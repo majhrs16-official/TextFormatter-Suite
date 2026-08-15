@@ -34,10 +34,12 @@ potencial se llama **TextFormatter Suite**.
   `ChatMessage`/`ChatMessageType`. Único puente: módulo `CoreTranslator`
   deprecated (la conversión `ChatMessage→Message` ya existe en
   `ChatRouter.dispatch`).
-- **Política de recepción default = ACCEPT** (canal abierto). Definir
-  `receive-permission` convierte el default en DROP para quien no tenga el
-  permiso. El emisor no necesita un tercer permiso para verse a sí mismo:
-  es parte del tail de emisor; `show-sender: false` por canal como override.
+- **Un único permiso por canal** (`cht.<channel>`): poseerlo es la suscripción.
+  Default ACCEPT (canal abierto). Con un solo nodo de permisos por canal, el
+  envío y la recepción comparten el mismo permiso; la asimetría
+  (p.ej. "puede leer pero no escribir") no se expresa con un segundo permiso
+  del canal, sino con reglas de iFlow (firewall), que sí distinguen lado.
+  El emisor se ve a sí mismo como parte del tail de emisor, sin permiso extra.
 
 ## Contratos SPI (lo que cada módulo implementa/publica)
 
@@ -52,8 +54,9 @@ potencial se llama **TextFormatter Suite**.
 
 ## Modelo Channel
 
-- Destino nombrado con policy de dos knobs: `send-permission` (emisor) y
-  `receive-permission` (receptor). Suscripción ≡ poseer `receive-permission`.
+- Destino nombrado con **un único permiso** (`permission: cht.<channel>`),
+  default ACCEPT. La asimetría lado-send/lado-receive vive en reglas de iFlow,
+  no en el canal. Suscripción ≡ poseer el permiso.
 - Tail: textos MiniMessage, tooltips, sonidos, `languages` default,
   `rate-limit` (ancho de banda por seg; no algoritmo CAKE).
 - Estructura por archivo (`channels/chat.yml`, `channels/private.yml`,
