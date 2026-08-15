@@ -1,0 +1,36 @@
+# ChatTranslator v3 formats.
+#
+# One flat group per event type. Messages use MiniMessage syntax plus the
+# engine's <tr>...</tr> spans, which mark the part that gets translated.
+#
+# Available variables:
+#   %player_name%  %player_uuid%  %lang_source%  %lang_target%  %content%
+# Any other %variable% is resolved through external placeholders (PAPI).
+
+chat:
+  message: '<gray><i>%player_name%</i></gray> <white><tr>%content%</tr></white>'
+  tooltip: '<aqua><tr>%lang_source% -> %lang_target%</tr></aqua>'
+  sound: 'entity.experience_orb.pickup;1.0;1.0'
+
+private-chat:
+  message: '<gray>→ <b>%player_name%</b>: <white><tr>%content%</tr></white>'
+  sound: 'entity.experience_orb.pickup;0.8;1.0'
+
+mention:
+  message: '<gray>@<b>%player_name%</b>: <yellow><tr>%content%</tr></yellow>'
+  sound: 'entity.experience_orb.pickup;1.0;1.5'
+
+join:
+  message: '<green>+ <yellow>%player_name%</yellow> <tr>se ha unido al juego</tr></green>'
+
+leave:
+  message: '<red>- <yellow>%player_name%</yellow> <tr>ha abandonado el juego</tr></red>'
+
+death:
+  message: '<red><tr>%content%</tr></red>'
+
+advancement:
+  message: '<dark_aqua>%player_name%</dark_aqua> <tr>ha logrado el progreso</tr>'
+
+sign:
+  message: '<dark_gray>[<white><tr>%content%</tr></white>]</dark_gray>'

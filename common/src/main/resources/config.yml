@@ -1,0 +1,30 @@
+# ChatTranslator v3 configuration.
+#
+# Languages use the codes from the supported list (es, en, zh-CN, ...).
+# "auto" performs automatic detection per message.
+
+default-language: en
+
+# When true the sender also sees their own message translated.
+translate-to-sender: false
+
+# Whether interacting with a sign translates it.
+translate-signs: true
+
+# When a translation backend is unreachable, failed translations are prefixed
+# in the rendered output.
+connection-lost-marker: true
+
+# Extra debug logging (used by the platform loggers).
+debug: false
+
+# Anti-spam protection (simple per-tick rate limit).
+anti-spam:
+  enabled: false
+  limit-per-tick: 5
+
+# Translation backend.
+translator:
+  provider: google            # google | libre
+  libre-url: http://localhost:5000
+  libre-key: ''

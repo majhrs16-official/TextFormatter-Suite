@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+base {
+    archivesName = 'chattranslator-spigot'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url 'https://repo.helpch.at/releases' }
+}
+
+dependencies {
+    implementation project(':common')
+
+    implementation 'net.kyori:adventure-platform-bukkit:4.3.2'
+
+    compileOnly 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+    compileOnly 'me.clip:placeholderapi:2.11.5'
+    compileOnly 'com.github.spotbugs:spotbugs-annotations:4.0.1'
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(
+            name: rootProject.name,
+            description: project.description ?: '',
+            cht_version: rootProject.version,
+            author: 'majhrs16',
+        )
+    }
+}
+
+shadowJar {
+    archiveClassifier = ''
+    relocate 'net.kyori', 'me.majhrs16.cht.lib.kyori'
+}
+
+jar {
+    archiveClassifier = 'slim'
+}

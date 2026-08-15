@@ -1,0 +1,17 @@
+group = 'me.majhrs16'
+version = project.cht_version
+
+allprojects {
+    group = rootProject.group
+    version = rootProject.version
+}
+
+subprojects {
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}
