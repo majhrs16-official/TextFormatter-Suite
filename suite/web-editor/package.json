@@ -1,0 +1,26 @@
+{
+  "name": "suite-web-editor",
+  "version": "2.1.0",
+  "description": "Suite Web Editor - modular, linted, tested",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint js/**/*.js",
+    "lint:fix": "eslint js/**/*.js --fix",
+    "format": "prettier --write \"js/**/*.js\" \"index.html\" \"paths.json\" \"styles.css\"",
+    "format:check": "prettier --check \"js/**/*.js\" \"index.html\" \"paths.json\" \"styles.css\"",
+    "test": "node tests/unit/stateStore.test.cjs && node tests/unit/model.test.cjs && node tests/unit/validate.test.cjs",
+    "test:integration": "node /tmp/opencode/func.js && node /tmp/opencode/interact.js && node /tmp/opencode/click.js && node /tmp/opencode/chain.js && node /tmp/opencode/undo.js && node /tmp/opencode/diffing.js && node /tmp/opencode/bind.js",
+    "check": "npm run format:check && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^8.57.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^15.0.0",
+    "jsdom": "^24.0.0",
+    "prettier": "^3.2.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

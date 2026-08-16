@@ -1,0 +1,17 @@
+name: chat.global
+permission: cht.chat.global
+send-permission: cht.chat.global.send
+receive-permission: cht.chat.global.receive
+show-sender: true
+rate-limit-per-second: 0
+lang-source: auto
+lang-target: auto
+messages:
+  - "&7👉 &f%player_name%&7: %content%"
+  - <green>💬 %content%</green>
+tooltips:
+  - "Hover: %lang_source% → %lang_target%"
+sounds:
+  - name: ping-message.mp3
+    volume: 1
+    pitch: 1

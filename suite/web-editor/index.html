@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>◧ TextFormatter Suite — Web Editor</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="logo">
+          <span class="glyph">◧</span>
+          <span>TextFormatter Suite <small>F6 · schema v2.2</small></span>
+        </div>
+        <div class="crumbs" id="crumbs">
+          <span class="sep">/</span><b>iFlow</b><span class="sep">›</span><span>grafo</span><span class="sep">›</span
+          ><span class="leaf">rules.yml</span>
+        </div>
+        <div class="hdr-right">
+          <button class="iconbtn" id="langBtn" title="Idioma / language">EN</button>
+          <button class="iconbtn" id="themeBtn" title="Theme">🌙</button>
+        </div>
+      </header>
+
+      <div id="body">
+        <aside id="sidebar" data-dockable="sidebar">
+          <div class="s-head" id="sidebarHead">
+            <span class="grip">⠿</span><span class="s-title">MENÚ</span
+            ><span class="x" id="dockSidebar" title="flotar / acoplar">⧉</span>
+          </div>
+          <div id="sidebarBody"></div>
+        </aside>
+
+        <main>
+          <div id="toolbar1" data-dockable="toolbar1">
+            <span class="dock-grip" title="arrastrar toolbar">⠿</span>
+            <button class="tbtn" id="undoBtn" disabled>↶ undo</button>
+            <button class="tbtn" id="redoBtn" disabled>↷ redo</button>
+            <div class="tsep"></div>
+            <button class="tbtn" id="dupBtn">⧉ duplicate</button>
+            <button class="tbtn" id="delBtn">✕ delete</button>
+            <div class="tsep"></div>
+            <button class="tbtn" id="validBtn">✓ validate</button>
+            <button class="tbtn" id="importBtn">⇪ import</button>
+            <button class="tbtn" id="pasteBtn">✎ paste yaml</button>
+            <div class="tspacer"></div>
+            <button class="tbtn primary-blue" id="previewBtn">🔵 Preview</button>
+            <button class="tbtn primary-green" id="dlBtn">⏷ Download <span>ZIP</span></button>
+            <button class="tbtn" id="dockTb1" title="flotar / acoplar toolbar">⧉</button>
+          </div>
+
+          <div id="toolbar2" data-dockable="toolbar2">
+            <span class="dock-grip" title="arrastrar palette">⠿</span>
+            <span class="pal-label" id="palLabel">PALETTE</span>
+            <div id="palette" style="display: flex; gap: 7px; align-items: center"></div>
+            <button class="tbtn" id="dockTb2" title="flotar / acoplar palette" style="margin-left: auto">⧉</button>
+          </div>
+
+          <div id="workspace">
+            <section class="view" data-view="config" id="configSection">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--green)" class="gr"></span>
+                Configuración general <span class="sub">config.yml — la configuración del plugin en sí</span>
+              </h2>
+              <div class="vgrid">
+                <div class="card">
+                  <h3><span style="background: var(--green)" class="gr"></span>General</h3>
+                  <div class="field">
+                    <span class="cap">Idioma default<small>fallback para mensajes sin idioma</small></span>
+                    <select id="cfgLang">
+                      <option>en</option>
+                      <option>es</option>
+                      <option>pt</option>
+                      <option>auto</option>
+                    </select>
+                  </div>
+                  <div class="switches-container"></div>
+                </div>
+                <div class="card">
+                  <h3><span style="background: var(--blue)" class="gr"></span>Motor iFlow</h3>
+                  <div class="field">
+                    <span class="cap">Guard anti-bucle<small>máximo de pasos por mensaje</small></span>
+                    <input type="text" style="width: 70px" id="cfgMaxSteps" value="512" />
+                  </div>
+                  <div class="switches-container"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="view" data-view="txf">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--green)" class="gr"></span>
+                TextFormatter <span class="sub">celdas = canales ⇄ se propagan a iFlow y Sync</span>
+              </h2>
+              <div class="chain">
+                <span class="chain-tag" title="chain default (iptables)">DEFAULT CHAIN</span>
+                <div class="chain-row" id="chainRow">
+                  <span class="rule-chip" draggable="true" data-kind="channel">↻ echo</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">✎ reformatear</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">🔊 sonidos</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">⛔ silenciar</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">🌐 traducir</span>
+                </div>
+                <span class="hint">arrastra fuera → nuevo canal (default chain)</span>
+              </div>
+              <div class="viewport" data-canvas="txf"></div>
+            </section>
+
+            <section class="view active" data-view="iflow">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--blue)" class="gr"></span>
+                iFlow <span class="sub">grafo — puertos ↑ entradas · ↓ salidas · ctrl+rueda zoom</span>
+              </h2>
+              <div class="viewport" data-canvas="iflow">
+                <div class="canvas-chrome cch-zoom">
+                  <button class="tbtn" id="zoomOut">−</button
+                  ><b id="zoomVal" style="font-size: 11px; min-width: 34px; text-align: center">100%</b
+                  ><button class="tbtn" id="zoomIn">＋</button>
+                </div>
+                <div class="canvas-chrome cch-fit"><button class="tbtn" id="fitView">⤢ fit</button></div>
+                <div class="minimap" id="minimap"></div>
+              </div>
+            </section>
+
+            <section class="view" data-view="translators">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--purple)" class="gr"></span>
+                Traductores <span class="sub">provider + test A→B</span>
+              </h2>
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+                  gap: 14px;
+                  max-width: 1000px;
+                "
+              >
+                <div class="card">
+                  <h3><span style="background: var(--blue)" class="gr"></span>Google <span class="live">●</span></h3>
+                  <div class="field">
+                    <span class="cap">Activo</span><span class="switch on" data-bind="translators.google.active"></span>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Pool máximo<small>concurrencia</small></span
+                    ><input type="text" style="width: 70px" id="googlePool" value="6" />
+                  </div>
+                </div>
+                <div class="card">
+                  <h3><span style="background: var(--green)" class="gr"></span>Libre</h3>
+                  <div class="field">
+                    <span class="cap">Activo</span><span class="switch" data-bind="translators.libre.active"></span>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Base URL</span><input type="text" style="width: 150px" id="libreUrl" />
+                  </div>
+                  <div class="field">
+                    <span class="cap">API key</span
+                    ><input type="text" style="width: 150px" id="libreKey" placeholder="vacío = anónimo" />
+                  </div>
+                </div>
+              </div>
+              <div class="card" style="margin-top: 14px; max-width: 480px">
+                <h3><span style="background: var(--amber)" class="gr"></span>Probar provider</h3>
+                <div class="token-input">
+                  <input type="text" id="testText" placeholder="es → en: «hola mundo»" style="flex: 1" />
+                  <button class="tbtn primary-blue" id="testBtn">▶ test</button>
+                </div>
+                <div id="testOut" style="font-size: 12px; color: var(--muted); min-height: 16px"></div>
+              </div>
+            </section>
+
+            <section class="view" data-view="sync">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--purple)" class="gr"></span>
+                Sync <span class="sub">bordes + Velocity (interconexión entre servidores)</span>
+              </h2>
+              <div class="edge-tabs">
+                <span class="etab on" data-edge="discord">Discord</span>
+                <span class="etab" data-edge="telegram">Telegram</span>
+                <span class="etab" data-edge="http">HTTP</span>
+                <span class="etab" data-edge="tcpudp">TCP-UDP</span>
+                <span class="etab" data-edge="velocity">Velocity</span>
+              </div>
+              <div class="edge-pane" data-pane="discord">
+                <div class="field">
+                  <span class="cap">Habilitado</span><span class="switch on" data-bind="sync.discord.enabled"></span>
+                </div>
+                <div class="big-field">
+                  <label>Bot token</label>
+                  <div class="token-input">
+                    <input type="text" id="discordToken" placeholder="paste / type your bot token…" style="flex: 1" />
+                    <button class="tbtn gray-dark" id="pasteTokenBtn">📋 Pegar</button>
+                    <button class="tbtn gray-dark" id="obtainToken">🔑 Obtener token</button>
+                  </div>
+                  <div class="cap-hint">«Obtener token» abre el dev portal de Discord en pestaña nueva.</div>
+                </div>
+                <div class="field">
+                  <span class="cap">Canal remoto → local</span
+                  ><input type="text" style="width: 180px" id="discordChannel" />
+                </div>
+                <div class="field">
+                  <span class="cap">Intents<small>GUILD_MESSAGES · MESSAGE_CONTENT</small></span
+                  ><span class="switch on" id="discordIntents" title="toggle intents"></span>
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="telegram" hidden>
+                <div class="field">
+                  <span class="cap">Habilitado</span><span class="switch" data-bind="sync.telegram.enabled"></span>
+                </div>
+                <div class="big-field">
+                  <label>Bot token</label><input type="text" id="telegramToken" placeholder="123456:ABC-DEF…" />
+                </div>
+                <div class="field">
+                  <span class="cap">Chat id</span><input type="text" style="width: 130px" id="telegramChat" />
+                </div>
+                <div class="field"><span class="cap">Hub</span><input type="text" id="telegramHub" /></div>
+              </div>
+              <div class="edge-pane" data-pane="http" hidden>
+                <div class="field">
+                  <span class="cap">Habilitado</span><span class="switch" data-bind="sync.http.enabled"></span>
+                </div>
+                <div class="big-field"><label>Webhook URL</label><input type="text" id="httpUrl" /></div>
+                <div class="field">
+                  <span class="cap">Puerto inbound</span><input type="text" style="width: 100px" id="httpPort" />
+                </div>
+                <div class="field">
+                  <span class="cap">Path</span><input type="text" style="width: 180px" id="httpPath" />
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="tcpudp" hidden>
+                <div class="field">
+                  <span class="cap">Habilitado</span><span class="switch" data-bind="sync.tcp-udp.enabled"></span>
+                </div>
+                <div class="field">
+                  <span class="cap">Protocolo</span>
+                  <div class="seg"><span class="on" data-prot="TCP">TCP</span><span data-prot="UDP">UDP</span></div>
+                </div>
+                <div class="field">
+                  <span class="cap">Host</span><input type="text" style="width: 150px" id="tcpHost" />
+                </div>
+                <div class="field">
+                  <span class="cap">Puertos out / in</span><input type="text" style="width: 150px" id="tcpPorts" />
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="velocity" hidden>
+                <div class="field">
+                  <span class="cap">Habilitado<small>proxy plugin (F7+)</small></span
+                  ><span class="switch on" data-bind="sync.velocity.enabled"></span>
+                </div>
+                <div class="big-field"><label>Secret / token</label><input type="text" id="velocitySecret" /></div>
+                <div class="field">
+                  <span class="cap">Servidores</span><input type="text" style="width: 180px" id="velocityServers" />
+                </div>
+                <div class="field">
+                  <span class="cap">Mapeo servidor → canal</span
+                  ><input type="text" style="width: 180px" id="velocityMapping" />
+                </div>
+              </div>
+            </section>
+
+            <section class="view" data-view="perm">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--amber)" class="gr"></span>
+                Permisos <span class="sub">tabla rol ↔ permiso</span>
+              </h2>
+              <div class="perm-wrap"><table class="perms" id="permsTable"></table></div>
+            </section>
+
+            <section class="view" data-view="kernel">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--red)" class="gr"></span>
+                Kernel / Estado <span class="sub">ServiceLoader · handshake · grafo</span>
+              </h2>
+              <div
+                class="mod-grid"
+                id="modGrid"
+                style="
+                  display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+                  gap: 12px;
+                  max-width: 980px;
+                "
+              ></div>
+            </section>
+
+            <div id="propPanel" class="panel" data-dockable="propPanel">
+              <div class="p-head" data-drag="propPanel">
+                <span class="grip">⠿</span> <span id="pfTitle">Propiedades</span>
+                <span class="x" id="propMini" title="minimizar">—</span>
+                <span class="x" id="propDetach" title="desprender / fijar">⧉</span>
+              </div>
+              <div class="p-body" id="propBody">
+                <div id="pfEmpty" class="no-sel" style="color: var(--muted); font-size: 12px"></div>
+                <div id="pfForm">
+                  <label>id / canal</label><input type="text" id="pfId" />
+                  <label>tipo</label>
+                  <div class="seg" id="pfKind"></div>
+                  <label id="pfTextLabel">texto reformateado</label><textarea id="pfText" spellcheck="false"></textarea>
+                  <label>sonidos (multi)</label>
+                  <ul class="sound-list" id="pfSounds"></ul>
+                  <div class="token-input">
+                    <input type="text" id="pfSoundAdd" placeholder="ej. entity.experience_orb.pickup" style="flex: 1" />
+                    <button class="tbtn" id="pfSoundBtn">＋</button>
+                  </div>
+                  <div class="field" id="pfLangs">
+                    <span class="cap">source</span
+                    ><select id="pfLangSource"></select>
+                    <span class="cap">target</span
+                    ><select id="pfLangTarget"></select>
+                  </div>
+                  <div class="field">
+                    <span class="cap">rate-limit/s</span><input type="text" style="width: 70px" id="pfRate" />
+                  </div>
+                  <div class="field">
+                    <span class="cap">show-sender</span><span class="switch on" id="pfShowSender"></span>
+                  </div>
+                  <div class="token-input">
+                    <button class="tbtn" id="pfDup">⧉ duplicar</button>
+                    <button class="tbtn" id="pfDel" style="color: var(--red)">✕ eliminar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="previewPanel" class="panel" data-dockable="previewPanel">
+              <div class="p-head" data-drag="previewPanel">
+                <span class="grip">⠿</span> <span>Preview</span> <span class="x" id="pvMini" title="minimizar">—</span>
+              </div>
+              <div class="p-body" id="pvBody">
+                <input
+                  type="text"
+                  id="pvInput"
+                  value="hola mundo"
+                  placeholder="mensaje de ejemplo"
+                  spellcheck="false"
+                />
+                <div class="token-input">
+                  <select
+                    id="pvChannel"
+                    style="
+                      flex: 1;
+                      background: var(--bg0);
+                      border: 1px solid var(--line);
+                      color: var(--txt);
+                      border-radius: 7px;
+                      padding: 6px 8px;
+                    "
+                  ></select>
+                  <button class="tbtn primary-blue" id="pvRun">▶ simular</button>
+                </div>
+                <div id="pvResult"></div>
+                <div id="pvPath"></div>
+                <div id="pvSounds"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="statusbar">
+            <span class="chip"><b id="sbCells">0</b> celdas</span>
+            <span class="chip"><b id="sbEdges">0</b> aristas</span>
+            <span class="chip"><b id="sbChain">5</b> reglas default</span>
+            <span class="chip">config <b id="sbSize">0 B</b></span>
+            <span
+              class="chip"
+              id="sbOk"
+              hidden
+              style="background: var(--green-soft); color: var(--green); border-color: var(--green)"
+              >✔ valid &amp; sound</span
+            >
+            <span class="chip err" id="sbErr" hidden>✗ <b id="sbErrN">0</b> err</span>
+            <span class="chip warn" id="sbWarn" hidden>⚠ <b id="sbWarnN">0</b> warn</span>
+            <span class="chip dirty" id="sbDirty" hidden><span class="dirty-dot"></span> sin guardar</span>
+            <span class="right">zoom <b id="sbarZoom">100%</b></span>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal-back" id="modal">
+      <div class="modal">
+        <h3>Pegar YAML — sección activa</h3>
+        <textarea
+          id="modalText"
+          spellcheck="false"
+          placeholder="# pega config.yml / channels/*.yml / rules.yml / sync/*.yml …"
+        ></textarea>
+        <div class="m-actions">
+          <button class="tbtn" id="modalCancel">cancelar</button>
+          <button class="tbtn primary-blue" id="modalApply">aplicar</button>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" id="fileInput" hidden multiple webkitdirectory accept=".yml,.yaml,.json" />
+
+    <div id="toasts"></div>
+
+    <script src="js/yaml.js"></script>
+    <script src="js/zip.js"></script>
+    <script src="js/model.js"></script>
+    <script src="js/validate.js"></script>
+    <script src="js/preview.js"></script>
+    <script src="js/stateStore.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/txf.js"></script>
+    <script src="js/props.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/docking.js"></script>
+    <script src="js/actions.js"></script>
+    <script src="js/perms.js"></script>
+    <script src="js/kernel.js"></script>
+    <script src="js/previewView.js"></script>
+    <script src="js/importExport.js"></script>
+    <script src="js/toolbar.js"></script>
+    <script src="js/status.js"></script>
+    <script src="js/core.js"></script>
+  </body>
+</html>

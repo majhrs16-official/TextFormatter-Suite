@@ -1,0 +1,12 @@
+quick-look: true
+general:
+  language: en
+iflow:
+  engine:
+    parallel: false
+  guard:
+    max-steps: 512
+  filter:
+    dedup-fanout: true
+sonido:
+  enabled: true

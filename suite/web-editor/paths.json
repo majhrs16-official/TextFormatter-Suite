@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "paths": {
+    "config.quick-look": {
+      "label": "Quick-look",
+      "desc": "Ventana temporal del mensaje",
+      "type": "boolean",
+      "default": true
+    },
+    "config.sonido.enabled": {
+      "label": "Sonido habilitado",
+      "desc": "Notificaciones del plugin",
+      "type": "boolean",
+      "default": true
+    },
+    "config.iflow.engine.parallel": {
+      "label": "engine.parallel",
+      "desc": "Ruta dirigida en paralelo por canal",
+      "type": "boolean",
+      "default": false
+    },
+    "config.iflow.filter.dedup-fanout": {
+      "label": "Dedup fan-out",
+      "desc": "Mensaje, camino→destino",
+      "type": "boolean",
+      "default": true
+    },
+    "translators.google.active": { "label": "Activo (Google)", "desc": "", "type": "boolean", "default": true },
+    "translators.libre.active": { "label": "Activo (Libre)", "desc": "", "type": "boolean", "default": false },
+    "sync.discord.enabled": { "label": "Habilitado (Discord)", "desc": "", "type": "boolean", "default": false },
+    "sync.telegram.enabled": { "label": "Habilitado (Telegram)", "desc": "", "type": "boolean", "default": false },
+    "sync.http.enabled": { "label": "Habilitado (HTTP)", "desc": "", "type": "boolean", "default": false },
+    "sync.tcp-udp.enabled": { "label": "Habilitado (TCP/UDP)", "desc": "", "type": "boolean", "default": false },
+    "sync.velocity.enabled": {
+      "label": "Habilitado (Velocity)",
+      "desc": "Proxy plugin (F7+)",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

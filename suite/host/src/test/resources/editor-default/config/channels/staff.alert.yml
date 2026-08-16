@@ -1,0 +1,16 @@
+name: staff.alert
+permission: cht.staff.alert
+send-permission: null
+receive-permission: null
+show-sender: false
+rate-limit-per-second: 0
+lang-source: auto
+lang-target: auto
+messages:
+  - <red>⚠ %content%</red>
+tooltips:
+  []
+sounds:
+  - name: alert.wav
+    volume: 0.8
+    pitch: 1.2

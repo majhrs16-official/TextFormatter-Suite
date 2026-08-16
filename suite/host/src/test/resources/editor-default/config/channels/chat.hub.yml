@@ -1,0 +1,14 @@
+name: chat.hub
+permission: cht.chat.hub
+send-permission: null
+receive-permission: null
+show-sender: true
+rate-limit-per-second: 0
+lang-source: auto
+lang-target: auto
+messages:
+  - <gold>⛨</gold> %content%
+tooltips:
+  []
+sounds:
+  []

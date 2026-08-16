@@ -1,0 +1,86 @@
+package me.majhrs16.suite.iflow.channel;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Sliding-window per-second limiter keyed by {@code (channelPath, actorUuid)}.
+ *
+ * <p>A channel advertises a budget (messages per second) via
+ * {@code rateLimitPerSecond}; this limiter enforces it independently for each
+ * emitter so a chatty player cannot starve the channel. Clock is injected for
+ * deterministic tests.</p>
+ */
+public final class RateLimiter {
+
+    private final long capacity;
+    private final Map<String, Bucket> buckets = new HashMap<>();
+    private final Clock clock;
+
+    public RateLimiter(int capacity) {
+        this(capacity, System::nanoTime);
+    }
+
+    RateLimiter(int capacity, Clock clock) {
+        this.capacity = Math.max(1, capacity);
+        this.clock = clock;
+    }
+
+    /**
+     * Tries to consume one ticket for the key.
+     *
+     * @return {@code true} when within budget, {@code false} when throttled;
+     *         a non-zero wait in nanoSeconds is implied by the remaining
+     *         window.
+     */
+    public boolean tryAcquire(String key) {
+        long now = clock.nanoTime();
+        Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
+        synchronized (bucket) {
+            bucket.refill(now);
+            if (bucket.tokens >= 1F) {
+                bucket.tokens -= 1F;
+                bucket.lastFill = now;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    private static final long WINDOW_NANOS = 1_000_000_000L;
+
+    private static final class Bucket {
+        private final float maxTokens;
+        private float tokens;
+        private long lastFill;
+
+        Bucket(float maxTokens) {
+            this.maxTokens = maxTokens;
+            this.tokens = maxTokens;
+        }
+
+        void refill(long now) {
+            long elapsed = now - lastFill;
+            if (elapsed <= 0) {
+                return;
+            }
+            long windows = elapsed / WINDOW_NANOS;
+            if (windows > 0) {
+                float gain = windows * maxTokens;
+                tokens = Math.min(maxTokens, tokens + gain);
+                lastFill += windows * WINDOW_NANOS;
+            }
+        }
+    }
+
+    @FunctionalInterface
+    interface Clock {
+        long nanoTime();
+    }
+
+    /** For tests: advances the clock by whole windows. */
+    public long nanosUntilNextWindow() {
+        return WINDOW_NANOS;
+    }
+}

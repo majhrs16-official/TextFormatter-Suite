@@ -1,0 +1,14 @@
+name: vip.chat
+permission: cht.vip.chat
+send-permission: null
+receive-permission: null
+show-sender: true
+rate-limit-per-second: 0
+lang-source: es
+lang-target: auto
+messages:
+  - "<purple>✦ %player_name%: %content%</purple>"
+tooltips:
+  []
+sounds:
+  []
