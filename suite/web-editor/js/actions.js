@@ -11,15 +11,18 @@
     if (!sel) {
       return;
     }
-    const st = StateStore.getState();
     if (sel.type === 'channel') {
-      const c = st.channels[sel.key];
-      let name = sel.key + '-copy';
-      let i = 2;
-      while (st.channels[name]) {
-        name = sel.key + '-copy' + i++;
+      const c = StateStore.getState().channels[sel.key];
+      if (!c) {
+        return;
       }
       StateStore.mutate('dup channel', () => {
+        const st = StateStore.getState();
+        let name = sel.key + '-copy';
+        let i = 2;
+        while (st.channels[name]) {
+          name = sel.key + '-copy' + i++;
+        }
         st.channels[name] = Suite.model.clone(c);
         st.channels[name].name = name;
         Suite.model.addNode(st, 'input', name, 140 + Math.random() * 160, 120 + Math.random() * 140);
@@ -29,11 +32,12 @@
       Suite.views.renderTxf();
       Suite.views.renderStatus();
     } else if (sel.type === 'node') {
-      const n = st.graph.nodes.find(x => x.id === sel.id);
+      const n = StateStore.getState().graph.nodes.find(x => x.id === sel.id);
       if (!n) {
         return;
       }
       StateStore.mutate('dup node', () => {
+        const st = StateStore.getState();
         const copy = Suite.model.clone(n);
         copy.id = n.id + '_copy';
         let i = 2;

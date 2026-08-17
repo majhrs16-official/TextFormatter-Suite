@@ -14,12 +14,12 @@
     $('#validBtn').onclick = () => {
       const v = Suite.validate.validate(StateStore.getState());
       Suite.utils.toast(
-        (v.errors ? v.errors + ' error(s) Â· ' : '') +
+        (v.errors ? v.errors + ' error(s) · ' : '') +
           (v.warnings ? v.warnings + ' warning(s)' : '') +
-          (v.errors === 0 && v.warnings === 0 ? 'âœ“ todo ok' : ''),
+          (v.errors === 0 && v.warnings === 0 ? '✓ todo ok' : ''),
         v.errors ? 'err' : v.warnings ? 'warn' : 'ok'
       );
-      for (const iss of v.issues.map(i => 'Â· ' + i.path + ': ' + i.msg)) {
+      for (const iss of v.issues.map(i => '· ' + i.path + ': ' + i.msg)) {
         console.log(iss);
       }
       Suite.views.renderStatus();

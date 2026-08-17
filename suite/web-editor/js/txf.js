@@ -8,7 +8,7 @@
   const StateStore = global.StateStore;
   const UI = global.Suite.i18n.UI;
 
-  const DEFAULT_CHIPS = ['â—‹ echo', 'âœŽ reformatear', 'ðŸ”Š sonidos', 'âŒ¡ silenciar', 'ðŸŒ traducir'];
+  const DEFAULT_CHIPS = ['○ echo', '✎ reformatear', '🔊 sonidos', '⌡ silenciar', '🌐 traducir'];
 
   function renderTxf() {
     const row = $('#chainRow');
@@ -60,8 +60,8 @@
         el.title = 'arrastrar dentro de la chain para reordenar';
         row.insertBefore(el, sep.nextSibling);
       }
-      if (el.textContent !== 'â—„ ' + name) {
-        el.textContent = 'â—„ ' + name;
+      if (el.textContent !== '◄ ' + name) {
+        el.textContent = '◄ ' + name;
       }
       if (!el._dragBound) {
         addChipDrag(el);
@@ -105,7 +105,7 @@
       el.style.cssText =
         'cursor:pointer' + (sel ? ';border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-soft)' : '');
       const firstMsg = (c.messages || [])[0] || '(sin plantilla)';
-      const sounds = c.sounds && c.sounds.length ? ' · ðŸ”Š ' + c.sounds.length : '';
+      const sounds = c.sounds && c.sounds.length ? ' · 🔊 ' + c.sounds.length : '';
       const newHTML =
         '<h3><span style="background:var(--green)" class="gr"></span>' +
         Suite.utils.esc(name) +
@@ -119,7 +119,7 @@
         sounds +
         ' · ' +
         Suite.utils.esc(c['lang-source']) +
-        'â†’' +
+        '→' +
         Suite.utils.esc(c['lang-target']) +
         '</div>';
       if (el.innerHTML !== newHTML) {
@@ -215,11 +215,11 @@
 
   function addChannelFromTemplate(template) {
     const names = {
-      'â—‹ echo': 'echo.chat',
-      'âœŽ reformatear': 'reformat.chat',
-      'ðŸ”Š sonidos': 'sounds.chat',
-      'âŒ¡ silenciar': 'mute.chat',
-      'ðŸŒ traducir': 'translate.chat',
+      '○ echo': 'echo.chat',
+      '✎ reformatear': 'reformat.chat',
+      '🔊 sonidos': 'sounds.chat',
+      '⌡ silenciar': 'mute.chat',
+      '🌐 traducir': 'translate.chat',
     };
     const base = (names[template] || 'new.chat').replace('.chat', '');
     let name = base + '.chat';
@@ -245,7 +245,7 @@
     const c = Suite.model.defaults().channels['chat.global'];
     const spec = Suite.model.clone(c);
     spec.name = name;
-    spec.messages = ['&7â–˜ &f%player_name%&7: %content%'];
+    spec.messages = ['&7▘ &f%player_name%&7: %content%'];
     return spec;
   }
 

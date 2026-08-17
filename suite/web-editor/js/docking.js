@@ -48,7 +48,7 @@
     if (sb) {
       const head = document.createElement('div');
       head.className = 's-head';
-      head.innerHTML = '<span>Suite</span><button class="tbtn" id="dockSidebar" title="Desacoplar">âŒ</button>';
+      head.innerHTML = '<span>Suite</span><button class="tbtn" id="dockSidebar" title="Desacoplar">⌏</button>';
       sb.insertBefore(head, sb.firstChild);
       sb.dataset.dockable = 'sidebar';
       sb.style.touchAction = 'none';
@@ -58,7 +58,7 @@
     if (tb1) {
       const grip = document.createElement('span');
       grip.className = 'dock-grip';
-      grip.innerHTML = '<button class="tbtn" id="dockTb1" title="Desacoplar toolbar1">âŒ</button>';
+      grip.innerHTML = '<button class="tbtn" id="dockTb1" title="Desacoplar toolbar1">⌏</button>';
       tb1.insertBefore(grip, tb1.firstChild);
       tb1.dataset.dockable = 'toolbar1';
       tb1.style.touchAction = 'none';
@@ -68,7 +68,7 @@
     if (tb2) {
       const grip = document.createElement('span');
       grip.className = 'dock-grip';
-      grip.innerHTML = '<button class="tbtn" id="dockTb2" title="Desacoplar toolbar2">âŒ</button>';
+      grip.innerHTML = '<button class="tbtn" id="dockTb2" title="Desacoplar toolbar2">⌏</button>';
       tb2.insertBefore(grip, tb2.firstChild);
       tb2.dataset.dockable = 'toolbar2';
       tb2.style.touchAction = 'none';
@@ -80,7 +80,7 @@
       btn.className = 'tbtn';
       btn.id = 'propDetach';
       btn.title = 'Desacoplar propiedades';
-      btn.textContent = 'âŒ';
+      btn.textContent = '⌏';
       pp.appendChild(btn);
       pp.dataset.dockable = 'propPanel';
       pp.style.touchAction = 'none';
@@ -95,8 +95,8 @@
       const btn = document.createElement('button');
       btn.className = 'tbtn';
       btn.id = 'pvDetach';
-      btn.title = 'Desacoplar previsualizaciÃ³n';
-      btn.textContent = 'âŒ';
+      btn.title = 'Desacoplar previsualización';
+      btn.textContent = '⌏';
       if (pvHead) {
         pvHead.appendChild(btn);
       }
@@ -169,7 +169,7 @@
       el.style.zIndex = '';
       const btn = el.querySelector('[id^="dock"], #propDetach, #pvDetach');
       if (btn) {
-        btn.textContent = 'âŒ';
+        btn.textContent = '⌏';
       }
     } else {
       el.classList.add('floating');
@@ -185,7 +185,7 @@
       el.style.zIndex = '55';
       const btn = el.querySelector('[id^="dock"], #propDetach, #pvDetach');
       if (btn) {
-        btn.textContent = 'â–—';
+        btn.textContent = '▗';
       }
     }
   }

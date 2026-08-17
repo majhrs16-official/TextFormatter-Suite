@@ -48,23 +48,38 @@
     const chan = st.channels[channel];
     const vars = Suite.preview.tokens(chan);
     vars.content = text;
+    const nodeById = new Map((st.graph.nodes || []).map(n => [n.id, n]));
     $('#pvResult').innerHTML = res.ok
-      ? '<span style="color:var(--green)">' + Suite.utils.esc(res.output) + '</span>'
-      : '<span style="color:var(--red)">' + Suite.utils.esc(res.error) + '</span>';
+      ? '<span style="color:var(--green)">' +
+        (res.outputs || []).map(o => Suite.utils.esc(o.text || o.target || '')).join('<br>') +
+        '</span>'
+      : '<span style="color:var(--red)">' + Suite.utils.esc(res.reason || 'error') + '</span>';
     $('#pvPath').innerHTML = '';
-    res.path.forEach((p, i) => {
+    const outputs = res.ok ? res.outputs || [] : [];
+    outputs.forEach((o, i) => {
       const step = document.createElement('div');
       step.style.cssText = 'font-family:var(--mono);font-size:11px;margin:2px 0';
+      const label = o.target || '(sin salida)';
       step.innerHTML =
         '<b>#' +
         (i + 1) +
         '</b> ' +
-        Suite.utils.esc(p.id) +
-        ' (' +
-        Suite.utils.esc(p.kind) +
-        ') â†’ ' +
-        Suite.utils.esc(p.output || '(no output)');
+        Suite.utils.esc(label) +
+        ' &rarr; ' +
+        Suite.utils.esc(o.text || '(no output)') +
+        (o.guard ? ' <span style="color:var(--red)">(guard max-steps)</span>' : '');
       $('#pvPath').appendChild(step);
+      if (o.path && o.path.length) {
+        const trail = document.createElement('div');
+        trail.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--muted);margin:0 0 4px 14px';
+        trail.textContent = o.path
+          .map(id => {
+            const n = nodeById.get(id);
+            return n ? n.kind + ':' + id : id;
+          })
+          .join(' > ');
+        $('#pvPath').appendChild(trail);
+      }
     });
     if (res.copies > 1) {
       const info = document.createElement('div');
@@ -72,8 +87,7 @@
       info.textContent = 'fan-out: ' + res.copies + ' copias';
       $('#pvPath').appendChild(info);
     }
-    const st2 = StateStore.getState();
-    if (res.steps >= (st2.graph.guard['max-steps'] || 512)) {
+    if (res.steps >= (st.graph.guard['max-steps'] || 512)) {
       const warn = document.createElement('div');
       warn.style.cssText = 'font-size:11px;color:var(--red)';
       warn.textContent = 'guard max-steps alcanzado';

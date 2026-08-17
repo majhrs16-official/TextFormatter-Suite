@@ -147,13 +147,13 @@
       return (n.transforms || [])
         .map(tr => {
           if (tr.op === 'rewrite') {
-            return '<div class="f">â—‹ ' + Suite.utils.esc((tr.template || '').slice(0, 26)) + '</div>';
+            return '<div class="f">○ ' + Suite.utils.esc((tr.template || '').slice(0, 26)) + '</div>';
           }
           if (tr.op === 'sounds') {
-            return '<div class="f">ðŸ”Š ' + Suite.utils.esc((tr.add || []).join(',')) + '</div>';
+            return '<div class="f">🔊 ' + Suite.utils.esc((tr.add || []).join(',')) + '</div>';
           }
           if (tr.op === 'sleep') {
-            return '<div class="f">â³ ' + Suite.utils.esc(String(tr.millis)) + 'ms</div>';
+            return '<div class="f">⏳ ' + Suite.utils.esc(String(tr.millis)) + 'ms</div>';
           }
           return '';
         })
@@ -161,7 +161,7 @@
     }
     if (n.kind === 'cond' && n.matcher) {
       return (
-        '<div class="f">â‰¡ ' +
+        '<div class="f">≡ ' +
         Suite.utils.esc(
           Object.entries(n.matcher)
             .map(([k, v]) => k + '=' + v)
@@ -171,7 +171,7 @@
       );
     }
     if (n.kind === 'redirect' && n.target) {
-      return '<div class="f">â†’ ' + Suite.utils.esc(n.target.channel) + '</div>';
+      return '<div class="f">→ ' + Suite.utils.esc(n.target.channel) + '</div>';
     }
     return '';
   }
@@ -345,7 +345,7 @@
             return n && (n.kind === 'cond' || n.kind === 'sleep');
           });
           if (!guard) {
-            out.add(cycle.join(' â†’ '));
+            out.add(cycle.join(' → '));
           }
           return true;
         }

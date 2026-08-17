@@ -79,10 +79,6 @@
     }
   }
 
-  function renderConfigValues() {
-    Suite.views.renderConfigValues();
-  }
-
   // BOOT
   let booted = false;
   function boot() {
@@ -132,5 +128,5 @@
     redo: StateStore.redo,
   };
   global.Suite.views = global.Suite.views || {};
-  Object.assign(global.Suite.views, { switchView, buildCrumbs, renderAll, renderConfigValues, changed, boot });
+  Object.assign(global.Suite.views, { switchView, buildCrumbs, renderAll, changed, boot });
 })(window || this);

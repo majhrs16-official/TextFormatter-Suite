@@ -130,7 +130,7 @@
       $('#pfSoundsWrap').style.display = 'none';
     } else if (sel.type === 'edge') {
       $('#pfKindWrap').style.display = 'none';
-      $('#pfId').value = e.from + ' â†’ ' + e.to;
+      $('#pfId').value = e.from + ' → ' + e.to;
       $('#pfId').readOnly = true;
       $('#pfText').value = '';
       $('#pfRateWrap').style.display = 'none';
@@ -160,13 +160,13 @@
     sounds.forEach((s, i) => {
       const li = document.createElement('li');
       li.innerHTML =
-        '<span style="flex:1">ðŸ”Š ' +
+        '<span style="flex:1">🔊 ' +
         Suite.utils.esc(s.name) +
         '</span><span style="font-size:10px;color:var(--muted)">v' +
         (s.volume || 1) +
         ' p' +
         (s.pitch || 1) +
-        '</span><span data-x class="x">âœ—</span>';
+        '</span><span data-x class="x">✗</span>';
       li.onclick = e => {
         if (e.target.hasAttribute('data-x')) {
           StateStore.mutate('del sound', () => {
@@ -189,14 +189,12 @@
         return;
       }
       if (sel.type === 'channel') {
-        const st = StateStore.getState();
-        const c = st.channels[sel.key];
         const newName = $('#pfId').value.trim();
         if (newName && newName !== sel.key) {
-          const existed = !!st.channels[newName];
+          const existed = !!StateStore.getState().channels[newName];
           StateStore.mutate('rename', () => {
             if (!existed) {
-              Suite.model.renameChannel(st, sel.key, newName);
+              Suite.model.renameChannel(StateStore.getState(), sel.key, newName);
             }
           });
           UI.sel.key = newName;
@@ -220,12 +218,11 @@
           st.channels[sel.key].messages = val.split('\n').filter(x => x.trim() !== '');
         });
       } else {
-        const st = StateStore.getState();
-        const n = st.graph.nodes.find(x => x.id === sel.id);
-        if (!n) {
-          return;
-        }
         StateStore.mutate('property', () => {
+          const n = StateStore.getState().graph.nodes.find(x => x.id === sel.id);
+          if (!n) {
+            return;
+          }
           if (n.kind === 'transform') {
             let tr = (n.transforms || []).find(x => x.op === 'rewrite');
             if (!tr) {
@@ -309,12 +306,15 @@
       .forEach(
         el =>
           (el.onclick = () => {
-            const st = StateStore.getState();
-            const target = st.graph.nodes.find(x => x.id === UI.sel.id);
-            if (!target) {
+            if (!UI.sel) {
               return;
             }
+            const nodeId = UI.sel.id;
             StateStore.mutate('kind', () => {
+              const target = StateStore.getState().graph.nodes.find(x => x.id === nodeId);
+              if (!target) {
+                return;
+              }
               target.kind = el.dataset.kind;
               target.matcher = target.matcher || {};
             });

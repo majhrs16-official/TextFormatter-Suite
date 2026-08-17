@@ -55,7 +55,7 @@
           type: 'boolean',
           default: false,
         },
-        'config.iflow.filter.dedup-fanout': {
+        'graph.filter.dedup-fanout': {
           label: 'Dedup fan-out',
           desc: 'Mensaje, camino→destino',
           type: 'boolean',

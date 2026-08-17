@@ -225,20 +225,21 @@
         const st = StateStore.getState();
         const txt = Suite.utils.$('#testText')?.value || 'hola mundo';
         const src = (st.config.general.language || 'en') === 'es' ? 'es' : 'en';
-        const dst = st.channels[Object.keys(st.channels)[0]]['lang-target'] || 'en';
+        const first = st.channels[Object.keys(st.channels)[0]];
+        const dst = (first && first['lang-target']) || 'en';
         const testOut = Suite.utils.$('#testOut');
         if (testOut) {
           setTimeout(() => {
             testOut.innerHTML =
               '<b>' +
               src +
-              ' â†’ ' +
+              ' → ' +
               dst +
-              '</b> Â· Â«' +
+              '</b> · «' +
               Suite.utils.esc(txt) +
-              'Â» â†’ Â«<span style="color:var(--green)">' +
-              Suite.utils.esc(txt + ' (traducciÃ³n demo)') +
-              '</span>Â»';
+              '» → «<span style="color:var(--green)">' +
+              Suite.utils.esc(txt + ' (traducción demo)') +
+              '</span>»';
           }, 240);
         }
       });

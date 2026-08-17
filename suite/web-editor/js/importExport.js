@@ -13,7 +13,7 @@
         const st = StateStore.getState();
         const v = Suite.validate.validate(st);
         if (v.blocking) {
-          Suite.utils.toast(v.errors + ' error(s) â€” ' + global.Suite.i18n.t('toast_blocked'), 'err', 3600);
+          Suite.utils.toast(v.errors + ' error(s) — ' + global.Suite.i18n.t('toast_blocked'), 'err', 3600);
           return;
         }
         const files = Suite.model.exportFiles(st, v);
@@ -58,7 +58,7 @@
               Suite.utils.toast('no .yml/.json found', 'warn');
             }
           } catch (err) {
-            Suite.utils.toast('zip invÃ¡lido: ' + err.message, 'err');
+            Suite.utils.toast('zip inválido: ' + err.message, 'err');
           }
         };
         reader.readAsArrayBuffer(file);

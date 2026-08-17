@@ -30,7 +30,7 @@
       config: {
         'quick-look': true,
         general: { language: 'en' },
-        iflow: { engine: { parallel: false }, guard: { 'max-steps': 512 }, filter: { 'dedup-fanout': true } },
+        iflow: { engine: { parallel: false } },
         sonido: { enabled: true },
       },
       channels: {

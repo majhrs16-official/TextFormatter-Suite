@@ -371,6 +371,7 @@ raíz (15 builds sueltos).
 |---|---|
 | `docs/ADR.md` | Registro de decisiones de arquitectura (contratos SPI, fases F0–F7, consecuencias). |
 | `docs/PLAN.md` | Plan de ejecución vivo: bugs confirmados, deuda, roadmap por fases. |
+| `docs/AUDITORIA.md` | Auditoría completa 2026-08-16: volcado íntegro de los 5 subagentes (bugs, paridad, arquitectura, clean code, roadmap) + verificación manual. |
 | `docs/web-editor/DESIGN.md` | Diseño del Web Editor (layout GIMP/Grafana, canvas de nodos, decisiones). |
 | `docs/web-editor/schema-v2.2.md` | Schema v2.2 detallado (archivos, claves, reglas de round-trip). |
 
