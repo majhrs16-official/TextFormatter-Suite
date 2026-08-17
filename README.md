@@ -379,5 +379,4 @@ raíz (15 builds sueltos).
 **GPL-3.0** (LICENSE). Repositorio:
 https://github.com/majhrs16-official/TextFormatter-Suite
 
-Documentación del proyecto original: `/usr/src/chattranslator` +
-`/usr/src/chattranslator.wiki` (referencia histórica).
+Documentación del proyecto original: https://github.com/Majhrs16/ChatTranslator y https://github.com/Majhrs16/ChatTranslator/wiki (referencia histórica).
