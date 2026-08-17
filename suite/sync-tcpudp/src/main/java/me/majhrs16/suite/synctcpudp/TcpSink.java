@@ -27,9 +27,9 @@ public final class TcpSink implements SyncSink {
     private final int localPort;
     private volatile SyncListener listener;
     private final AtomicBoolean running = new AtomicBoolean();
-    private ServerSocket server;
-    private Thread acceptThread;
-    private Socket pendingSocket;
+    private volatile ServerSocket server;
+    private volatile Thread acceptThread;
+    private volatile Socket pendingSocket;
 
     public TcpSink(String remoteHost, int remotePort, int localPort) {
         this.remoteHost = remoteHost;

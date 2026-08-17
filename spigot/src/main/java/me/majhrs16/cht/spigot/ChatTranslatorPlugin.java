@@ -25,6 +25,7 @@ public final class ChatTranslatorPlugin extends JavaPlugin {
     public void onEnable() {
         ConfigFolder folder = new SpigotConfigFolder(getDataFolder());
         SpigotLogger logger = new SpigotLogger(this);
+        NmsLocaleBridge.init(getLogger());
         DefaultFiles.copyMissing(folder, logger);
         this.audiences = BukkitAudiences.create(this);
 

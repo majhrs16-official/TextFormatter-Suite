@@ -1,8 +1,7 @@
 package me.majhrs16.suite.iflow.channel;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Sliding-window per-second limiter keyed by {@code (channelPath, actorUuid)}.
@@ -15,8 +14,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class RateLimiter {
 
     private final long capacity;
-    private final Map<String, Bucket> buckets = new HashMap<>();
+    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final Clock clock;
+
+    private static final long WINDOW_NANOS = 1_000_000_000L;
+    private static final long IDLE_NANOS = 5 * WINDOW_NANOS;
 
     public RateLimiter(int capacity) {
         this(capacity, System::nanoTime);
@@ -36,6 +38,9 @@ public final class RateLimiter {
      */
     public boolean tryAcquire(String key) {
         long now = clock.nanoTime();
+        if (++acquisitions % PURGE_INTERVAL == 0) {
+            purgeIdle(now);
+        }
         Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
         synchronized (bucket) {
             bucket.refill(now);
@@ -48,7 +53,14 @@ public final class RateLimiter {
         }
     }
 
-    private static final long WINDOW_NANOS = 1_000_000_000L;
+    private static final long PURGE_INTERVAL = 1_024L;
+    private long acquisitions;
+
+    /** Evicts buckets that have been idle for at least {@link #IDLE_NANOS}. */
+    private void purgeIdle(long now) {
+        long cutoff = now - IDLE_NANOS;
+        buckets.entrySet().removeIf(e -> e.getValue().lastFill <= cutoff);
+    }
 
     private static final class Bucket {
         private final float maxTokens;

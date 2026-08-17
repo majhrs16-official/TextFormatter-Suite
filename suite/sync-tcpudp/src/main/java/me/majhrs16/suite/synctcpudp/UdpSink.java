@@ -25,8 +25,8 @@ public final class UdpSink implements SyncSink {
     private final int localPort;
     private volatile SyncListener listener;
     private final AtomicBoolean running = new AtomicBoolean();
-    private DatagramSocket socket;
-    private Thread receiveThread;
+    private volatile DatagramSocket socket;
+    private volatile Thread receiveThread;
 
     public UdpSink(String remoteHost, int remotePort, int localPort) {
         this.remoteHost = remoteHost;

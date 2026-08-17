@@ -46,8 +46,10 @@ final class SpigotScheduler implements Scheduler {
     }
 
     private static long ticks(long amount, TimeUnit unit) {
-        // 20 ticks per second; conversion always rounds up to at least 1 tick.
-        long ticks = TimeUnit.MILLISECONDS.toSeconds(unit.toMillis(amount)) * 20;
+        // 20 ticks per second; round up so sub-second delays are never truncated
+        // to 1 tick (50 ms). e.g. 500ms -> 10 ticks, 50ms -> 1 tick.
+        long millis = unit.toMillis(amount);
+        long ticks = (millis * 20 + 999) / 1000;
         return Math.max(1, ticks);
     }
 }

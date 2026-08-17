@@ -29,7 +29,7 @@ public final class HttpSink implements SyncSink {
     private final String inboundPath;
     private final HttpClient client;
     private volatile SyncListener listener;
-    private HttpServer server;
+    private volatile HttpServer server;
 
     public HttpSink(String outboundUrl, int inboundPort, String inboundPath) {
         this.outboundUrl = Objects.requireNonNull(outboundUrl, "outboundUrl");
@@ -53,17 +53,22 @@ public final class HttpSink implements SyncSink {
     }
 
     @Override
-    public void start() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(inboundPort), 0);
-        server.createContext(inboundPath, this::handleInbound);
-        server.start();
+    public synchronized void start() throws IOException {
+        if (server != null) {
+            return;
+        }
+        HttpServer created = HttpServer.create(new InetSocketAddress(inboundPort), 0);
+        created.createContext(inboundPath, this::handleInbound);
+        created.start();
+        server = created;
     }
 
     @Override
-    public void stop() {
-        if (server != null) {
-            server.stop(0);
-            server = null;
+    public synchronized void stop() {
+        HttpServer current = server;
+        server = null;
+        if (current != null) {
+            current.stop(0);
         }
     }
 
