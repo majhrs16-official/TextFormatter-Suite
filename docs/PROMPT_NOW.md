@@ -105,11 +105,11 @@ respaldo; la validación canónica es Gradle + npm.
 Sin cambios vs plan anterior (adoptar core-api canónico, transport único, MessageCodec
 único, schema single-source).
 
-## FASE 5 — MANAGER (DIFERIDA — regla "Primero las bases", PROMPT.md)
 
-> El autor la sitúa POR DEBAJO de las features pendientes (P2/P3 y paridad).
-> No se toca hasta que A8/A10 y el grueso de P2 estén cerrados. Diseño
-> preservado aquí para no perderlo.
+## FASE 5 — MANAGER (PRIORITARIA — "primero las bases", PROMPT.md)
+
+> SIGUIENTE EN LA COLA: las bases van antes que features. No empezar nada de
+> P2/P3 hasta cerrar esta fase (o dejarla en estado estable).
 
 Prerrequisito clave: SPI de servicios real — hoy los módulos registran solo
 descriptores (`META-INF/services/...Module`); hace falta registrar también las
@@ -118,13 +118,14 @@ aporte motores sin recompilar el host.
 
 | # | Pieza | Notas |
 |---|-------|-------|
+| M0 | SPI de servicios | Registrar implementaciones por ServiceLoader; hosts descubren Translator/SyncSink desde el classloader |
 | M1 | Classloader dinámico | URLClassLoader sobre `plugins/TFS/modules/*.jar` + `ModuleLoader.discover(loader)` + `ModuleGraph.resolve()` → el kernel pasa de decorativo a pieza central |
 | M2 | Descarga GitHub Releases | HttpClient JDK; `latest` o versión compatible (retrocompatibilidad); sha256; instalación atómica en modules/ |
 | M3 | Ciclo de vida | instalar/actualizar ⇒ requiere reinicio (sin hot-swap de clases); config ⇒ ya hot via /suite reload |
 | M4 | Comando `/suite module <list|install|update|remove>` | |
 | M5 | Packaging/CI | GitHub Actions: cada jar de módulo como artefacto del release + manifest.json versionado |
 
-Estimación: M1+M3+M4 ≈ 1 sesión; M2+M5 dependen de red/CI (~media más).
+Estimación: M0+M1+M3+M4 ≈ 1 sesión; M2+M5 dependen de red/CI (~media más).
 
 ## FASE 4 — PARIDAD FUNCIONAL restante
 Cubierta por FASE 2B (A4-A10). Restos históricos: signs persistentes, bStats,

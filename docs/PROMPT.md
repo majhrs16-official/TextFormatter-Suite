@@ -11,7 +11,7 @@ Objetivos:
 
 Reglas:
 - Cero valores hardcodeados: Todo comportamiento debe parametrizarse mediante configuración.
-- **Primero las bases**: Las features concretas (paridad funcional, eventos, integraciones) tienen prioridad sobre infraestructura ambiciosa (Manager de módulos, CI de releases). El Manager se construye cuando las bases estén sólidas — ver FASE 5 en PROMPT_NOW.md.
+- **Primero las bases**: Las BASES del sistema (Manager de módulos, SPI de descubrimiento de servicios, kernel en runtime, packaging/CI) van ANTES que las features — las features no son bases, y sin bases sólidas se construyen sobre arena. Diseño del Manager: FASE 5 en PROMPT_NOW.md.
 - Sincronización del Prompt: Ante actualizaciones importantes del objetivo, actualizar este archivo (/docs/PROMPT.md) para mantener el contexto entre sesiones.
 
 Ecosistema y Módulos (Suite):
@@ -45,7 +45,7 @@ Prácticas Recomendadas:
 - Desplegar agentes para investigación profunda desde cero sobre Arquitectura Hexagonal, retrocompatibilidad funcional teórica con el proyecto original, auditoría de errores y búsqueda de mejoras.
 
 Ideas Pendientes y Roadmap:
-- El Manager buscará módulos en el GitHub del proyecto, descargando la versión correspondiente a los módulos actuales (retrocompatibilidad) o la *latest release* en instalaciones nuevas. **Prioridad: POR DEBAJO de las features pendientes** (regla "Primero las bases"); diseño detallado en FASE 5 de PROMPT_NOW.md.
+- El Manager buscará módulos en el GitHub del proyecto, descargando la versión correspondiente a los módulos actuales (retrocompatibilidad) o la *latest release* en instalaciones nuevas. **Es una BASE: prioridad alta, antes que features** — diseño en FASE 5 de PROMPT_NOW.md.
 - Compatibilidad del mod Fabric para clientes de Minecraft en mundos locales (Singleplayer / Open to LAN).
 - Soporte para Forge y Fabric 1.16.5 únicamente cuando la integración principal (Spigot + Fabric) sea 100% funcional.
 - Migración a CraftBukkit para maximizar la retrocompatibilidad base.
