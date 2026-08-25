@@ -127,10 +127,18 @@ ARCHIVOS: descarga/verifica/reemplaza jars en `plugins/` — nunca carga clases.
 
 Estimación: M0+M1+M3+M4 ≈ 1-2 sesiones; M2+M5 dependen de red/CI (~media más).
 
-Decision abierta para el autor (al ejecutar M0): ¿los motores embebidos hoy en
-el fat-jar permanecen como fallback bundled, o el fat-jar final deja de
-embeber motores y TODO va como plugins separados? (afecta experiencia de
-primera instalación vs pureza modular).
+**DECISIÓN DEL AUTOR (2026-08-25) — pureza modular total:**
+- El fat-jar del host DEJA DE EMBEBIR motores. Se distribuye **1 solo jar: el
+  Manager** (= spigot-host). Todo lo demás son módulos-plugin separados.
+- Instalar NO es soltar jars a mano: el usuario instala el Manager y desde él
+  **selecciona qué módulos instalar**.
+- **Resolución de dependencias contra el entorno actual**: el Manager evalúa
+  lo ya instalado (versiones/contratos vía ModuleDescriptor) y elige artefactos
+  COMPATIBLES con ese conjunto — no ciega contra `latest`. `latest` solo aplica
+  cuando no hay nada instalado (**instalación limpia**: selecciona el set base
+  coherente completo, incluyendo los módulos obligatorios textformatter+iflow).
+- Los módulos obligatorios del núcleo (textformatter, iflow) se auto-seleccionan
+  en toda instalación; sin ellos el host no arranca.
 
 
 ## FASE 4 — PARIDAD FUNCIONAL restante

@@ -45,7 +45,7 @@ Prácticas Recomendadas:
 - Desplegar agentes para investigación profunda desde cero sobre Arquitectura Hexagonal, retrocompatibilidad funcional teórica con el proyecto original, auditoría de errores y búsqueda de mejoras.
 
 Ideas Pendientes y Roadmap:
-- El Manager buscará módulos en el GitHub del proyecto, descargando la versión correspondiente a los módulos actuales (retrocompatibilidad) o la *latest release* en instalaciones nuevas. **Es una BASE: prioridad alta, antes que features** — diseño en FASE 5 de PROMPT_NOW.md.
+- Distribución: **1 solo jar inicial — el Manager** (host). Los motores son módulos-plugin separados que el Manager instala/selecciona, resolviendo dependencias CONTRA EL ENTORNO ACTUAL (no ciegamente contra latest; latest solo en instalación limpia). **Es una BASE: prioridad alta, antes que features** — diseño en FASE 5 de PROMPT_NOW.md.
 - Compatibilidad del mod Fabric para clientes de Minecraft en mundos locales (Singleplayer / Open to LAN).
 - Soporte para Forge y Fabric 1.16.5 únicamente cuando la integración principal (Spigot + Fabric) sea 100% funcional.
 - Migración a CraftBukkit para maximizar la retrocompatibilidad base.
