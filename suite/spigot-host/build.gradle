@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 base {
@@ -41,10 +42,12 @@ dependencies {
     implementation suiteJar('textformatter', 'suite-textformatter')
     implementation suiteJar('iflow', 'suite-iflow')
     implementation suiteJar('host', 'suite-host')
+    implementation suiteJar('sync-discord', 'suite-sync-discord')
 
     implementation 'net.kyori:adventure-platform-bukkit:4.3.2'
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-api:4.17.0'
+    implementation 'net.dv8tion:JDA:6.4.2'
     implementation 'org.yaml:snakeyaml:2.2'
 
     compileOnly 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
@@ -70,11 +73,19 @@ test {
     useJUnitPlatform()
 }
 
+tasks.jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    archiveBaseName = 'textformatter-suite-spigot'
+}
+
+// Fat-jar oficial (shadow). Requiere red la primera vez para el plugin+ASM.
 processResources {
     filesMatching('plugin.yml') {
         expand(version: project.version)
     }
 }
 
-// Fat-jar (shadow) pendiente: requiere descargar com.github.johnrengelman.shadow
-// y sus deps ASM; con red limitada se empaqueta cuando esté disponible.

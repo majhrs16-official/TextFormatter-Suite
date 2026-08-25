@@ -19,6 +19,7 @@ java {
 dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
     implementation 'org.json:json:20240303'
+    implementation 'net.dv8tion:JDA:6.4.2'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
     testImplementation platform('org.junit:junit-bom:5.10.2')

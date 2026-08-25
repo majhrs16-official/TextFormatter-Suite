@@ -75,13 +75,16 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         final MessageDispatcher dispatcher;
         final SpigotActorDirectory directory;
         final UserLanguageStore languages;
+        final DiscordBridge bridge;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
-                SpigotActorDirectory directory, UserLanguageStore languages) {
+                SpigotActorDirectory directory, UserLanguageStore languages,
+                DiscordBridge bridge) {
             this.host = host;
             this.dispatcher = dispatcher;
             this.directory = directory;
             this.languages = languages;
+            this.bridge = bridge;
         }
     }
 
@@ -123,6 +126,10 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
     @Override
     public void onDisable() {
+        Runtime current = runtime;
+        if (current != null && current.bridge != null) {
+            current.bridge.stop();
+        }
         if (audiences != null) {
             audiences.close();
             audiences = null;
@@ -147,9 +154,17 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
         SpigotActorDirectory dirs = new SpigotActorDirectory(languages);
         SpigotChatDelivery delivery = new SpigotChatDelivery(this, audiences);
-        this.runtime = new Runtime(reloaded,
-            new MessageDispatcher(reloaded, dirs, delivery, permissions, logger),
-            dirs, languages);
+        MessageDispatcher dispatcher =
+            new MessageDispatcher(reloaded, dirs, delivery, permissions, logger);
+        DiscordBridge previous = runtime == null ? null : runtime.bridge;
+        if (previous != null) {
+            previous.stop();
+        }
+        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge);
+        if (bridge != null) {
+            bridge.start();
+        }
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -181,6 +196,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         copyResource(folder, "defaults/translators/google.yml",
             folder.resolve("translators/google.yml"));
         copyResource(folder, "defaults/messages.yml", folder.resolve("messages.yml"));
+        copyResource(folder, "defaults/sync/discord.yml",
+            folder.resolve("sync/discord.yml"));
     }
 
     /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */
@@ -271,8 +288,29 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             dispatch(current, MessageType.CHAT, sender, Direction.initiator(),
                 channelPath, event.getMessage(), !senderOff);
         }
-        dispatch(current, MessageType.CHAT, sender, Direction.others(),
+        Message broadcast = broadcast(current, MessageType.CHAT, sender,
             channelPath, event.getMessage(), !senderOff);
+        mirror(current, broadcast);
+    }
+
+    private Message broadcast(Runtime current, MessageType type, Actor sender,
+                              String channelPath, String text, boolean translate) {
+        Message message = Message.builder()
+            .type(type)
+            .sender(sender)
+            .direction(Direction.others().channel(Channel.CHAT))
+            .translate(translate)
+            .text(text)
+            .channel(channelPath)
+            .build();
+        current.dispatcher.dispatch(message);
+        return message;
+    }
+
+    private void mirror(Runtime current, Message sent) {
+        if (current.bridge != null) {
+            current.bridge.mirror(sent);
+        }
     }
 
     /** Canal convencional {@code join}; presencia en el registro = activado. */
@@ -370,6 +408,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             .channel(channelName)
             .build();
         current.dispatcher.dispatch(message);
+        mirror(current, message);
     }
 
     /** @return whether this user disabled translation ({@code /suite lang off}). */
