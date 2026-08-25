@@ -1,0 +1,79 @@
+plugins {
+    id 'java'
+}
+
+base {
+    archivesName = 'textformatter-suite-spigot'
+}
+
+group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url 'https://repo.helpch.at/releases' }
+}
+
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}
+
+// Los módulos suite se consumen como archivos directos de sus builds
+// hermanos: determinista, sin red y siempre actualizado tras cada
+// `./gradlew jar`. El paso a mavenLocal/coordinadas normales llega con el
+// composite build (FASE 3).
+def suiteJar = { String module, String artifact ->
+    files("../${module}/build/libs/${artifact}-2.1.0-SNAPSHOT.jar")
+}
+
+dependencies {
+    implementation suiteJar('core-api', 'suite-core-api')
+    implementation suiteJar('kernel', 'suite-kernel')
+    implementation suiteJar('textformatter', 'suite-textformatter')
+    implementation suiteJar('iflow', 'suite-iflow')
+    implementation suiteJar('host', 'suite-host')
+
+    implementation 'net.kyori:adventure-platform-bukkit:4.3.2'
+    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
+    implementation 'net.kyori:adventure-api:4.17.0'
+    implementation 'org.yaml:snakeyaml:2.2'
+
+    compileOnly 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+    testImplementation 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}
+
+// Fat-jar (shadow) pendiente: requiere descargar com.github.johnrengelman.shadow
+// y sus deps ASM; con red limitada se empaqueta cuando esté disponible.

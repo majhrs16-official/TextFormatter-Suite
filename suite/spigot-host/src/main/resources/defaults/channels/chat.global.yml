@@ -1,0 +1,12 @@
+name: chat.global
+permission: cht.chat.global
+send-permission: cht.chat.global.send
+receive-permission: cht.chat.global.receive
+messages:
+  - '<gray>%player_name%: <tr>%content%</tr></gray>'
+tooltips:
+  - '<gray>Hover: %lang_source% → %lang_target%</gray>'
+sounds:
+  - name: entity.experience_orb.pickup
+    volume: 1.0
+    pitch: 1.0

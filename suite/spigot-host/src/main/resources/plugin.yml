@@ -1,0 +1,15 @@
+name: TextFormatterSuite
+version: '${version}'
+main: me.majhrs16.suite.spigothost.TextFormatterSuitePlugin
+api-version: '1.16'
+author: majhrs16
+description: Modern hexagonal chat translation/formatting suite for Minecraft.
+commands:
+  suite:
+    description: TextFormatter Suite administration.
+    usage: /suite <reload|status>
+    permission: textformattersuite.admin
+permissions:
+  textformattersuite.admin:
+    description: Allows /suite reload and status.
+    default: op

@@ -1,0 +1,4 @@
+provider: google
+active: true
+pool:
+  max-concurrent: 6
