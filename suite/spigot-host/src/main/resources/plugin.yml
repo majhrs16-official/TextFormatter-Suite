@@ -7,7 +7,7 @@ description: Modern hexagonal chat translation/formatting suite for Minecraft.
 commands:
   suite:
     description: TextFormatter Suite administration.
-    usage: /suite <reload|status>
+    usage: /suite <lang|reload|status>
     permission: textformattersuite.admin
 permissions:
   textformattersuite.admin:

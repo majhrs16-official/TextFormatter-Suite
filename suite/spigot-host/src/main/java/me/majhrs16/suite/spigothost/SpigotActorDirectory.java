@@ -3,6 +3,7 @@ package me.majhrs16.suite.spigothost;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.UserLanguageStore;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -15,10 +16,24 @@ import java.util.UUID;
 /**
  * Spigot implementation of {@link ActorDirectory}: every query maps live
  * Bukkit players onto suite {@link Actor}s carrying the native
- * {@link Player} handle. Player language comes from the client locale
- * ({@code Player#getLocale()}, 1.12.2+).
+ * {@link Player} handle.
+ *
+ * <p>Language resolution order per player: stored preference
+ * ({@link UserLanguageStore}; {@code off} maps to {@code AUTO} = receive
+ * source text) → client locale ({@code Player#getLocale()}, 1.12.2+) →
+ * null (host default applies).</p>
  */
 public final class SpigotActorDirectory implements ActorDirectory {
+
+    private final UserLanguageStore languageStore;
+
+    public SpigotActorDirectory() {
+        this(null);
+    }
+
+    public SpigotActorDirectory(UserLanguageStore languageStore) {
+        this.languageStore = languageStore;
+    }
 
     @Override
     public List<Actor> onlinePlayers() {
@@ -85,7 +100,20 @@ public final class SpigotActorDirectory implements ActorDirectory {
             Actor.ActorKind.PLAYER, languageOf(player), player);
     }
 
-    private static Language languageOf(Player player) {
+    private Language languageOf(Player player) {
+        if (languageStore != null) {
+            String stored = languageStore.languageOf(player.getUniqueId()).orElse(null);
+            if (stored != null) {
+                if (UserLanguageStore.OFF.equalsIgnoreCase(stored)) {
+                    // AUTO = target indefinido → TranslationService no traduce.
+                    return Language.AUTO;
+                }
+                Language chosen = Language.of(stored).orElse(null);
+                if (chosen != null) {
+                    return chosen;
+                }
+            }
+        }
         String raw = player.getLocale();
         if (raw == null || raw.isBlank()) {
             return null;
