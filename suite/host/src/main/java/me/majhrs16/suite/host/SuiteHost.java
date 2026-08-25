@@ -61,10 +61,21 @@ public final class SuiteHost {
     /** Bootstraps from a config directory following the suite layout. */
     public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
                                       TranslationService translation, PluginLogger logger) {
+        return bootstrap(configDir, permissions, translation, null, logger);
+    }
+
+    /**
+     * Bootstraps with an external placeholder resolver (e.g. PlaceholderAPI
+     * on Spigot); {@code null} keeps built-in variables only.
+     */
+    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
+                                      TranslationService translation,
+                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
+                                      PluginLogger logger) {
         HostConfig config = ConfigLoader.loadConfig(configDir);
         ChannelRegistry channels = ConfigLoader.loadChannels(configDir);
         Router router = new DefaultRouter(channels, permissions);
-        TextFormatter formatter = TextFormatters.create(channels, translation, null, logger);
+        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
         return new SuiteHost(config, channels, translation, router, formatter, logger);
     }
 
