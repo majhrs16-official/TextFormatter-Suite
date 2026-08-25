@@ -6,8 +6,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'chattranslator'
-
-include 'common'
-include 'spigot'
-include 'fabric-1.20.6'
+rootProject.name = 'textformatter-suite'
