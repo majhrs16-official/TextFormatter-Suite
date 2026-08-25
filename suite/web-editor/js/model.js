@@ -32,6 +32,7 @@
         general: { language: 'en' },
         iflow: { engine: { parallel: false } },
         sonido: { enabled: true },
+        chat: { 'claim-mode': 'cancel-event' },
       },
       channels: {
         'chat.global': ch('chat.global', {

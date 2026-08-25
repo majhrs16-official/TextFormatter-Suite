@@ -18,6 +18,17 @@
         s.config.general.language = $('#cfgLang').value;
       })
     );
+    const claim = Suite.utils.$('#cfgClaimMode');
+    if (claim) {
+      claim.value = st.config.chat?.['claim-mode'] || 'cancel-event';
+      claim.addEventListener('change', () =>
+        StateStore.mutate('claim-mode', () => {
+          const s = StateStore.getState();
+          s.config.chat = s.config.chat || {};
+          s.config.chat['claim-mode'] = claim.value;
+        })
+      );
+    }
     $('#cfgMaxSteps').value = st.graph.guard['max-steps'];
     $('#cfgMaxSteps').addEventListener('change', () => {
       const v = parseInt($('#cfgMaxSteps').value, 10) || 512;
@@ -273,6 +284,13 @@
     const cfgMaxSteps = Suite.utils.$('#cfgMaxSteps');
     if (cfgMaxSteps && cfgMaxSteps.value !== String(st.graph.guard['max-steps'])) {
       cfgMaxSteps.value = st.graph.guard['max-steps'];
+    }
+    const cfgClaimMode = Suite.utils.$('#cfgClaimMode');
+    if (cfgClaimMode) {
+      const desired = st.config.chat?.['claim-mode'] || 'cancel-event';
+      if (cfgClaimMode.value !== desired) {
+        cfgClaimMode.value = desired;
+      }
     }
     Suite.utils.$$('.switch[data-bind]').forEach(sw => {
       const desired = !!Suite.utils.getPath(st, sw.dataset.bind);
