@@ -108,24 +108,30 @@ Sin cambios vs plan anterior (adoptar core-api canónico, transport único, Mess
 
 ## FASE 5 — MANAGER (PRIORITARIA — "primero las bases", PROMPT.md)
 
-> SIGUIENTE EN LA COLA: las bases van antes que features. No empezar nada de
-> P2/P3 hasta cerrar esta fase (o dejarla en estado estable).
+> SIGUIENTE EN LA COLA: las bases van antes que features.
 
-Prerrequisito clave: SPI de servicios real — hoy los módulos registran solo
-descriptores (`META-INF/services/...Module`); hace falta registrar también las
-implementaciones (`...Translator`, `...SyncSink`) para que un jar instalado
-aporte motores sin recompilar el host.
+**Corrección arquitectónica del autor**: NO hay modloader propio. Cada módulo
+es UN PLUGIN/MOD REAL de la plataforma (plugin.yml con name propio; Fabric:
+fabric.mod.json). La plataforma nativa los carga al arrancar; por eso las
+actualizaciones de módulos requieren reiniciar. El Manager solo gestiona
+ARCHIVOS: descarga/verifica/reemplaza jars en `plugins/` — nunca carga clases.
 
 | # | Pieza | Notas |
 |---|-------|-------|
-| M0 | SPI de servicios | Registrar implementaciones por ServiceLoader; hosts descubren Translator/SyncSink desde el classloader |
-| M1 | Classloader dinámico | URLClassLoader sobre `plugins/TFS/modules/*.jar` + `ModuleLoader.discover(loader)` + `ModuleGraph.resolve()` → el kernel pasa de decorativo a pieza central |
-| M2 | Descarga GitHub Releases | HttpClient JDK; `latest` o versión compatible (retrocompatibilidad); sha256; instalación atómica en modules/ |
-| M3 | Ciclo de vida | instalar/actualizar ⇒ requiere reinicio (sin hot-swap de clases); config ⇒ ya hot via /suite reload |
-| M4 | Comando `/suite module <list|install|update|remove>` | |
-| M5 | Packaging/CI | GitHub Actions: cada jar de módulo como artefacto del release + manifest.json versionado |
+| M0 | Módulos como plugins reales | Cada motor (gtranslate, ltranslate, iflow, textformatter, sync-*) recibe plugin.yml propio (carga previa al host vía `depend`) y registra sus IMPLEMENTACIONES en META-INF/services (`...Translator`, `...SyncSink`, además del descriptor `...Module`). En el repo actual viven embebidas en el fat-jar como fallback; el modelo objetivo es 1 jar = 1 plugin |
+| M1 | Descubrimiento cross-plugin | spigot-host compone los ClassLoaders de los plugins-suite instalados y corre ServiceLoader sobre todos → `ModuleLoader.discover(loaders)` + `ModuleGraph.resolve()` (kernel pasa a pieza central SIN modloader: carga Bukkit) |
+| M2 | Descarga GitHub Releases | HttpClient JDK; `latest` o versión compatible (retrocompatibilidad); sha256; escritura atómica DIRECTA en `plugins/` (no hay carpeta modules/) |
+| M3 | Ciclo de vida nativo | instalar/actualizar/quitar = archivo en plugins/ + reinicio (la plataforma carga/descarga); config ⇒ hot via `/suite reload`. Resolución fallida (CONTRACT_MISMATCH etc.) se informa, no crashea |
+| M4 | Comando `/suite module <list|install|update|remove>` | `list` muestra qué plugins-suite detectó y su estado del grafo |
+| M5 | Packaging/CI | GitHub Actions: 1 release con 1 artefacto POR módulo-plugin + manifest.json versionado (sha256 incluidos) |
 
-Estimación: M0+M1+M3+M4 ≈ 1 sesión; M2+M5 dependen de red/CI (~media más).
+Estimación: M0+M1+M3+M4 ≈ 1-2 sesiones; M2+M5 dependen de red/CI (~media más).
+
+Decision abierta para el autor (al ejecutar M0): ¿los motores embebidos hoy en
+el fat-jar permanecen como fallback bundled, o el fat-jar final deja de
+embeber motores y TODO va como plugins separados? (afecta experiencia de
+primera instalación vs pureza modular).
+
 
 ## FASE 4 — PARIDAD FUNCIONAL restante
 Cubierta por FASE 2B (A4-A10). Restos históricos: signs persistentes, bStats,
