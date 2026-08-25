@@ -1,16 +1,18 @@
 # TextFormatter Suite
 
 Plataforma **agnóstica** de traducción y routing de chat para Minecraft.
-Un conjunto de **17 módulos** (JARs independientes, Spigot/CraftBukkit +
-Fabric) que arma todo lo que era ChatTranslator y mucho más, bajo un núcleo
-hexagonal (ports & adapters) con motor de reglas, formatos MiniMessage, grafos
-iFlow y un web-editor de configuración.
+Un conjunto de módulos (JARs independientes) que rehace todo lo que era
+ChatTranslator —y mucho más— bajo un núcleo hexagonal real (ports &
+adapters), motor de reglas, formatos MiniMessage, grafos iFlow y un
+web-editor de configuración.
 
 > **Nombres.** *Suite* = paraguas (el conjunto de módulos). *ChatTranslator*
 > queda retirado como marca global y se usa únicamente para los traductores
-> **GTranslate** / **LTranslate**. Renombrados respecto a v4: `FormatGroups` →
-> `Channels`, `FormatApplier` → `ChannelApplier`, `FormatCatalog` →
-> `ChannelCatalog`, `lastFormatPath` → `channel`.
+> **GTranslate** / **LTranslate**. La **retrocompatibilidad es funcional**:
+> paridad de comportamiento con el proyecto original ChatTranslator, **no**
+> con ningún código intermedio. El trío monolítico `common`/`spigot`/
+> `fabric-1.20.6` fue eliminado del árbol (recuperable desde el historial
+> git); los adapters reales son los módulos `*-host`.
 
 ---
 
@@ -18,32 +20,24 @@ iFlow y un web-editor de configuración.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  ADAPTERS       spigot ─────────────── fabric-1.20.6         │
-│  (implementan portos; nunca se importan entre sí)            │
+│  ADAPTERS       spigot-host ──────── fabric-host (⏳)        │
+│  (implementan puertos; nunca se importan entre sí)           │
 └───────────────▲─────────────────────────────────────────────┘
-                │ implementa
+                │ implementa puertos + bootstrapea
 ┌───────────────┴─────────────────────────────────────────────┐
-│  common  (núcleo v4 legacy, Java 8)                         │
-│  message/ player/ platform(ports)/ rules/ event/ translate/ │
-│  template/ scripting/ chat/ storage/ config/ api             │
-└─────────────────────────────────────────────────────────────┘
-
-        ↯ puente: common-legacy → suite/coretranslator
-
-┌─────────────────────────────────────────────────────────────┐
-│  suite  (17 módulos Gradle, Java 17, publican a mavenLocal)  │
-│  core-api (SPI + modelo)  kernel  textformatter  iflow       │
-│  coretranslator  gtranslate  ltranslate  sync-*  host        │
+│  suite  (módulos Gradle, Java 17)                            │
+│  core-api (SPI + modelo, JDK-puro)  kernel  textformatter    │
+│  iflow  gtranslate  ltranslate  sync-*  host                 │
 │  web-editor (JS vanilla)                                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Reglas de dependencia:**
-- `core-api` = contrato único (SPI `Module`/`Translator`/`SyncSink`/… + modelo
-  `Message`). Dependencias: cero (solo JDK).
+- `core-api` = contrato único (SPI `Module`/`Translator`/`SyncSink`/
+  `ActorDirectory`/… + modelo `Message`). Dependencias: cero (solo JDK).
 - Motores (`kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`,
-  `coretranslator`, `host`) dependen **solo** de `core-api`. Grafo acíclico.
-- Adaptadores de plataforma dependen de `core-api` + exactamente un SDK
+  `host`) dependen **solo** de `core-api`. Grafo acíclico.
+- Adaptadores de plataforma dependen de la suite + exactamente un SDK
   (`spigot-api`, `fabric-api`); nunca entre sí.
 - `web-editor` comunica vía YAML/schema; cero acoplamiento al runtime Java.
 - Descubrimiento de módulos: **ServiceLoader/SPI** (`META-INF/services/…Module`).
@@ -57,14 +51,11 @@ iFlow y un web-editor de configuración.
 
 | Módulo | Java | Rol |
 |---|---|---|
-| `common` | 8 | Núcleo v4 legacy (dominio + portos + infra). Referencia/legacy. |
-| `spigot` | 8 | Adapter Spigot/**CraftBukkit** (solo `org.bukkit.*`, `AsyncPlayerChatEvent`, adventure-platform-bukkit, NMS por reflection). |
-| `fabric-1.20.6` | 21 | Adapter Fabric 1.20.6 (fabric-loom, mixins). |
-| `suite/core-api` | 17 | SPI interno: `Module`, `ModuleDescriptor`, semver, capabilities, modelo `Message`, `Translator`, `TranslationService`, `SyncSink`, `SyncListener`, `PlaceholderResolver`, `PluginLogger`, `ExpressionEvaluator`. |
+| `suite/core-api` | 17 | SPI interno: `Module`, `ModuleDescriptor`, semver, capabilities, modelo `Message`, `Translator`, `TranslationService`, `SyncSink`, `SyncListener`, `ActorDirectory`, `PlaceholderResolver`, `PluginLogger`. |
 | `suite/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (resolución con Tarjan, detecta ciclos, `CONTRACT_MISMATCH`, `JVM_MISMATCH`), `Environment`. |
 | `suite/textformatter` | 17 | Motor de formato MiniMessage: `TemplateRenderer`, `TemplateContext`, `MiniEscape`, `ChannelRegistry`, transforms. |
 | `suite/iflow` | 17 | Motor de flujo: `DefaultRouter`, `Rule`, `RateLimiter` (token bucket), `PermissionChecker` (base + send/receive). |
-| `suite/coretranslator` | 17 | SPI `Translator` + `LegacyBridge` (conversión `ChatMessage→Message`, deprecated). |
+| `suite/coretranslator` | 17 | Puente deprecated que conserva capacidades del original: traducir textos al vuelo vía PAPI (`%cot_*`), capturar/modificar mensajes al vuelo vía API, inyectar lógica compleja vía SpEL. Deprecated = no recomendarlo para uso nuevo; **NO eliminar** (retrocompatibilidad funcional). |
 | `suite/gtranslate` | 17 | Proveedor Google Translate. |
 | `suite/ltranslate` | 17 | Proveedor LibreTranslate. |
 | `suite/sync-discord` | 17 | Gateway Discord v10 (WebSocket JDK + REST), intents, embeds. |
@@ -72,8 +63,9 @@ iFlow y un web-editor de configuración.
 | `suite/sync-http` | 17 | Webhook + REST (`HttpServer` JDK), inbound/outbound. |
 | `suite/sync-tcpudp` | 17 | TCP/UDP raw (`TcpSink`/`UdpSink`), JSON por línea/datagrama. |
 | `suite/sync-velocity` | 17 | **F7+ pendiente** (stub en editor/config, no existe en disco). |
-| `suite/host` | 17 | Composition root: `SuiteHost`, `ConfigLoader` (enum `ConfigPath`), `HostConfig`. Ensambla todos. |
+| `suite/host` | 17 | Composition root: `SuiteHost`, `ConfigLoader` (enum `ConfigPath`), `HostConfig`. Ensambla todos. Wiring listo para plataforma: `MessageDispatcher` (expande `Direction`→receptores, orquesta por-receptor), port `ChatDelivery` (`host/port/`) y port `ActorDirectory` (`core-api/spi/`). |
 | `suite/web-editor` | JS | UI configuración vanilla ES2022 (GitHub Pages estático). |
+| `suite/spigot-host` | 17 | **Plugin Spigot de la suite** (`TextFormatterSuite`): `SpigotActorDirectory`, `SpigotChatDelivery` (hop a main thread), bootstrap `SuiteHost`+`MessageDispatcher`, `/suite reload|status`. Consume los jars hermanos vía `files()`; fat-jar construido manualmente (shadow pendiente de red). |
 
 Dependencias entre motores: `kernel→core-api` · `textformatter→core-api`
 (+Adventure) · `iflow→core-api+textformatter` · `coretranslator→core-api` ·
@@ -239,53 +231,56 @@ Artefacto estático único (GitHub Pages), HTML+CSS+JS vanilla, sin build.
 
 ---
 
-## 9. Eventos para integraciones externas
+## 9. Eventos para integraciones externas (diseño, pendiente)
 
-`ChatTranslatorApi.messageEvents()` devuelve un `MessageEventBus` thread-safe.
-Los listeners corren sincrónicamente en el hilo de dispatch, antes de reglas y
-renderizado:
+> La API descrita antes aquí (`ChatTranslatorApi.messageEvents()`) pertenecía
+> al trío monolítico eliminado. El equivalente de la suite está diseñado pero
+> **aún no implementado**.
+
+Plan: un bus público thread-safe en `core-api` (`MessageBus`), alimentado por
+`MessageDispatcher` **antes** de reglas y renderizado:
 
 ```java
-api.messageEvents().register("anti-swear", event -> {
+bus.register("anti-swear", event -> {
     if (event.message().text().contains("badword")) {
-        event.setCancelled(true);
+        event.setCancelled(true);   // o setMessage(...) / setProcessed(true)
     }
 });
 ```
 
-Un listener puede cancelar el mensaje, `setMessage(...)` reemplazarlo o
-`setProcessed(true)` tomar el control de la entrega.
+Los listeners correrán en el hilo de dispatch; cancelar/reemplazar/tomar
+control de la entrega serán operaciones del `event`. Este bus es además el
+punto de enganche que reemplaza al evento Bukkit-custom que usaba
+ConditionalEvents y la base sobre la que `coretranslator` recuperará las
+capacidades del original (PAPI al vuelo `%cot_*`, captura/modificación de
+mensajes, SpEL).
 
 ---
 
 ## 10. Wiring de plataforma
 
-| Evento | Spigot | Fabric |
-|---|---|---|
-| Chat | `AsyncPlayerChatEvent` | `ServerMessageEvents.ALLOW_CHAT_MESSAGE` |
-| Privado | vía `ChatMessage.target` | igual (nivel motor) |
-| Join / Leave | `PlayerJoinEvent` / `PlayerQuitEvent` | `PlayerManagerMixin` |
-| Death | `PlayerDeathEvent` | `PlayerManagerMixin` |
-| Advancement | `PlayerAdvancementDoneEvent` | `PlayerManagerMixin` |
-| Sign | `PlayerInteractEvent` (sneak+left) | `AttackBlockCallback` |
-| Sonidos | registry Bukkit `Sound` | `Registries.SOUND_EVENT` |
+Los adapters implementan los puertos del motor y eligen el hilo:
 
-`NmsLocaleBridge` lee locales: `Player#getLocale()` (1.12.2+) con fallback
-reflective al campo NMS `EntityPlayer#locale` (caché de Class/Method/Field +
-mapa por UUID), de 1.8 en adelante.
+| Puerto (`core-api/spi` / `host/port`) | Spigot (`spigot-host`) | Fabric (`fabric-host`, ⏳) |
+|---|---|---|
+| `ActorDirectory` | `SpigotActorDirectory` (locale vía `Player#getLocale`, snapshot anti-CME) | ⏳ |
+| `ChatDelivery` | `SpigotChatDelivery` (BukkitAudiences, hop a main thread, sonidos normalizados) | ⏳ |
+| Evento chat | `AsyncPlayerChatEvent` (LOWEST, claim-first; cancela vanilla y despacha eco+broadcast atómicos) | `ServerMessageEvents.ALLOW_CHAT_MESSAGE` |
+| Permisos | `Player#hasPermission` | ⏳ |
+| Mundo/radio | `getWorld().getName()` / `distanceSquared` | ⏳ |
 
 ---
 
 ## 11. Configuración en runtime
 
-- Nunca toca el stack YAML del servidor: ambos adapters embuten `snakeyaml`
-  dentro del jar y parsean con un loader propio (`core.config.ConfigLoader`),
-  también usado para el user-data store.
-- Defaults (`config.yml`, `formats.yml`, `rules.yml`) van **dentro del jar con
-  sus comentarios intactos**; en primer arranque `core.config.DefaultFiles` los
-  copia verbatim y nunca sobrescribe ediciones del usuario.
-- `JsonCodec` (default `DefaultJsonCodec`) serializa `Message` a JSON compacto
-  con cero dependencias externas, usado para cruzar fronteras CoT.
+- Nunca toca el stack YAML del servidor: los hosts embuten `snakeyaml`
+  dentro del jar y parsean con loaders propios (`host/config/ConfigLoader`,
+  `TranslatorsConfig`), tolerantes a archivos corruptos (degradan, no crashean).
+- Defaults (`config.yml`, `channels/chat.global.yml`, `translators/google.yml`)
+  van **dentro del jar** (`resources/defaults/`); en primer arranque se copian
+  si faltan y **nunca sobrescriben** ediciones del usuario.
+- Estrategia de E/S: lectura directa delegando en el Page Cache del SO;
+  `/suite reload` relee todo el layout sin watchers ni polling.
 
 ---
 
@@ -293,18 +288,24 @@ mapa por UUID), de 1.8 en adelante.
 
 > Requiere JDK 8 y 21 (daemon Gradle y fabric-loom en 21; core/spigot target 8)
 > y JDK 17 para `suite/*`. Gradle wrapper 8.13, fabric-loom 1.10.5. Declara las
-> rutas JDK en `org.gradle.java.installations.paths` (`gradle.properties`).
-> Red necesaria en el primer build (Fabric maven, Mojang).
+> Requiere JDK 21 (toolchain; `options.release=17` para bytecode de la suite).
+> Gradle wrapper 8.13. Declara las rutas JDK en
+> `org.gradle.java.installations.paths` (`gradle.properties`). Con caché Gradle
+> poblada, todo compila `--offline`.
 
 ```bash
-# Núcleo v4 (common/spigot/fabric)
-./gradlew :common:build
-./gradlew :spigot:shadowJar          # build/libs/chattranslator-spigot-<ver>.jar
-./gradlew :fabric-1.20.6:build
+# Suite (cada módulo es un build independiente)
+cd suite/core-api      && ./gradlew test publishToMavenLocal --offline --no-daemon
+cd suite/kernel        && ./gradlew test publishToMavenLocal --offline --no-daemon
+cd suite/textformatter && ./gradlew test publishToMavenLocal --offline --no-daemon
+cd suite/iflow         && ./gradlew test publishToMavenLocal --offline --no-daemon
+cd suite/gtranslate    && ./gradlew publishToMavenLocal --offline --no-daemon
+cd suite/ltranslate    && ./gradlew publishToMavenLocal --offline --no-daemon
+cd suite/host          && ./gradlew test publishToMavenLocal --offline --no-daemon
 
-# Suite (cada módulo es un build independiente que publica a mavenLocal)
-cd suite/<modulo> && ./gradlew publishToMavenLocal
-./gradlew test                       # tests del módulo
+# Plugin Spigot de la suite (fat-jar manual mientras shadow requiera red;
+# ver docs/PROMPT_NOW.md para el procedimiento sin red)
+cd suite/spigot-host   && ./gradlew build --offline --no-daemon
 
 # Web editor
 cd suite/web-editor
@@ -316,50 +317,54 @@ npm run test:integration             # harnesses func/interact/click/chain/undo/
 
 ## 13. Pruebas
 
-- **Suite Java**: 131+ tests verdes (kernel, textformatter, iflow,
-  gtranslate/ltranslate, sync-http/tcpudp/telegram/discord, host
-  `ConfigLoaderTest` e2e contra el schema del editor).
+- **Suite Java**: 142+ tests verdes bajo Gradle (kernel, textformatter, iflow,
+  gtranslate/ltranslate, sync-http/tcpudp/telegram/discord, host con
+  `ConfigLoaderTest` e2e contra el schema del editor, `MessageDispatcherTest`
+  con las 8 direcciones y `TranslatorsConfigTest`;
+  spigot-host con normalización de sonido). `ModuleLoaderTest` requiere
+  ejecución aislada.
 - **Web editor**: 99 unitarios (StateStore 40, model 30, validate 29) +
-  harnesses de integración (func 28, interact, click, chain, undo, diffing,
-  bind).
+  harnesses de integración in-repo (`tests/integration/*.cjs`).
 - **Golden tests**: el editor y el host deben validar el mismo config
   (`ConfigLoaderTest.parsesEditorExportedDefaultConfig` verde).
 
 ---
 
-## 14. Estado real (2026-08-15)
+## 14. Estado real (2026-08-24)
 
 **Fases cerradas:** F0–F4 (kernel/SPI, TextFormatter + Channels, iFlow,
-GTranslate/LTranslate, CoreTranslator deprecated), F5 (bordes Sync:
-sync-http/tcpudp/telegram/discord con tests), F6 (Web Editor funcional con
-schema v2.2 y round-trip exacto).
+GTranslate/LTranslate), F5 (bordes Sync), F6 (Web Editor funcional, schema
+v2.2, round-trip exacto), **wiring plataforma lado motor** (`ActorDirectory`,
+`ChatDelivery`, `MessageDispatcher` — ADR 2026-08-24) y **spigot-host**
+(plugin instalable, auditado, fat-jar construido).
 
-**Pendientes (F7+):** knob `engine.parallel` en `DefaultRouter`, `transform`
-en el motor, `sync-velocity` real, wiring suite→plataforma (composition root
-`spigot-host`/`fabric-host`), strings de UI centralizados en `lang/`
-(0% hoy vs ~98% del original), migración automática de configs v4, permisos
-PAPI dentro de SpEL, destino "channel" en reglas.
+**Eliminado:** trío monolítico `common`/`spigot`/`fabric-1.20.6` (nunca
+probado en servidor; recuperable desde historial git).
+
+**Pendientes (F7+):** prueba de spigot-host en servidor real, `fabric-host`,
+knob `engine.parallel` en `DefaultRouter`, `transform` en el motor,
+`sync-velocity` real, strings de UI centralizados en `lang/`, permisos PAPI
+dentro de reglas, destino "channel" en reglas, paridad funcional restante del
+ChatTranslator original (comandos `/cht`, signs persistentes, storage SQLite/
+MySQL, Discord sync bidireccional completo).
 
 ---
 
-## 15. Bugs conocidos y deuda (2026-08-16, auditoría)
+## 15. Bugs conocidos y deuda (2026-08-16 auditoría; estado 2026-08-24)
 
-**Web editor:** mutaciones sobre clon descartado en `actions.js:14`/`props.js`
-(dup/rename/editar/tipo no hacen nada), recursión infinita `core.js:82-84`,
-preview lee `res.output` pero `simulate` devuelve `outputs/order/reason`,
-`esc()` no escapa `&<>"` (XSS), mojibake UTF-8 en strings de UI, drift
-`config.iflow.*` vs `graph.*`.
+**Web editor:** los P0 de la auditoría están **arreglados y verificados con
+tests** (`npm run check` + `test:integration` en verde). Queda: ampliar
+opciones YAML del editor para reglas complejas sin perder usabilidad.
 
-**Java:** `SpigotScheduler.ticks()` truncaba delays <1s a 50ms (**arreglado**),
-`RateLimiter` sin purga de buckets (**arreglado**: ConcurrentHashMap + TTL),
-`HttpSink` no idempotente (**arreglado**: synchronized + volatile),
-`TcpSink`/`UdpSink` sin `volatile` (**arreglado**), `NmsLocaleBridge` reflection
-por mensaje (**arreglado**: caché + logging).
+**Java legacy:** los bugs del trío monolítico (`SpigotScheduler`,
+`NmsLocaleBridge`, etc.) quedaron moot con su eliminación. Vigentes y
+arreglados en la suite: `RateLimiter` (TTL), `HttpSink` idempotente,
+`TcpSink`/`UdpSink` volatile.
 
-**Arquitectura:** dominio duplicado `common`↔`core-api` (~2300 líneas),
-`HttpTransport` byte-idéntico en gtranslate/ltranslate, `MessageCodec` x2,
-config schema en 5 copias manuales, suite no integrada en `settings.gradle`
-raíz (15 builds sueltos).
+**Arquitectura (deuda viva):** `HttpTransport` duplicado en gtranslate/
+ltranslate, `MessageCodec` x2 en sync-http/tcpudp, config schema en varias
+copias manuales, suite sin composite build en el `settings.gradle` raíz
+(los hosts consumen jars vía `files()` hasta entonces).
 
 > Ver **docs/PLAN.md** para el plan de ejecución detallado y el roadmap.
 
@@ -369,9 +374,12 @@ raíz (15 builds sueltos).
 
 | Documento | Contenido |
 |---|---|
-| `docs/ADR.md` | Registro de decisiones de arquitectura (contratos SPI, fases F0–F7, consecuencias). |
+| `docs/PROMPT.md` | Prompt rector del proyecto (objetivos, reglas, ecosistema, repositorio, roadmap). |
+| `docs/PROMPT_NOW.md` | Plan de acción de corto plazo (leer al inicio de cada sesión). |
+| `docs/ADR.md` | Registro de decisiones de arquitectura (contratos SPI, fases, ADR 2026-08-24). |
 | `docs/PLAN.md` | Plan de ejecución vivo: bugs confirmados, deuda, roadmap por fases. |
-| `docs/AUDITORIA.md` | Auditoría completa 2026-08-16: volcado íntegro de los 5 subagentes (bugs, paridad, arquitectura, clean code, roadmap) + verificación manual. |
+| `docs/AUDITORIA.md` | Auditoría completa 2026-08-16: volcado íntegro de los 5 subagentes + verificación manual. |
+| `docs/AUDITORIA-2026-08-24.md` | Auditoría integral del estado actual (módulos, clases, features, paridad) + veredictos del autor como decisiones. |
 | `docs/web-editor/DESIGN.md` | Diseño del Web Editor (layout GIMP/Grafana, canvas de nodos, decisiones). |
 | `docs/web-editor/schema-v2.2.md` | Schema v2.2 detallado (archivos, claves, reglas de round-trip). |
 
@@ -380,4 +388,4 @@ raíz (15 builds sueltos).
 **GPL-3.0** (LICENSE). Repositorio:
 https://github.com/majhrs16-official/TextFormatter-Suite
 
-Documentación del proyecto original: https://github.com/Majhrs16/ChatTranslator y https://github.com/Majhrs16/ChatTranslator/wiki (referencia histórica).
+Documentación del proyecto original: https://github.com/Majhrs16/ChatTranslator y https://github.com/Majhrs16/ChatTranslator/wiki (referencia histórica funcional).
