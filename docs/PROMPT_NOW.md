@@ -106,7 +106,35 @@ Sin cambios vs plan anterior (adoptar core-api canónico, transport único, Mess
 único, schema single-source).
 
 
-## FASE 5 — MANAGER (PRIORITARIA — "primero las bases", PROMPT.md)
+## FASE T — RED DE SEGURIDAD DE TESTS (BASE — antes del Manager)
+
+> Directriz autor 2026-08-25: "¿realmente comprueban cada pieza aislada y en
+> conjunto? ¿sirven para determinar funcionamiento y estabilidad?" Hoy: aislado
+> mayormente sí; integración/concurrencia/estabilidad NO.
+
+| # | Tarea | Notas |
+|---|-------|-------|
+| T1 | Cobertura medida | JaCoCo (Gradle) + c8 (editor); umbrales por paquete crítico visibles en build |
+| T2 | Lógica pura fuera de Bukkit | Extraer resolver-canal, claim-policy, máquina de /suite lang → tests sin servidor |
+| T3 | Golden cross-language | Fixtures YAML compartidos: render Java (serializado plain) == preview JS del editor |
+| T4 | E2E sin servidor | Escenario completo: store + dispatcher + ChatDelivery fake + SyncSink stub (Discord→MC→render) |
+| T5 | Concurrencia determinista | N hilos despachando mientras reload muta runtime; writer concurrently en store |
+| T6 | CI GitHub Actions | Suite Java + editor en cada push; artefacto fat-jar en cada tag (siembra M5) |
+
+## FASE E — EDITOR v3 "C sobre ASM" (tras FASE T)
+
+> Directriz autor 2026-08-25: editor confuso, muchas toolbars sin explicar,
+> poco intuitivo; comprobar cobertura TOTAL del yaml y abstraer a alto nivel
+> (analogía: ASM mnemónicos atómicos ↔ C abstracción potente).
+
+| # | Tarea | Notas |
+|---|-------|-------|
+| E1 | Matriz de cobertura schema↔editor | Cada capacidad del schema v2.2 (y futuras): soportada/parcial/faltante — documento vivo |
+| E2 | Modo atómico (ASM) | Nodos/YAML directo, todo permitido, visible |
+| E3 | Modo alto nivel (C) | Recetas/intenciones que COMPILAN a nodos+canales (ej. "chat regional", "staff solo-lectura"); round-trip exacto sigue siendo invariante |
+| E4 | UX orgánica | Una sola toolbar contextual explicada; onboarding primer uso; drag con magnetismo de puertos; estados vacíos que enseñan |
+
+## FASE 5 — MANAGER (PRIORITARIA — "primero las bases"; tras FASE T)
 
 > SIGUIENTE EN LA COLA: las bases van antes que features.
 
