@@ -96,7 +96,8 @@ class ConfigLoaderTest {
 
     @Test
     void parsesEditorExportedDefaultConfig() throws Exception {
-        Path cfg = Path.of("src/test/resources/editor-default/config");
+        Path cfg = Path.of(ConfigLoaderTest.class
+            .getResource("/editor-default/config").toURI());
         HostConfig config = ConfigLoader.loadConfig(cfg);
         ChannelRegistry registry = ConfigLoader.loadChannels(cfg);
 

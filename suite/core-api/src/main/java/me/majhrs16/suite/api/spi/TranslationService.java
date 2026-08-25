@@ -61,6 +61,11 @@ public final class TranslationService {
         return manager.active().isAvailable();
     }
 
+    /** @return the name of the active provider (e.g. {@code "google"}). */
+    public String activeName() {
+        return manager.active().name();
+    }
+
     private boolean shouldTranslate(Language from, Language to) {
         if (from == null || to == null || to == Language.AUTO) {
             return false;

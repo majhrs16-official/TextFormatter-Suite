@@ -50,7 +50,8 @@ public final class ConfigLoader {
                 .orElse(Language.EN);
 
             return new HostConfig(quickLook, defaultLang, parallel, sound);
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // YAML malformado: degradar a defaults en vez de tumbar el bootstrap.
             return HostConfig.defaults();
         }
     }
@@ -69,7 +70,7 @@ public final class ConfigLoader {
         try (var stream = Files.list(channelsDir)) {
             stream.filter(p -> p.toString().endsWith(".yml"))
                 .forEach(p -> readChannel(p).ifPresent(builder::register));
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             return ChannelRegistry.builder().build();
         }
         return builder.build();
@@ -103,7 +104,8 @@ public final class ConfigLoader {
 
             builder.sounds(readSounds(map.get(ConfigPath.CHANNEL_SOUNDS.key())));
             return java.util.Optional.of(builder.build());
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // Archivo de canal corrupto: se omite sin tumbar los demás.
             return java.util.Optional.empty();
         }
     }
