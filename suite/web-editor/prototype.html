@@ -1,867 +1,2205 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>◧ TextFormatter Suite — Web Editor (prototipo)</title>
-<style>
-:root{
-  --bg0:#15151b; --bg1:#1b1b23; --bg2:#20202a; --bg3:#262632; --bg4:#2c2c3a;
-  --line:#30303d; --line2:#3d3d50;
-  --txt:#e7e7f1; --txt2:#9c9cb0; --muted:#6e6e83;
-  --blue:#4c9bff; --blue-soft:rgba(76,155,255,.13);
-  --green:#6ee7a0; --green-soft:rgba(110,231,160,.13);
-  --red:#ff6b6b; --red-soft:rgba(255,107,107,.13);
-  --amber:#ffc057; --amber-soft:rgba(255,192,87,.13);
-  --purple:#b98cff; --purple-soft:rgba(185,140,255,.13);
-  --shadow:0 6px 18px rgba(0,0,0,.35);
-  --radius:10px;
-  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Inter",sans-serif;
-  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Consolas,monospace;
-}
-html[data-theme="light"]{
-  --bg0:#eef0f5; --bg1:#f6f7fb; --bg2:#ffffff; --bg3:#ffffff; --bg4:#eef0f6;
-  --line:#d9dce6; --line2:#c4c9d8;
-  --txt:#23232f; --txt2:#5b5b70; --muted:#8b8ba0;
-  --blue:#2563eb; --blue-soft:rgba(37,99,235,.10);
-  --green:#17a964; --green-soft:rgba(23,169,100,.10);
-  --red:#dc2626; --red-soft:rgba(220,38,38,.10);
-  --amber:#d97706; --amber-soft:rgba(217,119,6,.10);
-  --purple:#7c3aed; --purple-soft:rgba(124,58,237,.10);
-  --shadow:0 6px 18px rgba(40,50,90,.10);
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  font-family:var(--font); background:var(--bg0); color:var(--txt);
-  overflow:hidden; font-size:13.5px;
-}
-#app{display:flex;flex-direction:column;height:100vh}
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>◧ TextFormatter Suite — Web Editor (prototipo)</title>
+    <style>
+      :root {
+        --bg0: #15151b;
+        --bg1: #1b1b23;
+        --bg2: #20202a;
+        --bg3: #262632;
+        --bg4: #2c2c3a;
+        --line: #30303d;
+        --line2: #3d3d50;
+        --txt: #e7e7f1;
+        --txt2: #9c9cb0;
+        --muted: #6e6e83;
+        --blue: #4c9bff;
+        --blue-soft: rgba(76, 155, 255, 0.13);
+        --green: #6ee7a0;
+        --green-soft: rgba(110, 231, 160, 0.13);
+        --red: #ff6b6b;
+        --red-soft: rgba(255, 107, 107, 0.13);
+        --amber: #ffc057;
+        --amber-soft: rgba(255, 192, 87, 0.13);
+        --purple: #b98cff;
+        --purple-soft: rgba(185, 140, 255, 0.13);
+        --shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        --radius: 10px;
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+        --mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Consolas, monospace;
+      }
+      html[data-theme='light'] {
+        --bg0: #eef0f5;
+        --bg1: #f6f7fb;
+        --bg2: #ffffff;
+        --bg3: #ffffff;
+        --bg4: #eef0f6;
+        --line: #d9dce6;
+        --line2: #c4c9d8;
+        --txt: #23232f;
+        --txt2: #5b5b70;
+        --muted: #8b8ba0;
+        --blue: #2563eb;
+        --blue-soft: rgba(37, 99, 235, 0.1);
+        --green: #17a964;
+        --green-soft: rgba(23, 169, 100, 0.1);
+        --red: #dc2626;
+        --red-soft: rgba(220, 38, 38, 0.1);
+        --amber: #d97706;
+        --amber-soft: rgba(217, 119, 6, 0.1);
+        --purple: #7c3aed;
+        --purple-soft: rgba(124, 58, 237, 0.1);
+        --shadow: 0 6px 18px rgba(40, 50, 90, 0.1);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: var(--font);
+        background: var(--bg0);
+        color: var(--txt);
+        overflow: hidden;
+        font-size: 13.5px;
+      }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
 
-/* ── HEADER ───────────────────────────────────────────── */
-header{
-  display:flex;align-items:center;gap:14px;padding:9px 14px;
-  background:linear-gradient(180deg,var(--bg2),var(--bg1));
-  border-bottom:1px solid var(--line);flex:0 0 auto;
-}
-.logo{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.2px}
-.logo .glyph{
-  width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;
-  box-shadow:0 2px 8px rgba(76,155,255,.35);font-size:14px;
-}
-.logo small{display:block;font-weight:500;color:var(--muted);font-size:10.5px;letter-spacing:.4px}
-.crumbs{
-  flex:1;display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--txt2);
-  padding:6px 12px;margin-left:6px;border-radius:8px;background:var(--bg0);border:1px solid var(--line);
-  min-width:0;white-space:nowrap;overflow:hidden;
-}
-.crumbs b{color:var(--txt);font-weight:600}
-.crumbs .sep{color:var(--muted)}
-.crumbs .leaf{color:var(--blue)}
-.hdr-right{display:flex;align-items:center;gap:7px}
-.iconbtn{
-  width:30px;height:30px;border-radius:8px;display:grid;place-items:center;cursor:pointer;
-  background:var(--bg2);border:1px solid var(--line);color:var(--txt2);font-size:14px;transition:.15s;
-}
-.iconbtn:hover{background:var(--bg3);color:var(--txt);border-color:var(--line2)}
+      /* ── HEADER ───────────────────────────────────────────── */
+      header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 9px 14px;
+        background: linear-gradient(180deg, var(--bg2), var(--bg1));
+        border-bottom: 1px solid var(--line);
+        flex: 0 0 auto;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .logo .glyph {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, var(--blue), var(--purple));
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(76, 155, 255, 0.35);
+        font-size: 14px;
+      }
+      .logo small {
+        display: block;
+        font-weight: 500;
+        color: var(--muted);
+        font-size: 10.5px;
+        letter-spacing: 0.4px;
+      }
+      .crumbs {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12.5px;
+        color: var(--txt2);
+        padding: 6px 12px;
+        margin-left: 6px;
+        border-radius: 8px;
+        background: var(--bg0);
+        border: 1px solid var(--line);
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .crumbs b {
+        color: var(--txt);
+        font-weight: 600;
+      }
+      .crumbs .sep {
+        color: var(--muted);
+      }
+      .crumbs .leaf {
+        color: var(--blue);
+      }
+      .hdr-right {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .iconbtn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        background: var(--bg2);
+        border: 1px solid var(--line);
+        color: var(--txt2);
+        font-size: 14px;
+        transition: 0.15s;
+      }
+      .iconbtn:hover {
+        background: var(--bg3);
+        color: var(--txt);
+        border-color: var(--line2);
+      }
 
-/* ── BODY ─────────────────────────────────────────────── */
-#body{display:flex;flex:1 1 auto;min-height:0}
+      /* ── BODY ─────────────────────────────────────────────── */
+      #body {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
 
-/* sidebar */
-aside{
-  width:226px;flex:0 0 auto;background:var(--bg1);border-right:1px solid var(--line);
-  overflow-y:auto;padding:10px 8px 20px;
-}
-.sgroup{margin-bottom:6px}
-.sgroup>h4{
-  display:flex;align-items:center;gap:8px;padding:7px 9px;cursor:pointer;
-  border-radius:8px;font-size:12px;font-weight:600;color:var(--txt2);letter-spacing:.3px;
-  text-transform:uppercase;user-select:none;
-}
-.sgroup>h4:hover{color:var(--txt)}
-.sgroup>h4 .badge{margin-left:auto;font-size:10.5px;padding:1px 6px;border-radius:99px;background:var(--bg4);color:var(--muted)}
-.sgroup>h4 .badge.err{background:var(--red-soft);color:var(--red)}
-.sgroup ul{list-style:none}
-.sgroup li{
-  display:flex;align-items:center;gap:9px;padding:7px 10px 7px 30px;margin:1px 0;
-  border-radius:8px;cursor:pointer;color:var(--txt2);font-size:13px;position:relative;
-}
-.sgroup li:hover{background:var(--bg2);color:var(--txt)}
-.sgroup li.active{background:var(--blue-soft);color:var(--txt);box-shadow:inset 2px 0 0 var(--blue)}
-.sgroup li .err{width:16px;height:16px;margin-left:auto;border-radius:50%;background:var(--red);color:#fff;font-size:10px;display:grid;place-items:center;font-weight:700}
-.sgroup li .cmt{margin-left:auto;font-size:10px;color:var(--muted);font-family:var(--mono)}
+      /* sidebar */
+      aside {
+        width: 226px;
+        flex: 0 0 auto;
+        background: var(--bg1);
+        border-right: 1px solid var(--line);
+        overflow-y: auto;
+        padding: 10px 8px 20px;
+      }
+      .sgroup {
+        margin-bottom: 6px;
+      }
+      .sgroup > h4 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 9px;
+        cursor: pointer;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--txt2);
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        user-select: none;
+      }
+      .sgroup > h4:hover {
+        color: var(--txt);
+      }
+      .sgroup > h4 .badge {
+        margin-left: auto;
+        font-size: 10.5px;
+        padding: 1px 6px;
+        border-radius: 99px;
+        background: var(--bg4);
+        color: var(--muted);
+      }
+      .sgroup > h4 .badge.err {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+      .sgroup ul {
+        list-style: none;
+      }
+      .sgroup li {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 10px 7px 30px;
+        margin: 1px 0;
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--txt2);
+        font-size: 13px;
+        position: relative;
+      }
+      .sgroup li:hover {
+        background: var(--bg2);
+        color: var(--txt);
+      }
+      .sgroup li.active {
+        background: var(--blue-soft);
+        color: var(--txt);
+        box-shadow: inset 2px 0 0 var(--blue);
+      }
+      .sgroup li .err {
+        width: 16px;
+        height: 16px;
+        margin-left: auto;
+        border-radius: 50%;
+        background: var(--red);
+        color: #fff;
+        font-size: 10px;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+      }
+      .sgroup li .cmt {
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--muted);
+        font-family: var(--mono);
+      }
 
-/* main column */
-main{flex:1 1 auto;display:flex;flex-direction:column;min-width:0;min-height:0}
+      /* main column */
+      main {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+      }
 
-#toolbar1{
-  display:flex;align-items:center;gap:6px;padding:7px 10px;flex:0 0 auto;
-  background:var(--bg2);border-bottom:1px solid var(--line);
-}
-.tbtn{
-  display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:8px;cursor:pointer;
-  background:var(--bg3);border:1px solid var(--line);color:var(--txt2);font-size:12.5px;transition:.15s;
-}
-.tbtn:hover{background:var(--bg4);color:var(--txt);border-color:var(--line2)}
-.tbtn.primary-blue{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600;box-shadow:0 3px 10px rgba(76,155,255,.35)}
-.tbtn.primary-blue:hover{filter:brightness(1.08)}
-.tbtn.primary-green{background:var(--green);border-color:var(--green);color:#0b2b1a;font-weight:700;box-shadow:0 3px 10px rgba(110,231,160,.3)}
-.tbtn.primary-green:hover{filter:brightness(1.05)}
-.tsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
-.tbtn.gray-dark{background:#3a3a44;border-color:#4a4a58;color:#d0d0da}
-html[data-theme="light"] .tbtn.gray-dark{background:#e3e5ec;border-color:#c4c9d8;color:#444} 
-.tbtn .k{font-size:10.5px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:0 4px;font-family:var(--mono)}
-.tspacer{flex:1}
+      #toolbar1 {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        flex: 0 0 auto;
+        background: var(--bg2);
+        border-bottom: 1px solid var(--line);
+      }
+      .tbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 11px;
+        border-radius: 8px;
+        cursor: pointer;
+        background: var(--bg3);
+        border: 1px solid var(--line);
+        color: var(--txt2);
+        font-size: 12.5px;
+        transition: 0.15s;
+      }
+      .tbtn:hover {
+        background: var(--bg4);
+        color: var(--txt);
+        border-color: var(--line2);
+      }
+      .tbtn.primary-blue {
+        background: var(--blue);
+        border-color: var(--blue);
+        color: #fff;
+        font-weight: 600;
+        box-shadow: 0 3px 10px rgba(76, 155, 255, 0.35);
+      }
+      .tbtn.primary-blue:hover {
+        filter: brightness(1.08);
+      }
+      .tbtn.primary-green {
+        background: var(--green);
+        border-color: var(--green);
+        color: #0b2b1a;
+        font-weight: 700;
+        box-shadow: 0 3px 10px rgba(110, 231, 160, 0.3);
+      }
+      .tbtn.primary-green:hover {
+        filter: brightness(1.05);
+      }
+      .tsep {
+        width: 1px;
+        align-self: stretch;
+        background: var(--line);
+        margin: 0 4px;
+      }
+      .tbtn.gray-dark {
+        background: #3a3a44;
+        border-color: #4a4a58;
+        color: #d0d0da;
+      }
+      html[data-theme='light'] .tbtn.gray-dark {
+        background: #e3e5ec;
+        border-color: #c4c9d8;
+        color: #444;
+      }
+      .tbtn .k {
+        font-size: 10.5px;
+        color: var(--muted);
+        border: 1px solid var(--line2);
+        border-radius: 4px;
+        padding: 0 4px;
+        font-family: var(--mono);
+      }
+      .tspacer {
+        flex: 1;
+      }
 
-#toolbar2{
-  display:flex;align-items:center;gap:7px;padding:7px 10px;flex:0 0 auto;overflow-x:auto;
-  background:var(--bg1);border-bottom:1px solid var(--line);
-}
-.pal-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding-right:6px;white-space:nowrap}
-.pal-item{
-  display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;cursor:grab;
-  background:var(--bg3);border:1px dashed var(--line2);color:var(--txt2);font-size:12.5px;white-space:nowrap;
-  transition:.15s;user-select:none;
-}
-.pal-item:hover{border-color:var(--blue);color:var(--txt);background:var(--bg4)}
-.pal-item .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--line2)}
+      #toolbar2 {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 10px;
+        flex: 0 0 auto;
+        overflow-x: auto;
+        background: var(--bg1);
+        border-bottom: 1px solid var(--line);
+      }
+      .pal-label {
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--muted);
+        padding-right: 6px;
+        white-space: nowrap;
+      }
+      .pal-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 8px;
+        cursor: grab;
+        background: var(--bg3);
+        border: 1px dashed var(--line2);
+        color: var(--txt2);
+        font-size: 12.5px;
+        white-space: nowrap;
+        transition: 0.15s;
+        user-select: none;
+      }
+      .pal-item:hover {
+        border-color: var(--blue);
+        color: var(--txt);
+        background: var(--bg4);
+      }
+      .pal-item .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+        background: var(--line2);
+      }
 
-#workspace{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;background:var(--bg0)}
+      #workspace {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        background: var(--bg0);
+      }
 
-/* generic view wrapper */
-.view{position:absolute;inset:0;display:none;overflow:auto;padding:18px}
-.view.active{display:block}
+      /* generic view wrapper */
+      .view {
+        position: absolute;
+        inset: 0;
+        display: none;
+        overflow: auto;
+        padding: 18px;
+      }
+      .view.active {
+        display: block;
+      }
 
-/* ── CANVAS ───────────────────────────────────────────── */
-.viewport{position:absolute;inset:0;overflow:hidden}
-.stage{position:absolute;top:0;left:0;transform-origin:0 0;transition:transform .05s linear}
-.grid-bg{
-  position:absolute;inset:0;pointer-events:none;
-  background-image:radial-gradient(circle,var(--line) 1px,transparent 1.4px);
-  background-size:20px 20px;opacity:.6;
-}
-svg.edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
-.node{
-  position:absolute;min-width:128px;background:var(--bg3);border:1px solid var(--line2);
-  border-radius:12px;box-shadow:var(--shadow);user-select:none;cursor:pointer;
-  transition:box-shadow .15s,border-color .15s,transform .1s;
-}
-.node:hover{border-color:var(--blue)}
-.node.selected{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-soft),var(--shadow)}
-.node .n-head{
-  display:flex;align-items:center;gap:7px;padding:8px 10px 7px;font-size:12px;font-weight:600;
-  border-bottom:1px solid var(--line);border-radius:11px 11px 0 0;
-}
-.node .n-head .dot{width:9px;height:9px;border-radius:50%}
-.node .n-body{padding:8px 10px;display:grid;gap:5px}
-.node .n-body .f{font-family:var(--mono);font-size:11px;color:var(--txt2);background:var(--bg0);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
-.node .n-foot{padding:4px 10px 6px;font-size:10px;color:var(--muted);display:flex;gap:8px;justify-content:space-between}
-.port{
-  position:absolute;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;
-  border-radius:50%;border:2px solid var(--bg4);transition:.15s;
-}
-.port.top{top:0;background:var(--blue)}
-.port.bot{bottom:0;background:var(--green)}
-.node:hover .port{filter:brightness(1.3)}
-.node.cond .dot{background:var(--amber)}
-.node.transform .dot{background:var(--purple)}
-.node.channel .dot{background:var(--green)}
-.node.loop .dot{background:var(--blue)}
-.node.sleep .dot{background:var(--red)}
-.node.target .dot{background:var(--red)}
+      /* ── CANVAS ───────────────────────────────────────────── */
+      .viewport {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+      .stage {
+        position: absolute;
+        top: 0;
+        left: 0;
+        transform-origin: 0 0;
+        transition: transform 0.05s linear;
+      }
+      .grid-bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: radial-gradient(circle, var(--line) 1px, transparent 1.4px);
+        background-size: 20px 20px;
+        opacity: 0.6;
+      }
+      svg.edges {
+        position: absolute;
+        top: 0;
+        left: 0;
+        overflow: visible;
+        pointer-events: none;
+      }
+      .node {
+        position: absolute;
+        min-width: 128px;
+        background: var(--bg3);
+        border: 1px solid var(--line2);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        user-select: none;
+        cursor: pointer;
+        transition:
+          box-shadow 0.15s,
+          border-color 0.15s,
+          transform 0.1s;
+      }
+      .node:hover {
+        border-color: var(--blue);
+      }
+      .node.selected {
+        border-color: var(--blue);
+        box-shadow:
+          0 0 0 2px var(--blue-soft),
+          var(--shadow);
+      }
+      .node .n-head {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 10px 7px;
+        font-size: 12px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--line);
+        border-radius: 11px 11px 0 0;
+      }
+      .node .n-head .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+      }
+      .node .n-body {
+        padding: 8px 10px;
+        display: grid;
+        gap: 5px;
+      }
+      .node .n-body .f {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--txt2);
+        background: var(--bg0);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 3px 6px;
+      }
+      .node .n-foot {
+        padding: 4px 10px 6px;
+        font-size: 10px;
+        color: var(--muted);
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+      }
+      .port {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--bg4);
+        transition: 0.15s;
+      }
+      .port.top {
+        top: 0;
+        background: var(--blue);
+      }
+      .port.bot {
+        bottom: 0;
+        background: var(--green);
+      }
+      .node:hover .port {
+        filter: brightness(1.3);
+      }
+      .node.cond .dot {
+        background: var(--amber);
+      }
+      .node.transform .dot {
+        background: var(--purple);
+      }
+      .node.channel .dot {
+        background: var(--green);
+      }
+      .node.loop .dot {
+        background: var(--blue);
+      }
+      .node.sleep .dot {
+        background: var(--red);
+      }
+      .node.target .dot {
+        background: var(--red);
+      }
 
-/* minimap + canvas chrome */
-.canvas-chrome{position:absolute;z-index:5;display:flex;gap:6px;align-items:center;padding:6px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
-.cch-zoom{top:10px;left:10px}
-.cch-fit{top:auto;bottom:10px;right:10px}
-.minimap{
-  position:absolute;right:10px;top:10px;width:150px;height:100px;z-index:5;border-radius:8px;
-  background:var(--bg1);border:1px solid var(--line);overflow:hidden;opacity:.95;box-shadow:var(--shadow);
-}
-.minimap .mm-view{position:absolute;border:1px solid var(--blue);border-radius:3px;background:var(--blue-soft)}
-.minimap .mm-node{position:absolute;width:10px;height:6px;border-radius:2px;background:var(--line2)}
-.minimap-title{position:absolute;bottom:0;right:0;font-size:9px;color:var(--muted);padding:1px 5px}
+      /* minimap + canvas chrome */
+      .canvas-chrome {
+        position: absolute;
+        z-index: 5;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 6px;
+        background: var(--bg2);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+      }
+      .cch-zoom {
+        top: 10px;
+        left: 10px;
+      }
+      .cch-fit {
+        top: auto;
+        bottom: 10px;
+        right: 10px;
+      }
+      .minimap {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        width: 150px;
+        height: 100px;
+        z-index: 5;
+        border-radius: 8px;
+        background: var(--bg1);
+        border: 1px solid var(--line);
+        overflow: hidden;
+        opacity: 0.95;
+        box-shadow: var(--shadow);
+      }
+      .minimap .mm-view {
+        position: absolute;
+        border: 1px solid var(--blue);
+        border-radius: 3px;
+        background: var(--blue-soft);
+      }
+      .minimap .mm-node {
+        position: absolute;
+        width: 10px;
+        height: 6px;
+        border-radius: 2px;
+        background: var(--line2);
+      }
+      .minimap-title {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        font-size: 9px;
+        color: var(--muted);
+        padding: 1px 5px;
+      }
 
-/* floating panel */
-.panel{
-  position:absolute;z-index:20;width:292px;background:var(--bg3);border:1px solid var(--line2);
-  border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;
-}
-.panel.docked{position:static;display:flex;height:100%;border-radius:0;border:0;border-left:1px solid var(--line);width:292px}
-.panel .p-head{
-  display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);
-  border-bottom:1px solid var(--line);cursor:grab;font-size:12px;font-weight:600;
-}
-.panel .p-head .grip{color:var(--muted);letter-spacing:-1px}
-.panel .p-head .x{margin-left:auto;cursor:pointer;color:var(--muted);font-size:14px}
-.panel .p-head .x:hover{color:var(--red)}
-.panel .p-body{padding:10px;display:grid;gap:9px;overflow:auto}
-.panel label{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
-.panel input[type=text],.panel textarea{
-  width:100%;background:var(--bg0);border:1px solid var(--line);border-radius:7px;
-  color:var(--txt);padding:6px 8px;font-family:var(--mono);font-size:12px;
-}
-.panel textarea{min-height:56px;resize:vertical}
-.sound-list{list-style:none;display:grid;gap:4px}
-.sound-list li{
-  display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg0);
-  border:1px solid var(--line);border-radius:7px;font-size:12px;cursor:pointer;color:var(--txt2);
-}
-.sound-list input{accent-color:var(--green)}
-.sound-list li.on{color:var(--txt);border-color:var(--line2)}
-.seg{display:flex;gap:3px;border:1px solid var(--line);border-radius:8px;padding:2px;overflow:hidden}
-.seg span{flex:1;text-align:center;font-size:11px;padding:4px 0;border-radius:6px;cursor:pointer;color:var(--muted)}
-.seg span.on{background:var(--blue-soft);color:var(--txt);box-shadow:inset 0 0 0 1px var(--blue)}
+      /* floating panel */
+      .panel {
+        position: absolute;
+        z-index: 20;
+        width: 292px;
+        background: var(--bg3);
+        border: 1px solid var(--line2);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .panel.docked {
+        position: static;
+        display: flex;
+        height: 100%;
+        border-radius: 0;
+        border: 0;
+        border-left: 1px solid var(--line);
+        width: 292px;
+      }
+      .panel .p-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: var(--bg2);
+        border-bottom: 1px solid var(--line);
+        cursor: grab;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .panel .p-head .grip {
+        color: var(--muted);
+        letter-spacing: -1px;
+      }
+      .panel .p-head .x {
+        margin-left: auto;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .panel .p-head .x:hover {
+        color: var(--red);
+      }
+      .panel .p-body {
+        padding: 10px;
+        display: grid;
+        gap: 9px;
+        overflow: auto;
+      }
+      .panel label {
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: var(--muted);
+      }
+      .panel input[type='text'],
+      .panel textarea {
+        width: 100%;
+        background: var(--bg0);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--txt);
+        padding: 6px 8px;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .panel textarea {
+        min-height: 56px;
+        resize: vertical;
+      }
+      .sound-list {
+        list-style: none;
+        display: grid;
+        gap: 4px;
+      }
+      .sound-list li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        background: var(--bg0);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        font-size: 12px;
+        cursor: pointer;
+        color: var(--txt2);
+      }
+      .sound-list input {
+        accent-color: var(--green);
+      }
+      .sound-list li.on {
+        color: var(--txt);
+        border-color: var(--line2);
+      }
+      .seg {
+        display: flex;
+        gap: 3px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 2px;
+        overflow: hidden;
+      }
+      .seg span {
+        flex: 1;
+        text-align: center;
+        font-size: 11px;
+        padding: 4px 0;
+        border-radius: 6px;
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .seg span.on {
+        background: var(--blue-soft);
+        color: var(--txt);
+        box-shadow: inset 0 0 0 1px var(--blue);
+      }
 
-/* ── CONFIG VIEW ──────────────────────────────────────── */
-.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;max-width:1100px}
-.card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:grid;gap:12px}
-.card h3{font-size:13px;display:flex;gap:8px;align-items:center}
-.card h3 .dot{width:8px;height:8px;border-radius:50%}
-.field{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.field .cap{color:var(--txt2);font-size:12.5px}
-.field .cap small{display:block;color:var(--muted);font-size:11px}
-.switch{position:relative;width:38px;height:21px;border-radius:99px;background:var(--bg4);cursor:pointer;transition:.15s;flex:0 0 auto}
-.switch.on{background:var(--green)}
-.switch::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.switch.on::after{left:19px}
-.select,select,input[type=text].inp{
-  background:var(--bg0);border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:var(--font);
-}
+      /* ── CONFIG VIEW ──────────────────────────────────────── */
+      .vgrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 14px;
+        max-width: 1100px;
+      }
+      .card {
+        background: var(--bg2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+      .card h3 {
+        font-size: 13px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .card h3 .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      .field {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .field .cap {
+        color: var(--txt2);
+        font-size: 12.5px;
+      }
+      .field .cap small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .switch {
+        position: relative;
+        width: 38px;
+        height: 21px;
+        border-radius: 99px;
+        background: var(--bg4);
+        cursor: pointer;
+        transition: 0.15s;
+        flex: 0 0 auto;
+      }
+      .switch.on {
+        background: var(--green);
+      }
+      .switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        background: #fff;
+        transition: 0.15s;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      }
+      .switch.on::after {
+        left: 19px;
+      }
+      .select,
+      select,
+      input[type='text'].inp {
+        background: var(--bg0);
+        border: 1px solid var(--line);
+        color: var(--txt);
+        border-radius: 7px;
+        padding: 5px 8px;
+        font-size: 12.5px;
+        font-family: var(--font);
+      }
 
-/* ── TXF / cells ──────────────────────────────────────── */
-.chain{display:flex;gap:8px;align-items:center;padding:12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:14px;max-width:1100px}
-.chain .chain-tag{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:6px;background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber);white-space:nowrap}
-.chain .chain-row{display:flex;gap:6px;overflow:auto}
-.chain .rule-chip{white-space:nowrap;padding:5px 9px;border-radius:7px;background:var(--bg3);border:1px solid var(--line);color:var(--txt2);font-size:11.5px;cursor:grab}
-.chain .rule-chip:hover{border-color:var(--blue);color:var(--txt)}
-.chain .hint{font-size:10.5px;color:var(--muted);white-space:nowrap;margin-left:auto}
+      /* ── TXF / cells ──────────────────────────────────────── */
+      .chain {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 12px;
+        background: var(--bg2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        margin-bottom: 14px;
+        max-width: 1100px;
+      }
+      .chain .chain-tag {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 4px 9px;
+        border-radius: 6px;
+        background: var(--amber-soft);
+        color: var(--amber);
+        border: 1px solid var(--amber);
+        white-space: nowrap;
+      }
+      .chain .chain-row {
+        display: flex;
+        gap: 6px;
+        overflow: auto;
+      }
+      .chain .rule-chip {
+        white-space: nowrap;
+        padding: 5px 9px;
+        border-radius: 7px;
+        background: var(--bg3);
+        border: 1px solid var(--line);
+        color: var(--txt2);
+        font-size: 11.5px;
+        cursor: grab;
+      }
+      .chain .rule-chip:hover {
+        border-color: var(--blue);
+        color: var(--txt);
+      }
+      .chain .hint {
+        font-size: 10.5px;
+        color: var(--muted);
+        white-space: nowrap;
+        margin-left: auto;
+      }
 
-/* ── SYNC ─────────────────────────────────────────────── */
-.edge-tabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
-.edge-tabs .etab{padding:7px 14px;border-radius:8px;background:var(--bg2);border:1px solid var(--line);cursor:pointer;color:var(--txt2);font-size:13px}
-.edge-tabs .etab.on{background:var(--blue-soft);color:var(--txt);box-shadow:inset 0 0 0 1px var(--blue)}
-.edge-pane{max-width:560px;display:grid;gap:13px}
-.edge-pane .big-field{display:grid;gap:6px}
-.edge-pane .big-field label{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
-.token-input{display:flex;gap:8px}
-.token-input input[type=text]{flex:1;background:var(--bg0);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-family:var(--mono);font-size:12px}
-.token-input input[type=text]::placeholder{color:var(--muted)}
-.cap-hint{font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:center}
-h2.view-title{font-size:15px;margin-bottom:16px;display:flex;gap:10px;align-items:center}
-h2.view-title .sub{font-size:12px;color:var(--muted);font-weight:400}
+      /* ── SYNC ─────────────────────────────────────────────── */
+      .edge-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .edge-tabs .etab {
+        padding: 7px 14px;
+        border-radius: 8px;
+        background: var(--bg2);
+        border: 1px solid var(--line);
+        cursor: pointer;
+        color: var(--txt2);
+        font-size: 13px;
+      }
+      .edge-tabs .etab.on {
+        background: var(--blue-soft);
+        color: var(--txt);
+        box-shadow: inset 0 0 0 1px var(--blue);
+      }
+      .edge-pane {
+        max-width: 560px;
+        display: grid;
+        gap: 13px;
+      }
+      .edge-pane .big-field {
+        display: grid;
+        gap: 6px;
+      }
+      .edge-pane .big-field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: var(--muted);
+      }
+      .token-input {
+        display: flex;
+        gap: 8px;
+      }
+      .token-input input[type='text'] {
+        flex: 1;
+        background: var(--bg0);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--txt);
+        padding: 8px 10px;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .token-input input[type='text']::placeholder {
+        color: var(--muted);
+      }
+      .cap-hint {
+        font-size: 11.5px;
+        color: var(--muted);
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      h2.view-title {
+        font-size: 15px;
+        margin-bottom: 16px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      h2.view-title .sub {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 400;
+      }
 
-/* ── PERM TABLE ───────────────────────────────────────── */
-.perm-wrap{max-width:900px;overflow:auto}
-table.perms{border-collapse:collapse;width:100%;font-size:12.5px}
-table.perms th,table.perms td{border:1px solid var(--line);padding:8px 10px;text-align:left}
-table.perms th{background:var(--bg2);color:var(--txt2);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.3px}
-table.perms td:first-child{font-weight:600;font-family:var(--mono);font-size:12px}
-table.perms td{background:var(--bg1)}
-table.perms .chk{color:var(--green);font-weight:700}
-.live{display:inline-block;animation:blink 1.4s infinite}
-@keyframes blink{50%{opacity:.35}}
+      /* ── PERM TABLE ───────────────────────────────────────── */
+      .perm-wrap {
+        max-width: 900px;
+        overflow: auto;
+      }
+      table.perms {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12.5px;
+      }
+      table.perms th,
+      table.perms td {
+        border: 1px solid var(--line);
+        padding: 8px 10px;
+        text-align: left;
+      }
+      table.perms th {
+        background: var(--bg2);
+        color: var(--txt2);
+        font-weight: 600;
+        font-size: 11.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+      table.perms td:first-child {
+        font-weight: 600;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      table.perms td {
+        background: var(--bg1);
+      }
+      table.perms .chk {
+        color: var(--green);
+        font-weight: 700;
+      }
+      .live {
+        display: inline-block;
+        animation: blink 1.4s infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.35;
+        }
+      }
 
-/* ── KERNEL ───────────────────────────────────────────── */
-.mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;max-width:980px}
-.mcard{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:13px;display:grid;gap:7px}
-.mcard .mname{font-family:var(--mono);font-weight:600;font-size:12.5px;display:flex;gap:8px;align-items:center}
-.mcard .mver{font-size:11px;color:var(--muted)}
-.mcard .mstate{font-size:11px;display:flex;gap:6px;align-items:center}
-.ok{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--amber)}
+      /* ── KERNEL ───────────────────────────────────────────── */
+      .mod-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 12px;
+        max-width: 980px;
+      }
+      .mcard {
+        background: var(--bg2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 13px;
+        display: grid;
+        gap: 7px;
+      }
+      .mcard .mname {
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 12.5px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .mcard .mver {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .mcard .mstate {
+        font-size: 11px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .ok {
+        color: var(--green);
+      }
+      .bad {
+        color: var(--red);
+      }
+      .warn {
+        color: var(--amber);
+      }
 
-/* ── STATUS BAR ───────────────────────────────────────── */
-#statusbar{
-  display:flex;align-items:center;gap:10px;padding:6px 12px;flex:0 0 auto;
-  background:var(--bg2);border-top:1px solid var(--line);font-size:12px;color:var(--txt2);
-}
-#statusbar .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:99px;background:var(--bg3);border:1px solid var(--line)}
-#statusbar .chip b{color:var(--txt);font-weight:600}
-#statusbar .chip.err{background:var(--red-soft);border-color:var(--red);color:var(--red)}
-#statusbar .chip.dirty{background:var(--amber-soft);border-color:var(--amber);color:var(--amber)}
-#statusbar .dirty-dot{width:7px;height:7px;border-radius:50%;background:var(--amber)}
-#statusbar .right{margin-left:auto;font-size:11px;color:var(--muted)}
+      /* ── STATUS BAR ───────────────────────────────────────── */
+      #statusbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 12px;
+        flex: 0 0 auto;
+        background: var(--bg2);
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--txt2);
+      }
+      #statusbar .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 9px;
+        border-radius: 99px;
+        background: var(--bg3);
+        border: 1px solid var(--line);
+      }
+      #statusbar .chip b {
+        color: var(--txt);
+        font-weight: 600;
+      }
+      #statusbar .chip.err {
+        background: var(--red-soft);
+        border-color: var(--red);
+        color: var(--red);
+      }
+      #statusbar .chip.dirty {
+        background: var(--amber-soft);
+        border-color: var(--amber);
+        color: var(--amber);
+      }
+      #statusbar .dirty-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--amber);
+      }
+      #statusbar .right {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted);
+      }
 
-/* scrollbars */
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:var(--line2);border-radius:99px;border:2px solid transparent;background-clip:content-box}
-::-webkit-scrollbar-track{background:transparent}
-</style>
-</head>
-<body>
-<div id="app">
+      /* scrollbars */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--line2);
+        border-radius: 99px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <!-- ================= HEADER + NAVBAR ================= -->
+      <header>
+        <div class="logo">
+          <span class="glyph">◧</span>
+          <span
+            >TextFormatter Suite
+            <small>deploy · github pages · v2.1</small>
+          </span>
+        </div>
+        <div class="crumbs" id="crumbs">
+          <span class="sep">/</span>
+          <b data-i18n="iflow">iFlow</b>
+          <span class="sep">›</span>
+          <span data-i18n="graph">Grafo</span>
+          <span class="sep">›</span>
+          <span class="leaf">rules.yml</span>
+        </div>
+        <div class="hdr-right">
+          <button class="iconbtn" title="Search (ctrl+k)">🔍</button>
+          <button class="iconbtn" id="langBtn" title="Idioma">EN</button>
+          <button class="iconbtn" id="themeBtn" title="Tema">🌙</button>
+        </div>
+      </header>
 
-  <!-- ================= HEADER + NAVBAR ================= -->
-  <header>
-    <div class="logo">
-      <span class="glyph">◧</span>
-      <span>TextFormatter Suite
-        <small>deploy · github pages · v2.1</small>
-      </span>
-    </div>
-    <div class="crumbs" id="crumbs">
-      <span class="sep">/</span>
-      <b data-i18n="iflow">iFlow</b>
-      <span class="sep">›</span>
-      <span data-i18n="graph">Grafo</span>
-      <span class="sep">›</span>
-      <span class="leaf">rules.yml</span>
-    </div>
-    <div class="hdr-right">
-      <button class="iconbtn" title="Search (ctrl+k)">🔍</button>
-      <button class="iconbtn" id="langBtn" title="Idioma">EN</button>
-      <button class="iconbtn" id="themeBtn" title="Tema">🌙</button>
-    </div>
-  </header>
+      <div id="body">
+        <!-- ================= SIDEBAR ================= -->
+        <aside id="sidebar"></aside>
 
-  <div id="body">
-
-    <!-- ================= SIDEBAR ================= -->
-    <aside id="sidebar"></aside>
-
-    <!-- ================= MAIN ================= -->
-    <main>
-      <!-- toolbar fila 1 -->
-      <div id="toolbar1">
-        <button class="tbtn" title="Deshacer">↶ <span data-i18n="undo">undo</span></button>
-        <button class="tbtn" title="Rehacer">↷ <span data-i18n="redo">redo</span></button>
-        <div class="tsep"></div>
-        <button class="tbtn" title="Reset de sección">⟲ <span data-i18n="reset">reset</span></button>
-        <button class="tbtn" title="Duplicar celdas seleccionadas">⧉ <span data-i18n="dup">duplicate</span></button>
-        <div class="tsep"></div>
-        <button class="tbtn" title="Validar suite completa">✓ <span data-i18n="validate">validate</span></button>
-        <button class="tbtn" title="Simular mensaje de ejemplo">▶ <span data-i18n="sim">simulate</span></button>
-        <div class="tspacer"></div>
-        <button class="tbtn primary-blue" id="previewBtn" title="Previsualizar pipeline completo">🔵 <span data-i18n="preview">Previsualizar</span></button>
-        <button class="tbtn primary-green" id="dlBtn" title="Descargar ZIP">⏷ <span data-i18n="download">Descargar</span> <span class="k">ZIP</span></button>
-      </div>
-
-      <!-- toolbar fila 2 = palette contextual -->
-      <div id="toolbar2">
-        <span class="pal-label" id="palLabel" data-i18n="palette">PALETTE</span>
-        <div id="palette"></div>
-      </div>
-
-      <!-- workspace: views -->
-      <div id="workspace">
-
-        <!-- CONFIG -->
-        <section class="view" data-view="config">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--green)"></span> Configuración general <span class="sub">config.yml — la configuración del plugin en sí</span></h2>
-          <div class="vgrid">
-            <div class="card">
-              <h3><span class="dot" style="background:var(--green)"></span>General</h3>
-              <div class="field"><span class="cap">Idioma default<small>fallback para mensajes sin idioma</small></span><select class="select"><option>es</option><option selected>en</option><option>pt</option></select></div>
-              <div class="field"><span class="cap">Quick-look<small>ventana temporal del mensaje</small></span><span class="switch on"></span></div>
-              <div class="field"><span class="cap">Sonido habilitado<small>WebAudio / notificaciones</small></span><span class="switch on"></span></div>
-            </div>
-            <div class="card">
-              <h3><span class="dot" style="background:var(--blue)"></span>Motor iFlow</h3>
-              <div class="field"><span class="cap">engine.parallel<small>ruta dirigida en paralelo por canal</small></span><span class="switch"></span></div>
-              <div class="field"><span class="cap">Guard anti-bucle<small>máximo de pasos por mensaje</small></span><input class="inp" style="width:70px" value="512"/></div>
-              <div class="field"><span class="cap">Dedup fan-out<small>(mensaje, camino→destino)</small></span><span class="switch on"></span></div>
-            </div>
-            <div class="card">
-              <h3><span class="dot" style="background:var(--purple)"></span>Editor</h3>
-              <div class="field"><span class="cap">Snap a rejilla<small>px</small></span><input class="inp" style="width:70px" value="20"/></div>
-              <div class="field"><span class="cap">Zoom min / máx</span><span class="cap" style="justify-content:flex-end">25% — 400%</span></div>
-              <div class="field"><span class="cap">Autosave proyecto<small>localStorage</small></span><span class="switch on"></span></div>
-            </div>
+        <!-- ================= MAIN ================= -->
+        <main>
+          <!-- toolbar fila 1 -->
+          <div id="toolbar1">
+            <button class="tbtn" title="Deshacer">↶ <span data-i18n="undo">undo</span></button>
+            <button class="tbtn" title="Rehacer">↷ <span data-i18n="redo">redo</span></button>
+            <div class="tsep"></div>
+            <button class="tbtn" title="Reset de sección">⟲ <span data-i18n="reset">reset</span></button>
+            <button class="tbtn" title="Duplicar celdas seleccionadas">⧉ <span data-i18n="dup">duplicate</span></button>
+            <div class="tsep"></div>
+            <button class="tbtn" title="Validar suite completa">✓ <span data-i18n="validate">validate</span></button>
+            <button class="tbtn" title="Simular mensaje de ejemplo">▶ <span data-i18n="sim">simulate</span></button>
+            <div class="tspacer"></div>
+            <button class="tbtn primary-blue" id="previewBtn" title="Previsualizar pipeline completo">
+              🔵 <span data-i18n="preview">Previsualizar</span>
+            </button>
+            <button class="tbtn primary-green" id="dlBtn" title="Descargar ZIP">
+              ⏷ <span data-i18n="download">Descargar</span> <span class="k">ZIP</span>
+            </button>
           </div>
-        </section>
 
-        <!-- TXF (cian) -->
-        <section class="view" data-view="txf">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--green)"></span> TextFormatter <span class="sub">celdas = canales ⇄ se propagan a iFlow y Sync</span></h2>
-          <div class="chain">
-            <span class="chain-tag" title="chain default (iptables)">DEFAULT CHAIN</span>
-            <div class="chain-row">
-              <span class="rule-chip" draggable="true" data-kind="channel">↻ echo</span>
-              <span class="rule-chip" draggable="true" data-kind="channel">✎ reformatear</span>
-              <span class="rule-chip" draggable="true" data-kind="channel">🔊 sonidos</span>
-              <span class="rule-chip" draggable="true" data-kind="channel">⛔ silenciar</span>
-              <span class="rule-chip" draggable="true" data-kind="channel">🌐 traducir</span>
-            </div>
-            <span class="hint">arrastra fuera → nuevo canal con reglas default</span>
+          <!-- toolbar fila 2 = palette contextual -->
+          <div id="toolbar2">
+            <span class="pal-label" id="palLabel" data-i18n="palette">PALETTE</span>
+            <div id="palette"></div>
           </div>
-          <div class="viewport" data-canvas="txf"></div>
-        </section>
 
-        <!-- iFLOW -->
-        <section class="view active" data-view="iflow">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--blue)"></span> iFlow <span class="sub">grafo — puertos ↑ entradas · ↓ salidas · ctrl+rueda zoom</span></h2>
-          <div class="viewport" data-canvas="iflow">
-            <div class="canvas-chrome cch-zoom">
-              <button class="tbtn" id="zoomOut">−</button><b id="zoomVal" style="font-size:11px;min-width:34px;text-align:center">100%</b><button class="tbtn" id="zoomIn">＋</button>
-            </div>
-            <div class="canvas-chrome cch-fit"><button class="tbtn" id="fitView">⤢ fit</button></div>
-            <div class="minimap" id="minimap"></div>
-          </div>
-        </section>
-
-        <!-- TRANSLATORS -->
-        <section class="view" data-view="translators">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--purple)"></span> Traductores <span class="sub">proveedor activo + test A→B</span></h2>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;max-width:1000px">
-            <div class="card">
-              <h3><span class="dot" style="background:var(--blue)"></span>Google <span class="live" style="position:relative;top:3px">●</span></h3>
-              <div class="field"><span class="cap">Endpoint<small>implícito translate_a/single · client=gtx</small></span><span class="cap" style="font-family:var(--mono)">no key</span></div>
-              <div class="field"><span class="cap">Pool de peticiones<small>concurrencia máxima</small></span><input class="inp" style="width:70px" value="6"/></div>
-            </div>
-            <div class="card">
-              <h3><span class="dot" style="background:var(--green)"></span>Libre</h3>
-              <div class="field"><span class="cap">Base URL</span><input type="text" class="inp" style="width:150px" value="https://libretranslate.example"/></div>
-              <div class="field"><span class="cap">API key<small>anónimo si vacío</small></span><input type="text" class="inp" style="width:150px" placeholder="••••••••••••"/></div>
-            </div>
-          </div>
-          <div class="card" style="margin-top:14px;max-width:480px">
-            <h3><span class="dot" style="background:var(--amber)"></span>Probar provider</h3>
-            <div class="token-input">
-              <input type="text" placeholder="es → en: «hola mundo»"/>
-              <button class="tbtn primary-blue">▶ test</button>
-            </div>
-          </div>
-        </section>
-
-        <!-- SYNC / DISCORD -->
-        <section class="view" data-view="sync">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--purple)"></span> Sync <span class="sub">bordes del plugin + Velocity (interconexión entre servidores)</span></h2>
-          <div class="edge-tabs">
-            <span class="etab on" data-edge="discord">Discord</span>
-            <span class="etab" data-edge="telegram">Telegram</span>
-            <span class="etab" data-edge="http">HTTP</span>
-            <span class="etab" data-edge="tcpudp">TCP-UDP</span>
-            <span class="etab" data-edge="velocity">Velocity</span>
-          </div>
-          <div class="edge-pane" data-pane="discord">
-            <div class="big-field">
-              <label>Bot token</label>
-              <div class="token-input">
-                <input type="text" value="" placeholder="paste / type your bot token…"/>
-                <button class="tbtn gray-dark">📋 Pegar token</button>
-                <button class="tbtn gray-dark" id="obtainToken">🔑 Obtener token</button>
+          <!-- workspace: views -->
+          <div id="workspace">
+            <!-- CONFIG -->
+            <section class="view" data-view="config">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--green)"></span>
+                Configuración general <span class="sub">config.yml — la configuración del plugin en sí</span>
+              </h2>
+              <div class="vgrid">
+                <div class="card">
+                  <h3><span class="dot" style="background: var(--green)"></span>General</h3>
+                  <div class="field">
+                    <span class="cap">Idioma default<small>fallback para mensajes sin idioma</small></span
+                    ><select class="select">
+                      <option>es</option>
+                      <option selected>en</option>
+                      <option>pt</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Quick-look<small>ventana temporal del mensaje</small></span
+                    ><span class="switch on"></span>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Sonido habilitado<small>WebAudio / notificaciones</small></span
+                    ><span class="switch on"></span>
+                  </div>
+                </div>
+                <div class="card">
+                  <h3><span class="dot" style="background: var(--blue)"></span>Motor iFlow</h3>
+                  <div class="field">
+                    <span class="cap">engine.parallel<small>ruta dirigida en paralelo por canal</small></span
+                    ><span class="switch"></span>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Guard anti-bucle<small>máximo de pasos por mensaje</small></span
+                    ><input class="inp" style="width: 70px" value="512" />
+                  </div>
+                  <div class="field">
+                    <span class="cap">Dedup fan-out<small>(mensaje, camino→destino)</small></span
+                    ><span class="switch on"></span>
+                  </div>
+                </div>
+                <div class="card">
+                  <h3><span class="dot" style="background: var(--purple)"></span>Editor</h3>
+                  <div class="field">
+                    <span class="cap">Snap a rejilla<small>px</small></span
+                    ><input class="inp" style="width: 70px" value="20" />
+                  </div>
+                  <div class="field">
+                    <span class="cap">Zoom min / máx</span
+                    ><span class="cap" style="justify-content: flex-end">25% — 400%</span>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Autosave proyecto<small>localStorage</small></span
+                    ><span class="switch on"></span>
+                  </div>
+                </div>
               </div>
-              <div class="cap-hint">«Obtener token» abre el dev portal de Discord en una pestaña nueva.</div>
-            </div>
-            <div class="field"><span class="cap">Canal remoto → local<small>mapeo de identidad</small></span><input type="text" class="inp" style="width:170px" value="1234567890 → chat.global"/></div>
-            <div class="field"><span class="cap">Intents<small>GUILD_MESSAGES · MESSAGE_CONTENT</small></span><span class="switch on"></span></div>
-            <div class="card">
-              <h3><span class="dot" style="background:var(--green)"></span>Gateway v10</h3>
-              <div class="field"><span class="cap">Heartbeat<small>Hello interval (ms)</small></span><b style="font-family:var(--mono)">41250</b></div>
-              <div class="field"><span class="cap">Estado sesión</span><span class="chip" style="background:var(--green-soft);color:var(--green);border-color:var(--green)">● conectando…</span></div>
-            </div>
-          </div>
-          <div class="edge-pane" data-pane="telegram" style="display:none">
-            <div class="big-field"><label>Bot token + chat id</label>
-              <div class="token-input"><input type="text" placeholder="123456:ABC-DEF…"/><input type="text" style="width:130px" placeholder="chat-id"/></div>
-            </div>
-            <div class="big-field"><label>Hub</label><input type="text" class="inp" placeholder="hub id / canal span"/></div>
-          </div>
-          <div class="edge-pane" data-pane="http" style="display:none">
-            <div class="big-field"><label>Webhook URL</label><input type="text" class="inp" placeholder="https://…/webhook"/></div>
-            <div class="field"><span class="cap">Puerto inbound</span><input type="text" class="inp" style="width:100px" value="28314"/></div>
-            <div class="field"><span class="cap">Path</span><input type="text" class="inp" style="width:160px" value="/suite/inbound"/></div>
-          </div>
-          <div class="edge-pane" data-pane="tcpudp" style="display:none">
-            <div class="field"><span class="cap">Protocolo</span>
-              <div class="seg"><span class="on">TCP</span><span>UDP</span></div></div>
-            <div class="field"><span class="cap">Host</span><input type="text" class="inp" style="width:150px" value="0.0.0.0"/></div>
-            <div class="field"><span class="cap">Puertos</span><input type="text" class="inp" style="width:150px" value="25566 / 25567"/></div>
-          </div>
-          <div class="edge-pane" data-pane="velocity" style="display:none">
-            <div class="field"><span class="cap">Habilitado<small>proxy plugin (F7+)</small></span><span class="switch on"></span></div>
-            <div class="big-field"><label>Secret / token</label><input type="text" class="inp" placeholder="shared secret entre el proxy y los servidores"/></div>
-            <div class="field"><span class="cap">Servidores</span><input type="text" class="inp" style="width:170px" value="lobby, survival, minigames"/></div>
-            <div class="field"><span class="cap">Mapeo servidor → canal</span><input type="text" class="inp" style="width:170px" value="* → chat.hub"/></div>
-            <div class="cap-hint">Interconecta los chats de varios servidores a través del proxy.</div>
-          </div>
-        </section>
+            </section>
 
-        <!-- PERMS -->
-        <section class="view" data-view="perm">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--amber)"></span> Permisos <span class="sub">tabla rol ↔ permiso</span></h2>
-          <div class="perm-wrap">
-            <table class="perms">
-              <thead><tr><th>Rol</th><th>send</th><th>receive</th><th>bypass rate</th><th>mute</th><th>broadcast</th><th>ctr.*</th><th>admin</th></tr></thead>
-              <tbody>
-                <tr><td>owner</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td></tr>
-                <tr><td>admin</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td>—</td></tr>
-                <tr><td>moderator</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td class="chk">✔</td><td>—</td><td>—</td><td>—</td></tr>
-                <tr><td>guard</td><td class="chk">✔</td><td class="chk">✔</td><td>—</td><td class="chk">✔</td><td>—</td><td>—</td><td>—</td></tr>
-                <tr><td>player</td><td class="chk">✔</td><td class="chk">✔</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
-                <tr><td>guest</td><td>—</td><td class="chk">✔</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+            <!-- TXF (cian) -->
+            <section class="view" data-view="txf">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--green)"></span>
+                TextFormatter <span class="sub">celdas = canales ⇄ se propagan a iFlow y Sync</span>
+              </h2>
+              <div class="chain">
+                <span class="chain-tag" title="chain default (iptables)">DEFAULT CHAIN</span>
+                <div class="chain-row">
+                  <span class="rule-chip" draggable="true" data-kind="channel">↻ echo</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">✎ reformatear</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">🔊 sonidos</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">⛔ silenciar</span>
+                  <span class="rule-chip" draggable="true" data-kind="channel">🌐 traducir</span>
+                </div>
+                <span class="hint">arrastra fuera → nuevo canal con reglas default</span>
+              </div>
+              <div class="viewport" data-canvas="txf"></div>
+            </section>
 
-        <!-- KERNEL -->
-        <section class="view" data-view="kernel">
-          <h2 class="view-title"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:var(--red)"></span> Kernel / Estado <span class="sub">ServiceLoader · handshake · grafo</span></h2>
-          <div class="mod-grid">
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>channel-api</div><div class="mver">2.1.0 · contract 2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>textformatter</div><div class="mver">2.1.0 · contract 2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>iflow</div><div class="mver">2.1.0 · contract 2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>gtranslate</div><div class="mver">2.1.0 · contract 2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>ltranslate</div><div class="mver">2.1.0 · contract 2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>coretranslator</div><div class="mver">1.0.0 · legacy</div><div class="mstate"><span class="warn">⚠ deprecated</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>sync-http</div><div class="mver">2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>sync-tcpudp</div><div class="mver">2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>sync-telegram</div><div class="mver">2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--green)"></span>sync-discord</div><div class="mver">2.1.0</div><div class="mstate"><span class="ok">✔ RESOLVED</span></div></div>
-            <div class="mcard"><div class="mname"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--red)"></span>sync-velocity</div><div class="mver">—</div><div class="mstate"><span class="bad">✘ ausente · motor F7+</span></div></div>
-          </div>
-        </section>
+            <!-- iFLOW -->
+            <section class="view active" data-view="iflow">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--blue)"></span>
+                iFlow <span class="sub">grafo — puertos ↑ entradas · ↓ salidas · ctrl+rueda zoom</span>
+              </h2>
+              <div class="viewport" data-canvas="iflow">
+                <div class="canvas-chrome cch-zoom">
+                  <button class="tbtn" id="zoomOut">−</button
+                  ><b id="zoomVal" style="font-size: 11px; min-width: 34px; text-align: center">100%</b
+                  ><button class="tbtn" id="zoomIn">＋</button>
+                </div>
+                <div class="canvas-chrome cch-fit"><button class="tbtn" id="fitView">⤢ fit</button></div>
+                <div class="minimap" id="minimap"></div>
+              </div>
+            </section>
 
+            <!-- TRANSLATORS -->
+            <section class="view" data-view="translators">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--purple)"></span>
+                Traductores <span class="sub">proveedor activo + test A→B</span>
+              </h2>
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+                  gap: 14px;
+                  max-width: 1000px;
+                "
+              >
+                <div class="card">
+                  <h3>
+                    <span class="dot" style="background: var(--blue)"></span>Google
+                    <span class="live" style="position: relative; top: 3px">●</span>
+                  </h3>
+                  <div class="field">
+                    <span class="cap">Endpoint<small>implícito translate_a/single · client=gtx</small></span
+                    ><span class="cap" style="font-family: var(--mono)">no key</span>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Pool de peticiones<small>concurrencia máxima</small></span
+                    ><input class="inp" style="width: 70px" value="6" />
+                  </div>
+                </div>
+                <div class="card">
+                  <h3><span class="dot" style="background: var(--green)"></span>Libre</h3>
+                  <div class="field">
+                    <span class="cap">Base URL</span
+                    ><input type="text" class="inp" style="width: 150px" value="https://libretranslate.example" />
+                  </div>
+                  <div class="field">
+                    <span class="cap">API key<small>anónimo si vacío</small></span
+                    ><input type="text" class="inp" style="width: 150px" placeholder="••••••••••••" />
+                  </div>
+                </div>
+              </div>
+              <div class="card" style="margin-top: 14px; max-width: 480px">
+                <h3><span class="dot" style="background: var(--amber)"></span>Probar provider</h3>
+                <div class="token-input">
+                  <input type="text" placeholder="es → en: «hola mundo»" />
+                  <button class="tbtn primary-blue">▶ test</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- SYNC / DISCORD -->
+            <section class="view" data-view="sync">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--purple)"></span>
+                Sync <span class="sub">bordes del plugin + Velocity (interconexión entre servidores)</span>
+              </h2>
+              <div class="edge-tabs">
+                <span class="etab on" data-edge="discord">Discord</span>
+                <span class="etab" data-edge="telegram">Telegram</span>
+                <span class="etab" data-edge="http">HTTP</span>
+                <span class="etab" data-edge="tcpudp">TCP-UDP</span>
+                <span class="etab" data-edge="velocity">Velocity</span>
+              </div>
+              <div class="edge-pane" data-pane="discord">
+                <div class="big-field">
+                  <label>Bot token</label>
+                  <div class="token-input">
+                    <input type="text" value="" placeholder="paste / type your bot token…" />
+                    <button class="tbtn gray-dark">📋 Pegar token</button>
+                    <button class="tbtn gray-dark" id="obtainToken">🔑 Obtener token</button>
+                  </div>
+                  <div class="cap-hint">«Obtener token» abre el dev portal de Discord en una pestaña nueva.</div>
+                </div>
+                <div class="field">
+                  <span class="cap">Canal remoto → local<small>mapeo de identidad</small></span
+                  ><input type="text" class="inp" style="width: 170px" value="1234567890 → chat.global" />
+                </div>
+                <div class="field">
+                  <span class="cap">Intents<small>GUILD_MESSAGES · MESSAGE_CONTENT</small></span
+                  ><span class="switch on"></span>
+                </div>
+                <div class="card">
+                  <h3><span class="dot" style="background: var(--green)"></span>Gateway v10</h3>
+                  <div class="field">
+                    <span class="cap">Heartbeat<small>Hello interval (ms)</small></span
+                    ><b style="font-family: var(--mono)">41250</b>
+                  </div>
+                  <div class="field">
+                    <span class="cap">Estado sesión</span
+                    ><span
+                      class="chip"
+                      style="background: var(--green-soft); color: var(--green); border-color: var(--green)"
+                      >● conectando…</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="telegram" style="display: none">
+                <div class="big-field">
+                  <label>Bot token + chat id</label>
+                  <div class="token-input">
+                    <input type="text" placeholder="123456:ABC-DEF…" /><input
+                      type="text"
+                      style="width: 130px"
+                      placeholder="chat-id"
+                    />
+                  </div>
+                </div>
+                <div class="big-field">
+                  <label>Hub</label><input type="text" class="inp" placeholder="hub id / canal span" />
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="http" style="display: none">
+                <div class="big-field">
+                  <label>Webhook URL</label><input type="text" class="inp" placeholder="https://…/webhook" />
+                </div>
+                <div class="field">
+                  <span class="cap">Puerto inbound</span
+                  ><input type="text" class="inp" style="width: 100px" value="28314" />
+                </div>
+                <div class="field">
+                  <span class="cap">Path</span
+                  ><input type="text" class="inp" style="width: 160px" value="/suite/inbound" />
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="tcpudp" style="display: none">
+                <div class="field">
+                  <span class="cap">Protocolo</span>
+                  <div class="seg"><span class="on">TCP</span><span>UDP</span></div>
+                </div>
+                <div class="field">
+                  <span class="cap">Host</span><input type="text" class="inp" style="width: 150px" value="0.0.0.0" />
+                </div>
+                <div class="field">
+                  <span class="cap">Puertos</span
+                  ><input type="text" class="inp" style="width: 150px" value="25566 / 25567" />
+                </div>
+              </div>
+              <div class="edge-pane" data-pane="velocity" style="display: none">
+                <div class="field">
+                  <span class="cap">Habilitado<small>proxy plugin (F7+)</small></span
+                  ><span class="switch on"></span>
+                </div>
+                <div class="big-field">
+                  <label>Secret / token</label
+                  ><input type="text" class="inp" placeholder="shared secret entre el proxy y los servidores" />
+                </div>
+                <div class="field">
+                  <span class="cap">Servidores</span
+                  ><input type="text" class="inp" style="width: 170px" value="lobby, survival, minigames" />
+                </div>
+                <div class="field">
+                  <span class="cap">Mapeo servidor → canal</span
+                  ><input type="text" class="inp" style="width: 170px" value="* → chat.hub" />
+                </div>
+                <div class="cap-hint">Interconecta los chats de varios servidores a través del proxy.</div>
+              </div>
+            </section>
+
+            <!-- PERMS -->
+            <section class="view" data-view="perm">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--amber)"></span>
+                Permisos <span class="sub">tabla rol ↔ permiso</span>
+              </h2>
+              <div class="perm-wrap">
+                <table class="perms">
+                  <thead>
+                    <tr>
+                      <th>Rol</th>
+                      <th>send</th>
+                      <th>receive</th>
+                      <th>bypass rate</th>
+                      <th>mute</th>
+                      <th>broadcast</th>
+                      <th>ctr.*</th>
+                      <th>admin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>owner</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                    </tr>
+                    <tr>
+                      <td>admin</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td>—</td>
+                    </tr>
+                    <tr>
+                      <td>moderator</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                    </tr>
+                    <tr>
+                      <td>guard</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td>—</td>
+                      <td class="chk">✔</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                    </tr>
+                    <tr>
+                      <td>player</td>
+                      <td class="chk">✔</td>
+                      <td class="chk">✔</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                    </tr>
+                    <tr>
+                      <td>guest</td>
+                      <td>—</td>
+                      <td class="chk">✔</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- KERNEL -->
+            <section class="view" data-view="kernel">
+              <h2 class="view-title">
+                <span class="dot" style="width: 9px; height: 9px; border-radius: 50%; background: var(--red)"></span>
+                Kernel / Estado <span class="sub">ServiceLoader · handshake · grafo</span>
+              </h2>
+              <div class="mod-grid">
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >channel-api
+                  </div>
+                  <div class="mver">2.1.0 · contract 2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >textformatter
+                  </div>
+                  <div class="mver">2.1.0 · contract 2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >iflow
+                  </div>
+                  <div class="mver">2.1.0 · contract 2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >gtranslate
+                  </div>
+                  <div class="mver">2.1.0 · contract 2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >ltranslate
+                  </div>
+                  <div class="mver">2.1.0 · contract 2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >coretranslator
+                  </div>
+                  <div class="mver">1.0.0 · legacy</div>
+                  <div class="mstate"><span class="warn">⚠ deprecated</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >sync-http
+                  </div>
+                  <div class="mver">2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >sync-tcpudp
+                  </div>
+                  <div class="mver">2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >sync-telegram
+                  </div>
+                  <div class="mver">2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span
+                      class="dot"
+                      style="width: 8px; height: 8px; border-radius: 50%; background: var(--green)"
+                    ></span
+                    >sync-discord
+                  </div>
+                  <div class="mver">2.1.0</div>
+                  <div class="mstate"><span class="ok">✔ RESOLVED</span></div>
+                </div>
+                <div class="mcard">
+                  <div class="mname">
+                    <span class="dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--red)"></span
+                    >sync-velocity
+                  </div>
+                  <div class="mver">—</div>
+                  <div class="mstate"><span class="bad">✘ ausente · motor F7+</span></div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- status bar -->
+          <div id="statusbar">
+            <span class="chip"><b>12</b> celdas</span>
+            <span class="chip"><b>9</b> aristas</span>
+            <span class="chip"><b>3</b> reglas default</span>
+            <span class="chip">config <b>2.4 KB</b></span>
+            <span class="chip err">✗ <b>2</b> errores</span>
+            <span class="chip dirty"><span class="dirty-dot"></span> sin guardar</span>
+            <span class="right">zoom: <b id="sbarZoom">100%</b> · fila:col 14:3</span>
+          </div>
+        </main>
       </div>
+    </div>
 
-      <!-- status bar -->
-      <div id="statusbar">
-        <span class="chip"><b>12</b> celdas</span>
-        <span class="chip"><b>9</b> aristas</span>
-        <span class="chip"><b>3</b> reglas default</span>
-        <span class="chip">config <b>2.4 KB</b></span>
-        <span class="chip err">✗ <b>2</b> errores</span>
-        <span class="chip dirty"><span class="dirty-dot"></span> sin guardar</span>
-        <span class="right">zoom: <b id="sbarZoom">100%</b> · fila:col 14:3</span>
+    <!-- flotante: panel de propiedades -->
+    <div id="propPanel" class="panel" style="right: 18px; bottom: 52px">
+      <div class="p-head">
+        <span class="grip">⠿</span> <span>Propiedades — nodo</span>
+        <span class="x" id="propDetach" title="desprender / fijar">⧉</span>
       </div>
-    </main>
-  </div>
-</div>
+      <div class="p-body">
+        <label>id</label><input type="text" value="n_chat.global" /> <label>tipo</label
+        ><input type="text" value="transform · evento/mensaje" /> <label>texto reformateado</label
+        ><textarea>&lt;green&gt;💬 %content%&lt;/green&gt;</textarea>
+        <label>sonidos (multi)</label>
+        <ul class="sound-list">
+          <li class="on"><input type="checkbox" checked />🔔 notification.ogg</li>
+          <li class="on"><input type="checkbox" checked />🎵 ping-message.mp3</li>
+          <li><input type="checkbox" />🚨 alert.wav</li>
+          <li><input type="checkbox" />✨ sparkle.ogg</li>
+        </ul>
+        <label>traducible</label><span class="switch on" style="margin-left: auto"></span>
+      </div>
+    </div>
 
-<!-- flotante: panel de propiedades -->
-<div id="propPanel" class="panel" style="right:18px;bottom:52px">
-  <div class="p-head"><span class="grip">⠿</span> <span>Propiedades — nodo</span> <span class="x" id="propDetach" title="desprender / fijar">⧉</span></div>
-  <div class="p-body">
-    <label>id</label><input type="text" value="n_chat.global"/>
-    <label>tipo</label><input type="text" value="transform · evento/mensaje"/>
-    <label>texto reformateado</label><textarea>&lt;green&gt;💬 %content%&lt;/green&gt;</textarea>
-    <label>sonidos (multi)</label>
-    <ul class="sound-list">
-      <li class="on"><input type="checkbox" checked/>🔔 notification.ogg</li>
-      <li class="on"><input type="checkbox" checked/>🎵 ping-message.mp3</li>
-      <li><input type="checkbox"/>🚨 alert.wav</li>
-      <li><input type="checkbox"/>✨ sparkle.ogg</li>
-    </ul>
-    <label>traducible</label><span class="switch on" style="margin-left:auto"></span>
-  </div>
-</div>
+    <script>
+      /* ══════════════ MODEL ══════════════ */
+      const state = { view: 'iflow', zoom: 1, pan: { x: 0, y: 0 }, theme: 'dark', lang: 'en' };
 
-<script>
-/* ══════════════ MODEL ══════════════ */
-const state = { view:'iflow', zoom:1, pan:{x:0,y:0}, theme:'dark', lang:'en' };
+      const GROUPS = [
+        {
+          name: 'config',
+          label: 'Configuración general',
+          badge: '1',
+          items: [['config', 'Configuración del plugin', '*']],
+        },
+        {
+          name: 'txf',
+          label: 'TextFormatter',
+          badge: '12',
+          err: 1,
+          items: [
+            ['txf', 'Canales', '12'],
+            ['plantillas', 'Plantillas', '4'],
+            ['sonidos', 'Sonidos', '6'],
+            ['idiomas', 'Idiomas', '3'],
+          ],
+        },
+        {
+          name: 'iflow',
+          label: 'iFlow',
+          badge: '9',
+          err: 1,
+          items: [
+            ['iflow', 'Grafo', '9'],
+            ['default', 'Default-policy', '3'],
+            ['engine', 'Engine (parallel)', ''],
+            ['tests', 'Tests de regla', ''],
+          ],
+        },
+        {
+          name: 'translators',
+          label: 'Traductores',
+          items: [
+            ['translators', 'Proveedores', '2'],
+            ['test', 'Test A→B', ''],
+          ],
+        },
+        { name: 'sync', label: 'Sync', badge: '5', items: [['sync', 'Bordes', '5']] },
+        { name: 'perm', label: 'Permisos', items: [['perm', 'Rol ↔ permiso', '']] },
+        {
+          name: 'kernel',
+          label: 'Kernel/Estado',
+          items: [
+            ['kernel', 'Detección', '11'],
+            ['handshake', 'Handshake', ''],
+            ['registros', 'Registros', ''],
+          ],
+        },
+      ];
 
-const GROUPS = [
-  { name:'config', label:'Configuración general', badge:'1', items:[ ['config','Configuración del plugin','*'] ] },
-  { name:'txf', label:'TextFormatter', badge:'12', err:1, items:[ ['txf','Canales','12'], ['plantillas','Plantillas','4'], ['sonidos','Sonidos','6'], ['idiomas','Idiomas','3'] ] },
-  { name:'iflow', label:'iFlow', badge:'9', err:1, items:[ ['iflow','Grafo','9'], ['default','Default-policy','3'], ['engine','Engine (parallel)',''], ['tests','Tests de regla',''] ] },
-  { name:'translators', label:'Traductores', items:[ ['translators','Proveedores','2'], ['test','Test A→B',''] ] },
-  { name:'sync', label:'Sync', badge:'5', items:[ ['sync','Bordes','5'] ] },
-  { name:'perm', label:'Permisos', items:[ ['perm','Rol ↔ permiso',''] ] },
-  { name:'kernel', label:'Kernel/Estado', items:[ ['kernel','Detección','11'], ['handshake','Handshake',''], ['registros','Registros',''] ] },
-];
+      const PALETTE = {
+        iflow: [
+          ['channel', 'célula', null, 'channel'],
+          ['cond', 'condición', null, 'cond'],
+          ['transform', 'transform', null, 'transform'],
+          ['loop', 'bucle', null, 'loop'],
+          ['sleep', 'sleep', null, 'sleep'],
+          ['target', 'redirección', null, 'target'],
+          ['log', 'log/test', null, 'channel'],
+          ['out', 'canal salida', null, 'channel'],
+        ],
+        txf: [
+          ['txf', 'celda canal', null, 'channel'],
+          ['template', 'plantilla', null, 'cond'],
+          ['tooltip', 'tooltip', null, 'sleep'],
+          ['snd', 'sonido +', null, 'loop'],
+          ['%content%', '%content%', null, 'transform'],
+          ['<tr>', '<tr>', null, 'transform'],
+          ['%player_name%', '%player_name%', null, 'transform'],
+        ],
+        config: [
+          ['blk', 'bloque idioma'],
+          ['blk', 'bloque sonido'],
+          ['blk', 'quick-look'],
+          ['blk', 'engine.parallel'],
+        ],
+        translators: [],
+        sync: [],
+        perm: [],
+        kernel: [],
+      };
 
-const PALETTE = {
-  iflow:[ ['channel','célula',null,'channel'], ['cond','condición',null,'cond'], ['transform','transform',null,'transform'],
-          ['loop','bucle',null,'loop'], ['sleep','sleep',null,'sleep'], ['target','redirección',null,'target'],
-          ['log','log/test',null,'channel'], ['out','canal salida',null,'channel'] ],
-  txf:[ ['txf','celda canal',null,'channel'], ['template','plantilla',null,'cond'], ['tooltip','tooltip',null,'sleep'],
-        ['snd','sonido +',null,'loop'] , ['%content%','%content%',null,'transform'], ['<tr>','<tr>',null,'transform'], ['%player_name%','%player_name%',null,'transform'] ],
-  config:[ ['blk','bloque idioma'], ['blk','bloque sonido'], ['blk','quick-look'], ['blk','engine.parallel'] ],
-  translators:[], sync:[], perm:[], kernel:[],
-};
+      /* canvas node datasets */
+      const NODES_iflow = [
+        {
+          id: 'n_chat.global',
+          kind: 'channel',
+          x: 60,
+          y: 110,
+          w: 150,
+          title: 'chat.global',
+          sub: 'entrada',
+          body: '%content%',
+        },
+        {
+          id: 'n_cond',
+          kind: 'cond',
+          x: 340,
+          y: 70,
+          w: 150,
+          title: 'condición',
+          sub: 'filtro',
+          body: '!isSilenced(actor)',
+        },
+        {
+          id: 'n_transform',
+          kind: 'transform',
+          x: 660,
+          y: 40,
+          w: 160,
+          title: 'transform',
+          sub: 'evento/mensaje',
+          body: 'reformatear(+2 sonidos)',
+        },
+        {
+          id: 'n_loop',
+          kind: 'loop',
+          x: 660,
+          y: 270,
+          w: 140,
+          title: 'bucle',
+          sub: 'reintentar',
+          body: 'max 512 pasos',
+        },
+        { id: 'n_sleep', kind: 'sleep', x: 1000, y: 60, w: 130, title: 'sleep', sub: 'delay', body: '1.5 s' },
+        {
+          id: 'n_clean',
+          kind: 'target',
+          x: 1000,
+          y: 240,
+          w: 130,
+          title: 'canal salida',
+          sub: 'chat.hub',
+          body: 'broadcast',
+        },
+        {
+          id: 'n_redirect',
+          kind: 'cond',
+          x: 340,
+          y: 320,
+          w: 150,
+          title: 'redirección',
+          sub: 'target',
+          body: '→ staff.alert',
+        },
+      ];
+      const EDGES_iflow = [
+        ['n_chat.global', 'n_cond'],
+        ['n_cond', 'n_transform'],
+        ['n_transform', 'n_sleep'],
+        ['n_sleep', 'n_clean'],
+        ['n_transform', 'n_loop'],
+        ['n_loop', 'n_cond'], // ciclo con condición de salida
+        ['n_cond', 'n_redirect'],
+      ];
 
-/* canvas node datasets */
-const NODES_iflow = [
-  { id:'n_chat.global', kind:'channel', x:60,y:110, w:150, title:'chat.global', sub:'entrada', body:'%content%' },
-  { id:'n_cond', kind:'cond', x:340,y:70,w:150, title:'condición', sub:'filtro', body:'!isSilenced(actor)' },
-  { id:'n_transform', kind:'transform', x:660,y:40,w:160, title:'transform', sub:'evento/mensaje', body:'reformatear(+2 sonidos)' },
-  { id:'n_loop', kind:'loop', x:660,y:270,w:140, title:'bucle', sub:'reintentar', body:'max 512 pasos' },
-  { id:'n_sleep', kind:'sleep', x:1000,y:60,w:130, title:'sleep', sub:'delay', body:'1.5 s' },
-  { id:'n_clean', kind:'target', x:1000,y:240,w:130, title:'canal salida', sub:'chat.hub', body:'broadcast' },
-  { id:'n_redirect', kind:'cond', x:340,y:320,w:150, title:'redirección', sub:'target', body:'→ staff.alert' },
-];
-const EDGES_iflow = [
-  ['n_chat.global','n_cond'], ['n_cond','n_transform'], ['n_transform','n_sleep'], ['n_sleep','n_clean'],
-  ['n_transform','n_loop'], ['n_loop','n_cond'],            // ciclo con condición de salida
-  ['n_cond','n_redirect'],
-];
+      const NODES_txf = [
+        {
+          id: 'c_global',
+          kind: 'channel',
+          x: 50,
+          y: 120,
+          w: 150,
+          title: 'chat.global',
+          sub: 'canal',
+          body: 'echo + reformatear',
+        },
+        {
+          id: 'c_staff',
+          kind: 'channel',
+          x: 300,
+          y: 50,
+          w: 150,
+          title: 'staff.alert',
+          sub: 'canal',
+          body: '⛔ silencio + 🔊',
+        },
+        { id: 'c_vip', kind: 'channel', x: 300, y: 260, w: 150, title: 'vip.chat', sub: 'canal', body: '🌐 traducir' },
+        {
+          id: 'c_tmp',
+          kind: 'channel',
+          x: 560,
+          y: 150,
+          w: 150,
+          title: 'temp.chat',
+          sub: 'nuevo (arrastrado)',
+          body: 'reglas default',
+        },
+      ];
 
-const NODES_txf = [
-  { id:'c_global', kind:'channel', x:50,y:120,w:150, title:'chat.global', sub:'canal', body:'echo + reformatear' },
-  { id:'c_staff', kind:'channel', x:300,y:50,w:150, title:'staff.alert', sub:'canal', body:'⛔ silencio + 🔊' },
-  { id:'c_vip', kind:'channel', x:300,y:260,w:150, title:'vip.chat', sub:'canal', body:'🌐 traducir' },
-  { id:'c_tmp', kind:'channel', x:560,y:150,w:150, title:'temp.chat', sub:'nuevo (arrastrado)', body:'reglas default' },
-];
+      /* ══════════════ I18N (en default, es en vivo opcional) ══════════════ */
+      const I18N = {
+        en: {
+          iflow: 'iFlow',
+          graph: 'grafo',
+          undo: 'undo',
+          redo: 'redo',
+          reset: 'reset',
+          dup: 'duplicate',
+          validate: 'validate',
+          sim: 'simulate',
+          preview: 'Previsualizar',
+          download: 'Descargar',
+          palette: 'PALETTE',
+        },
+        es: {
+          iflow: 'iFlow',
+          graph: 'grafo',
+          undo: 'deshacer',
+          redo: 'rehacer',
+          reset: 'reset',
+          dup: 'duplicar',
+          validate: 'validar',
+          sim: 'simular',
+          preview: 'Previsualizar',
+          download: 'Descargar',
+          palette: 'PALETA',
+        },
+      };
 
-/* ══════════════ I18N (en default, es en vivo opcional) ══════════════ */
-const I18N = {
-  en:{ iflow:'iFlow', graph:'grafo', undo:'undo', redo:'redo', reset:'reset', dup:'duplicate',
-       validate:'validate', sim:'simulate', preview:'Previsualizar', download:'Descargar', palette:'PALETTE' },
-  es:{ iflow:'iFlow', graph:'grafo', undo:'deshacer', redo:'rehacer', reset:'reset', dup:'duplicar',
-       validate:'validar', sim:'simular', preview:'Previsualizar', download:'Descargar', palette:'PALETA' },
-};
+      /* ══════════════ RENDER ══════════════ */
+      const $ = s => document.querySelector(s);
+      function renderSidebar(activeView) {
+        const aside = $('#sidebar');
+        aside.innerHTML = '';
+        for (const g of GROUPS) {
+          const wrap = document.createElement('div');
+          wrap.className = 'sgroup';
+          const h4 = document.createElement('h4');
+          h4.innerHTML = `<span>${g.label}</span>${g.err ? `<span class="badge err">${g.err}</span>` : g.badge ? `<span class="badge">${g.badge}</span>` : ''}`;
+          const ul = document.createElement('ul');
+          g.items.forEach(([view, label, cmt]) => {
+            const li = document.createElement('li');
+            if (view === activeView) li.className = 'active';
+            li.dataset.view = view;
+            li.innerHTML = `<span>${label}</span>${cmt ? `<span class="cmt">${cmt}</span>` : ''}`;
+            if (activeView !== 'perm' && g.name === 'iflow' && view === 'tests') null;
+            li.addEventListener('click', () => switchView(view));
+            ul.appendChild(li);
+          });
+          wrap.appendChild(h4);
+          wrap.appendChild(ul);
+          aside.appendChild(wrap);
+        }
+        // marca grupo con imagen: si hay vista activa, resalta
+        [...aside.querySelectorAll('.sgroup')].forEach(sg => {
+          if (sg.querySelector('.active')) sg.querySelector('h4').style.color = 'var(--txt)';
+        });
+      }
+      function renderPalette(view) {
+        const box = $('#palette');
+        box.innerHTML = '';
+        (PALETTE[view] || []).forEach(p => {
+          const span = document.createElement('span');
+          span.className = 'pal-item';
+          span.draggable = true;
+          span.dataset.kind = p[2];
+          if (p[1].startsWith('%') || p[1] === '<tr>') {
+            span.style.borderStyle = 'solid';
+          }
+          span.innerHTML = p[2] ? `<span class="dot" style="background:var(--col)"></span>${p[1]}` : p[1];
+          if (p[2]) span.style.setProperty('--col', colorOf(p[2]));
+          span.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('text/plain', p[1]);
+            e.dataTransfer.effectAllowed = 'copy';
+          });
+          box.appendChild(span);
+        });
+        $('#palLabel').textContent = I18N[state.lang].palette;
+      }
+      function colorOf(kind) {
+        return (
+          {
+            channel: 'var(--green)',
+            cond: 'var(--amber)',
+            transform: 'var(--purple)',
+            loop: 'var(--blue)',
+            sleep: 'var(--red)',
+            target: 'var(--red)',
+          }[kind] || 'var(--blue)'
+        );
+      }
 
-/* ══════════════ RENDER ══════════════ */
-const $ = s => document.querySelector(s);
-function renderSidebar(activeView){
-  const aside = $('#sidebar'); aside.innerHTML='';
-  for(const g of GROUPS){
-    const wrap=document.createElement('div'); wrap.className='sgroup';
-    const h4=document.createElement('h4');
-    h4.innerHTML = `<span>${g.label}</span>${g.err?`<span class="badge err">${g.err}</span>`:g.badge?`<span class="badge">${g.badge}</span>`:''}`;
-    const ul=document.createElement('ul');
-    g.items.forEach(([view,label,cmt])=>{
-      const li=document.createElement('li');
-      if(view===activeView) li.className='active';
-      li.dataset.view=view;
-      li.innerHTML = `<span>${label}</span>${cmt?`<span class="cmt">${cmt}</span>`:''}`;
-      if(activeView!=='perm' && g.name==='iflow' && view==='tests') null;
-      li.addEventListener('click',()=>switchView(view));
-      ul.appendChild(li);
-    });
-    wrap.appendChild(h4); wrap.appendChild(ul); aside.appendChild(wrap);
-  }
-  // marca grupo con imagen: si hay vista activa, resalta
-  [...aside.querySelectorAll('.sgroup')].forEach(sg=>{
-    if(sg.querySelector('.active')) sg.querySelector('h4').style.color='var(--txt)';
-  });
-}
-function renderPalette(view){
-  const box=$('#palette'); box.innerHTML='';
-  (PALETTE[view]||[]).forEach(p=>{
-    const span=document.createElement('span'); span.className='pal-item'; span.draggable=true;
-    span.dataset.kind=p[2];
-    if(p[1].startsWith('%') || p[1]==='<tr>'){ span.style.borderStyle='solid'; }
-    span.innerHTML = p[2]?`<span class="dot" style="background:var(--col)"></span>${p[1]}`:p[1];
-    if(p[2]) span.style.setProperty('--col', colorOf(p[2]));
-    span.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', p[1]); e.dataTransfer.effectAllowed='copy'; });
-    box.appendChild(span);
-  });
-  $('#palLabel').textContent = I18N[state.lang].palette;
-}
-function colorOf(kind){ return {channel:'var(--green)',cond:'var(--amber)',transform:'var(--purple)',loop:'var(--blue)',sleep:'var(--red)',target:'var(--red)'}[kind]||'var(--blue)'; }
+      /* views switching */
+      function switchView(view) {
+        state.view = view;
+        document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
+        renderSidebar(view);
+        renderPalette(view);
+        const crumbs = $('#crumbs');
+        const group = GROUPS.find(g => g.items.some(([v]) => v === view));
+        const label = group ? group.label : '—';
+        crumbs.innerHTML = `<span class="sep">/</span><b data-i18n="iflow">${label}</b><span class="sep">›</span><span>${label}</span><span class="sep">›</span><span class="leaf">sección</span>`;
+        // gestión de canvas según vista
+        if (view === 'txf') {
+          const vp = document.querySelector('[data-canvas="txf"]');
+          initCanvas(vp, 'txf');
+        }
+        if (view === 'iflow') {
+          const vp = document.querySelector('[data-canvas="iflow"]');
+          initCanvas(vp, 'iflow');
+          $('#minimap').style.display = 'block';
+        } else {
+          $('#minimap').style.display = 'none';
+        }
+      }
 
-/* views switching */
-function switchView(view){
-  state.view = view;
-  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.dataset.view===view));
-  renderSidebar(view); renderPalette(view);
-  const crumbs=$('#crumbs');
-  const group = GROUPS.find(g=>g.items.some(([v])=>v===view));
-  const label = group?group.label:'—';
-  crumbs.innerHTML = `<span class="sep">/</span><b data-i18n="iflow">${label}</b><span class="sep">›</span><span>${label}</span><span class="sep">›</span><span class="leaf">sección</span>`;
-  // gestión de canvas según vista
-  if(view==='txf'){
-    const vp = document.querySelector('[data-canvas="txf"]');
-    initCanvas(vp,'txf');
-  }
-  if(view==='iflow'){
-    const vp = document.querySelector('[data-canvas="iflow"]');
-    initCanvas(vp,'iflow');
-    $('#minimap').style.display='block';
-  } else {
-    $('#minimap').style.display='none';
-  }
-}
+      /* ══════════════ CANVAS ══════════════ */
+      function initCanvas(viewport, view) {
+        if (viewport.dataset.built === '1') return;
+        viewport.dataset.built = '1';
+        const nodes = view === 'iflow' ? NODES_iflow : NODES_txf;
+        const edges = view === 'iflow' ? EDGES_iflow : [];
+        const stage = document.createElement('div');
+        stage.className = 'stage';
+        const grid = document.createElement('div');
+        grid.className = 'grid-bg';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('edges');
+        svg.setAttribute('width', 2400);
+        svg.setAttribute('height', 1400);
+        stage.appendChild(grid);
+        stage.appendChild(svg);
+        viewport.appendChild(stage);
 
-/* ══════════════ CANVAS ══════════════ */
-function initCanvas(viewport, view){
-  if(viewport.dataset.built==='1') return; viewport.dataset.built='1';
-  const nodes = view==='iflow'?NODES_iflow:NODES_txf;
-  const edges = view==='iflow'?EDGES_iflow:[];
-  const stage = document.createElement('div'); stage.className='stage';
-  const grid = document.createElement('div'); grid.className='grid-bg';
-  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.classList.add('edges');
-  svg.setAttribute('width',2400); svg.setAttribute('height',1400);
-  stage.appendChild(grid); stage.appendChild(svg); viewport.appendChild(stage);
-
-  // nodes
-  nodes.forEach(n=>{
-    const node=document.createElement('div'); node.className='node '+n.kind; node.dataset.id=n.id;
-    node.style.left=n.x+'px'; node.style.top=n.y+'px'; node.style.width=n.w+'px';
-    node.innerHTML = `
+        // nodes
+        nodes.forEach(n => {
+          const node = document.createElement('div');
+          node.className = 'node ' + n.kind;
+          node.dataset.id = n.id;
+          node.style.left = n.x + 'px';
+          node.style.top = n.y + 'px';
+          node.style.width = n.w + 'px';
+          node.innerHTML = `
       <span class="port top"></span>
       <div class="n-head"><span class="dot"></span>${n.title}</div>
       <div class="n-body"><span class="f">${n.body}</span><small style="color:var(--muted)">${n.sub}</small></div>
       <div class="n-foot"><span>${n.id}</span><span class="live">●</span></div>
       <span class="port bot"></span>`;
-    node.addEventListener('click',e=>{ e.stopPropagation();
-      document.querySelectorAll('.node.selected').forEach(x=>x.classList.remove('selected'));
-      node.classList.add('selected');
-      $('#propPanel').querySelector('input[type=text]').value=n.id;
-      $('#propPanel').querySelector('textarea').value = n.kind==='transform'
-        ? '<green>💬 %content%</green>' : n.body;
-      fillPropSounds(n.kind==='transform');
-    });
-    stage.appendChild(node);
-  });
+          node.addEventListener('click', e => {
+            e.stopPropagation();
+            document.querySelectorAll('.node.selected').forEach(x => x.classList.remove('selected'));
+            node.classList.add('selected');
+            $('#propPanel').querySelector('input[type=text]').value = n.id;
+            $('#propPanel').querySelector('textarea').value =
+              n.kind === 'transform' ? '<green>💬 %content%</green>' : n.body;
+            fillPropSounds(n.kind === 'transform');
+          });
+          stage.appendChild(node);
+        });
 
-  // edges (svg bezier, puerto inferior→superior)
-  edges.forEach(([a,b])=>{
-    const na=nodes.find(n=>n.id===a), nb=nodes.find(n=>n.id===b); if(!na||!nb) return;
-    const x1=na.x+na.w/2, y1=na.y+70, x2=nb.x+nb.w/2, y2=nb.y;
-    const cy=(y1+y2)/2;
-    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('d',`M${x1},${y1} C${x1},${cy} ${x2},${cy} ${x2},${y2}`);
-    path.setAttribute('fill','none'); path.setAttribute('stroke', b==='n_cond'&&a==='n_loop'?'var(--red)':'var(--line2)');
-    path.setAttribute('stroke-width', a==='n_loop'?2:1.6);
-    path.setAttribute('stroke-dasharray', a==='n_loop'?'4,3':'');
-    svg.appendChild(path);
-  });
+        // edges (svg bezier, puerto inferior→superior)
+        edges.forEach(([a, b]) => {
+          const na = nodes.find(n => n.id === a),
+            nb = nodes.find(n => n.id === b);
+          if (!na || !nb) return;
+          const x1 = na.x + na.w / 2,
+            y1 = na.y + 70,
+            x2 = nb.x + nb.w / 2,
+            y2 = nb.y;
+          const cy = (y1 + y2) / 2;
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', `M${x1},${y1} C${x1},${cy} ${x2},${cy} ${x2},${y2}`);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', b === 'n_cond' && a === 'n_loop' ? 'var(--red)' : 'var(--line2)');
+          path.setAttribute('stroke-width', a === 'n_loop' ? 2 : 1.6);
+          path.setAttribute('stroke-dasharray', a === 'n_loop' ? '4,3' : '');
+          svg.appendChild(path);
+        });
 
-  // interacción: zoom ctrl+rueda
-  viewport.addEventListener('wheel',e=>{
-    if(!(e.ctrlKey||e.metaKey)) return; e.preventDefault();
-    const f = e.deltaY>0?1/1.1:1.1;
-    setZoom(clamp(state.zoom*f,0.25,4));
-  },{passive:false});
+        // interacción: zoom ctrl+rueda
+        viewport.addEventListener(
+          'wheel',
+          e => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            const f = e.deltaY > 0 ? 1 / 1.1 : 1.1;
+            setZoom(clamp(state.zoom * f, 0.25, 4));
+          },
+          { passive: false }
+        );
 
-  // pan con arrastre en vacío
-  let drag=null;
-  viewport.addEventListener('pointerdown',e=>{
-    if(e.target.closest('.node')||e.target.closest('.pal-item')) return;
-    drag={x:e.clientX,y:e.clientY,px:state.pan.x,py:state.pan.y};
-    viewport.setPointerCapture(e.pointerId);
-  });
-  viewport.addEventListener('pointermove',e=>{
-    if(!drag) return;
-    state.pan.x=drag.px+(e.clientX-drag.x);
-    state.pan.y=drag.py+(e.clientY-drag.y);
-    applyStage();
-  });
-  viewport.addEventListener('pointerup',()=>drag=null);
+        // pan con arrastre en vacío
+        let drag = null;
+        viewport.addEventListener('pointerdown', e => {
+          if (e.target.closest('.node') || e.target.closest('.pal-item')) return;
+          drag = { x: e.clientX, y: e.clientY, px: state.pan.x, py: state.pan.y };
+          viewport.setPointerCapture(e.pointerId);
+        });
+        viewport.addEventListener('pointermove', e => {
+          if (!drag) return;
+          state.pan.x = drag.px + (e.clientX - drag.x);
+          state.pan.y = drag.py + (e.clientY - drag.y);
+          applyStage();
+        });
+        viewport.addEventListener('pointerup', () => (drag = null));
 
-  // drop para stamp de palette
-  viewport.addEventListener('dragover',e=>e.preventDefault());
-  viewport.addEventListener('drop',e=>{
-    e.preventDefault();
-    const label=e.dataTransfer.getData('text/plain'); if(!label) return;
-    const rect=viewport.getBoundingClientRect();
-    const x=(e.clientX-rect.left-state.pan.x)/state.zoom - 60;
-    const y=(e.clientY-rect.top-state.pan.y)/state.zoom - 20;
-    if(view==='iflow') stampNode(label, x, y);
-    else stampCell(label, x, y);
-    applyStage();
-  });
+        // drop para stamp de palette
+        viewport.addEventListener('dragover', e => e.preventDefault());
+        viewport.addEventListener('drop', e => {
+          e.preventDefault();
+          const label = e.dataTransfer.getData('text/plain');
+          if (!label) return;
+          const rect = viewport.getBoundingClientRect();
+          const x = (e.clientX - rect.left - state.pan.x) / state.zoom - 60;
+          const y = (e.clientY - rect.top - state.pan.y) / state.zoom - 20;
+          if (view === 'iflow') stampNode(label, x, y);
+          else stampCell(label, x, y);
+          applyStage();
+        });
 
-  state.stageXY = {stage, viewport};
-  // minimap estático
-  buildMinimap(viewport, nodes);
-  applyStage();
-}
-function stampNode(label,x,y){
-  NODES_iflow.push({ id:'n_'+Math.random().toString(36).slice(2,7), kind:'channel', x, y, w:140, title:label.toLowerCase().replace(/\s/g,'-'), sub:label, body:'nueva celda' });
-  const vp=document.querySelector('[data-canvas="iflow"]'); vp.dataset.built='0'; vp.innerHTML='';
-  document.querySelectorAll('.viewport[data-canvas="iflow"]').forEach(v=>v.dataset.built='1');
-  // simple: re-init
-  const cv=document.querySelector('[data-canvas="iflow"]');
-  cv.dataset.built='0'; cv.querySelector('.stage')?.remove(); cv.dataset.built='0'; // reinicia limpio
-  initCanvas(cv,'iflow');
-}
-function stampCell(label,x,y){
-  const n={x,y,w:150,title:'nuevo.chat',sub:'canal',body:'reglas default',kind:'channel'};
-  const vp=document.querySelector('[data-canvas="txf"]');
-  const stage=vp.querySelector('.stage');
-  nodeDiv(n,stage); NODES_txf.push(n);
-}
-function nodeDiv(n,stage){
-  const node=document.createElement('div'); node.className='node '+n.kind;
-  node.style.left=n.x+'px'; node.style.top=n.y+'px'; node.style.width=n.w+'px';
-  node.innerHTML = `<span class="port top"></span><div class="n-head"><span class="dot"></span>${n.title}</div>
+        state.stageXY = { stage, viewport };
+        // minimap estático
+        buildMinimap(viewport, nodes);
+        applyStage();
+      }
+      function stampNode(label, x, y) {
+        NODES_iflow.push({
+          id: 'n_' + Math.random().toString(36).slice(2, 7),
+          kind: 'channel',
+          x,
+          y,
+          w: 140,
+          title: label.toLowerCase().replace(/\s/g, '-'),
+          sub: label,
+          body: 'nueva celda',
+        });
+        const vp = document.querySelector('[data-canvas="iflow"]');
+        vp.dataset.built = '0';
+        vp.innerHTML = '';
+        document.querySelectorAll('.viewport[data-canvas="iflow"]').forEach(v => (v.dataset.built = '1'));
+        // simple: re-init
+        const cv = document.querySelector('[data-canvas="iflow"]');
+        cv.dataset.built = '0';
+        cv.querySelector('.stage')?.remove();
+        cv.dataset.built = '0'; // reinicia limpio
+        initCanvas(cv, 'iflow');
+      }
+      function stampCell(label, x, y) {
+        const n = { x, y, w: 150, title: 'nuevo.chat', sub: 'canal', body: 'reglas default', kind: 'channel' };
+        const vp = document.querySelector('[data-canvas="txf"]');
+        const stage = vp.querySelector('.stage');
+        nodeDiv(n, stage);
+        NODES_txf.push(n);
+      }
+      function nodeDiv(n, stage) {
+        const node = document.createElement('div');
+        node.className = 'node ' + n.kind;
+        node.style.left = n.x + 'px';
+        node.style.top = n.y + 'px';
+        node.style.width = n.w + 'px';
+        node.innerHTML = `<span class="port top"></span><div class="n-head"><span class="dot"></span>${n.title}</div>
     <div class="n-body"><span class="f">${n.body}</span><small style="color:var(--muted)">${n.sub}</small></div>
-    <div class="n-foot"><span>${n.id||'…'}</span><span class="live">●</span></div><span class="port bot"></span>`;
-  stage.appendChild(node);
-}
-function buildMinimap(viewport,nodes){
-  const mm=$('#minimap'); mm.style.display='block'; mm.innerHTML='<span class="mm-title">minimapa</span>';
-  const scale={w:150/2400,h:100/1400};
-  nodes.slice(0,20).forEach(n=>{
-    const d=document.createElement('div'); d.className='mm-node';
-    d.style.left=n.x*scale.w+'px'; d.style.top=n.y*scale.h+'px'; d.style.background=colorOf(n.kind);
-    mm.appendChild(d);
-  });
-  const mv=document.createElement('div'); mv.className='mm-view';
-  mv.style.left='15px'; mv.style.top='20px'; mv.style.width='70px'; mv.style.height='50px';
-  mm.appendChild(mv);
-}
-function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
-function setZoom(z){ state.zoom=z; $('#zoomVal').textContent=Math.round(z*100)+'%'; $('#sbarZoom').textContent=Math.round(z*100)+'%'; applyStage(); }
-function applyStage(){
-  const vp=document.querySelector('[data-canvas="iflow"]'); if(!vp) return;
-  const st=vp.querySelector('.stage'); if(!st) return;
-  st.style.transform=`translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
-}
-function fillPropSounds(on){
-  if(!on) return;
-  const list=$('#propPanel .sound-list');
-  if(list.dataset.filled) return; list.dataset.filled='1';
-  list.innerHTML += `<li class="on"><input type="checkbox" checked/>🔔 notification.ogg</li><li class="on"><input type="checkbox" checked/>🎵 ping-message.mp3</li>`;
-}
+    <div class="n-foot"><span>${n.id || '…'}</span><span class="live">●</span></div><span class="port bot"></span>`;
+        stage.appendChild(node);
+      }
+      function buildMinimap(viewport, nodes) {
+        const mm = $('#minimap');
+        mm.style.display = 'block';
+        mm.innerHTML = '<span class="mm-title">minimapa</span>';
+        const scale = { w: 150 / 2400, h: 100 / 1400 };
+        nodes.slice(0, 20).forEach(n => {
+          const d = document.createElement('div');
+          d.className = 'mm-node';
+          d.style.left = n.x * scale.w + 'px';
+          d.style.top = n.y * scale.h + 'px';
+          d.style.background = colorOf(n.kind);
+          mm.appendChild(d);
+        });
+        const mv = document.createElement('div');
+        mv.className = 'mm-view';
+        mv.style.left = '15px';
+        mv.style.top = '20px';
+        mv.style.width = '70px';
+        mv.style.height = '50px';
+        mm.appendChild(mv);
+      }
+      function clamp(v, a, b) {
+        return Math.max(a, Math.min(b, v));
+      }
+      function setZoom(z) {
+        state.zoom = z;
+        $('#zoomVal').textContent = Math.round(z * 100) + '%';
+        $('#sbarZoom').textContent = Math.round(z * 100) + '%';
+        applyStage();
+      }
+      function applyStage() {
+        const vp = document.querySelector('[data-canvas="iflow"]');
+        if (!vp) return;
+        const st = vp.querySelector('.stage');
+        if (!st) return;
+        st.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+      }
+      function fillPropSounds(on) {
+        if (!on) return;
+        const list = $('#propPanel .sound-list');
+        if (list.dataset.filled) return;
+        list.dataset.filled = '1';
+        list.innerHTML += `<li class="on"><input type="checkbox" checked/>🔔 notification.ogg</li><li class="on"><input type="checkbox" checked/>🎵 ping-message.mp3</li>`;
+      }
 
-/* ══════════════ CHROME / OTROS ══════════════ */
-$('#zoomIn').addEventListener('click',()=>setZoom(clamp(state.zoom*1.25,0.25,4)));
-$('#zoomOut').addEventListener('click',()=>setZoom(clamp(state.zoom/1.25,0.25,4)));
-$('#fitView').addEventListener('click',()=>{ state.pan={x:60,y:40}; setZoom(1); });
+      /* ══════════════ CHROME / OTROS ══════════════ */
+      $('#zoomIn').addEventListener('click', () => setZoom(clamp(state.zoom * 1.25, 0.25, 4)));
+      $('#zoomOut').addEventListener('click', () => setZoom(clamp(state.zoom / 1.25, 0.25, 4)));
+      $('#fitView').addEventListener('click', () => {
+        state.pan = { x: 60, y: 40 };
+        setZoom(1);
+      });
 
-$('#themeBtn').addEventListener('click',()=>{
-  const cur = document.documentElement.dataset.theme;
-  const next = cur==='dark'?'light':'dark';
-  document.documentElement.dataset.theme=next;
-  $('#themeBtn').textContent = next==='dark'?'🌙':'☀';
-  localStorage.setItem('tf-theme', next);
-});
-$('#langBtn').addEventListener('click',()=>{
-  state.lang = state.lang==='en'?'es':'en';
-  $('#langBtn').textContent = state.lang.toUpperCase();
-  document.documentElement.lang = state.lang;
-  document.querySelectorAll('[data-i18n]').forEach(el=>{
-    const k=el.dataset.i18n;
-    if(I18N[state.lang][k]) el.textContent=I18N[state.lang][k];
-  });
-  $('#palLabel').textContent = I18N[state.lang].palette;
-  localStorage.setItem('tf-lang', state.lang);
-});
-$('#obtainToken').addEventListener('click',()=>{
-  window.open('https://discord.com/developers/applications','_blank');
-});
-$('#dlBtn').addEventListener('click',()=>{
-  const zipOk = confirm('(prototipo) Descargaría \ntextformatter-suite.zip \ncon manifest.json + validación.');
-  console.log('zip', zipOk);
-});
-$('#previewBtn').addEventListener('click',()=>{
-  confirm('(prototipo) Previsualizar pipeline: \nentrada → traducción → ruta iFlow + transforms → salida.');
-});
-$('#propDetach').addEventListener('click',()=>{
-  $('#propPanel').classList.toggle('docked');
-});
+      $('#themeBtn').addEventListener('click', () => {
+        const cur = document.documentElement.dataset.theme;
+        const next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        $('#themeBtn').textContent = next === 'dark' ? '🌙' : '☀';
+        localStorage.setItem('tf-theme', next);
+      });
+      $('#langBtn').addEventListener('click', () => {
+        state.lang = state.lang === 'en' ? 'es' : 'en';
+        $('#langBtn').textContent = state.lang.toUpperCase();
+        document.documentElement.lang = state.lang;
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+          const k = el.dataset.i18n;
+          if (I18N[state.lang][k]) el.textContent = I18N[state.lang][k];
+        });
+        $('#palLabel').textContent = I18N[state.lang].palette;
+        localStorage.setItem('tf-lang', state.lang);
+      });
+      $('#obtainToken').addEventListener('click', () => {
+        window.open('https://discord.com/developers/applications', '_blank');
+      });
+      $('#dlBtn').addEventListener('click', () => {
+        const zipOk = confirm('(prototipo) Descargaría \ntextformatter-suite.zip \ncon manifest.json + validación.');
+        console.log('zip', zipOk);
+      });
+      $('#previewBtn').addEventListener('click', () => {
+        confirm('(prototipo) Previsualizar pipeline: \nentrada → traducción → ruta iFlow + transforms → salida.');
+      });
+      $('#propDetach').addEventListener('click', () => {
+        $('#propPanel').classList.toggle('docked');
+      });
 
-// panel flotante draggable
-(function(){
-  const p=$('#propPanel'), h=p.querySelector('.p-head');
-  let drag=null;
-  h.addEventListener('pointerdown',e=>{
-    if(e.target.classList.contains('x')) return;
-    drag={x:e.clientX,y:e.clientY,l:p.offsetLeft,t:p.offsetTop};
-    p.style.right='auto'; p.style.bottom='auto'; p.style.zIndex=50;
-    h.setPointerCapture(e.pointerId);
-  });
-  h.addEventListener('pointermove',e=>{
-    if(!drag) return;
-    p.style.left=(drag.l+e.clientX-drag.x)+'px';
-    p.style.top=(drag.t+e.clientY-drag.y)+'px';
-  });
-  h.addEventListener('pointerup',()=>drag=null);
-})();
+      // panel flotante draggable
+      (function () {
+        const p = $('#propPanel'),
+          h = p.querySelector('.p-head');
+        let drag = null;
+        h.addEventListener('pointerdown', e => {
+          if (e.target.classList.contains('x')) return;
+          drag = { x: e.clientX, y: e.clientY, l: p.offsetLeft, t: p.offsetTop };
+          p.style.right = 'auto';
+          p.style.bottom = 'auto';
+          p.style.zIndex = 50;
+          h.setPointerCapture(e.pointerId);
+        });
+        h.addEventListener('pointermove', e => {
+          if (!drag) return;
+          p.style.left = drag.l + e.clientX - drag.x + 'px';
+          p.style.top = drag.t + e.clientY - drag.y + 'px';
+        });
+        h.addEventListener('pointerup', () => (drag = null));
+      })();
 
-// switches clicables
-document.querySelectorAll('.switch').forEach(s=>s.addEventListener('click',()=>s.classList.toggle('on')));
+      // switches clicables
+      document.querySelectorAll('.switch').forEach(s => s.addEventListener('click', () => s.classList.toggle('on')));
 
-/* iniciar */
-renderSidebar('iflow'); renderPalette('iflow');
-initCanvas(document.querySelector('[data-canvas="iflow"]'),'iflow');
-</script>
-</body>
+      /* iniciar */
+      renderSidebar('iflow');
+      renderPalette('iflow');
+      initCanvas(document.querySelector('[data-canvas="iflow"]'), 'iflow');
+    </script>
+  </body>
 </html>

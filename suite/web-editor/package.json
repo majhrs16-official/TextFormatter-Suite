@@ -9,7 +9,7 @@
     "format": "prettier --write \"js/**/*.js\" \"index.html\" \"paths.json\" \"styles.css\"",
     "format:check": "prettier --check \"js/**/*.js\" \"index.html\" \"paths.json\" \"styles.css\"",
     "test": "node tests/unit/stateStore.test.cjs && node tests/unit/model.test.cjs && node tests/unit/validate.test.cjs",
-    "test:integration": "node /tmp/opencode/func.js && node /tmp/opencode/interact.js && node /tmp/opencode/click.js && node /tmp/opencode/chain.js && node /tmp/opencode/undo.js && node /tmp/opencode/diffing.js && node /tmp/opencode/bind.js",
+    "test:integration": "node tests/integration/func.cjs && node tests/integration/interact.cjs && node tests/integration/click.cjs && node tests/integration/chain.cjs && node tests/integration/undo.cjs && node tests/integration/diffing.cjs && node tests/integration/bind.cjs",
     "check": "npm run format:check && npm run lint && npm run test"
   },
   "devDependencies": {

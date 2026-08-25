@@ -5,11 +5,22 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const dir = '/home/majhrs16/Documentos/Default Project/suite/web-editor';
+const dir = path.join(__dirname, '..', '..');
 const html = '<!DOCTYPE html><html><body><div id="toasts"></div></body></html>';
 const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://localhost/' });
 const { window } = dom;
-for (const g of ['window', 'document', 'localStorage', 'navigator', 'TextEncoder', 'Blob', 'URL', 'console', 'requestAnimationFrame', 'cancelAnimationFrame'])
+for (const g of [
+  'window',
+  'document',
+  'localStorage',
+  'navigator',
+  'TextEncoder',
+  'Blob',
+  'URL',
+  'console',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+])
   if (!(g in global)) global[g] = window[g];
 global.window = window;
 global.document = window.document;
@@ -20,10 +31,27 @@ window.eval(yamlCode);
 window.eval(modelCode);
 const Suite = window.Suite;
 
-let passed = 0, failed = 0;
+let passed = 0,
+  failed = 0;
 
-function assert(cond, msg) { if (cond) { console.log('✓ ' + msg); passed++; } else { console.log('✗ ' + msg); failed++; } }
-function assertEq(a, b, msg) { if (JSON.stringify(a) === JSON.stringify(b)) { console.log('✓ ' + msg); passed++; } else { console.log('✗ ' + msg + ' — expected ' + JSON.stringify(b) + ' got ' + JSON.stringify(a)); failed++; } }
+function assert(cond, msg) {
+  if (cond) {
+    console.log('✓ ' + msg);
+    passed++;
+  } else {
+    console.log('✗ ' + msg);
+    failed++;
+  }
+}
+function assertEq(a, b, msg) {
+  if (JSON.stringify(a) === JSON.stringify(b)) {
+    console.log('✓ ' + msg);
+    passed++;
+  } else {
+    console.log('✗ ' + msg + ' — expected ' + JSON.stringify(b) + ' got ' + JSON.stringify(a));
+    failed++;
+  }
+}
 
 console.log('\n=== Suite.model Unit Tests ===\n');
 
@@ -103,7 +131,10 @@ const v = { errors: 0, warnings: 0, blocking: false, issues: [] };
 const files = Suite.model.exportFiles(s6, v);
 assert(typeof files['config.yml'] === 'string', 'exports config.yml');
 assert(typeof files['rules.yml'] === 'string', 'exports rules.yml');
-assert(Object.keys(files).some(k => k.startsWith('channels/')), 'exports channels');
+assert(
+  Object.keys(files).some(k => k.startsWith('channels/')),
+  'exports channels'
+);
 const imported = Suite.model.importFromFiles(Suite.model.defaults(), files);
 assertEq(imported.channels['chat.global'].name, 'chat.global', 'import restores channel');
 assertEq(imported.graph.nodes.length, 7, 'import restores nodes');

@@ -5,26 +5,54 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const dir = '/home/majhrs16/Documentos/Default Project/suite/web-editor';
+const dir = path.join(__dirname, '..', '..');
 const html = '<!DOCTYPE html><html><body><div id="toasts"></div></body></html>';
 const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://localhost/' });
 const { window } = dom;
-for (const g of ['window', 'document', 'localStorage', 'navigator', 'TextEncoder', 'Blob', 'URL', 'console', 'requestAnimationFrame', 'cancelAnimationFrame'])
+for (const g of [
+  'window',
+  'document',
+  'localStorage',
+  'navigator',
+  'TextEncoder',
+  'Blob',
+  'URL',
+  'console',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+])
   if (!(g in global)) global[g] = window[g];
 global.window = window;
 global.document = window.document;
 
-const yamlCode = fs.readFileSync(path.join('/home/majhrs16/Documentos/Default Project/suite/web-editor', 'js', 'yaml.js'), 'utf8');
-const modelCode = fs.readFileSync(path.join('/home/majhrs16/Documentos/Default Project/suite/web-editor', 'js', 'model.js'), 'utf8');
-const validateCode = fs.readFileSync(path.join('/home/majhrs16/Documentos/Default Project/suite/web-editor', 'js', 'validate.js'), 'utf8');
-window.eval(require('fs').readFileSync(path.join('/home/majhrs16/Documentos/Default Project/suite/web-editor', 'js', 'yaml.js'), 'utf8'));
-window.eval(require('fs').readFileSync(path.join('/home/majhrs16/Documentos/Default Project/suite/web-editor', 'js', 'model.js'), 'utf8'));
+const yamlCode = fs.readFileSync(path.join(dir, 'js', 'yaml.js'), 'utf8');
+const modelCode = fs.readFileSync(path.join(dir, 'js', 'model.js'), 'utf8');
+const validateCode = fs.readFileSync(path.join(dir, 'js', 'validate.js'), 'utf8');
+window.eval(require('fs').readFileSync(path.join(dir, 'js', 'yaml.js'), 'utf8'));
+window.eval(require('fs').readFileSync(path.join(dir, 'js', 'model.js'), 'utf8'));
 window.eval(validateCode);
 const Suite = window.Suite;
 
-let passed = 0, failed = 0;
-function assert(cond, msg) { if (cond) { console.log('✓ ' + msg); passed++; } else { console.log('✗ ' + msg); failed++; } }
-function assertEq(a, b, msg) { if (JSON.stringify(a) === JSON.stringify(b)) { console.log('✓ ' + msg); passed++; } else { console.log('✗ ' + msg + ' — expected ' + JSON.stringify(b) + ' got ' + JSON.stringify(a)); failed++; } }
+let passed = 0,
+  failed = 0;
+function assert(cond, msg) {
+  if (cond) {
+    console.log('✓ ' + msg);
+    passed++;
+  } else {
+    console.log('✗ ' + msg);
+    failed++;
+  }
+}
+function assertEq(a, b, msg) {
+  if (JSON.stringify(a) === JSON.stringify(b)) {
+    console.log('✓ ' + msg);
+    passed++;
+  } else {
+    console.log('✗ ' + msg + ' — expected ' + JSON.stringify(b) + ' got ' + JSON.stringify(a));
+    failed++;
+  }
+}
 
 console.log('\n=== Suite.validate Unit Tests ===\n');
 
@@ -51,7 +79,10 @@ const s2 = baseState();
 s2.graph.guard['max-steps'] = 0;
 let v2 = Suite.validate.validate(s2);
 assert(v2.errors > 0, 'errors on max-steps 0');
-assert(v2.issues.some(i => i.path.includes('max-steps')), 'error path includes max-steps');
+assert(
+  v2.issues.some(i => i.path.includes('max-steps')),
+  'error path includes max-steps'
+);
 
 s2.graph.guard['max-steps'] = -5;
 v2 = Suite.validate.validate(s2);
@@ -92,7 +123,10 @@ const existingId = s7.graph.nodes[0].id;
 s7.graph.nodes.push({ ...s7.graph.nodes[0], id: existingId });
 let v7 = Suite.validate.validate(s7);
 assert(v7.errors > 0, 'errors on duplicate node id');
-assert(v7.issues.some(i => i.path.includes('nodes/' + existingId)), 'error path includes duplicate id');
+assert(
+  v7.issues.some(i => i.path.includes('nodes/' + existingId)),
+  'error path includes duplicate id'
+);
 
 console.log('\n--- graph: condition without matcher ---');
 const s8 = baseState();

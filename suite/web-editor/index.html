@@ -184,7 +184,7 @@
               </div>
               <div class="edge-pane" data-pane="discord">
                 <div class="field">
-                  <span class="cap">Habilitado</span><span class="switch on" data-bind="sync.discord.enabled"></span>
+                  <span class="cap">Habilitado</span><span class="switch" data-bind="sync.discord.enabled"></span>
                 </div>
                 <div class="big-field">
                   <label>Bot token</label>
@@ -246,7 +246,7 @@
               <div class="edge-pane" data-pane="velocity" hidden>
                 <div class="field">
                   <span class="cap">Habilitado<small>proxy plugin (F7+)</small></span
-                  ><span class="switch on" data-bind="sync.velocity.enabled"></span>
+                  ><span class="switch" data-bind="sync.velocity.enabled"></span>
                 </div>
                 <div class="big-field"><label>Secret / token</label><input type="text" id="velocitySecret" /></div>
                 <div class="field">
@@ -294,25 +294,34 @@
                 <div id="pfEmpty" class="no-sel" style="color: var(--muted); font-size: 12px"></div>
                 <div id="pfForm">
                   <label>id / canal</label><input type="text" id="pfId" />
-                  <label>tipo</label>
-                  <div class="seg" id="pfKind"></div>
-                  <label id="pfTextLabel">texto reformateado</label><textarea id="pfText" spellcheck="false"></textarea>
-                  <label>sonidos (multi)</label>
-                  <ul class="sound-list" id="pfSounds"></ul>
-                  <div class="token-input">
-                    <input type="text" id="pfSoundAdd" placeholder="ej. entity.experience_orb.pickup" style="flex: 1" />
-                    <button class="tbtn" id="pfSoundBtn">＋</button>
+                  <div id="pfKindWrap">
+                    <label>tipo</label>
+                    <div class="seg" id="pfKind"></div>
                   </div>
-                  <div class="field" id="pfLangs">
+                  <label id="pfTextLabel">texto reformateado</label><textarea id="pfText" spellcheck="false"></textarea>
+                  <div id="pfSoundsWrap">
+                    <label>sonidos (multi)</label>
+                    <ul class="sound-list" id="pfSounds"></ul>
+                    <div class="token-input">
+                      <input
+                        type="text"
+                        id="pfSoundAdd"
+                        placeholder="ej. entity.experience_orb.pickup"
+                        style="flex: 1"
+                      />
+                      <button class="tbtn" id="pfSoundBtn">＋</button>
+                    </div>
+                  </div>
+                  <div class="field" id="pfLangWrap">
                     <span class="cap">source</span
                     ><select id="pfLangSource"></select>
                     <span class="cap">target</span
                     ><select id="pfLangTarget"></select>
                   </div>
-                  <div class="field">
+                  <div class="field" id="pfRateWrap">
                     <span class="cap">rate-limit/s</span><input type="text" style="width: 70px" id="pfRate" />
                   </div>
-                  <div class="field">
+                  <div class="field" id="pfSenderWrap">
                     <span class="cap">show-sender</span><span class="switch on" id="pfShowSender"></span>
                   </div>
                   <div class="token-input">
@@ -408,6 +417,7 @@
     <script src="js/canvas.js"></script>
     <script src="js/txf.js"></script>
     <script src="js/props.js"></script>
+    <script src="js/paths.js"></script>
     <script src="js/config.js"></script>
     <script src="js/docking.js"></script>
     <script src="js/actions.js"></script>

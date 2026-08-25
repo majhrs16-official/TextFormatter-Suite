@@ -685,5 +685,6 @@
     rafPan,
     rafTemp,
     rafNode,
+    KIND_H,
   });
 })(window || this);

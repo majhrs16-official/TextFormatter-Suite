@@ -28,17 +28,24 @@
     });
     // generic data-bind switches - rendered dynamically from paths.json
     renderSwitches();
-    // bind click on dynamically rendered switches
-    Suite.utils.$$('#configSection .switch[data-bind]').forEach(sw => {
-      sw.addEventListener('click', () => {
+    // Delegated binding: covers dynamic (config section) AND static
+    // (translators/sync sections) switches, surviving any re-render.
+    if (!Suite.views._switchDelegateBound) {
+      Suite.views._switchDelegateBound = true;
+      document.addEventListener('click', e => {
+        const sw = e.target.closest('.switch[data-bind]');
+        if (!sw) {
+          return;
+        }
         StateStore.mutate('toggle', () => {
           const s = StateStore.getState();
           Suite.utils.setPath(s, sw.dataset.bind, !Suite.utils.getPath(s, sw.dataset.bind));
         });
         sw.classList.toggle('on', !!Suite.utils.getPath(StateStore.getState(), sw.dataset.bind));
+        Suite.views.renderSwitches();
         Suite.views.renderStatus();
       });
-    });
+    }
     $('#discordIntents').addEventListener('click', () => {
       StateStore.mutate('intents', () => {
         const s = StateStore.getState();
@@ -56,8 +63,12 @@
     if (!container) {
       return;
     }
+    // Solo knobs de config.yml/rules.yml: los switches de translators/sync
+    // viven en sus propias secciones (estáticos) y no deben duplicarse aquí.
+    const CONFIG_SCOPE = p => p.startsWith('config.') || p.startsWith('graph.');
     container.innerHTML = global.Suite.paths
       .getAllSwitchPaths()
+      .filter(({ path }) => CONFIG_SCOPE(path))
       .map(({ path, label, desc }) => {
         const meta = global.Suite.paths.getPathMeta(path);
         const value = Suite.utils.getPath(StateStore.getState(), path);
@@ -73,6 +84,13 @@
         );
       })
       .join('');
+    // Sincronizar también los switches estáticos (translators/sync) con el estado.
+    Suite.utils.$$('.switch[data-bind]').forEach(sw => {
+      const desired = !!Suite.utils.getPath(st, sw.dataset.bind);
+      if (sw.classList.contains('on') !== desired) {
+        sw.classList.toggle('on', desired);
+      }
+    });
   }
 
   function bindSyncFields() {
@@ -273,5 +291,11 @@
 
   global.Suite = global.Suite || {};
   global.Suite.views = global.Suite.views || {};
-  Object.assign(global.Suite.views, { bindConfig, bindSyncFields, bindConfigSelects, renderConfigValues });
+  Object.assign(global.Suite.views, {
+    bindConfig,
+    bindSyncFields,
+    bindConfigSelects,
+    renderConfigValues,
+    renderSwitches,
+  });
 })(window || this);
