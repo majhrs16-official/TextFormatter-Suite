@@ -48,8 +48,9 @@ public final class ConfigLoader {
             boolean sound = bool(nested(map, ConfigPath.SONIDO, ConfigPath.SONIDO_ENABLED), true);
             Language defaultLang = Language.of(str(nested(map, ConfigPath.GENERAL, ConfigPath.GENERAL_LANGUAGE), "en"))
                 .orElse(Language.EN);
+            HostConfig.ClaimMode claimMode = claimMode(nested(map, ConfigPath.CHAT, ConfigPath.CHAT_CLAIM_MODE));
 
-            return new HostConfig(quickLook, defaultLang, parallel, sound);
+            return new HostConfig(quickLook, defaultLang, parallel, sound, claimMode);
         } catch (IOException | RuntimeException e) {
             // YAML malformado: degradar a defaults en vez de tumbar el bootstrap.
             return HostConfig.defaults();
@@ -157,6 +158,17 @@ public final class ConfigLoader {
         return current;
     }
 
+    private static HostConfig.ClaimMode claimMode(Object raw) {
+        if (!(raw instanceof String value)) {
+            return HostConfig.ClaimMode.CANCEL_EVENT;
+        }
+        try {
+            return HostConfig.ClaimMode.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT).replace('-', '_'));
+        } catch (IllegalArgumentException ignored) {
+            return HostConfig.ClaimMode.CANCEL_EVENT;
+        }
+    }
+
     private static String fileName(Path file) {
         String name = file.getFileName().toString();
         return name.endsWith(".yml") ? name.substring(0, name.length() - 4) : name;
@@ -190,6 +202,8 @@ public final class ConfigLoader {
         SONIDO_ENABLED("enabled"),
         GENERAL("general"),
         GENERAL_LANGUAGE("language"),
+        CHAT("chat"),
+        CHAT_CLAIM_MODE("claim-mode"),
         CHANNEL_NAME("name"),
         CHANNEL_PERMISSION("permission"),
         CHANNEL_SEND_PERMISSION("send-permission"),

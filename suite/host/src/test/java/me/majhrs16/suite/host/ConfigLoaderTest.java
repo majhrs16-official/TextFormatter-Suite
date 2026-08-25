@@ -42,6 +42,8 @@ class ConfigLoaderTest {
                 parallel: true
             sonido:
               enabled: false
+            chat:
+              claim-mode: clear-recipients
             """);
 
         HostConfig config = ConfigLoader.loadConfig(dir);
@@ -50,6 +52,17 @@ class ConfigLoaderTest {
         assertEquals(Language.ES, config.defaultLanguage());
         assertTrue(config.engineParallel());
         assertFalse(config.soundEnabled());
+        assertEquals(HostConfig.ClaimMode.CLEAR_RECIPIENTS, config.claimMode());
+    }
+
+    @Test
+    void invalidClaimModeFallsBackToCancelEvent() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+            chat:
+              claim-mode: no-existe
+            """);
+
+        assertEquals(HostConfig.ClaimMode.CANCEL_EVENT, ConfigLoader.loadConfig(dir).claimMode());
     }
 
     @Test
@@ -105,6 +118,7 @@ class ConfigLoaderTest {
         assertEquals(Language.EN, config.defaultLanguage());
         assertFalse(config.engineParallel());
         assertTrue(config.soundEnabled());
+        assertEquals(HostConfig.ClaimMode.CANCEL_EVENT, config.claimMode());
 
         assertEquals(4, registry.all().size());
         Channel global = registry.get("chat.global").orElseThrow();

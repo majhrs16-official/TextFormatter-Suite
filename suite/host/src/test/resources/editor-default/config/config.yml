@@ -10,3 +10,5 @@ iflow:
     dedup-fanout: true
 sonido:
   enabled: true
+chat:
+  claim-mode: cancel-event
