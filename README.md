@@ -263,9 +263,11 @@ Los adapters implementan los puertos del motor y eligen el hilo:
 
 | Puerto (`core-api/spi` / `host/port`) | Spigot (`spigot-host`) | Fabric (`fabric-host`, ⏳) |
 |---|---|---|
-| `ActorDirectory` | `SpigotActorDirectory` (locale vía `Player#getLocale`, snapshot anti-CME) | ⏳ |
+| `ActorDirectory` | `SpigotActorDirectory` (idioma: store→locale→null; snapshot anti-CME) | ⏳ |
 | `ChatDelivery` | `SpigotChatDelivery` (BukkitAudiences, hop a main thread, sonidos normalizados) | ⏳ |
-| Evento chat | `AsyncPlayerChatEvent` (LOWEST, claim-first; cancela vanilla y despacha eco+broadcast atómicos) | `ServerMessageEvents.ALLOW_CHAT_MESSAGE` |
+| Evento chat | `AsyncPlayerChatEvent` (LOWEST claim-first; claim configurable: `cancel-event`\|`clear-recipients`) | `ServerMessageEvents.ALLOW_CHAT_MESSAGE` |
+| Join/Quit/Death | canales convencionales `join`/`quit`/`death` (presencia = activado) | ⏳ |
+| Idioma por usuario | `UserLanguageStore` (YAML) + `/suite lang [jugador] <auto\|off\|código>`; `off` = sin traducción | ⏳ |
 | Permisos | `Player#hasPermission` | ⏳ |
 | Mundo/radio | `getWorld().getName()` / `distanceSquared` | ⏳ |
 
