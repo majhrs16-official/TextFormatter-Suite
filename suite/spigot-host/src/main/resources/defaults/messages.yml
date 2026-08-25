@@ -1,0 +1,25 @@
+# TextFormatter Suite — strings de UI del host.
+# Todo valor es editable; {} / %s son argumentos posicionales.
+# Restaurar originales: /suite reset (respaldo en backup/).
+prefix: "[suite] "
+not-initialized: "[suite] no inicializado"
+usage: "[suite] uso: /suite <lang|reload|status|toggle|reset>"
+enabled: "[suite] activo: {} canales, traductor '{}'"
+reload-ok: "[suite] recargado: {} canales, traductor '{}'"
+reload-error: "[suite] error al recargar: {}"
+status:
+  channels: "[suite] canales: {}"
+  translator: "[suite] traductor activo: {}"
+  knobs: "[suite] engine.parallel: {} · sonido: {} · claim: {}"
+lang:
+  current: "[suite] tu idioma: {}"
+  updated: "[suite] idioma actualizado: {}"
+  invalid: "[suite] valor inválido: usa auto | off | <código> (ej. es, en, zh-CN)"
+  other-admin: "[suite] setear el idioma de otro requiere admin"
+  player-offline: "[suite] jugador no conectado: {}"
+  console: "[suite] consola no tiene idioma; usa /suite lang <jugador> <valor>"
+toggle:
+  current: "[suite] traducción: {}"
+reset:
+  ok: "[suite] configs restauradas (respaldo en backup/); storage.yml intacto"
+  error: "[suite] error al restaurar: {}"

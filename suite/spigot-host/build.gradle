@@ -48,6 +48,7 @@ dependencies {
     implementation 'org.yaml:snakeyaml:2.2'
 
     compileOnly 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+    compileOnly 'me.clip:placeholderapi:2.11.5'
     testImplementation 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
