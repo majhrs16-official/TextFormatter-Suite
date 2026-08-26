@@ -91,7 +91,7 @@ respaldo; la validación canónica es Gradle + npm.
 | A2 | **Eventos no-chat en spigot-host**: join/quit/death (+advancement ⏳) | ✅ 2026-08-25 (advancement pendiente) | Canales convencionales `join`/`quit`/`death`; presencia = activado; una unidad Direction.all(); MONITOR priority; %content% = mensaje vanilla de muerte / nombre. Espejo consola vía reglas REDIRECT del usuario. |
 | A3 | **Claim-mode configurable**: `cancel-event` \| `clear-recipients` | ✅ 2026-08-25 | `chat.claim-mode` en config.yml → HostConfig.ClaimMode (tolerante a inválidos); defaults embebido actualizado; editor: select cfgClaimMode + default en model.js (round-trip incluido); fixture golden del host actualizado. Nota: clear-recipients deja el log vanilla en consola (duplicado potencial con REDIRECT) — documentado. |
 | A4 | PlaceholderResolver adapter PAPI en spigot-host | ✅ 2026-08-25 | `SpigotPlaceholderResolver` (hook aislado, carga perezosa segura con dep compileOnly); `SuiteHost.bootstrap` overload con placeholders; wired en reloadSuite. Sin PAPI → unavailable y tokens intactos. |
-| A5 | Comandos paridad: lang(A1)/toggle/reset/status | ✅ 2026-08-25 | `/suite toggle [jugador]` alterna off↔auto vía store; `/suite reset` mueve configs de usuario a backup/<timestamp>/ y regenera defaults (storage.yml intacto); status ampliado (claim). |
+| A5 | Comandos paridad: lang(A1)/toggle/reset/status | ✅ 2026-08-25 (puente temporal) | `/suite toggle [jugador]` alterna off↔auto vía store; `/suite reset` mueve configs a backup/<ts>/ y regenera defaults; status ampliado. FASE C migrará todo a raíces configurables (/cht …). |
 | A6 | Self-traducción UI: strings centralizados | 🟡 estructural ✅ 2026-08-25 | `messages.yml` copiado-if-missing + `MessagesConfig` (flatten anidado→claves dotted, defaults BUILT_IN como último recurso, {} / %s posicionales). TODOS los literales del plugin usan claves. Traducción VIVA por idioma de receptor (pasar por el pipeline) queda como mejora futura — hoy es configurable, no auto-traducido. |
 | A7 | Colores por permiso (ColorMode consumo real en renderer) | P1 | FORZAR/POR-PERMISO/QUITAR como el original; permiso `suite.chat.<canal>.color`. |
 | A8 | Menciones @nick → canal `_mention`-equivalente | P2 | Re-ruteo pre-dispatch según regex configurable. |
@@ -133,6 +133,32 @@ Sin cambios vs plan anterior (adoptar core-api canónico, transport único, Mess
 | E2 | Modo atómico (ASM) | Nodos/YAML directo, todo permitido, visible |
 | E3 | Modo alto nivel (C) | Recetas/intenciones que COMPILAN a nodos+canales (ej. "chat regional", "staff solo-lectura"); round-trip exacto sigue siendo invariante |
 | E4 | UX orgánica | Una sola toolbar contextual explicada; onboarding primer uso; drag con magnetismo de puertos; estados vacíos que enseñan |
+
+## FASE C — SISTEMA DE COMANDOS (BASE — tras FASE T, antes del Manager)
+
+> Directriz autor 2026-08-25: /suite es genérico y choca con otros plugins.
+> Mantener el enfoque del original: topología de comandos creada dinámicamente
+> desde config (renombrar comando, cambiar acción, título, descripción, suggest).
+> Los comandos REUTILIZAN el motor del chat (versatilidad + paridad): el
+> feedback se renderiza por el pipeline según el idioma/perfil del receptor.
+> El comando NO sabe qué motor está en uso.
+
+Espacios por módulo (defaults, todos renombrables vía config):
+`/cht` traducción · `/dst` discord sync · `/txf` textformatter ·
+`/tg` telegram sync · `/if` iflow.
+
+| # | Pieza | Notas |
+|---|-------|-------|
+| C1 | Registro de ACCIONES ATÓMICAS | Funciones elementales tipadas con specs de argumento (jugador, idioma, ruta-config, enum); combinables entre sí; catálogo consultable |
+| C2 | Topología desde config (commands.yml v2) | árbol literal→acción+permiso+args+descripción+suggest; renombrable todo; registro dinámico en el CommandMap de Bukkit (sin tocar plugin.yml) |
+| C3 | Feedback por el motor | respuesta = Message (INTERNAL/CUSTOM) sobre canales `plugin.cmd.*`; render por receptor (idioma/formato/tooltips) — sustituye/evoluciona messages.yml plano |
+| C4 | Acciones iniciales | traducción: lang get/set/toggle (motor-agnóstico) · config: get/set de booleanos y enums de config.yml estilo LuckPerms · iflow: reglas list/reload/test · sync: status/test-send · txf: preview al emisor |
+| C5 | Escritura de config | ConfigWriter con edición puntual preservando el resto del archivo (decidir: edición por línea vs reescritura) |
+| M4← | `/suite module` pasa a raíz configurable (ej. /cht module) | depende de esta fase |
+
+Orden dentro de la cola: FASE T → **FASE C** → FASE 5 Manager (su M4 usa C) → FASE E.
+Los comandos actuales /suite * quedan como puente temporal hasta que C los
+reemplace como raíces configuradas (ej. /cht lang, /cht reload).
 
 ## FASE 5 — MANAGER (PRIORITARIA — "primero las bases"; tras FASE T)
 

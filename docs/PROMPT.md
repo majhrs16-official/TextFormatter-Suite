@@ -49,6 +49,7 @@ Ideas Pendientes y Roadmap:
 - Compatibilidad del mod Fabric para clientes de Minecraft en mundos locales (Singleplayer / Open to LAN).
 - Soporte para Forge y Fabric 1.16.5 únicamente cuando la integración principal (Spigot + Fabric) sea 100% funcional.
 - Migración a CraftBukkit para maximizar la retrocompatibilidad base.
+- Sistema de comandos (BASE): topología dinámica desde config (renombrable: cht/dst/txf/tg/if), acciones ATÓMICAS combinables, feedback reutilizando el motor de chat (el comando ignora qué motor hay), y edición de config.yml desde comandos (estilo LuckPerms). Diseño: FASE C en PROMPT_NOW.md.
 - Investigación Legacy (1.0 - 1.7): Exploración a futuro para reimplementar funciones faltantes (ej. Hover Events) mediante adaptadores de la arquitectura hexagonal, sin condicionar la arquitectura moderna, únicamente cuando la integración principal sea 100% funcional.
 
 Manejo de Configuración y E/S (Disk/Cache Policy):
