@@ -1,4 +1,5 @@
 plugins {
+    id 'jacoco'
     id 'java'
     id 'maven-publish'
 }
@@ -49,3 +50,17 @@ publishing {
         }
     }
 }
+// FASE T/T1 — cobertura medida (xml para CI, html para humano)
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}
+
+// FASE T/T1 — umbral anti-regresión (80% líneas)
+jacocoTestCoverageVerification {
+    violationRules { rule {
+        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.8 }
+    } }
+}
+tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }

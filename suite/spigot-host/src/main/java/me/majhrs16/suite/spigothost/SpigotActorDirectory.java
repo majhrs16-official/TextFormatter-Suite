@@ -101,19 +101,13 @@ public final class SpigotActorDirectory implements ActorDirectory {
     }
 
     private Language languageOf(Player player) {
-        if (languageStore != null) {
-            String stored = languageStore.languageOf(player.getUniqueId()).orElse(null);
-            if (stored != null) {
-                if (UserLanguageStore.OFF.equalsIgnoreCase(stored)) {
-                    // AUTO = target indefinido → TranslationService no traduce.
-                    return Language.AUTO;
-                }
-                Language chosen = Language.of(stored).orElse(null);
-                if (chosen != null) {
-                    return chosen;
-                }
-            }
-        }
+        String stored = languageStore == null ? null
+            : languageStore.languageOf(player.getUniqueId()).orElse(null);
+        return me.majhrs16.suite.spigothost.logic.LangSetting.effective(
+            stored, clientLocale(player));
+    }
+
+    private static Language clientLocale(Player player) {
         String raw = player.getLocale();
         if (raw == null || raw.isBlank()) {
             return null;

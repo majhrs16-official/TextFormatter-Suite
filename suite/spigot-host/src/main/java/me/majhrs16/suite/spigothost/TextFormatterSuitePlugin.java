@@ -15,6 +15,9 @@ import me.majhrs16.suite.host.config.MessagesConfig;
 import me.majhrs16.suite.host.config.TranslatorsConfig;
 import me.majhrs16.suite.host.config.YamlUserLanguageStore;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.spigothost.logic.ChannelSelector;
+import me.majhrs16.suite.spigothost.logic.EventRules;
+import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
@@ -278,7 +281,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
         Actor sender = current.directory.actorOf(event.getPlayer());
         me.majhrs16.suite.textformatter.channel.Channel channel =
-            current.host.channels().resolve(resolveChannel(current, sender));
+            current.host.channels().resolve(
+                ChannelSelector.select(List.copyOf(current.host.channels().all()),
+                    permission -> hasPermission(sender, permission)));
         String channelPath = channel.name();
         boolean senderOff = isOff(current, sender);
 
@@ -320,7 +325,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         if (current == null) {
             return;
         }
-        dispatchTyped(current, MessageType.JOIN, "join",
+        dispatchTyped(current, MessageType.JOIN, EventRules.CHANNEL_JOIN,
             current.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
     }
 
@@ -331,7 +336,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         if (current == null) {
             return;
         }
-        dispatchTyped(current, MessageType.LEAVE, "quit",
+        dispatchTyped(current, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
             current.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
     }
 
@@ -345,27 +350,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         String vanilla = event.getDeathMessage() == null
             ? event.getEntity().getName()
             : event.getDeathMessage();
-        dispatchTyped(current, MessageType.DEATH, "death",
+        dispatchTyped(current, MessageType.DEATH, EventRules.CHANNEL_DEATH,
             current.directory.actorOf(event.getEntity()), vanilla);
-    }
-
-    /**
-     * MVP channel selection: first registered channel whose base permission
-     * the sender holds (registry order); falls back to {@code chat}.
-     * Richer per-source routing belongs to iFlow rules (F7+).
-     */
-    private String resolveChannel(Runtime current, Actor sender) {
-        ChannelRegistry channels = current.host.channels();
-        List<String> paths = channels.paths();
-        for (String path : paths) {
-            String permission = channels.get(path)
-                .map(c -> c.permission())
-                .orElse(null);
-            if (permission == null || hasPermission(sender, permission)) {
-                return path;
-            }
-        }
-        return "chat";
     }
 
     private void dispatch(Runtime current, MessageType type, Actor sender,
@@ -395,7 +381,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
      */
     private void dispatchTyped(Runtime current, MessageType type, String channelName,
                                Actor subject, String content) {
-        if (!current.host.channels().has(channelName)) {
+        if (!EventRules.typedEventEnabled(current.host.channels(), channelName)) {
             return;
         }
         boolean senderOff = isOff(current, subject);
@@ -413,9 +399,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
     /** @return whether this user disabled translation ({@code /suite lang off}). */
     private boolean isOff(Runtime current, Actor actor) {
-        UUID uuid = actor == null ? null : actor.uuid();
-        return uuid != null && UserLanguageStore.OFF.equalsIgnoreCase(
-            current.languages.languageOf(uuid).orElse(null));
+        return !EventRules.shouldTranslate(current.languages,
+            actor == null ? null : actor.uuid());
     }
 
     // -- commands ----------------------------------------------------------
@@ -498,9 +483,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             return true;
         }
         if (args.length == 0) {
-            String current2 = current.languages.languageOf(self.getUniqueId())
-                .orElse(UserLanguageStore.AUTO);
-            sender.sendMessage(messages.format("lang.current", displayValue(current2)));
+            String current2 = LangSetting.normalize(current.languages
+                .languageOf(self.getUniqueId()).orElse(UserLanguageStore.AUTO));
+            sender.sendMessage(messages.format("lang.current", LangSetting.display(current2)));
             return true;
         }
 
@@ -508,7 +493,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         String value;
         if (args.length == 1) {
             target = self == null ? null : self.getUniqueId();
-            value = normalizeLangValue(args[0]);
+            value = LangSetting.normalize(args[0]);
         } else {
             if (self == null || !self.hasPermission("textformattersuite.admin")) {
                 sender.sendMessage(messages.format("lang.other-admin"));
@@ -520,14 +505,14 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 return true;
             }
             target = other.getUniqueId();
-            value = normalizeLangValue(args[1]);
+            value = LangSetting.normalize(args[1]);
         }
-        if (target == null || !isValidLangValue(value)) {
+        if (target == null || !LangSetting.isValid(value)) {
             sender.sendMessage(messages.format("lang.invalid"));
             return true;
         }
         current.languages.save(target, value);
-        sender.sendMessage(messages.format("lang.updated", displayValue(value)));
+        sender.sendMessage(messages.format("lang.updated", LangSetting.display(value)));
         return true;
     }
 
@@ -559,35 +544,14 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             sender.sendMessage(messages.format("lang.console"));
             return true;
         }
-        String now = current.languages.languageOf(target).orElse(UserLanguageStore.AUTO);
-        String flipped = UserLanguageStore.OFF.equalsIgnoreCase(now)
-            ? UserLanguageStore.AUTO
-            : UserLanguageStore.OFF;
+        String flipped = LangSetting.flip(
+            current.languages.languageOf(target).orElse(UserLanguageStore.AUTO));
         current.languages.save(target, flipped);
         sender.sendMessage(messages.format("toggle.current",
-            UserLanguageStore.OFF.equalsIgnoreCase(flipped) ? "off" : "auto"));
+            LangSetting.display(flipped).startsWith("off") ? "off" : "auto"));
         return true;
     }
 
-    private static String normalizeLangValue(String raw) {
-        return raw == null ? "" : raw.trim();
+    
+    
     }
-
-    private static boolean isValidLangValue(String value) {
-        if (value.equalsIgnoreCase(UserLanguageStore.AUTO)
-            || value.equalsIgnoreCase(UserLanguageStore.OFF)) {
-            return true;
-        }
-        return me.majhrs16.suite.api.message.Language.of(value).isPresent();
-    }
-
-    private static String displayValue(String stored) {
-        if (UserLanguageStore.OFF.equalsIgnoreCase(stored)) {
-            return "off (sin traducción)";
-        }
-        if (UserLanguageStore.AUTO.equalsIgnoreCase(stored)) {
-            return "auto (locale del cliente)";
-        }
-        return stored;
-    }
-}

@@ -36,8 +36,8 @@
 
 | # | Tarea | Estado |
 |---|-------|--------|
-| T1 | Cobertura medida: JaCoCo (host/spigot-host/iflow/textformatter) + c8 (editor) con umbrales visibles | 🔨 |
-| T2 | Lógica pura fuera de Bukkit: ChannelSelector, LangSetting, TranslationFlag, TypedEvents → tests sin servidor | 🔨 |
+| T1 | Cobertura medida: JaCoCo en host 89.7% · kernel 88.4% · iflow 85.9% · textformatter 74.2% · spigot-host **10.1%** (umbral diferido hasta más extracción). Umbrales anti-regresión activos en `check` (85/80/80/70). Editor c8 pendiente (harness multi-proceso requiere merge de reportes) | ✅ Java 2026-08-25 |
+| T2 | Lógica pura fuera de Bukkit: `logic/ChannelSelector`, `logic/LangSetting` (effective/flip/isValid/display), `logic/EventRules` (canales tipados + shouldTranslate) → 8 tests nuevos; plugin/directory delegan en ellas | ✅ 2026-08-25 (12 tests spigot-host) |
 | T3 | Golden cross-language: fixture YAML compartido Java↔JS | ⏳ |
 | T4 | E2E sin servidor: store+dispatcher+delivery fake+sink stub | ⏳ |
 | T5 | Concurrencia determinista: dispatch vs reload; store writers | ⏳ |
