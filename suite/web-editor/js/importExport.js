@@ -55,10 +55,10 @@
               Suite.utils.toast(global.Suite.i18n.t('toast_import_ok'), 'ok');
               Suite.views.renderAll();
             } else {
-              Suite.utils.toast('no .yml/.json found', 'warn');
+              Suite.utils.toast(global.Suite.i18n.t('toast_yml_not_found'), 'warn');
             }
           } catch (err) {
-            Suite.utils.toast('zip inválido: ' + err.message, 'err');
+            Suite.utils.toast(global.Suite.i18n.t('toast_zip_invalid') + err.message, 'err');
           }
         };
         reader.readAsArrayBuffer(file);
@@ -79,10 +79,10 @@
       }
       const files = classifyPaste(txt);
       if (!files) {
-        Suite.utils.toast('no se pudo interpretar el YAML', 'err');
+        Suite.utils.toast(global.Suite.i18n.t('toast_yaml_invalid'), 'err');
       } else {
         StateStore.replace(Suite.model.importFromFiles(StateStore.getState(), files));
-        Suite.utils.toast('importado', 'ok');
+        Suite.utils.toast(global.Suite.i18n.t('toast_imported'), 'ok');
         Suite.views.renderAll();
       }
       $('#modal').classList.remove('show');
