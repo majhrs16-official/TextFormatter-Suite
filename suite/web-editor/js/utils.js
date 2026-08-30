@@ -50,9 +50,8 @@
     return b < 1024 ? b + ' B' : (b / 1024).toFixed(1) + ' KB';
   }
   function esc(s) {
-    return String(s).replace(
-      /[&<>"']/g,
-      c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    return String(s).replace(/[&<>"']/g, c =>
+      c === '&' ? '&' : c === '<' ? '<' : c === '>' ? '>' : c === '"' ? '"' : '&apos;'
     );
   }
 

@@ -1,0 +1,4 @@
+enabled: false
+token: ""
+channel: 0
+format: "{sender}: {content}"

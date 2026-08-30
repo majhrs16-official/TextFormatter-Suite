@@ -3,8 +3,10 @@ package me.majhrs16.suite.host.config;
 import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.gtranslate.GTranslate;
-import me.majhrs16.suite.gtranslate.HttpTransport;
 import me.majhrs16.suite.ltranslate.LTranslate;
+import me.majhrs16.suite.transport.HttpTransport;
+import me.majhrs16.suite.ltranslate.LTranslate;
+import me.majhrs16.suite.gtranslate.GTranslate;
 
 import org.yaml.snakeyaml.Yaml;
 
@@ -81,8 +83,8 @@ public final class TranslatorsConfig {
                 case "libre" -> baseUrl.isBlank()
                     ? null
                     : (apiKey.isBlank()
-                        ? new LTranslate(baseUrl, new me.majhrs16.suite.ltranslate.HttpTransport())
-                        : new LTranslate(baseUrl, apiKey, new me.majhrs16.suite.ltranslate.HttpTransport()));
+                        ? new LTranslate(baseUrl, new HttpTransport())
+                        : new LTranslate(baseUrl, apiKey, new HttpTransport()));
                 default -> null;
             };
             return java.util.Optional.of(new Provider(kind, active, settings));
@@ -101,26 +103,21 @@ public final class TranslatorsConfig {
     }
 
     private static int rank(String kind) {
-        return switch (kind) {
-            case "google" -> 0;
-            case "libre" -> 1;
-            default -> 2;
-        };
+        return "google".equals(kind) ? 0 : "libre".equals(kind) ? 1 : 2;
+    }
+
+    private static String str(Object o, String def) {
+        return o == null ? def : String.valueOf(o);
+    }
+
+    private static boolean bool(Object o, boolean def) {
+        return o instanceof Boolean b ? b : def;
     }
 
     private static String fileName(Path file) {
-        String name = file.getFileName().toString();
-        return name.endsWith(".yml") ? name.substring(0, name.length() - 4) : name;
+        String n = file.getFileName().toString();
+        return n.substring(0, n.lastIndexOf('.'));
     }
 
-    private static String str(Object value, String fallback) {
-        return value == null ? fallback : String.valueOf(value);
-    }
-
-    private static boolean bool(Object value, boolean fallback) {
-        return value instanceof Boolean b ? b : fallback;
-    }
-
-    private record Provider(String kind, boolean active, Translator settings) {
-    }
+    private record Provider(String kind, boolean active, Translator settings) {}
 }

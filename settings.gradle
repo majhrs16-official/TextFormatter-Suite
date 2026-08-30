@@ -7,3 +7,22 @@ pluginManagement {
 }
 
 rootProject.name = 'textformatter-suite'
+
+include 'suite:core-api'
+include 'suite:coretranslator'
+include 'suite:kernel'
+include 'suite:iflow'
+include 'suite:host'
+include 'suite:textformatter'
+include 'suite:gtranslate'
+include 'suite:ltranslate'
+include 'suite:sync-http'
+include 'suite:sync-tcpudp'
+include 'suite:sync-discord'
+include 'suite:sync-telegram'
+include 'suite:spigot-host'
+include 'suite:fabric-host'
+include 'suite:common-legacy'
+
+include 'suite:transport'
+

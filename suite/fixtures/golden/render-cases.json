@@ -1,0 +1,32 @@
+[
+  {
+    "name": "chat basico con builtins",
+    "format": "<gray>%player_name%: %content%</gray>",
+    "vars": { "player_name": "Steve", "content": "hola" },
+    "expectPlain": "Steve: hola"
+  },
+  {
+    "name": "tags anidados y unicode",
+    "format": "<green>✓</green> <gold>%player_name%</gold> <dark_gray>»</dark_gray> %content%",
+    "vars": { "player_name": "Alex", "content": "ñandú ✦" },
+    "expectPlain": "✓ Alex » ñandú ✦"
+  },
+  {
+    "name": "contenido con minimessage literal no rompe tags (escape)",
+    "format": "<gray>%content%</gray>",
+    "vars": { "content": "<bold>x</bold>" },
+    "expectPlain": "<bold>x</bold>"
+  },
+  {
+    "name": "token desconocido queda literal",
+    "format": "%unknown_token% %content%",
+    "vars": { "content": "y" },
+    "expectPlain": "%unknown_token% y"
+  },
+  {
+    "name": "tooltip marker tr sin traduccion disponible deja texto",
+    "format": "<white><tr>%content%</tr></white>",
+    "vars": { "content": "eco" },
+    "expectPlain": "eco"
+  }
+]

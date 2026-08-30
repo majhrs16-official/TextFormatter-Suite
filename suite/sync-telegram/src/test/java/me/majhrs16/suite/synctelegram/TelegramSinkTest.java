@@ -4,13 +4,11 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.transport.Transport;
 
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,7 +18,7 @@ class TelegramSinkTest {
 
     /** Stub transport that records requests and returns canned JSON. */
     private static final class StubTransport implements Transport {
-        final List<String> requests = new CopyOnWriteArrayList<>();
+        final java.util.List<String> requests = new java.util.concurrent.CopyOnWriteArrayList<>();
         String getResponse = "{\"ok\":true,\"result\":[]}";
         String postResponse = "{\"ok\":true}";
 
@@ -34,6 +32,11 @@ class TelegramSinkTest {
         public String post(String url, String jsonBody) {
             requests.add(url);
             return postResponse;
+        }
+
+        @Override
+        public String post(String url, java.util.Map<String, String> headers, String jsonBody) {
+            return post(url, jsonBody);
         }
     }
 

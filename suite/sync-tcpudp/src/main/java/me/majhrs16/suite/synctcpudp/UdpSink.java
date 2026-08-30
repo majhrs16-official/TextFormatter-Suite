@@ -67,7 +67,7 @@ public final class UdpSink implements SyncSink {
 
     @Override
     public void send(Message message) throws IOException {
-        byte[] payload = MessageCodec.toJson(message).getBytes(StandardCharsets.UTF_8);
+        byte[] payload = me.majhrs16.suite.transport.MessageCodec.toJsonString(message).getBytes(StandardCharsets.UTF_8);
         DatagramPacket packet = new DatagramPacket(payload, payload.length,
             new InetSocketAddress(remoteHost, remotePort));
         socket.send(packet);
@@ -95,7 +95,7 @@ public final class UdpSink implements SyncSink {
                 }
                 SyncListener currentListener = listener;
                 if (currentListener != null) {
-                    currentListener.onMessage(this, MessageCodec.fromJson(line));
+                    currentListener.onMessage(this, me.majhrs16.suite.transport.MessageCodec.fromJsonString(line));
                 }
             } catch (IOException e) {
                 if (running.get()) {

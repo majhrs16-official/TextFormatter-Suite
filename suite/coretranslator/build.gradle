@@ -18,6 +18,7 @@ java {
 
 dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-common-legacy:2.1.0-SNAPSHOT'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
     testImplementation platform('org.junit:junit-bom:5.10.2')

@@ -4,12 +4,11 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.transport.Transport;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -49,7 +48,7 @@ public final class TelegramSink implements SyncSink {
 
     @Override
     public void send(Message message) throws Exception {
-        String url = HttpTransport.withQuery(baseUrl + "/sendMessage", Map.of(
+        String url = Transport.withQuery(baseUrl + "/sendMessage", Map.of(
             "chat_id", String.valueOf(chatId),
             "text", message.text()));
         String body = transport.get(url);

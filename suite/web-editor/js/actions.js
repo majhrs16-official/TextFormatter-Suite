@@ -12,12 +12,11 @@
       return;
     }
     if (sel.type === 'channel') {
-      const c = StateStore.getState().channels[sel.key];
-      if (!c) {
-        return;
-      }
-      StateStore.mutate('dup channel', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('dup channel', st => {
+        const c = st.channels[sel.key];
+        if (!c) {
+          return;
+        }
         let name = sel.key + '-copy';
         let i = 2;
         while (st.channels[name]) {
@@ -32,12 +31,11 @@
       Suite.views.renderTxf();
       Suite.views.renderStatus();
     } else if (sel.type === 'node') {
-      const n = StateStore.getState().graph.nodes.find(x => x.id === sel.id);
-      if (!n) {
-        return;
-      }
-      StateStore.mutate('dup node', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('dup node', st => {
+        const n = st.graph.nodes.find(x => x.id === sel.id);
+        if (!n) {
+          return;
+        }
         const copy = Suite.model.clone(n);
         copy.id = n.id + '_copy';
         let i = 2;
@@ -60,8 +58,7 @@
       return;
     }
     if (sel.type === 'channel') {
-      StateStore.mutate('del channel', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('del channel', st => {
         const victims = new Set(st.graph.nodes.filter(x => x.kind === 'input' && x.label === sel.key).map(x => x.id));
         delete st.channels[sel.key];
         st.graph.nodes = st.graph.nodes.filter(x => !victims.has(x.id));
@@ -73,13 +70,13 @@
       Suite.views.renderTxf();
       Suite.views.renderStatus();
     } else if (sel.type === 'node') {
-      StateStore.mutate('del node', () => Suite.model.removeNode(StateStore.getState(), sel.id));
+      StateStore.mutate('del node', st => Suite.model.removeNode(st, sel.id));
       UI.sel = null;
       Suite.utils.toast(global.Suite.i18n.t('toast_del'), 'ok');
       Suite.views.renderCanvas('iflow');
       Suite.views.renderStatus();
     } else if (sel.type === 'edge') {
-      StateStore.mutate('del edge', () => Suite.model.removeEdge(StateStore.getState(), sel.from, sel.to));
+      StateStore.mutate('del edge', st => Suite.model.removeEdge(st, sel.from, sel.to));
       UI.sel = null;
       Suite.utils.toast(global.Suite.i18n.t('toast_del'), 'ok');
       Suite.views.renderCanvas('iflow');

@@ -2,6 +2,7 @@ package me.majhrs16.suite.ltranslate;
 
 import me.majhrs16.suite.api.spi.TranslationException;
 import me.majhrs16.suite.api.spi.Translator;
+import me.majhrs16.suite.transport.Transport;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

@@ -80,7 +80,7 @@ public final class TcpSink implements SyncSink {
             socket.connect(new InetSocketAddress(remoteHost, remotePort));
             Writer writer = new OutputStreamWriter(socket.getOutputStream(),
                 StandardCharsets.UTF_8);
-            writer.write(MessageCodec.toJson(message));
+            writer.write(me.majhrs16.suite.transport.MessageCodec.toJsonString(message));
             writer.write("\n");
             writer.flush();
         }
@@ -103,7 +103,7 @@ public final class TcpSink implements SyncSink {
                 }
                 SyncListener current = listener;
                 if (current != null) {
-                    current.onMessage(this, MessageCodec.fromJson(line));
+                    current.onMessage(this, me.majhrs16.suite.transport.MessageCodec.fromJsonString(line));
                 }
             } catch (IOException e) {
                 if (running.get()) {

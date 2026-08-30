@@ -26,14 +26,14 @@
     bold: '<b>',
     italic: '<i>',
     underlined: '<u>',
-    strikethrough: '<s>',
+    strikethrough: '',
     obfuscated: '',
     reset: '',
     rainbow: '',
     gradient: '',
   };
   function esc(s) {
-    return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+    return String(s).replace(/[&<>]/g, c => ({ '&': '&', '<': '<', '>': '>' })[c]);
   }
 
   // Renderiza texto con tokens %var% y etiquetas MiniMessage limitadas.
@@ -78,105 +78,83 @@
     if (FIXES[tag] !== undefined) {
       return escaped + FIXES[tag];
     }
-    if (tag === 'tr') {
-      return escaped + '<span title="traducible" style="border-bottom:1px dotted currentColor">';
-    }
-    if (tag === 't') {
-      return escaped + '<span title="tag">';
-    }
+
+    // tags sin cierre (formato) se ignoran
     return escaped;
   }
 
-  // Define los placeholders disponibles en plantillas.
-  function tokens(channel) {
-    return {
-      player_name: 'Steve',
-      content: 'hola mundo',
-      ct_messages: 'hola mundo',
-      lang_source: channel ? channel['lang-source'] || 'auto' : 'auto',
-      lang_target: channel ? channel['lang-target'] || 'auto' : 'auto',
-    };
-  }
+  // Simulación del pipeline iFlow: recorre graph.nodes/edges y aplica transforms.
+  function simulate(state, channelName, text, options) {
+    options = options || {};
+    const dedup = options.dedup !== false;
+    const maxSteps = state.graph?.guard?.['max-steps'] ?? 512;
 
-  // Simula el pipeline: entra un mensaje en `channel`, recorre el grafo.
-  function simulate(state, channelName, text) {
-    const nodes = state.graph.nodes || [];
-    const edges = state.graph.edges || [];
-    const maxSteps = (state.graph.guard && state.graph.guard['max-steps']) || 512;
-    const dedup = (state.graph.filter && state.graph.filter['dedup-fanout']) !== false;
-    const adj = new Map(nodes.map(n => [n.id, []]));
-    for (const e of edges) {
-      if (adj.has(e.from)) {
-        adj.get(e.from).push(e.to);
+    if (!state.channels || !state.channels[channelName]) {
+      return { ok: false, reason: 'Channel not found: ' + channelName };
+    }
+    const channel = state.channels[channelName];
+    const vars = tokens(channel);
+    vars.content = text;
+
+    // Build adjacency list
+    const adj = new Map();
+    for (const e of state.graph?.edges || []) {
+      if (!adj.has(e.from)) {
+        adj.set(e.from, []);
       }
+      adj.get(e.from).push(e.to);
     }
 
-    const start =
-      nodes.find(n => n.kind === 'input' && n.label === channelName) || nodes.filter(n => n.kind === 'input')[0];
-    if (!start) {
-      return { ok: false, path: [], outputs: [], steps: 0, reason: 'sin nodo de entrada para ' + channelName };
+    // Find entry nodes matching channel
+    const entries = (state.graph?.nodes || []).filter(n => n.kind === 'input' && n.label === channelName);
+    if (!entries.length) {
+      return { ok: false, reason: 'No input node for channel: ' + channelName };
     }
 
-    const results = [];
+    // BFS simulation
+    const queue = entries.map(n => ({
+      id: n.id,
+      path: [n.id],
+      msg: text,
+      sounds: [],
+      steps: 0,
+    }));
     const seen = new Set();
-    const queue = [{ id: start.id, path: [start.id], msg: text, sounds: [], steps: 0 }];
+    const results = [];
     const order = [];
+
     while (queue.length) {
       const cur = queue.shift();
-      const node = nodes.find(n => n.id === cur.id);
-      if (!node) {
-        continue;
-      }
+      if (!cur) continue;
 
-      let keep = true;
-      // condición = filtro
-      if (node.kind === 'cond' && node.matcher) {
-        const m = node.matcher;
-        if (m.channel && !channelName.includes(m.channel)) {
-          keep = false;
-        }
-        if (m.sender && !text.includes(m.sender)) {
-          keep = false;
-        }
-      }
-      if (!keep) {
-        continue;
-      }
+      const node = (state.graph?.nodes || []).find(x => x.id === cur.id);
+      if (!node) continue;
 
-      // transformación
-      let outText = cur.msg,
-        sounds = cur.sounds;
-      for (const t of node.transforms || []) {
-        if (t.op === 'rewrite' && t.template && t.template !== undefined) {
-          const chan = state.channels[channelName];
-          outText = t.template
-            .replace(/%player_name%/g, 'Steve')
-            .replace(/%ct_messages%/g, text)
-            .replace(/%content%/g, text)
-            .replace(/%lang_source%/g, chan ? chan['lang-source'] || 'auto' : 'auto')
-            .replace(/%lang_target%/g, chan ? chan['lang-target'] || 'auto' : 'auto');
-          if (chan && t.template === '@messages0') {
-            outText = (chan.messages[0] || text).replace(/%content%/g, text).replace(/%player_name%/g, 'Steve');
-          }
-        }
-        if (t.op === 'sounds') {
-          sounds = sounds.slice();
-          for (const a of t.add || []) {
-            if (!sounds.includes(a)) {
-              sounds.push(a);
+      let outText = cur.msg;
+      let sounds = [...cur.sounds];
+
+      // Apply node transforms
+      if (node.kind === 'transform') {
+        for (const t of node.transforms || []) {
+          if (t.op === 'rewrite') {
+            outText = Suite.preview.renderMini(t.template, vars);
+            vars.content = outText;
+          } else if (t.op === 'sounds') {
+            for (const a of t.add || []) {
+              sounds.push({ name: a, volume: 1.0, pitch: 1.0 });
+            }
+            for (const r of t.remove || []) {
+              sounds = sounds.filter(s => s !== r);
             }
           }
-          for (const r of t.remove || []) {
-            sounds = sounds.filter(s => s !== r);
-          }
         }
-        if (t.op === 'sleep') {
-          /* el delay no cambia el mensaje */
-        }
+      } else if (node.kind === 'sleep') {
+        /* el delay no cambia el mensaje */
       }
 
+      // Output/redirect nodes produce results
       if (node.kind === 'output' || node.kind === 'redirect') {
-        const key = (dedup ? node.id : '') + '/' + channelName + '/' + outText;
+        const key = (options.dedup !== false ? node.id : '') + '/' + channelName + '/' + outText;
         if (!seen.has(key)) {
           seen.add(key);
           results.push({
@@ -190,6 +168,7 @@
         continue;
       }
 
+      // Traverse edges
       const nexts = adj.get(node.id) || [];
       for (const nxt of nexts) {
         const steps = cur.steps + 1;
@@ -221,13 +200,25 @@
     return {
       ok: true,
       copies,
-      outputs: results.length
-        ? results
-        : [{ target: '(sin salida)', text: start ? text : '', path: order, sounds: [] }],
+      outputs: results.length ? results : [{ target: '(sin salida)', text: text, path: order, sounds: [] }],
       order,
       steps: order.length,
-      start: start.id,
+      start: entries[0]?.id,
     };
+  }
+
+  // Extrae tokens %...% de un template.
+  function tokens(channel) {
+    const vars = {};
+    if (!channel) return vars;
+    const re = /%([a-zA-Z_][a-zA-Z0-9_]*)%/g;
+    for (const msg of channel.messages || []) {
+      let m;
+      while ((m = re.exec(msg))) {
+        vars[m[1]] = '';
+      }
+    }
+    return vars;
   }
 
   // Sonido: Web Audio (beep determinista por nombre, sin recursos de red).

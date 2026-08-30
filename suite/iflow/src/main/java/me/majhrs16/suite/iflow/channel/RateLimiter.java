@@ -1,6 +1,9 @@
 package me.majhrs16.suite.iflow.channel;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.Map;
 
 /**
@@ -16,17 +19,25 @@ public final class RateLimiter {
     private final long capacity;
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final Clock clock;
+    private final ScheduledExecutorService purger;
 
     private static final long WINDOW_NANOS = 1_000_000_000L;
     private static final long IDLE_NANOS = 5 * WINDOW_NANOS;
 
     public RateLimiter(int capacity) {
         this(capacity, System::nanoTime);
+        purger.scheduleAtFixedRate(() -> purgeIdle(clock.nanoTime()), 1, 1, TimeUnit.MINUTES);
     }
 
     RateLimiter(int capacity, Clock clock) {
         this.capacity = Math.max(1, capacity);
         this.clock = clock;
+        this.purger = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "rate-limiter-purge");
+            t.setDaemon(true);
+            return t;
+        });
+        purger.scheduleAtFixedRate(() -> purgeIdle(clock.nanoTime()), 1, 1, TimeUnit.MINUTES);
     }
 
     /**
@@ -38,9 +49,6 @@ public final class RateLimiter {
      */
     public boolean tryAcquire(String key) {
         long now = clock.nanoTime();
-        if (++acquisitions % PURGE_INTERVAL == 0) {
-            purgeIdle(now);
-        }
         Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
         synchronized (bucket) {
             bucket.refill(now);
@@ -53,13 +61,16 @@ public final class RateLimiter {
         }
     }
 
-    private static final long PURGE_INTERVAL = 1_024L;
-    private long acquisitions;
-
     /** Evicts buckets that have been idle for at least {@link #IDLE_NANOS}. */
     private void purgeIdle(long now) {
         long cutoff = now - IDLE_NANOS;
         buckets.entrySet().removeIf(e -> e.getValue().lastFill <= cutoff);
+    }
+
+    public void close() {
+        if (purger != null) {
+            purger.shutdownNow();
+        }
     }
 
     private static final class Bucket {

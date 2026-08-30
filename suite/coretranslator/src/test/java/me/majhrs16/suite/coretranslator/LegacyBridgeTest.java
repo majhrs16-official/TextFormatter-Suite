@@ -5,8 +5,8 @@ import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.coretranslator.legacy.ChatMessage;
-import me.majhrs16.suite.coretranslator.legacy.ChatMessageType;
+import me.majhrs16.suite.common.legacy.ChatMessage;
+import me.majhrs16.suite.common.legacy.ChatMessageType;
 
 import org.junit.jupiter.api.Test;
 

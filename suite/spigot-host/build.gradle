@@ -34,7 +34,7 @@ configurations.all {
 // `./gradlew jar`. El paso a mavenLocal/coordinadas normales llega con el
 // composite build (FASE 3).
 def suiteJar = { String module, String artifact ->
-    files("../${module}/build/libs/${artifact}-2.1.0-SNAPSHOT.jar")
+    files("../${module}/build/libs/${module}-2.1.0-SNAPSHOT.jar")
 }
 
 dependencies {

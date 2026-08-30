@@ -1,0 +1,9 @@
+general:
+  language: en
+  translation-enabled: true
+  engine-parallel: true
+  sound-enabled: true
+  claim-mode: cancel-event
+
+chat:
+  global-prefix: ""

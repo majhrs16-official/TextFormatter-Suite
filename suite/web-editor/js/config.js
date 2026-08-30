@@ -254,7 +254,8 @@
         const st = StateStore.getState();
         const txt = Suite.utils.$('#testText')?.value || 'hola mundo';
         const src = (st.config.general.language || 'en') === 'es' ? 'es' : 'en';
-        const first = st.channels[Object.keys(st.channels)[0]];
+        const channels = Object.keys(st.channels);
+        const first = channels.length ? st.channels[channels[0]] : null;
         const dst = (first && first['lang-target']) || 'en';
         const testOut = Suite.utils.$('#testOut');
         if (testOut) {

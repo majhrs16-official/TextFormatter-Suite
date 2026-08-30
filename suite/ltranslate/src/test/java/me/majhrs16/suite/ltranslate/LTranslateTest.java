@@ -1,6 +1,7 @@
 package me.majhrs16.suite.ltranslate;
 
 import me.majhrs16.suite.api.spi.TranslationException;
+import me.majhrs16.suite.transport.Transport;
 
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +20,10 @@ class LTranslateTest {
             @Override public String get(String url) { return ""; }
             @Override public String post(String url, String jsonBody) {
                 return url.endsWith("/detect") ? DETECT_BODY : TRANSLATE_BODY;
+            }
+            @Override
+            public String post(String url, java.util.Map<String, String> headers, String jsonBody) {
+                return post(url, jsonBody);
             }
         });
     }
@@ -43,7 +48,11 @@ class LTranslateTest {
         LTranslate libre = new LTranslate("https://example.org", new Transport() {
             @Override public String get(String url) { return ""; }
             @Override public String post(String url, String jsonBody) throws java.io.IOException {
-                throw new java.io.IOException("unreachable");
+                try { throw new java.io.IOException("unreachable"); } catch (java.io.IOException e) { throw new RuntimeException(e); }
+            }
+            @Override
+            public String post(String url, java.util.Map<String, String> headers, String jsonBody) {
+                try { throw new java.io.IOException("unreachable"); } catch (java.io.IOException e) { throw new RuntimeException(e); }
             }
         });
 
@@ -67,6 +76,10 @@ class LTranslateTest {
             @Override public String post(String url, String jsonBody) {
                 body[0] = jsonBody;
                 return TRANSLATE_BODY;
+            }
+            @Override
+            public String post(String url, java.util.Map<String, String> headers, String jsonBody) {
+                return post(url, jsonBody);
             }
         });
 

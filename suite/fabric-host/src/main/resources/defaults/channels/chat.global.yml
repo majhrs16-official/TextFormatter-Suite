@@ -1,0 +1,8 @@
+name: chat.global
+permission: ""
+messages:
+  - '<gray>%player_name%: %content%</gray>'
+tooltips: []
+sounds:
+  - { name: "entity.experience_orb.pickup", volume: 0.5, pitch: 1.0 }
+show-sender: true

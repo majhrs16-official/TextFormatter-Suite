@@ -2,6 +2,7 @@ package me.majhrs16.suite.gtranslate;
 
 import me.majhrs16.suite.api.spi.TranslationException;
 import me.majhrs16.suite.api.spi.Translator;
+import me.majhrs16.suite.transport.Transport;
 
 import org.json.JSONArray;
 
@@ -71,6 +72,6 @@ public final class GTranslate implements Translator {
     }
 
     private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
     }
 }

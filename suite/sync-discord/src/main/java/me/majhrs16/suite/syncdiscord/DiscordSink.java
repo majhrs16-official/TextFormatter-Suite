@@ -1,4 +1,5 @@
 package me.majhrs16.suite.syncdiscord;
+import me.majhrs16.suite.transport.Transport;
 
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.SyncListener;

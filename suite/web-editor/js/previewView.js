@@ -49,13 +49,18 @@
     const vars = Suite.preview.tokens(chan);
     vars.content = text;
     const nodeById = new Map((st.graph.nodes || []).map(n => [n.id, n]));
-    $('#pvResult').innerHTML = res.ok
-      ? '<span style="color:var(--green)">' +
-        (res.outputs || []).map(o => Suite.utils.esc(o.text || o.target || '')).join('<br>') +
-        '</span>'
-      : '<span style="color:var(--red)">' + Suite.utils.esc(res.reason || 'error') + '</span>';
+    if (!res.ok) {
+      $('#pvResult').innerHTML =
+        '<span style="color:var(--red)">' + Suite.utils.esc(res.reason || 'unknown error') + '</span>';
+      $('#pvPath').innerHTML = '';
+      return;
+    }
+    const outputs = res.outputs || [];
+    $('#pvResult').innerHTML =
+      '<span style="color:var(--green)">' +
+      outputs.map(o => Suite.utils.esc(o.text || o.target || '')).join('<br>') +
+      '</span>';
     $('#pvPath').innerHTML = '';
-    const outputs = res.ok ? res.outputs || [] : [];
     outputs.forEach((o, i) => {
       const step = document.createElement('div');
       step.style.cssText = 'font-family:var(--mono);font-size:11px;margin:2px 0';

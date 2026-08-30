@@ -1,0 +1,81 @@
+plugins {
+    id 'fabric-loom' version '1.6.12'
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'jacoco'
+}
+
+group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven { url 'https://maven.fabricmc.net/' }
+    maven { url 'https://libraries.minecraft.net/' }
+}
+
+dependencies {
+    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
+
+    minecraft 'com.mojang:minecraft:1.21'
+    mappings 'net.fabricmc:yarn:1.21+build.1:v2'
+    modImplementation 'net.fabricmc:fabric-loader:0.16.10'
+    modImplementation 'net.fabricmc.fabric-api:fabric-api:0.100.5+1.21'
+
+    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
+    implementation 'net.kyori:adventure-api:4.17.0'
+    implementation 'net.kyori:adventure-text-serializer-gson:4.17.0'
+    implementation 'net.dv8tion:JDA:6.4.2'
+    implementation 'org.yaml:snakeyaml:2.2'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.jar {
+    archiveClassifier = 'thin'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    archiveBaseName = 'textformatter-suite-fabric'
+}
+
+processResources {
+    filesMatching('fabric.mod.json') {
+        expand(version: project.version)
+    }
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}

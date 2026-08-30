@@ -78,7 +78,7 @@ public final class HttpSink implements SyncSink {
             .timeout(Duration.ofSeconds(10))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(
-                MessageCodec.toJson(message).toString()))
+                me.majhrs16.suite.transport.MessageCodec.toJson(message).toString()))
             .build();
         HttpResponse<String> response = client.send(request,
             HttpResponse.BodyHandlers.ofString());
@@ -102,7 +102,7 @@ public final class HttpSink implements SyncSink {
                 StandardCharsets.UTF_8);
             SyncListener current = listener;
             if (current != null) {
-                current.onMessage(this, MessageCodec.fromJson(body));
+                current.onMessage(this, me.majhrs16.suite.transport.MessageCodec.fromJson(body));
             }
             exchange.sendResponseHeaders(200, -1);
         } finally {

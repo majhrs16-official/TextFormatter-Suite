@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "textformatter-suite-fabric",
+  "version": "${version}",
+  "name": "TextFormatter Suite (Fabric)",
+  "description": "Cross-platform chat formatting and translation suite for Fabric",
+  "authors": ["majhrs16"],
+  "contact": {
+    "homepage": "https://github.com/majhrs16/textformatter-suite",
+    "sources": "https://github.com/majhrs16/textformatter-suite"
+  },
+  "license": "MIT",
+  "icon": "assets/textformatter-suite-fabric/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "me.majhrs16.suite.fabrichost.TextFormatterSuiteMod"
+    ],
+    "server": [
+      "me.majhrs16.suite.fabrichost.TextFormatterSuiteMod"
+    ]
+  },
+  "mixins": [
+    "textformatter-suite-fabric.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21",
+    "java": ">=21"
+  },
+  "suggests": {
+    "flamingo": "*"
+  }
+}

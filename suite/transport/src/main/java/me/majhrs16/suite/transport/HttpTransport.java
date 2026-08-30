@@ -1,4 +1,4 @@
-package me.majhrs16.suite.synctelegram;
+package me.majhrs16.suite.transport;
 
 import java.io.IOException;
 import java.net.URI;
@@ -6,13 +6,16 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /**
- * {@link Transport} backed by the JDK HTTP client with query-string support
- * (Telegram's Bot API takes parameters in the URL).
+ * Production {@link Transport} backed by the JDK {@link HttpClient}.
+ *
+ * <p>Supports all HTTP methods required by the suite:
+ * - GET requests for translation APIs (Google, Libre, Telegram)
+ * - POST with JSON body for general REST APIs
+ * - POST with custom headers for Discord REST API
+ * - Query string building for Telegram Bot API
  */
 public final class HttpTransport implements Transport {
 
@@ -52,19 +55,17 @@ public final class HttpTransport implements Transport {
         return send(request);
     }
 
-    /** Builds a URL with percent-encoded query parameters. */
-    public static String withQuery(String base, Map<String, String> params) {
-        StringBuilder builder = new StringBuilder(base);
-        char sep = '?';
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            builder.append(sep)
-                .append(encode(entry.getKey())).append('=').append(encode(entry.getValue()));
-            sep = '&';
+    @Override
+    public String post(String url, Map<String, String> headers, String jsonBody) throws IOException {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+            .timeout(timeout)
+            .header("User-Agent", "TextFormatterSuite/2.1")
+            .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+        if (headers != null) {
+            headers.forEach(builder::header);
         }
-        return builder.toString();
+        HttpRequest request = builder.build();
+        return send(request);
     }
 
     private String send(HttpRequest request) throws IOException {
@@ -79,9 +80,5 @@ public final class HttpTransport implements Transport {
             Thread.currentThread().interrupt();
             throw new IOException("request interrupted", e);
         }
-    }
-
-    private static String encode(String value) {
-        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
     }
 }

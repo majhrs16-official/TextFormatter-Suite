@@ -169,8 +169,7 @@
         '</span><span data-x class="x">✗</span>';
       li.onclick = e => {
         if (e.target.hasAttribute('data-x')) {
-          StateStore.mutate('del sound', () => {
-            const st = StateStore.getState();
+          StateStore.mutate('del sound', st => {
             const arr = st.channels[UI.sel.key].sounds;
             arr.splice(i, 1);
           });
@@ -192,9 +191,9 @@
         const newName = $('#pfId').value.trim();
         if (newName && newName !== sel.key) {
           const existed = !!StateStore.getState().channels[newName];
-          StateStore.mutate('rename', () => {
+          StateStore.mutate('rename', st => {
             if (!existed) {
-              Suite.model.renameChannel(StateStore.getState(), sel.key, newName);
+              Suite.model.renameChannel(st, sel.key, newName);
             }
           });
           UI.sel.key = newName;
@@ -213,13 +212,12 @@
       }
       const val = $('#pfText').value;
       if (sel.type === 'channel') {
-        StateStore.mutate('templates', () => {
-          const st = StateStore.getState();
+        StateStore.mutate('templates', st => {
           st.channels[sel.key].messages = val.split('\n').filter(x => x.trim() !== '');
         });
       } else {
-        StateStore.mutate('property', () => {
-          const n = StateStore.getState().graph.nodes.find(x => x.id === sel.id);
+        StateStore.mutate('property', st => {
+          const n = st.graph.nodes.find(x => x.id === sel.id);
           if (!n) {
             return;
           }
@@ -248,8 +246,7 @@
         return;
       }
       const v = parseFloat($('#pfRate').value) || 0;
-      StateStore.mutate('rate', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('rate', st => {
         st.channels[sel.key]['rate-limit-per-second'] = v;
       });
     });
@@ -258,8 +255,7 @@
       if (!sel) {
         return;
       }
-      StateStore.mutate('lang', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('lang', st => {
         st.channels[sel.key]['lang-source'] = $('#pfLangSource').value;
       });
     });
@@ -268,8 +264,7 @@
       if (!sel) {
         return;
       }
-      StateStore.mutate('lang', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('lang', st => {
         st.channels[sel.key]['lang-target'] = $('#pfLangTarget').value;
       });
     });
@@ -278,8 +273,7 @@
       if (!sel || sel.type !== 'channel') {
         return;
       }
-      StateStore.mutate('sender', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('sender', st => {
         st.channels[sel.key]['show-sender'] = !st.channels[sel.key]['show-sender'];
       });
       $('#pfShowSender').classList.toggle('on');
@@ -293,8 +287,7 @@
       if (!name) {
         return;
       }
-      StateStore.mutate('add sound', () => {
-        const st = StateStore.getState();
+      StateStore.mutate('add sound', st => {
         st.channels[sel.key].sounds = st.channels[sel.key].sounds || [];
         st.channels[sel.key].sounds.push({ name, volume: 1.0, pitch: 1.0 });
       });
@@ -310,8 +303,8 @@
               return;
             }
             const nodeId = UI.sel.id;
-            StateStore.mutate('kind', () => {
-              const target = StateStore.getState().graph.nodes.find(x => x.id === nodeId);
+            StateStore.mutate('kind', st => {
+              const target = st.graph.nodes.find(x => x.id === nodeId);
               if (!target) {
                 return;
               }

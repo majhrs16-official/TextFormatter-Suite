@@ -1,0 +1,8 @@
+name: google
+base-url: "https://translation.googleapis.com/language/translate/v2"
+api-key: ""
+enabled: false
+timeout-ms: 3000
+rate-limit:
+  requests-per-second: 10
+  burst: 20

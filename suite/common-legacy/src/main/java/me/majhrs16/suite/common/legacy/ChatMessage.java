@@ -1,4 +1,4 @@
-package me.majhrs16.suite.coretranslator.legacy;
+package me.majhrs16.suite.common.legacy;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;

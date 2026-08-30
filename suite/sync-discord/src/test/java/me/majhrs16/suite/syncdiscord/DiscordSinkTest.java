@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.transport.Transport;
 
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,16 @@ class DiscordSinkTest {
             this.headers.add(headers);
             bodies.add(jsonBody);
             return response;
+        }
+
+        @Override
+        public String get(String url) {
+            throw new UnsupportedOperationException("get not used");
+        }
+
+        @Override
+        public String post(String url, String jsonBody) {
+            return post(url, Map.of(), jsonBody);
         }
     }
 

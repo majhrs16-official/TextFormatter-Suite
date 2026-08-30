@@ -24,7 +24,7 @@
       }
       Suite.views.renderStatus();
     };
-    $('#dlBtn').onclick = () => Suite.views.bindImportExport(); // placeholder, real in importExport
+    // #dlBtn handler is set up in importExport.js bindImportExport()
     $('#importBtn').onclick = () => $('#fileInput').click();
     $('#fitView').onclick = () => Suite.views.fitView();
     $('#zoomIn').onclick = () => zoomAt(vwC(), vhC(), 1.2);
