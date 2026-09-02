@@ -130,12 +130,68 @@ INPUT → DETECT → PARSE → TRANSFORM → TRANSLATE → FORMAT → SYNC → O
 ## 📝 Notas de arquitectura
 
 **Separación de áreas:**
-| Área | Pregunta que responde |
-|------|----------------------|
-| **Translation** | ¿Qué debe decir el texto? |
-| **Formatting** | ¿Cómo manipulo/represento ese texto? |
-| **Sync** | ¿A dónde viaja y cómo llega? |
-| **Web Editor** | ¿Cómo describo todo sin perder control de bajo nivel? |
+| Área            | Pregunta que responde                                             |
+| --------------- | ----------------------------------------------------------------- |
+| **Translation** | ¿Qué debe decir el texto?                                         |
+| **Formatting**  | ¿Cómo manipulo/represento ese texto?                              |
+| **Sync**        | ¿A dónde viaja y cómo llega?                                      |
+| **Web Editor**  | ¿Cómo describo todo lo anterior sin perder control de bajo nivel? |
+
+**Ninguna área depende conceptualmente de Minecraft.** Minecraft es un consumidor más.
+
+---
+
+---
+
+## 🧠 BRAINSTORMING HISTÓRICO (completo)
+
+*El siguiente contenido es el brainstorming original completo. Mover a "IMPLEMENTADO" o "EN PROGRESO" cuando se haga.*
+
+### Translation
+- Text discovery (extract/inject text de cualquier objeto)
+- Traducción estructural (preservar Component semántica)
+- Universal Text Pipeline (DETECT→PARSE→TRANSFORM→TRANSLATE→FORMAT→SYNC→OUTPUT)
+
+### Formatting
+- Arsenal de transformaciones (uppercase, rot13, base64, leetspeak, etc.)
+- Unicode processing (NFC/NFD/NFKC/NFKD, grapheme segmentation, width calculation)
+- Visual width (emojis, CJK, ANSI, MiniMessage, Adventure Components)
+- Parser/serializer universal (Plain↔MiniMessage↔Adventure↔ANSI↔Markdown↔HTML↔JSON↔YAML)
+
+### Sync
+- Message synchronization fabric (broadcast a múltiples transports)
+- Bridge declarativo YAML con loop detection (message-id, hop-count, route-history)
+- Delivery guarantees (at-most-once, at-least-once, best-effort)
+- Ordering guarantees (none, per-channel, global)
+- Priority levels (low, normal, high)
+- Message transformation entre transports (Discord embed ↔ Minecraft Message)
+- UDP capabilities (broadcast, multicast, fragmentation, reliability custom)
+- WebSocket subscriptions (`/ws/chat`, `/ws/events`, `/ws/sync`, `/ws/logs`)
+
+### Web Editor
+- YAML como lenguaje (variables, scopes, constantes, funciones, macros, imports, tipos, namespaces, condiciones, loops, composición)
+- "Go to assembly" / "Show compiled representation" (high-level ↔ atomic operations)
+- Compiler diagnostics tipados (no "YAML inválido")
+- Formatter optimizer (fusionar operaciones equivalentes con prueba de equivalencia)
+- Source maps (YAML line → AST → IR instruction → runtime operation)
+
+### Universal Text Pipeline
+```text
+INPUT → DETECT → PARSE → TRANSFORM → TRANSLATE → FORMAT → SYNC → OUTPUT
+```
+(Cada etapa opcional)
+
+---
+
+## 📝 Notas de arquitectura
+
+**Separación de áreas:**
+| Área            | Pregunta que responde                                             |
+| --------------- | ----------------------------------------------------------------- |
+| **Translation** | ¿Qué debe decir el texto?                                         |
+| **Formatting**  | ¿Cómo manipulo/represento ese texto?                              |
+| **Sync**        | ¿A dónde viaja y cómo llega?                                      |
+| **Web Editor**  | ¿Cómo describo todo lo anterior sin perder control de bajo nivel? |
 
 **Ninguna área depende conceptualmente de Minecraft.** Minecraft es un consumidor más.
 
@@ -153,4 +209,4 @@ INPUT → DETECT → PARSE → TRANSFORM → TRANSLATE → FORMAT → SYNC → O
 - `docs/web-editor/schema-v2.2.md` — Schema v2.2
 - `docs/historial/` — Logs de sesión
 
-(End of file - total 160 lines)
+(End of file - total 1085 lines)
