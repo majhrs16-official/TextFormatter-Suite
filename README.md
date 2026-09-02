@@ -152,22 +152,28 @@ manifest.json         → versiones + validación + capabilities
 ```
 **`config.yml`**: `quick-look`, `general.language`, `iflow.engine.parallel`,
 `sonido.enabled`. Claves opcionales; desconocidas se ignoran (degradan).
+
 **`channels/<id>.yml`**: `name` (es el id; renombrar propaga a rules.yml y
 sync), `type` (CHAT|EVENT), `permission`, `send-permission`, `receive-permission`,
 `show-sender`, `rate-limit-per-second`, `lang-source`, `lang-target`,
 `messages[]`, `tooltips[]`, `sounds[]` (name/volume/pitch).
+
 **`rules.yml`**: `guard.max-steps`, `filter.dedup-fanout`, `priority`, `nodes[]`
 (kind, label, matcher, transforms, target), `edges[]`. Mux/fan-out/condición/
 ciclos.
+
 **`translators/*.yml`**: `provider` (google|libre), `active`, `base-url`,
 `api-key`, `pool.max-concurrent`.
+
 **`sync/*.yml`**: discord (token, channel, intents) · telegram (token,
 chat-id, hub) · http (webhook-url, inbound-port, path) · tcp-udp (protocol,
 host, outbound-port, inbound-port) · velocity (enabled, secret, servers[],
 mapping).
+
 **`manifest.json`**: `schema`, `suite-version`, `generated-at`,
 `capabilities` (`transforms: true/false`), `validation` (errors/warnings/
 blocking/issues).
+
 **Reglas de round-trip**: (1) writer/parser propios, byte-idéntico;
 (2) `config.yml` + `channels/*.yml` parsables por el host (`ConfigLoaderTest`);
 (3) import acepta cualquier export; campos faltantes = defaults; campos
@@ -317,5 +323,6 @@ https://github.com/majhrs16-official/TextFormatter-Suite
 Documentación del proyecto original: https://github.com/Majhrs16/ChatTranslator y https://github.com/Majhrs16/ChatTranslator/wiki (referencia histórica funcional).
 
 (End of file - total 337 lines)
+
 
 

@@ -1,6 +1,7 @@
 # ADR — TextFormatter Suite v2.1
 
 Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño)
+> **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` y `PROMPT_NOW.md` para estado actual.
 
 ## Contexto
 

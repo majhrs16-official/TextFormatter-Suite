@@ -193,6 +193,6 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 > Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo. Ver `docs/NEW-FEATURES.md` para brainstorming histórico completo.
 
-(End of file - total 104 lines)
+
 
 
