@@ -1,925 +1,156 @@
-Sí, ahora quedó claro el **modelo de producto**: no son cuatro módulos que casualmente conviven, sino **cuatro áreas de primera clase** con objetivos distintos.
+# NEW-FEATURES.md — Features nuevas implementadas y roadmap
 
-Y mi error anterior fue tratar traducción como el centro gravitacional. No lo es.
-
-Yo lo mapearía así:
-
-```text
-                 TextFormatter-Suite
-                        │
-       ┌────────────────┼────────────────┐
-       │                │                │
-  TRANSLATION       FORMATTING        SYNC
-       │                │                │
-       │                │                │
-       └────────────────┼────────────────┘
-                        │
-                   WEB EDITOR
-                        │
-                   YAML / IR
-```
-
-Con esa definición, sí se me ocurren features bastante más interesantes.
+> Documento vivo: documenta features completadas vs planeadas. Actualizar al cerrar cada fase.
 
 ---
 
-# 1. Traducción: no "chat translation", sino **text translation**
+## ✅ IMPLEMENTADO (2026-08-31, commit 4dc7375)
 
-La unidad no debería ser `ChatMessage`.
+### Channel Type System
+- **`Channel.Type` enum**: `CHAT` (player messages) y `EVENT` (join/quit/death/advancement)
+- **`ChannelSelector` filtra por tipo**: solo considera canales `CHAT` para mensajes de jugadores
+- **Default channels creados**:
+  - `chat.global` → `type: CHAT`
+  - `join.yml`, `quit.yml`, `death.yml`, `advancement.yml` → `type: EVENT`
+- **Placeholders corregidos**: `%player_name%` en lugar de `<sender>` en todos los canales
 
-Debería ser:
+### Tester Module (`suite/tester`)
+- **25 tests automatizados runtime**: routing, eventos, traducción, formato, iFlow, concurrencia, stress, profiling
+- **PerformanceProfiler**: mide CPU time (ThreadMXBean) + heap delta/used/max (MemoryMXBean) por test
+- **Skip mechanism**: tests que requieren 2+ jugadores devuelven `skipped("Need 2+ online players")` en lugar de fallar
+- **Comandos**: `/suite test full|stress <players> <msgs>|concurrency <threads> <msgs>`
+- **Suite completa**: 25 tests en ~5s, todos PASS con 1 jugador
 
-> **cualquier representación que contenga texto.**
+### HttpTransport → HttpURLConnection
+- Migrado de `java.net.http.HttpClient` (problemas de módulos en Paper) a `HttpURLConnection`
+- Usado por: GTranslate, LTranslate, sync-http, sync-telegram, sync-discord
 
-Eso incluye literalmente:
+### ConfigLoader → type field
+- Lee campo `type` de `channels/*.yml` (CHAT|EVENT), default `CHAT`
+- `ConfigPath.CHANNEL_TYPE` añadido al enum centralizado
 
-```text
-MOTD
-chat
-commands
-books
-signs
-item names
-item lore
-scoreboards
-bossbars
-titles
-actionbars
-advancements
-kick messages
-join/quit messages
-death messages
-system messages
-NPC dialogue
-GUI text
-Discord
-Telegram
-WebSocket payloads
-console
-logs
-web responses
-```
+### Channel Type Filtering en ChannelSelector
+- `ChannelSelector.select()` ahora ignora canales `EVENT` para mensajes de chat
+- Previene que canal `quit` sea seleccionado para chat normal
 
-Y ahí hay una feature que me parece fundamental:
+### ConfigValidator placeholder
+- Clase placeholder en `spigot-host` para validación estructural futura (FASE 3)
 
-## 🔎 Text discovery
+### Messages Module (`suite/messages`)
+- i18n centralizado: `MessagesCatalog` singleton con catálogos EN/ES
+- Reemplaza strings hardcodeados en plugin
 
-Que Suite pueda registrar:
-
-```text
-TextSource
-```
-
-y descubrir automáticamente dónde existe texto dentro de un objeto/evento.
-
-Por ejemplo:
-
-```text
-PlayerJoinEvent
- ├── player
- └── joinMessage
-```
-
-o:
-
-```text
-ItemStack
- └── ItemMeta
-      ├── displayName
-      └── lore[]
-```
-
-El translator no necesita conocer Minecraft.
-
-El adapter declara:
-
-```text
-extractText()
-injectText()
-```
-
-Y listo.
+### Fixes de bugs heredados
+- `SpigotScheduler.ticks()`: conversión correcta MS→ticks (redondeo, no truncar)
+- `NmsLocaleBridge`: cache Class/Method/Field + log no silencioso
+- `RateLimiter`: purga TTL (5s cada 1024 adquisiciones)
+- `HttpSink`: start/stop idempotente + campos volatile
+- `TcpSink`/`UdpSink`: campos volatile
+- `HttpTransport`: `HttpURLConnection` en lugar de `HttpClient`
+- `SpigotScheduler` y `NmsLocaleBridge` corregidos
+- Memory pressure test: 10MB en lugar de 1GB
 
 ---
 
-# 2. Traducción estructural
+## 🔄 EN PROGRESO / PRÓXIMOS (FASE 4)
 
-Esto es diferente de traducir strings.
+### 1. fabric-host funcional
+- Paper 1.20.6+ listo y probado; Fabric pendiente (Loom 1.6.12)
 
-Si tienes:
+### 2. Strings UI centralizados (i18n)
+- Mover todos los strings hardcodeados a `lang/` (catalogos EN/ES)
+- Recobrar 98% de strings en config (actualmente 0% en plugin)
 
-```text
-Component
- ├── text
- ├── clickEvent
- ├── hoverEvent
- └── children[]
-```
+### 3. Motor de reglas iFlow enriquecido
+- Destino "channel" en reglas
+- Permisos/PAPI dentro de SpEL
+- `MessageEventBus` público para third-party
+- `transform` real (F7+)
 
-Suite debería poder traducir **solamente los nodos textuales**, preservando absolutamente todo lo demás.
+### 4. ConfigValidator real
+- Validación estructural contra schema del editor
+- Issues con shape del editor reportados en consola
 
-```text
-ANTES
-Component
- ├── "Hello "
- ├── click:/spawn
- └── " world"
+### 5. Sistema de comandos dinámico (`/suite`)
+- Topología desde `commands.yml` v2
+- Acciones atómicas combinables
+- Feedback reutilizando motor de chat
+- Edición de config.yml desde comandos (estilo LuckPerms)
 
-DESPUÉS
-Component
- ├── "Hola "
- ├── click:/spawn
- └── " mundo"
-```
+### 6. sync-velocity real
+- Implementar o eliminar stub en editor/config
 
-Nunca:
-
-```text
-Component → stringify → translate → parse
-```
-
-si eso implica perder semántica.
+### 7. Observabilidad
+- Metrics endpoint (`/metrics` Prometheus)
+- Debug endpoints (`/debug/simulate`, `/debug/dump`)
+- Healthchecks para sinks
 
 ---
 
-# 3. Formateo: aquí sí hay un universo entero
+## 📋 BACKLOG / IDEAS (del brainstorming original)
 
-Y cuando dices:
+*El siguiente contenido es brainstorming histórico. Mover a "IMPLEMENTADO" o "EN PROGRESO" cuando se haga.*
 
-> “procesamiento del texto de todas las formas posibles, incluso las redundantes”
+### Translation
+- Text discovery (extract/inject text de cualquier objeto)
+- Traducción estructural (preservar Component semántica)
+- Universal Text Pipeline (DETECT→PARSE→TRANSFORM→TRANSLATE→FORMAT→SYNC→OUTPUT)
 
-eso cambia completamente mi respuesta.
+### Formatting
+- Arsenal de transformaciones (uppercase, rot13, base64, leetspeak, etc.)
+- Unicode processing (NFC/NFD/NFKC/NFKD, grapheme segmentation, width calculation)
+- Visual width (emojis, CJK, ANSI, MiniMessage, Adventure Components)
+- Parser/serializer universal (Plain↔MiniMessage↔Adventure↔ANSI↔Markdown↔HTML↔JSON↔YAML)
 
-Yo metería un **arsenal de transformaciones**, aunque algunas parezcan absurdas.
+### Sync
+- Message synchronization fabric (broadcast a múltiples transports)
+- Bridge declarativo YAML con loop detection (message-id, hop-count, route-history)
+- Delivery guarantees (at-most-once, at-least-once, best-effort)
+- Ordering guarantees (none, per-channel, global)
+- Priority levels (low, normal, high)
+- Message transformation entre transports (Discord embed ↔ Minecraft Message)
+- UDP capabilities (broadcast, multicast, fragmentation, reliability custom)
+- WebSocket subscriptions (`/ws/chat`, `/ws/events`, `/ws/sync`, `/ws/logs`)
 
-Por ejemplo:
+### Web Editor
+- YAML como lenguaje (variables, scopes, constantes, funciones, macros, imports, tipos, namespaces, condiciones, loops, composición)
+- "Go to assembly" / "Show compiled representation" (high-level ↔ atomic operations)
+- Compiler diagnostics tipados (no "YAML inválido")
+- Formatter optimizer (fusionar operaciones equivalentes con prueba de equivalencia)
+- Source maps (YAML line → AST → IR instruction → runtime operation)
 
+### Universal Text Pipeline
 ```text
-uppercase
-lowercase
-capitalize
-titlecase
-swapcase
-trim
-normalize
-pad
-indent
-wrap
-truncate
-reverse
-repeat
-replace
-remove
-split
-join
-prefix
-suffix
-center
-align
-sort
-deduplicate
-shuffle
-escape
-unescape
-encode
-decode
-compress
-decompress
-hash
-checksum
-regex
-tokenize
-detokenize
+INPUT → DETECT → PARSE → TRANSFORM → TRANSLATE → FORMAT → SYNC → OUTPUT
 ```
-
-Y también transformaciones deliberadamente "estúpidas":
-
-```text
-rot13
-base64
-hex
-binary
-URL encode
-HTML encode
-JSON encode
-Unicode escape
-Morse
-ASCII art
-Leetspeak
-Caesar
-Pig Latin
-```
-
-¿Por qué?
-
-Porque el **formatter debería ser una caja de herramientas**, no una colección de transformaciones que "parecen útiles".
-
-Si una transformación textual es técnicamente razonable, debería poder existir.
+(Cada etapa opcional)
 
 ---
 
-# 4. Unicode processing
+## 📝 Notas de arquitectura
 
-Esto merece su propio subsistema.
+**Separación de áreas:**
+| Área | Pregunta que responde |
+|------|----------------------|
+| **Translation** | ¿Qué debe decir el texto? |
+| **Formatting** | ¿Cómo manipulo/represento ese texto? |
+| **Sync** | ¿A dónde viaja y cómo llega? |
+| **Web Editor** | ¿Cómo describo todo sin perder control de bajo nivel? |
 
-Cosas como:
-
-```text
-NFC
-NFD
-NFKC
-NFKD
-case folding
-grapheme segmentation
-codepoint inspection
-width calculation
-```
-
-Y herramientas:
-
-```text
-"é"
-```
-
-pudiendo inspeccionarse como:
-
-```text
-U+00E9
-```
-
-o:
-
-```text
-U+0065 U+0301
-```
-
-Esto sería particularmente útil para un proyecto llamado **TextFormatter**.
+**Ninguna área depende conceptualmente de Minecraft.** Minecraft es un consumidor más.
 
 ---
 
-# 5. Visual width
-
-Esta me parece MUY importante.
-
-Longitud:
-
-```text
-text.length()
-```
-
-no significa longitud visual.
-
-Suite podría tener:
-
-```text
-text.codepoints()
-text.graphemes()
-text.displayWidth()
-```
-
-considerando:
-
-* Unicode;
-* emojis;
-* CJK;
-* ANSI;
-* MiniMessage;
-* Adventure Components.
-
-Entonces:
-
-```text
-center(width=80)
-```
-
-podría realmente centrar el contenido.
-
----
-
-# 6. Parser / serializer universal
-
-El formatter podría tener conversiones:
-
-```text
-Plain Text
- ↕
-MiniMessage
- ↕
-Adventure Component
- ↕
-ANSI
- ↕
-Markdown
- ↕
-HTML
- ↕
-JSON
- ↕
-YAML
-```
-
-Pero **sin que sean simples conversions destructivas**.
-
-La idea sería tener un modelo intermedio suficientemente expresivo.
-
-Eso permitiría:
-
-```text
-Markdown
- ↓
-Suite IR
- ↓
-Discord
-```
-
-o:
-
-```text
-MiniMessage
- ↓
-Suite IR
- ↓
-HTML
-```
-
----
-
-# 7. Sync: aquí también estaba pensando demasiado en traducción
-
-Si tienes:
-
-```text
-Discord
-Telegram
-WebSocket
-TCP
-UDP
-```
-
-yo lo llevaría hacia un verdadero **message synchronization fabric**.
-
-Por ejemplo:
-
-```text
-              ┌── Discord
-              │
-Message ──────┼── Telegram
-              │
-              ├── WebSocket
-              │
-              ├── TCP
-              │
-              └── UDP
-```
-
-pero además:
-
-```text
-Discord ↔ Telegram
-Discord ↔ WebSocket
-Telegram ↔ TCP
-WebSocket ↔ UDP
-```
-
-sin tener que escribir un bridge específico para cada par.
-
----
-
-# 8. Bridge declarativo
-
-Algo como:
-
-```yaml
-bridge:
-  from: discord
-  to:
-    - telegram
-    - minecraft
-    - websocket
-```
-
-y:
-
-```yaml
-bridge:
-  from: telegram
-  to:
-    - discord
-```
-
-El sistema debería evitar loops:
-
-```text
-Discord
- ↓
-Telegram
- ↓
-Discord
- ↓
-Telegram
-💀
-```
-
-mediante:
-
-```text
-message-id
-origin
-hop-count
-route-history
-```
-
----
-
-# 9. Sync con diferentes garantías
-
-TCP y UDP no deberían ser simplemente:
-
-> dos transportes que envían bytes.
-
-Suite podría expresar:
-
-```text
-delivery:
-  guarantee: at-most-once
-```
-
-o:
-
-```text
-at-least-once
-```
-
-o:
-
-```text
-best-effort
-```
-
-y:
-
-```text
-ordering:
-  none
-  per-channel
-  global
-```
-
-y:
-
-```text
-priority:
-  low
-  normal
-  high
-```
-
-Eso haría que Sync sea un sistema de mensajería real.
-
----
-
-# 10. Message transformation entre transports
-
-Esta me parece particularmente potente.
-
-Discord puede producir:
-
-```text
-DiscordMessage
-```
-
-y Suite convertirlo:
-
-```text
-DiscordMessage
- ↓
-Message
- ↓
-Formatter
- ↓
-MinecraftMessage
-```
-
-pero también:
-
-```text
-Minecraft
- ↓
-Message
- ↓
-Formatter
- ↓
-Discord embed
-```
-
-El formatter sería literalmente el **adaptador semántico de presentación**.
-
----
-
-# 11. UDP debería tener capacidades que TCP no tiene
-
-Si Suite soporta UDP de verdad, aprovecharía cosas como:
-
-```text
-broadcast
-multicast
-fragmentation
-reassembly
-sequence numbers
-loss detection
-optional retransmission
-```
-
-Y podría existir:
-
-```text
-reliability: custom
-```
-
-para construir un protocolo encima.
-
-Eso sería bastante más interesante que simplemente:
-
-```java
-DatagramSocket.send(...)
-```
-
----
-
-# 12. WebSocket: subscriptions
-
-Por ejemplo:
-
-```text
-/ws/chat
-/ws/events
-/ws/sync
-/ws/logs
-```
-
-con:
-
-```text
-subscribe(channel)
-unsubscribe(channel)
-```
-
-Entonces una web podría suscribirse a:
-
-```text
-server.chat
-```
-
-y recibir Messages en tiempo real.
-
----
-
-# 13. Editor web: aquí sí creo que tienes una mina
-
-Tu analogía con C/ASM me parece especialmente importante:
-
-> **el editor puede proporcionar abstracciones de alto nivel sin eliminar la capacidad de expresar las operaciones primitivas.**
-
-Eso sugiere algo como:
-
-```text
-                 Suite YAML
-                    │
-             High-level syntax
-                    │
-                    ▼
-                    IR
-                    │
-             Atomic operations
-                    │
-                    ▼
-                 Runtime
-```
-
-Y el usuario podría escribir:
-
-```yaml
-format:
-  player_message:
-    ...
-```
-
-pero eventualmente expandirlo hasta operaciones atómicas.
-
----
-
-# 14. "Go to assembly"
-
-Esto sería una feature brutal del editor.
-
-Seleccionas:
-
-```yaml
-format:
-  foo:
-    ...
-```
-
-y:
-
-> **Show compiled representation**
-
-obtienes algo como:
-
-```text
-LOAD_VAR player.name
-PUSH_STRING "Hello "
-CONCAT
-FORMAT_COLOR aqua
-EMIT
-```
-
-Y al revés:
-
-```text
-atomic instructions
-       ↓
-decompiler
-       ↓
-YAML
-```
-
-No necesariamente reconstruyendo exactamente el YAML original, sino una representación equivalente.
-
-Eso cumpliría exactamente tu filosofía:
-
-> alto nivel cuando quieres comodidad; bajo nivel cuando necesitas control absoluto.
-
----
-
-# 15. YAML como lenguaje, no como simple configuración
-
-Aquí yo iría bastante lejos.
-
-Que el editor tenga:
-
-* variables;
-* scopes;
-* constantes;
-* funciones;
-* macros;
-* imports;
-* tipos;
-* namespaces;
-* condiciones;
-* loops;
-* composición.
-
-Pero que finalmente todo compile a un conjunto pequeño de operaciones.
-
-Algo conceptualmente:
-
-```text
-YAML source
-    ↓
-Lexer
-    ↓
-Parser
-    ↓
-AST
-    ↓
-Semantic analysis
-    ↓
-IR
-    ↓
-Optimization
-    ↓
-Atomic representation
-```
-
-Eso ya justificaría plenamente lo de **mini compilador**.
-
----
-
-# 16. Y el editor debería permitir mezclar niveles
-
-Esto es lo realmente interesante.
-
-Por ejemplo:
-
-```yaml
-message:
-  transform:
-    - uppercase
-    - instruction: LOAD_VAR
-      args: ["player.name"]
-    - center: 50
-```
-
-Tienes:
-
-```text
-abstracción
-+
-primitiva
-+
-abstracción
-```
-
-exactamente como:
-
-```c
-foo();
-asm(...);
-bar();
-```
-
----
-
-# 17. Compiler diagnostics
-
-No errores de:
-
-> "YAML inválido"
-
-sino:
-
-```text
-Line 37:
-Cannot assign Component to String.
-
-Expected:
-    Text
-
-Received:
-    Component
-```
-
-o:
-
-```text
-Line 42:
-Instruction SEND requires:
-    Message
-
-Received:
-    TranslationResult
-```
-
-Eso convertiría el editor en un entorno de desarrollo real.
-
----
-
-# 18. Formatter optimizer
-
-Ya que existe un compilador, también:
-
-```text
-input:
-uppercase
-lowercase
-uppercase
-```
-
-→
-
-```text
-uppercase
-```
-
-o:
-
-```text
-replace("foo","bar")
-replace("bar","baz")
-```
-
-→ potencialmente fusionable.
-
-Pero con una regla muy importante:
-
-> **optimizar solamente cuando se pueda demostrar equivalencia.**
-
-Nada de optimizaciones heurísticas que cambien comportamiento.
-
----
-
-# 19. Source maps
-
-Esto sería espectacular para debugging.
-
-```text
-YAML line 84
-      ↓
-AST node 291
-      ↓
-IR instruction 712
-      ↓
-runtime operation
-```
-
-Si algo explota:
-
-```text
-Runtime error
-    ↓
-IR instruction
-    ↓
-YAML line 84
-```
-
-El editor te lleva directamente al origen.
-
----
-
-# 20. Y una feature que conectaría las cuatro áreas
-
-## 🔄 Universal Text Pipeline
-
-Algo como:
-
-```text
-INPUT
- ↓
-DETECT
- ↓
-PARSE
- ↓
-TRANSFORM
- ↓
-TRANSLATE
- ↓
-FORMAT
- ↓
-SYNC
- ↓
-OUTPUT
-```
-
-Pero **cada etapa opcional**.
-
-Así puedes hacer:
-
-```text
-MOTD
- ↓
-format
- ↓
-output
-```
-
-o:
-
-```text
-Discord
- ↓
-parse
- ↓
-translate
- ↓
-format
- ↓
-Minecraft
-```
-
-o:
-
-```text
-TCP
- ↓
-decode
- ↓
-transform
- ↓
-WebSocket
-```
-
-o incluso:
-
-```text
-YAML
- ↓
-compile
- ↓
-formatter
-```
-
----
-
-# La separación que ahora veo
-
-Después de tu aclaración, yo dejaría de pensar en Suite como:
-
-> “un framework de traducción con cosas adicionales”.
-
-Lo veo como cuatro productos interconectados:
-
-| Área            | Pregunta que responde                                             |
-| --------------- | ----------------------------------------------------------------- |
-| **Translation** | ¿Qué debe decir el texto?                                         |
-| **Formatting**  | ¿Cómo manipulo/represento ese texto?                              |
-| **Sync**        | ¿A dónde viaja y cómo llega?                                      |
-| **Web Editor**  | ¿Cómo describo todo lo anterior sin perder control de bajo nivel? |
-
-Y lo más interesante es que **ninguna de las cuatro debería depender conceptualmente de Minecraft**.
-
-Minecraft es simplemente uno de los consumidores.
-
-Eso abre features mucho más ambiciosas que “otra forma de traducir chat”: **universal text extraction, transformación arbitraria, serialización, rendering, bridges entre protocolos, garantías de transporte y un lenguaje declarativo compilado con escape hatch atómico**.
-
-Ahí sí estamos hablando del Suite que estabas describiendo.
+## 📚 Documentación relacionada
+- `docs/PLAN.md` — Plan de ejecución vivo
+- `docs/PROMPT.md` — Prompt rector (solo lectura)
+- `docs/PROMPT_NOW.md` — Plan de acción de corto plazo
+- `docs/ADR.md` — Decisiones de arquitectura
+- `docs/PLAN.md` — Plan de ejecución vivo
+- `docs/AUDITORIA.md` — Auditoría 2026-08-16
+- `docs/AUDITORIA-2026-08-24.md` — Auditoría integral
+- `docs/web-editor/DESIGN.md` — Diseño editor
+- `docs/web-editor/schema-v2.2.md` — Schema v2.2
+- `docs/historial/` — Logs de sesión
+
+(End of file - total 160 lines)

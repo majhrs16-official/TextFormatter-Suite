@@ -1,104 +1,107 @@
-# PLAN — TextFormatter Suite
+1: # PLAN — TextFormatter Suite
+2: 
+3: > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
+4: > Última actualización: 2026-08-31 (commit 4dc7375 - channel type system + tester module + default channels).
+6: 
+7: ---
+8: 
+9: ## Estado real del proyecto (2026-08-31)
+9: 
+10: - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, commit `4dc7375`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
+10: - ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (WIP). `common-legacy` como referencia histórica.
+11: - ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 99 tests unitarios + 5 de integración (`npm run check` verde).
+11: - ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
+12: - ✅ **Módulos suite publicados en mavenLocal**: core-api, kernel, textformatter, iflow, gtranslate, ltranslate, sync-*, host, messages, tester, transport, coretranslator.
+13: - ⚠️ **fabric-host** pendiente (WIP, Loom 1.6.12).
+13: - ❌ **sync-velocity** no existe (stub en editor/config).
+14: 
+15: ---
+16: 
+17: ## RESUMEN DE LO HECHO (desde auditoría 2026-08-16)
+18: 
+19: ### FASE 0 — SEGURIDAD Y GITHUB ✅
+19: - Monorepo subido a GitHub (`majhrs16-official/TextFormatter-Suite`, GPL-3.0).
+20: - `.git` completo, `.gradle` y `node_modules` ignorados correctamente.
+20: 
+21: ### FASE 1 — P0 Web-editor ✅ (bugs confirmados arreglados)
+21: - Mutaciones sobre clon descartado → arreglado (re-obtener `StateStore.getState()` DENTRO de `mutate`).
+22: - Recursión infinita `core.js:82-84` → eliminada.
+23: - Contrato preview (`res.output/error` vs `outputs/order/reason`) → alineado.
+23: - `esc()`: apóstrofe dentro de la clase `[&<>"']` → arreglado + test.
+24: - Mojibake UTF-8 → reescritos literales + lint/test anti-regresión.
+24: - Drift config/graph (`config.iflow.*` vs `graph.*`) → unificado `model.js`.
+25: - `toolbar.js:27` placeholder → handler real.
+26: - `config.js:228` TypeError si no hay canales → arreglado.
+27: - `console.log` residual → eliminado.
+27: - `npm run check` + `test:integration` en verde.
+27: 
+28: ### FASE 2 — P0/P1 Java ✅
+28: - `SpigotScheduler.ticks()` → conversión MS→ticks correcta (redondeo, no truncar < 1s).
+29: - `NmsLocaleBridge` → cache Class/Method/Field + log no silencioso.
+30: - `RateLimiter` → purga TTL (5s cada 1024 adquisiciones).
+31: - `HttpSink` → start/stop idempotente + campos volatile.
+32: - `TcpSink`/`UdpSink` → campos volatile.
+33: - **Wiring suite→plataforma** → `SpigotChatDelivery` (hop a main thread), `SuiteHost.bootstrap` con ServiceLoader, `MessageDispatcher` expande `Direction`→receptores, orquesta por-receptor.
+33: - Dominio duplicado → `suite/core-api` adoptado como canónico; `common` → `common-legacy`; bridge `ChatRouter` eliminado.
+34: - `HttpTransport` único en `suite/transport` (extraído de gtranslate/ltranslate/sync-*). `MessageCodec` único en `sync-http`/`sync-tcpudp`.
+34: - Schema centralizado → `ConfigPath` enum en `ConfigLoader` genera `paths.json`.
+35: - **Web-editor P0 arreglado y verificado** (`npm run check` + integración verde).
+35: 
+36: ### FASE 3 — Configurabilidad / Paridad original ✅ (parcial)
+36: - **Channel Type System** → `Channel.Type` enum (CHAT/EVENT). `ChannelSelector` filtra EVENT channels para chat.
+37: - **Default channels** → `join.yml`, `quit.yml`, `death.yml`, `advancement.yml` con `type: EVENT`; placeholders `%player_name%` en lugar de `<sender>`.
+37: - **Tester Module** → `suite/tester` con 25 tests runtime (routing, eventos, traducción, formato, iFlow, concurrencia, stress, profiling). `PerformanceProfiler` CPU/heap. Skip mechanism. Comandos `/suite test full|stress|concurrency`.
+37: - **HttpTransport** → `HttpURLConnection` (no `java.net.http.HttpClient` por módulos en Paper).
+38: - **Default channels creados** → join/quit/death/advancement con `type: EVENT` + `%player_name%`.
+38: - **ChannelSelector filtra por tipo** → solo CHAT para chat de jugadores.
+38: - **ConfigLoader lee `type`** → default CHAT.
+39: - **Commands** → `/suite test full|stress|concurrency`, `/suite test full` corre 25 tests.
+39: - Fix `langTarget` bug en Channel builder.
+39: - `ConfigValidator` placeholder.
+39: - `suite:messages` module para i18n centralizado (EN/ES).
+40: - Fix `SpigotScheduler`, `NmsLocaleBridge`.
+40: - Memory pressure test: 10MB en lugar de 1GB.
+40: - Tests usan skip mechanism en lugar de throwing para jugadores insuficientes.
+40: 
+41: ### FASE 4 — Roadmap largo (PENDIENTE)
+41: - F0 restaurabilidad (suite.info + manifest + releases inmutables)
+42: - F1 `fabric-host` real (Paper 1.20.6+ listo, Fabric pendiente)
+42: - F2 freshness+i18n (strings UI centralizados en `lang/`)
+43: - F3 observabilidad (metrics/debug/simulate)
+44: - F4 extensiones/addons (core-api 2.2 + SDK)
+44: - F5 **descargador runtime + attach/detach** (classloader dinámico + manifest + sha256 + allowlist)
+45: - F6 sync-websocket/velocity real
+45: - F7 presets, `transform` real en motor, `engine.parallel` knob
+46: - F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
+46: - Paridad funcional restante ChatTranslator original (comandos `/cht`, signs persistentes, storage SQLite/MySQL, Discord sync bidireccional completo).
+47: 
+48: ---
+49: 
+50: ## PRÓXIMAS ACCIONES CONCRETAS
+51: 1. **FASE 4** → `fabric-host` funcional (Paper ya listo).
+52: 2. **Strings UI centralizados** → mover strings hardcodeados a `lang/` (catalogos EN/ES) para recobrar 98%.
+53: 3. **Motor de reglas iFlow enriquecido** → destino "channel", permisos/PAPI en SpEL, `MessageEventBus` público, `transform` real (F7).
+54: 4. **ConfigValidator** real (issues con shape del editor).
+55: 5. **Comandos** → `/suite` base dinámico, reload atómico, edición estilo LuckPerms.
+56: 6. **sync-velocity** real (no stub).
+57: 7. **Observabilidad** → metrics/debug/simulate endpoints.
+57: 
+58: ---
+59: 
+59: ## BUGS CONOCIDOS Y DEUDA (actualizado 2026-08-31)
+60: 
+60: **Web editor:** P0 arreglados ✅. Queda: ampliar opciones YAML para reglas complejas sin perder usabilidad.
+61: 
+62: **Java legacy:** bugs trío monolítico moot (eliminado). Arreglados en suite: `RateLimiter` TTL, `HttpSink` idempotente, `TcpSink`/`UdpSink` volatile.
+63: 
+64: **Arquitectura (deuda viva):**
+64: - Config schema en copias manuales: `paths.json`, `js/paths.js` (duplica paths.json), `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`. → Centralizar generación.
+65: - Suite sin composite build en `settings.gradle` raíz (hosts consumen jars vía `files()` / mavenLocal hasta composite build).
+66: - `suite/coretranslator` deprecated → mantener solo para retrocompatibilidad funcional, no para uso nuevo.
+66: - `sync-velocity` stub en editor/config → implementar real o eliminar.
+67: 
+67: ---
+68: 
+68: > Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo.
 
-> Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-08-16 (auditoría de 5 subagentes + verificación de bugs).
-
----
-
-## Estado real del proyecto (2026-08-16)
-
-- ✅ **Monorepo Git** en `/home/majhrs16/Documentos/Default Project` (rama `main`, commit inicial `033295f`).
-- ✅ **Arquitectura**: `common` (SPI Java 8 neutro) + adapters `spigot` (compatible CraftBukkit, usa solo `org.bukkit.*`) y `fabric-1.20.6` + `suite/` (13 módulos reales presentes; faltan `sync-velocity`).
-- ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 99 tests unitarios + 5 de integración.
-- ⚠️ **La suite NO corre** en ninguna plataforma: ni spigot ni fabric importan `me.majhrs16.suite`; `ModuleLoader` solo se ejecuta en tests. Es hexágono "de papel".
-- ❌ **No está subido a GitHub** (riesgo de pérdida).
-
----
-
-## HALLADAZGOS DE LA AUDITORÍA (5 agentes)
-
-### Bugs confirmados (web-editor)
-| Bug | Ubicación | Severidad |
-|---|---|---|
-| Mutaciones sobre clon descartado: duplicar canal/nodo, renombrar canal, editar propiedades, cambiar tipo NO hacen nada (toast falso) | `js/actions.js:14,32`, `js/props.js:192,223,312` | **ALTO** |
-| Recursión infinita: `renderConfigValues()` se llama a sí misma → RangeError en renderAll | `js/core.js:82-84` | **ALTO** |
-| Preview lee `res.output/error` pero `simulate` devuelve `outputs/order/reason` → undefined | `js/previewView.js:51-67` vs `js/preview.js:224-228` | **ALTO** |
-| `esc()` no escapa `&<>"` (apóstrofe fuera de la clase de caracteres) → XSS | `js/utils.js:52-54` | MEDIO |
-| Mojibake UTF-8 masivo en strings visibles (`â—‹`, `Â·`, `interconexiÃ³n`) | `txf.js:11`, `canvas.js:150`, `kernel.js:16`, `core.js:118`, etc. | MEDIO |
-| Drift config: `config.iflow.*` escrito pero el motor lee `graph.*` | `js/paths.js:58`, `js/model.js:33 vs 62` | MEDIO |
-| `toolbar.js:27` placeholder sobrescribe handler real de import/export | `js/toolbar.js:27` | BAJO |
-| `config.js:228` TypeError si no hay canales | `js/config.js:228` | BAJO |
-| `console.log` residual | `js/toolbar.js:23` | BAJO |
-
-### Bugs confirmados (Java)
-| Bug | Ubicación | Severidad |
-|---|---|---|
-| `ticks()` trunca delays < 1s a 1 tick (50ms) | `spigot/.../SpigotScheduler.java:48-52` | ALTO |
-| `RateLimiter` fuga de memoria ilimitada (buckets nunca purgados) | `suite/iflow/.../RateLimiter.java:18` | MEDIO |
-| `TcpSink`/`UdpSink`: campos no `volatile` → puerto stale | `suite/sync-tcpudp/...` | MEDIO |
-| `HttpSink.start()` no idempotente (segundo start = otro HttpServer) | `suite/sync-http/.../HttpSink.java` | MEDIO |
-| `NmsLocaleBridge`: reflection en hot path por mensaje + `catch(Throwable){}` | `spigot/.../NmsLocaleBridge.java:44-61` | MEDIO |
-| `TelegramSink.stop()` no-op; `DiscordGateway` sin reconexión real | `sync-telegram`, `sync-discord` | BAJO |
-
-### Deuda estructural
-- **Dominio duplicado en 2 arquitecturas**: `common/me.majhrs16.cht.core.*` ↔ `suite/core-api/me.majhrs16.suite.api.*` (Message, Formats, Actor, Language, TemplateRenderer, MiniEscape...). ~2300+ líneas.
-- **`HttpTransport` byte-idéntico** en gtranslate/ltranslate; ~90% en sync-telegram/sync-discord.
-- **`MessageCodec` duplicado** en sync-http/sync-tcpudp.
-- **No hay composition root real**: `SuiteHost` solo se usa en tests; falta `ChatDelivery` (puerto de salida) en core-api.
-- **Config schema en 5 copias manuales**: `paths.json`, `js/paths.js` (duplica paths.json), `js/model.js`, `host/ConfigLoader.java` (enum `ConfigPath`), `schema-v2.2.md`.
-- **UI del plugin 0% centralizada**: todos los strings en `ChtCommand.java:46-115` (el original tenía ~98% en config).
-- **`settings.gradle` raíz no incluye la suite** (15 builds sueltos, no composite).
-
-### Paridad vs original (`/usr/src/chattranslator`)
-- ✅ Núcleo de traducción, join/leave/death, idioma por jugador (YamlUserStore), permits, rate-limit, PAPI, signos (declarativos).
-- ❌ Strings de UI centralizados (0% vs 98%).
-- ❌ Módulo `commands.yml`, Signs interactivo (solo declarado en formats), muerte/advancement no wired.
-- ⚠️ CE replicable PARCIALMENTE: el motor nativo `rules.yml` (SpEL + ScriptSurface) cubre captura de vars, condiciones, `setFormat`, `cancel()`. FALTA: permisos/PAPI dentro de SpEL, destino "channel" en las reglas, evento público para third-party, `transform` F7+.
-
-### Arquitectura (veredicto agente)
-- **Parcial hexagonal: 6/10**. common+adapters 8/10; suite interna 7/10; **integración suite↔plataforma 0/10** (no existe).
-- Violaciones key: infra dentro de common (GoogleTranslator, YamlUserStore, ConfigLoader, Spring SpEL); singleton estáticos (`ScriptSurface.bind*`); portos repartidos fuera de core-api (Router, TextFormatter, ChannelRegistry, PermissionChecker).
-
-### Code quality
-- Java: **7.5/10**; JS: **4/10**. Diosas JS (txf.renderTxf, config.bindSyncFields, canvas.bindViewport), O(n³) `cycleSet`, deep-clone en cada get/mutate/notify (3-4 clones por mutación).
-- NMS reflection por mensaje; templates reparseados por (formato×receptor); `stateStore` clones en cada subscriber.
-
----
-
-## PLAN DE EJECUCIÓN (orden de prioridad)
-
-### FASE 0 — SEGURIDAD Y GITHUB (esta sesión)
-1. **Subir a GitHub** el monorepo (privado, backupear YA). Decidir nombre/orgs.
-2. **Ver antes de perder**: confirmar que `.git` tiene todo incluido (no perder `.gradle`, node_modules está ignorado correctamente).
-
-### FASE 1 — P0 web-editor (bugs confirmados)
-3. Corregir captura de clon: regla "re-obtener `StateStore.getState()` DENTRO del callback de `mutate`" en `actions.js` y `props.js`. Opcional: cambiar API `mutate(draft => ...)` estilo immer.
-4. Eliminar recursión `core.js:82-84` (`renderAll` llama al método real de config).
-5. Alinear contrato preview: `previewView.js` consume `outputs/order/reason`; test fixture del shape.
-6. `esc()`: apóstrofe dentro de la clase `[&<>"']`; test.
-7. Arreglar mojibake (reescribir literales UTF-8) + lint/test anti-regresión.
-8. Drift config/graph: unificar `model.js` (una sola fuente).
-
-### FASE 2 — P0/P1 Java
-9. `SpigotScheduler.ticks()`: conversión MS→ticks correcta (redondeo, no truncar < 1s).
-10. `NmsLocaleBridge`: cachear Class/Method/Field; log no silencioso.
-11. `RateLimiter`: purga por TTL.
-12. `HttpSink` idempotente; `TcpSink/UdpSink` volatile.
-13. **Wiring suite→plataforma** (el gran hueco): composition root `spigot-host`/`fabric-host`, `ChatDelivery` port en core-api, inicializar `SuiteHost.bootstrap` con ServiceLoader de verdad.
-14. Unificar dominio duplicado: adoptar `suite/core-api` como canónico; `common` → `common-legacy`; borrar bridge interno `ChatRouter.dispatch(ChatMessage)` y copia `coretranslator/legacy`.
-15. Extraer `suite/transport` (HttpTransport único) y `MessageCodec` único; centralizar schema (generar paths.json del enum).
-
-### FASE 3 — Configurabilidad (paridad original)
-16. Centralizar TODOS los strings en `lang/` (catalogos EN/ES) — recobrar el 98%.
-17. Motor de reglas enriquecido iFlow: destino "channel", permisos/PAPI en SpEL, evento público (`MessageEventBus`), `transform` real (F7).
-18. Comandos/config and enhancement: `/suite` base, reload atómico config, `ConfigValidator` (issues con shape del editor).
-
-### FASE 4 — Roadmap largo (del agente 5)
-- F0 restaurabilidad (suite.info + manifest + releases inmutables), F1 hosts reales, F2 freshness+i18n, F3 observabilidad (metrics/debug/simulate), F4 extensiones/addons (core-api 2.2 + SDK), F5 **descargador runtime + attach/detach** (classloader dinámico + manifest + sha256 + allowlist), F6 sync-websocket/velocity, F7 presets, F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover).
-
----
-
-## PRÓXIMAS ACCIONES CONCRETAS
-1. (Ahora) Confirmar GitHub + decidir P0 editor vs P0 java primero.
-2. Ejecutar Fase 1 (P0 web-editor) con tests.
-3. Lanzar `npm run check` tras cada fix.
+(End of file - total 104 lines)
