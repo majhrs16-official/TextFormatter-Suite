@@ -6,100 +6,90 @@
 
 ---
 
-## 1. ESTADO DEL SISTEMA
+## 1. ESTADO DEL SISTEMA (2026-09-02)
 
 | Pieza | Estado | Verificación |
 |---|---|---|
 | core-api (modelo atómico + SPI) | ✅ estable, JDK-puro | tests |
-| kernel (ServiceLoader + grafo semver/Tarjan) | ✅ · ⚠️ decorativo en runtime hasta FASE 5/M1 | 13 tests |
+| kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
 | textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
-| iflow (router/reglas/rate-limit) | ✅ (`engine.parallel` sin consumir, B2) | tests |
+| iflow (router/reglas/rate-limit) | ✅ (`engine.parallel` sin consumir) | tests |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ JDA wired vía DiscordBridge | build |
-| sync-telegram/http/tcpudp | 🟡 motores OK, sin wiring runtime (B1) | tests propios |
-| spigot-host | ✅ funcional · ❌ sin probar en servidor real | 4 tests (lógica Bukkit sin testear → T2) |
-| web-editor | ✅ gates verdes · UX confusa (→ FASE E) | check+integración |
+| sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
+| spigot-host | ✅ funcional · ✅ **probado en Paper 1.20.6 real** | 4 tests + server test |
+| web-editor | ✅ gates verdes | check+integración |
 | fabric-host / Manager | ❌ no existen | — |
+| tester (suite/tester) | ✅ 25 tests runtime + PerformanceProfiler | tests |
+| messages | ✅ i18n centralizado EN/ES | tests |
+| transport | ✅ HttpURLConnection + MessageCodec único | tests |
 
-## 2. COLA DE FASES
+---
+
+## 2. COLA DE FASES (actualizado 2026-09-02)
 
 ```
-1. FASE T   red de seguridad de tests        ← SIGUIENTE
-2. FASE C   sistema de comandos
-3. FASE 5   Manager
-4. FASE E   editor v3 "C sobre ASM"
-5. RESTOS   P2/P3 consolidados
+1. FASE 4   fabric-host funcional           ← SIGUIENTE
+2. FASE 5   Strings UI centralizados (i18n)
+3. FASE 6   Motor de reglas iFlow enriquecido
+4. FASE 7   ConfigValidator real
+5. FASE 8   Sistema comandos dinámico (/suite)
+6. FASE 9   sync-velocity real
+7. FASE 10  Observabilidad (metrics/debug/simulate)
+8. RESTOS   P2/P3 consolidados
 ```
 
-### FASE T — RED DE SEGURIDAD DE TESTS (BASE)
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| T1 | Cobertura medida: JaCoCo en host 89.7% · kernel 88.4% · iflow 85.9% · textformatter 74.2% · spigot-host **10.1%** (umbral diferido hasta más extracción). Umbrales anti-regresión activos en `check` (85/80/80/70). Editor c8 pendiente (harness multi-proceso requiere merge de reportes) | ✅ Java 2026-08-25 |
-| T2 | Lógica pura fuera de Bukkit: `logic/ChannelSelector`, `logic/LangSetting` (effective/flip/isValid/display), `logic/EventRules` (canales tipados + shouldTranslate) → 8 tests nuevos; plugin/directory delegan en ellas | ✅ 2026-08-25 (12 tests spigot-host) |
-| T3 | Golden cross-language: fixture YAML compartido Java↔JS | ⏳ |
-| T4 | E2E sin servidor: store+dispatcher+delivery fake+sink stub | ⏳ |
-| T5 | Concurrencia determinista: dispatch vs reload; store writers | ⏳ |
-| T6 | CI GitHub Actions: suite Java + editor en cada push; fat-jar por tag | ⏳ |
-
-### FASE C — SISTEMA DE COMANDOS (BASE)
-
-Topología dinámica desde config (renombrable: `/cht` `/dst` `/txf` `/tg` `/if`),
-acciones ATÓMICAS combinables, feedback reutilizando el motor de chat (el
-comando ignora qué motor hay), config editable desde comandos estilo LuckPerms.
-
+### FASE 4 — fabric-host (BASE)
 | # | Pieza | Estado |
 |---|-------|--------|
-| C1 | Registro de acciones atómicas tipadas (specs de args: jugador/idioma/ruta-config/enum), combinables, catálogo consultable | ⏳ |
-| C2 | Topología commands.yml v2 → registro dinámico en CommandMap (sin plugin.yml) | ⏳ |
-| C3 | Feedback = Message INTERNAL/CUSTOM por canales `plugin.cmd.*`, render por receptor (evoluciona messages.yml plano) | ⏳ |
-| C4 | Acciones iniciales: lang get/set/toggle · config get/set booleanos/enums · iflow rules list/reload/test · sync status/test-send · txf preview | ⏳ |
-| C5 | ConfigWriter con edición puntual preservando el archivo (decidir línea-vs-reescritura) | ⏳ |
-| — | Los actuales `/suite *` son puente temporal hasta que C los reemplace | 🔁 |
+| F4-1 | fabric-host plugin: `FabricMod` entrypoint, `FabricActorDirectory`, `FabricChatDelivery` | ⏳ |
+| F4-2 | Loom 1.6.12 configurado, mappings 1.20.6+ | ⏳ |
+| F4-3 | Test en servidor Fabric real | ⏳ |
 
-### FASE 5 — MANAGER (BASE)
-
-**Sin modloader.** Cada módulo es UN PLUGIN REAL (plugin.yml propio); la
-plataforma nativa carga al arrancar ⇒ actualizar módulos requiere reiniciar.
-El Manager solo gestiona ARCHIVOS y **selecciona/resuelve qué instalar**.
-
-**Distribución (decisión autor):** 1 solo jar inicial = el Manager (= host).
-Motores como módulos-plugin separados. Resolución CONTRA EL ENTORNO ACTUAL
-(via ModuleDescriptor); `latest` solo en instalación limpia, que auto-selecciona
-los obligatorios textformatter+iflow.
-
+### FASE 5 — Strings UI centralizados (i18n)
 | # | Pieza | Estado |
 |---|-------|--------|
-| M0 | Módulos como plugins reales: plugin.yml propio + implementaciones registradas en META-INF/services (Translator/SyncSink además del descriptor Module) | ⏳ |
-| M1 | Descubrimiento cross-plugin: classloaders de plugins-suite → ServiceLoader compuesto → `ModuleLoader.discover` + `ModuleGraph.resolve` (kernel pieza central, carga nativa de Bukkit) | ⏳ |
-| M2 | Descarga GitHub Releases: latest-o-compatible, sha256, escritura atómica directa en plugins/ | ⏳ |
-| M3 | Ciclo de vida: módulo⇒reinicio; config⇒hot (/suite reload); resolución fallida se informa sin crashear | ⏳ |
-| M4 | `/suite module <list\|install\|update\|remove>` → raíz configurable vía FASE C | ⏳ (depende C) |
-| M5 | CI releases: 1 artefacto por módulo-plugin + manifest.json (sha256) | ⏳ |
+| F5-1 | Mover strings hardcodeados a `suite/messages` (catalogos EN/ES) | ⏳ |
+| F5-2 | Recobrar 98% strings en config (actualmente 0% en plugin) | ⏳ |
+| F5-3 | `/suite lang` usa `MessagesCatalog` | ⏳ |
 
-### FASE E — EDITOR v3 "C sobre ASM"
-
-| # | Tarea | Estado |
+### FASE 6 — Motor de reglas iFlow enriquecido
+| # | Pieza | Estado |
 |---|-------|--------|
-| E1 | Matriz cobertura schema↔editor (soportada/parcial/faltante) — documento vivo | ⏳ |
-| E2 | Modo atómico (ASM): nodos/YAML directo, todo permitido y visible | ⏳ |
-| E3 | Modo alto nivel (C): recetas que COMPILAN a nodos+canales ("chat regional", "staff solo-lectura"); round-trip exacto como invariante | ⏳ |
-| E4 | UX orgánica: una toolbar contextual explicada, onboarding, drag con magnetismo de puertos, estados vacíos que enseñan | ⏳ |
+| F6-1 | Destino "channel" en reglas | ⏳ |
+| F6-2 | Permisos/PAPI dentro de SpEL | ⏳ |
+| F6-3 | `MessageEventBus` público para third-party | ⏳ |
+| F6-4 | `transform` real (F7+) | ⏳ |
 
-### RESTOS P2/P3 (features — después de las bases)
+### FASE 7 — ConfigValidator real
+| # | Pieza | Estado |
+|---|-------|--------|
+| F7-1 | Validación estructural contra schema del editor | ⏳ |
+| F7-2 | Issues con shape del editor reportados en consola | ⏳ |
 
-| Item | Fase origen | Prioridad |
-|---|---|---|
-| advancement wiring | A2 | P2 |
-| Colores por permiso (consumo ColorMode en renderer) | A7 | P1-feature |
-| Menciones @nick → re-ruteo configurable | A8 | P2 |
-| SQLite/MySQL backends del store | A10 | P2 |
-| Sinks telegram/http/tcpudp wiring runtime | B1 | media/baja |
-| Paridad DST profunda (embeds, replies→DM, roles↔permisos, console-cmds, link) | A9 | P3 |
-| engine.parallel (executor alrededor del loop) | B2 | P3 |
-| Sonidos NamespacedKey lookup | B3 | P3 |
-| signs persistentes · bStats · update-checker · rescue-mode | históricos | P3 |
+### FASE 8 — Sistema comandos dinámico (/suite)
+| # | Pieza | Estado |
+|---|-------|--------|
+| F8-1 | Topología dinámica desde `commands.yml` v2 | ⏳ |
+| F8-2 | Acciones ATÓMICAS combinables (specs: jugador/idioma/ruta-config/enum) | ⏳ |
+| F8-3 | Feedback reutilizando motor de chat | ⏳ |
+| F8-4 | Edición config.yml desde comandos (estilo LuckPerms) | ⏳ |
+| F8-5 | `/suite` base configurable (renombrable: cht/dst/txf/tg/if) | ⏳ |
+
+### FASE 9 — sync-velocity real
+| # | Pieza | Estado |
+|---|-------|--------|
+| F9-1 | Implementar `suite/sync-velocity` real o eliminar stub | ⏳ |
+
+### FASE 10 — Observabilidad
+| # | Pieza | Estado |
+|---|-------|--------|
+| F10-1 | Metrics endpoint (`/metrics` Prometheus) | ⏳ |
+| F10-2 | Debug endpoints (`/debug/simulate`, `/debug/dump`) | ⏳ |
+| F10-3 | Healthchecks para sinks | ⏳ |
+
+---
 
 ## 3. DECISIONES VINCULANTES (índice)
 
@@ -109,9 +99,11 @@ los obligatorios textformatter+iflow.
 - Pureza modular: 1 jar inicial (Manager), motores separados, resolución vs entorno actual. → FASE 5
 - Sin modloader: módulos = plugins reales; plataforma nativa carga. → FASE 5
 - JDA detrás del puerto SyncSink; gateway propio = alternativa cero-deps. → A9
-- Comandos: topología dinámica + acciones atómicas + feedback por motor. → FASE C
+- Comandos: topología dinámica + acciones atómicas + feedback por motor. → FASE 8
 - Persistencia idioma paridad obligatoria; `off` ⇒ AUTO (texto fuente). → A1
 - Claim-mode configurable cancel-event/clear-recipients. → A3
+
+---
 
 ## 4. ENTORNO Y COMANDOS
 
@@ -123,12 +115,29 @@ source ~/.nvm/nvm.sh
 cd suite/web-editor && npm run check && npm run test:integration
 
 # Suite Java (orden; offline salvo deps nuevas)
-for m in core-api kernel textformatter iflow gtranslate ltranslate; do
+for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport; do
   (cd suite/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
 done
 (cd suite/host && ./gradlew test publishToMavenLocal --offline --no-daemon)
 (cd suite/sync-discord && ./gradlew test --offline --no-daemon)
-(cd suite/spigot-host && ./gradlew shadowJar --offline --no-daemon)   # fat-jar instalable
+(cd suite/sync-telegram && ./gradlew test --offline --no-daemon)
+(cd suite/sync-http && ./gradlew test --offline --no-daemon)
+(cd suite/sync-tcpudp && ./gradlew test --offline --no-daemon)
+(cd suite/sync-telegram && ./gradlew test --offline --no-daemon)
+
+# Plugin Spigot de la suite (fat-jar)
+cd suite/spigot-host && ./gradlew build --offline --no-daemon
+
+# Web editor
+cd suite/web-editor
+npm run check                        # format:check + lint + test (99 unit)
+npm run test:integration             # harnesses func/interact/click/chain/undo/diffing/bind
 ```
 
 Git: commits convencionales por tema; push SOLO con autorización explícita.
+
+---
+
+## 5. PRÓXIMA ACCIÓN INMEDIATA
+
+**FASE 4 → fabric-host funcional** (Paper ya listo y probado en servidor real).

@@ -37,6 +37,7 @@ false, sonido true.
 
 ```yaml
 name: chat.global              # fallback del host = nombre de archivo
+type: CHAT                     # CHAT (mensajes jugadores) | EVENT (join/quit/death/advancement)
 permission: cht.chat.global    # permiso BASE (plugin)
 send-permission: cht.chat.global.send
 receive-permission: cht.chat.global.receive
@@ -57,6 +58,8 @@ sounds:
 
 Regla de identidad: `name` **es el id**. Renombrar propaga a `rules.yml`
 (nodos) y a `translators/sync` (mapeos remoto→local).
+
+**`type`** (opcional, default `CHAT`): `CHAT` = canal de mensajes de jugadores (chat normal); `EVENT` = eventos de sistema (join, quit, death, advancement). Solo canales `CHAT` son considerados para mensajes de chat de jugadores.
 
 ## 4. `rules.yml` (grafo iFlow → reglas)
 
