@@ -63,10 +63,13 @@ web-editor de configuración.
 | `suite/coretranslator` | 17 | Puente legacy (retrocompatibilidad funcional). |
 | `suite/web-editor` | JS | UI configuración vanilla ES2022 (GitHub Pages estático). |
 | `suite/spigot-host` | 17 | **Plugin Spigot de la suite** (`TextFormatterSuite`): `SpigotActorDirectory`, `SpigotChatDelivery` (hop a main thread), bootstrap `SuiteHost`+`MessageDispatcher`, `/suite reload|status|test|lang|toggle|reset`. Fat-jar construido (shadow). |
-Dependencias entre motores: `kernel→core-api` · `textformatter→core-api`
-(+Adventure) · `iflow→core-api+textformatter` · `coretranslator→core-api` ·
-`gtranslate/ltranslate→core-api+transport` · `host→core-api+textformatter+iflow+
-gtranslate+ltranslate+messages+tester`.
+Dependencias entre motores:
+- `kernel→core-api`
+- `textformatter→core-api` (+Adventure)
+- `iflow→core-api+textformatter`
+- `coretranslator→core-api`
+- `gtranslate/ltranslate→core-api+transport`
+- `host→core-api+textformatter+iflow+gtranslate+ltranslate+messages+tester`
 ---
 ## 3. Modelo de mensaje
 Cada evento de chat produce unidades atómicas **`Message`** con su propio
@@ -284,8 +287,11 @@ simulate), extensiones/addons (core-api 2.2 + SDK), descargador runtime
 presets, `transform` real, `engine.parallel`, F8 in-world.
 ---
 ## 15. Bugs conocidos y deuda (2026-09-02)
+
 **Web editor:** P0 arreglados ✅. Queda: ampliar opciones YAML para reglas complejas sin perder usabilidad.
+
 **Java legacy:** bugs trío monolítico moot (eliminado). Arreglados en suite: `RateLimiter` TTL, `HttpSink` idempotente, `TcpSink`/`UdpSink` volatile, `HttpTransport` → `HttpURLConnection`.
+
 **Arquitectura (deuda viva):**
 - Config schema en copias manuales: `paths.json`, `js/paths.js` (duplica paths.json), `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`. → Centralizar generación.
 - Suite sin composite build en `settings.gradle` raíz (hosts consumen jars vía `files()` / mavenLocal hasta composite build).
@@ -311,4 +317,5 @@ https://github.com/majhrs16-official/TextFormatter-Suite
 Documentación del proyecto original: https://github.com/Majhrs16/ChatTranslator y https://github.com/Majhrs16/ChatTranslator/wiki (referencia histórica funcional).
 
 (End of file - total 337 lines)
+
 
