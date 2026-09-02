@@ -145,7 +145,53 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 - Reportes en `docs/historial/research-<agente>-<fecha>.md`
 - Sesión de consolidación tras finalización → actualiza `PLAN.md` y `ADR.md` con decisiones
 
+---
 
-> Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo.
+## INTEGRACIÓN DE NEW-FEATURES.md (consolidado 2026-09-02)
+
+### ✅ IMPLEMENTADO (commit 4dc7375 - FASE 3)
+
+| Feature | Detalles | Módulos afectados |
+|---|---|---|
+| **Channel Type System** | `Channel.Type` enum (CHAT/EVENT), `ChannelSelector` filtra por tipo, default channels join/quit/death/advancement con `type: EVENT` | `textformatter`, `spigot-host` |
+| **Tester Module** | 25 tests runtime (routing, eventos, traducción, formato, iFlow, concurrencia, stress, profiling), `PerformanceProfiler` CPU/heap, skip mechanism, comandos `/suite test full|stress|concurrency` | `suite/tester` |
+| **HttpTransport → HttpURLConnection** | Migración desde `java.net.http.HttpClient` (problemas módulos Paper), usado por GTranslate, LTranslate, sync-http, sync-telegram, sync-discord | `transport`, `gtranslate`, `ltranslate`, `sync-*` |
+| **ConfigLoader type field** | Lee `type` (CHAT|EVENT) de `channels/*.yml`, default CHAT, `ConfigPath.CHANNEL_TYPE` en enum centralizado | `host`, `spigot-host` |
+| **Messages Module** | i18n centralizado EN/ES, `MessagesCatalog` singleton, reemplaza strings hardcodeados | `suite/messages` |
+| **Fixes bugs heredados** | `SpigotScheduler.ticks()` redondeo, `NmsLocaleBridge` cache, `RateLimiter` TTL, `HttpSink` idempotente, `TcpSink`/`UdpSink` volatile, memory pressure 10MB | `spigot-host`, `sync-*` |
+
+### 🔄 EN PROGRESO / PRÓXIMOS (FASE 4+)
+
+| Feature | Estado | Detalles |
+|---|---|---|
+| **fabric-host funcional** | ⏳ | Paper 1.20.6+ listo y probado; Fabric pendiente (Loom 1.6.12) |
+| **Strings UI centralizados (i18n)** | ⏳ | Mover strings hardcodeados a `lang/` (catálogos EN/ES), recobrar 98% strings en config |
+| **Motor de reglas iFlow enriquecido** | ⏳ | Destino "channel" en reglas, permisos/PAPI en SpEL, `MessageEventBus` público, `transform` real (F7+) |
+| **ConfigValidator real** | ⏳ | Validación estructural contra schema editor, issues shape en consola |
+| **Sistema comandos dinámico (`/suite`)** | ⏳ | Topología desde `commands.yml` v2, acciones atómicas combinables, feedback motor chat, edición config.yml estilo LuckPerms |
+| **sync-velocity real** | ⏳ | Implementar o eliminar stub en editor/config |
+| **Observabilidad** | ⏳ | Metrics endpoint Prometheus, debug endpoints `/debug/simulate` `/debug/dump`, healthchecks sinks |
+
+### 📋 BACKLOG ARQUITECTURAL (brainstorming histórico)
+
+| Área | Ideas clave |
+|---|---|
+| **Translation** | Text discovery, traducción estructural (preservar Component), Universal Text Pipeline DETECT→PARSE→TRANSFORM→TRANSLATE→FORMAT→SYNC→OUTPUT |
+| **Formatting** | Arsenal transformaciones (uppercase, rot13, base64, leetspeak), Unicode processing (NFC/NFD/NFKC/NFKD, grapheme segmentation), visual width (emojis, CJK), parser/serializer universal (Plain↔MiniMessage↔Adventure↔ANSI↔Markdown↔HTML↔JSON↔YAML) |
+| **Sync** | Message synchronization fabric, bridge declarativo YAML con loop detection, delivery guarantees (at-most-once, at-least-once), ordering guarantees, UDP capabilities, WebSocket subscriptions |
+| **Web Editor** | YAML como lenguaje (variables, scopes, funciones, macros, imports, tipos, namespaces), "Go to assembly", compiler diagnostics tipados, formatter optimizer, source maps |
+
+**Separación de áreas (Clean Architecture):**
+| Área | Pregunta que responde |
+|---|---|
+| **Translation** | ¿Qué debe decir el texto? |
+| **Formatting** | ¿Cómo manipulo/represento ese texto? |
+| **Sync** | ¿A dónde viaja y cómo llega? |
+| **Web Editor** | ¿Cómo describo todo sin perder control de bajo nivel? |
+
+*Ninguna área depende conceptualmente de Minecraft. Minecraft es un consumidor más.*
+
+> Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo. Ver `docs/NEW-FEATURES.md` para brainstorming histórico completo.
 
 (End of file - total 104 lines)
+
