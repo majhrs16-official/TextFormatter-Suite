@@ -1,0 +1,56 @@
+plugins {
+    id 'jacoco'
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifactId = 'suite-messages'
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
+}

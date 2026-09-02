@@ -18,7 +18,11 @@ import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.spigothost.logic.ChannelSelector;
 import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
+import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+
+import java.util.Arrays;
+import java.util.function.Consumer;
 
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 
@@ -79,15 +83,17 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         final SpigotActorDirectory directory;
         final UserLanguageStore languages;
         final DiscordBridge bridge;
+        final PluginLogger logger;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
                 SpigotActorDirectory directory, UserLanguageStore languages,
-                DiscordBridge bridge) {
+                DiscordBridge bridge, PluginLogger logger) {
             this.host = host;
             this.dispatcher = dispatcher;
             this.directory = directory;
             this.languages = languages;
             this.bridge = bridge;
+            this.logger = logger;
         }
     }
 
@@ -96,33 +102,12 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private volatile Runtime runtime;
     private volatile MessagesConfig messages;
 
-    /** Último recurso si falta una clave en messages.yml (todo editable ahí). */
-    private static final Map<String, String> BUILT_IN_MESSAGES = Map.ofEntries(
-        Map.entry("prefix", "[suite] "),
-        Map.entry("not-initialized", "[suite] no inicializado"),
-        Map.entry("usage", "[suite] uso: /suite <lang|reload|status|toggle|reset>"),
-        Map.entry("enabled", "[suite] activo: {} canales, traductor '{}'"),
-        Map.entry("reload-ok", "[suite] recargado: {} canales, traductor '{}'"),
-        Map.entry("reload-error", "[suite] error al recargar: {}"),
-        Map.entry("status.channels", "[suite] canales: {}"),
-        Map.entry("status.translator", "[suite] traductor activo: {}"),
-        Map.entry("status.knobs", "[suite] engine.parallel: {} · sonido: {} · claim: {}"),
-        Map.entry("lang.current", "[suite] tu idioma: {}"),
-        Map.entry("lang.updated", "[suite] idioma actualizado: {}"),
-        Map.entry("lang.invalid", "[suite] valor inválido: usa auto | off | <código> (ej. es, en, zh-CN)"),
-        Map.entry("lang.other-admin", "[suite] setear el idioma de otro requiere admin"),
-        Map.entry("lang.player-offline", "[suite] jugador no conectado: {}"),
-        Map.entry("lang.console", "[suite] consola no tiene idioma; usa /suite lang <jugador> <valor>"),
-        Map.entry("toggle.current", "[suite] traducción: {}"),
-        Map.entry("reset.ok", "[suite] configs restauradas (respaldo en backup/); storage.yml intacto"),
-        Map.entry("reset.error", "[suite] error al restaurar: {}"));
-
     @Override
     public void onEnable() {
         audiences = BukkitAudiences.create(this);
         reloadSuite();
         getServer().getPluginManager().registerEvents(this, this);
-        getLogger().info(messages.format("enabled",
+        getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
             runtime.host.channels().paths().size(),
             runtime.host.translation().activeName()));
     }
@@ -145,8 +130,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         Path folder = getDataFolder().toPath();
         copyDefaultsIfMissing(folder);
         PluginLogger logger = logger();
+        // Validación estructural de config (Item 18 FASE 3)
+        me.majhrs16.suite.spigothost.validator.ConfigValidator.validate(
+            me.majhrs16.suite.host.config.ConfigLoader.loadConfig(folder),
+            logger,
+            folder);
         PermissionChecker permissions = this::hasPermission;
-        this.messages = MessagesConfig.load(folder, BUILT_IN_MESSAGES);
+        this.messages = MessagesConfig.load(folder, MessagesCatalog.getInstance().getAllMessages());
         TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
         SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
             new SpigotPlaceholderResolver(), logger);
@@ -164,7 +154,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             previous.stop();
         }
         DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger);
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, logger);
         if (bridge != null) {
             bridge.start();
         }
@@ -192,7 +182,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             return;
         }
         copyResource(folder, "defaults/config.yml", folder.resolve("config.yml"));
-        for (String name : List.of("chat.global")) {
+        for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
             copyResource(folder, "defaults/channels/" + name + ".yml",
                 folder.resolve("channels/" + name + ".yml"));
         }
@@ -249,20 +239,16 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
     private PluginLogger logger() {
         return new PluginLogger() {
-            @Override public void info(String m, Object... a) { getLogger().info(format(m, a)); }
-            @Override public void warn(String m, Object... a) { getLogger().warning(format(m, a)); }
-            @Override public void error(String m, Object... a) { getLogger().severe(format(m, a)); }
-            @Override public void error(String m, Throwable t) { getLogger().severe(m + " :: " + t); }
-            @Override public void debug(String m, Object... a) { if (isDebug()) getLogger().info("[debug] " + format(m, a)); }
+            @Override public void info(String m, Object... a) { getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void warn(String m, Object... a) { getLogger().warning(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void error(String m, Object... a) { getLogger().severe(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void error(String m, Throwable t) { getLogger().severe(MessagesCatalog.getInstance().format(Locale.ENGLISH, m) + " :: " + t); }
+            @Override public void debug(String m, Object... a) { if (isDebug()) getLogger().info("[debug] " + MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
         };
     }
 
     private boolean isDebug() {
         return Boolean.getBoolean("textformattersuite.debug");
-    }
-
-    private static String format(String message, Object... args) {
-        return MessagesConfig.substitute(message, args);
     }
 
     // -- events -----------------------------------------------------------
@@ -409,7 +395,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Runtime current = runtime;
         if (current == null || current.host == null) {
-            sender.sendMessage(messages.format("not-initialized"));
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "not-initialized"));
             return true;
         }
         SuiteHost host = current.host;
@@ -419,53 +405,56 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 try {
                     reloadSuite();
                     Runtime fresh = runtime;
-                    sender.sendMessage(messages.format("reload-ok",
+                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reload-ok",
                         fresh != null ? fresh.host.channels().paths().size() : 0,
                         fresh != null ? fresh.host.translation().activeName() : "?"));
                 } catch (RuntimeException exception) {
-                    sender.sendMessage(messages.format("reload-error", exception.getMessage()));
+                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reload-error", exception.getMessage()));
                 }
                 return true;
             }
             case "lang" -> {
-                return handleLang(current, sender, args);
+                return handleLang(current, sender, Arrays.copyOfRange(args, 1, args.length));
             }
             case "toggle" -> {
-                return handleToggle(current, sender, args);
+                return handleToggle(current, sender, Arrays.copyOfRange(args, 1, args.length));
             }
             case "reset" -> {
                 if (sender instanceof Player p && !p.hasPermission("textformattersuite.admin")) {
-                    sender.sendMessage(messages.format("lang.other-admin"));
+                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
                     return true;
                 }
                 if (!sender.hasPermission("textformattersuite.admin")) {
-                    sender.sendMessage(messages.format("lang.other-admin"));
+                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
                     return true;
                 }
                 try {
                     if (resetConfigs(getDataFolder().toPath())) {
                         reloadSuite();
-                        sender.sendMessage(messages.format("reset.ok"));
+                        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reset.ok"));
                     } else {
-                        sender.sendMessage(messages.format("reset.error", "ver log"));
+                        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reset.error", "ver log"));
                     }
                 } catch (RuntimeException exception) {
-                    sender.sendMessage(messages.format("reset.error", exception.getMessage()));
+                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reset.error", exception.getMessage()));
                 }
                 return true;
             }
             case "status" -> {
-                sender.sendMessage(messages.format("status.channels", host.channels().paths()));
-                sender.sendMessage(messages.format("status.translator",
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "status.channels", host.channels().paths()));
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "status.translator",
                     host.translation().activeName()));
-                sender.sendMessage(messages.format("status.knobs",
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "status.knobs",
                     host.config().engineParallel(), host.config().soundEnabled(),
                     host.config().claimMode().name().toLowerCase(Locale.ROOT)
                         .replace('_', '-')));
                 return true;
             }
+            case "test" -> {
+                return handleTest(current, sender, Arrays.copyOfRange(args, 1, args.length));
+            }
             default -> {
-                sender.sendMessage(messages.format("usage"));
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "usage"));
                 return true;
             }
         }
@@ -479,13 +468,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private boolean handleLang(Runtime current, CommandSender sender, String[] args) {
         Player self = sender instanceof Player player ? player : null;
         if (self == null && args.length == 0) {
-            sender.sendMessage(messages.format("lang.console"));
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.console"));
             return true;
         }
         if (args.length == 0) {
             String current2 = LangSetting.normalize(current.languages
-                .languageOf(self.getUniqueId()).orElse(UserLanguageStore.AUTO));
-            sender.sendMessage(messages.format("lang.current", LangSetting.display(current2)));
+                .languageOf(self.getUniqueId()).orElse(MessagesCatalog.getInstance().format(Locale.ENGLISH, "auto")));
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.current", LangSetting.display(current2)));
             return true;
         }
 
@@ -496,23 +485,23 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             value = LangSetting.normalize(args[0]);
         } else {
             if (self == null || !self.hasPermission("textformattersuite.admin")) {
-                sender.sendMessage(messages.format("lang.other-admin"));
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
                 return true;
             }
             Player other = getServer().getPlayerExact(args[0]);
             if (other == null) {
-                sender.sendMessage(messages.format("lang.player-offline", args[0]));
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.player-offline", args[0]));
                 return true;
             }
             target = other.getUniqueId();
             value = LangSetting.normalize(args[1]);
         }
         if (target == null || !LangSetting.isValid(value)) {
-            sender.sendMessage(messages.format("lang.invalid"));
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.invalid"));
             return true;
         }
         current.languages.save(target, value);
-        sender.sendMessage(messages.format("lang.updated", LangSetting.display(value)));
+        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.updated", LangSetting.display(value)));
         return true;
     }
 
@@ -523,6 +512,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private boolean handleToggle(Runtime current, CommandSender sender, String[] args) {
         Player self = sender instanceof Player player ? player : null;
         UUID target;
+        String value;
         if (args.length == 0) {
             target = self == null ? null : self.getUniqueId();
         } else {
@@ -530,28 +520,105 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 ? sender.hasPermission("textformattersuite.admin")
                 : self.hasPermission("textformattersuite.admin");
             if (!admin) {
-                sender.sendMessage(messages.format("lang.other-admin"));
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
                 return true;
             }
             Player other = getServer().getPlayerExact(args[0]);
             if (other == null) {
-                sender.sendMessage(messages.format("lang.player-offline", args[0]));
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.player-offline", args[0]));
                 return true;
             }
             target = other.getUniqueId();
+            value = LangSetting.normalize(args[1]);
         }
         if (target == null) {
-            sender.sendMessage(messages.format("lang.console"));
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.console"));
             return true;
         }
         String flipped = LangSetting.flip(
-            current.languages.languageOf(target).orElse(UserLanguageStore.AUTO));
+            current.languages.languageOf(target).orElse(MessagesCatalog.getInstance().format(Locale.ENGLISH, "auto")));
         current.languages.save(target, flipped);
-        sender.sendMessage(messages.format("toggle.current",
+        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "toggle.current",
             LangSetting.display(flipped).startsWith("off") ? "off" : "auto"));
+        return true;
+
+    }
+
+    /**
+     * {@code /suite test} — ejecuta la suite de tests automatizada en runtime.
+     * {@code /suite test full} — suite completa (default).
+     * {@code /suite test stress <players> <msgs>} — stress test.
+     * {@code /suite test concurrency <threads> <msgs>} — test de concurrencia.
+     * {@code /suite test routing} — tests de enrutamiento.
+     * {@code /suite test events} — tests de eventos.
+     * {@code /suite test perf} — profiling de hot paths.
+     * {@code /suite test sync} — tests de sinks de sincronización.
+     */
+    private boolean handleTest(Runtime current, CommandSender sender, String[] args) {
+        if (!sender.hasPermission("textformattersuite.admin")) {
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
+            return true;
+        }
+
+        var testService = getTestService();
+        if (testService == null) {
+            sender.sendMessage("§cTest service not available. Is tester module loaded?");
+            return true;
+        }
+
+        String sub = args.length == 0 ? "full" : args[0];
+
+        sender.sendMessage("§a[Test] Starting: " + sub);
+
+        // Run async to not block main thread
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            var reporter = (Consumer<String>) line -> {
+                getServer().getScheduler().runTask(this, () -> sender.sendMessage(line));
+            };
+
+            try {
+                switch (sub) {
+                    case "full" -> testService.runFullTestSuite(reporter);
+                    case "stress" -> {
+                        int players = args.length > 1 ? Integer.parseInt(args[1]) : 5;
+                        int msgs = args.length > 2 ? Integer.parseInt(args[2]) : 20;
+                        reporter.accept("§6[TEST] Stress Test (" + players + " players, " + msgs + " msgs each)...");
+                        testService.runStressTest(players, msgs);
+                        reporter.accept("§a[PASS] Stress Test complete");
+                    }
+                    case "concurrency" -> {
+                        int threads = args.length > 1 ? Integer.parseInt(args[1]) : 10;
+                        int msgs = args.length > 2 ? Integer.parseInt(args[2]) : 20;
+                        reporter.accept("§6[TEST] Concurrency Test (" + threads + " threads, " + msgs + " msgs each)...");
+                        testService.runConcurrencyTest(threads, msgs);
+                        reporter.accept("§a[PASS] Concurrency Test complete");
+                    }
+                    default -> sender.sendMessage("§cUnknown test: " + sub + ". Use: full, stress, concurrency");
+                }
+            } catch (Exception e) {
+                sender.sendMessage("§c[Test] Error: " + e.getMessage());
+                Runtime rt = runtime;
+                if (rt != null && rt.logger != null) {
+                    rt.logger.error("Test error: " + sub, e);
+                }
+            }
+        });
         return true;
     }
 
-    
-    
+    private me.majhrs16.suite.tester.TestService getTestService() {
+        // Get TestService from current runtime
+        Runtime rt = runtime;
+        if (rt != null && rt.host != null && rt.dispatcher != null) {
+            return new me.majhrs16.suite.tester.TestService(
+                rt.host,
+                rt.dispatcher,
+                rt.directory,
+                rt.languages,
+                rt.logger
+            );
+        }
+        return null;
     }
+
+}

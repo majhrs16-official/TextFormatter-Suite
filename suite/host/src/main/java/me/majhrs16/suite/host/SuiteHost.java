@@ -3,6 +3,7 @@ package me.majhrs16.suite.host;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.config.ConfigLoader;
@@ -20,6 +21,7 @@ import me.majhrs16.suite.textformatter.template.TemplateContext;
 import net.kyori.adventure.text.Component;
 
 import java.nio.file.Path;
+import java.util.ServiceLoader;
 
 /**
  * Platform-neutral facade that assembles the suite from its file layout and
@@ -43,19 +45,22 @@ public final class SuiteHost {
     private final Router router;
     private final TextFormatter formatter;
     private final PluginLogger logger;
+    private final ChatDelivery chatDelivery;
 
     SuiteHost(HostConfig config,
               ChannelRegistry channels,
               TranslationService translation,
               Router router,
               TextFormatter formatter,
-              PluginLogger logger) {
+              PluginLogger logger,
+              ChatDelivery chatDelivery) {
         this.config = config;
         this.channels = channels;
         this.translation = translation;
         this.router = router;
         this.formatter = formatter;
         this.logger = logger;
+        this.chatDelivery = chatDelivery;
     }
 
     /** Bootstraps from a config directory following the suite layout. */
@@ -72,11 +77,24 @@ public final class SuiteHost {
                                       TranslationService translation,
                                       me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
                                       PluginLogger logger) {
+        return bootstrap(configDir, permissions, translation, placeholders, logger, ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null));
+    }
+
+    /**
+     * Bootstraps with a explicitly provided {@link ChatDelivery} implementation.
+     * Use {@link #bootstrap(Path, PermissionChecker, TranslationService, PluginLogger)}
+     * for ServiceLoader-auto-discovery.
+     */
+    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
+                                      TranslationService translation,
+                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
+                                      PluginLogger logger,
+                                      ChatDelivery chatDelivery) {
         HostConfig config = ConfigLoader.loadConfig(configDir);
         ChannelRegistry channels = ConfigLoader.loadChannels(configDir);
         Router router = new DefaultRouter(channels, permissions);
         TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
-        return new SuiteHost(config, channels, translation, router, formatter, logger);
+        return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
     }
 
     public HostConfig config() {

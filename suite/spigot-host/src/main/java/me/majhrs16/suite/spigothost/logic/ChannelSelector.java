@@ -21,6 +21,10 @@ public final class ChannelSelector {
     /** @return effective channel path for a sender with {@code hasPermission}. */
     public static String select(List<Channel> orderedChannels, Predicate<String> hasPermission) {
         for (Channel channel : orderedChannels) {
+            // Only consider CHAT type channels for player chat messages
+            if (channel.type() != Channel.Type.CHAT) {
+                continue;
+            }
             String permission = channel.permission();
             if (permission == null || hasPermission.test(permission)) {
                 return channel.name();

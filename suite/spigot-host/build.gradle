@@ -29,21 +29,21 @@ configurations.all {
     resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
-// Los módulos suite se consumen como archivos directos de sus builds
-// hermanos: determinista, sin red y siempre actualizado tras cada
-// `./gradlew jar`. El paso a mavenLocal/coordinadas normales llega con el
-// composite build (FASE 3).
-def suiteJar = { String module, String artifact ->
-    files("../${module}/build/libs/${module}-2.1.0-SNAPSHOT.jar")
-}
-
 dependencies {
-    implementation suiteJar('core-api', 'suite-core-api')
-    implementation suiteJar('kernel', 'suite-kernel')
-    implementation suiteJar('textformatter', 'suite-textformatter')
-    implementation suiteJar('iflow', 'suite-iflow')
-    implementation suiteJar('host', 'suite-host')
-    implementation suiteJar('sync-discord', 'suite-sync-discord')
+    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-http:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-tcpudp:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-telegram:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-gtranslate:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-ltranslate:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-messages:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-tester:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
 
     implementation 'net.kyori:adventure-platform-bukkit:4.3.2'
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
@@ -52,22 +52,23 @@ dependencies {
     implementation 'org.yaml:snakeyaml:2.2'
 
     compileOnly 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
-    compileOnly 'me.clip:placeholderapi:2.11.5'
-    testImplementation 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+    compileOnly 'me.clip:placeholderapi:2.11.6'
 
+    testImplementation 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+    testImplementation 'me.clip:placeholderapi:2.11.6'
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 17
+    options.release = 21
 }
 
 test {
@@ -83,15 +84,12 @@ shadowJar {
     archiveBaseName = 'textformatter-suite-spigot'
 }
 
-// Fat-jar oficial (shadow). Requiere red la primera vez para el plugin+ASM.
 processResources {
     filesMatching('plugin.yml') {
         expand(version: project.version)
     }
 }
 
-
-// FASE T/T1 — cobertura medida (xml para CI, html para humano)
 tasks.named('test') { finalizedBy 'jacocoTestReport' }
 jacocoTestReport {
     dependsOn test

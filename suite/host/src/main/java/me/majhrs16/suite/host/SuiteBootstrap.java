@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.Router;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
@@ -17,8 +18,7 @@ import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.ServiceLoader;
 
 /**
  * Kernel-driven bootstrap that discovers and resolves all suite modules via
@@ -81,7 +81,8 @@ public final class SuiteBootstrap {
         me.majhrs16.suite.textformatter.TextFormatter formatter = me.majhrs16.suite.textformatter.TextFormatters.create(channels, translation, placeholders, logger);
 
         // 5. Create SuiteHost with core components
-        return new SuiteHost(config, channels, translation, router, formatter, logger);
+        ChatDelivery chatDelivery = ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null);
+        return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
     }
 
     /**

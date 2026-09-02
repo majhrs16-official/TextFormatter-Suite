@@ -1,25 +1,23 @@
 package me.majhrs16.suite.transport;
 
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 
 /**
- * Production {@link Transport} backed by the JDK {@link HttpClient}.
- *
- * <p>Supports all HTTP methods required by the suite:
- * - GET requests for translation APIs (Google, Libre, Telegram)
- * - POST with JSON body for general REST APIs
- * - POST with custom headers for Discord REST API
- * - Query string building for Telegram Bot API
+ * Production {@link Transport} backed by {@link HttpURLConnection}.
+ * <p>
+ * Avoids {@code java.net.http.HttpClient} module accessibility issues
+ * in plugin classloaders (Paper/Spigot).
  */
 public final class HttpTransport implements Transport {
 
-    private final HttpClient client;
     private final Duration timeout;
 
     public HttpTransport() {
@@ -27,58 +25,67 @@ public final class HttpTransport implements Transport {
     }
 
     public HttpTransport(Duration timeout) {
-        this.client = HttpClient.newBuilder()
-            .connectTimeout(timeout)
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
         this.timeout = timeout;
     }
 
     @Override
     public String get(String url) throws IOException {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-            .timeout(timeout)
-            .header("User-Agent", "TextFormatterSuite/2.1")
-            .GET()
-            .build();
-        return send(request);
+        HttpURLConnection conn = openConnection(url, "GET", null, null);
+        return readResponse(conn);
     }
 
     @Override
     public String post(String url, String jsonBody) throws IOException {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-            .timeout(timeout)
-            .header("Content-Type", "application/json")
-            .header("User-Agent", "TextFormatterSuite/2.1")
-            .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-            .build();
-        return send(request);
+        HttpURLConnection conn = openConnection(url, "POST", Map.of("Content-Type", "application/json"), jsonBody);
+        return readResponse(conn);
     }
 
     @Override
     public String post(String url, Map<String, String> headers, String jsonBody) throws IOException {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
-            .timeout(timeout)
-            .header("User-Agent", "TextFormatterSuite/2.1")
-            .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
-        if (headers != null) {
-            headers.forEach(builder::header);
-        }
-        HttpRequest request = builder.build();
-        return send(request);
+        HttpURLConnection conn = openConnection(url, "POST", headers, jsonBody);
+        return readResponse(conn);
     }
 
-    private String send(HttpRequest request) throws IOException {
-        try {
-            HttpResponse<String> response = client.send(request,
-                HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 400) {
-                throw new IOException("HTTP " + response.statusCode() + ": " + response.body());
+    private HttpURLConnection openConnection(String urlString, String method, Map<String, String> headers, String body) throws IOException {
+        URL url = new URL(urlString);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod(method);
+        conn.setConnectTimeout((int) timeout.toMillis());
+        conn.setReadTimeout((int) timeout.toMillis());
+        conn.setInstanceFollowRedirects(true);
+        conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
+
+        if (headers != null) {
+            headers.forEach(conn::setRequestProperty);
+        }
+
+        if (body != null) {
+            conn.setDoOutput(true);
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            conn.setRequestProperty("Content-Length", String.valueOf(bytes.length));
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(bytes);
             }
-            return response.body();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("request interrupted", e);
+        }
+        return conn;
+    }
+
+    private String readResponse(HttpURLConnection conn) throws IOException {
+        int status = conn.getResponseCode();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                status >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            String response = sb.toString();
+            if (status >= 400) {
+                throw new IOException("HTTP " + status + ": " + response);
+            }
+            return response;
+        } finally {
+            conn.disconnect();
         }
     }
 }

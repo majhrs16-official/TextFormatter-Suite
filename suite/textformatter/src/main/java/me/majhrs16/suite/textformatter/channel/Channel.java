@@ -29,6 +29,14 @@ public final class Channel {
     /** Default placeholder consumed by every format template. */
     public static final String PLACEHOLDER = "%ct_messages%";
 
+/** Type of channel: determines its purpose and routing behavior. */
+    public enum Type {
+        /** Regular chat channel for player messages. */
+        CHAT,
+        /** System event channels (join, quit, death, advancement). */
+        EVENT
+    }
+
     private final String name;
     private final Formats messages;
     private final Formats tooltips;
@@ -40,6 +48,7 @@ public final class Channel {
     private final String receivePermission;
     private final boolean showSender;
     private final int rateLimitPerSecond;
+    private final Type type;
 
     private Channel(Builder builder) {
         this.name = builder.name;
@@ -55,6 +64,7 @@ public final class Channel {
         this.receivePermission = builder.receivePermission;
         this.showSender = builder.showSender;
         this.rateLimitPerSecond = builder.rateLimitPerSecond;
+        this.type = builder.type != null ? builder.type : Type.CHAT;
     }
 
     /** @return unique dotted path of this channel, e.g. {@code chat} or {@code private.other}. */
@@ -102,6 +112,11 @@ public final class Channel {
         return showSender;
     }
 
+    /** @return channel type: CHAT for player messages, EVENT for system events. */
+    public Type type() {
+        return type;
+    }
+
     /** @return messages-per-second limit, 0 means unlimited. */
     public int rateLimitPerSecond() {
         return rateLimitPerSecond;
@@ -139,6 +154,7 @@ public final class Channel {
         private String receivePermission;
         private boolean showSender = true;
         private int rateLimitPerSecond;
+        private Type type = Type.CHAT;
 
         private Builder(String name) {
             this.name = name;
@@ -191,6 +207,11 @@ public final class Channel {
 
         public Builder rateLimitPerSecond(int rateLimitPerSecond) {
             this.rateLimitPerSecond = rateLimitPerSecond;
+            return this;
+        }
+
+        public Builder type(Type type) {
+            this.type = type;
             return this;
         }
 

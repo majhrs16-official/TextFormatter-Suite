@@ -1,0 +1,11 @@
+name: quit
+permission: ""
+type: EVENT
+show-sender: true
+rate-limit-per-second: 0
+lang-source: auto
+lang-target: auto
+messages:
+  - "<red>-</red> %player_name% left the game"
+tooltips: []
+sounds: []

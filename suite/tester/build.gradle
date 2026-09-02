@@ -1,8 +1,7 @@
 plugins {
-    id 'fabric-loom' version '1.6.12'
-    id 'java'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
     id 'jacoco'
+    id 'java'
+    id 'maven-publish'
 }
 
 group = 'me.majhrs16'
@@ -15,35 +14,36 @@ java {
 }
 
 repositories {
-    mavenCentral()
     mavenLocal()
-    maven { url 'https://maven.fabricmc.net/' }
-    maven { url 'https://libraries.minecraft.net/' }
+    mavenCentral()
+    maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
 }
 
 dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-messages:2.1.0-SNAPSHOT'
-
-    minecraft 'com.mojang:minecraft:1.21'
-    mappings 'net.fabricmc:yarn:1.21+build.1:v2'
-    modImplementation 'net.fabricmc:fabric-loader:0.16.10'
-    modImplementation 'net.fabricmc.fabric-api:fabric-api:0.100.5+1.21'
-
-    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-api:4.17.0'
-    implementation 'net.kyori:adventure-text-serializer-gson:4.17.0'
-    implementation 'net.kyori:adventure-platform-fabric:5.14.2'
-    implementation 'net.dv8tion:JDA:6.4.2'
-    implementation 'org.yaml:snakeyaml:2.2'
 
+    // Spigot API for runtime (needed for Bukkit types in main source)
+    implementation 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
+
+    // Test dependencies - need full suite for integration tests
+    testImplementation 'me.majhrs16:suite-gtranslate:2.1.0-SNAPSHOT'
+    testImplementation 'me.majhrs16:suite-ltranslate:2.1.0-SNAPSHOT'
+    testImplementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
+    testImplementation 'me.majhrs16:suite-sync-http:2.1.0-SNAPSHOT'
+    testImplementation 'me.majhrs16:suite-sync-tcpudp:2.1.0-SNAPSHOT'
+    testImplementation 'me.majhrs16:suite-sync-telegram:2.1.0-SNAPSHOT'
+    testImplementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
+
+    // For Spigot integration tests
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -61,18 +61,15 @@ test {
     useJUnitPlatform()
 }
 
-tasks.jar {
-    archiveClassifier = 'thin'
-}
-
-shadowJar {
-    archiveClassifier = ''
-    archiveBaseName = 'textformatter-suite-fabric'
-}
-
-processResources {
-    filesMatching('fabric.mod.json') {
-        expand(version: project.version)
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifactId = 'suite-tester'
+        }
+    }
+    repositories {
+        mavenLocal()
     }
 }
 

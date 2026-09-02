@@ -1,6 +1,7 @@
 package me.majhrs16.suite.fabrichost;
 
 import me.majhrs16.suite.api.message.Actor;
+import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
@@ -17,13 +18,15 @@ import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.fabrichost.logic.ChannelSelector;
 import me.majhrs16.suite.fabrichost.logic.EventRules;
 import me.majhrs16.suite.fabrichost.logic.LangSetting;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.messages.MessagesCatalog;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.kyori.adventure.platform.fabric.FabricAudiences;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -44,7 +47,25 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Composition root of the TextFormatter Suite on Fabric.
+ * Composition root of the TextFormatter Suite on Fabric: bootstraps
+ * {@link SuiteHost} + {@link MessageDispatcher} from the suite file layout
+ * and routes events through the modern engine instead of the legacy core.
+ *
+ * <p>Threading: chat events fire on the server thread; translation,
+ * routing and rendering run on that thread and delivery uses
+ * {@link FabricAudiences} directly.</p>
+ *
+ * <p>Non-chat events (join/quit/death) are dispatched when a channel with
+ * the conventional name exists in the registry ({@code join}, {@code quit},
+ * {@code death}): presence IS configuration.</p>
+ *
+ * <p>Per-user language persists in {@code storage.yml} via
+ * {@link YamlUserLanguageStore}; {@code /suite lang} manages it. The value
+ * {@code off} maps to {@link Language#AUTO}, which disables translation for
+ * that user both as sender and as receiver.</p>
+ *
+ * <p>Debug logging: launch with {@code -Dtextformattersuite.debug=true}
+ * (JVM property, not hot-reloadable).</p>
  */
 public final class TextFormatterSuiteMod implements ModInitializer {
 
@@ -68,6 +89,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     }
 
     private static MinecraftServer SERVER;
+    private static FabricAudiences AUDIENCES;
     private static volatile UserLanguageStore LANGUAGE_STORE;
     private static volatile Runtime RUNTIME;
     private static volatile MessagesConfig MESSAGES;
@@ -115,18 +137,20 @@ public final class TextFormatterSuiteMod implements ModInitializer {
 
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
             Runtime current = RUNTIME;
-            if (current == null || current.dispatcher == null) return;
-
+            if (current == null || current.dispatcher == null) {
+                return;
+            }
             Actor senderActor = current.directory.actorOf(sender);
-            String channelPath = ChannelSelector.select(List.copyOf(current.host.channels().all()),
-                    permission -> hasPermission(senderActor, permission));
-            Channel channel = current.host.channels().resolve(channelPath);
+            Channel channel = current.host.channels().resolve(
+                ChannelSelector.select(List.copyOf(current.host.channels().all()),
+                    permission -> hasPermission(senderActor, permission)));
+            String channelPath = channel.name();
             boolean senderOff = isOff(current, senderActor);
 
-            String text = message.getSignedContent();
+            String text = message.getContent().getString();
 
             if (channel.showSender()) {
-                dispatch(current, MessageType.CHAT, senderActor, me.majhrs16.suite.api.message.Direction.initiator(),
+                dispatch(current, MessageType.CHAT, senderActor, Direction.initiator(),
                     channelPath, text, !senderOff);
             }
             Message broadcast = broadcast(current, MessageType.CHAT, senderActor,
@@ -137,6 +161,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
 
     private void onServerStarted(MinecraftServer server) {
         SERVER = server;
+        AUDIENCES = net.kyori.adventure.platform.fabric.FabricAudiences.create(server);
         reloadSuite();
         LOGGER.info(MESSAGES.format("enabled",
             RUNTIME.host.channels().paths().size(),
@@ -148,6 +173,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         if (current != null && current.bridge != null) {
             current.bridge.stop();
         }
+        AUDIENCES = null;
         RUNTIME = null;
         SERVER = null;
     }
@@ -155,11 +181,11 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     /** Re-reads the whole file layout from disk (save → apply). */
     public static void reloadSuite() {
         if (SERVER == null) return;
-        Path folder = Path.of(".").resolve("textformatter-suite").toAbsolutePath();
+        Path folder = SERVER.getRunDirectory().resolve("textformatter-suite");
         copyDefaultsIfMissing(folder);
         PluginLogger logger = logger();
         PermissionChecker permissions = TextFormatterSuiteMod::hasPermission;
-        MESSAGES = MessagesConfig.load(folder, BUILT_IN_MESSAGES);
+        MESSAGES = MessagesConfig.load(folder, MessagesCatalog.getInstance().getAllMessages());
         TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
         SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
             new FabricPlaceholderResolver(), logger);
@@ -191,7 +217,8 @@ public final class TextFormatterSuiteMod implements ModInitializer {
 
     /**
      * First-boot experience: copies the bundled {@code defaults/} tree
-     * into the data folder. Existing user files are never overwritten.
+     * (config.yml, channels/, translators/) into the data folder. Existing
+     * user files are never overwritten.
      */
     private static void copyDefaultsIfMissing(Path folder) {
         try (var stream = TextFormatterSuiteMod.class.getResourceAsStream("/defaults/config.yml")) {
@@ -243,19 +270,19 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             if (in == null) return;
             Files.createDirectories(target.getParent());
             Files.copy(in, target);
-            LOGGER.info("default creado: " + folder.relativize(target));
+            if (SERVER != null) LOGGER.info("default creado: " + folder.relativize(target));
         } catch (IOException exception) {
-            LOGGER.warn("no se pudo crear " + target + ": " + exception.getMessage());
+            if (SERVER != null) LOGGER.info("no se pudo crear " + target + ": " + exception.getMessage());
         }
     }
 
     private static PluginLogger logger() {
         return new PluginLogger() {
-            @Override public void info(String m, Object... a) { LOGGER.info(format(m, a)); }
-            @Override public void warn(String m, Object... a) { LOGGER.warn(format(m, a)); }
-            @Override public void error(String m, Object... a) { LOGGER.error(format(m, a)); }
-            @Override public void error(String m, Throwable t) { LOGGER.error(m + " :: " + t); }
-            @Override public void debug(String m, Object... a) { if (isDebug()) LOGGER.info("[debug] " + format(m, a)); }
+            @Override public void info(String m, Object... a) { if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void warn(String m, Object... a) { if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void error(String m, Object... a) { if (SERVER != null) LOGGER.error(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void error(String m, Throwable t) { if (SERVER != null) LOGGER.error(MessagesCatalog.getInstance().format(Locale.ENGLISH, m) + " :: " + t); }
+            @Override public void debug(String m, Object... a) { if (isDebug() && SERVER != null) LOGGER.info("[debug] " + MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
         };
     }
 
@@ -264,23 +291,23 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     }
 
     private static String format(String message, Object... args) {
-        return MessagesConfig.substitute(message, args);
+        return MessagesCatalog.getInstance().format(Locale.ENGLISH, message, args);
     }
 
     // -- dispatch helpers ---------------------------------------------------
 
     private static void dispatch(Runtime current, MessageType type, Actor sender,
-                                 me.majhrs16.suite.api.message.Direction direction, String channelPath, String text) {
+                                 Direction direction, String channelPath, String text) {
         dispatch(current, type, sender, direction, channelPath, text, true);
     }
 
     private static void dispatch(Runtime current, MessageType type, Actor sender,
-                                 me.majhrs16.suite.api.message.Direction direction, String channelPath, String text,
+                                 Direction direction, String channelPath, String text,
                                  boolean translate) {
         Message message = Message.builder()
             .type(type)
             .sender(sender)
-            .direction(direction.channel(me.majhrs16.suite.api.message.Channel.CHAT))
+            .direction(direction)
             .translate(translate)
             .text(text)
             .channel(channelPath)
@@ -293,7 +320,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         Message message = Message.builder()
             .type(type)
             .sender(sender)
-            .direction(me.majhrs16.suite.api.message.Direction.others().channel(me.majhrs16.suite.api.message.Channel.CHAT))
+            .direction(Direction.others())
             .translate(translate)
             .text(text)
             .channel(channelPath)
@@ -321,7 +348,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         Message message = Message.builder()
             .type(type)
             .sender(subject)
-            .direction(me.majhrs16.suite.api.message.Direction.all())
+            .direction(Direction.all())
             .translate(!senderOff)
             .text(content)
             .channel(channelName)

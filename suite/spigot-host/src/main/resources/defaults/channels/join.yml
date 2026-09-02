@@ -1,0 +1,11 @@
+name: join
+permission: ""
+type: EVENT
+show-sender: true
+rate-limit-per-second: 0
+lang-source: auto
+lang-target: auto
+messages:
+  - "<green>+</green> %player_name% joined the game"
+tooltips: []
+sounds: []

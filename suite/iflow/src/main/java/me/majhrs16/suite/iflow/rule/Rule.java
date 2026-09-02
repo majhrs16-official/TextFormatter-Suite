@@ -12,8 +12,14 @@ import java.util.Optional;
  * the rule applies to; an empty matcher set matches everything.
  *
  * <p>Rules are evaluated in priority order (lowest {@code priority} number
- * first); the first matching rule wins. Values come straight from the
+ * first); the first matching rule wins. Values come from the
  * {@code rules.yml} config of iFlow.</p>
+ * <p>
+ * <b>Transform (F7):</b> A {@link #transform()} expression that modifies the
+ * message before delivery. Syntax: {@code "key=value,key2=value2"} or a SpEL
+ * expression operating on message fields ({@code #message.text}, {@code #message.id},
+ * {@code #message.langSource}, etc.). When present, the transform is applied
+ * after matching but before the disposition decision.</p>
  */
 public final class Rule {
 
@@ -25,6 +31,7 @@ public final class Rule {
     private final String emitterPattern; // future-proof: prefix/regex, nullable
     private final String receiverPattern;
     private final Direction.Kind kind;
+    private final String transform; // F7: expression to transform message content
 
     private Rule(Builder builder) {
         this.id = builder.id == null ? "" : builder.id;
@@ -35,6 +42,7 @@ public final class Rule {
         this.emitterPattern = builder.emitterPattern;
         this.receiverPattern = builder.receiverPattern;
         this.kind = builder.kind;
+        this.transform = builder.transform;
     }
 
     public String id() {
@@ -67,6 +75,11 @@ public final class Rule {
 
     public Direction.Kind kind() {
         return kind;
+    }
+
+    /** @return the transform expression (may be {@code null}). */
+    public String transform() {
+        return transform;
     }
 
     /** @return whether this rule applies to the given message/recipient pair. */
@@ -114,6 +127,7 @@ public final class Rule {
         private String emitterPattern;
         private String receiverPattern;
         private Direction.Kind kind;
+        private String transform; // F7
 
         private Builder(PolicyTarget target) {
             this.target = target;
@@ -149,8 +163,19 @@ public final class Rule {
             return this;
         }
 
+        public Builder kind(Direction.Kind kind) {
+            this.kind = kind;
+            return this;
+        }
+
         public Builder direction(Direction.Kind kind) {
             this.kind = kind;
+            return this;
+        }
+
+        /** F7: set a transform expression that modifies the message before delivery. */
+        public Builder transform(String transform) {
+            this.transform = transform;
             return this;
         }
 

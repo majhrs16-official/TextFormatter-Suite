@@ -97,7 +97,8 @@ public final class ConfigLoader {
                 .messages(readFormats(map.get(ConfigPath.CHANNEL_MESSAGES.key())))
                 .tooltips(readFormats(map.get(ConfigPath.CHANNEL_TOOLTIPS.key())))
                 .showSender(bool(map.get(ConfigPath.CHANNEL_SHOW_SENDER.key()), true))
-                .rateLimitPerSecond(intOf(map.get(ConfigPath.CHANNEL_RATE_LIMIT.key()), 0));
+                .rateLimitPerSecond(intOf(map.get(ConfigPath.CHANNEL_RATE_LIMIT.key()), 0))
+                .type(parseType(str(map.get(ConfigPath.CHANNEL_TYPE.key()), "chat")));
 
             Language source = Language.of(str(map.get(ConfigPath.CHANNEL_LANG_SOURCE.key()), "auto")).orElse(Language.AUTO);
             Language target = Language.of(str(map.get(ConfigPath.CHANNEL_LANG_TARGET.key()), "auto")).orElse(Language.AUTO);
@@ -190,6 +191,17 @@ public final class ConfigLoader {
         return value instanceof Number n ? n.floatValue() : fallback;
     }
 
+    private static me.majhrs16.suite.textformatter.channel.Channel.Type parseType(String value) {
+        if (value == null || value.isBlank()) {
+            return me.majhrs16.suite.textformatter.channel.Channel.Type.CHAT;
+        }
+        try {
+            return me.majhrs16.suite.textformatter.channel.Channel.Type.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return me.majhrs16.suite.textformatter.channel.Channel.Type.CHAT;
+        }
+    }
+
     /**
      * Centralized config keys — single source of truth for YAML paths.
      */
@@ -214,6 +226,7 @@ public final class ConfigLoader {
         CHANNEL_RATE_LIMIT("rate-limit-per-second"),
         CHANNEL_LANG_SOURCE("lang-source"),
         CHANNEL_LANG_TARGET("lang-target"),
+        CHANNEL_TYPE("type"),
         CHANNEL_SOUNDS("sounds"),
         SOUND_NAME("name"),
         SOUND_VOLUME("volume"),

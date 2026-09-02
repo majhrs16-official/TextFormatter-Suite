@@ -23,6 +23,6 @@ include 'suite:sync-telegram'
 include 'suite:spigot-host'
 include 'suite:fabric-host'
 include 'suite:common-legacy'
-
 include 'suite:transport'
-
+include 'suite:messages'
+include 'suite:tester'
