@@ -102,6 +102,50 @@
 67: 
 67: ---
 68: 
-68: > Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo.
+68: 
+
+## FASE 2 — PLANIFICACIÓN (Documentar ahora, NO ejecutar)
+
+### 1. Testing Exhaustivo — Diseño de Tests por Sección
+
+Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claramente entradas y salidas esperadas.
+
+| Sección / Módulo | Tests a Diseñar | Entradas | Salidas Esperadas |
+|---|---|---|---|
+| **core-api** (SPI + Modelo) | - Module/ModuleDescriptor registration<br>- Semver parsing & compatibility<br>- Message/Builder inmutabilidad<br>- Direction expansion (8 kinds)<br>- Actor equality & serialization | SPI configs, Message builders, Direction enums | Valid ModuleDescriptors, correct semver ranges, immutable Messages, expanded receiver lists |
+| **kernel** (ModuleLoader + Graph) | - Tarjan cycle detection<br>- CONTRACT_MISMATCH / JVM_MISMATCH handling<br>- Environment bootstrap order<br>- ServiceLoader discovery | Module JARs with varying semver/JVM reqs | Correct load order, proper mismatch degradation, no cycles |
+| **textformatter** (MiniMessage) | - TemplateRenderer with `<tr>` tags<br>- MiniEscape injection safety<br>- PlaceholderResolver (PAPI/identity)<br>- ChannelRegistry load/save<br>- Format groups per event type | MiniMessage templates, raw text, PAPI placeholders | Escaped output, translated segments, correct channel formats |
+| **iflow** (Router + Rules) | - DefaultRouter BFS priority<br>- RateLimiter token bucket<br>- PermissionChecker (base + send/receive)<br>- Rule SpEL conditions/actions<br>- Graph cycles with max-steps guard | Rules YAML, message streams, permission maps | Correct routing decisions, rate-limited drops, permission-gated delivery |
+| **gtranslate / ltranslate** | - Provider selection & fallback<br>- HttpTransport pool & rate-limit<br>- Translation cache TTL<br>- Error handling (429, 5xx, timeout) | Text batches, provider configs, mock HTTP | Translated text, proper fallback, metrics recorded |
+| **sync-* (discord/telegram/http/tcpudp)** | - Sink start/stop idempotency<br>- MessageCodec encode/decode<br>- Discord gateway reconnect<br>- Telegram watermark offset<br>- TCP/UDP raw framing | Events, config YAML, mock sockets | Delivered payloads, acknowledged receipts, no leaks |
+| **host** (SuiteHost + Dispatcher) | - ConfigLoader round-trip<br>- MessageDispatcher Direction→receivers<br>- ChatDelivery port contract<br>- ActorDirectory snapshot anti-CME<br>- Reload atomicity | Config files, Actor sets, Direction enums | Parsed config, delivered messages, thread-safe snapshots |
+| **spigot-host** (Plugin) | - AsyncPlayerChatEvent claim modes<br>- Join/Quit/Death channel dispatch<br>- `/suite` command tree<br>- SpigotScheduler ticks conversion<br>- NmsLocaleBridge cache | Bukkit events, commands, player locales | Cancelled/cleared vanilla, dispatched Messages, correct tick math |
+| **web-editor** (JS) | - StateStore undo/redo/diffing<br>- YAML writer/parser round-trip<br>- Validation incremental (revision)<br>- Canvas node graph (mux/fan-out)<br>- Preview pipeline (JS port) | User actions, YAML configs, graph edits | Consistent state, byte-identical YAML, valid issues list |
+
+**Criterios de aceptación por test:**
+- Given/When/Then explícito
+- Inputs: fixtures YAML/JSON + mock objects
+- Outputs: assertions sobre estado, side-effects, métricas
+- Determinísticos (sin flakiness), paralelos, `--offline` compatibles
+
+---
+
+### 2. Sub-agentes de Investigación (5 agentes paralelos)
+
+| Agente | Foco | Entregable | Fuentes |
+|---|---|---|---|
+| **A1 — Paridad Funcional ChatTranslator** | Comparar comportamiento runtime (comandos, canales, traducción, sync, storage) vs proyecto original ChatTranslator + wiki. Identificar gaps de paridad funcional (no código). | Matriz de paridad (feature → ✅/⚠️/❌ + notas), lista de gaps priorizados | `/home/majhrs16/Documentos/chattranslator`, `chattranslator.wiki`, GitHub `Majhrs16/ChatTranslator`, issues cerrados |
+| **A2 — Arquitectura Hexagonal** | Validar cumplimiento estricto: core-api JDK-puro, puertos en `host/port/`, adapters sin dependencias cruzadas, SPI ServiceLoader, handshake doble, sin modloader. | Informe de conformidad (regla → ✅/❌ + evidencia), deuda arquitectural cuantificada | `suite/core-api`, `suite/host`, `suite/spigot-host`, `suite/fabric-host`, ADR.md |
+| **A3 — Clean Architecture** | Verificar capas: Entidades (core-api/model) → Casos de uso (host/kernel) → Adaptadores (spigot-host, sync-*) → Frameworks (Bukkit, JDA, Loom). Inversión de dependencias, testabilidad. | Diagrama de capas + violaciones, recomendaciones de refactor | Código fuente suite/*, build.gradle, settings.gradle |
+| **A4 — Bugs & Vulnerabilidades (Código)** | Análisis estático + revisión manual: race conditions, memory leaks, injection (MiniMessage, SpEL, YAML), DoS (rate-limit bypass, unbounded queues), secret handling (tokens en config/logs). | Lista de hallazgos (CWE, severidad, ubicación, PoC sugerido), fixes propuestos | `suite/*/src/main`, dependencias (Adventure, JDA, snakeyaml), `build.gradle` |
+| **A5 — Vulnerabilidades (Cadena de Suministro / Runtime)** | Dependency check (OWASP), Gradle lockfiles, SHA256 de jars publicados, manifest validation, classloader isolation (runtime downloader futuro), allowlist enforcement. | SBOM, hallazgos CVE, plan de mitigación, checklist de release | `gradle.lockfile`, `mavenLocal`, `suite/*/build.gradle`, GitHub Actions (si existen) |
+
+**Modo de operación:**
+- Cada agente trabaja en paralelo, lectura sola (no modifica código)
+- Reportes en `docs/historial/research-<agente>-<fecha>.md`
+- Sesión de consolidación tras finalización → actualiza `PLAN.md` y `ADR.md` con decisiones
+
+
+> Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo.
 
 (End of file - total 104 lines)
