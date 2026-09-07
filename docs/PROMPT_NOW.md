@@ -20,7 +20,7 @@
 | sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
 | spigot-host | ✅ funcional · ✅ **probado en Paper 1.20.6 real** | 4 tests + server test |
 | web-editor | ✅ gates verdes | check+integración |
-| fabric-host / Manager | ❌ no existen | — |
+| fabric-host / Manager | ✅ implementado | build |
 | tester (suite/tester) | ✅ 25 tests runtime + PerformanceProfiler | tests |
 | messages | ✅ i18n centralizado EN/ES | tests |
 | transport | ✅ HttpURLConnection + MessageCodec único | tests |
@@ -43,9 +43,12 @@
 ### FASE 4 — fabric-host (BASE)
 | # | Pieza | Estado |
 |---|-------|--------|
-| F4-1 | fabric-host plugin: `FabricMod` entrypoint, `FabricActorDirectory`, `FabricChatDelivery` | ⏳ |
-| F4-2 | Loom 1.6.12 configurado, mappings 1.20.6+ | ⏳ |
-| F4-3 | Test en servidor Fabric real | ⏳ |
+| F4-1 | fabric-host plugin: `FabricMod` entrypoint, `FabricActorDirectory`, `FabricChatDelivery` | ✅ |
+| F4-2 | Loom 1.6.12 configurado, mappings 1.20.6+ | ✅ (1.21 + yarn 1.21+build.1) |
+| F4-3 | Canales por defecto (join/quit/death/advancement) | ✅ |
+| F4-4 | Event handlers: death, advancement | ✅ |
+| F4-5 | Comando `/suite` (reload, status, lang, toggle, reset) | ✅ |
+| F4-6 | Test en servidor Fabric real | ⏳ (pendiente Java 21) |
 
 ### FASE 5 — Strings UI centralizados (i18n)
 | # | Pieza | Estado |
@@ -142,4 +145,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 4 → fabric-host funcional** (Paper ya listo y probado en servidor real).
+**FASE 5 → Strings UI centralizados (i18n)** — mover strings hardcodeados a `lang/` (catalogos EN/ES) para recobrar 98%. `fabric-host` implementado y listo para test en servidor real (requiere Java 21).
