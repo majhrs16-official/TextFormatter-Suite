@@ -193,6 +193,108 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 > Ver `README.md` para estado detallado, arquitectura, módulos y build. Ver `docs/ADR.md` para decisiones de arquitectura. Ver `docs/PROMPT_NOW.md` para plan de acción de corto plazo. Ver `docs/NEW-FEATURES.md` para brainstorming histórico completo.
 
+---
+
+## RESULTADOS FASE 2 — INVESTIGACIÓN (2026-09-06)
+
+### A1 — Paridad Funcional ChatTranslator ✅
+**Entregable:** `docs/historial/research-A1-paridad-chattranslator-2026-09-06.md`
+
+**Resumen:** Paridad alta en core (chat translation, formatos, eventos join/quit/death/advancement, Discord sync, anti-spam, selección idioma, hot-reload).
+
+**Gaps CRÍTICOS (bloqueantes migración producción):**
+1. **Sign translation** (Shift+Click) — No hay listener Spigot ni persistencia `signs.yml`
+2. **PAPI `%cot_*`** — Placeholders `cot_translate`, `cot_var`, `cot_broadcast`, `cot_lang`, `cot_sendDiscord` no existen (rompe ConditionalEvents/integraciones)
+3. **Velocity/MySQL sync** — Solo stub en config; sin storage compartido para redes multi-servidor
+
+**Gaps ALTOS:** MySQL storage, ConditionalEvents/MessageBus, Private messages, Connection loss indicator
+
+**Ventajas Suite (nuevo):** iFlow rules engine, permisos asimétricos nativos send/receive, Telegram/HTTP/TCP-UDP sync, Web Editor round-trip YAML exacto, test runtime automatizado (`/suite test`), fallback multi-proveedor (Google→LibreTranslate), arquitectura hexagonal testeable.
+
+---
+
+### A2 — Arquitectura Hexagonal ✅
+**Entregable:** `docs/historial/research-A2-hexagonal-2026-09-06.md`
+
+**Cumplimiento:** 7/8 reglas ✅, 1 deuda menor (V1)
+
+| Regla | Estado | Evidencia |
+|-------|--------|-----------|
+| 1. core-api JDK-puro | ✅ | Solo test deps JUnit |
+| 2. Puertos separados | ✅ | `ActorDirectory` en `core-api/spi`; `ChatDelivery` en `host/port` (Adventure) |
+| 3. Adapters sin imports cruzados | ✅ | Verificado por grep |
+| 4. SPI = ServiceLoader | ✅ | `META-INF/services/me.majhrs16.suite.api.Module` (10 módulos) |
+| 5. Handshake doble | ✅ | `Environment.current()` (JVM) + `ModuleDescriptor.contractVersion()` (semver) |
+| 6. Mismatch → degrade/no crash | ✅ | `ResolutionStatus` no fatales |
+| 7. Descubrimiento vía SPI | ✅ | `ModuleLoader.discover(ServiceLoader)` |
+| 8. Web Editor desacoplado | ✅ | YAML/schema v2.2, parser JS propio, round-trip validado |
+
+**Violación menor (V1):** `suite/tester/build.gradle:32` — `implementation 'org.spigotmc:spigot-api'` contamina classpath. Fix: cambiar a `compileOnly`.
+
+---
+
+### A3 — Clean Architecture ✅
+**Entregable:** `docs/historial/research-A3-clean-arch-2026-09-06.md`
+
+**Compliance:** ~85%
+
+**Violaciones CRÍTICAS (Inversión de dependencias en `host`):**
+
+| # | Archivo:Línea | Issue |
+|---|---------------|-------|
+| V1 | `host/config/TranslatorsConfig.java:82` | Host instancia directamente `GTranslate` (adapter) |
+| V2 | `host/config/TranslatorsConfig.java:83-87` | Host instancia directamente `LTranslate` (adapter) |
+| V3 | `host/build.gradle:24-25` | Host tiene `implementation` deps en `gtranslate`, `ltranslate` |
+
+**Root cause:** `TranslatorsConfig` (capa caso de uso) tiene dependencias compile-time a implementaciones de adaptadores en vez de usar puerto `Translator` vía ServiceLoader/factory.
+
+**Fix P0:** Introducir `TranslatorProvider` SPI + ServiceLoader discovery, remover deps `implementation` de host.
+
+---
+
+### A4 — Bugs & Vulnerabilidades Código ✅
+**Entregable:** `docs/historial/research-A4-bugs-vulns-2026-09-06.md`
+
+**30 hallazgos totales:** 1 Crítico, 7 Alto, 11 Medio, 11 Bajo
+
+**Crítico (P0 — Fix inmediato):**
+- **INJ-3 (CWE-94):** `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usa `StandardEvaluationContext`
+- **INJ-4 (CWE-502):** 4 loaders YAML usan `new Yaml()` (unsafe constructor) → **deserialización arbitraria** si atacante escribe en config files
+
+**Alto (P1-P3):**
+- INJ-1: `MiniEscape` solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`
+- SEC-1..4: Tokens Discord, Telegram, LibreTranslate en `String` permanente en heap
+- DOS-1: `HttpServer` executor unbounded → thread exhaustion
+- DOS-2: `MessageDispatcher` secuencial en async chat event → lag servidor 200+ jugadores
+- DOS-3: `RateLimiter` capacity hardcodeado a `1` (ignora `channel.rateLimitPerSecond()`)
+
+**Plan de fixes (4 sprints):**
+- Sprint 1: SpEL sandbox + SafeConstructor YAML + MiniEscape completo + char[] tokens
+- Sprint 2: Bounded executors, dispatcher paralelo, RateLimiter fix, cache eviction
+- Sprint 3: Race conditions, socket timeouts, executor reuse
+- Sprint 4: Template validation, env vars, weak refs, PAPI dynamic check
+
+---
+
+### A5 — Vulnerabilidades Supply-Chain/Runtime ✅
+**Entregable:** `docs/historial/research-A5-supply-chain-2026-09-06.md`
+
+**Riesgo supply-chain: ALTO**
+
+**Hallazgos clave:**
+1. **SBOM top 20 deps** — JDA 5.0.0 (CVE-2023-2603, CVE-2022-23611), SnakeYAML 2.2 (CVE-2022-1471, CVE-2022-38751), Adventure 4.15.0 (sin CVEs públicos), Fabric Loom 1.6.12 (sin CVEs), Spigot/Paper API (provided)
+2. **gradle.lockfile / SHA256** — **AMBOS AUSENTES**; sin `dependencyVerification` configurado; builds no reproducibles
+3. **Repositorios Maven (8)** — Central, Plugin Portal, FabricMC, Spigot, PaperMC, HelpChat, Minecraft Libraries, mavenLocal(); riesgo: `mavenLocal()` con precedencia sobre remotos
+4. **Reproducible builds** — NO (falta lockfile, verification metadata, versiones release en jars, determinismo timestamps)
+5. **Manifest validation en ModuleLoader** — NO; solo ServiceLoader discovery, validación semántica posterior en ModuleGraph (contract/JVM/ciclos)
+6. **Allowlist módulos** — NO; carga todo del classpath, solo rechazo post-resolución
+7. **Prep classloader dinámico (F5)** — Kernel listo (ModuleLoader paramétrico, ModuleDescriptor serializable), gaps: provisioning seguro, verificación SHA256, aislamiento classloader, allowlist enforcement
+8. **Checklist release (15 items P0/P2)** — P0: gradle.lockfile + SHA256 + dependencyVerification; P1: allowlist + manifest validation pre-load; P2: reproducible builds + CI/CD gate
+
+**Recomendación inmediata:** Configurar `dependencyVerification` en `settings.gradle` con claves SHA256 + generar `gradle.lockfile` antes de cualquier release.
+
+
+
 
 
 
