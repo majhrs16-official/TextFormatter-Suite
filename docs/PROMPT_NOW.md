@@ -136,6 +136,8 @@ npm run test:integration             # harnesses func/interact/click/chain/undo/
 
 Git: commits convencionales por tema; push SOLO con autorización explícita.
 
+> **Nota sub-agentes (2026-09-06):** Cada `task` lanza un NUEVO agente stateless. No hay persistencia entre llamadas. Para "continuar" un agente fallido, relanzar `task` con prompt `"continua" + contexto resumido`. La API Nemotron 3 Ultra está saturada → reintentos frecuentes (502/504).
+
 ---
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
