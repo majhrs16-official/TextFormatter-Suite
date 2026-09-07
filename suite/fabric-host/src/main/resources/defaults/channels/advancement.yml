@@ -1,0 +1,11 @@
+name: advancement
+permission: ""
+type: EVENT
+show-sender: true
+rate-limit-per-second: 0
+lang-source: auto
+lang-target: auto
+messages:
+  - "<yellow>%player_name% has made the advancement [%content%]</yellow>"
+tooltips: []
+sounds: []

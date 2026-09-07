@@ -22,14 +22,20 @@ import me.majhrs16.suite.messages.MessagesCatalog;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.kyori.adventure.platform.fabric.FabricAudiences;
+import net.minecraft.command.CommandSource;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,6 +141,33 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 current.directory.actorOf(handler.player), handler.player.getName().getString());
         });
 
+        // Death event
+        net.fabricmc.fabric.api.event.player.PlayerDeathEvents.AFTER_DEATH.register((damageSource, player) -> {
+            Runtime current = RUNTIME;
+            if (current == null) return;
+            String vanilla = damageSource.getDeathMessage() != null
+                ? damageSource.getDeathMessage().getString()
+                : player.getName().getString();
+            dispatchTyped(current, MessageType.DEATH, EventRules.CHANNEL_DEATH,
+                current.directory.actorOf(player), vanilla);
+        });
+
+        // Advancement event (Fabric 1.21+)
+        try {
+            Class<?> advancementClass = Class.forName("net.fabricmc.fabric.api.event.player.AdvancementEvents");
+            java.lang.reflect.Method register = advancementClass.getMethod("ADVANCEMENT_GRANTED", 
+                net.fabricmc.api.EventHandler.class);
+            register.invoke(null, (java.util.function.BiConsumer<net.minecraft.advancement.Advancement, net.minecraft.server.network.ServerPlayerEntity>) (adv, player) -> {
+                Runtime current = RUNTIME;
+                if (current == null) return;
+                String content = adv.getId().toString();
+                dispatchTyped(current, MessageType.ADVANCEMENT, "advancement",
+                    current.directory.actorOf(player), content);
+            });
+        } catch (Exception ignored) {
+            // Advancement events not available in this version
+        }
+
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
             Runtime current = RUNTIME;
             if (current == null || current.dispatcher == null) {
@@ -156,6 +189,74 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             Message broadcast = broadcast(current, MessageType.CHAT, senderActor,
                 channelPath, text, !senderOff);
             mirror(current, broadcast);
+        });
+
+        // Register /suite command
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            LiteralArgumentBuilder<CommandSource> suiteCmd = LiteralArgumentBuilder.literal("suite")
+                .requires(source -> source.hasPermissionLevel(2)) // OP level for admin commands
+                .then(LiteralArgumentBuilder.literal("reload")
+                    .executes(ctx -> {
+                        reloadSuite();
+                        Runtime r = RUNTIME;
+                        if (r != null) {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reload-ok",
+                                r.host.channels().paths().size(), r.host.translation().activeName())), false);
+                        } else {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reload-error", "no inicializado")), false);
+                        }
+                        return 1;
+                    }))
+                .then(LiteralArgumentBuilder.literal("status")
+                    .executes(ctx -> {
+                        Runtime r = RUNTIME;
+                        if (r != null) {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("status.channels", r.host.channels().paths())), false);
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("status.translator", r.host.translation().activeName())), false);
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("status.knobs", r.host.config().engineParallel(), r.host.config().soundEnabled(), r.host.config().claimMode().name().toLowerCase(Locale.ROOT).replace('_', '-'))), false);
+                        } else {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("not-initialized")), false);
+                        }
+                        return 1;
+                    }))
+                .then(LiteralArgumentBuilder.literal("lang")
+                    .then(LiteralArgumentBuilder.literal("auto").executes(ctx -> handleLang(ctx, "auto")))
+                    .then(LiteralArgumentBuilder.literal("off").executes(ctx -> handleLang(ctx, "off")))
+                    .then(LiteralArgumentBuilder.argument("code", StringArgumentType.string()).executes(ctx -> handleLang(ctx, StringArgumentType.getString(ctx, "code"))))
+                )
+                .then(LiteralArgumentBuilder.literal("toggle")
+                    .executes(ctx -> {
+                        Runtime r = RUNTIME;
+                        if (r == null) {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("not-initialized")), false);
+                            return 0;
+                        }
+                        if (!(ctx.getSource().getEntity() instanceof ServerPlayerEntity player)) {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.console")), false);
+                            return 0;
+                        }
+                        String flipped = LangSetting.flip(r.languages.languageOf(player.getUuid()).orElse(AUTO));
+                        r.languages.save(player.getUuid(), flipped);
+                        ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("toggle.current", LangSetting.display(flipped))), false);
+                        return 1;
+                    }))
+                .then(LiteralArgumentBuilder.literal("reset")
+                    .requires(source -> source.hasPermissionLevel(3))
+                    .executes(ctx -> {
+                        if (SERVER == null) {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.error", "no server")), false);
+                            return 0;
+                        }
+                        Path folder = SERVER.getRunDirectory().resolve("textformatter-suite");
+                        if (resetConfigs(folder)) {
+                            reloadSuite();
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.ok")), false);
+                        } else {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.error", "ver log")), false);
+                        }
+                        return 1;
+                    }));
+            dispatcher.register(suiteCmd);
         });
     }
 
@@ -225,7 +326,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             if (stream == null) return;
         } catch (IOException ignored) { return; }
         copyResource(folder, "defaults/config.yml", folder.resolve("config.yml"));
-        for (String name : List.of("chat.global")) {
+        for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
             copyResource(folder, "defaults/channels/" + name + ".yml",
                 folder.resolve("channels/" + name + ".yml"));
         }
@@ -361,5 +462,25 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     private static boolean isOff(Runtime current, Actor actor) {
         return !EventRules.shouldTranslate(current.languages,
             actor == null ? null : actor.uuid());
+    }
+
+    private static int handleLang(CommandContext<CommandSource> ctx, String value) {
+        Runtime r = RUNTIME;
+        if (r == null) {
+            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("not-initialized")), false);
+            return 0;
+        }
+        if (!(ctx.getSource().getEntity() instanceof ServerPlayerEntity player)) {
+            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.console")), false);
+            return 0;
+        }
+        String normalized = LangSetting.normalize(value);
+        if (!LangSetting.isValid(normalized)) {
+            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.invalid")), false);
+            return 0;
+        }
+        r.languages.save(player.getUuid(), normalized);
+        ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.updated", LangSetting.display(normalized))), false);
+        return 1;
     }
 }
