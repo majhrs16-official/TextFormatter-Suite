@@ -61,7 +61,7 @@
 ### FASE 6 — Motor de reglas iFlow enriquecido
 | # | Pieza | Estado |
 |---|-------|--------|
-| F6-1 | Destino "channel" en reglas | ⏳ |
+| F6-1 | Destino "channel" en reglas (CHANNEL_REDIRECT) | ✅ |
 | F6-2 | Permisos/PAPI dentro de SpEL | ⏳ |
 | F6-3 | `MessageEventBus` público para third-party | ⏳ |
 | F6-4 | `transform` real (F7+) | ⏳ |
@@ -146,4 +146,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 6 → Motor de reglas iFlow enriquecido** — destino "channel", permisos/PAPI en SpEL, `MessageEventBus` público, `transform` real (F7+).
+**FASE 6 (continuación) → Permisos/PAPI en SpEL + MessageEventBus público** — ampliar `ScriptSurface` con `hasPermission`, `papi()`, y crear `MessageEventBus` en `core-api` para third-party hooks.
