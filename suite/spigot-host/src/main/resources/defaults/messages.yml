@@ -23,3 +23,13 @@ toggle:
 reset:
   ok: "[suite] configs restauradas (respaldo en backup/); storage.yml intacto"
   error: "[suite] error al restaurar: {}"
+file:
+  reset-failed: "reset falló: {}"
+  default-created: "default creado: {}"
+  create-failed: "no se pudo crear {}: {}"
+test:
+  service-unavailable: "§cTest service not available. Is tester module loaded?"
+  starting: "§a[Test] Starting: {}"
+  output: "{}"
+  unknown: "§cUnknown test: {}. Use: full, stress, concurrency"
+  error: "§c[Test] Error: {}"

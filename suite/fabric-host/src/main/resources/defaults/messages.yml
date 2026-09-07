@@ -16,3 +16,15 @@ lang.console: "[suite] consola no tiene idioma; usa /suite lang <jugador> <valor
 toggle.current: "[suite] traducción: {}"
 reset.ok: "[suite] configs restauradas (respaldo en backup/); storage.yml intacto"
 reset.error: "[suite] error al restaurar: {}"
+file:
+  reset-failed: "reset falló: {}"
+  default-created: "default creado: {}"
+  create-failed: "no se pudo crear {}: {}"
+test:
+  service-unavailable: "Test service not available. Is tester module loaded?"
+  starting: "[Test] Starting: {}"
+  output: "{}"
+  unknown: "Unknown test: {}. Use: full, stress, concurrency"
+  error: "[Test] Error: {}"
+no-server: "no server"
+log-check: "ver log"

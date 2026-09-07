@@ -216,7 +216,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             copyDefaultsIfMissing(folder);
             return true;
         } catch (IOException exception) {
-            getLogger().warning("reset falló: " + exception.getMessage());
+            getLogger().warning(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.reset-failed", exception.getMessage()));
             return false;
         }
     }
@@ -231,9 +231,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             }
             Files.createDirectories(target.getParent());
             Files.copy(in, target);
-            getLogger().info("default creado: " + folder.relativize(target));
+            getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.default-created", folder.relativize(target)));
         } catch (IOException exception) {
-            getLogger().warning("no se pudo crear " + target + ": " + exception.getMessage());
+            getLogger().warning(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.create-failed", target, exception.getMessage()));
         }
     }
 
@@ -562,13 +562,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
         var testService = getTestService();
         if (testService == null) {
-            sender.sendMessage("§cTest service not available. Is tester module loaded?");
+            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.service-unavailable"));
             return true;
         }
 
         String sub = args.length == 0 ? "full" : args[0];
 
-        sender.sendMessage("§a[Test] Starting: " + sub);
+        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.starting", sub));
 
         // Run async to not block main thread
         getServer().getScheduler().runTaskAsynchronously(this, () -> {
@@ -582,21 +582,21 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     case "stress" -> {
                         int players = args.length > 1 ? Integer.parseInt(args[1]) : 5;
                         int msgs = args.length > 2 ? Integer.parseInt(args[2]) : 20;
-                        reporter.accept("§6[TEST] Stress Test (" + players + " players, " + msgs + " msgs each)...");
+                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§6[TEST] Stress Test (" + players + " players, " + msgs + " msgs each)..."));
                         testService.runStressTest(players, msgs);
-                        reporter.accept("§a[PASS] Stress Test complete");
+                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§a[PASS] Stress Test complete"));
                     }
                     case "concurrency" -> {
                         int threads = args.length > 1 ? Integer.parseInt(args[1]) : 10;
                         int msgs = args.length > 2 ? Integer.parseInt(args[2]) : 20;
-                        reporter.accept("§6[TEST] Concurrency Test (" + threads + " threads, " + msgs + " msgs each)...");
+                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§6[TEST] Concurrency Test (" + threads + " threads, " + msgs + " msgs each)..."));
                         testService.runConcurrencyTest(threads, msgs);
-                        reporter.accept("§a[PASS] Concurrency Test complete");
+                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§a[PASS] Concurrency Test complete"));
                     }
-                    default -> sender.sendMessage("§cUnknown test: " + sub + ". Use: full, stress, concurrency");
+                    default -> sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.unknown", sub));
                 }
             } catch (Exception e) {
-                sender.sendMessage("§c[Test] Error: " + e.getMessage());
+                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.error", e.getMessage()));
                 Runtime rt = runtime;
                 if (rt != null && rt.logger != null) {
                     rt.logger.error("Test error: " + sub, e);

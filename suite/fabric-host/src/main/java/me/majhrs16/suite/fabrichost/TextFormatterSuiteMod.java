@@ -244,7 +244,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                     .requires(source -> source.hasPermissionLevel(3))
                     .executes(ctx -> {
                         if (SERVER == null) {
-                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.error", "no server")), false);
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.error", MESSAGES.format("no-server"))), false);
                             return 0;
                         }
                         Path folder = SERVER.getRunDirectory().resolve("textformatter-suite");
@@ -252,10 +252,32 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                             reloadSuite();
                             ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.ok")), false);
                         } else {
-                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.error", "ver log")), false);
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("reset.error", MESSAGES.format("log-check"))), false);
                         }
                         return 1;
-                    }));
+                    }))
+                .then(LiteralArgumentBuilder.literal("test")
+                    .executes(ctx -> {
+                        Runtime r = RUNTIME;
+                        if (r == null) {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("not-initialized")), false);
+                            return 0;
+                        }
+                        ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("test.service-unavailable")), false);
+                        return 1;
+                    })
+                    .then(LiteralArgumentBuilder.argument("type", StringArgumentType.string())
+                        .executes(ctx -> {
+                            Runtime r = RUNTIME;
+                            if (r == null) {
+                                ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("not-initialized")), false);
+                                return 0;
+                            }
+                            String sub = StringArgumentType.getString(ctx, "type");
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("test.starting", sub)), false);
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("test.unknown", sub)), false);
+                            return 1;
+                        })));
             dispatcher.register(suiteCmd);
         });
     }
@@ -360,7 +382,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             copyDefaultsIfMissing(folder);
             return true;
         } catch (IOException exception) {
-            LOGGER.warn("reset falló: " + exception.getMessage());
+            LOGGER.warn(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.reset-failed", exception.getMessage()));
             return false;
         }
     }
@@ -371,9 +393,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             if (in == null) return;
             Files.createDirectories(target.getParent());
             Files.copy(in, target);
-            if (SERVER != null) LOGGER.info("default creado: " + folder.relativize(target));
+            if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.default-created", folder.relativize(target)));
         } catch (IOException exception) {
-            if (SERVER != null) LOGGER.info("no se pudo crear " + target + ": " + exception.getMessage());
+            if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.create-failed", target, exception.getMessage()));
         }
     }
 
