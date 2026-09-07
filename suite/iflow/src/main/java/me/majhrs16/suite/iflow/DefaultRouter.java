@@ -122,6 +122,11 @@ public final class DefaultRouter implements Router {
                 return new RouteDecision(PolicyTarget.REJECT, rule.reason(), 0, recipient, emitter);
             case REDIRECT:
                 return new RouteDecision(PolicyTarget.REDIRECT, rule.reason(), 0, recipient, emitter);
+            case CHANNEL_REDIRECT:
+                String targetChannel = rule.redirectChannel();
+                return new RouteDecision(PolicyTarget.CHANNEL_REDIRECT,
+                    rule.reason() + (targetChannel != null ? " → " + targetChannel : ""),
+                    0, recipient, emitter, targetChannel);
             case RATE_LIMIT:
                 if (channel.rateLimitPerSecond() > 0) {
                     String key = message.channel() + "\u0000" + emitter.uuid();

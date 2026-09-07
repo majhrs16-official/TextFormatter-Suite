@@ -7,18 +7,25 @@ package me.majhrs16.suite.host;
  * @param delivered  recipients that received the rendered message.
  * @param silenced   recipients dropped/rejected/rate-limited by routing.
  * @param redirected copies sent to the console instead of a recipient.
+ * @param channelRedirected copies sent to a different channel via CHANNEL_REDIRECT.
  * @param skipReason why nothing was considered at all ({@code null} when the
  *                   pass ran; e.g. {@code "cancelled"}).
  */
 public record DispatchReport(int considered, int delivered, int silenced,
-                             int redirected, String skipReason) {
+                             int redirected, int channelRedirected, String skipReason) {
 
     /** Report for a pass that never ran (e.g. {@code "cancelled"} message). */
     public static DispatchReport none(String reason) {
-        return new DispatchReport(0, 0, 0, 0, reason);
+        return new DispatchReport(0, 0, 0, 0, 0, reason);
+    }
+
+    // Backwards compatibility constructor
+    public DispatchReport(int considered, int delivered, int silenced,
+                          int redirected, String skipReason) {
+        this(considered, delivered, silenced, redirected, 0, skipReason);
     }
 
     public boolean anythingSent() {
-        return delivered > 0 || redirected > 0;
+        return delivered > 0 || redirected > 0 || channelRedirected > 0;
     }
 }

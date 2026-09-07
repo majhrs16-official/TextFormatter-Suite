@@ -32,6 +32,7 @@ public final class Rule {
     private final String receiverPattern;
     private final Direction.Kind kind;
     private final String transform; // F7: expression to transform message content
+    private final String redirectChannel; // for CHANNEL_REDIRECT target
 
     private Rule(Builder builder) {
         this.id = builder.id == null ? "" : builder.id;
@@ -43,6 +44,7 @@ public final class Rule {
         this.receiverPattern = builder.receiverPattern;
         this.kind = builder.kind;
         this.transform = builder.transform;
+        this.redirectChannel = builder.redirectChannel;
     }
 
     public String id() {
@@ -80,6 +82,11 @@ public final class Rule {
     /** @return the transform expression (may be {@code null}). */
     public String transform() {
         return transform;
+    }
+
+    /** @return the target channel for CHANNEL_REDIRECT (may be {@code null}). */
+    public String redirectChannel() {
+        return redirectChannel;
     }
 
     /** @return whether this rule applies to the given message/recipient pair. */
@@ -128,6 +135,7 @@ public final class Rule {
         private String receiverPattern;
         private Direction.Kind kind;
         private String transform; // F7
+        private String redirectChannel; // for CHANNEL_REDIRECT
 
         private Builder(PolicyTarget target) {
             this.target = target;
@@ -176,6 +184,12 @@ public final class Rule {
         /** F7: set a transform expression that modifies the message before delivery. */
         public Builder transform(String transform) {
             this.transform = transform;
+            return this;
+        }
+
+        /** For CHANNEL_REDIRECT target: set the channel to redirect to. */
+        public Builder redirectChannel(String redirectChannel) {
+            this.redirectChannel = redirectChannel;
             return this;
         }
 

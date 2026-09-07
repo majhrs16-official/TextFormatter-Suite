@@ -60,12 +60,34 @@ public final class MessageDispatcher {
         int delivered = 0;
         int silenced = 0;
         int redirected = 0;
+        int channelRedirected = 0;
 
         for (Actor recipient : recipients) {
             RoutingResult result = host.deliver(message, recipient);
             RouteDecision decision = result.decision();
 
             if (result.redirect()) {
+                delivery.deliverConsole(result.rendered());
+                redirected++;
+                continue;
+            }
+            if (decision.target() == PolicyTarget.CHANNEL_REDIRECT) {
+                String targetChannel = decision.redirectChannel();
+                if (targetChannel != null) {
+                    Message redirectedMsg = Message.builder()
+                        .from(message)
+                        .channel(targetChannel)
+                        .build();
+                    // Re-route to target channel
+                    var reResult = host.deliver(redirectedMsg, recipient);
+                    if (reResult.decision().delivered()) {
+                        delivery.deliver(recipient, reResult.rendered(), redirectedMsg);
+                        channelRedirected++;
+                        playChannelSounds(redirectedMsg, recipient);
+                        continue;
+                    }
+                }
+                // Fallback: deliver to console if channel redirect fails
                 delivery.deliverConsole(result.rendered());
                 redirected++;
                 continue;
@@ -79,7 +101,7 @@ public final class MessageDispatcher {
             delivered++;
             playChannelSounds(message, recipient);
         }
-        return new DispatchReport(recipients.size(), delivered, silenced, redirected, null);
+        return new DispatchReport(recipients.size(), delivered, silenced, redirected, channelRedirected);
     }
 
     /**
