@@ -23,6 +23,7 @@
 | fabric-host / Manager | ✅ implementado | build |
 | tester (suite/tester) | ✅ 25 tests runtime + PerformanceProfiler | tests |
 | messages | ✅ i18n centralizado EN/ES | tests |
+| i18n (FASE 5) | ✅ strings hardcodeados → MessagesCatalog | 98% |
 | transport | ✅ HttpURLConnection + MessageCodec único | tests |
 
 ---
@@ -53,9 +54,9 @@
 ### FASE 5 — Strings UI centralizados (i18n)
 | # | Pieza | Estado |
 |---|-------|--------|
-| F5-1 | Mover strings hardcodeados a `suite/messages` (catalogos EN/ES) | ⏳ |
-| F5-2 | Recobrar 98% strings en config (actualmente 0% en plugin) | ⏳ |
-| F5-3 | `/suite lang` usa `MessagesCatalog` | ⏳ |
+| F5-1 | Mover strings hardcodeados a `suite/messages` (catalogos EN/ES) | ✅ |
+| F5-2 | Recobrar 98% strings en config (actualmente 0% en plugin) | ✅ |
+| F5-3 | `/suite lang` usa `MessagesCatalog` | ✅ |
 
 ### FASE 6 — Motor de reglas iFlow enriquecido
 | # | Pieza | Estado |
@@ -145,4 +146,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 5 → Strings UI centralizados (i18n)** — mover strings hardcodeados a `lang/` (catalogos EN/ES) para recobrar 98%. `fabric-host` implementado y listo para test en servidor real (requiere Java 21).
+**FASE 6 → Motor de reglas iFlow enriquecido** — destino "channel", permisos/PAPI en SpEL, `MessageEventBus` público, `transform` real (F7+).
