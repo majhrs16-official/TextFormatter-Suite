@@ -102,6 +102,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private volatile Runtime runtime;
     private volatile MessagesConfig messages;
     private DynamicCommandRegistrar commandRegistrar;
+    private me.majhrs16.suite.observability.Observability observability;
 
     @Override
     public void onEnable() {
@@ -123,6 +124,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         Runtime current = runtime;
         if (current != null && current.bridge != null) {
             current.bridge.stop();
+        }
+        if (observability != null) {
+            observability.stop();
         }
         if (audiences != null) {
             audiences.close();
@@ -163,6 +167,19 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, logger);
         if (bridge != null) {
             bridge.start();
+        }
+
+        // Initialize Observability module
+        if (observability != null) {
+            observability.stop();
+        }
+        try {
+            this.observability = me.majhrs16.suite.observability.Observability.createDefault(
+                reloaded, dispatcher, dirs, logger);
+            observability.start();
+            logger.info("Observability module started (metrics:9090, debug:9091)");
+        } catch (Exception e) {
+            logger.warn("Failed to start Observability module: " + e.getMessage());
         }
     }
 
@@ -633,8 +650,13 @@ rt.host,
 }
 
 /** Getter para el runtime actual (usado por DynamicCommandRegistrar). */
-Runtime getRuntime() {
-    return runtime;
-}
+    Runtime getRuntime() {
+        return runtime;
+    }
+
+    /** Getter para el módulo de observabilidad. */
+    me.majhrs16.suite.observability.Observability getObservability() {
+        return observability;
+    }
 
 }

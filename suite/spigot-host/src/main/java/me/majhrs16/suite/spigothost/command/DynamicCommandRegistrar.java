@@ -71,7 +71,9 @@ public final class DynamicCommandRegistrar implements CommandExecutor, TabComple
             "lang", new CommandsConfig.ActionDef("Configura idioma", "textformattersuite.user", "textformattersuite.admin", List.of(), false, ""),
             "toggle", new CommandsConfig.ActionDef("Alterna traducción", "textformattersuite.user", "textformattersuite.admin", List.of(), false, ""),
             "reset", new CommandsConfig.ActionDef("Restaura configs", "textformattersuite.admin", null, List.of(), true, ""),
-            "test", new CommandsConfig.ActionDef("Ejecuta tests", "textformattersuite.admin", null, List.of(), false, "")
+            "test", new CommandsConfig.ActionDef("Ejecuta tests", "textformattersuite.admin", null, List.of(), false, ""),
+            "health", new CommandsConfig.ActionDef("Muestra estado de salud del sistema", "textformattersuite.admin", null, List.of(), false, ""),
+            "metrics", new CommandsConfig.ActionDef("Muestra métricas Prometheus", "textformattersuite.admin", null, List.of(), false, "")
         );
 
         Map<String, CommandsConfig.CommandNode> commands = Map.of(
@@ -90,7 +92,9 @@ public final class DynamicCommandRegistrar implements CommandExecutor, TabComple
                     )),
                     "toggle", new CommandsConfig.CommandNode("", "textformattersuite.user", "toggle", Map.of(), "target", Map.of()),
                     "reset", new CommandsConfig.CommandNode("", "textformattersuite.admin", "reset", Map.of(), "", Map.of()),
-                    "test", new CommandsConfig.CommandNode("", "textformattersuite.admin", "test", Map.of(), "type", Map.of())
+                    "test", new CommandsConfig.CommandNode("", "textformattersuite.admin", "test", Map.of(), "type", Map.of()),
+                    "health", new CommandsConfig.CommandNode("", "textformattersuite.admin", "health", Map.of(), "", Map.of()),
+                    "metrics", new CommandsConfig.CommandNode("", "textformattersuite.admin", "metrics", Map.of(), "", Map.of())
                 )
             )
         );
@@ -163,4 +167,5 @@ public final class DynamicCommandRegistrar implements CommandExecutor, TabComple
     Path configDir() { return plugin.getDataFolder().toPath(); }
     CommandsConfig commandsConfig() { return commandsConfig; }
     Map<String, CommandsConfig.ActionDef> actions() { return commandsConfig.actions(); }
+    me.majhrs16.suite.observability.HealthCheckRegistry healthChecks() { return plugin.getObservability().getHealthCheckRegistry(); }
 }

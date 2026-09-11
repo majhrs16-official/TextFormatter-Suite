@@ -207,6 +207,32 @@ public final class DynamicCommand {
                 return registrar.plugin().handleTest(registrar.plugin().getRuntime(),
                     sender, bindings.getOrDefault("type", "full"));
             }
+            case "health" -> {
+                if (!sender.hasPermission("textformattersuite.admin")) {
+                    sender.sendMessage("§cPermiso de admin requerido");
+                    return true;
+                }
+                var health = registrar.healthChecks().getHealthSummary();
+                sender.sendMessage("§a[Health] Status: " + health.get("status"));
+                @SuppressWarnings("unchecked")
+                Map<String, Object> checks = (Map<String, Object>) health.get("checks");
+                for (Map.Entry<String, Object> entry : checks.entrySet()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> check = (Map<String, Object>) entry.getValue();
+                    sender.sendMessage("  §e" + entry.getKey() + ": §f" + check.get("status") + " - " + check.get("message"));
+                }
+                return true;
+            }
+            case "metrics" -> {
+                if (!sender.hasPermission("textformattersuite.admin")) {
+                    sender.sendMessage("§cPermiso de admin requerido");
+                    return true;
+                }
+                sender.sendMessage("§a[Metrics] Endpoint disponible en: http://localhost:9090/metrics");
+                sender.sendMessage("§a[Health] Endpoint disponible en: http://localhost:9090/health");
+                sender.sendMessage("§a[Debug] Endpoint disponible en: http://localhost:9091/debug/simulate");
+                return true;
+            }
             case "edit" -> {
                 String path = bindings.get("path");
                 String value = bindings.get("value");

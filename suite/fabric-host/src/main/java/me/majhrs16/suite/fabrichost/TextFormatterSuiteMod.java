@@ -19,6 +19,7 @@ import me.majhrs16.suite.fabrichost.logic.ChannelSelector;
 import me.majhrs16.suite.fabrichost.logic.EventRules;
 import me.majhrs16.suite.fabrichost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
+import me.majhrs16.suite.observability.Observability;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -99,6 +100,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     private static volatile UserLanguageStore LANGUAGE_STORE;
     private static volatile Runtime RUNTIME;
     private static volatile MessagesConfig MESSAGES;
+    private static me.majhrs16.suite.observability.Observability OBSERVABILITY;
     private static final Logger LOGGER = LoggerFactory.getLogger("TextFormatterSuite");
 
     /** Fallback messages if missing from messages.yml. */
@@ -296,6 +298,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         if (current != null && current.bridge != null) {
             current.bridge.stop();
         }
+        if (OBSERVABILITY != null) {
+            OBSERVABILITY.stop();
+        }
         AUDIENCES = null;
         RUNTIME = null;
         SERVER = null;
@@ -333,6 +338,19 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         RUNTIME = new Runtime(reloaded, dispatcher, dirs, languages, bridge);
         if (bridge != null) {
             bridge.start();
+        }
+
+        // Initialize Observability module
+        if (OBSERVABILITY != null) {
+            OBSERVABILITY.stop();
+        }
+        try {
+            OBSERVABILITY = me.majhrs16.suite.observability.Observability.createDefault(
+                reloaded, dispatcher, dirs, logger);
+            OBSERVABILITY.start();
+            logger.info("Observability module started (metrics:9090, debug:9091)");
+        } catch (Exception e) {
+            logger.warn("Failed to start Observability module: " + e.getMessage());
         }
     }
 

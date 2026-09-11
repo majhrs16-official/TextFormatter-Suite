@@ -28,7 +28,9 @@ dependencies {
     implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-velocity:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-messages:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-observability:2.1.0-SNAPSHOT'
 
     minecraft 'com.mojang:minecraft:1.21'
     mappings 'net.fabricmc:yarn:1.21+build.1:v2'
