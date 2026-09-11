@@ -62,8 +62,8 @@
 | # | Pieza | Estado |
 |---|-------|--------|
 | F6-1 | Destino "channel" en reglas (CHANNEL_REDIRECT) | ✅ |
-| F6-2 | Permisos/PAPI dentro de SpEL | ⏳ |
-| F6-3 | `MessageEventBus` público para third-party | ⏳ |
+| F6-2 | Permisos/PAPI dentro de SpEL | ✅ |
+| F6-3 | `MessageEventBus` público para third-party | ✅ (core-api/event/MessageEvent) |
 | F6-4 | `transform` real (F7+) | ⏳ |
 
 ### FASE 7 — ConfigValidator real
@@ -146,4 +146,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 6 (continuación) → Permisos/PAPI en SpEL + MessageEventBus público** — ampliar `ScriptSurface` con `hasPermission`, `papi()`, y crear `MessageEventBus` en `core-api` para third-party hooks.
+**FASE 6 (continuación) → `transform` real (F7+)** — evaluación de expresiones SpEL para modificar mensaje antes de delivery (rewrite, sounds, sleep, setText, setLangSource, setLangTarget, etc.) + integrar ExpressionEvaluator en spigot-host/fabric-host + tests.
