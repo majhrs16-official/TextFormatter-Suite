@@ -31,14 +31,14 @@
 ## 2. COLA DE FASES (actualizado 2026-09-02)
 
 ```
-1. FASE 4   fabric-host funcional           ← SIGUIENTE
-2. FASE 5   Strings UI centralizados (i18n)
-3. FASE 6   Motor de reglas iFlow enriquecido
-4. FASE 7   ConfigValidator real
-5. FASE 8   Sistema comandos dinámico (/suite)
-6. FASE 9   sync-velocity real
-7. FASE 10  Observabilidad (metrics/debug/simulate)
-8. RESTOS   P2/P3 consolidados
+1. FASE 4   fabric-host funcional           ✅
+2. FASE 5   Strings UI centralizados (i18n) ✅
+3. FASE 6   Motor de reglas iFlow enriquecido ✅
+5. FASE 7   ConfigValidator real            ✅
+6. FASE 8   Sistema comandos dinámico (/suite) ✅
+7. FASE 9   sync-velocity real              ✅
+8. FASE 10  Observabilidad (metrics/debug/simulate)  ← SIGUIENTE
+9. RESTOS   P2/P3 consolidados
 ```
 
 ### FASE 4 — fabric-host (BASE)
@@ -84,7 +84,10 @@
 ### FASE 9 — sync-velocity real
 | # | Pieza | Estado |
 |---|-------|--------|
-| F9-1 | Implementar `suite/sync-velocity` real o eliminar stub | ⏳ |
+| F9-1 | Implementar `suite/sync-velocity` real o eliminar stub | ✅ |
+| F9-2 | VelocitySink: plugin messaging channel, secret auth, mapping | ✅ |
+| F9-3 | VelocityPlugin: Module SPI, velocity-plugin.json | ✅ |
+| F9-4 | Test en proxy Velocity real | ⏳ (pendiente proxy Velocity) |
 
 ### FASE 10 — Observabilidad
 | # | Pieza | Estado |
@@ -146,4 +149,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 9 → sync-velocity real** — implementar o eliminar stub en editor/config.
+**FASE 10 → Observabilidad** — metrics endpoint (`/metrics` Prometheus), debug endpoints (`/debug/simulate`, `/debug/dump`), healthchecks para sinks.
