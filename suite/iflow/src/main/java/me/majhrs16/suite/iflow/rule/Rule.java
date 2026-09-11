@@ -3,6 +3,7 @@ package me.majhrs16.suite.iflow.rule;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -31,7 +32,7 @@ public final class Rule {
     private final String emitterPattern; // future-proof: prefix/regex, nullable
     private final String receiverPattern;
     private final Direction.Kind kind;
-    private final String transform; // F7: expression to transform message content
+    private final List<TransformOp> transforms; // F7+: list of transform operations
     private final String redirectChannel; // for CHANNEL_REDIRECT target
     private final String condition; // SpEL condition expression
     private final String action; // SpEL action expression
@@ -45,7 +46,7 @@ public final class Rule {
         this.emitterPattern = builder.emitterPattern;
         this.receiverPattern = builder.receiverPattern;
         this.kind = builder.kind;
-        this.transform = builder.transform;
+        this.transforms = builder.transforms != null ? List.copyOf(builder.transforms) : List.of();
         this.redirectChannel = builder.redirectChannel;
         this.condition = builder.condition;
         this.action = builder.action;
@@ -83,9 +84,9 @@ public final class Rule {
         return kind;
     }
 
-    /** @return the transform expression (may be {@code null}). */
-    public String transform() {
-        return transform;
+    /** @return the transform operations (may be empty). */
+    public List<TransformOp> transforms() {
+        return transforms;
     }
 
     /** @return the target channel for CHANNEL_REDIRECT (may be {@code null}). */
@@ -152,6 +153,7 @@ public final class Rule {
         private String redirectChannel; // for CHANNEL_REDIRECT
         private String condition; // SpEL condition
         private String action; // SpEL action
+        private List<TransformOp> transforms; // F7+
 
         private Builder(PolicyTarget target) {
             this.target = target;
@@ -206,6 +208,12 @@ public final class Rule {
         /** For CHANNEL_REDIRECT target: set the channel to redirect to. */
         public Builder redirectChannel(String redirectChannel) {
             this.redirectChannel = redirectChannel;
+            return this;
+        }
+
+        /** F7+: set a list of transform operations (rewrite, sounds, sleep, etc.). */
+        public Builder transforms(List<TransformOp> transforms) {
+            this.transforms = transforms;
             return this;
         }
 

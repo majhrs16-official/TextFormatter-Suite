@@ -217,6 +217,30 @@ public final class ScriptSurface {
     }
 
     // ============================================================
+    // TRANSFORM OPERATIONS (for F7+ transform ops)
+    // ============================================================
+
+    /** Sets the raw message text (for Rewrite transform). */
+    public void setText(String text) {
+        message.setText(text);
+    }
+
+    /** Adds sound specs to the message (for Sounds transform). */
+    public void setSoundsAdd(List<String> sounds) {
+        message.setSoundsAdd(sounds);
+    }
+
+    /** Removes sound specs from the message (for Sounds transform). */
+    public void setSoundsRemove(List<String> sounds) {
+        message.setSoundsRemove(sounds);
+    }
+
+    /** Sets sleep milliseconds (for Sleep transform). */
+    public void setSleepMillis(long millis) {
+        message.setSleepMillis(millis);
+    }
+
+    // ============================================================
     // HELPER / UTILITY
     // ============================================================
 

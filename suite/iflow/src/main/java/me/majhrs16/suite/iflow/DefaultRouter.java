@@ -8,6 +8,7 @@ import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.rule.ScriptSurface;
+import me.majhrs16.suite.iflow.rule.TransformOp;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
@@ -169,6 +170,26 @@ public final class DefaultRouter implements Router {
             return new RouteDecision(PolicyTarget.DROP, "cancelled by action", 0, recipient, emitter);
         }
 
+        // Apply transform operations (F7+)
+        if (!rule.transforms().isEmpty()) {
+            ScriptSurface surface = new ScriptSurface(message, emitter, recipient,
+                channels, null, null, permissions::has);
+            for (TransformOp transform : rule.transforms()) {
+                transform.apply(surface);
+            }
+        }
+
+        // Check if transforms cancelled the message
+        if (message.isCancelled()) {
+            return new RouteDecision(PolicyTarget.DROP, "cancelled by transform", 0, recipient, emitter);
+        }
+
+        // Handle CHANNEL_REDIRECT from transform (setChannel)
+        String redirectTarget = message.channel();
+        if (rule.redirectChannel() != null) {
+            redirectTarget = rule.redirectChannel();
+        }
+
         switch (rule.target()) {
             case DROP:
                 return new RouteDecision(PolicyTarget.DROP, rule.reason(), 0, recipient, emitter);
@@ -196,13 +217,3 @@ public final class DefaultRouter implements Router {
                 return new RouteDecision(PolicyTarget.LOG, rule.reason(), 0, recipient, emitter);
         }
     }
-
-    private void executeAction(Rule rule, Message message, Actor emitter, Actor recipient) {
-        try {
-            Map<String, Object> bindings = createBindings(message, emitter, recipient);
-            expressionEvaluator.evaluate(rule.action(), bindings);
-        } catch (Exception e) {
-            // Log error but continue - action failure shouldn't crash the router
-        }
-    }
-}
