@@ -69,8 +69,8 @@
 ### FASE 7 — ConfigValidator real
 | # | Pieza | Estado |
 |---|-------|--------|
-| F7-1 | Validación estructural contra schema del editor | ⏳ |
-| F7-2 | Issues con shape del editor reportados en consola | ⏳ |
+| F7-1 | Validación estructural contra schema del editor | ✅ |
+| F7-2 | Issues con shape del editor reportados en consola | ✅ |
 
 ### FASE 8 — Sistema comandos dinámico (/suite)
 | # | Pieza | Estado |
@@ -146,4 +146,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 7 → ConfigValidator real** — validación estructural contra schema del editor, issues con shape del editor reportados en consola.
+**FASE 8 → Sistema comandos dinámico (/suite)** — topología desde `commands.yml` v2, acciones atómicas combinables, feedback reutilizando motor de chat, edición de config.yml desde comandos (estilo LuckPerms).
