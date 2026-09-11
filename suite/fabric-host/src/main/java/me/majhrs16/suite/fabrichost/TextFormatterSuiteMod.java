@@ -312,6 +312,10 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
         SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
             new FabricPlaceholderResolver(), logger);
+
+        // Validate configuration structure
+        me.majhrs16.suite.fabrichost.validator.ConfigValidator.validate(reloaded.config(), logger, folder);
+
         UserLanguageStore languages = LANGUAGE_STORE;
         if (languages == null) {
             languages = new YamlUserLanguageStore(folder);
