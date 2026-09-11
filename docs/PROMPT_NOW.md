@@ -75,11 +75,11 @@
 ### FASE 8 — Sistema comandos dinámico (/suite)
 | # | Pieza | Estado |
 |---|-------|--------|
-| F8-1 | Topología dinámica desde `commands.yml` v2 | ⏳ |
-| F8-2 | Acciones ATÓMICAS combinables (specs: jugador/idioma/ruta-config/enum) | ⏳ |
-| F8-3 | Feedback reutilizando motor de chat | ⏳ |
+| F8-1 | Topología dinámica desde `commands.yml` v2 | ✅ |
+| F8-2 | Acciones ATÓMICAS combinables (specs: jugador/idioma/ruta-config/enum) | ✅ |
+| F8-3 | Feedback reutilizando motor de chat | ✅ |
 | F8-4 | Edición config.yml desde comandos (estilo LuckPerms) | ⏳ |
-| F8-5 | `/suite` base configurable (renombrable: cht/dst/txf/tg/if) | ⏳ |
+| F8-5 | `/suite` base configurable (renombrable: cht/dst/txf/tg/if) | ✅ |
 
 ### FASE 9 — sync-velocity real
 | # | Pieza | Estado |
@@ -146,4 +146,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 8 → Sistema comandos dinámico (/suite)** — topología desde `commands.yml` v2, acciones atómicas combinables, feedback reutilizando motor de chat, edición de config.yml desde comandos (estilo LuckPerms).
+**FASE 9 → sync-velocity real** — implementar o eliminar stub en editor/config.
