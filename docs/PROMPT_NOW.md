@@ -64,7 +64,7 @@
 | F6-1 | Destino "channel" en reglas (CHANNEL_REDIRECT) | ✅ |
 | F6-2 | Permisos/PAPI dentro de SpEL | ✅ |
 | F6-3 | `MessageEventBus` público para third-party | ✅ (core-api/event/MessageEvent) |
-| F6-4 | `transform` real (F7+) | ⏳ |
+| F6-4 | `transform` real (F7+) | ✅ (rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel) |
 
 ### FASE 7 — ConfigValidator real
 | # | Pieza | Estado |
@@ -146,4 +146,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 6 (continuación) → `transform` real (F7+)** — evaluación de expresiones SpEL para modificar mensaje antes de delivery (rewrite, sounds, sleep, setText, setLangSource, setLangTarget, etc.) + integrar ExpressionEvaluator en spigot-host/fabric-host + tests.
+**FASE 7 → ConfigValidator real** — validación estructural contra schema del editor, issues con shape del editor reportados en consola.
