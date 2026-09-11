@@ -1,0 +1,22 @@
+{
+  "id": "textformatter-suite-velocity",
+  "name": "TextFormatter Suite (Velocity)",
+  "version": "${version}",
+  "description": "Velocity proxy sync module for TextFormatter Suite",
+  "authors": ["majhrs16"],
+  "contact": {
+    "homepage": "https://github.com/majhrs16/textformatter-suite",
+    "sources": "https://github.com/majhrs16/textformatter-suite"
+  },
+  "license": "GPL-3.0",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "me.majhrs16.suite.syncvelocity.VelocityPlugin"
+    ]
+  },
+  "depends": {
+    "velocity": ">=3.2.0",
+    "java": ">=17"
+  }
+}

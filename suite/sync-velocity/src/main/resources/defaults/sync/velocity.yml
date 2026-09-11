@@ -1,0 +1,4 @@
+enabled: false
+secret: ""
+servers: []
+mapping: "* -> chat.hub"
