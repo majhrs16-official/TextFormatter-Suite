@@ -37,7 +37,7 @@
 5. FASE 7   ConfigValidator real            ✅
 6. FASE 8   Sistema comandos dinámico (/suite) ✅
 7. FASE 9   sync-velocity real              ✅
-8. FASE 10  Observabilidad (metrics/debug/simulate)  ← SIGUIENTE
+8. FASE 10  Observabilidad                  ✅
 9. RESTOS   P2/P3 consolidados
 ```
 
@@ -92,9 +92,11 @@
 ### FASE 10 — Observabilidad
 | # | Pieza | Estado |
 |---|-------|--------|
-| F10-1 | Metrics endpoint (`/metrics` Prometheus) | ⏳ |
-| F10-2 | Debug endpoints (`/debug/simulate`, `/debug/dump`) | ⏳ |
-| F10-3 | Healthchecks para sinks | ⏳ |
+| F10-1 | Metrics endpoint (`/metrics` Prometheus) | ✅ |
+| F10-2 | Debug endpoints (`/debug/simulate`, `/debug/dump`) | ✅ |
+| F10-3 | Healthchecks para sinks | ✅ |
+| F10-4 | Debug endpoints (`/debug/state`, `/debug/channels`) | ✅ |
+| F10-5 | Dynamic commands: `/suite health`, `/suite metrics` | ✅ |
 
 ---
 
@@ -149,4 +151,9 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 10 → Observabilidad** — metrics endpoint (`/metrics` Prometheus), debug endpoints (`/debug/simulate`, `/debug/dump`), healthchecks para sinks.
+**Todas las fases base completadas (F4-F10).** Próximos pasos:
+- FASE 11: Extensiones/addons (core-api 2.2 + SDK)
+- FASE 12: Descargador runtime + attach/detach (classloader dinámico + manifest + sha256 + allowlist)
+- FASE 13: sync-websocket
+- FASE 14: Presets, `transform` real, `engine.parallel` knob
+- FASE 15: F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
