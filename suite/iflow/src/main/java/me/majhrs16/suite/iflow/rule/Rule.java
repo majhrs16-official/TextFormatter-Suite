@@ -33,6 +33,8 @@ public final class Rule {
     private final Direction.Kind kind;
     private final String transform; // F7: expression to transform message content
     private final String redirectChannel; // for CHANNEL_REDIRECT target
+    private final String condition; // SpEL condition expression
+    private final String action; // SpEL action expression
 
     private Rule(Builder builder) {
         this.id = builder.id == null ? "" : builder.id;
@@ -45,6 +47,8 @@ public final class Rule {
         this.kind = builder.kind;
         this.transform = builder.transform;
         this.redirectChannel = builder.redirectChannel;
+        this.condition = builder.condition;
+        this.action = builder.action;
     }
 
     public String id() {
@@ -87,6 +91,16 @@ public final class Rule {
     /** @return the target channel for CHANNEL_REDIRECT (may be {@code null}). */
     public String redirectChannel() {
         return redirectChannel;
+    }
+
+    /** @return the SpEL condition expression (may be {@code null}). */
+    public String condition() {
+        return condition;
+    }
+
+    /** @return the SpEL action expression (may be {@code null}). */
+    public String action() {
+        return action;
     }
 
     /** @return whether this rule applies to the given message/recipient pair. */
@@ -136,6 +150,8 @@ public final class Rule {
         private Direction.Kind kind;
         private String transform; // F7
         private String redirectChannel; // for CHANNEL_REDIRECT
+        private String condition; // SpEL condition
+        private String action; // SpEL action
 
         private Builder(PolicyTarget target) {
             this.target = target;
@@ -190,6 +206,18 @@ public final class Rule {
         /** For CHANNEL_REDIRECT target: set the channel to redirect to. */
         public Builder redirectChannel(String redirectChannel) {
             this.redirectChannel = redirectChannel;
+            return this;
+        }
+
+        /** F7: set a SpEL condition expression (evaluated per message/recipient). */
+        public Builder condition(String condition) {
+            this.condition = condition;
+            return this;
+        }
+
+        /** F7: set a SpEL action expression (executed when condition matches). */
+        public Builder action(String action) {
+            this.action = action;
             return this;
         }
 

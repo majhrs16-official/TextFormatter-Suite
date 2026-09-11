@@ -21,6 +21,7 @@ dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
+    implementation 'org.springframework:spring-expression:6.1.12'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
 

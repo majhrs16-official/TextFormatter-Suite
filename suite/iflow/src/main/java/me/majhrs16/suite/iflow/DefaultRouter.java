@@ -2,9 +2,12 @@ package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.spi.ExpressionEvaluator;
+import me.majhrs16.suite.api.spi.ExpressionEvaluationException;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.rule.Rule;
+import me.majhrs16.suite.iflow.rule.ScriptSurface;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
@@ -12,7 +15,9 @@ import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -40,15 +45,22 @@ public final class DefaultRouter implements Router {
     private final PermissionChecker permissions;
     private final RateLimiter rateLimit;
     private final AtomicReference<List<Rule>> rules = new AtomicReference<>(List.of());
+    private final ExpressionEvaluator expressionEvaluator;
 
     public DefaultRouter(ChannelRegistry channels) {
-        this(channels, PermissionChecker.ALLOW_ALL);
+        this(channels, PermissionChecker.ALLOW_ALL, null);
     }
 
     public DefaultRouter(ChannelRegistry channels, PermissionChecker permissions) {
+        this(channels, permissions, null);
+    }
+
+    public DefaultRouter(ChannelRegistry channels, PermissionChecker permissions,
+                         ExpressionEvaluator expressionEvaluator) {
         this.channels = Objects.requireNonNull(channels, "channels");
         this.permissions = Objects.requireNonNull(permissions, "permissions");
         this.rateLimit = new RateLimiter(1);
+        this.expressionEvaluator = expressionEvaluator;
     }
 
     @Override
@@ -70,7 +82,7 @@ public final class DefaultRouter implements Router {
                 0, recipient, emitter);
         }
 
-        Rule rule = matchingRule(path, emitter.name(), recipient.name(), message.direction());
+        Rule rule = matchingRule(path, emitter, recipient, message);
         if (rule != null) {
             return apply(rule, channel, message, recipient, emitter);
         }
@@ -103,18 +115,60 @@ public final class DefaultRouter implements Router {
         return permission == null || permissions.has(actor, permission);
     }
 
-    private Rule matchingRule(String path, String emitter, String receiver,
-                              me.majhrs16.suite.api.message.Direction direction) {
+    private Rule matchingRule(String path, Actor emitter, Actor recipient, Message message) {
         for (Rule rule : rules.get()) {
-            if (rule.matches(path, emitter, receiver, direction)) {
+            if (rule.matches(path, emitter.name(), recipient.name(), message.direction())) {
+                // Evaluate SpEL condition if present
+                if (rule.condition() != null && expressionEvaluator != null) {
+                    if (!evaluateCondition(rule, message, emitter, recipient)) {
+                        continue;
+                    }
+                }
                 return rule;
             }
         }
         return null;
     }
 
+    private boolean evaluateCondition(Rule rule, Message message, Actor emitter, Actor recipient) {
+        try {
+            Map<String, Object> bindings = createBindings(message, emitter, recipient);
+            Object result = expressionEvaluator.evaluateObject(rule.condition(), bindings);
+            return Boolean.TRUE.equals(result);
+        } catch (Exception e) {
+            // Condition evaluation error -> treat as false (skip rule)
+            return false;
+        }
+    }
+
+    private Map<String, Object> createBindings(Message message, Actor emitter, Actor recipient) {
+        Map<String, Object> bindings = new HashMap<>();
+        bindings.put("msg", message);
+        bindings.put("sender", emitter);
+        bindings.put("recipient", recipient);
+        bindings.put("emitter", emitter);
+        bindings.put("receiver", recipient);
+        bindings.put("channel", message.channel());
+        bindings.put("direction", message.direction());
+        bindings.put("type", message.type());
+        bindings.put("content", message.text());
+        bindings.put("langSource", message.langSource() != null ? message.langSource().code() : "");
+        bindings.put("langTarget", message.langTarget() != null ? message.langTarget().code() : "");
+        return bindings;
+    }
+
     private RouteDecision apply(Rule rule, Channel channel, Message message,
                                 Actor recipient, Actor emitter) {
+        // Execute SpEL action if present
+        if (rule.action() != null && expressionEvaluator != null) {
+            executeAction(rule, message, emitter, recipient);
+        }
+
+        // Check if action cancelled the message
+        if (message.isCancelled()) {
+            return new RouteDecision(PolicyTarget.DROP, "cancelled by action", 0, recipient, emitter);
+        }
+
         switch (rule.target()) {
             case DROP:
                 return new RouteDecision(PolicyTarget.DROP, rule.reason(), 0, recipient, emitter);
@@ -140,6 +194,15 @@ public final class DefaultRouter implements Router {
             case LOG:
             default:
                 return new RouteDecision(PolicyTarget.LOG, rule.reason(), 0, recipient, emitter);
+        }
+    }
+
+    private void executeAction(Rule rule, Message message, Actor emitter, Actor recipient) {
+        try {
+            Map<String, Object> bindings = createBindings(message, emitter, recipient);
+            expressionEvaluator.evaluate(rule.action(), bindings);
+        } catch (Exception e) {
+            // Log error but continue - action failure shouldn't crash the router
         }
     }
 }
