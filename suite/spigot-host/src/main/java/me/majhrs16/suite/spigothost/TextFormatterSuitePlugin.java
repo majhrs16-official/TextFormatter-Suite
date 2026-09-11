@@ -101,12 +101,18 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private volatile UserLanguageStore languageStore;
     private volatile Runtime runtime;
     private volatile MessagesConfig messages;
+    private DynamicCommandRegistrar commandRegistrar;
 
     @Override
     public void onEnable() {
         audiences = BukkitAudiences.create(this);
         reloadSuite();
         getServer().getPluginManager().registerEvents(this, this);
+
+        // Inicializar sistema de comandos dinámicos
+        this.commandRegistrar = new DynamicCommandRegistrar(this, runtime.host, runtime.dispatcher,
+            runtime.languages, runtime.host.translation(), runtime.logger, getDataFolder().toPath());
+
         getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
             runtime.host.channels().paths().size(),
             runtime.host.translation().activeName()));
@@ -393,6 +399,11 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // Delegar al sistema de comandos dinámicos
+        if (commandRegistrar != null) {
+            return commandRegistrar.onCommand(sender, command, label, args);
+        }
+        // Fallback al sistema legacy si el registrador no está listo
         Runtime current = runtime;
         if (current == null || current.host == null) {
             sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "not-initialized"));
@@ -611,14 +622,19 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         Runtime rt = runtime;
         if (rt != null && rt.host != null && rt.dispatcher != null) {
             return new me.majhrs16.suite.tester.TestService(
-                rt.host,
-                rt.dispatcher,
-                rt.directory,
-                rt.languages,
-                rt.logger
-            );
-        }
-        return null;
+rt.host,
+            rt.dispatcher,
+            rt.directory,
+            rt.languages,
+            rt.logger
+        );
     }
+    return null;
+}
+
+/** Getter para el runtime actual (usado por DynamicCommandRegistrar). */
+Runtime getRuntime() {
+    return runtime;
+}
 
 }
