@@ -73,7 +73,15 @@ public final class DynamicCommandRegistrar implements CommandExecutor, TabComple
             "reset", new CommandsConfig.ActionDef("Restaura configs", "textformattersuite.admin", null, List.of(), true, ""),
             "test", new CommandsConfig.ActionDef("Ejecuta tests", "textformattersuite.admin", null, List.of(), false, ""),
             "health", new CommandsConfig.ActionDef("Muestra estado de salud del sistema", "textformattersuite.admin", null, List.of(), false, ""),
-            "metrics", new CommandsConfig.ActionDef("Muestra métricas Prometheus", "textformattersuite.admin", null, List.of(), false, "")
+            "metrics", new CommandsConfig.ActionDef("Muestra métricas Prometheus", "textformattersuite.admin", null, List.of(), false, ""),
+            "module", new CommandsConfig.ActionDef("Gestiona módulos (install, update, list, remove)", "textformattersuite.admin", null, List.of(
+                new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Acción a realizar"),
+                new CommandsConfig.ArgDef("module", "string", "ID del módulo (ej. suite-textformatter)"),
+                new CommandsConfig.ArgDef("version", "string?", "Versión específica (opcional)")
+            ), false, ""),
+            "suite", new CommandsConfig.ActionDef("Actualiza toda la suite a las últimas versiones compatibles", "textformattersuite.admin", null, List.of(
+                new CommandsConfig.ArgDef("force", "boolean?", "Forzar actualización aunque no sea compatible")
+            ), false, "")
         );
 
         Map<String, CommandsConfig.CommandNode> commands = Map.of(
@@ -94,7 +102,15 @@ public final class DynamicCommandRegistrar implements CommandExecutor, TabComple
                     "reset", new CommandsConfig.CommandNode("", "textformattersuite.admin", "reset", Map.of(), "", Map.of()),
                     "test", new CommandsConfig.CommandNode("", "textformattersuite.admin", "test", Map.of(), "type", Map.of()),
                     "health", new CommandsConfig.CommandNode("", "textformattersuite.admin", "health", Map.of(), "", Map.of()),
-                    "metrics", new CommandsConfig.CommandNode("", "textformattersuite.admin", "metrics", Map.of(), "", Map.of())
+                    "metrics", new CommandsConfig.CommandNode("", "textformattersuite.admin", "metrics", Map.of(), "", Map.of()),
+                    "module", new CommandsConfig.CommandNode("Gestiona módulos", "textformattersuite.admin", "module", Map.of(), "action", Map.of(
+                        "install", new CommandsConfig.CommandNode("", "textformattersuite.admin", "module", Map.of("action", "install"), "module", Map.of()),
+                        "update", new CommandsConfig.CommandNode("", "textformattersuite.admin", "module", Map.of("action", "update"), "module", Map.of()),
+                        "list", new CommandsConfig.CommandNode("", "textformattersuite.user", "module", Map.of("action", "list"), "", Map.of()),
+                        "remove", new CommandsConfig.CommandNode("", "textformattersuite.admin", "module", Map.of("action", "remove"), "module", Map.of()),
+                        "info", new CommandsConfig.CommandNode("", "textformattersuite.user", "module", Map.of("action", "info"), "module", Map.of())
+                    )),
+                    "suite", new CommandsConfig.CommandNode("Actualiza toda la suite", "textformattersuite.admin", "suite", Map.of(), "force", Map.of())
                 )
             )
         );

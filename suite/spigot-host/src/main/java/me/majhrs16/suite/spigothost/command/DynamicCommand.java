@@ -233,6 +233,96 @@ public final class DynamicCommand {
                 sender.sendMessage("§a[Debug] Endpoint disponible en: http://localhost:9091/debug/simulate");
                 return true;
             }
+            case "module" -> {
+                if (!sender.hasPermission("textformattersuite.admin")) {
+                    sender.sendMessage("§cPermiso de admin requerido");
+                    return true;
+                }
+                if (moduleLifecycle == null) {
+                    sender.sendMessage("§c[Module] Manager no inicializado");
+                    return true;
+                }
+                String action = bindings.getOrDefault("action", "list");
+                String module = bindings.getOrDefault("module", "");
+                String version = bindings.getOrDefault("version", "");
+
+                switch (action) {
+                    case "list" -> {
+                        List<ModuleDescriptor> loaded = moduleLifecycle.getLoadedModules();
+                        if (loaded.isEmpty()) {
+                            sender.sendMessage("§e[Module] No hay módulos cargados");
+                        } else {
+                            sender.sendMessage("§a[Module] Módulos cargados (" + loaded.size() + "):");
+                            for (ModuleDescriptor d : loaded) {
+                                sender.sendMessage("  §e- §f" + d.id() + " §7(" + d.description() + ")");
+                            }
+                        }
+                        // Check for updates
+                        List<ModuleCoordinate> updates = moduleLifecycle.checkUpdates();
+                        if (!updates.isEmpty()) {
+                            sender.sendMessage("§6[Module] Actualizaciones disponibles: " + updates.size());
+                            for (ModuleCoordinate u : updates) {
+                                sender.sendMessage("  §6- §f" + u);
+                            }
+                        }
+                        return true;
+                    }
+                    case "install" -> {
+                        if (module.isBlank()) {
+                            sender.sendMessage("§cUso: /suite module install <módulo> [versión]");
+                            return true;
+                        }
+                        sender.sendMessage("§a[Module] Instalando " + module + (version.isBlank() ? "" : ":" + version) + "...");
+                        // TODO: implement install via moduleLifecycle
+                        sender.sendMessage("§c[Module] Instalación no implementada aún (requiere reinicio para cargar el módulo)");
+                        return true;
+                    }
+                    case "update" -> {
+                        if (module.isBlank()) {
+                            sender.sendMessage("§cUso: /suite module update <módulo> [versión]");
+                            return true;
+                        }
+                        sender.sendMessage("§a[Module] Actualizando " + module + (version.isBlank() ? "" : ":" + version) + "...");
+                        // TODO: implement update via moduleLifecycle
+                        sender.sendMessage("§c[Module] Actualización no implementada aún (requiere reinicio)");
+                        return true;
+                    }
+                    case "remove" -> {
+                        if (module.isBlank()) {
+                            sender.sendMessage("§cUso: /suite module remove <módulo>");
+                            return true;
+                        }
+                        sender.sendMessage("§a[Module] Eliminando " + module + "...");
+                        // TODO: implement remove
+                        sender.sendMessage("§c[Module] Eliminación no implementada aún");
+                        return true;
+                    }
+                    case "info" -> {
+                        if (module.isBlank()) {
+                            sender.sendMessage("§cUso: /suite module info <módulo>");
+                            return true;
+                        }
+                        // TODO: fetch module info
+                        sender.sendMessage("§a[Module] Info para " + module + " (no implementado aún)");
+                        return true;
+                    }
+                    default -> {
+                        sender.sendMessage("§cSubcomando desconocido: " + action + ". Usa: install, update, list, remove, info");
+                        return true;
+                    }
+                }
+            }
+            case "suite" -> {
+                if (!sender.hasPermission("textformattersuite.admin")) {
+                    sender.sendMessage("§cPermiso de admin requerido");
+                    return true;
+                }
+                boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
+                sender.sendMessage("§a[Suite] Iniciando actualización completa" + (force ? " (forzada)" : "") + "...");
+                // TODO: implement suite update
+                sender.sendMessage("§c[Suite] Actualización completa no implementada aún");
+                return true;
+            }
             case "edit" -> {
                 String path = bindings.get("path");
                 String value = bindings.get("value");

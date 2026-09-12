@@ -281,6 +281,63 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                             ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("test.starting", sub)), false);
                             ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("test.unknown", sub)), false);
                             return 1;
+                        })))
+                .then(LiteralArgumentBuilder.literal("module")
+                    .requires(source -> source.hasPermissionLevel(2))
+                    .then(LiteralArgumentBuilder.literal("list")
+                        .executes(ctx -> {
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.list.empty")), false);
+                            return 1;
+                        }))
+                    .then(LiteralArgumentBuilder.literal("install")
+                        .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
+                            .then(LiteralArgumentBuilder.argument("version", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String module = StringArgumentType.getString(ctx, "module");
+                                    String version = StringArgumentType.getString(ctx, "version");
+                                    ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.install.started", module, version)), false);
+                                    return 1;
+                                }))
+                            .executes(ctx -> {
+                                String module = StringArgumentType.getString(ctx, "module");
+                                ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.install.started", module, "latest")), false);
+                                return 1;
+                            }))))
+                    .then(LiteralArgumentBuilder.literal("update")
+                        .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
+                            .then(LiteralArgumentBuilder.argument("version", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String module = StringArgumentType.getString(ctx, "module");
+                                    String version = StringArgumentType.getString(ctx, "version");
+                                    ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.update.started", module, version)), false);
+                                    return 1;
+                                }))
+                            .executes(ctx -> {
+                                String module = StringArgumentType.getString(ctx, "module");
+                                ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.update.started", module, "latest")), false);
+                                return 1;
+                            }))))
+                    .then(LiteralArgumentBuilder.literal("remove")
+                        .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
+                            .executes(ctx -> {
+                                String module = StringArgumentType.getString(ctx, "module");
+                                ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.remove.started", module)), false);
+                                return 1;
+                            }))))
+                    .then(LiteralArgumentBuilder.literal("info")
+                        .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
+                            .executes(ctx -> {
+                                String module = StringArgumentType.getString(ctx, "module");
+                                ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.info", module)), false);
+                                return 1;
+                            }))))
+                .then(LiteralArgumentBuilder.literal("suite")
+                    .requires(source -> source.hasPermissionLevel(2))
+                    .then(LiteralArgumentBuilder.argument("force", StringArgumentType.bool())
+                        .executes(ctx -> {
+                            boolean force = ctx.getArgument("force", false);
+                            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("suite.update.started", force ? "forced" : "normal")), false);
+                            return 1;
                         })));
             dispatcher.register(suiteCmd);
         });

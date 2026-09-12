@@ -21,6 +21,8 @@ import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.extension.ExtensionManager;
+import me.majhrs16.suite.manager.ModuleLifecycle;
+import me.majhrs16.suite.manager.DefaultModuleLifecycle;
 
 import java.util.Arrays;
 import java.util.function.Consumer;
@@ -105,6 +107,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private DynamicCommandRegistrar commandRegistrar;
     private me.majhrs16.suite.observability.Observability observability;
     private ExtensionManager extensionManager;
+    private ModuleLifecycle moduleLifecycle;
 
     @Override
     public void onEnable() {
@@ -133,6 +136,11 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }, extensionsDir);
         this.extensionManager.start();
 
+        // Inicializar ModuleLifecycle (Manager)
+        Path cacheDir = getDataFolder().toPath().resolve("manager-cache");
+        this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, runtime.logger);
+        logger.info("ModuleLifecycle (Manager) initialized at " + cacheDir);
+
         getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
             runtime.host.channels().paths().size(),
             runtime.host.translation().activeName()));
@@ -149,6 +157,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
         if (extensionManager != null) {
             extensionManager.stop();
+        }
+        if (moduleLifecycle != null) {
+            // Unload all modules
+            for (ModuleDescriptor desc : moduleLifecycle.getLoadedModules()) {
+                moduleLifecycle.unload(desc.id());
+            }
+            logger.info("ModuleLifecycle (Manager) stopped");
         }
         if (audiences != null) {
             audiences.close();
@@ -222,6 +237,17 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             );
         }, folder.resolve("extensions"));
         extensionManager.start();
+
+        // Reload ModuleLifecycle
+        if (moduleLifecycle != null) {
+            // Unload all modules first
+            for (ModuleDescriptor desc : moduleLifecycle.getLoadedModules()) {
+                moduleLifecycle.unload(desc.id());
+            }
+        }
+        Path cacheDir = folder.resolve("manager-cache");
+        this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, logger);
+        logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir);
     }
 
     private boolean hasPermission(Actor actor, String permission) {

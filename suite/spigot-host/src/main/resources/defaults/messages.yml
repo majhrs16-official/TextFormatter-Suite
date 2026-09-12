@@ -3,7 +3,7 @@
 # Restaurar originales: /suite reset (respaldo en backup/).
 prefix: "[suite] "
 not-initialized: "[suite] no inicializado"
-usage: "[suite] uso: /suite <lang|reload|status|toggle|reset>"
+usage: "[suite] uso: /suite <lang|reload|status|toggle|reset|module|suite>"
 enabled: "[suite] activo: {} canales, traductor '{}'"
 reload-ok: "[suite] recargado: {} canales, traductor '{}'"
 reload-error: "[suite] error al recargar: {}"
@@ -33,3 +33,19 @@ test:
   output: "{}"
   unknown: "§cUnknown test: {}. Use: full, stress, concurrency"
   error: "§c[Test] Error: {}"
+module:
+  list.empty: "No hay módulos cargados"
+  list.header: "Módulos cargados ({}):"
+  list.entry: "  - {} ({})"
+  install.started: "Instalando {}:{}"
+  update.started: "Actualizando {}:{}"
+  remove.started: "Eliminando {}"
+  info: "Info de {}: {}"
+  install.no-module: "Uso: /suite module install <módulo> [versión]"
+  update.no-module: "Uso: /suite module update <módulo> [versión]"
+  remove.no-module: "Uso: /suite module remove <módulo>"
+  info.no-module: "Uso: /suite module info <módulo>"
+suite:
+  update.started: "Iniciando actualización completa de la suite ({})"
+  update.finished: "Actualización de la suite completada"
+  update.failed: "Error en actualización: {}"
