@@ -38,7 +38,8 @@
 6. FASE 8   Sistema comandos dinámico (/suite) ✅
 7. FASE 9   sync-velocity real              ✅
 8. FASE 10  Observabilidad                  ✅
-9. RESTOS   P2/P3 consolidados
+9. FASE 11  Extensiones/addons (SDK)        ⏳
+10. RESTOS   P2/P3 consolidados
 ```
 
 ### FASE 4 — fabric-host (BASE)
@@ -98,6 +99,18 @@
 | F10-4 | Debug endpoints (`/debug/state`, `/debug/channels`) | ✅ |
 | F10-5 | Dynamic commands: `/suite health`, `/suite metrics` | ✅ |
 
+### FASE 11 — Extensiones/addons (SDK)
+| # | Pieza | Estado |
+|---|-------|--------|
+| F11-1 | Extension API: Extension, ExtensionContext, ExtensionConfig, ExtensionMetadata | ✅ |
+| F11-2 | ExtensionManager: discovery, dependency resolution, load/unload/reload | ✅ |
+| F11-3 | Extension SPI: onEnable/onDisable/onConfigReload, Capability system | ✅ |
+| F11-4 | Example extension demonstrating the API | ✅ |
+| F11-5 | ExtensionContext: channel registration, message dispatch, state, events | ✅ |
+| F11-6 | Integration with spigot-host/fabric-host (ExtensionManager start/stop) | ⏳ |
+| F11-7 | Web-editor support for extension management (list, enable/disable, config) | ⏳ |
+| F11-8 | Extension manifest schema (extension.yml) + validation | ⏳ |
+
 ---
 
 ## 3. DECISIONES VINCULANTES (índice)
@@ -151,9 +164,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**Todas las fases base completadas (F4-F10).** Próximos pasos:
-- FASE 11: Extensiones/addons (core-api 2.2 + SDK)
-- FASE 12: Descargador runtime + attach/detach (classloader dinámico + manifest + sha256 + allowlist)
-- FASE 13: sync-websocket
-- FASE 14: Presets, `transform` real, `engine.parallel` knob
-- FASE 15: F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
+**FASE 11 → Extensiones/addons (SDK)** — integrar ExtensionManager en spigot-host/fabric-host, soporte en web-editor, manifest schema extension.yml.

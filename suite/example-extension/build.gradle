@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'me.majhrs16:suite-extension-api:2.1.0-SNAPSHOT'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    manifest {
+        attributes(
+            'Extension-Id': 'example-extension',
+            'Extension-Name': 'Example Extension',
+            'Extension-Version': '1.0.0',
+            'Extension-Required-Core-Api': '2.1.0',
+            'Extension-Dependencies': '',
+            'Extension-Provides': 'custom-command',
+            'Extension-Requires': '',
+            'Extension-Main-Class': 'me.majhrs16.suite.example.ExampleExtension',
+            'Extension-Auto-Load': 'true'
+        )
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'example-extension'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}
