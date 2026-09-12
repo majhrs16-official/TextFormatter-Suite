@@ -20,6 +20,7 @@ import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.extension.ExtensionManager;
 
 import java.util.Arrays;
 import java.util.function.Consumer;
@@ -103,6 +104,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private volatile MessagesConfig messages;
     private DynamicCommandRegistrar commandRegistrar;
     private me.majhrs16.suite.observability.Observability observability;
+    private ExtensionManager extensionManager;
 
     @Override
     public void onEnable() {
@@ -113,6 +115,23 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Inicializar sistema de comandos dinámicos
         this.commandRegistrar = new DynamicCommandRegistrar(this, runtime.host, runtime.dispatcher,
             runtime.languages, runtime.host.translation(), runtime.logger, getDataFolder().toPath());
+
+        // Inicializar ExtensionManager
+        Path extensionsDir = getDataFolder().toPath().resolve("extensions");
+        this.extensionManager = new ExtensionManager(runtime.logger, extId -> {
+            // Create ExtensionContext for the extension
+            return new me.majhrs16.suite.extension.ExtensionContext(
+                runtime.host,
+                runtime.dispatcher,
+                runtime.logger,
+                runtime.host.translation(),
+                runtime.languages,
+                runtime.host.channels(),
+                getDataFolder().toPath(),
+                extId
+            );
+        }, extensionsDir);
+        this.extensionManager.start();
 
         getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
             runtime.host.channels().paths().size(),
@@ -127,6 +146,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
         if (observability != null) {
             observability.stop();
+        }
+        if (extensionManager != null) {
+            extensionManager.stop();
         }
         if (audiences != null) {
             audiences.close();
@@ -181,6 +203,25 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         } catch (Exception e) {
             logger.warn("Failed to start Observability module: " + e.getMessage());
         }
+
+        // Reload extensions
+        if (extensionManager != null) {
+            extensionManager.stop();
+        }
+        Path extensionsDir = getDataFolder().toPath().resolve("extensions");
+        this.extensionManager = new ExtensionManager(logger, extId -> {
+            return new me.majhrs16.suite.extension.ExtensionContext(
+                reloaded,
+                dispatcher,
+                logger,
+                reloaded.translation(),
+                languages,
+                reloaded.channels(),
+                folder,
+                extId
+            );
+        }, folder.resolve("extensions"));
+        extensionManager.start();
     }
 
     private boolean hasPermission(Actor actor, String permission) {

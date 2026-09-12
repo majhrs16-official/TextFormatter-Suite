@@ -19,6 +19,7 @@ import me.majhrs16.suite.fabrichost.logic.ChannelSelector;
 import me.majhrs16.suite.fabrichost.logic.EventRules;
 import me.majhrs16.suite.fabrichost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
+import me.majhrs16.suite.extension.ExtensionManager;
 import me.majhrs16.suite.observability.Observability;
 
 import net.fabricmc.api.ModInitializer;
@@ -101,6 +102,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     private static volatile Runtime RUNTIME;
     private static volatile MessagesConfig MESSAGES;
     private static me.majhrs16.suite.observability.Observability OBSERVABILITY;
+    private static ExtensionManager EXTENSION_MANAGER;
     private static final Logger LOGGER = LoggerFactory.getLogger("TextFormatterSuite");
 
     /** Fallback messages if missing from messages.yml. */
@@ -301,6 +303,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         if (OBSERVABILITY != null) {
             OBSERVABILITY.stop();
         }
+        if (EXTENSION_MANAGER != null) {
+            EXTENSION_MANAGER.stop();
+        }
         AUDIENCES = null;
         RUNTIME = null;
         SERVER = null;
@@ -352,6 +357,24 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         } catch (Exception e) {
             logger.warn("Failed to start Observability module: " + e.getMessage());
         }
+
+        // Reload Extension Manager
+        if (EXTENSION_MANAGER != null) {
+            EXTENSION_MANAGER.stop();
+        }
+        EXTENSION_MANAGER = new ExtensionManager(logger, extId -> {
+            return new me.majhrs16.suite.extension.ExtensionContext(
+                reloaded,
+                dispatcher,
+                logger,
+                translation,
+                languages,
+                dirs,
+                folder,
+                extId
+            );
+        }, folder.resolve("extensions"));
+        EXTENSION_MANAGER.start();
     }
 
     private static boolean hasPermission(Actor actor, String permission) {
