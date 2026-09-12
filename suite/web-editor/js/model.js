@@ -139,6 +139,7 @@
           guest: [0, 1, 0, 0, 0, 0, 0],
         },
       },
+      extensions: {}, // extensiones instaladas (id -> config)
       extra: {}, // archivos no conocidos (se conservan en round-trip)
     };
   }
@@ -160,6 +161,11 @@
       files['sync/' + key + '.yml'] = Suite.yaml.stringify(edge);
     }
     ftrans(state.translators, files);
+
+    // Extensions
+    for (const [id, cfg] of Object.entries(state.extensions)) {
+      files['extensions/' + id + '.yml'] = Suite.yaml.stringify(cfg);
+    }
 
     for (const [path, text] of Object.entries(state.extra || {})) {
       files[path] = text;
@@ -229,6 +235,16 @@
         }
       }
     }
+    // Extensions
+    for (const [path, text] of Object.entries(files)) {
+      const m = /^extensions\/(.+)\.yml$/.exec(path);
+      if (m) {
+        const parsed = Suite.yaml.parse(text);
+        if (parsed && typeof parsed === 'object') {
+          next.extensions[m[1]] = parsed;
+        }
+      }
+    }
     // conserva archivos desconocidos
     next.extra = {};
     for (const [path, text] of Object.entries(files)) {
@@ -238,7 +254,8 @@
         path !== 'rules.yml' &&
         path !== 'manifest.json' &&
         !path.startsWith('translators/') &&
-        !path.startsWith('sync/')
+        !path.startsWith('sync/') &&
+        !path.startsWith('extensions/')
       ) {
         next.extra[path] = text;
       }

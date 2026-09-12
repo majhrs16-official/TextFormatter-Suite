@@ -11,6 +11,12 @@
 
   const GROUPS = { chat: 0, staff: 0, vip: 0, bypass: 0 };
 
+const EXTENSION_GROUPS = {
+  enabled: 0,
+  disabled: 0,
+  unloaded: 0,
+};
+
   function renderSidebar() {
     const sb = $('#sidebarBody');
     const st = StateStore.getState();
@@ -30,8 +36,13 @@
         '" data-side="palette">' +
         t('palette') +
         '</span>' +
+        '<span class="' +
+        (UI.side === 'extensions' ? 'on' : '') +
+        '" data-side="extensions">' +
+        t('extensions') +
+        '</span>' +
         '</div>' +
-        (UI.side === 'groups' ? groupsPane() : palettePane());
+        (UI.side === 'groups' ? groupsPane() : UI.side === 'extensions' ? extensionsPane() : palettePane());
       sb.dataset.side = UI.side;
       // Re-bind event handlers
       sb.querySelectorAll('[data-side]').forEach(
@@ -57,6 +68,30 @@
         addBtn.onclick = addChannelPrompt;
       }
       sb.querySelectorAll('.pal-item').forEach(el => el.addEventListener('dragstart', onPalDrag));
+      // Extensions event handlers
+      sb.querySelectorAll('[data-ext-id]').forEach(el => {
+        el.onclick = () => {
+          UI.sel = { type: 'extension', key: el.dataset.extId };
+          Suite.views.switchView('extensions');
+          Suite.views.renderProps();
+        };
+      });
+      sb.querySelectorAll('[data-ext-action]').forEach(el => {
+        el.onclick = (e) => {
+          e.stopPropagation();
+          const action = el.dataset.extAction;
+          const extId = el.dataset.extId;
+          if (action === 'enable') {
+            enableExtension(extId);
+          } else if (action === 'disable') {
+            disableExtension(extId);
+          } else if (action === 'reload') {
+            reloadExtension(extId);
+          } else if (action === 'config') {
+            showExtensionConfig(extId);
+          }
+        };
+      });
       return;
     }
 
@@ -109,6 +144,54 @@
         // Remove channels no longer present
         for (const [ch, li] of existingByChannel) {
           if (!channels.includes(ch)) {
+            li.remove();
+          }
+        }
+      }
+    }
+
+    // Extensions view - diff extensions list
+    if (UI.side === 'extensions') {
+      const extensions = Object.keys(st.extensions || {}).sort();
+      const ul = sb.querySelector('.sgroup:last-child ul');
+      if (ul) {
+        const existingItems = Array.from(ul.querySelectorAll('li[data-ext-id]'));
+        const existingByExt = new Map(existingItems.map(el => [el.dataset.extId, el]));
+        const allExts = extensions;
+        const groups = Object.keys(EXTENSION_GROUPS).sort();
+
+        for (const g of groups) {
+          const exts = extensions.filter(id => {
+            const ext = st.extensions[id];
+            return ext && ext.enabled === (g === 'enabled');
+          });
+          for (const extId of exts) {
+            const ext = st.extensions[extId];
+            let li = existingByExt.get(extId);
+            const sel = UI.sel && UI.sel.type === 'extension' && UI.sel.key === extId;
+            if (!li) {
+              li = document.createElement('li');
+              li.dataset.extId = extId;
+              li.className = 'ext-item';
+              li.innerHTML = extensionItemHTML(extId, ext);
+              ul.appendChild(li);
+            } else {
+              li.innerHTML = extensionItemHTML(extId, ext);
+            }
+            li.classList.toggle('active', sel);
+            if (!li._clickBound) {
+              li.onclick = () => {
+                UI.sel = { type: 'extension', key: li.dataset.extId };
+                Suite.views.switchView('extensions');
+                Suite.views.renderProps();
+              };
+              li._clickBound = true;
+            }
+          }
+        }
+        // Remove extensions no longer present
+        for (const [extId, li] of existingByExt) {
+          if (!exts.includes(extId)) {
             li.remove();
           }
         }
@@ -204,7 +287,115 @@
     e.dataTransfer.effectAllowed = 'copy';
   }
 
-  function addChannelPrompt() {
+  function extensionsPane() {
+    const st = StateStore.getState();
+    const extensions = Object.keys(st.extensions || {}).sort();
+    const groups = { enabled: [], disabled: [] };
+    for (const id of Object.keys(st.extensions || {}).sort()) {
+      const ext = st.extensions[id];
+      if (ext && ext.enabled) {
+        groups.enabled.push(id);
+      } else {
+        groups.disabled.push(id);
+      }
+    }
+    let h = '<div class="sgroup"><h4>' + t('extensions') + ' <span class="badge">' + Object.keys(st.extensions || {}).length + '</span></h4><ul>';
+    for (const [group, exts] of Object.entries({ enabled: [], disabled: [] })) {
+      const exts = Object.keys(st.extensions || {}).sort().filter(id => {
+        const ext = st.extensions[id];
+        return ext && ext.enabled === (group === 'enabled');
+      });
+      if (exts.length === 0) continue;
+      h += '<li style="font-size:10px;color:var(--muted);text-transform:uppercase;padding:4px 10px;cursor:default">' + group + ' (' + exts.length + ')</li>';
+      for (const id of exts) {
+        h += extensionItemHTML(id, st.extensions[id]);
+      }
+    }
+    h += '</ul></div>';
+    return h;
+  }
+
+  function extensionItemHTML(id, ext) {
+    if (!ext) return '';
+    const enabled = ext.enabled;
+    const version = ext.version || '1.0.0';
+    const author = ext.author || 'Unknown';
+    const desc = ext.description || '';
+    const st = StateStore.getState();
+    return (
+      '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;width:100%">' +
+      '<span data-ext-id="' +
+      Suite.utils.esc(id) +
+      '" class="ext-name" style="font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+      Suite.utils.esc(id) +
+      '</span>' +
+      '<span class="ext-version" style="font-size:10px;color:var(--muted);margin-right:6px">' +
+      Suite.utils.esc(ext.version || '1.0.0') +
+      '</span>' +
+      '<span class="ext-status ' +
+      (st.extensions[id]?.enabled ? 'enabled' : 'disabled') +
+      '" style="font-size:10px;padding:1px 4px;border-radius:3px;background:' +
+      (st.extensions[id]?.enabled ? 'var(--green)' : 'var(--amber)') +
+      ';color:white">' +
+      (st.extensions[id]?.enabled ? t('enabled') : 'disabled') +
+      '</span>' +
+      '<button data-ext-id="' +
+      Suite.utils.esc(id) +
+      '" data-ext-action="config" class="tbtn" style="font-size:10px;padding:2px 6px;margin-left:4px" title="' +
+      t('extension_config') +
+      '">' +
+      t('extension_config') +
+      '</button>' +
+      '<button data-ext-id="' +
+      Suite.utils.esc(id) +
+      '" data-ext-action="' +
+      (st.extensions[id]?.enabled ? 'disable' : 'enable') +
+      '" class="tbtn" style="font-size:10px;padding:2px 6px;margin-left:2px" title="' +
+      (st.extensions[id]?.enabled ? t('extension_disable') : t('extension_enable')) +
+      '">' +
+      (st.extensions[id]?.enabled ? t('extension_disable') : t('extension_enable')) +
+      '</button>' +
+      '<button data-ext-id="' +
+      Suite.utils.esc(id) +
+      '" data-ext-action="reload" class="tbtn" style="font-size:10px;padding:2px 6px;margin-left:2px" title="' +
+      t('extension_reload') +
+      '">' +
+      t('extension_reload') +
+      '</button>' +
+      '</div>'
+    );
+  }
+
+  function enableExtension(id) {
+    StateStore.mutate('enable extension', () => {
+      const st = StateStore.getState();
+      if (st.extensions[id]) {
+        st.extensions[id].enabled = true;
+      }
+    });
+    Suite.utils.toast(t('toast_ext_enabled', id), 'ok');
+  }
+
+  function disableExtension(id) {
+    StateStore.mutate('disable extension', () => {
+      const st = StateStore.getState();
+      if (st.extensions[id]) {
+        st.extensions[id].enabled = false;
+      }
+    });
+    Suite.utils.toast(t('toast_ext_disabled', id), 'ok');
+  }
+
+  function reloadExtension(id) {
+    Suite.utils.toast(t('toast_ext_reloaded', id), 'ok');
+  }
+
+  function showExtensionConfig(id) {
+    const st = StateStore.getState();
+    const ext = st.extensions[id];
+    if (!ext) return;
+    Suite.utils.toast(t('extension_config') + ': ' + id, 'info');
+  }
     const name = window.prompt(t('new_channel_prompt'), t('new_channel'));
     if (name) {
       StateStore.mutate('add channel', () => {
@@ -262,6 +453,13 @@
     addChannelPrompt,
     channelSpec,
     renderPalette,
+    extensionsPane,
+    extensionItemHTML,
+    enableExtension,
+    disableExtension,
+    reloadExtension,
+    showExtensionConfig,
     GROUPS,
+    EXTENSION_GROUPS,
   });
 })(window || this);
