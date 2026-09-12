@@ -164,4 +164,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 11 → Extensiones/addons (SDK)** — integrar ExtensionManager en spigot-host/fabric-host, soporte en web-editor, manifest schema extension.yml.
+**FASE 12 → Descargador runtime + attach/detach** — classloader dinámico + manifest + sha256 + allowlist.
