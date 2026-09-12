@@ -41,8 +41,8 @@
 9. FASE 11  Extensiones/addons (SDK)        ✅
 10. FASE 12  Descargador runtime + attach/detach ✅
 11. FASE 13  sync-websocket                 ✅
-12. FASE 14  Presets, `transform` real, `engine.parallel` knob  ← SIGUIENTE
-13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
+12. FASE 14  Presets, `transform` real, `engine.parallel` knob  ✅
+13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)  ← SIGUIENTE
 ```
 
 ### FASE 14 — Presets, `transform` real, `engine.parallel` knob
@@ -51,8 +51,8 @@
 | F14-1 | Presets module con configuraciones predefinidas (standard, rpg, staff, minimal) | ✅ |
 | F14-2 | TransformEngine con SpEL sandboxed para transformaciones reales | ✅ |
 | F14-3 | PresetManager para cargar/aplicar presets | ✅ |
-| F14-4 | `engine.parallel` knob para procesamiento paralelo de mensajes | ⏳ |
-| F14-5 | Integración en spigot-host/fabric-host | ⏳ |
+| F14-4 | `engine.parallel` knob para procesamiento paralelo de mensajes | ✅ |
+| F14-5 | Integración en spigot-host/fabric-host | ✅ |
 | F14-6 | Web-editor UI para presets | ⏳ |
 
 ### FASE 4 — fabric-host (BASE)
