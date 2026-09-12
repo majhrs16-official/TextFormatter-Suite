@@ -38,8 +38,11 @@
 6. FASE 8   Sistema comandos dinámico (/suite) ✅
 7. FASE 9   sync-velocity real              ✅
 8. FASE 10  Observabilidad                  ✅
-9. FASE 11  Extensiones/addons (SDK)        ⏳
-10. RESTOS   P2/P3 consolidados
+9. FASE 11  Extensiones/addons (SDK)        ✅
+10. FASE 12  Descargador runtime + attach/detach ✅
+11. FASE 13  sync-websocket                  ← SIGUIENTE
+12. FASE 14  Presets, `transform` real, `engine.parallel` knob
+13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
 ```
 
 ### FASE 4 — fabric-host (BASE)
@@ -110,6 +113,20 @@
 | F11-6 | Integration with spigot-host/fabric-host (ExtensionManager start/stop) | ✅ |
 | F11-7 | Web-editor support for extension management (list, enable/disable, config) | ✅ |
 | F11-8 | Extension manifest schema (extension.yml) + validation | ✅ (docs/extension-schema.md) |
+---
+
+### FASE 12 u2014 Descargador runtime + attach/detach
+| # | Pieza | Estado |
+|---|-------|--------|
+| F12-1 | Manager API: ModuleCoordinate, ModuleDescriptor, Environment, ModuleLifecycle SPI | ✅ |
+| F12-2 | Manager Impl: GitHub releases downloader, version resolver, dependency relocator | ✅ |
+| F12-3 | ClassLoader aislado (parent-last) + SHA256 verification | ✅ |
+| F12-4 | Force flag para versiones no compatibles | ✅ |
+| F12-5 | Comando `/suite update` (actualización completa) | ✅ |
+| F12-6 | Comando `/suite module` (install, update, list, remove, info) | ✅ |
+| F12-7 | Integración spigot-host/fabric-host (start/stop/reload) | ✅ |
+
+---
 
 ---
 
@@ -164,4 +181,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 12 → Descargador runtime + attach/detach** — classloader dinámico + manifest + sha256 + allowlist.
+**FASE 13 → sync-websocket** — WebSocket server para sync en tiempo real, suscripciones `/ws/chat`, `/ws/events`, `/ws/sync`, `/ws/logs`.
