@@ -108,7 +108,7 @@
 | F11-4 | Example extension demonstrating the API | ✅ |
 | F11-5 | ExtensionContext: channel registration, message dispatch, state, events | ✅ |
 | F11-6 | Integration with spigot-host/fabric-host (ExtensionManager start/stop) | ✅ |
-| F11-7 | Web-editor support for extension management (list, enable/disable, config) | ⏳ |
+| F11-7 | Web-editor support for extension management (list, enable/disable, config) | ✅ |
 | F11-8 | Extension manifest schema (extension.yml) + validation | ⏳ |
 
 ---
