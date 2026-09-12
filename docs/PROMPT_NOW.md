@@ -40,8 +40,8 @@
 8. FASE 10  Observabilidad                  ✅
 9. FASE 11  Extensiones/addons (SDK)        ✅
 10. FASE 12  Descargador runtime + attach/detach ✅
-11. FASE 13  sync-websocket                  ← SIGUIENTE
-12. FASE 14  Presets, `transform` real, `engine.parallel` knob
+11. FASE 13  sync-websocket                 ✅
+12. FASE 14  Presets, `transform` real, `engine.parallel` knob  ← SIGUIENTE
 13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
 ```
 
@@ -179,6 +179,18 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ---
 
+### FASE 13 — sync-websocket
+| # | Pieza | Estado |
+|---|-------|--------|
+| F13-1 | WebSocket server para sync en tiempo real | ✅ |
+| F13-2 | Endpoints: /ws/chat, /ws/events, /ws/sync, /ws/logs | ✅ |
+| F13-3 | Subscription management y message broadcasting | ✅ |
+| F13-4 | Auth via token, subscription management | ✅ |
+| F13-5 | Log streaming via /ws/logs | ✅ |
+| F13-6 | Integración spigot-host/fabric-host | ✅ |
+
+---
+
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 13 → sync-websocket** — WebSocket server para sync en tiempo real, suscripciones `/ws/chat`, `/ws/events`, `/ws/sync`, `/ws/logs`.
+**FASE 14 → Presets, `transform` real, `engine.parallel` knob** — Configuraciones predefinidas, motor de transformaciones real, knob de paralelización.
