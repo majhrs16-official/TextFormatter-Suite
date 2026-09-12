@@ -45,6 +45,16 @@
 13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)
 ```
 
+### FASE 14 — Presets, `transform` real, `engine.parallel` knob
+| # | Pieza | Estado |
+|---|-------|--------|
+| F14-1 | Presets module con configuraciones predefinidas (standard, rpg, staff, minimal) | ✅ |
+| F14-2 | TransformEngine con SpEL sandboxed para transformaciones reales | ✅ |
+| F14-3 | PresetManager para cargar/aplicar presets | ✅ |
+| F14-4 | `engine.parallel` knob para procesamiento paralelo de mensajes | ⏳ |
+| F14-5 | Integración en spigot-host/fabric-host | ⏳ |
+| F14-6 | Web-editor UI para presets | ⏳ |
+
 ### FASE 4 — fabric-host (BASE)
 | # | Pieza | Estado |
 |---|-------|--------|
@@ -193,4 +203,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 14 → Presets, `transform` real, `engine.parallel` knob** — Configuraciones predefinidas, motor de transformaciones real, knob de paralelización.
+**FASE 15 → F8 in-world** — signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover.
