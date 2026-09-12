@@ -402,6 +402,33 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             bridge.start();
         }
 
+        // Initialize WebSocket Sync Sink
+        try {
+            Path wsConfig = folder.resolve("sync/websocket.yml");
+            String wsToken = "";
+            int wsPort = 9092;
+            if (Files.exists(wsConfig)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                String content = Files.readString(wsConfig);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) new org.yaml.snakeyaml.Yaml().load(content);
+                if (map != null) {
+                    Object token = map.get("token");
+                    if (token instanceof String) wsToken = (String) token;
+                    Object port = map.get("port");
+                    if (port instanceof Number) wsPort = ((Number) port).intValue();
+                }
+            }
+            WebSocketSyncSink wsSink = new WebSocketSyncSink(wsPort, wsToken, logger);
+            wsSink.setListener((sink, message) -> {
+                dispatcher.dispatch(message);
+            });
+            wsSink.start();
+            logger.info("WebSocket sync sink started on port " + wsPort);
+        } catch (Exception e) {
+            logger.warn("Failed to start WebSocket sync sink: " + e.getMessage());
+        }
+
         // Initialize Observability module
         if (OBSERVABILITY != null) {
             OBSERVABILITY.stop();
@@ -459,6 +486,8 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         copyResource(folder, "defaults/messages.yml", folder.resolve("messages.yml"));
         copyResource(folder, "defaults/sync/discord.yml",
             folder.resolve("sync/discord.yml"));
+        copyResource(folder, "defaults/sync/websocket.yml",
+            folder.resolve("sync/websocket.yml"));
     }
 
     /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */

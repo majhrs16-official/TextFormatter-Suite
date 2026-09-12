@@ -29,6 +29,7 @@ dependencies {
     implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-sync-velocity:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-sync-websocket:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-messages:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-observability:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-extension-api:2.1.0-SNAPSHOT'
