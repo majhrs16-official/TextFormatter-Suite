@@ -215,4 +215,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 16 (continuación)** → Tests de integración end-to-end, Optimización de rendimiento, Documentación final.
+**FASE 16 (en progreso)** → Tests de integración end-to-end (en curso), luego Optimización de rendimiento y Documentación final.
