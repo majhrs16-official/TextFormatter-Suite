@@ -205,7 +205,7 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 | # | Pieza | Estado |
 |---|-------|--------|
 | F16-1 | Tests de carga/estrés (JMH + Gatling) | ✅ |
-| F16-2 | Tests de integración end-to-end | ⏳ |
+| F16-2 | Tests de integración end-to-end | ✅ |
 | F16-3 | Optimización de rendimiento (profiling, memory tuning) | ⏳ |
 | F16-4 | Documentación final (Wiki, API docs, guías) | ⏳ |
 | F16-5 | Benchmarks de regresión continua | ⏳ |
