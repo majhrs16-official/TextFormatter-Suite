@@ -1,0 +1,23 @@
+enabled: true
+signs:
+  enabled: true
+  auto-detect: true
+containers:
+  enabled: true
+  types:
+    - CHEST
+    - BARREL
+    - SHULKER_BOX
+books:
+  enabled: true
+world-channels:
+  enabled: true
+radius-channels:
+  enabled: true
+click-hover:
+  enabled: true
+glossary:
+  enabled: true
+cache:
+  enabled: true
+  ttl-minutes: 60

@@ -42,7 +42,7 @@
 10. FASE 12  Descargador runtime + attach/detach ✅
 11. FASE 13  sync-websocket                 ✅
 12. FASE 14  Presets, `transform` real, `engine.parallel` knob  ✅
-13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)  ← SIGUIENTE
+13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)  ✅
 ```
 
 ### FASE 14 — Presets, `transform` real, `engine.parallel` knob
@@ -203,4 +203,4 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 15 → F8 in-world** — signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover.
+**FASE 16 → Próximas fases** — Tests de integración completos, optimización de rendimiento, documentación final.

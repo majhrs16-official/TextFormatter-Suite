@@ -21,6 +21,7 @@ import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.extension.ExtensionManager;
+import me.majhrs16.suite.inworld.InWorldHandler;
 import me.majhrs16.suite.manager.ModuleLifecycle;
 import me.majhrs16.suite.manager.DefaultModuleLifecycle;
 
@@ -108,6 +109,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private me.majhrs16.suite.observability.Observability observability;
     private ExtensionManager extensionManager;
     private ModuleLifecycle moduleLifecycle;
+    private InWorldHandler inworldHandler;
 
     @Override
     public void onEnable() {
@@ -141,6 +143,12 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, runtime.logger);
         logger.info("ModuleLifecycle (Manager) initialized at " + cacheDir);
 
+        // Inicializar InWorldHandler
+        this.inworldHandler = new InWorldHandler(runtime.host, runtime.dispatcher,
+            runtime.host.channels(), runtime.logger,
+            runtime.host.translation(), runtime.languages);
+        getServer().getPluginManager().registerEvents(inworldHandler, this);
+
         getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
             runtime.host.channels().paths().size(),
             runtime.host.translation().activeName()));
@@ -157,6 +165,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
         if (extensionManager != null) {
             extensionManager.stop();
+        }
+        if (inworldHandler != null) {
+            // InWorldHandler cleanup if needed
         }
         if (moduleLifecycle != null) {
             // Unload all modules
@@ -246,6 +257,15 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger.warn("Failed to start Observability module: " + e.getMessage());
         }
 
+        // Reload InWorldHandler
+        if (inworldHandler != null) {
+            // InWorldHandler cleanup if needed
+        }
+        this.inworldHandler = new InWorldHandler(reloaded, dispatcher,
+            reloaded.channels(), logger,
+            reloaded.translation(), languages);
+        getServer().getPluginManager().registerEvents(inworldHandler, this);
+
         // Reload extensions
         if (extensionManager != null) {
             extensionManager.stop();
@@ -310,6 +330,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             folder.resolve("sync/discord.yml"));
         copyResource(folder, "defaults/sync/websocket.yml",
             folder.resolve("sync/websocket.yml"));
+        copyResource(folder, "defaults/inworld.yml",
+            folder.resolve("inworld.yml"));
     }
 
     /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */

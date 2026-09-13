@@ -20,6 +20,7 @@ import me.majhrs16.suite.fabrichost.logic.EventRules;
 import me.majhrs16.suite.fabrichost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.extension.ExtensionManager;
+import me.majhrs16.suite.inworld.InWorldHandler;
 import me.majhrs16.suite.observability.Observability;
 
 import net.fabricmc.api.ModInitializer;
@@ -103,6 +104,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
     private static volatile MessagesConfig MESSAGES;
     private static me.majhrs16.suite.observability.Observability OBSERVABILITY;
     private static ExtensionManager EXTENSION_MANAGER;
+    private static InWorldHandler INWORLD_HANDLER;
     private static final Logger LOGGER = LoggerFactory.getLogger("TextFormatterSuite");
 
     /** Fallback messages if missing from messages.yml. */
@@ -363,6 +365,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         if (EXTENSION_MANAGER != null) {
             EXTENSION_MANAGER.stop();
         }
+        if (INWORLD_HANDLER != null) {
+            // InWorldHandler cleanup if needed
+        }
         AUDIENCES = null;
         RUNTIME = null;
         SERVER = null;
@@ -442,6 +447,15 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             logger.warn("Failed to start Observability module: " + e.getMessage());
         }
 
+        // Initialize InWorldHandler
+        if (INWORLD_HANDLER != null) {
+            // InWorldHandler cleanup if needed
+        }
+        INWORLD_HANDLER = new InWorldHandler(reloaded, dispatcher,
+            reloaded.channels(), logger,
+            translation, languages);
+        logger.info("InWorldHandler started");
+
         // Reload Extension Manager
         if (EXTENSION_MANAGER != null) {
             EXTENSION_MANAGER.stop();
@@ -488,6 +502,8 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             folder.resolve("sync/discord.yml"));
         copyResource(folder, "defaults/sync/websocket.yml",
             folder.resolve("sync/websocket.yml"));
+        copyResource(folder, "defaults/inworld.yml",
+            folder.resolve("inworld.yml"));
     }
 
     /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */
