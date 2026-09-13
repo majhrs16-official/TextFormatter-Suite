@@ -201,6 +201,18 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ---
 
+### FASE 16 — Tests, Optimización y Documentación
+| # | Pieza | Estado |
+|---|-------|--------|
+| F16-1 | Tests de carga/estrés (JMH + Gatling) | 🔄 En progreso |
+| F16-2 | Tests de integración end-to-end | ⏳ |
+| F16-3 | Optimización de rendimiento (profiling, memory tuning) | ⏳ |
+| F16-4 | Documentación final (Wiki, API docs, guías) | ⏳ |
+| F16-5 | Benchmarks de regresión continua | ⏳ |
+| F16-6 | Release pipeline y versionado semántico | ⏳ |
+
+---
+
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 16 → Próximas fases** — Tests de integración completos, optimización de rendimiento, documentación final.
+**FASE 16 (actual)** → Tests de carga/estrés (JMH + Gatling), Tests de integración end-to-end, Optimización de rendimiento, Documentación final.

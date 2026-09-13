@@ -1,0 +1,79 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+
+    implementation 'org.openjdk.jmh:jmh-core:1.37'
+    implementation 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+    implementation 'io.gatling:gatling-core:3.10.3'
+    implementation 'io.gatling:gatling-http:3.10.3'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'suite-loadtest'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}
+
+// JMH benchmark task
+task jmh(type: JavaExec) {
+    group = 'benchmark'
+    description = 'Run JMH benchmarks'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.openjdk.jmh.Main'
+    args = ['-wi', '3', '-i', '5', '-f', '1', '-t', '4']
+}
+
+task loadTest(type: JavaExec) {
+    group = 'loadtest'
+    description = 'Run Gatling load tests'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.gatling.app.Gatling'
+    args = ['-s', 'me.majhrs16.suite.loadtest.SuiteLoadTestSimulation']
+}

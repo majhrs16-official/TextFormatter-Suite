@@ -36,6 +36,7 @@ dependencies {
     implementation 'me.majhrs16:suite-manager-impl:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-presets:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-inworld:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-loadtest:2.1.0-SNAPSHOT'
 
     minecraft 'com.mojang:minecraft:1.21'
     mappings 'net.fabricmc:yarn:1.21+build.1:v2'
