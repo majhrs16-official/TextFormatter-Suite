@@ -270,6 +270,7 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             // Register with the suite kernel
             // This would integrate with SuiteHost/ModuleLoader
             loadedModules.put(descriptor.id(), descriptor);
+            moduleClassLoaders.put(descriptor.id(), classLoader);
             logger.info("Registered module: " + descriptor.id());
             return true;
         } catch (Exception e) {
@@ -414,16 +415,16 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     private boolean matchesVersion(String version, String spec) {
         if (spec.equals(version)) return true;
         if (spec.startsWith("[") || spec.contains(",")) {
-            // Range matching would go here
-            return true; // Simplified
+            // Range matching not yet implemented
+            throw new UnsupportedOperationException("Version range matching not implemented: " + spec);
         }
         return SemVer.parse(version).satisfies(SemVer.parse(spec));
     }
 
     private boolean isCompatibleWithEnv(JsonObject release, Environment env) {
         // Check release metadata for compatibility
-        // For now, assume compatible
-        return true;
+        // For now, require explicit compatibility metadata
+        throw new UnsupportedOperationException("Environment compatibility check not implemented");
     }
 
     private List<String> getAvailableVersions(JsonArray releases, String artifact) {
@@ -443,8 +444,8 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
 
     private List<String> parseDependencies(JsonObject release) {
         // Parse from release body or manifest
-        // For now, return empty
-        return List.of();
+        // Not yet implemented
+        throw new UnsupportedOperationException("Dependency parsing from release metadata not implemented");
     }
 
     private ModuleCoordinate parseCoordinate(String depStr) {
@@ -552,34 +553,6 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
         return hex.toString();
     }
 
-    private Path relocate(Path moduleJar, Path outputDir, Map<String, String> relocations) {
-        return relocate(moduleJar, outputDir, relocations);
-    }
-
-    private Map<String, String> getRelocationsForModule(ModuleDescriptor desc) {
-        Map<String, String> relocations = new HashMap<>();
-        // Relocate all non-API packages
-        String base = "me.majhrs16.suite." + desc.coordinate().artifact().replace("suite-", "");
-        relocations.put(base, base + ".relocated");
-        relocations.put("org.apache.commons", "me.majhrs16.suite.relocated.org.apache.commons");
-        relocations.put("com.google", "me.majhrs16.suite.relocated.com.google");
-        relocations.put("org.yaml", "me.majhrs16.suite.relocated.org.yaml");
-        relocations.put("com.fasterxml.jackson", "me.majhrs16.suite.relocated.com.fasterxml.jackson");
-        return relocations;
-    }
-
-    private byte[] readEntry(JarFile jarFile, JarEntry entry) throws IOException {
-        try (InputStream is = jarFile.getInputStream(entry)) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = is.read(buffer)) > 0) {
-                baos.write(buffer, 0, read);
-            }
-            return baos.toByteArray();
-        }
-    }
-
     private String relocateClassName(String name, Map<String, String> relocations) {
         for (Map.Entry<String, String> entry : relocations.entrySet()) {
             if (name.startsWith(entry.getKey())) {
@@ -602,7 +575,7 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     }
 
     // ModuleClassLoader with parent-last delegation
-    private static final class ModuleClassLoader extends ClassLoader {
+    private static final class ModuleClassLoader extends URLClassLoader {
         private final PluginLogger logger;
 
         public ModuleClassLoader(URL[] urls, ClassLoader parent, PluginLogger logger) {
