@@ -8,10 +8,10 @@ import java.util.UUID;
  * The atomic, dissectable unit that travels through the routing engine.
  *
  * <p>A single delivery unit with its own sender, routing direction, content
- * arrays, channel, colors, sound and language pair. Deliberately mutable
- * through the {@link Builder} API and always cloned before being mutated by a
- * <em>rule</em>, so a rule can never corrupt a message shared by other
- * recipients.</p>
+ * arrays, channel, colors, sound and language pair. <strong>Immutable</strong>
+ * through the {@link Builder} API; mutations produce a new {@code Message}
+ * instance via {@code withX()} methods, so a rule can never corrupt a message
+ * shared by other recipients.</p>
  *
  * <p>There is no embedded from/to. The {@link Direction} tells the engine which
  * audience this particular unit targets; a chat event therefore produces as
@@ -35,6 +35,7 @@ public final class Message {
     private final boolean show;
     private final boolean formatPapi;
     private final String channel;
+    private final long sleepMillis;
 
     private Message(Builder builder) {
         this.id = builder.id != null ? builder.id : UUID.randomUUID();
@@ -53,6 +54,7 @@ public final class Message {
         this.show = builder.show;
         this.formatPapi = builder.formatPapi;
         this.channel = builder.channel;
+        this.sleepMillis = builder.sleepMillis;
     }
 
     public UUID id() {
@@ -119,6 +121,11 @@ public final class Message {
     /** @return the channel path this message was routed through, if any. */
     public String channel() {
         return channel;
+    }
+
+    /** @return sleep milliseconds for delayed delivery (F7+ sleep transform). */
+    public long sleepMillis() {
+        return sleepMillis;
     }
 
     /** The first text of the first message; convenience for scripting. */
@@ -193,7 +200,7 @@ public final class Message {
     }
 
     public Message withSleepMillis(long millis) {
-        return this;
+        return toBuilder().sleepMillis(millis).build();
     }
 
     public Message clone() {
@@ -233,6 +240,7 @@ public final class Message {
         private boolean show = true;
         private boolean formatPapi = true;
         private String channel;
+        private long sleepMillis;
 
         public Builder() {
         }
@@ -254,6 +262,7 @@ public final class Message {
             this.show = original.show;
             this.formatPapi = original.formatPapi;
             this.channel = original.channel;
+            this.sleepMillis = original.sleepMillis;
         }
 
         public Builder id(UUID id) {
@@ -349,6 +358,11 @@ public final class Message {
             return this;
         }
 
+        public Builder sleepMillis(long sleepMillis) {
+            this.sleepMillis = sleepMillis;
+            return this;
+        }
+
         public Builder from(Message message) {
             if (message == null) return this;
             this.id = message.id;
@@ -367,6 +381,7 @@ public final class Message {
             this.show = message.show;
             this.formatPapi = message.formatPapi;
             this.channel = message.channel;
+            this.sleepMillis = message.sleepMillis;
             return this;
         }
 

@@ -160,32 +160,37 @@ public final class DefaultRouter implements Router {
 
     private RouteDecision apply(Rule rule, Channel channel, Message message,
                                 Actor recipient, Actor emitter) {
+        // Use a working message that gets updated through ScriptSurface transforms
+        Message working = message;
+
         // Execute SpEL action if present
         if (rule.action() != null && expressionEvaluator != null) {
-            executeAction(rule, message, emitter, recipient);
+            executeAction(rule, working, emitter, recipient);
         }
 
         // Check if action cancelled the message
-        if (message.isCancelled()) {
+        if (working.isCancelled()) {
             return new RouteDecision(PolicyTarget.DROP, "cancelled by action", 0, recipient, emitter);
         }
 
         // Apply transform operations (F7+)
         if (!rule.transforms().isEmpty()) {
-            ScriptSurface surface = new ScriptSurface(message, emitter, recipient,
+            ScriptSurface surface = new ScriptSurface(working, emitter, recipient,
                 channels, null, null, permissions::has);
             for (TransformOp transform : rule.transforms()) {
                 transform.apply(surface);
             }
+            // Retrieve the transformed message from ScriptSurface
+            working = surface.msg();
         }
 
         // Check if transforms cancelled the message
-        if (message.isCancelled()) {
+        if (working.isCancelled()) {
             return new RouteDecision(PolicyTarget.DROP, "cancelled by transform", 0, recipient, emitter);
         }
 
         // Handle CHANNEL_REDIRECT from transform (setChannel)
-        String redirectTarget = message.channel();
+        String redirectTarget = working.channel();
         if (rule.redirectChannel() != null) {
             redirectTarget = rule.redirectChannel();
         }
@@ -204,7 +209,7 @@ public final class DefaultRouter implements Router {
                     0, recipient, emitter, targetChannel);
             case RATE_LIMIT:
                 if (channel.rateLimitPerSecond() > 0) {
-                    String key = message.channel() + "\u0000" + emitter.uuid();
+                    String key = working.channel() + "\u0000" + emitter.uuid();
                     if (!rateLimit.tryAcquire(key, channel.rateLimitPerSecond())) {
                         return new RouteDecision(PolicyTarget.RATE_LIMIT,
                             rule.reason() + " — budget exhausted",
