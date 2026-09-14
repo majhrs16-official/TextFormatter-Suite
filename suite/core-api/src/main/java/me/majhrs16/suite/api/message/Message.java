@@ -1,5 +1,7 @@
 package me.majhrs16.suite.api.message;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -27,6 +29,7 @@ public final class Message {
     private final ColorMode colorMode;
     private final Language langSource;
     private final Language langTarget;
+    private final Language resolvedSourceLanguage;
     private final boolean translate;
     private final boolean cancelled;
     private final boolean show;
@@ -44,6 +47,7 @@ public final class Message {
         this.colorMode = builder.colorMode != null ? builder.colorMode : ColorMode.BY_PERMISSION;
         this.langSource = builder.langSource != null ? builder.langSource : Language.AUTO;
         this.langTarget = builder.langTarget != null ? builder.langTarget : Language.AUTO;
+        this.resolvedSourceLanguage = builder.resolvedSourceLanguage;
         this.translate = builder.translate;
         this.cancelled = builder.cancelled;
         this.show = builder.show;
@@ -91,6 +95,11 @@ public final class Message {
         return langTarget;
     }
 
+    /** @return the resolved source language, or null if not yet resolved. */
+    public Language resolvedSourceLanguage() {
+        return resolvedSourceLanguage;
+    }
+
     public boolean shouldTranslate() {
         return translate;
     }
@@ -126,6 +135,75 @@ public final class Message {
         return new Builder(this);
     }
 
+    public Message withResolvedSourceLanguage(Language resolvedSourceLanguage) {
+        return toBuilder().resolvedSourceLanguage(resolvedSourceLanguage).build();
+    }
+
+    public Message withLangTarget(Language langTarget) {
+        return toBuilder().langTarget(langTarget).build();
+    }
+
+    public Message withLangSource(Language langSource) {
+        return toBuilder().langSource(langSource).build();
+    }
+
+    public Message withTranslate(boolean translate) {
+        return toBuilder().translate(translate).build();
+    }
+
+    public Message withChannel(String channel) {
+        return toBuilder().channel(channel).build();
+    }
+
+    public Message withCancelled(boolean cancelled) {
+        return toBuilder().cancelled(cancelled).build();
+    }
+
+    public Message withText(String text) {
+        return toBuilder().text(text).build();
+    }
+
+    public Message withColorMode(ColorMode colorMode) {
+        return toBuilder().colorMode(colorMode).build();
+    }
+
+    public Message withFormatPapi(boolean formatPapi) {
+        return toBuilder().formatPapi(formatPapi).build();
+    }
+
+    public Message withProcessed(boolean processed) {
+        return toBuilder().show(processed).build();
+    }
+
+    public Message withSoundsAdd(List<String> sounds) {
+        String[] current = this.sounds;
+        String[] combined = Arrays.copyOf(current, current.length + sounds.size());
+        for (int i = 0; i < sounds.size(); i++) {
+            combined[current.length + i] = sounds.get(i);
+        }
+        return toBuilder().sounds(combined).build();
+    }
+
+    public Message withSoundsRemove(List<String> soundsToRemove) {
+        String[] current = this.sounds;
+        List<String> filtered = Arrays.stream(current)
+            .filter(s -> !soundsToRemove.contains(s))
+            .toList();
+        return toBuilder().sounds(filtered.toArray(new String[0])).build();
+    }
+
+    public Message withSleepMillis(long millis) {
+        return this;
+    }
+
+    public Message clone() {
+        return new Message(toBuilder());
+    }
+
+    public String toJson() {
+        return toString();
+    }
+
     @Override
     public String toString() {
         return "Message{" + type + " from=" + sender.name()
@@ -149,6 +227,7 @@ public final class Message {
         private ColorMode colorMode;
         private Language langSource;
         private Language langTarget;
+        private Language resolvedSourceLanguage;
         private boolean translate = true;
         private boolean cancelled;
         private boolean show = true;
@@ -169,6 +248,7 @@ public final class Message {
             this.colorMode = original.colorMode;
             this.langSource = original.langSource;
             this.langTarget = original.langTarget;
+            this.resolvedSourceLanguage = original.resolvedSourceLanguage;
             this.translate = original.translate;
             this.cancelled = original.cancelled;
             this.show = original.show;
@@ -239,6 +319,11 @@ public final class Message {
             return this;
         }
 
+        public Builder resolvedSourceLanguage(Language resolvedSourceLanguage) {
+            this.resolvedSourceLanguage = resolvedSourceLanguage;
+            return this;
+        }
+
         public Builder translate(boolean translate) {
             this.translate = translate;
             return this;
@@ -261,6 +346,27 @@ public final class Message {
 
         public Builder channel(String channel) {
             this.channel = channel;
+            return this;
+        }
+
+        public Builder from(Message message) {
+            if (message == null) return this;
+            this.id = message.id;
+            this.type = message.type;
+            this.sender = message.sender;
+            this.direction = message.direction;
+            this.messages = message.messages;
+            this.toolTips = message.toolTips;
+            this.sounds = message.sounds();
+            this.colorMode = message.colorMode;
+            this.langSource = message.langSource;
+            this.langTarget = message.langTarget;
+            this.resolvedSourceLanguage = message.resolvedSourceLanguage;
+            this.translate = message.translate;
+            this.cancelled = message.cancelled;
+            this.show = message.show;
+            this.formatPapi = message.formatPapi;
+            this.channel = message.channel;
             return this;
         }
 

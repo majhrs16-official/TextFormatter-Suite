@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -22,7 +23,7 @@ public final class MessageEvent {
 
     private final Message message;
     private final Actor sender;
-    private final boolean cancelled;
+    private boolean cancelled;
     private final UUID id;
     private Message modifiedMessage;
 
