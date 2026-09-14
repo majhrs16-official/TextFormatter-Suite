@@ -25,10 +25,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 
 /**
- * Debug endpoints for the suite:
- * - /debug/simulate - simulate message processing with given parameters
+ * Debug endpoints for the suite (binds to localhost only, requires auth token):
  * - /debug/dump - dumps current state (channels, rules, sinks, etc.)
  * - /debug/state - current internal state snapshot
+ * - /debug/channels - channel information
+ * - /debug/rules - iFlow rules (stub)
+ * - /debug/sinks - sync sinks (stub)
+ *
+ * <p>Security: binds to 127.0.0.1 only, requires X-Debug-Token header matching
+ * the configured token. The /debug/simulate endpoint has been removed to prevent
+ * remote message injection.</p>
  */
 public final class DebugEndpoint {
 
@@ -37,28 +43,30 @@ public final class DebugEndpoint {
     private final MessageDispatcher dispatcher;
     private final ChannelRegistry channels;
     private final PluginLogger logger;
+    private final String authToken;
     private volatile boolean running = false;
+    private final long startTime = System.currentTimeMillis();
 
     private final Map<String, Object> lastSimulationResult = new ConcurrentHashMap<>();
 
     public DebugEndpoint(SuiteHost host, MessageDispatcher dispatcher,
-                         ChannelRegistry channels, PluginLogger logger) throws IOException {
+                         ChannelRegistry channels, PluginLogger logger, String authToken) throws IOException {
         this.host = host;
         this.dispatcher = dispatcher;
         this.channels = channels;
         this.logger = logger;
-        this.server = HttpServer.create(new InetSocketAddress(9091), 0);
+        this.authToken = authToken;
+        this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 9091), 0);
         this.server.setExecutor(Executors.newFixedThreadPool(4));
 
-        // Debug endpoints
-        server.createContext("/debug/simulate", new SimulateHandler());
+        // Debug endpoints (read-only, no message injection)
         server.createContext("/debug/dump", new DumpHandler());
         server.createContext("/debug/state", new StateHandler());
         server.createContext("/debug/channels", new ChannelsHandler());
         server.createContext("/debug/rules", new RulesHandler());
         server.createContext("/debug/sinks", new SinksHandler());
 
-        server.setExecutor(Executors.newFixedThreadPool(4));
+        // Removed: server.setExecutor(Executors.newFixedThreadPool(4)); // duplicate
     }
 
     public synchronized void start() {
@@ -78,78 +86,35 @@ public final class DebugEndpoint {
         return running;
     }
 
+    public int getPort() {
+        return server.getAddress().getPort();
+    }
+
     public Map<String, Object> getLastSimulationResult() {
         return Map.copyOf(lastSimulationResult);
+    }
+
+    private boolean checkAuth(HttpExchange exchange) throws IOException {
+        String token = exchange.getRequestHeaders().getFirst("X-Debug-Token");
+        if (authToken == null || authToken.isBlank()) {
+            sendResponse(exchange, 403, "Debug endpoint disabled: no auth token configured", "text/plain");
+            return false;
+        }
+        if (!authToken.equals(token)) {
+            sendResponse(exchange, 401, "Invalid auth token", "text/plain");
+            return false;
+        }
+        return true;
     }
 
     // ============================================================
     // Handlers
     // ============================================================
 
-    private final class SimulateHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!"POST".equals(exchange.getRequestMethod()) && !"GET".equals(exchange.getRequestMethod())) {
-                sendResponse(exchange, 405, "Method not allowed", "text/plain");
-                return;
-            }
-
-            // Parse query parameters or JSON body
-            Map<String, String> params = parseParams(exchange);
-
-            String type = params.getOrDefault("type", "CHAT");
-            String channel = params.getOrDefault("channel", "chat.global");
-            String sender = params.getOrDefault("sender", "TestPlayer");
-            String content = params.getOrDefault("content", "Hello world!");
-            String sourceLang = params.getOrDefault("sourceLang", "auto");
-            String targetLang = params.getOrDefault("targetLang", "en");
-            String direction = params.getOrDefault("direction", "OTHERS");
-
-            // Create test message
-            Actor testSender = new Actor(
-                UUID.randomUUID(), sender, Actor.ActorKind.PLAYER,
-                Language.of(sourceLang).orElse(Language.AUTO), null
-            );
-
-            Message message = Message.builder()
-                .type(MessageType.valueOf(type.toUpperCase()))
-                .sender(testSender)
-                .direction(Direction.valueOf(direction.toUpperCase()))
-                .translate(true)
-                .text(content)
-                .channel(channel)
-                .build();
-
-            // Simulate through dispatcher
-            long start = System.nanoTime();
-            var result = dispatcher.dispatch(message);
-            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-
-            // Store result
-            lastSimulationResult.clear();
-            lastSimulationResult.put("input", Map.of(
-                "type", type, "channel", channel, "sender", sender,
-                "content", content, "sourceLang", sourceLang,
-                "targetLang", targetLang, "direction", direction
-            ));
-            lastSimulationResult.put("result", Map.of(
-                "considered", result.considered(),
-                "delivered", result.delivered(),
-                "silenced", result.silenced(),
-                "redirected", result.redirected(),
-                "channelRedirected", getChannelRedirected(result),
-                "elapsedMs", elapsedMs
-            ));
-            lastSimulationResult.put("timestamp", java.time.Instant.now().toString());
-
-            String response = toJson(lastSimulationResult);
-            sendResponse(exchange, 200, response, "application/json");
-        }
-    }
-
     private final class DumpHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            if (!checkAuth(exchange)) return;
             if (!"GET".equals(exchange.getRequestMethod())) {
                 sendResponse(exchange, 405, "Method not allowed", "text/plain");
                 return;
@@ -162,7 +127,6 @@ public final class DebugEndpoint {
                     "channelsCount", channels.paths().size()
                 ),
                 "channels", channels.paths(),
-                "simulation", getLastSimulationResult(),
                 "timestamp", java.time.Instant.now().toString()
             );
 
@@ -174,6 +138,7 @@ public final class DebugEndpoint {
     private final class StateHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            if (!checkAuth(exchange)) return;
             if (!"GET".equals(exchange.getRequestMethod())) {
                 sendResponse(exchange, 405, "Method not allowed", "text/plain");
                 return;
@@ -182,7 +147,7 @@ public final class DebugEndpoint {
             Map<String, Object> state = Map.of(
                 "host", "TextFormatter Suite",
                 "version", "2.1.0-SNAPSHOT",
-                "uptimeMs", System.currentTimeMillis() - System.currentTimeMillis(), // placeholder
+                "uptimeMs", System.currentTimeMillis() - startTime,
                 "channelsLoaded", channels.paths().size(),
                 "timestamp", java.time.Instant.now().toString()
             );
@@ -195,6 +160,7 @@ public final class DebugEndpoint {
     private final class ChannelsHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            if (!checkAuth(exchange)) return;
             if (!"GET".equals(exchange.getRequestMethod())) {
                 sendResponse(exchange, 405, "Method not allowed", "text/plain");
                 return;
@@ -228,6 +194,7 @@ public final class DebugEndpoint {
     private final class RulesHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            if (!checkAuth(exchange)) return;
             if (!"GET".equals(exchange.getRequestMethod())) {
                 sendResponse(exchange, 405, "Method not allowed", "text/plain");
                 return;
@@ -244,6 +211,7 @@ public final class DebugEndpoint {
     private final class SinksHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            if (!checkAuth(exchange)) return;
             if (!"GET".equals(exchange.getRequestMethod())) {
                 sendResponse(exchange, 405, "Method not allowed", "text/plain");
                 return;
@@ -274,28 +242,6 @@ public final class DebugEndpoint {
             }
         }
 
-        // Parse JSON body for POST
-        if ("POST".equals(exchange.getRequestMethod())) {
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            if (!body.isBlank()) {
-                try {
-                    // Simple JSON parsing for flat objects
-                    String json = body.trim();
-                    if (json.startsWith("{") && json.endsWith("}")) {
-                        json = json.substring(1, json.length() - 1);
-                        for (String pair : json.split(",")) {
-                            String[] kv = pair.split(":", 2);
-                            if (kv.length == 2) {
-                                String key = kv[0].trim().replaceAll("\"", "");
-                                String value = kv[1].trim().replaceAll("\"", "");
-                                params.put(key, value);
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
-
         return params;
     }
 
@@ -311,7 +257,7 @@ public final class DebugEndpoint {
 
     private void sendResponse(HttpExchange exchange, int code, String body, String contentType) throws IOException {
         exchange.getResponseHeaders().set("Content-Type", contentType);
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        // Removed: Access-Control-Allow-Origin: * (security)
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(code, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {

@@ -28,10 +28,10 @@ public final class Observability {
 
     private Observability(SuiteHost host, MessageDispatcher dispatcher,
                           ChannelRegistry channels, PluginLogger logger,
-                          int metricsPort, int debugPort) throws IOException {
+                          int metricsPort, int debugPort, String debugAuthToken) throws IOException {
         this.logger = logger;
         this.metricsEndpoint = new MetricsEndpoint(logger, metricsPort, "/metrics");
-        this.debugEndpoint = new DebugEndpoint(host, dispatcher, channels, logger);
+        this.debugEndpoint = new DebugEndpoint(host, dispatcher, channels, logger, debugAuthToken);
         this.healthCheckRegistry = new HealthCheckRegistry();
 
         // Register default health checks
@@ -43,8 +43,8 @@ public final class Observability {
      */
     public static Observability create(SuiteHost host, MessageDispatcher dispatcher,
                                        ChannelRegistry channels, PluginLogger logger,
-                                       int metricsPort, int debugPort) throws IOException {
-        Observability obs = new Observability(host, dispatcher, channels, logger, metricsPort, debugPort);
+                                       int metricsPort, int debugPort, String debugAuthToken) throws IOException {
+        Observability obs = new Observability(host, dispatcher, channels, logger, metricsPort, debugPort, debugAuthToken);
         obs.start();
         return obs;
     }
@@ -54,7 +54,7 @@ public final class Observability {
      */
     public static Observability createDefault(SuiteHost host, MessageDispatcher dispatcher,
                                                ChannelRegistry channels, PluginLogger logger) throws IOException {
-        return create(host, dispatcher, channels, logger, 9090, 9091);
+        return create(host, dispatcher, channels, logger, 9090, 9091, null);
     }
 
     private void registerDefaultChecks() {
