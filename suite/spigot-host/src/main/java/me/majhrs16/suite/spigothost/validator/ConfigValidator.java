@@ -15,6 +15,6 @@ public final class ConfigValidator {
     private ConfigValidator() {}
 
     public static void validate(HostConfig config, PluginLogger logger, Path configDir) {
-        ConfigValidator.validate(config, logger, configDir);
+        me.majhrs16.suite.host.config.ConfigValidator.validate(config, logger, configDir);
     }
 }

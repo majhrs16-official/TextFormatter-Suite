@@ -95,12 +95,15 @@ public final class DiscordBridge {
         sink.stop();
     }
 
-    /** Best-effort outbound copy; never interrupts game delivery. */
-    public void mirror(Message outgoing) {
-        try {
-            sink.send(outgoing);
-        } catch (Exception exception) {
-            logger.debug("espejo Discord falló: " + exception.getMessage());
+    /** Best-effort outbound copy; only mirrors messages that were delivered. */
+    public void mirror(Message outgoing, DispatchReport report) {
+        // Only mirror if the message was actually delivered to someone
+        if (report.delivered() > 0 || report.channelRedirected() > 0 || report.redirected() > 0) {
+            try {
+                sink.send(outgoing);
+            } catch (Exception exception) {
+                logger.debug("espejo Discord falló: " + exception.getMessage());
+            }
         }
     }
 

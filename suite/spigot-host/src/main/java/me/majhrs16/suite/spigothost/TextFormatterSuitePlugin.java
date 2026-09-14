@@ -417,15 +417,17 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Dos unidades atómicas; el eco respeta show-sender del canal.
         // Emisor con lang off → su mensaje no se traduce para nadie.
         if (channel.showSender()) {
-            dispatch(current, MessageType.CHAT, sender, Direction.initiator(),
+            DispatchReport initiatorReport = dispatch(current, MessageType.CHAT, sender, Direction.initiator(),
                 channelPath, event.getMessage(), !senderOff);
+            mirror(current, initiatorReport);
         }
         Message broadcast = broadcast(current, MessageType.CHAT, sender,
             channelPath, event.getMessage(), !senderOff);
-        mirror(current, broadcast);
+        DispatchReport broadcastReport = current.dispatcher.dispatch(broadcast);
+        mirror(current, broadcast, broadcastReport);
     }
 
-    private Message broadcast(Runtime current, MessageType type, Actor sender,
+private Message broadcast(Runtime current, MessageType type, Actor sender,
                               String channelPath, String text, boolean translate) {
         Message message = Message.builder()
             .type(type)
@@ -441,7 +443,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
     private void mirror(Runtime current, Message sent) {
         if (current.bridge != null) {
-            current.bridge.mirror(sent);
+            current.bridge.mirror(sent, DispatchReport.none("no-report"));
+        }
+    }
+
+    private void mirror(Runtime current, Message sent, DispatchReport report) {
+        if (current.bridge != null) {
+            current.bridge.mirror(sent, report);
         }
     }
 
@@ -486,9 +494,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         dispatch(current, type, sender, direction, channelPath, text, true);
     }
 
-    private void dispatch(Runtime current, MessageType type, Actor sender,
-                          Direction direction, String channelPath, String text,
-                          boolean translate) {
+    private DispatchReport dispatch(Runtime current, MessageType type, Actor sender,
+                              Direction direction, String channelPath, String text,
+                              boolean translate) {
         Message message = Message.builder()
             .type(type)
             .sender(sender)
@@ -497,7 +505,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             .text(text)
             .channel(channelPath)
             .build();
-        current.dispatcher.dispatch(message);
+        return current.dispatcher.dispatch(message);
     }
 
     /**
@@ -520,8 +528,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             .text(content)
             .channel(channelName)
             .build();
-        current.dispatcher.dispatch(message);
-        mirror(current, message);
+        DispatchReport report = current.dispatcher.dispatch(message);
+        mirror(current, message, report);
     }
 
     /** @return whether this user disabled translation ({@code /suite lang off}). */
@@ -658,7 +666,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private boolean handleToggle(Runtime current, CommandSender sender, String[] args) {
         Player self = sender instanceof Player player ? player : null;
         UUID target;
-        String value;
         if (args.length == 0) {
             target = self == null ? null : self.getUniqueId();
         } else {
@@ -675,7 +682,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 return true;
             }
             target = other.getUniqueId();
-            value = LangSetting.normalize(args[1]);
         }
         if (target == null) {
             sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.console"));
