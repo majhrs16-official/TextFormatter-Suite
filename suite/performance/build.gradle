@@ -75,18 +75,3 @@ task profile(type: JavaExec) {
     mainClass = 'me.majhrs16.suite.performance.profiling.ProfilingMain'
     args = ['-d', '60', '-e', 'cpu', '-f', 'profile.html']
 }
-
-publishing {
-    publications {
-        maven(MavenPublication) {
-            from components.java
-            artifactId = 'suite-performance'
-        }
-    }
-    repositories {
-        maven {
-            name = 'local'
-            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
-        }
-    }
-}
