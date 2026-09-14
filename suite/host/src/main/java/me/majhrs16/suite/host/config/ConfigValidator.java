@@ -523,6 +523,7 @@ public final class ConfigValidator {
         }
 
         int activeCount = 0;
+        java.util.concurrent.atomic.AtomicInteger activeCounter = new java.util.concurrent.atomic.AtomicInteger(0);
         try (var stream = java.nio.file.Files.list(translatorsDir)) {
             stream.filter(p -> p.toString().endsWith(".yml"))
                 .forEach(p -> {
@@ -551,7 +552,7 @@ public final class ConfigValidator {
                             }
                             Object active = map.get("active");
                             if (active instanceof Boolean && (Boolean) active) {
-                                activeCount++;
+                                activeCounter.incrementAndGet();
                             }
                         }
                     } catch (Exception e) {
@@ -572,7 +573,7 @@ public final class ConfigValidator {
             ));
         }
 
-        if (activeCount == 0) {
+        if (activeCounter.get() == 0) {
             issues.add(new ValidationIssue(
                 ValidationLevel.WARNING,
                 "translators",

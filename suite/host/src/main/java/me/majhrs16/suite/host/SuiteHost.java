@@ -118,6 +118,19 @@ public final class SuiteHost {
     }
 
     /**
+     * Resolves the source language for a message once and returns a new Message
+     * with the resolved source language cached. This avoids repeated detection
+     * when delivering to multiple recipients.
+     */
+    public Message resolveSourceLanguage(Message message) {
+        if (message.resolvedSourceLanguage() != null) {
+            return message;
+        }
+        Language resolved = effectiveSource(message);
+        return message.withResolvedSourceLanguage(resolved);
+    }
+
+    /**
      * Full pipeline for one recipient: resolve their language, route through
      * iFlow and render with TextFormatter when delivery is allowed.
      */
@@ -143,20 +156,24 @@ public final class SuiteHost {
         return formatter.format(message, context);
     }
 
-    private Language effectiveLanguage(Actor recipient) {
-        if (recipient.language() != null) {
-            return recipient.language();
-        }
-        return config.defaultLanguage();
-    }
-
     private Language effectiveSource(Message message) {
+        // Use already-resolved source language if available
+        if (message.resolvedSourceLanguage() != null) {
+            return message.resolvedSourceLanguage();
+        }
         if (message.langSource() != null && message.langSource() != Language.AUTO) {
             return message.langSource();
         }
         if (translation.isAvailable()) {
             Language detected = translation.detect(message.text());
             return detected == Language.AUTO ? config.defaultLanguage() : detected;
+        }
+        return config.defaultLanguage();
+    }
+
+    private Language effectiveLanguage(Actor recipient) {
+        if (recipient.language() != null) {
+            return recipient.language();
         }
         return config.defaultLanguage();
     }

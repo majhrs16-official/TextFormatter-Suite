@@ -56,14 +56,17 @@ public final class MessageDispatcher {
             return DispatchReport.none("cancelled");
         }
 
-        List<Actor> recipients = expand(message);
+        // Resolve source language once for the entire message (not per recipient)
+        Message messageWithResolvedSource = host.resolveSourceLanguage(message);
+
+        List<Actor> recipients = expand(messageWithResolvedSource);
         int delivered = 0;
         int silenced = 0;
         int redirected = 0;
         int channelRedirected = 0;
 
         for (Actor recipient : recipients) {
-            RoutingResult result = host.deliver(message, recipient);
+            RoutingResult result = host.deliver(messageWithResolvedSource, recipient);
             RouteDecision decision = result.decision();
 
             if (result.redirect()) {
@@ -101,7 +104,7 @@ public final class MessageDispatcher {
             delivered++;
             playChannelSounds(message, recipient);
         }
-        return new DispatchReport(recipients.size(), delivered, silenced, redirected, channelRedirected);
+        return new DispatchReport(recipients.size(), delivered, silenced, redirected, channelRedirected, null);
     }
 
     /**
