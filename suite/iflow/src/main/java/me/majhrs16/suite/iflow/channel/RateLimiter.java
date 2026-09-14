@@ -16,7 +16,6 @@ import java.util.Map;
  */
 public final class RateLimiter {
 
-    private final long capacity;
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final Clock clock;
     private final ScheduledExecutorService purger;
@@ -24,13 +23,11 @@ public final class RateLimiter {
     private static final long WINDOW_NANOS = 1_000_000_000L;
     private static final long IDLE_NANOS = 5 * WINDOW_NANOS;
 
-    public RateLimiter(int capacity) {
-        this(capacity, System::nanoTime);
-        purger.scheduleAtFixedRate(() -> purgeIdle(clock.nanoTime()), 1, 1, TimeUnit.MINUTES);
+    public RateLimiter() {
+        this(System::nanoTime);
     }
 
-    RateLimiter(int capacity, Clock clock) {
-        this.capacity = Math.max(1, capacity);
+    RateLimiter(Clock clock) {
         this.clock = clock;
         this.purger = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "rate-limiter-purge");
@@ -41,13 +38,15 @@ public final class RateLimiter {
     }
 
     /**
-     * Tries to consume one ticket for the key.
+     * Tries to consume one ticket for the key with the given capacity (messages per second).
      *
+     * @param key the rate limit key (channel + actor)
+     * @param capacity the maximum messages per second for this key
      * @return {@code true} when within budget, {@code false} when throttled;
      *         a non-zero wait in nanoSeconds is implied by the remaining
      *         window.
      */
-    public boolean tryAcquire(String key) {
+    public boolean tryAcquire(String key, int capacity) {
         long now = clock.nanoTime();
         Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
         synchronized (bucket) {

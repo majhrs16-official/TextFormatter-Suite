@@ -60,7 +60,7 @@ public final class DefaultRouter implements Router {
                          ExpressionEvaluator expressionEvaluator) {
         this.channels = Objects.requireNonNull(channels, "channels");
         this.permissions = Objects.requireNonNull(permissions, "permissions");
-        this.rateLimit = new RateLimiter(1);
+        this.rateLimit = new RateLimiter();
         this.expressionEvaluator = expressionEvaluator;
     }
 
@@ -90,7 +90,7 @@ public final class DefaultRouter implements Router {
 
         if (channel.rateLimitPerSecond() > 0) {
             String key = path + "\u0000" + emitter.uuid();
-            if (!rateLimit.tryAcquire(key)) {
+            if (!rateLimit.tryAcquire(key, channel.rateLimitPerSecond())) {
                 return new RouteDecision(PolicyTarget.RATE_LIMIT,
                     "budget exhausted on " + path + " (" + channel.rateLimitPerSecond() + "/s)",
                     rateLimit.nanosUntilNextWindow() / 1_000_000L, recipient, emitter);
@@ -205,7 +205,7 @@ public final class DefaultRouter implements Router {
             case RATE_LIMIT:
                 if (channel.rateLimitPerSecond() > 0) {
                     String key = message.channel() + "\u0000" + emitter.uuid();
-                    if (!rateLimit.tryAcquire(key)) {
+                    if (!rateLimit.tryAcquire(key, channel.rateLimitPerSecond())) {
                         return new RouteDecision(PolicyTarget.RATE_LIMIT,
                             rule.reason() + " — budget exhausted",
                             rateLimit.nanosUntilNextWindow() / 1_000_000L, recipient, emitter);
@@ -217,3 +217,13 @@ public final class DefaultRouter implements Router {
                 return new RouteDecision(PolicyTarget.LOG, rule.reason(), 0, recipient, emitter);
         }
     }
+
+    private void executeAction(Rule rule, Message message, Actor emitter, Actor recipient) {
+        try {
+            Map<String, Object> bindings = createBindings(message, emitter, recipient);
+            expressionEvaluator.evaluateObject(rule.action(), bindings);
+        } catch (Exception e) {
+            // Action evaluation error -> ignore
+        }
+    }
+}

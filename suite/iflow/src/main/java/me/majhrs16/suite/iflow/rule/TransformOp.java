@@ -30,14 +30,14 @@ import java.util.Map;
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "op", visible = true)
 @JsonSubTypes({
-    @JsonSubTypes.Type(value = Rewrite.class, name = "rewrite"),
-    @JsonSubTypes.Type(value = Sounds.class, name = "sounds"),
-    @JsonSubTypes.Type(value = Sleep.class, name = "sleep"),
-    @JsonSubTypes.Type(value = SetLangSource.class, name = "setLangSource"),
-    @JsonSubTypes.Type(value = SetLangTarget.class, name = "setLangTarget"),
-    @JsonSubTypes.Type(value = SetColorMode.class, name = "setColorMode"),
-    @JsonSubTypes.Type(value = SetFormatPapi.class, name = "setFormatPapi"),
-    @JsonSubTypes.Type(value = SetChannel.class, name = "setChannel")
+    @JsonSubTypes.Type(value = TransformOp.Rewrite.class, name = "rewrite"),
+    @JsonSubTypes.Type(value = TransformOp.Sounds.class, name = "sounds"),
+    @JsonSubTypes.Type(value = TransformOp.Sleep.class, name = "sleep"),
+    @JsonSubTypes.Type(value = TransformOp.SetLangSource.class, name = "setLangSource"),
+    @JsonSubTypes.Type(value = TransformOp.SetLangTarget.class, name = "setLangTarget"),
+    @JsonSubTypes.Type(value = TransformOp.SetColorMode.class, name = "setColorMode"),
+    @JsonSubTypes.Type(value = TransformOp.SetFormatPapi.class, name = "setFormatPapi"),
+    @JsonSubTypes.Type(value = TransformOp.SetChannel.class, name = "setChannel")
 })
 public abstract class TransformOp {
 
@@ -71,7 +71,7 @@ public abstract class TransformOp {
 
         @Override
         public void apply(ScriptSurface surface) {
-            surface.msg().setText(template);
+            surface.setText(template);
         }
 
         @Override
@@ -115,10 +115,10 @@ public abstract class TransformOp {
         public void apply(ScriptSurface surface) {
             // Sounds are handled at channel level; this marks for post-processing
             if (!add.isEmpty()) {
-                surface.msg().setSoundsAdd(add);
+                surface.setSoundsAdd(add);
             }
             if (!remove.isEmpty()) {
-                surface.msg().setSoundsRemove(remove);
+                surface.setSoundsRemove(remove);
             }
         }
 
@@ -151,7 +151,7 @@ public abstract class TransformOp {
 
         @Override
         public void apply(ScriptSurface surface) {
-            surface.msg().setSleepMillis(millis);
+            surface.setSleepMillis(millis);
         }
 
         @Override

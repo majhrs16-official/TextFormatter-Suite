@@ -4,14 +4,18 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.ColorMode;
+import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * Surface of atomic operations exposed to SpEL scripts in iFlow rules.
@@ -34,13 +38,13 @@ import java.util.function.Function;
  */
 public final class ScriptSurface {
 
-    private final Message message;
+    private Message message;
     private final Actor sender;
     private final Actor recipient;
     private final ChannelRegistry channels;
     private final PlaceholderResolver placeholders;
     private final TranslationService translation;
-    private final Function<Actor, Boolean> permissionChecker;
+    private final BiFunction<Actor, String, Boolean> permissionChecker;
 
     private String redirectChannel;
     private boolean cancelled = false;
@@ -53,7 +57,7 @@ public final class ScriptSurface {
                          ChannelRegistry channels,
                          PlaceholderResolver placeholders,
                          TranslationService translation,
-                         Function<Actor, Boolean> permissionChecker) {
+                         BiFunction<Actor, String, Boolean> permissionChecker) {
         this.message = Objects.requireNonNull(message, "message");
         this.sender = Objects.requireNonNull(sender, "sender");
         this.recipient = Objects.requireNonNull(recipient, "recipient");
@@ -90,7 +94,7 @@ public final class ScriptSurface {
     /** @return whether the given actor has the specified permission. */
     public boolean hasPermission(Actor actor, String permission) {
         if (permission == null || permission.isBlank()) return true;
-        return permissionChecker.apply(actor);
+        return permissionChecker.apply(actor, permission);
     }
 
     /** @return whether the sender has the specified permission. */
@@ -143,52 +147,50 @@ public final class ScriptSurface {
 
     /** Sets the target language for this message's translation. */
     public void setLangTarget(Language lang) {
-        // Message is immutable; actual mutation happens in delivery pipeline
-        // This is a marker for the delivery pipeline
-        message.setLangTarget(lang);
+        this.message = message.withLangTarget(lang);
     }
 
     /** Sets the source language for this message's translation. */
     public void setLangSource(Language lang) {
-        message.setLangSource(lang);
+        this.message = message.withLangSource(lang);
     }
 
     /** Disables translation for this message. */
     public void skipTranslate() {
         this.skipTranslate = true;
-        message.setTranslate(false);
+        this.message = message.withTranslate(false);
     }
 
     /** Enables translation for this message. */
     public void enableTranslate() {
-        message.setTranslate(true);
+        this.message = message.withTranslate(true);
     }
 
     /** Sets the format path (channel) for this message. */
     public void setFormat(String path) {
         this.formatPath = path;
-        message.setChannel(path);
+        this.message = message.withChannel(path);
     }
 
     /** Sets the color mode for this message. */
     public void setColorMode(String mode) {
-        message.setColorMode(mode);
+        this.message = message.withColorMode(ColorMode.valueOf(mode.toUpperCase()));
     }
 
     /** Sets whether PAPI placeholders should be resolved. */
     public void setFormatPapi(boolean enabled) {
-        message.setFormatPapi(enabled);
+        this.message = message.withFormatPapi(enabled);
     }
 
     /** Cancels the message delivery entirely (DROP). */
     public void cancel() {
         this.cancelled = true;
-        message.setCancelled(true);
+        this.message = message.withCancelled(true);
     }
 
     /** Marks the message as processed without delivery (internal). */
     public void setProcessed() {
-        message.setProcessed(true);
+        this.message = message.withProcessed(true);
     }
 
     /** Sets a redirect target channel (for CHANNEL_REDIRECT). */
@@ -222,22 +224,22 @@ public final class ScriptSurface {
 
     /** Sets the raw message text (for Rewrite transform). */
     public void setText(String text) {
-        message.setText(text);
+        this.message = message.withText(text);
     }
 
     /** Adds sound specs to the message (for Sounds transform). */
     public void setSoundsAdd(List<String> sounds) {
-        message.setSoundsAdd(sounds);
+        this.message = message.withSoundsAdd(sounds);
     }
 
     /** Removes sound specs from the message (for Sounds transform). */
     public void setSoundsRemove(List<String> sounds) {
-        message.setSoundsRemove(sounds);
+        this.message = message.withSoundsRemove(sounds);
     }
 
     /** Sets sleep milliseconds (for Sleep transform). */
     public void setSleepMillis(long millis) {
-        message.setSleepMillis(millis);
+        this.message = message.withSleepMillis(millis);
     }
 
     // ============================================================
