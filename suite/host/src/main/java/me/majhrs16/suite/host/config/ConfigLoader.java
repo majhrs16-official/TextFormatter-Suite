@@ -7,6 +7,8 @@ import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.LoaderOptions;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,7 +26,7 @@ import java.util.Map;
  */
 public final class ConfigLoader {
 
-    private static final Yaml YAML = new Yaml();
+    private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
     private ConfigLoader() {
     }

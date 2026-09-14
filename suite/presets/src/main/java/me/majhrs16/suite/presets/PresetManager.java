@@ -7,6 +7,7 @@ import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.host.config.HostConfig;
 
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,7 +22,7 @@ public final class PresetManager {
 
     private final Map<String, Preset> presets = new ConcurrentHashMap<>();
     private final Path presetsDir;
-    private final Yaml yaml = new Yaml();
+    private final Yaml yaml = new Yaml(new SafeConstructor());
 
     public PresetManager(Path presetsDir) {
         this.presetsDir = presetsDir.toAbsolutePath();
@@ -246,8 +247,7 @@ public final class PresetManager {
                 .forEach(p -> {
                     try {
                         String content = Files.readString(p);
-                        Yaml yaml = new Yaml();
-                        Map<String, Object> map = (Map<String, Object>) new Yaml().load(content);
+                        Map<String, Object> map = (Map<String, Object>) yaml.load(content);
                         // TODO: Parse custom preset from YAML
                     } catch (Exception e) {
                         // Log error

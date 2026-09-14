@@ -6,6 +6,7 @@ import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.syncdiscord.JdaDiscordSink;
 
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -47,7 +48,7 @@ public final class DiscordBridge {
             return null;
         }
         try {
-            Object root = new Yaml().load(Files.readString(file));
+            Object root = new Yaml(new SafeConstructor()).load(Files.readString(file));
             if (!(root instanceof Map)) {
                 return null;
             }

@@ -3,6 +3,8 @@ package me.majhrs16.suite.host.config;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.LoaderOptions;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,7 +23,7 @@ import java.util.Map;
  */
 public final class MessagesConfig {
 
-    private static final Yaml YAML = new Yaml();
+    private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
     private final Map<String, String> values;
 

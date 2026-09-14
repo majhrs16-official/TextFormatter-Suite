@@ -418,3 +418,85 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 8. **Checklist release (15 items P0/P2)** — P0: gradle.lockfile + SHA256 + dependencyVerification; P1: allowlist + manifest validation pre-load; P2: reproducible builds + CI/CD gate.
 
 **Recomendación inmediata:** Configurar `dependencyVerification` en `settings.gradle` con claves SHA256 + generar `gradle.lockfile` antes de cualquier release.
+
+---
+
+## PENDIENTES POST-AUDITORÍA 14/09/2026 (AUDITORIA-14-09-2026)
+
+### 🔴 Sprint Seguridad — P0 (Antes de cualquier release)
+
+| # | Item | Archivos Afectados | Severidad | Estado |
+|---|------|-------------------|-----------|--------|
+| S1 | **SpEL Sandbox** — `ExpressionEvaluator` sin sandbox, usar `SimpleEvaluationContext` o contexto restringido | `textformatter/scripting/SpelExpressionEvaluator.java`, `iflow/DefaultRouter.java` | CWE-94 RCE | ⏳ |
+| S2 | **YAML SafeConstructor** — 4 loaders usan `new Yaml()` unsafe → `new Yaml(new SafeConstructor())` | `host/config/ConfigLoader.java`, `host/config/ConfigValidator.java`, `host/config/CommandsConfigLoader.java`, `manager-impl/DefaultModuleLifecycle.java` | CWE-502 Deserialización | ⏳ |
+| S3 | **MiniEscape Completo** — Escapar `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@` además de `<`, `\` | `textformatter/template/MiniEscape.java` | Inyección MiniMessage | ⏳ |
+| S4 | **Tokens en `char[]`** — Discord/Telegram/LibreTranslate tokens en `String` permanente → `char[]` + `Arrays.fill()` | `sync-discord/JdaDiscordSink.java`, `sync-telegram/TelegramSink.java`, `gtranslate/GTranslate.java`, `ltranslate/LTranslate.java` | Fuga secretos | ⏳ |
+| S5 | **Bounded Executors** — `HttpServer` executor unbounded; `MessageDispatcher` paralelo (no secuencial en async) | `sync-http/HttpSink.java`, `host/MessageDispatcher.java`, `observability/endpoint/MetricsEndpoint.java` | DoS thread exhaustion | ⏳ |
+| S6 | **gradle.lockfile + dependencyVerification** — Configurar en `settings.gradle` con claves SHA256 | `settings.gradle`, `build.gradle` (root) | Supply chain | ⏳ |
+
+### 🔴 Module Manager (F12) — Release-Ready
+
+| # | Item | Detalle | Estado |
+|---|------|---------|--------|
+| M1 | **Publicar GitHub Releases** | Requisito para downloader; tags `v2.1.0`, `v2.1.1`, etc. | ⏳ |
+| M2 | **Version Resolver** | Implementar rangos semver (`[1.0,2.0)`, `1.0.x`) + compatibilidad env (Java, MC version, contract) | ⏳ |
+| M3 | **Dependency Resolver** | Parsear `META-INF/maven/pom.xml` o `module.json` de releases para dependencias transitivas | ⏳ |
+| M4 | **SHA256 Realmente Conectado** | Asset `.sha256` separado por release; verificación obligatoria (no `null` = skip) | ⏳ |
+| M5 | **Allowlist + Manifest Validation** | Pre-load: verificar manifest, allowlist módulos permitidos, firmas | ⏳ |
+| M6 | **register() Semántica** | Revisar: manager carga descriptor SPI, no debería instanciar `Module` como servicio | ⏳ |
+
+### 🟡 Media Prioridad
+
+| # | Item | Detalle | Estado |
+|---|------|---------|--------|
+| T1 | **Tests E2E Pipeline Completo** | Spigot + Fabric: chat → iFlow → format → delivery; assertions sobre efectos | ⏳ |
+| T2 | **Docs Sincronización** | README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR → un mismo estado | ⏳ |
+| T3 | **sync-velocity Estado Real** | Confirmar implementación real vs stub; actualizar README/PLAN | ⏳ |
+| T4 | **Config Schema Single-Source** | Generar `paths.json`, `js/paths.js`, `js/model.js` desde `ConfigPath` enum | ⏳ |
+| T5 | **Reproducible Builds** | `gradle.lockfile` + timestamps deterministas + versiones release en JARs | ⏳ |
+| T6 | **TranslatorProvider SPI** | Fix Clean Architecture V1-V3: host no debe instanciar GTranslate/LTranslate directo | ⏳ |
+
+---
+
+## PLAN DE ACCIÓN INMEDIATO (Orden Sugerido)
+
+### Semana 1: Security Sprint 1
+1. S1 — SpEL Sandbox (`SpelExpressionEvaluator`)
+2. S2 — YAML SafeConstructor (4 loaders)
+3. S3 — MiniEscape completo
+4. S4 — Tokens en `char[]`
+
+### Semana 2: Security Sprint 2
+5. S5 — Bounded Executors + MessageDispatcher paralelo
+6. S6 — gradle.lockfile + dependencyVerification
+7. T4 — Config Schema single-source generation
+
+### Semana 3: Module Manager Release-Ready
+8. M1 — Publicar GitHub Releases (tags + assets + .sha256)
+9. M2 — Version Resolver (rangos semver + env compat)
+10. M3 — Dependency Resolver (manifest parsing)
+11. M4 — SHA256 conectado (asset .sha256 obligatorio)
+12. M5 — Allowlist + Manifest validation
+
+### Semana 4: Tests + Docs + Release
+13. T1 — Tests E2E pipeline completo
+14. T2 — Docs sincronización completa
+15. T3 — sync-velocity confirmación
+16. T6 — TranslatorProvider SPI (Clean Arch fix)
+17. Release pipeline + versionado semántico
+
+---
+
+## FASE 17 — CONSOLIDACIÓN FINAL (Nueva)
+
+```
+F17-1  Security hardening completo (S1-S6)
+F17-2  Module Manager release-ready (M1-M6)
+F17-3  Tests E2E Spigot + Fabric
+F17-4  Docs 100% sincronizadas
+F17-5  Release pipeline + semver + lockfile
+F17-6  TranslatorProvider SPI + Clean Arch fixes
+F17-7  sync-velocity confirmado real
+F17-8  Config schema single-source generado
+```
+---

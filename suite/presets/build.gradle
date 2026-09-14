@@ -20,6 +20,8 @@ dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation 'org.yaml:snakeyaml:2.3'
     implementation 'org.springframework:spring-expression:6.1.12'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
