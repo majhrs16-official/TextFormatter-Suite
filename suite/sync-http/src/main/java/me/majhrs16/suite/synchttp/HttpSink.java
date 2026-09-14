@@ -16,6 +16,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * HTTP edge connector: pushes outbound messages to a webhook URL and exposes
@@ -30,6 +33,7 @@ public final class HttpSink implements SyncSink {
     private final HttpClient client;
     private volatile SyncListener listener;
     private volatile HttpServer server;
+    private ThreadPoolExecutor executor;
 
     public HttpSink(String outboundUrl, int inboundPort, String inboundPath) {
         this.outboundUrl = Objects.requireNonNull(outboundUrl, "outboundUrl");
@@ -38,6 +42,17 @@ public final class HttpSink implements SyncSink {
         this.client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
+        // Bounded executor for HTTP server (prevents thread exhaustion)
+        this.executor = new ThreadPoolExecutor(
+            4, 16, 60L, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(100),
+            r -> {
+                Thread t = new Thread(r, "http-sink-worker");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 
     @Override
@@ -59,6 +74,8 @@ public final class HttpSink implements SyncSink {
         }
         HttpServer created = HttpServer.create(new InetSocketAddress(inboundPort), 0);
         created.createContext(inboundPath, this::handleInbound);
+        // Use bounded executor to prevent thread exhaustion (DOS-1)
+        created.setExecutor(executor);
         created.start();
         server = created;
     }
@@ -69,6 +86,18 @@ public final class HttpSink implements SyncSink {
         server = null;
         if (current != null) {
             current.stop(0);
+        }
+        // Shutdown executor gracefully
+        if (executor != null) {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

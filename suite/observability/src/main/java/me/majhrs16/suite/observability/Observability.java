@@ -11,7 +11,9 @@ import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -137,7 +139,8 @@ public final class Observability {
     }
 
     public MetricsCollector getMetricsCollector() {
-        return new MetricsCollector(); // static methods
+        // MetricsCollector uses static methods; return null as marker
+        return null;
     }
 
     /**
@@ -161,28 +164,5 @@ public final class Observability {
                     )
                 ))
         );
-    }
-
-    // Getters for port info (need to add to endpoints)
-    private int getMetricsPort() {
-        try {
-            var field = MetricsEndpoint.class.getDeclaredField("server");
-            field.setAccessible(true);
-            var server = field.get(metricsEndpoint);
-            return (int) server.getClass().getMethod("getAddress").invoke(server).getClass().getMethod("getPort").invoke(server.getAddress());
-        } catch (Exception e) {
-            return 9090;
-        }
-    }
-
-    private int getDebugPort() {
-        try {
-            var field = DebugEndpoint.class.getDeclaredField("server");
-            field.setAccessible(true);
-            var server = field.get(debugEndpoint);
-            return (int) server.getClass().getMethod("getAddress").invoke(server).getClass().getMethod("getPort").invoke(server.getAddress());
-        } catch (Exception e) {
-            return 9091;
-        }
     }
 }

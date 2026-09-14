@@ -18,10 +18,11 @@ java {
 
 dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
     implementation 'io.prometheus:simpleclient:0.16.0'
     implementation 'io.prometheus:simpleclient_common:0.16.0'
-    implementation 'com.sun.net.httpserver:jdk-httpserver:1.0.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
     testImplementation platform('org.junit:junit-bom:5.10.2')

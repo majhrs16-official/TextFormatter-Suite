@@ -169,22 +169,22 @@ public final class DebugEndpoint {
             List<Map<String, Object>> channelList = channels.paths().stream()
                 .map(path -> {
                     var channel = channels.resolve(path);
-                    return Map.of(
-                        "name", channel.name(),
-                        "permission", channel.permission(),
-                        "sendPermission", channel.sendPermission(),
-                        "receivePermission", channel.receivePermission(),
-                        "type", channel.type().name(),
-                        "showSender", channel.showSender(),
-                        "rateLimit", channel.rateLimitPerSecond(),
-                        "langSource", channel.langSource().code(),
-                        "langTarget", channel.langTarget().code(),
-                        "messageCount", channel.messages().templates().length,
-                        "tooltipCount", channel.tooltips().templates().length,
-                        "soundCount", channel.sounds().size()
-                    );
+                    Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("name", channel.name());
+                    m.put("permission", channel.permission());
+                    m.put("sendPermission", channel.sendPermission());
+                    m.put("receivePermission", channel.receivePermission());
+                    m.put("type", channel.type().name());
+                    m.put("showSender", channel.showSender());
+                    m.put("rateLimit", channel.rateLimitPerSecond());
+                    m.put("langSource", channel.langSource().code());
+                    m.put("langTarget", channel.langTarget().code());
+                    m.put("messageCount", channel.messages().texts().length);
+                    m.put("tooltipCount", channel.tooltips().texts().length);
+                    m.put("soundCount", channel.sounds().size());
+                    return m;
                 })
-                .toList();
+                .collect(java.util.stream.Collectors.toList());
 
             String response = toJson(Map.of("channels", channelList));
             sendResponse(exchange, 200, response, "application/json");
@@ -267,9 +267,40 @@ public final class DebugEndpoint {
 
     private String toJson(Object obj) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(obj);
+            // Use a simple JSON approach without Jackson dependency
+            return toJsonSimple(obj);
         } catch (Exception e) {
             return "{\"error\": \"JSON serialization failed: " + e.getMessage() + "\"}";
         }
+    }
+
+    private String toJsonSimple(Object obj) {
+        if (obj == null) return "null";
+        if (obj instanceof String) return "\"" + obj + "\"";
+        if (obj instanceof Number || obj instanceof Boolean) return obj.toString();
+        if (obj instanceof Map) {
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) obj).entrySet()) {
+                if (!first) sb.append(",");
+                sb.append("\"").append(entry.getKey()).append("\":");
+                sb.append(toJsonSimple(entry.getValue()));
+                first = false;
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+        if (obj instanceof List) {
+            StringBuilder sb = new StringBuilder("[");
+            boolean first = true;
+            for (Object item : (List<?>) obj) {
+                if (!first) sb.append(",");
+                sb.append(toJsonSimple(item));
+                first = false;
+            }
+            sb.append("]");
+            return sb.toString();
+        }
+        return "\"" + obj.toString() + "\"";
     }
 }

@@ -15,6 +15,12 @@ import me.majhrs16.suite.textformatter.channel.Channel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Bridges the engine and the platform: expands a {@link Direction} into the
@@ -22,9 +28,10 @@ import java.util.Objects;
  * {@code SuiteHost} pipeline per recipient and pushes the outcome through a
  * {@link ChatDelivery}.
  *
- * <p>Deliberately synchronous and thread-agnostic: the platform adapter picks
- * the execution context (async chat event, off-main scheduler) and the
- * delivery implementation hops back to the main thread when required.</p>
+ * <p>Processes recipients in parallel using a bounded executor to prevent
+ * thread exhaustion (DOS-2). The platform adapter picks the execution context
+ * (async chat event, off-main scheduler) and the delivery implementation
+ * hops back to the main thread when required.</p>
  */
 public final class MessageDispatcher {
 
@@ -33,6 +40,7 @@ public final class MessageDispatcher {
     private final ChatDelivery delivery;
     private final PermissionChecker permissions;
     private final PluginLogger logger;
+    private final ExecutorService executor;
 
     public MessageDispatcher(SuiteHost host,
                              ActorDirectory actors,
@@ -44,6 +52,17 @@ public final class MessageDispatcher {
         this.delivery = Objects.requireNonNull(delivery, "delivery");
         this.permissions = Objects.requireNonNull(permissions, "permissions");
         this.logger = Objects.requireNonNull(logger, "logger");
+        // Bounded executor for parallel recipient processing (DOS-2)
+        this.executor = new ThreadPoolExecutor(
+            4, 32, 60L, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(1000),
+            r -> {
+                Thread t = new Thread(r, "msg-dispatcher-worker");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 
     /**
@@ -60,52 +79,74 @@ public final class MessageDispatcher {
         Message messageWithResolvedSource = host.resolveSourceLanguage(message);
 
         List<Actor> recipients = expand(messageWithResolvedSource);
+        if (recipients.isEmpty()) {
+            return new DispatchReport(0, 0, 0, 0, 0, null);
+        }
+
+        // Process recipients in parallel using bounded executor
+        List<CompletableFuture<RecipientResult>> futures = recipients.stream()
+            .map(recipient -> CompletableFuture.supplyAsync(() -> {
+                RoutingResult result = host.deliver(messageWithResolvedSource, recipient);
+                return new RecipientResult(recipient, result);
+            }, executor))
+            .collect(Collectors.toList());
+
+        // Collect results
         int delivered = 0;
         int silenced = 0;
         int redirected = 0;
         int channelRedirected = 0;
 
-        for (Actor recipient : recipients) {
-            RoutingResult result = host.deliver(messageWithResolvedSource, recipient);
-            RouteDecision decision = result.decision();
+        for (CompletableFuture<RecipientResult> future : futures) {
+            try {
+                RecipientResult rr = future.get();
+                Actor recipient = rr.recipient();
+                RoutingResult result = rr.result();
+                RouteDecision decision = result.decision();
 
-            if (result.redirect()) {
-                delivery.deliverConsole(result.rendered());
-                redirected++;
-                continue;
-            }
-            if (decision.target() == PolicyTarget.CHANNEL_REDIRECT) {
-                String targetChannel = decision.redirectChannel();
-                if (targetChannel != null) {
-                    Message redirectedMsg = Message.builder()
-                        .from(message)
-                        .channel(targetChannel)
-                        .build();
-                    // Re-route to target channel
-                    var reResult = host.deliver(redirectedMsg, recipient);
-                    if (reResult.decision().delivered()) {
-                        delivery.deliver(recipient, reResult.rendered(), redirectedMsg);
-                        channelRedirected++;
-                        playChannelSounds(redirectedMsg, recipient);
-                        continue;
-                    }
+                if (result.redirect()) {
+                    delivery.deliverConsole(result.rendered());
+                    redirected++;
+                    continue;
                 }
-                // Fallback: deliver to console if channel redirect fails
-                delivery.deliverConsole(result.rendered());
-                redirected++;
-                continue;
-            }
-            if (!decision.delivered()) {
-                logSilenced(recipient, decision);
+                if (decision.target() == PolicyTarget.CHANNEL_REDIRECT) {
+                    String targetChannel = decision.redirectChannel();
+                    if (targetChannel != null) {
+                        Message redirectedMsg = Message.builder()
+                            .from(messageWithResolvedSource)
+                            .channel(targetChannel)
+                            .build();
+                        // Re-route to target channel
+                        var reResult = host.deliver(redirectedMsg, recipient);
+                        if (reResult.decision().delivered()) {
+                            delivery.deliver(recipient, reResult.rendered(), redirectedMsg);
+                            channelRedirected++;
+                            playChannelSounds(redirectedMsg, recipient);
+                            continue;
+                        }
+                    }
+                    // Fallback: deliver to console if channel redirect fails
+                    delivery.deliverConsole(result.rendered());
+                    redirected++;
+                    continue;
+                }
+                if (!decision.delivered()) {
+                    logSilenced(recipient, decision);
+                    silenced++;
+                    continue;
+                }
+                delivery.deliver(recipient, result.rendered(), messageWithResolvedSource);
+                delivered++;
+                playChannelSounds(messageWithResolvedSource, recipient);
+            } catch (Exception e) {
+                logger.error("Error processing recipient", e);
                 silenced++;
-                continue;
             }
-            delivery.deliver(recipient, result.rendered(), message);
-            delivered++;
-            playChannelSounds(message, recipient);
         }
         return new DispatchReport(recipients.size(), delivered, silenced, redirected, channelRedirected, null);
     }
+
+    private record RecipientResult(Actor recipient, RoutingResult result) {}
 
     /**
      * Materializes the direction into a de-duplicated recipient list.

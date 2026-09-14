@@ -16,6 +16,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -51,8 +52,18 @@ public final class MetricsEndpoint {
         // Health endpoint
         server.createContext("/health", new HealthHandler());
 
-        // Configure executor
-        server.setExecutor(Executors.newFixedThreadPool(4));
+        // Configure bounded executor to prevent thread exhaustion (DOS-1)
+        ThreadPoolExecutor boundedExecutor = new ThreadPoolExecutor(
+            2, 8, 60L, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(50),
+            r -> {
+                Thread t = new Thread(r, "metrics-endpoint-worker");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy()
+        );
+        server.setExecutor(boundedExecutor);
     }
 
     /**
@@ -107,7 +118,10 @@ public final class MetricsEndpoint {
 
             MetricsCollector.updateJvmMetrics();
 
-            String output = TextFormat.write004(MetricsCollector.registry().metricFamilySamples());
+            // Use StringWriter to capture Prometheus text format
+            java.io.StringWriter writer = new java.io.StringWriter();
+            TextFormat.write004(writer, MetricsCollector.registry().metricFamilySamples());
+            String output = writer.toString();
 
             exchange.getResponseHeaders().set("Content-Type", TextFormat.CONTENT_TYPE_004);
             exchange.sendResponseHeaders(200, output.getBytes(StandardCharsets.UTF_8).length);
@@ -149,5 +163,9 @@ public final class MetricsEndpoint {
 
     public boolean isRunning() {
         return running;
+    }
+
+    public int getPort() {
+        return server.getAddress().getPort();
     }
 }
