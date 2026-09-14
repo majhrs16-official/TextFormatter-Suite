@@ -6,137 +6,84 @@
 
 ---
 
-## 1. ESTADO DEL SISTEMA (2026-09-02)
+## 1. ESTADO DEL SISTEMA (2026-09-13)
 
 | Pieza | Estado | Verificación |
 |---|---|---|
 | core-api (modelo atómico + SPI) | ✅ estable, JDK-puro | tests |
 | kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
 | textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
-| iflow (router/reglas/rate-limit) | ✅ (`engine.parallel` sin consumir) | tests |
+| iflow (router/reglas/rate-limit per-key) | ✅ (`engine.parallel` sin consumir) | tests |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
-| sync-discord | ✅ JDA wired vía DiscordBridge | build |
+| sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
 | sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
+| sync-velocity | ✅ real (VelocitySink + VelocityPlugin) | build |
+| sync-websocket | ✅ real | build |
 | spigot-host | ✅ funcional · ✅ **probado en Paper 1.20.6 real** | 4 tests + server test |
+| fabric-host | ✅ funcional (Loom 1.6.12, 1.21) | build |
 | web-editor | ✅ gates verdes | check+integración |
-| fabric-host / Manager | ✅ implementado | build |
-| tester (suite/tester) | ✅ 25 tests runtime + PerformanceProfiler | tests |
+| manager-api | ✅ SPI estable | compile |
+| manager-impl | ⚠️ **No release-ready** (ver auditoría 2026-09-13) | compile |
+| presets | ✅ standard/rpg/staff/minimal | tests |
+| inworld | ✅ signos/cofres/libros, WORLD/RADIUS | tests |
+| observability | ✅ metrics/debug/health (auth token, 127.0.0.1) | tests |
+| extension-api | ✅ SDK estable | tests |
+| example-extension | ✅ demo funcional | tests |
+| tester | ✅ 25 tests runtime + PerformanceProfiler | tests |
 | messages | ✅ i18n centralizado EN/ES | tests |
 | i18n (FASE 5) | ✅ strings hardcodeados → MessagesCatalog | 98% |
 | transport | ✅ HttpURLConnection + MessageCodec único | tests |
+| loadtest | ✅ JMH benchmarks | build |
+| performance | ✅ profiling (CPU/heap/hotspot/cache/memory) | tests |
 
 ---
 
-## 2. COLA DE FASES (actualizado 2026-09-02)
+## 2. COLA DE FASES (actualizado 2026-09-13)
 
 ```
 1. FASE 4   fabric-host funcional           ✅
 2. FASE 5   Strings UI centralizados (i18n) ✅
 3. FASE 6   Motor de reglas iFlow enriquecido ✅
-5. FASE 7   ConfigValidator real            ✅
-6. FASE 8   Sistema comandos dinámico (/suite) ✅
-7. FASE 9   sync-velocity real              ✅
-8. FASE 10  Observabilidad                  ✅
-9. FASE 11  Extensiones/addons (SDK)        ✅
-10. FASE 12  Descargador runtime + attach/detach ✅
-11. FASE 13  sync-websocket                 ✅
-12. FASE 14  Presets, `transform` real, `engine.parallel` knob  ✅
-13. FASE 15  F8 in-world (signos/cofres/libros, WORLD/RADIUS, caché+glosario, botones click/hover)  ✅
+4. FASE 7   ConfigValidator real            ✅
+5. FASE 8   Sistema comandos dinámico (/suite) ✅
+6. FASE 9   sync-velocity real              ✅
+7. FASE 10  Observabilidad                  ✅
+8. FASE 11  Extensiones/addons (SDK)        ✅
+9. FASE 12  Descargador runtime + attach/detach ⚠️ (No release-ready)
+10. FASE 13 sync-websocket                  ✅
+11. FASE 14 Presets, `transform` real, `engine.parallel` knob  ✅
+12. FASE 15 F8 in-world                     ✅
+13. FASE 16 Tests, Optimización y Documentación ⚠️ (parcial: docs + E2E pendientes)
 ```
 
-### FASE 14 — Presets, `transform` real, `engine.parallel` knob
+### FASE 16 — Tests, Optimización y Documentación (EN CURSO)
 | # | Pieza | Estado |
 |---|-------|--------|
-| F14-1 | Presets module con configuraciones predefinidas (standard, rpg, staff, minimal) | ✅ |
-| F14-2 | TransformEngine con SpEL sandboxed para transformaciones reales | ✅ |
-| F14-3 | PresetManager para cargar/aplicar presets | ✅ |
-| F14-4 | `engine.parallel` knob para procesamiento paralelo de mensajes | ✅ |
-| F14-5 | Integración en spigot-host/fabric-host | ✅ |
-| F14-6 | Web-editor UI para presets | ⏳ |
+| F16-1 | Tests de carga/estrés (JMH + Gatling) | ✅ |
+| F16-2 | Tests de integración end-to-end | ⏳ (pipeline completo Spigot+Fabric) |
+| F16-3 | Optimización de rendimiento (profiling, memory tuning) | ✅ |
+| F16-4 | Documentación final (Wiki, API docs, guías) | ⏳ (sincronizar README/PLAN/PROMPT_NOW/Release Notes/ADR) |
+| F16-5 | Benchmarks de regresión continua | ⏳ |
+| F16-6 | Release pipeline y versionado semántico | ⏳ |
 
-### FASE 4 — fabric-host (BASE)
-| # | Pieza | Estado |
-|---|-------|--------|
-| F4-1 | fabric-host plugin: `FabricMod` entrypoint, `FabricActorDirectory`, `FabricChatDelivery` | ✅ |
-| F4-2 | Loom 1.6.12 configurado, mappings 1.20.6+ | ✅ (1.21 + yarn 1.21+build.1) |
-| F4-3 | Canales por defecto (join/quit/death/advancement) | ✅ |
-| F4-4 | Event handlers: death, advancement | ✅ |
-| F4-5 | Comando `/suite` (reload, status, lang, toggle, reset) | ✅ |
-| F4-6 | Test en servidor Fabric real | ⏳ (pendiente Java 21) |
-
-### FASE 5 — Strings UI centralizados (i18n)
-| # | Pieza | Estado |
-|---|-------|--------|
-| F5-1 | Mover strings hardcodeados a `suite/messages` (catalogos EN/ES) | ✅ |
-| F5-2 | Recobrar 98% strings en config (actualmente 0% en plugin) | ✅ |
-| F5-3 | `/suite lang` usa `MessagesCatalog` | ✅ |
-
-### FASE 6 — Motor de reglas iFlow enriquecido
-| # | Pieza | Estado |
-|---|-------|--------|
-| F6-1 | Destino "channel" en reglas (CHANNEL_REDIRECT) | ✅ |
-| F6-2 | Permisos/PAPI dentro de SpEL | ✅ |
-| F6-3 | `MessageEventBus` público para third-party | ✅ (core-api/event/MessageEvent) |
-| F6-4 | `transform` real (F7+) | ✅ (rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel) |
-
-### FASE 7 — ConfigValidator real
-| # | Pieza | Estado |
-|---|-------|--------|
-| F7-1 | Validación estructural contra schema del editor | ✅ |
-| F7-2 | Issues con shape del editor reportados en consola | ✅ |
-
-### FASE 8 — Sistema comandos dinámico (/suite)
-| # | Pieza | Estado |
-|---|-------|--------|
-| F8-1 | Topología dinámica desde `commands.yml` v2 | ✅ |
-| F8-2 | Acciones ATÓMICAS combinables (specs: jugador/idioma/ruta-config/enum) | ✅ |
-| F8-3 | Feedback reutilizando motor de chat | ✅ |
-| F8-4 | Edición config.yml desde comandos (estilo LuckPerms) | ⏳ |
-| F8-5 | `/suite` base configurable (renombrable: cht/dst/txf/tg/if) | ✅ |
-
-### FASE 9 — sync-velocity real
-| # | Pieza | Estado |
-|---|-------|--------|
-| F9-1 | Implementar `suite/sync-velocity` real o eliminar stub | ✅ |
-| F9-2 | VelocitySink: plugin messaging channel, secret auth, mapping | ✅ |
-| F9-3 | VelocityPlugin: Module SPI, velocity-plugin.json | ✅ |
-| F9-4 | Test en proxy Velocity real | ⏳ (pendiente proxy Velocity) |
-
-### FASE 10 — Observabilidad
-| # | Pieza | Estado |
-|---|-------|--------|
-| F10-1 | Metrics endpoint (`/metrics` Prometheus) | ✅ |
-| F10-2 | Debug endpoints (`/debug/simulate`, `/debug/dump`) | ✅ |
-| F10-3 | Healthchecks para sinks | ✅ |
-| F10-4 | Debug endpoints (`/debug/state`, `/debug/channels`) | ✅ |
-| F10-5 | Dynamic commands: `/suite health`, `/suite metrics` | ✅ |
-
-### FASE 11 — Extensiones/addons (SDK)
-| # | Pieza | Estado |
-|---|-------|--------|
-| F11-1 | Extension API: Extension, ExtensionContext, ExtensionConfig, ExtensionMetadata | ✅ |
-| F11-2 | ExtensionManager: discovery, dependency resolution, load/unload/reload | ✅ |
-| F11-3 | Extension SPI: onEnable/onDisable/onConfigReload, Capability system | ✅ |
-| F11-4 | Example extension demonstrating the API | ✅ |
-| F11-5 | ExtensionContext: channel registration, message dispatch, state, events | ✅ |
-| F11-6 | Integration with spigot-host/fabric-host (ExtensionManager start/stop) | ✅ |
-| F11-7 | Web-editor support for extension management (list, enable/disable, config) | ✅ |
-| F11-8 | Extension manifest schema (extension.yml) + validation | ✅ (docs/extension-schema.md) |
 ---
 
-### FASE 12 u2014 Descargador runtime + attach/detach
+### FASE 12 — Descargador runtime + attach/detach (DEUDA CONOCIDA)
 | # | Pieza | Estado |
 |---|-------|--------|
 | F12-1 | Manager API: ModuleCoordinate, ModuleDescriptor, Environment, ModuleLifecycle SPI | ✅ |
-| F12-2 | Manager Impl: GitHub releases downloader, version resolver, dependency relocator | ✅ |
-| F12-3 | ClassLoader aislado (parent-last) + SHA256 verification | ✅ |
-| F12-4 | Force flag para versiones no compatibles | ✅ |
-| F12-5 | Comando `/suite update` (actualización completa) | ✅ |
-| F12-6 | Comando `/suite module` (install, update, list, remove, info) | ✅ |
-| F12-7 | Integración spigot-host/fabric-host (start/stop/reload) | ✅ |
+| F12-2 | Manager Impl: GitHub releases downloader | ⚠️ **Releases = 0** |
+| F12-3 | Version resolver | ⚠️ **Stub** (lanza UnsupportedOperationException) |
+| F12-4 | Dependency relocator | ✅ (bug crítico arreglado: recursión infinita) |
+| F12-5 | ClassLoader aislado (parent-last) | ✅ (URLClassLoader, no ClassLoader) |
+| F12-6 | SHA256 verification | ⚠️ **No conectado** (sha256 = null) |
+| F12-7 | Force flag para versiones no compatibles | ✅ |
+| F12-8 | Comando `/suite update` | ✅ |
+| F12-9 | Comando `/suite module` (install, update, list, remove, info) | ✅ |
+| F12-10 | Integración spigot-host/fabric-host (start/stop/reload) | ✅ |
 
----
+> **Veredicto auditoría**: F12 no debería marcarse como 100%. Es un prototipo con API definida pero implementación incompleta.
 
 ---
 
@@ -151,6 +98,9 @@
 - Comandos: topología dinámica + acciones atómicas + feedback por motor. → FASE 8
 - Persistencia idioma paridad obligatoria; `off` ⇒ AUTO (texto fuente). → A1
 - Claim-mode configurable cancel-event/clear-recipients. → A3
+- **Message inmutable** → mutaciones vía `withX()` + `Builder.from()`. → Auditoría C1
+- **iFlow autoridad única** → Discord mirror respeta `DispatchReport`. → Auditoría H2
+- **Language detection O(1)** → `resolvedSourceLanguage` caché en Message. → Auditoría H3
 
 ---
 
@@ -164,18 +114,15 @@ source ~/.nvm/nvm.sh
 cd suite/web-editor && npm run check && npm run test:integration
 
 # Suite Java (orden; offline salvo deps nuevas)
-for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport; do
+for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-velocity sync-websocket host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
   (cd suite/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
 done
-(cd suite/host && ./gradlew test publishToMavenLocal --offline --no-daemon)
-(cd suite/sync-discord && ./gradlew test --offline --no-daemon)
-(cd suite/sync-telegram && ./gradlew test --offline --no-daemon)
-(cd suite/sync-http && ./gradlew test --offline --no-daemon)
-(cd suite/sync-tcpudp && ./gradlew test --offline --no-daemon)
-(cd suite/sync-telegram && ./gradlew test --offline --no-daemon)
 
 # Plugin Spigot de la suite (fat-jar)
 cd suite/spigot-host && ./gradlew build --offline --no-daemon
+
+# Plugin Fabric de la suite
+cd suite/fabric-host && ./gradlew build --offline --no-daemon
 
 # Web editor
 cd suite/web-editor
@@ -185,34 +132,13 @@ npm run test:integration             # harnesses func/interact/click/chain/undo/
 
 Git: commits convencionales por tema; push SOLO con autorización explícita.
 
-> **Nota sub-agentes (2026-09-06):** Cada `task` lanza un NUEVO agente stateless. No hay persistencia entre llamadas. Para "continuar" un agente fallido, relanzar `task` con prompt `"continua" + contexto resumido`. La API Nemotron 3 Ultra está saturada → reintentos frecuentes (502/504).
-
----
-
-### FASE 13 — sync-websocket
-| # | Pieza | Estado |
-|---|-------|--------|
-| F13-1 | WebSocket server para sync en tiempo real | ✅ |
-| F13-2 | Endpoints: /ws/chat, /ws/events, /ws/sync, /ws/logs | ✅ |
-| F13-3 | Subscription management y message broadcasting | ✅ |
-| F13-4 | Auth via token, subscription management | ✅ |
-| F13-5 | Log streaming via /ws/logs | ✅ |
-| F13-6 | Integración spigot-host/fabric-host | ✅ |
-
----
-
-### FASE 16 — Tests, Optimización y Documentación
-| # | Pieza | Estado |
-|---|-------|--------|
-| F16-1 | Tests de carga/estrés (JMH + Gatling) | ✅ |
-| F16-2 | Tests de integración end-to-end | ✅ |
-| F16-3 | Optimización de rendimiento (profiling, memory tuning) | ✅ |
-| F16-4 | Documentación final (Wiki, API docs, guías) | ✅ |
-| F16-5 | Benchmarks de regresión continua | ⏳ |
-| F16-6 | Release pipeline y versionado semántico | ⏳ |
-
 ---
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 16 (en progreso)** → Tests de integración end-to-end (en curso), luego Optimización de rendimiento y Documentación final.
+**FASE 16 (en progreso)** → 
+1. **Tests E2E pipeline completo** (Spigot + Fabric host, chat → iFlow → format → delivery)
+2. **Sincronización documentación** (README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR a un mismo estado)
+3. **Module Manager (F12) a release-ready**: publicar GitHub releases, implementar version resolver, dependency resolver, SHA256 verification
+4. **Security hardening** (SpEL sandbox, YAML SafeConstructor, MiniEscape completo, char[] tokens, bounded executors)
+5. **Release pipeline** + versionado semántico

@@ -47,7 +47,7 @@ web-editor de configuración.
 | `suite/core-api` | 17 | SPI interno: `Module`, `ModuleDescriptor`, semver, capabilities, modelo `Message`, `Translator`, `TranslationService`, `SyncSink`, `SyncListener`, `ActorDirectory`, `PlaceholderResolver`, `PluginLogger`. |
 | `suite/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (resolución con Tarjan, detecta ciclos, `CONTRACT_MISMATCH`, `JVM_MISMATCH`), `Environment`. |
 | `suite/textformatter` | 17 | Motor de formato MiniMessage: `TemplateRenderer`, `TemplateContext`, `MiniEscape`, `ChannelRegistry`, transforms. |
-| `suite/iflow` | 17 | Motor de flujo: `DefaultRouter`, `Rule`, `RateLimiter` (token bucket), `PermissionChecker` (base + send/receive). |
+| `suite/iflow` | 17 | Motor de flujo: `DefaultRouter`, `Rule`, `RateLimiter` (token bucket per-key), `PermissionChecker` (base + send/receive). |
 | `suite/coretranslator` | 17 | Puente deprecated que conserva capacidades del original: traducir textos al vuelo vía PAPI (`%cot_*`), capturar/modificar mensajes al vuelo vía API, inyectar lógica compleja vía SpEL. Deprecated = no recomendarlo para uso nuevo; **NO eliminar** (retrocompatibilidad funcional). |
 | `suite/gtranslate` | 17 | Proveedor Google Translate. |
 | `suite/ltranslate` | 17 | Proveedor LibreTranslate. |
@@ -63,6 +63,19 @@ web-editor de configuración.
 | `suite/coretranslator` | 17 | Puente legacy (retrocompatibilidad funcional). |
 | `suite/web-editor` | JS | UI configuración vanilla ES2022 (GitHub Pages estático). |
 | `suite/spigot-host` | 17 | **Plugin Spigot de la suite** (`TextFormatterSuite`): `SpigotActorDirectory`, `SpigotChatDelivery` (hop a main thread), bootstrap `SuiteHost`+`MessageDispatcher`, `/suite reload|status|test|lang|toggle|reset`. Fat-jar construido (shadow). |
+| `suite/fabric-host` | 17 | **Plugin Fabric de la suite** (`FabricMod`): `FabricActorDirectory`, `FabricChatDelivery`, bootstrap `SuiteHost`+`MessageDispatcher`. Loom 1.6.12, mappings 1.21. |
+| `suite/manager-api` | 17 | SPI del gestor de módulos runtime: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`. |
+| `suite/manager-impl` | 17 | Implementación: GitHub releases downloader, version resolver (stub), dependency relocator, ClassLoader aislado (parent-last). **No release-ready** (ver auditoría). |
+| `suite/presets` | 17 | Presets de configuración predefinidos (standard, rpg, staff, minimal). |
+| `suite/inworld` | 17 | Handlers in-world (signos, cofres, libros), WORLD/RADIUS, botones click/hover. |
+| `suite/observability` | 17 | Metrics endpoint (`/metrics` Prometheus), Debug endpoint (`/debug/*` con auth token, 127.0.0.1), Health checks. |
+| `suite/extension-api` | 17 | SPI de extensiones: `Extension`, `ExtensionContext`, `ExtensionConfig`, `ExtensionMetadata`. |
+| `suite/example-extension` | 17 | Ejemplo de extensión demostrando la API. |
+| `suite/loadtest` | 17 | Tests de carga/estrés (JMH). |
+| `suite/performance` | 17 | Profiling y optimización (`PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer`, `MemoryOptimizer`). |
+| `suite/common-legacy` | 17 | Referencia histórica (trío monolítico eliminado). |
+| `suite/sync-websocket` | 17 | WebSocket sync sink para tiempo real. |
+
 Dependencias entre motores:
 - `kernel→core-api`
 - `textformatter→core-api` (+Adventure)
@@ -70,13 +83,25 @@ Dependencias entre motores:
 - `coretranslator→core-api`
 - `gtranslate/ltranslate→core-api+transport`
 - `host→core-api+textformatter+iflow+gtranslate+ltranslate+messages+tester`
+- `manager-impl→manager-api+core-api+kernel+textformatter+host+gtranslate+ltranslate+sync-*+messages+tester+extension-api`
+- `presets→core-api+textformatter+iflow+host+messages`
+- `inworld→core-api+textformatter+iflow+host+messages`
+- `observability→core-api+textformatter+iflow+host+messages`
+- `extension-api→core-api+iflow+host+messages`
+- `example-extension→extension-api+core-api`
+- `loadtest→core-api+textformatter+iflow+host+messages+tester`
+- `performance→core-api+textformatter+iflow+host+transport`
+- `sync-websocket→core-api+textformatter+host+messages`
+- `spigot-host→core-api+textformatter+iflow+host+messages+tester+manager-impl+presets+inworld+observability+extension-api+sync-*`
+- `fabric-host→core-api+textformatter+iflow+host+messages+manager-impl+presets+inworld+observability+extension-api+sync-*`
 ---
 ## 3. Modelo de mensaje
 Cada evento de chat produce unidades atómicas **`Message`** con su propio
 emisor, **`Direction`** (audiencia), arrays de contenido, grupo de formato,
 colores, sonidos y par de idiomas — **no** hay par from/to embebido. El mensaje
 al iniciador y el broadcast al resto son unidades independientes con formato y
-cancelación independientes. **Inmutables**; las reglas mutan un clon privado.
+cancelación independientes. **Inmutables**; las reglas mutan un clon privado
+vía `Message.withX()` methods (`withLangTarget`, `withText`, `withCancelled`, etc.).
 Un `Message` lleva:
 - `type` — `MessageType` (CHAT, PRIVATE, MENTION, JOIN, LEAVE, DEATH,
 ADVANCEMENT, SIGN, INTERNAL, CUSTOM).
@@ -86,6 +111,7 @@ PERMISSION, SPECIFIC) con canal y receptores explícitos opcionales.
 - `messages` / `toolTips` — `Formats` paralelas (textos + MiniMessage).
 - `sounds` — specs `name;volume;pitch`.
 - `colorMode`, `langSource`, `langTarget`, `translate`, `formatPapi`.
+- `resolvedSourceLanguage` — idioma fuente resuelto (caché para evitar detección por receptor).
 - `lastFormatPath` — el grupo de formato que construyó el mensaje.
 ---
 ## 4. Motor de formato (MiniMessage + Adventure)
@@ -121,7 +147,7 @@ actions:
 `clone()`, `toJson()`). Root SpEL: `#msg`.
 ### iFlow (grafos)
 Firewall por receptor/emisor con default-policy por canal y targets `LOG`,
-`DROP`, `REJECT`, `REDIRECT` (a consola), `RATE-LIMIT`.
+`DROP`, `REJECT`, `REDIRECT` (a consola), `RATE-LIMIT`, `CHANNEL_REDIRECT`.
 - Entradas múltiples = **mux** (independientes); salidas múltiples = **fan-out**
 (broadcast); ramificación = condición-filtro; ciclos permitidos con guard
 `max-steps` (default 512, DROP + log al superar).
@@ -129,6 +155,10 @@ Firewall por receptor/emisor con default-policy por canal y targets `LOG`,
 `transform`, `loop`, `sleep`, `output`, `redirect`, con transforms
 `rewrite`/`sounds`/`sleep` (requieren motor F7+, se marcan en manifest).
 - Prioridad = BFS por capas desde entradas; empates por índice de creación.
+- **RateLimiter**: token bucket per-key (`channel + actor`), capacidad por canal
+(`channel.rateLimitPerSecond()`).
+- **iFlow como autoridad única**: Discord mirror respeta decisión del dispatcher
+(solo envía si `delivered > 0`).
 ---
 ## 6. Permisos por canal
 - **Base**: un único permiso `cht.<channel>` = suscripción (poseerlo = adscrito).
@@ -148,6 +178,7 @@ rules.yml             → grafo iFlow (editor/F7+)
 translators/*.yml     → proveedores (google/libre)
 sync/discord.yml      sync/telegram.yml  sync/http.yml
 sync/tcp-udp.yml      sync/velocity.yml
+sync/websocket.yml
 manifest.json         → versiones + validación + capabilities
 ```
 **`config.yml`**: `quick-look`, `general.language`, `iflow.engine.parallel`,
@@ -168,7 +199,7 @@ ciclos.
 **`sync/*.yml`**: discord (token, channel, intents) · telegram (token,
 chat-id, hub) · http (webhook-url, inbound-port, path) · tcp-udp (protocol,
 host, outbound-port, inbound-port) · velocity (enabled, secret, servers[],
-mapping).
+mapping) · websocket (token, port).
 
 **`manifest.json`**: `schema`, `suite-version`, `generated-at`,
 `capabilities` (`transforms: true/false`), `validation` (errors/warnings/
@@ -198,11 +229,9 @@ persistencia + validadores con rollback + diffing de paths + autosave 400ms),
 rendering con diffing, validación incremental por `revision()`, paths.json
 centralizado para data-bind, i18n en/es, docking de paneles.
 ---
-## 9. Eventos para integraciones externas (diseño, pendiente)
-> La API descrita antes aquí (`ChatTranslatorApi.messageEvents()`) pertenecía
-> al trío monolítico eliminado. El equivalente de la suite está diseñado pero
-> **aún no implementado**.
-Plan: un bus público thread-safe en `core-api` (`MessageBus`), alimentado por
+## 9. Eventos para integraciones externas
+La API está diseñada pero **aún no implementada completamente**.
+Plan: un bus público thread-safe en `core-api` (`MessageEventBus`), alimentado por
 `MessageDispatcher` **antes** de reglas y renderizado:
 ```java
 bus.register("anti-swear", event -> {
@@ -220,15 +249,15 @@ mensajes, SpEL).
 ---
 ## 10. Wiring de plataforma
 Los adapters implementan los puertos del motor y eligen el hilo:
-| Puerto (`core-api/spi` / `host/port`) | Spigot (`spigot-host`) | Fabric (`fabric-host`, ⏳) |
+| Puerto (`core-api/spi` / `host/port`) | Spigot (`spigot-host`) | Fabric (`fabric-host`) |
 |---|---|---|
-| `ActorDirectory` | `SpigotActorDirectory` (idioma: store→locale→null; snapshot anti-CME) | ⏳ |
-| `ChatDelivery` | `SpigotChatDelivery` (BukkitAudiences, hop a main thread, sonidos normalizados) | ⏳ |
+| `ActorDirectory` | `SpigotActorDirectory` (idioma: store→locale→null; snapshot anti-CME) | `FabricActorDirectory` |
+| `ChatDelivery` | `SpigotChatDelivery` (BukkitAudiences, hop a main thread, sonidos normalizados) | `FabricChatDelivery` |
 | Evento chat | `AsyncPlayerChatEvent` (LOWEST claim-first; claim configurable: `cancel-event`\|`clear-recipients`) | `ServerMessageEvents.ALLOW_CHAT_MESSAGE` |
-| Join/Quit/Death/Advancement | canales convencionales `join`/`quit`/`death`/`advancement` (presencia = activado) | ⏳ |
-| Idioma por usuario | `UserLanguageStore` (YAML) + `/suite lang [jugador] <auto\|off\|código>`; `off` = sin traducción | ⏳ |
-| Permisos | `Player#hasPermission` | ⏳ |
-| Mundo/radio | `getWorld().getName()` / `distanceSquared` | ⏳ |
+| Join/Quit/Death/Advancement | canales convencionales `join`/`quit`/`death`/`advancement` (presencia = activado) | mismos canales |
+| Idioma por usuario | `UserLanguageStore` (YAML) + `/suite lang [jugador] <auto|off|código>`; `off` = sin traducción | mismo |
+| Permisos | `Player#hasPermission` | `ServerPlayerEntity#hasPermission` |
+| Mundo/radio | `getWorld().getName()` / `distanceSquared` | mismo |
 ---
 ## 11. Configuración en runtime
 - Nunca toca el stack YAML del servidor: los hosts embuten `snakeyaml`
@@ -247,16 +276,20 @@ si faltan y **nunca sobrescriben** ediciones del usuario.
 > poblada, todo compila `--offline`.
 ```bash
 # Suite (cada módulo es un build independiente)
+export JAVA_HOME=/opt/javac/x64/21
 cd suite/core-api      && ./gradlew test publishToMavenLocal --offline --no-daemon
 cd suite/kernel        && ./gradlew test publishToMavenLocal --offline --no-daemon
 cd suite/textformatter && ./gradlew test publishToMavenLocal --offline --no-daemon
 cd suite/iflow         && ./gradlew test publishToMavenLocal --offline --no-daemon
 cd suite/gtranslate    && ./gradlew publishToMavenLocal --offline --no-daemon
 cd suite/ltranslate    && ./gradlew publishToMavenLocal --offline --no-daemon
-cd suite/sync-telegram && ./gradlew publishToMavenLocal --offline --no-daemon
+cd suite/sync-telegram && ./gradlew test publishToMavenLocal --offline --no-daemon
 
 # Plugin Spigot de la suite (fat-jar)
 cd suite/spigot-host   && ./gradlew build --offline --no-daemon
+
+# Plugin Fabric de la suite
+cd suite/fabric-host   && ./gradlew build --offline --no-daemon
 
 # Web editor
 cd suite/web-editor
@@ -274,25 +307,45 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
 - **Golden tests**: el editor y el host deben validar el mismo config
 (`ConfigLoaderTest.parsesEditorExportedDefaultConfig` verde).
 ---
-## 14. Estado real (2026-09-02)
+## 14. Estado real (2026-09-13)
 
-**Fases cerradas:** F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
-F3 (channel type system + tester module + default channels).
+**Fases cerradas:**
+- F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
+- F3 (channel type system + tester module + default channels).
+- F4 (fabric-host funcional), F5 (i18n strings UI), F6 (iFlow enriquecido: CHANNEL_REDIRECT, PAPI/permisos en SpEL, transform F7+),
+- F7 (ConfigValidator real), F8 (comandos dinámicos `/suite`), F9 (sync-velocity real),
+- F10 (observabilidad: metrics/debug/health), F11 (extensiones/addons SDK), F12 (manager runtime - **no release-ready**),
+- F13 (sync-websocket), F14 (presets, transform real, engine.parallel), F15 (in-world),
+- F16 (tests, profiling, docs — **parcial: tests E2E pendientes**).
 
 **Eliminado:** trío monolítico `common`/`spigot`/`fabric-1.20.6` (nunca
 probado en servidor; recuperable desde historial git).
 
 **Probado en producción:** Plugin `TextFormatterSuite` probado en servidor Paper 1.20.6 real — todos los comandos `/suite`, canales join/quit/death/advancement, chat con traducción, rate-limit, y tests runtime funcionando.
 
-**Pendientes (F4+):** `fabric-host` funcional, strings UI centralizados en `lang/`,
-motor de reglas iFlow enriquecido (destino "channel", permisos/PAPI en SpEL,
-`MessageEventBus`, `transform` F7+), `ConfigValidator` real, comandos
-dinámicos (`/suite` base), `sync-velocity` real, observabilidad (metrics/debug/
-simulate), extensiones/addons (core-api 2.2 + SDK), descargador runtime
-(classloader dinámico + manifest + sha256 + allowlist), sync-websocket,
-presets, `transform` real, `engine.parallel`, F8 in-world.
+**Problemas críticos arreglados (commit 82d38f4, audit 2026-09-13):**
+- ✅ **C1** Contrato `Message` roto → `withX()` methods inmutables, `Builder.from()`
+- ✅ **C2** `MessageEvent` roto → `cancelled` no final, imports
+- ✅ **C3** Module Manager → `URLClassLoader`, `register()` almacena classloader, stubs lanzan `UnsupportedOperationException`
+- ✅ **C4** Debug endpoint → 127.0.0.1, auth token, sin `/debug/simulate`, sin CORS *
+- ✅ **C5** HEAD no compilable → core modules compilan (core-api, iflow, host, observability, spigot-host, manager-impl)
+- ✅ **H1** RateLimiter → per-key capacity, sin double scheduler
+- ✅ **H2** Discord bypass iFlow → `mirror(DispatchReport)` solo si delivered
+- ✅ **H3** Language detection O(recipients) → `resolvedSourceLanguage` caché
+
+**Pendientes / Deuda conocida:**
+- ⚠️ **Module Manager (F12)**: No release-ready — GitHub releases = 0, version resolver stub, dependency resolver stub, SHA256 no conectado, relocation tenía bug crítico (arreglado), ClassLoader extendía ClassLoader (arreglado a URLClassLoader), register/unload incompletos.
+- ⚠️ **SpEL**: Debe auditarse profundamente (RCE potential sin sandbox).
+- ⚠️ **YAML unsafe constructor**: 4 loaders usan `new Yaml()` sin `SafeConstructor`.
+- ⚠️ **MiniEscape**: Solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`.
+- ⚠️ **Tokens en heap**: Discord, Telegram, LibreTranslate en `String` permanente.
+- ⚠️ **Config schema**: Copias manuales (`paths.json`, `js/paths.js`, `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`).
+- ⚠️ **sync-velocity**: Stub en editor/config → implementar real o eliminar.
+- ⚠️ **Tests E2E**: `npm run test:integration` para web-editor OK; tests Java E2E pipeline completo pendientes.
+- ⚠️ **Documentación**: README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR deben sincronizarse a un mismo estado (ver §57 de auditoría).
+- ⚠️ **GitHub Releases**: No existen; F12 requiere releases publicados.
 ---
-## 15. Bugs conocidos y deuda (2026-09-02)
+## 15. Bugs conocidos y deuda (2026-09-13)
 
 **Web editor:** P0 arreglados ✅. Queda: ampliar opciones YAML para reglas complejas sin perder usabilidad.
 
@@ -303,6 +356,21 @@ presets, `transform` real, `engine.parallel`, F8 in-world.
 - Suite sin composite build en `settings.gradle` raíz (hosts consumen jars vía `files()` / mavenLocal hasta composite build).
 - `suite/coretranslator` deprecated → mantener solo para retrocompatibilidad funcional, no para uso nuevo.
 - `sync-velocity` stub en editor/config → implementar real o eliminar.
+
+**Seguridad (de auditoría A4 2026-09-06):**
+- **INJ-3 (CWE-94)**: `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usa `StandardEvaluationContext`.
+- **INJ-4 (CWE-502)**: 4 loaders YAML usan `new Yaml()` (unsafe constructor) → **deserialización arbitraria** si atacante escribe en config files.
+- **INJ-1**: `MiniEscape` solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`.
+- **SEC-1..4**: Tokens Discord, Telegram, LibreTranslate en `String` permanente en heap.
+- **DOS-1**: `HttpServer` executor unbounded → thread exhaustion.
+- **DOS-2**: `MessageDispatcher` secuencial en async chat event → lag servidor 200+ jugadores.
+
+**Supply Chain (A5 2026-09-06):**
+- Sin `gradle.lockfile` / SHA256 / `dependencyVerification`.
+- 8 repos Maven; `mavenLocal()` con precedencia.
+- Builds no reproducibles.
+- Sin allowlist módulos / manifest validation pre-load.
+
 ---
 ## 16. Documentación
 | Documento | Contenido |
@@ -313,16 +381,13 @@ presets, `transform` real, `engine.parallel`, F8 in-world.
 | `docs/PLAN.md` | Plan de ejecución vivo: bugs confirmados, deuda, roadmap por fases. |
 | `docs/AUDITORIA.md` | Auditoría completa 2026-08-16: volcado íntegro de los 5 subagentes + verificación manual. |
 | `docs/AUDITORIA-2026-08-24.md` | Auditoría integral del estado actual (módulos, clases, features, paridad) + veredictos del autor como decisiones. |
+| `docs/historial/AUDITORIA-2026-09-13.md` | **Auditoría profunda HEAD 494f7ea** — código vs docs, contratos, seguridad, severidades, prioridades de reparación. |
 | `docs/NEW-FEATURES.md` | Features nuevas documentadas (channel type, tester, etc.). |
 | `docs/web-editor/DESIGN.md` | Diseño del Web Editor (layout GIMP/Grafana, canvas de nodos, decisiones). |
 | `docs/web-editor/schema-v2.2.md` | Schema v2.2 detallado (archivos, claves, reglas de round-trip). |
 | `docs/historial/` | Logs de sesión por fecha. |
+---
 ## 17. Licencia
 **GPL-3.0** (LICENSE). Repositorio:
 https://github.com/majhrs16-official/TextFormatter-Suite
 Documentación del proyecto original: https://github.com/Majhrs16/ChatTranslator y https://github.com/Majhrs16/ChatTranslator/wiki (referencia histórica funcional).
-
-(End of file - total 337 lines)
-
-
-
