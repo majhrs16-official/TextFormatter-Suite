@@ -139,6 +139,7 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 **FASE 16 (en progreso)** → 
 1. **Tests E2E pipeline completo** (Spigot + Fabric host, chat → iFlow → format → delivery)
 2. **Sincronización documentación** (README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR a un mismo estado)
-3. **Module Manager (F12) a release-ready**: publicar GitHub releases, implementar version resolver, dependency resolver, SHA256 verification
-4. **Security hardening** (SpEL sandbox, YAML SafeConstructor, MiniEscape completo, char[] tokens, bounded executors)
-5. **Release pipeline** + versionado semántico
+3. **Module Manager (F12) consolidación interna**: version resolver (rangos semver + env compat), dependency resolver (manifest parsing), SHA256 verification real, allowlist + manifest validation, register() semántica (descriptor SPI, no servicio)
+4. **Security hardening pendiente**: tokens en `char[]` + `Arrays.fill()`, template validation, PAPI dynamic check
+5. **Module Manager (F12) release-ready**: **AL FINAL** publicar GitHub releases (tags + assets + .sha256) solo cuando todo lo anterior esté verde en local
+6. **Release pipeline** + versionado semántico + gradle.lockfile

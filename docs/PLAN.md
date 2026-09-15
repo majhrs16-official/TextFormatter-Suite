@@ -434,16 +434,18 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | S5 | **Bounded Executors** — `HttpServer` executor unbounded; `MessageDispatcher` paralelo (no secuencial en async) | `sync-http/HttpSink.java`, `host/MessageDispatcher.java`, `observability/endpoint/MetricsEndpoint.java` | DoS thread exhaustion | ⏳ |
 | S6 | **gradle.lockfile + dependencyVerification** — Configurar en `settings.gradle` con claves SHA256 | `settings.gradle`, `build.gradle` (root) | Supply chain | ⏳ |
 
-### 🔴 Module Manager (F12) — Release-Ready
+### 🔴 Module Manager (F12) — Release-Ready (orden: consolidación interna → releases)
 
 | # | Item | Detalle | Estado |
 |---|------|---------|--------|
-| M1 | **Publicar GitHub Releases** | Requisito para downloader; tags `v2.1.0`, `v2.1.1`, etc. | ⏳ |
-| M2 | **Version Resolver** | Implementar rangos semver (`[1.0,2.0)`, `1.0.x`) + compatibilidad env (Java, MC version, contract) | ⏳ |
-| M3 | **Dependency Resolver** | Parsear `META-INF/maven/pom.xml` o `module.json` de releases para dependencias transitivas | ⏳ |
-| M4 | **SHA256 Realmente Conectado** | Asset `.sha256` separado por release; verificación obligatoria (no `null` = skip) | ⏳ |
-| M5 | **Allowlist + Manifest Validation** | Pre-load: verificar manifest, allowlist módulos permitidos, firmas | ⏳ |
-| M6 | **register() Semántica** | Revisar: manager carga descriptor SPI, no debería instanciar `Module` como servicio | ⏳ |
+| M2 | **Version Resolver** | Rangos semver (`[1.0,2.0)`), compatibilidad env (Java, MC, contract) | ⏳ |
+| M3 | **Dependency Resolver** | Parsear `META-INF/maven/pom.xml` o `module.json` de releases | ⏳ |
+| M4 | **SHA256 Real** | Asset `.sha256` separado; verificación obligatoria (no `null` = skip) | ⏳ |
+| M5 | **Allowlist + Manifest** | Pre-load validation, firmas | ⏳ |
+| M6 | **`register()` semántica** | No instanciar `Module` como servicio; solo descriptor SPI | ⏳ |
+| **M1** | **Publicar GitHub Releases** | **AL FINAL**: tags `v2.1.0`, assets `.jar` + `.sha256` (solo cuando todo lo anterior esté verde) | ⏳ |
+
+> **Decisión**: GitHub Releases se deja para el final absoluto. Primero consolidar toda la implementación interna (resolver, deps, SHA256, allowlist, semántica register). Solo cuando el manager sea funcionalmente completo y probado en local, se publican releases.
 
 ### 🟡 Media Prioridad
 
@@ -471,12 +473,15 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 6. S6 — gradle.lockfile + dependencyVerification
 7. T4 — Config Schema single-source generation
 
-### Semana 3: Module Manager Release-Ready
-8. M1 — Publicar GitHub Releases (tags + assets + .sha256)
-9. M2 — Version Resolver (rangos semver + env compat)
-10. M3 — Dependency Resolver (manifest parsing)
-11. M4 — SHA256 conectado (asset .sha256 obligatorio)
-12. M5 — Allowlist + Manifest validation
+### Semana 3: Module Manager — Consolidación Interna (sin releases)
+
+8. M2 — Version Resolver (rangos semver + env compat)
+9. M3 — Dependency Resolver (manifest parsing)
+10. M4 — SHA256 conectado (asset .sha256 obligatorio)
+11. M5 — Allowlist + Manifest validation
+12. M6 — register() semántica (descriptor SPI, no servicio)
+
+> M1 (GitHub Releases) se deja para el final absoluto, tras validar todo lo anterior en local.
 
 ### Semana 4: Tests + Docs + Release
 13. T1 — Tests E2E pipeline completo
