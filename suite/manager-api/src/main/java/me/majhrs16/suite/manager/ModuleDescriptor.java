@@ -98,10 +98,11 @@ public final class ModuleDescriptor {
     }
 
     /**
-     * Checks if this module version satisfies a version range.
+     * Checks if this module version satisfies a version range specification.
+     * Supports exact versions, ranges, caret, tilde, wildcards, and comparison operators.
      */
-    public boolean satisfies(SemVer range) {
-        return version().satisfies(range);
+    public boolean satisfies(String rangeSpec) {
+        return version().satisfies(rangeSpec);
     }
 
     public SemVer version() { return coordinate().version(); }

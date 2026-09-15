@@ -140,6 +140,124 @@ public final class SemVer implements Comparable<SemVer> {
         return compareTo(new SemVer(major, minor, patch, null)) >= 0;
     }
 
+    /**
+     * Checks if this version satisfies a version range specification.
+     * Supports:
+     * - Exact version: "1.0.0"
+     * - Range: "[1.0.0,2.0.0)", "(1.0.0,2.0.0]", "[1.0.0,2.0.0]"
+     * - Caret: "^1.0.0" (>=1.0.0 <2.0.0)
+     * - Tilde: "~1.0.0" (>=1.0.0 <1.1.0)
+     * - Wildcard: "1.x", "1.0.x"
+     * - Comparison: ">=1.0.0", "<2.0.0", ">1.0.0", "<=2.0.0"
+     */
+    public boolean satisfies(String rangeSpec) {
+        if (rangeSpec == null || rangeSpec.isBlank()) {
+            return true; // Empty spec matches everything
+        }
+        String spec = rangeSpec.trim();
+        
+        // Exact version
+        if (SemVer.isValid(spec)) {
+            return this.equals(SemVer.parse(spec));
+        }
+        
+        // Wildcard: 1.x or 1.0.x
+        if (spec.endsWith(".x") || spec.endsWith(".X")) {
+            String base = spec.substring(0, spec.length() - 2);
+            String[] parts = base.split("\\.");
+            if (parts.length == 1) {
+                // 1.x -> major == 1
+                return this.major == Integer.parseInt(parts[0]);
+            } else if (parts.length == 2) {
+                // 1.0.x -> major == 1 && minor == 0
+                return this.major == Integer.parseInt(parts[0]) 
+                    && this.minor == Integer.parseInt(parts[1]);
+            }
+            return false;
+        }
+        
+        // Caret range: ^1.0.0
+        if (spec.startsWith("^")) {
+            SemVer base = SemVer.parse(spec.substring(1));
+            if (base.major() == 0) {
+                // 0.x.x -> only patch changes allowed
+                return this.major == 0 && this.minor == base.minor() 
+                    && this.patch >= base.patch();
+            }
+            // ^1.0.0 -> >=1.0.0 <2.0.0
+            return this.compareTo(base) >= 0 
+                && this.major < base.major() + 1;
+        }
+        
+        // Tilde range: ~1.0.0
+        if (spec.startsWith("~")) {
+            SemVer base = SemVer.parse(spec.substring(1));
+            // ~1.0.0 -> >=1.0.0 <1.1.0
+            return this.compareTo(base) >= 0 
+                && (this.major == base.major() && this.minor == base.minor());
+        }
+        
+        // Comparison operators
+        if (spec.startsWith(">=")) {
+            SemVer min = SemVer.parse(spec.substring(2));
+            return this.compareTo(min) >= 0;
+        }
+        if (spec.startsWith("<=")) {
+            SemVer max = SemVer.parse(spec.substring(2));
+            return this.compareTo(max) <= 0;
+        }
+        if (spec.startsWith(">")) {
+            SemVer min = SemVer.parse(spec.substring(1));
+            return this.compareTo(min) > 0;
+        }
+        if (spec.startsWith("<")) {
+            SemVer max = SemVer.parse(spec.substring(1));
+            return this.compareTo(max) < 0;
+        }
+        
+        // Range syntax: [1.0.0,2.0.0), (1.0.0,2.0.0], etc.
+        if ((spec.startsWith("[") || spec.startsWith("(")) 
+                && (spec.endsWith("]") || spec.endsWith(")"))) {
+            return satisfiesRange(spec);
+        }
+        
+        return false;
+    }
+    
+    private boolean satisfiesRange(String spec) {
+        // Format: [min,max], [min,max), (min,max], (min,max)
+        boolean minInclusive = spec.startsWith("[");
+        boolean maxInclusive = spec.endsWith("]");
+        
+        // Remove brackets and split by comma
+        String inner = spec.substring(1, spec.length() - 1);
+        String[] parts = inner.split(",", 2);
+        if (parts.length != 2) {
+            return false;
+        }
+        
+        String minStr = parts[0].trim();
+        String maxStr = parts[1].trim();
+        
+        boolean minOk;
+        if (minStr.isEmpty()) {
+            minOk = true; // No lower bound
+        } else {
+            SemVer min = SemVer.parse(minStr);
+            minOk = minInclusive ? this.compareTo(min) >= 0 : this.compareTo(min) > 0;
+        }
+        
+        boolean maxOk;
+        if (maxStr.isEmpty()) {
+            maxOk = true; // No upper bound
+        } else {
+            SemVer max = SemVer.parse(maxStr);
+            maxOk = maxInclusive ? this.compareTo(max) <= 0 : this.compareTo(max) < 0;
+        }
+        
+        return minOk && maxOk;
+    }
+
     @Override
     public boolean equals(Object o) {
         return o instanceof SemVer other && compareTo(other) == 0;

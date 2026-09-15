@@ -52,7 +52,7 @@ public final class Environment {
         String installed = installedModules.get(moduleId);
         if (installed == null) return false;
         try {
-            return SemVer.parse(installed).satisfies(minVersion);
+            return SemVer.parse(installed).satisfies(">=" + minVersion);
         } catch (Exception e) {
             return false;
         }

@@ -1,46 +1,55 @@
 package me.majhrs16.suite.manager;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
-import java.security.MessageDigest;
-import java.nio.file.attribute.FileTime;
-import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-import java.util.jar.JarOutputStream;
-import java.util.jar.Manifest;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
-import java.io.ByteArrayOutputStream;
+import me.majhrs16.suite.api.SemVer;
+import me.majhrs16.suite.api.spi.PluginLogger;
+
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import java.io.FileOutputStream;
 
 /**
  * Default implementation of the ModuleLifecycle SPI.
@@ -336,10 +345,11 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
                             updated.add(success.module().descriptor().coordinate());
                         }
                     }
-                } catch (Exception e) {
-                    logger.warn("Failed to update " + desc.id() + ": " + e.getMessage());
                 }
+            } catch (Exception e) {
+                logger.warn("Failed to update " + desc.id() + ": " + e.getMessage());
             }
+        }
         return updated;
     }
 
@@ -414,17 +424,74 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
 
     private boolean matchesVersion(String version, String spec) {
         if (spec.equals(version)) return true;
-        if (spec.startsWith("[") || spec.contains(",")) {
-            // Range matching not yet implemented
-            throw new UnsupportedOperationException("Version range matching not implemented: " + spec);
-        }
-        return SemVer.parse(version).satisfies(SemVer.parse(spec));
+        // Use SemVer satisfies for range matching
+        return SemVer.parse(version).satisfies(spec);
     }
 
     private boolean isCompatibleWithEnv(JsonObject release, Environment env) {
-        // Check release metadata for compatibility
-        // For now, require explicit compatibility metadata
-        throw new UnsupportedOperationException("Environment compatibility check not implemented");
+        // Check platform compatibility
+        if (release.has("platforms")) {
+            JsonArray platforms = release.getAsJsonArray("platforms");
+            boolean platformMatch = false;
+            for (JsonElement p : platforms) {
+                if (p.getAsString().equals(env.platform())) {
+                    platformMatch = true;
+                    break;
+                }
+            }
+            if (!platformMatch) return false;
+        }
+
+        // Check Java version
+        if (release.has("minJavaVersion")) {
+            int minJava = release.get("minJavaVersion").getAsInt();
+            if (env.javaVersion() < minJava) return false;
+        }
+        if (release.has("maxJavaVersion")) {
+            int maxJava = release.get("maxJavaVersion").getAsInt();
+            if (env.javaVersion() > maxJava) return false;
+        }
+
+        // Check core API version
+        if (release.has("requiredCoreApi")) {
+            String requiredApi = release.get("requiredCoreApi").getAsString();
+            if (!SemVer.isValid(requiredApi)) return false;
+            SemVer required = SemVer.parse(requiredApi);
+            if (env.coreApiVersion().compareTo(required) < 0) return false;
+        }
+
+        // Check Minecraft version if specified
+        if (release.has("minecraftVersion")) {
+            String requiredMc = release.get("minecraftVersion").getAsString();
+            if (!requiredMc.equals(env.minecraftVersion())) return false;
+        }
+
+        // Check required capabilities
+        if (release.has("requires")) {
+            JsonArray requires = release.getAsJsonArray("requires");
+            for (JsonElement cap : requires) {
+                if (!env.hasCapability(cap.getAsString())) return false;
+            }
+        }
+
+        // Check dependencies (module coordinates that must be installed)
+        if (release.has("dependencies")) {
+            JsonArray deps = release.getAsJsonArray("dependencies");
+            for (JsonElement dep : deps) {
+                String depStr = dep.getAsString();
+                // Format: group:artifact:version or group:artifact:version:classifier
+                String[] parts = depStr.split(":");
+                if (parts.length >= 3) {
+                    String depId = parts[0] + ":" + parts[1];
+                    String depVersion = parts[2];
+                    if (!env.hasModule(depId, SemVer.parse(depVersion))) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 
     private List<String> getAvailableVersions(JsonArray releases, String artifact) {
@@ -502,7 +569,7 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
 
                 // Verify
                 if (expectedSha256 != null && !expectedSha256.isBlank()) {
-                    if (!verifyChecksum(dest.toFile(), expectedSha256)) {
+                    if (!verifyChecksum(dest, expectedSha256)) {
                         Files.deleteIfExists(dest);
                         throw new IOException("Checksum mismatch for " + dest);
                     }
@@ -527,17 +594,25 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
         }
     }
 
-    private boolean verifyChecksum(Path file, String expectedSha256) {
-        try {
-            String actual = computeSha256(file);
-            return actual.equalsIgnoreCase(expectedSha256);
-        } catch (IOException e) {
-            return false;
+    private byte[] readEntry(JarFile jarFile, JarEntry entry) throws IOException {
+        try (InputStream is = jarFile.getInputStream(entry)) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = is.read(buffer)) > 0) {
+                baos.write(buffer, 0, read);
+            }
+            return baos.toByteArray();
         }
     }
 
     private String computeSha256(Path file) throws IOException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IOException("SHA-256 algorithm not available", e);
+        }
         try (InputStream is = Files.newInputStream(file)) {
             byte[] buffer = new byte[8192];
             int read;
@@ -553,6 +628,18 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
         return hex.toString();
     }
 
+    private Map<String, String> getRelocationsForModule(ModuleDescriptor desc) {
+        Map<String, String> relocations = new HashMap<>();
+        // Relocate all non-API packages
+        String base = "me.majhrs16.suite." + desc.coordinate().artifact().replace("suite-", "");
+        relocations.put(base, base + ".relocated");
+        relocations.put("org.apache.commons", "me.majhrs16.suite.relocated.org.apache.commons");
+        relocations.put("com.google", "me.majhrs16.suite.relocated.com.google");
+        relocations.put("org.yaml", "me.majhrs16.suite.relocated.org.yaml");
+        relocations.put("com.fasterxml.jackson", "me.majhrs16.suite.relocated.com.fasterxml.jackson");
+        return relocations;
+    }
+
     private String relocateClassName(String name, Map<String, String> relocations) {
         for (Map.Entry<String, String> entry : relocations.entrySet()) {
             if (name.startsWith(entry.getKey())) {
@@ -563,6 +650,10 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     }
 
     private Environment getCurrentEnvironment() {
+        Map<String, String> sysProps = new HashMap<>();
+        for (String key : System.getProperties().stringPropertyNames()) {
+            sysProps.put(key, System.getProperty(key));
+        }
         return new Environment(
             "spigot", // or detect
             Runtime.version().feature(),
@@ -570,7 +661,7 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             SemVer.of(2, 1, 0),
             loadedModules.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().version().toString())),
             Set.of(),
-            System.getProperties()
+            sysProps
         );
     }
 
