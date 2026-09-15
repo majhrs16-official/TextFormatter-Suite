@@ -138,9 +138,26 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             }
 
             String downloadUrl = mainAsset.get("browser_download_url").getAsString();
-            String sha256 = mainAsset.get("name").getAsString().endsWith(".sha256") ? 
-                fetchSha256(downloadUrl + ".sha256") : null;
             long sizeBytes = mainAsset.get("size").getAsLong();
+
+            // Find SHA256 asset (separate .sha256 file)
+            String sha256 = null;
+            for (JsonElement asset : assets) {
+                JsonObject a = asset.getAsJsonObject();
+                String shaAssetName = a.get("name").getAsString();
+                if (shaAssetName.equals(coordinate.releaseAssetName() + ".sha256")) {
+                    String sha256Url = a.get("browser_download_url").getAsString();
+                    sha256 = fetchSha256(sha256Url);
+                    break;
+                }
+            }
+
+            if (sha256 == null || sha256.isBlank()) {
+                return ResolutionResult.failure(
+                    "SHA256 checksum asset not found for " + coordinate.releaseAssetName() + ".sha256",
+                    List.of()
+                );
+            }
 
             // Parse dependencies from release metadata or module manifest
             List<String> depStrings = parseDependencies(matchingRelease);
