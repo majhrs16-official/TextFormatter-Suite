@@ -510,9 +510,54 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     }
 
     private List<String> parseDependencies(JsonObject release) {
-        // Parse from release body or manifest
-        // Not yet implemented
-        throw new UnsupportedOperationException("Dependency parsing from release metadata not implemented");
+        List<String> deps = new ArrayList<>();
+
+        // 1. Try to parse from release body (e.g., "dependencies:" section)
+        if (release.has("body") && !release.get("body").isJsonNull()) {
+            String body = release.get("body").getAsString();
+            deps.addAll(parseDependenciesFromBody(body));
+        }
+
+        // 2. Try to find and parse a manifest file from assets
+        // This would require downloading and parsing a manifest asset
+        // For now, we'll leave this as a TODO for when assets are available
+
+        return deps;
+    }
+
+    private List<String> parseDependenciesFromBody(String body) {
+        List<String> deps = new ArrayList<>();
+        if (body == null || body.isBlank()) return deps;
+
+        // Look for a "dependencies:" section in the body
+        // Format: 
+        // dependencies:
+        //   - group:artifact:version
+        //   - group:artifact:version:classifier
+        String[] lines = body.split("\n");
+        boolean inDepsSection = false;
+        for (String line : lines) {
+            line = line.trim();
+            if (line.equalsIgnoreCase("dependencies:") || line.equalsIgnoreCase("dependencies:")) {
+                inDepsSection = true;
+                continue;
+            }
+            if (inDepsSection) {
+                if (line.isEmpty() || !line.startsWith("-")) {
+                    // End of dependencies section
+                    if (!line.isEmpty() && !line.startsWith(" ")) {
+                        inDepsSection = false;
+                    }
+                }
+                if (inDepsSection && line.startsWith("-")) {
+                    String dep = line.substring(1).trim();
+                    if (!dep.isEmpty()) {
+                        deps.add(dep);
+                    }
+                }
+            }
+        }
+        return deps;
     }
 
     private ModuleCoordinate parseCoordinate(String depStr) {
@@ -530,6 +575,15 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
         String version = tagName.replace("v", "");
         String name = release.get("name").getAsString();
         String description = release.has("body") ? release.get("body").getAsString() : "";
+        List<String> depStrings = parseDependencies(release);
+        List<String> depCoords = new ArrayList<>();
+        for (String depStr : depStrings) {
+            try {
+                depCoords.add(parseCoordinate(depStr).toCoordinateString());
+            } catch (Exception e) {
+                logger.warn("Failed to parse dependency: " + depStr + " - " + e.getMessage());
+            }
+        }
         return new ModuleDescriptor(
             ModuleCoordinate.of(coord.group(), coord.artifact(), version),
             name, description, "TextFormatter Suite Team",
@@ -539,7 +593,7 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             "17", // minJavaVersion
             "21", // maxJavaVersion
             List.of("spigot", "fabric", "velocity", "common"),
-            List.of(), // dependencies
+            depCoords,
             Set.of(), // provides
             Set.of(), // requires
             Map.of() // properties
