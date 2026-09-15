@@ -66,6 +66,13 @@ public final class MessageDispatcher {
     }
 
     /**
+     * Returns the actor directory for accessing online players.
+     */
+    public ActorDirectory getActors() {
+        return actors;
+    }
+
+    /**
      * Routes and delivers one message end-to-end.
      *
      * @return per-target counters; never throws for routing outcomes.

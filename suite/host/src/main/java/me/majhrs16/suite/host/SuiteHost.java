@@ -177,4 +177,12 @@ public final class SuiteHost {
         }
         return config.defaultLanguage();
     }
+
+    /**
+     * Checks if an actor has a permission.
+     * Delegates to the PermissionChecker provided at bootstrap.
+     */
+    public boolean hasPermission(Actor actor, String permission) {
+        return router.hasPermission(actor, permission);
+    }
 }

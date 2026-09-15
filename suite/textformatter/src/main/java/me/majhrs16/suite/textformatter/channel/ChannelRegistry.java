@@ -71,6 +71,23 @@ public final class ChannelRegistry {
         return channels.values();
     }
 
+    /**
+     * Registers a new channel (for extensions).
+     */
+    public void register(Channel channel) {
+        if (channels.containsKey(channel.name())) {
+            throw new IllegalArgumentException("Channel already exists: " + channel.name());
+        }
+        channels.put(channel.name(), channel);
+    }
+
+    /**
+     * Unregisters a channel (for extensions).
+     */
+    public void unregister(String path) {
+        channels.remove(path);
+    }
+
     /** All dotted paths, in insertion order. */
     public List<String> paths() {
         return new ArrayList<>(channels.keySet());

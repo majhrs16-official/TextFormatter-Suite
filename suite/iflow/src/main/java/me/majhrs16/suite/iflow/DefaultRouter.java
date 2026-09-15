@@ -116,6 +116,11 @@ public final class DefaultRouter implements Router {
         return permission == null || permissions.has(actor, permission);
     }
 
+    @Override
+    public boolean hasPermission(Actor actor, String permission) {
+        return permission == null || permissions.has(actor, permission);
+    }
+
     private Rule matchingRule(String path, Actor emitter, Actor recipient, Message message) {
         for (Rule rule : rules.get()) {
             if (rule.matches(path, emitter.name(), recipient.name(), message.direction())) {

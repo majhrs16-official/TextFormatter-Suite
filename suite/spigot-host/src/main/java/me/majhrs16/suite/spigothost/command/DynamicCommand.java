@@ -10,11 +10,13 @@ import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,7 +26,7 @@ import java.util.stream.Collectors;
 /**
  * Representa un comando dinámico individual con sus subcomandos.
  */
-public final class DynamicCommand {
+public final class DynamicCommand implements Command {
 
     private final DynamicCommandRegistrar registrar;
     private final String name;
@@ -369,5 +371,18 @@ public final class DynamicCommand {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public List<String> tabComplete(CommandSender sender, String[] args) {
+        if (args.length == 0) {
+            return new java.util.ArrayList<>(node.children().keySet());
+        }
+        
+        String lastArg = args[args.length - 1];
+        String prefix = lastArg.toLowerCase(java.util.Locale.ROOT);
+        
+        return node.children().keySet().stream()
+            .filter(key -> key.toLowerCase(java.util.Locale.ROOT).startsWith(prefix))
+            .collect(java.util.stream.Collectors.toList());
     }
 }

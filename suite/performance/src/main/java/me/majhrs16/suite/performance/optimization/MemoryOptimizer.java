@@ -22,6 +22,8 @@ public final class MemoryOptimizer {
     private final PluginLogger logger;
     private final long maxHeapBytes;
     private final double targetHeapUsagePercent;
+    private final double criticalThreshold = 0.85; // 85%
+    private final double warningThreshold = 0.70;  // 70%
     
     // Weak reference cache for temporary objects
     private final ReferenceQueue<Object> refQueue = new ReferenceQueue<>();
@@ -36,10 +38,6 @@ public final class MemoryOptimizer {
         t.setDaemon(true);
         return t;
     });
-    
-    private final long maxHeapBytes;
-    private final double criticalThreshold = 0.85; // 85%
-    private final double warningThreshold = 0.70;  // 70%
     
     // Metrics
     private final java.util.concurrent.atomic.AtomicLong allocationsCount = new java.util.concurrent.atomic.AtomicLong(0);

@@ -23,6 +23,12 @@ public interface Router {
      */
     RouteDecision route(Message message, Actor recipient);
 
+    /**
+     * Checks if an actor has a permission.
+     * Delegates to the PermissionChecker provided at router construction.
+     */
+    boolean hasPermission(Actor actor, String permission);
+
     /** Replaces the active rule set (hot reload of {@code rules.yml}). */
     void setRules(Collection<Rule> rules);
 

@@ -20,10 +20,7 @@ import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.extension.ExtensionManager;
-import me.majhrs16.suite.inworld.InWorldHandler;
-import me.majhrs16.suite.manager.ModuleLifecycle;
-import me.majhrs16.suite.manager.DefaultModuleLifecycle;
+
 
 import java.util.Arrays;
 import java.util.function.Consumer;
@@ -107,9 +104,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private volatile MessagesConfig messages;
     private DynamicCommandRegistrar commandRegistrar;
     private me.majhrs16.suite.observability.Observability observability;
-    private ExtensionManager extensionManager;
-    private ModuleLifecycle moduleLifecycle;
-    private InWorldHandler inworldHandler;
 
     @Override
     public void onEnable() {
@@ -121,33 +115,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         this.commandRegistrar = new DynamicCommandRegistrar(this, runtime.host, runtime.dispatcher,
             runtime.languages, runtime.host.translation(), runtime.logger, getDataFolder().toPath());
 
-        // Inicializar ExtensionManager
-        Path extensionsDir = getDataFolder().toPath().resolve("extensions");
-        this.extensionManager = new ExtensionManager(runtime.logger, extId -> {
-            // Create ExtensionContext for the extension
-            return new me.majhrs16.suite.extension.ExtensionContext(
-                runtime.host,
-                runtime.dispatcher,
-                runtime.logger,
-                runtime.host.translation(),
-                runtime.languages,
-                runtime.host.channels(),
-                getDataFolder().toPath(),
-                extId
-            );
-        }, extensionsDir);
-        this.extensionManager.start();
 
-        // Inicializar ModuleLifecycle (Manager)
-        Path cacheDir = getDataFolder().toPath().resolve("manager-cache");
-        this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, runtime.logger);
-        logger.info("ModuleLifecycle (Manager) initialized at " + cacheDir);
 
-        // Inicializar InWorldHandler
-        this.inworldHandler = new InWorldHandler(runtime.host, runtime.dispatcher,
-            runtime.host.channels(), runtime.logger,
-            runtime.host.translation(), runtime.languages);
-        getServer().getPluginManager().registerEvents(inworldHandler, this);
 
         getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
             runtime.host.channels().paths().size(),
@@ -162,19 +131,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
         if (observability != null) {
             observability.stop();
-        }
-        if (extensionManager != null) {
-            extensionManager.stop();
-        }
-        if (inworldHandler != null) {
-            // InWorldHandler cleanup if needed
-        }
-        if (moduleLifecycle != null) {
-            // Unload all modules
-            for (ModuleDescriptor desc : moduleLifecycle.getLoadedModules()) {
-                moduleLifecycle.unload(desc.id());
-            }
-            logger.info("ModuleLifecycle (Manager) stopped");
         }
         if (audiences != null) {
             audiences.close();
@@ -258,18 +214,12 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
 
         // Reload InWorldHandler
-        if (inworldHandler != null) {
-            // InWorldHandler cleanup if needed
-        }
         this.inworldHandler = new InWorldHandler(reloaded, dispatcher,
             reloaded.channels(), logger,
             reloaded.translation(), languages);
         getServer().getPluginManager().registerEvents(inworldHandler, this);
 
         // Reload extensions
-        if (extensionManager != null) {
-            extensionManager.stop();
-        }
         Path extensionsDir = getDataFolder().toPath().resolve("extensions");
         this.extensionManager = new ExtensionManager(logger, extId -> {
             return new me.majhrs16.suite.extension.ExtensionContext(
@@ -286,12 +236,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         extensionManager.start();
 
         // Reload ModuleLifecycle
-        if (moduleLifecycle != null) {
-            // Unload all modules first
-            for (ModuleDescriptor desc : moduleLifecycle.getLoadedModules()) {
-                moduleLifecycle.unload(desc.id());
-            }
-        }
         Path cacheDir = folder.resolve("manager-cache");
         this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, logger);
         logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir);
@@ -779,7 +723,7 @@ rt.host,
     }
 
     /** Getter para el módulo de observabilidad. */
-    me.majhrs16.suite.observability.Observability getObservability() {
+    public me.majhrs16.suite.observability.Observability getObservability() {
         return observability;
     }
 

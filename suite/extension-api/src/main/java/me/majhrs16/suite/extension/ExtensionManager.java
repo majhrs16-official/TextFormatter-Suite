@@ -1,7 +1,6 @@
 package me.majhrs16.suite.extension;
 
 import me.majhrs16.suite.api.Capability;
-import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
@@ -9,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
@@ -99,7 +99,7 @@ public final class ExtensionManager {
         }
 
         // Check core API compatibility
-        if (!desc.version().satisfies(desc.requiredCoreApi())) {
+        if (!desc.version().satisfies(desc.requiredCoreApi().toString())) {
             logger.error("Extension " + id + " requires core-api " + desc.requiredCoreApi() +
                 " but running " + desc.version());
             return false;

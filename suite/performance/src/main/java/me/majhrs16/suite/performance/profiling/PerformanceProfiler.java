@@ -11,12 +11,93 @@ import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.CompilationMXBean;
+import java.lang.management.ThreadInfo;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+
+// ============================================================
+// Data Classes (Records) - Must be defined before use
+// ============================================================
+
+record MethodProfile(
+    String methodName,
+    long totalTimeNanos,
+    long callCount,
+    long minTimeNanos,
+    long maxTimeNanos,
+    double avgTimeNanos
+) {}
+
+record MemorySnapshot(
+    long heapUsed,
+    long heapMax,
+    long nonHeapUsed,
+    long nonHeapMax,
+    long poolCount,
+    String[] poolNames
+) {}
+
+record GcStats(
+    long totalCollections,
+    long totalTimeMs
+) {
+    public double getOverheadPercent(long uptimeMs) {
+        return uptimeMs > 0 ? (double) totalTimeMs / uptimeMs * 100 : 0;
+    }
+}
+
+record BufferPoolStats(
+    String name,
+    long count,
+    long memoryUsed,
+    long totalCapacity
+) {}
+
+record CompilationStats(
+    long totalCompilationTimeMs,
+    int compilationCount
+) {}
+
+record ThreadDump(
+    ThreadInfo[] threads,
+    int threadCount,
+    int peakThreadCount,
+    long totalStartedThreads
+) {}
+
+record BottleneckAnalysis(
+    List<String> issues,
+    List<String> recommendations
+) {}
+
+record SystemMetrics(
+    double cpuLoadPercent,
+    long freePhysicalMemory,
+    long totalPhysicalMemory,
+    long freeSwapSpace,
+    long totalSwapSpace,
+    int availableProcessors,
+    long uptimeMs,
+    double processCpuLoadPercent
+) {}
+
+record ProfilingReport(
+    long totalCpuTimeNanos,
+    long totalAllocatedMemory,
+    long peakMemoryUsage,
+    long gcCount,
+    long gcTimeMs,
+    Map<String, MethodProfile> methodProfiles,
+    MemorySnapshot memorySnapshot,
+    GcStats gcStats,
+    SystemMetrics systemMetrics,
+    BottleneckAnalysis bottlenecks
+) {}
 
 /**
  * Advanced performance profiler for the TextFormatter Suite.
@@ -92,7 +173,7 @@ public final class PerformanceProfiler {
      */
     public ProfilingReport stopProfiling() {
         if (!profiling) {
-            return new ProfilingReport(0, 0, 0, 0, 0, Map.of());
+            return new ProfilingReport(0, 0, 0, 0, 0, Map.of(), null, null, null);
         }
         
         profiling = false;
@@ -505,10 +586,6 @@ public final class PerformanceProfiler {
         return result;
     }
 
-    private GcStats getGcStats() {
-        return getGcStats();
-    }
-
     // Logging helpers
     private void logInfo(String msg) {
         if (logger != null) logger.info(msg);
@@ -521,129 +598,4 @@ public final class PerformanceProfiler {
     }
 
     // ============================================================
-    // Data Classes
-    // ============================================================
-
-    public record ProfilingReport(
-        long totalCpuTimeNanos,
-        long totalAllocatedMemory,
-        long peakMemoryUsage,
-        long gcCount,
-        long gcTimeMs,
-        Map<String, MethodProfile> methodProfiles,
-        MemorySnapshot memorySnapshot,
-        GcStats gcStats,
-        SystemMetrics systemMetrics,
-        BottleneckAnalysis bottlenecks
-    ) {}
-
-    public record MethodProfile(
-        String methodName,
-        long totalTimeNanos,
-        long callCount,
-        long minTimeNanos,
-        long maxTimeNanos,
-        double avgTimeNanos
-    ) {
-        public MethodProfile(String name, long durationNanos) {
-            this(name, durationNanos, 1, durationNanos, durationNanos, durationNanos);
-        }
-
-        public MethodProfile addSample(long durationNanos) {
-            return new MethodProfile(
-                methodName,
-                totalTimeNanos + durationNanos,
-                callCount + 1,
-                Math.min(minTimeNanos, durationNanos),
-                Math.max(maxTimeNanos, durationNanos),
-                (totalTimeNanos + durationNanos) / (double) (callCount + 1)
-            );
-        }
-    }
-
-    public record MemorySnapshot(
-        long heapUsed,
-        long heapCommitted,
-        long heapMax,
-        long nonHeapUsed,
-        Map<String, Long> bufferPools,
-        GcStats gcStats
-    ) {}
-
-    public record GcStats(
-        long totalCollections,
-        long totalTimeMs
-    ) {}
-
-    public record GcCollectorInfo(
-        String name,
-        long collectionCount,
-        long collectionTimeMs,
-        String[] memoryPoolNames
-    ) {}
-
-    public record SystemMetrics(
-        double cpuLoadPercent,
-        long freePhysicalMemory,
-        long totalPhysicalMemory,
-        long freeSwapSpace,
-        long totalSwapSpace,
-        int availableProcessors,
-        long uptimeMs,
-        double processCpuLoadPercent
-    ) {}
-
-    public record GcStats(
-        long totalCollections,
-        long totalTimeMs
-    ) {}
-
-    public record BufferPoolStats(
-        String name,
-        long count,
-        long memoryUsed,
-        long totalCapacity
-    ) {}
-
-    public record CompilationStats(
-        long totalCompilationTimeMs,
-        int compilationCount
-    ) {}
-
-    public record ThreadDump(
-        ThreadInfo[] threads,
-        int threadCount,
-        int peakThreadCount,
-        long totalStartedThreads
-    ) {}
-
-    public record BottleneckAnalysis(
-        List<String> issues,
-        List<String> recommendations
-    ) {}
-
-    public record GcStats(
-        long totalCollections,
-        long totalTimeMs
-    ) {
-        public double getOverheadPercent(long uptimeMs) {
-            return uptimeMs > 0 ? (double) totalTimeMs / uptimeMs * 100 : 0;
-        }
-    }
-
-    public record SystemMetrics(
-        double cpuLoadPercent,
-        long freePhysicalMemory,
-        long totalPhysicalMemory,
-        long freeSwapSpace,
-        long totalSwapSpace,
-        int availableProcessors,
-        long uptimeMs,
-        double processCpuLoadPercent
-    ) {}
-
-    public record BottleneckAnalysis(
-        List<String> issues,
-        List<String> recommendations
-    ) {}
 }

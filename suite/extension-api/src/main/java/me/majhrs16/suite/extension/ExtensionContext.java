@@ -10,6 +10,8 @@ import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
+import org.yaml.snakeyaml.Yaml;
+
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
@@ -191,11 +193,11 @@ public final class ExtensionContext {
             return ExtensionConfig.empty();
         }
         try {
-            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+            Yaml yaml = new Yaml();
             String content = java.nio.file.Files.readString(configFile);
             @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) new org.yaml.snakeyaml.Yaml().load(content);
-            return new ExtensionConfig(map != null ? map : Map.of());
+            Map<String, Object> map = (Map<String, Object>) yaml.load(content);
+            return ExtensionConfig.of(map != null ? map : Map.of());
         } catch (Exception e) {
             logger.warn("Failed to load extension config: " + e.getMessage());
             return ExtensionConfig.empty();
@@ -208,7 +210,7 @@ public final class ExtensionContext {
     public void saveConfig(ExtensionConfig config) {
         Path configFile = dataDirectory().resolve("config.yml");
         try {
-            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+            Yaml yaml = new Yaml();
             String yamlStr = yaml.dump(config.asMap());
             java.nio.file.Files.writeString(configFile, yamlStr);
         } catch (Exception e) {

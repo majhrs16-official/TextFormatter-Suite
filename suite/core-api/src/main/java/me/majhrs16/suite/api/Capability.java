@@ -26,4 +26,11 @@ public record Capability(String name, SemVer version) {
     public String toString() {
         return name + '@' + version;
     }
+
+    /**
+     * Checks if a capability name is valid (non-blank).
+     */
+    public static boolean isValid(String name) {
+        return name != null && !name.isBlank();
+    }
 }

@@ -238,22 +238,27 @@ public final class CacheOptimizer<K, V> {
         }
     }
 
-    private K selectVictim() {
-        return switch (policy) {
-            case LRU -> accessOrder.poll();
-            case LFU -> accessCounts.entrySet().stream()
-                .min(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse(null);
-            case TTL -> {
+private K selectVictim() {
+        switch (policy) {
+            case LRU:
+                return accessOrder.poll();
+            case LFU:
+                return accessCounts.entrySet().stream()
+                    .min(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElse(null);
+            case TTL: {
                 long now = System.currentTimeMillis();
-                yield cache.entrySet().stream()
+                return cache.entrySet().stream()
                     .filter(e -> e.getValue().isExpired())
                     .findFirst()
                     .map(Map.Entry::getKey)
                     .orElse(null);
             }
-            case ADAPTIVE -> selectAdaptiveVictim();
+            case ADAPTIVE:
+                return selectAdaptiveVictim();
+            default:
+                return null;
         }
     }
 
@@ -287,10 +292,6 @@ public final class CacheOptimizer<K, V> {
         boolean isExpired() {
             return expiryTime != Long.MAX_VALUE && System.currentTimeMillis() > expiryTime;
         }
-
-        final V value;
-        final long expiryTime;
-        final long createdAt;
     }
 
     public record CacheStats(
