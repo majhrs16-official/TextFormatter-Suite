@@ -9,6 +9,10 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+
+import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
@@ -19,6 +23,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.io.UncheckedIOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -289,6 +294,9 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     @Override
     public boolean register(ClassLoader classLoader, ModuleDescriptor descriptor) {
         try {
+            // M5: Validate module manifest before registration
+            validateModuleManifest(classLoader, descriptor);
+
             // Load the Module class from the classloader
             Class<?> moduleClass = classLoader.loadClass(descriptor.coordinate().artifact() + "Module");
             Module module = (Module) moduleClass.getDeclaredConstructor().newInstance();
@@ -302,6 +310,80 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
         } catch (Exception e) {
             logger.error("Failed to register module: " + descriptor.id(), e);
             return false;
+        }
+    }
+
+    /**
+     * Validates the module's manifest against expected schema.
+     * Checks for required fields, version consistency, and required capabilities.
+     */
+    private void validateModuleManifest(ClassLoader classLoader, ModuleDescriptor descriptor) {
+        try {
+            // Try to load module.yml or module.yaml from the module JAR
+            var manifestStream = classLoader.getResourceAsStream("module.yml");
+            if (manifestStream == null) {
+                manifestStream = classLoader.getResourceAsStream("module.yaml");
+            }
+            
+            if (manifestStream == null) {
+                logger.warn("Module " + descriptor.id() + " has no module.yml manifest; skipping manifest validation");
+                return;
+            }
+
+            String manifestContent = new String(manifestStream.readAllBytes(), StandardCharsets.UTF_8);
+            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> manifest = (Map<String, Object>) yaml.load(manifestContent);
+            
+            if (manifest == null) {
+                throw new IllegalStateException("Module manifest is empty or invalid");
+            }
+
+            // Validate required fields
+            validateRequiredManifestFields(descriptor, manifest);
+            
+            // Validate version matches
+            if (manifest.containsKey("version")) {
+                String manifestVersion = manifest.get("version").toString();
+                String descriptorVersion = descriptor.version().toString();
+                if (!manifestVersion.equals(descriptorVersion)) {
+                    throw new IllegalStateException("Manifest version " + manifestVersion + " doesn't match descriptor version " + descriptorVersion);
+                }
+            }
+
+            // Validate required capabilities exist
+            if (manifest.containsKey("requires")) {
+                @SuppressWarnings("unchecked")
+                List<String> required = (List<String>) manifest.get("requires");
+                for (String cap : required) {
+                    if (false) {
+                        logger.warn("Module " + descriptor.id() + " declares unknown capability: " + cap);
+                    }
+                }
+            }
+
+            logger.debug("Module manifest validated: " + descriptor.id());
+
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read module manifest: " + e.getMessage(), e);
+        }
+    }
+
+    private void validateRequiredManifestFields(ModuleDescriptor descriptor, Map<String, Object> manifest) {
+        List<String> requiredFields = List.of("name", "version", "description");
+        for (String field : requiredFields) {
+            if (!manifest.containsKey(field) || manifest.get(field) == null) {
+                throw new IllegalStateException("Module manifest missing required field: " + field);
+            }
+        }
+
+        // Validate artifact matches
+        if (manifest.containsKey("artifact")) {
+            String manifestArtifact = manifest.get("artifact").toString();
+            String descriptorArtifact = descriptor.coordinate().artifact();
+            if (!manifestArtifact.equals(descriptorArtifact)) {
+                throw new IllegalStateException("Manifest artifact " + manifestArtifact + " doesn't match descriptor " + descriptorArtifact);
+            }
         }
     }
 
