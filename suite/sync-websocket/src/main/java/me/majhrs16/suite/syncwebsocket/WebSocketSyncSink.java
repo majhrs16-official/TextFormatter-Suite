@@ -50,8 +50,8 @@ public final class WebSocketSyncSink implements SyncSink {
     private final String authToken;
     private final PluginLogger logger;
     private final WebSocketServer server;
-    private final MessageCodec codec;
     private volatile SyncListener listener;
+    private volatile boolean running = false;
 
     // Subscription management
     private final Map<String, Set<WebSocket>> subscriptions = new ConcurrentHashMap<>();
@@ -64,7 +64,6 @@ public final class WebSocketSyncSink implements SyncSink {
         this.port = port > 0 ? port : DEFAULT_PORT;
         this.authToken = authToken;
         this.logger = logger;
-        this.codec = new MessageCodec();
         this.server = new SyncWebSocketServer(new InetSocketAddress(port));
     }
 
@@ -75,17 +74,19 @@ public final class WebSocketSyncSink implements SyncSink {
 
     @Override
     public synchronized void start() throws IOException {
-        if (server.isRunning()) return;
+        if (running) return;
 
         server.start();
+        running = true;
         logger.info("WebSocket sync server started on port " + port);
         logger.info("Endpoints: " + CHAT_PATH + ", " + EVENTS_PATH + ", " + SYNC_PATH + ", " + LOGS_PATH);
     }
 
-    @Override
+@Override
     public synchronized void stop() {
-        if (!server.isRunning()) return;
+        if (!running) return;
 
+        running = false;
         // Close all connections
         for (WebSocket client : allClients) {
             try {
@@ -260,9 +261,9 @@ public final class WebSocketSyncSink implements SyncSink {
             if (subs != null) {
                 subs.remove(conn);
             }
-            Set<String> subs = clientSubscriptions.get(conn);
-            if (subs != null) {
-                subs.remove(path);
+            Set<String> pathSubs = clientSubscriptions.get(conn);
+            if (pathSubs != null) {
+                pathSubs.remove(path);
             }
 
             JsonObject response = new JsonObject();
@@ -370,6 +371,6 @@ public final class WebSocketSyncSink implements SyncSink {
     }
 
     public boolean isRunning() {
-        return server.isRunning();
+        return running;
     }
 }

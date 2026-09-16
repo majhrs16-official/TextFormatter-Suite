@@ -36,4 +36,10 @@ public enum MessageType {
 
     /** A custom message created by the API or rules engine. */
     CUSTOM,
+
+    /** A container interaction (chest, barrel, shulker box, etc.). */
+    CONTAINER,
+
+    /** A written book being read. */
+    BOOK,
 }

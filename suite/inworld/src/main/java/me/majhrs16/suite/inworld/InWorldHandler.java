@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
@@ -40,6 +41,7 @@ public final class InWorldHandler implements Listener {
     private final PluginLogger logger;
     private final TranslationService translation;
     private final UserLanguageStore languages;
+    private final org.bukkit.Server server;
 
     // Sign cache
     private final Map<Location, SignData> signCache = new ConcurrentHashMap<>();
@@ -54,9 +56,11 @@ public final class InWorldHandler implements Listener {
     private final Map<UUID, RadiusData> radiusCache = new ConcurrentHashMap<>();
 
     public InWorldHandler(SuiteHost host, MessageDispatcher dispatcher,
+                          org.bukkit.Server server,
                           ChannelRegistry channels, PluginLogger logger,
                           TranslationService translation, UserLanguageStore languages) {
         this.host = host;
+        this.server = server;
         this.dispatcher = dispatcher;
         this.channels = channels;
         this.logger = logger;
@@ -144,9 +148,18 @@ public final class InWorldHandler implements Listener {
         return null;
     }
 
-    private String getPlayerLanguage(Player player) {
-        return languages.languageOf(player.getUniqueId())
-            .orElse(languages.languageOf(player.getUniqueId()).orElse("auto"));
+    private Language getPlayerLanguage(Player player) {
+        Optional<String> langOpt = languages.languageOf(player.getUniqueId());
+        if (langOpt.isPresent()) {
+            Optional<Language> lang = Language.of(langOpt.get());
+            if (lang.isPresent()) return lang.get();
+        }
+        Optional<String> fallback = languages.languageOf(player.getUniqueId());
+        if (fallback.isPresent()) {
+            Optional<Language> lang = Language.of(fallback.get());
+            if (lang.isPresent()) return lang.get();
+        }
+        return Language.AUTO;
     }
 
     private String getFormattedMessage(Message message, String original) {
@@ -270,7 +283,7 @@ public final class InWorldHandler implements Listener {
      */
     public List<Actor> getPlayersInWorld(String worldName) {
         List<Actor> players = new ArrayList<>();
-        for (Player p : host.getServer().getWorld(worldName).getPlayers()) {
+        for (Player p : server.getWorld(worldName).getPlayers()) {
             players.add(new Actor(p.getUniqueId(), p.getName(),
                 Actor.ActorKind.PLAYER, getPlayerLanguage(p), p));
         }

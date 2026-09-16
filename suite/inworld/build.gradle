@@ -9,6 +9,7 @@ version = '2.1.0-SNAPSHOT'
 repositories {
     mavenLocal()
     mavenCentral()
+    maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
 }
 
 java {
@@ -23,6 +24,7 @@ dependencies {
     implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-api:4.17.0'
+    compileOnly 'org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
     testImplementation platform('org.junit:junit-bom:5.10.2')

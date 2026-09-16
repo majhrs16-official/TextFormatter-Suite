@@ -1,18 +1,15 @@
 package me.majhrs16.suite.spigothost.command;
 
-import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.host.config.CommandsConfig;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.manager.ModuleCoordinate;
+import me.majhrs16.suite.manager.ModuleDescriptor;
+import me.majhrs16.suite.manager.ModuleLifecycle;
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -26,7 +23,7 @@ import java.util.stream.Collectors;
 /**
  * Representa un comando dinámico individual con sus subcomandos.
  */
-public final class DynamicCommand implements Command {
+public final class DynamicCommand implements org.bukkit.command.Command {
 
     private final DynamicCommandRegistrar registrar;
     private final String name;
@@ -384,5 +381,35 @@ public final class DynamicCommand implements Command {
         return node.children().keySet().stream()
             .filter(key -> key.toLowerCase(java.util.Locale.ROOT).startsWith(prefix))
             .collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public String getDescription() {
+        return node.description();
+    }
+
+    @Override
+    public String getUsage() {
+        return "/" + name + " <" + String.join("|", node.children().keySet()) + ">";
+    }
+
+    @Override
+    public String getPermission() {
+        return node.permission();
+    }
+
+    @Override
+    public List<String> getAliases() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public String getPermissionMessage() {
+        return "§cNo tienes permiso para usar este comando.";
     }
 }

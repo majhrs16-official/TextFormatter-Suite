@@ -10,6 +10,8 @@ repositories {
     mavenLocal()
     mavenCentral()
     maven { url 'https://repo.velocitypowered.com/repository/maven-public/' }
+    maven { url 'https://repo.velocitypowered.com/releases/' }
+    maven { url 'https://repo.velocitypowered.com/snapshots/' }
 }
 
 java {
@@ -20,7 +22,7 @@ java {
 dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
-    implementation 'com.velocitypowered:velocity-api:3.2.0'
+    implementation 'com.velocitypowered:velocity-api:3.3.0'
 
     testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
     testImplementation platform('org.junit:junit-bom:5.10.2')

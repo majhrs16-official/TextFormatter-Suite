@@ -75,12 +75,12 @@ public final class DynamicCommandRegistrar implements CommandExecutor, TabComple
             "health", new CommandsConfig.ActionDef("Muestra estado de salud del sistema", "textformattersuite.admin", null, List.of(), false, ""),
             "metrics", new CommandsConfig.ActionDef("Muestra métricas Prometheus", "textformattersuite.admin", null, List.of(), false, ""),
             "module", new CommandsConfig.ActionDef("Gestiona módulos (install, update, list, remove)", "textformattersuite.admin", null, List.of(
-                new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Acción a realizar"),
-                new CommandsConfig.ArgDef("module", "string", "ID del módulo (ej. suite-textformatter)"),
-                new CommandsConfig.ArgDef("version", "string?", "Versión específica (opcional)")
+new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Acción a realizar", ""),
+                        new CommandsConfig.ArgDef("module", "string", "ID del módulo (ej. suite-textformatter)", ""),
+                        new CommandsConfig.ArgDef("version", "string?", "Versión específica (opcional)", "")
             ), false, ""),
             "suite", new CommandsConfig.ActionDef("Actualiza toda la suite a las últimas versiones compatibles", "textformattersuite.admin", null, List.of(
-                new CommandsConfig.ArgDef("force", "boolean?", "Forzar actualización aunque no sea compatible")
+                new CommandsConfig.ArgDef("force", "boolean?", "Forzar actualización aunque no sea compatible", "")
             ), false, "")
         );
 
