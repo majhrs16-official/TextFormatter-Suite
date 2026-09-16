@@ -6,7 +6,7 @@
 
 ---
 
-## 1. ESTADO DEL SISTEMA (2026-09-13)
+## 1. ESTADO DEL SISTEMA (2026-09-16)
 
 | Pieza | Estado | Verificación |
 |---|---|---|
@@ -18,15 +18,15 @@
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
 | sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
-| sync-velocity | ✅ real (VelocitySink + VelocityPlugin) | build |
+| sync-velocity | ❌ **Bloqueado** (dependencia velocity-api no disponible) | build falla |
 | sync-websocket | ✅ real | build |
-| spigot-host | ✅ funcional · ✅ **probado en Paper 1.20.6 real** | 4 tests + server test |
-| fabric-host | ✅ funcional (Loom 1.6.12, 1.21) | build |
+| spigot-host | ❌ **Bloqueado** (Spigot API no disponible en Maven) | build falla |
+| fabric-host | ⚠️ **Excluido** (requiere descarga Minecraft) | build falla |
 | web-editor | ✅ gates verdes | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ⚠️ **No release-ready** (ver auditoría 2026-09-13) | compile |
 | presets | ✅ standard/rpg/staff/minimal | tests |
-| inworld | ✅ signos/cofres/libros, WORLD/RADIUS | tests |
+| inworld | ❌ **Bloqueado** (depende spigot-host) | build falla |
 | observability | ✅ metrics/debug/health (auth token, 127.0.0.1) | tests |
 | extension-api | ✅ SDK estable | tests |
 | example-extension | ✅ demo funcional | tests |
@@ -39,29 +39,29 @@
 
 ---
 
-## 2. COLA DE FASES (actualizado 2026-09-13)
+## 2. COLA DE FASES (actualizado 2026-09-16)
 
 ```
-1. FASE 4   fabric-host funcional           ✅
+1. FASE 4   fabric-host funcional           ❌ (bloqueado por descarga Minecraft)
 2. FASE 5   Strings UI centralizados (i18n) ✅
 3. FASE 6   Motor de reglas iFlow enriquecido ✅
 4. FASE 7   ConfigValidator real            ✅
-5. FASE 8   Sistema comandos dinámico (/suite) ✅
-6. FASE 9   sync-velocity real              ✅
-7. FASE 10  Observabilidad                  ✅
-8. FASE 11  Extensiones/addons (SDK)        ✅
-9. FASE 12  Descargador runtime + attach/detach ⚠️ (No release-ready)
-10. FASE 13 sync-websocket                  ✅
-11. FASE 14 Presets, `transform` real, `engine.parallel` knob  ✅
-12. FASE 15 F8 in-world                     ✅
-13. FASE 16 Tests, Optimización y Documentación ⚠️ (parcial: docs + E2E pendientes)
+4. FASE 8   Sistema comandos dinámico (/suite) ✅
+5. FASE 9   sync-velocity real              ❌ (bloqueado velocity-api)
+5. FASE 10  Observabilidad                  ✅
+6. FASE 11  Extensiones/addons (SDK)        ✅
+7. FASE 12  Descargador runtime + attach/detach ⚠️ (No release-ready)
+8. FASE 13  sync-websocket                  ✅
+9. FASE 14  Presets, `transform` real, `engine.parallel` knob  ✅
+10. FASE 15 F8 in-world                     ❌ (bloqueado spigot-host)
+11. FASE 16 Tests, Optimización y Documentación ⚠️ (parcial: docs + E2E pendientes)
 ```
 
 ### FASE 16 — Tests, Optimización y Documentación (EN CURSO)
 | # | Pieza | Estado |
 |---|-------|--------|
 | F16-1 | Tests de carga/estrés (JMH + Gatling) | ✅ |
-| F16-2 | Tests de integración end-to-end | ⏳ (pipeline completo Spigot+Fabric) |
+| F16-2 | Tests de integración end-to-end | ⏳ (pipeline completo Spigot+Fabric **bloqueado**) |
 | F16-3 | Optimización de rendimiento (profiling, memory tuning) | ✅ |
 | F16-4 | Documentación final (Wiki, API docs, guías) | ⏳ (sincronizar README/PLAN/PROMPT_NOW/Release Notes/ADR) |
 | F16-5 | Benchmarks de regresión continua | ⏳ |
@@ -81,7 +81,7 @@
 | F12-7 | Force flag para versiones no compatibles | ✅ |
 | F12-8 | Comando `/suite update` | ✅ |
 | F12-9 | Comando `/suite module` (install, update, list, remove, info) | ✅ |
-| F12-10 | Integración spigot-host/fabric-host (start/stop/reload) | ✅ |
+| F12-10 | Integración spigot-host/fabric-host (start/stop/reload) | ❌ (bloqueado spigot-host) |
 
 > **Veredicto auditoría**: F12 no debería marcarse como 100%. Es un prototipo con API definida pero implementación incompleta.
 
@@ -114,15 +114,15 @@ source ~/.nvm/nvm.sh
 cd suite/web-editor && npm run check && npm run test:integration
 
 # Suite Java (orden; offline salvo deps nuevas)
-for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-velocity sync-websocket host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
+for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
   (cd suite/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
 done
 
-# Plugin Spigot de la suite (fat-jar)
-cd suite/spigot-host && ./gradlew build --offline --no-daemon
+# Plugin Spigot de la suite (fat-jar) — BLOQUEADO: Spigot API no disponible
+# cd suite/spigot-host && ./gradlew build --offline --no-daemon
 
-# Plugin Fabric de la suite
-cd suite/fabric-host && ./gradlew build --offline --no-daemon
+# Plugin Fabric de la suite — EXCLUIDO (requiere descarga Minecraft)
+# cd suite/fabric-host && ./gradlew build --offline --no-daemon
 
 # Web editor
 cd suite/web-editor
@@ -136,10 +136,53 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-**FASE 16 (en progreso)** → 
-1. **Tests E2E pipeline completo** (Spigot + Fabric host, chat → iFlow → format → delivery)
+### 🔴 CRÍTICO — Desbloquear spigot-host
+1. **Resolver dependencia Spigot API** — El artefacto `org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT` no está disponible en Maven Central ni en hub.spigotmc.org (404). Opciones:
+   - Usar versión release de Spigot/Paper API en lugar de SNAPSHOT
+   - Compilar Spigot API desde fuente
+   - Usar Paper API como alternativa
+   - Instalar manualmente en mavenLocal
+
+### 🔴 CRÍTICO — Completar spigot-host
+Una vez disponible Spigot API:
+1. Completar `DynamicCommand` implementación `Command` interface
+2. Implementar clases faltantes: `DispatchReport`, `HealthCheckRegistry`, `WebSocketSyncSink`, `InWorldHandler`
+3. Publicar `sync-velocity`, `sync-websocket`, `inworld` en mavenLocal
 2. **Sincronización documentación** (README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR a un mismo estado)
 3. **Module Manager (F12) consolidación interna**: version resolver (rangos semver + env compat), dependency resolver (manifest parsing), SHA256 verification real, allowlist + manifest validation, register() semántica (descriptor SPI, no servicio)
 4. **Security hardening pendiente**: tokens en `char[]` + `Arrays.fill()`, template validation, PAPI dynamic check
 5. **Module Manager (F12) release-ready**: **AL FINAL** publicar GitHub releases (tags + assets + .sha256) solo cuando todo lo anterior esté verde en local
 6. **Release pipeline** + versionado semántico + gradle.lockfile
+
+---
+
+## 6. RESUMEN DE AUDITORÍA 2026-09-16 — ESTADO ACTUAL
+
+| Área | Estado | Comentario |
+|------|--------|------------|
+| **Core modules** | ✅ Compilan | core-api, iflow, host, textformatter, manager-impl, observability, extension-api |
+| **Bugs críticos (C1-C5)** | ✅ Arreglados | Message contract, MessageEvent, Module Manager, DebugEndpoint, Compilación |
+| **Bugs altos (H1-H5)** | ✅ Arreglados | RateLimiter, Discord bypass, Language cache, ConfigValidator, Channel/Direction |
+| **Security Sprint 1** | ✅ Done | SpEL sandbox, YAML SafeConstructor, MiniEscape, SafeConstructor args |
+| **Security Sprint 2** | ✅ Done | Bounded executors, parallel dispatcher, observability fixes |
+| **Module Manager (F12)** | ⚠️ Parcial | M2 ✅, M3 ✅, M4 ✅, M5 ✅, M6 ⏳, M1 ⏳ (final) |
+| **Security Sprint 3** | ⏳ Pendiente | char[] tokens, template validation, PAPI dynamic check |
+| **Spigot-host** | ❌ Bloqueado | Spigot API no disponible |
+| **fabric-host** | ❌ Excluido | Requiere descarga Minecraft |
+| **sync-velocity** | ❌ Bloqueado | velocity-api no disponible |
+| **inworld** | ❌ Bloqueado | Depende spigot-host |
+| **Tests E2E** | ⏳ Pendiente | Pipeline completo bloqueado |
+| **Docs Sync** | ⏳ Pendiente | README/PLAN/PROMPT_NOW/Release Notes/ADR |
+
+---
+
+## 7. PRÓXIMA ACCIÓN INMEDIATA
+
+**PRIORIDAD 1**: Resolver dependencia Spigot API (usar Paper API, release version, o build local)
+**PRIORIDAD 2**: Completar spigot-host + publicar módulos dependientes
+**PRIORIDAD 3**: Tests E2E pipeline completo + Sincronización docs completa
+**PRIORIDAD 4**: F12 release-ready (M6 + M1) + Security Sprint 3 + Release pipeline
+
+---
+
+*Última actualización: 2026-09-16 | Commit: a420e44*
