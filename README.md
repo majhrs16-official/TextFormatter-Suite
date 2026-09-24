@@ -65,7 +65,7 @@ web-editor de configuración.
 | `suite/spigot-host` | 17 | **Plugin Spigot de la suite** (`TextFormatterSuite`): `SpigotActorDirectory`, `SpigotChatDelivery` (hop a main thread), bootstrap `SuiteHost`+`MessageDispatcher`, `/suite reload|status|test|lang|toggle|reset`. Fat-jar construido (shadow). |
 | `suite/fabric-host` | 17 | **Plugin Fabric de la suite** (`FabricMod`): `FabricActorDirectory`, `FabricChatDelivery`, bootstrap `SuiteHost`+`MessageDispatcher`. Loom 1.6.12, mappings 1.21. |
 | `suite/manager-api` | 17 | SPI del gestor de módulos runtime: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`. |
-| `suite/manager-impl` | 17 | Implementación: GitHub releases downloader, version resolver (stub), dependency relocator, ClassLoader aislado (parent-last). **No release-ready** (ver auditoría). |
+| `suite/manager-impl` | 17 | Implementación: GitHub releases downloader, version resolver (semver + env compat), dependency resolver (parsea module.yml), dependency relocator, ClassLoader aislado (parent-last), SHA256 verificación, register() SPI-only, discoverAll() para kernel. **Núcleo completado**; pendiente GitHub Releases reales y Security Sprint 3. |
 | `suite/presets` | 17 | Presets de configuración predefinidos (standard, rpg, staff, minimal). |
 | `suite/inworld` | 17 | Handlers in-world (signos, cofres, libros), WORLD/RADIUS, botones click/hover. |
 | `suite/observability` | 17 | Metrics endpoint (`/metrics` Prometheus), Debug endpoint (`/debug/*` con auth token, 127.0.0.1), Health checks. |
@@ -307,42 +307,47 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
 - **Golden tests**: el editor y el host deben validar el mismo config
 (`ConfigLoaderTest.parsesEditorExportedDefaultConfig` verde).
 ---
-## 14. Estado real (2026-09-13)
+## 14. Estado real (2026-09-18)
 
 **Fases cerradas:**
 - F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
 - F3 (channel type system + tester module + default channels).
 - F4 (fabric-host funcional), F5 (i18n strings UI), F6 (iFlow enriquecido: CHANNEL_REDIRECT, PAPI/permisos en SpEL, transform F7+),
 - F7 (ConfigValidator real), F8 (comandos dinámicos `/suite`), F9 (sync-velocity real),
-- F10 (observabilidad: metrics/debug/health), F11 (extensiones/addons SDK), F12 (manager runtime - **no release-ready**),
+- F10 (observabilidad: metrics/debug/health), F11 (extensiones/addons SDK), **F12 (manager runtime - núcleo completado)**,
 - F13 (sync-websocket), F14 (presets, transform real, engine.parallel), F15 (in-world),
-- F16 (tests, profiling, docs — **parcial: tests E2E pendientes**).
+- F16 (tests, profiling, docs — **parcial: tests E2E pendientes, docs sync en progreso**).
 
 **Eliminado:** trío monolítico `common`/`spigot`/`fabric-1.20.6` (nunca
 probado en servidor; recuperable desde historial git).
 
 **Probado en producción:** Plugin `TextFormatterSuite` probado en servidor Paper 1.20.6 real — todos los comandos `/suite`, canales join/quit/death/advancement, chat con traducción, rate-limit, y tests runtime funcionando.
 
-**Problemas críticos arreglados (commit 82d38f4, audit 2026-09-13):**
+**Problemas críticos arreglados (commit 82d38f4, audit 2026-09-13 + fixes 2026-09-18):**
 - ✅ **C1** Contrato `Message` roto → `withX()` methods inmutables, `Builder.from()`
 - ✅ **C2** `MessageEvent` roto → `cancelled` no final, imports
-- ✅ **C3** Module Manager → `URLClassLoader`, `register()` almacena classloader, stubs lanzan `UnsupportedOperationException`
-- ✅ **C4** Debug endpoint → 127.0.0.1, auth token, sin `/debug/simulate`, sin CORS *
+- ✅ **C3** Module Manager → `URLClassLoader`, `register()` SPI-only (no instancia Module), `discoverAll()`, manifest validation, stubs lanzan `UnsupportedOperationException`
+- ✅ **C4** Debug endpoint → 127.0.0.1, auth token, sin `/debug/simulate`, sin CORS *, executor shutdown
 - ✅ **C5** HEAD no compilable → core modules compilan (core-api, iflow, host, observability, spigot-host, manager-impl)
 - ✅ **H1** RateLimiter → per-key capacity, sin double scheduler
 - ✅ **H2** Discord bypass iFlow → `mirror(DispatchReport)` solo si delivered
 - ✅ **H3** Language detection O(recipients) → `resolvedSourceLanguage` caché
+- ✅ **CT-01** `Message.toJson()` → serialización JSON real
+- ✅ **CFG-01** ConfigLoader → `LoadResult` con errores, logging ERROR en lugar de degradar silenciosamente
+- ✅ **OBS-01** DebugEndpoint → executor shutdown en stop()
+- ✅ **F12-M2** Version resolver → semver ranges + env compat
+- ✅ **F12-M3** Dependency resolver → parsing module.yml desde JAR
+- ✅ **F12-M6** register() semántica → descriptor SPI only
 
 **Pendientes / Deuda conocida:**
-- ⚠️ **Module Manager (F12)**: No release-ready — GitHub releases = 0, version resolver stub, dependency resolver stub, SHA256 no conectado, relocation tenía bug crítico (arreglado), ClassLoader extendía ClassLoader (arreglado a URLClassLoader), register/unload incompletos.
-- ⚠️ **SpEL**: Debe auditarse profundamente (RCE potential sin sandbox).
-- ⚠️ **YAML unsafe constructor**: 4 loaders usan `new Yaml()` sin `SafeConstructor`.
-- ⚠️ **MiniEscape**: Solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`.
-- ⚠️ **Tokens en heap**: Discord, Telegram, LibreTranslate en `String` permanente.
-- ⚠️ **Config schema**: Copias manuales (`paths.json`, `js/paths.js`, `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`).
+- ⚠️ **Module Manager (F12)**: GitHub Releases = 0 (requiere release pipeline), Security Sprint 3 pendiente
+- ⚠️ **SpEL**: Debe auditarse profundamente (RCE potential sin sandbox) — Security Sprint 3
+- ⚠️ **Tokens en heap**: Discord, Telegram, LibreTranslate en `String` permanente — Security Sprint 3 (char[])
+- ⚠️ **MiniEscape**: Solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@` — Security Sprint 3
+- ⚠️ **Config schema**: Copias manuales (`paths.json`, `js/paths.js`, `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`)
 - ⚠️ **sync-velocity**: Stub en editor/config → implementar real o eliminar.
 - ⚠️ **Tests E2E**: `npm run test:integration` para web-editor OK; tests Java E2E pipeline completo pendientes.
-- ⚠️ **Documentación**: README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR deben sincronizarse a un mismo estado (ver §57 de auditoría).
+- ⚠️ **Documentación**: README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR deben sincronizarse a un mismo estado (en progreso).
 - ⚠️ **GitHub Releases**: No existen; F12 requiere releases publicados.
 ---
 ## 15. Bugs conocidos y deuda (2026-09-13)

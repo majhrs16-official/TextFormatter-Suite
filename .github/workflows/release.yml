@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: '21'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build all modules
+        run: |
+          ./gradlew :suite:core-api:publishMavenPublicationToMavenLocal \
+            :suite:kernel:publishMavenPublicationToMavenLocal \
+            :suite:iflow:publishMavenPublicationToMavenLocal \
+            :suite:host:publishMavenPublicationToMavenLocal \
+            :suite:textformatter:publishMavenPublicationToMavenLocal \
+            :suite:gtranslate:publishMavenPublicationToMavenLocal \
+            :suite:ltranslate:publishMavenPublicationToMavenLocal \
+            :suite:sync-http:publishMavenPublicationToMavenLocal \
+            :suite:sync-tcpudp:publishMavenPublicationToMavenLocal \
+            :suite:sync-discord:publishMavenPublicationToMavenLocal \
+            :suite:sync-telegram:publishMavenPublicationToMavenLocal \
+            :suite:sync-websocket:publishMavenPublicationToMavenLocal \
+            :suite:observability:publishMavenPublicationToMavenLocal \
+            :suite:extension-api:publishMavenPublicationToMavenLocal \
+            :suite:example-extension:publishMavenPublicationToMavenLocal \
+            :suite:manager-api:publishMavenPublicationToMavenLocal \
+            :suite:manager-impl:publishMavenPublicationToMavenLocal \
+            :suite:presets:publishMavenPublicationToMavenLocal \
+            :suite:inworld:publishMavenPublicationToMavenLocal \
+            :suite:loadtest:publishMavenPublicationToMavenLocal \
+            :suite:performance:publishMavenPublicationToMavenLocal \
+            :suite:transport:publishMavenPublicationToMavenLocal \
+            :suite:messages:publishMavenPublicationToMavenLocal \
+            :suite:tester:publishMavenPublicationToMavenLocal \
+            --no-daemon
+
+      - name: Build Spigot plugin (fat-jar)
+        run: ./gradlew :suite:spigot-host:shadowJar --no-daemon
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TextFormatter Suite ${{ steps.version.outputs.version }}
+          body: |
+            ## TextFormatter Suite ${{ steps.version.outputs.version }}
+            
+            ### Cambios
+            Ver CHANGELOG.md para detalles.
+            
+            ### Artefactos
+            - Plugin Spigot (fat-jar): `textformatter-suite-spigot-${{ steps.version.outputs.version }}.jar`
+            - Módulos Java publicados en Maven Local
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            suite/spigot-host/build/libs/textformatter-suite-spigot-*.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

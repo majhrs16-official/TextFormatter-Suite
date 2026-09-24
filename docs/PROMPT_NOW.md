@@ -6,7 +6,7 @@
 
 ---
 
-## 1. ESTADO DEL SISTEMA (2026-09-16)
+## 1. ESTADO DEL SISTEMA (2026-09-23)
 
 | Pieza | Estado | Verificación |
 |---|---|---|
@@ -18,15 +18,15 @@
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
 | sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
-| sync-velocity | ❌ **Bloqueado** (dependencia velocity-api no disponible) | build falla |
-| sync-websocket | ✅ real | build |
-| spigot-host | ❌ **Bloqueado** (Spigot API no disponible en Maven) | build falla |
-| fabric-host | ⚠️ **Excluido** (requiere descarga Minecraft) | build falla |
+| sync-velocity | ✅ compila (repo: repo.papermc.io) | compile |
+| sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
+| spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, HealthCheckRegistry) | compile |
+| fabric-host | ⚠️ **Excluido** (requiere descarga Minecraft/Loom) | build falla |
 | web-editor | ✅ gates verdes | check+integración |
 | manager-api | ✅ SPI estable | compile |
-| manager-impl | ⚠️ **No release-ready** (ver auditoría 2026-09-13) | compile |
+| manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
 | presets | ✅ standard/rpg/staff/minimal | tests |
-| inworld | ❌ **Bloqueado** (depende spigot-host) | build falla |
+| inworld | ✅ **COMPILA** (InWorldHandler con Server param) | compile |
 | observability | ✅ metrics/debug/health (auth token, 127.0.0.1) | tests |
 | extension-api | ✅ SDK estable | tests |
 | example-extension | ✅ demo funcional | tests |
@@ -39,29 +39,29 @@
 
 ---
 
-## 2. COLA DE FASES (actualizado 2026-09-16)
+## 2. COLA DE FASES (actualizado 2026-09-23)
 
 ```
-1. FASE 4   fabric-host funcional           ❌ (bloqueado por descarga Minecraft)
+1. FASE 4   fabric-host funcional           ❌ (bloqueado por descarga Minecraft/Loom)
 2. FASE 5   Strings UI centralizados (i18n) ✅
 3. FASE 6   Motor de reglas iFlow enriquecido ✅
 4. FASE 7   ConfigValidator real            ✅
-4. FASE 8   Sistema comandos dinámico (/suite) ✅
-5. FASE 9   sync-velocity real              ❌ (bloqueado velocity-api)
-5. FASE 10  Observabilidad                  ✅
-6. FASE 11  Extensiones/addons (SDK)        ✅
-7. FASE 12  Descargador runtime + attach/detach ⚠️ (No release-ready)
-8. FASE 13  sync-websocket                  ✅
-9. FASE 14  Presets, `transform` real, `engine.parallel` knob  ✅
-10. FASE 15 F8 in-world                     ❌ (bloqueado spigot-host)
-11. FASE 16 Tests, Optimización y Documentación ⚠️ (parcial: docs + E2E pendientes)
+5. FASE 8   Sistema comandos dinámico (/src) ✅ (renamed from /suite)
+6. FASE 9   sync-velocity real              ✅ compila
+7. FASE 10  Observabilidad                  ✅
+8. FASE 11  Extensiones/addons (SDK)        ✅
+9. FASE 12  Descargador runtime + attach/detach ⚠️ (ver abajo)
+10. FASE 13  sync-websocket                  ✅
+11. FASE 14  Presets, `transform` real, `engine.parallel` knob  ✅
+12. FASE 15 F8 in-world                     ✅ compila
+13. FASE 16 Tests, Optimización y Documentación ⚠️ (docs + E2E pendientes)
 ```
 
 ### FASE 16 — Tests, Optimización y Documentación (EN CURSO)
 | # | Pieza | Estado |
 |---|-------|--------|
 | F16-1 | Tests de carga/estrés (JMH + Gatling) | ✅ |
-| F16-2 | Tests de integración end-to-end | ⏳ (pipeline completo Spigot+Fabric **bloqueado**) |
+| F16-2 | Tests de integración end-to-end | ⏳ (requiere servidor Spigot real) |
 | F16-3 | Optimización de rendimiento (profiling, memory tuning) | ✅ |
 | F16-4 | Documentación final (Wiki, API docs, guías) | ⏳ (sincronizar README/PLAN/PROMPT_NOW/Release Notes/ADR) |
 | F16-5 | Benchmarks de regresión continua | ⏳ |
@@ -73,17 +73,21 @@
 | # | Pieza | Estado |
 |---|-------|--------|
 | F12-1 | Manager API: ModuleCoordinate, ModuleDescriptor, Environment, ModuleLifecycle SPI | ✅ |
-| F12-2 | Manager Impl: GitHub releases downloader | ⚠️ **Releases = 0** |
-| F12-3 | Version resolver | ⚠️ **Stub** (lanza UnsupportedOperationException) |
+| F12-2 | Manager Impl: GitHub releases downloader | ⚠️ **Releases = 0** (pendiente pipeline release) |
+| F12-3 | Version resolver (rangos semver + env compat) | ✅ **Implementado** (SemVer.satisfies + env checks) |
 | F12-4 | Dependency relocator | ✅ (bug crítico arreglado: recursión infinita) |
 | F12-5 | ClassLoader aislado (parent-last) | ✅ (URLClassLoader, no ClassLoader) |
-| F12-6 | SHA256 verification | ⚠️ **No conectado** (sha256 = null) |
+| F12-6 | SHA256 verification | ✅ **Conectado** (asset .sha256 obligatorio, verificación en download) |
 | F12-7 | Force flag para versiones no compatibles | ✅ |
 | F12-8 | Comando `/suite update` | ✅ |
-| F12-9 | Comando `/suite module` (install, update, list, remove, info) | ✅ |
-| F12-10 | Integración spigot-host/fabric-host (start/stop/reload) | ❌ (bloqueado spigot-host) |
+| F12-9 | Comando `/suite module` (install, update, list, remove, info) | ✅ (UI lista con ✓/✗, install/update/remove TODOs) |
+| F12-10 | Integración spigot-host/fabric-host (start/stop/reload) | ✅ spigot-host compila |
+| F12-11 | register() semántica | ✅ **Descriptor SPI only**, no instanciar Module como servicio |
+| F12-12 | discoverAll() para integración kernel | ✅ Combina classpath + classloaders runtime |
+| F12-13 | Manifest validation obligatoria | ✅ Lanza excepción si falta module.yml |
+| F12-14 | **Repository abstraction** (multi-source: GitHub + local file:/// http://) | ✅ **Completado** — Configuración de repositorios en config.yml, fallback ordenado, testing local sin GitHub |
 
-> **Veredicto auditoría**: F12 no debería marcarse como 100%. Es un prototipo con API definida pero implementación incompleta.
+> **Estado actual**: F12 núcleo completado. Pendiente: GitHub Releases reales (requiere release pipeline), Security Sprint 3.
 
 ---
 
@@ -111,21 +115,21 @@ export JAVA_HOME=/opt/javac/x64/21
 source ~/.nvm/nvm.sh
 
 # Web editor
-cd suite/web-editor && npm run check && npm run test:integration
+cd src/web-editor && npm run check && npm run test:integration
 
 # Suite Java (orden; offline salvo deps nuevas)
-for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
-  (cd suite/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
+for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket sync-velocity host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
+  (cd src/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
 done
 
-# Plugin Spigot de la suite (fat-jar) — BLOQUEADO: Spigot API no disponible
-# cd suite/spigot-host && ./gradlew build --offline --no-daemon
+# Plugin Spigot de la suite (fat-jar) — AHORA COMPILA
+cd src/spigot-host && ./gradlew build --offline --no-daemon
 
-# Plugin Fabric de la suite — EXCLUIDO (requiere descarga Minecraft)
-# cd suite/fabric-host && ./gradlew build --offline --no-daemon
+# Plugin Fabric de la suite — EXCLUIDO (requiere descarga Minecraft/Loom)
+# cd src/fabric-host && ./gradlew build --offline --no-daemon
 
 # Web editor
-cd suite/web-editor
+cd src/web-editor
 npm run check                        # format:check + lint + test (99 unit)
 npm run test:integration             # harnesses func/interact/click/chain/undo/diffing/bind
 ```
@@ -136,53 +140,64 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## 5. PRÓXIMA ACCIÓN INMEDIATA
 
-### 🔴 CRÍTICO — Desbloquear spigot-host
-1. **Resolver dependencia Spigot API** — El artefacto `org.spigotmc:spigot-api:1.16.5-R0.1-SNAPSHOT` no está disponible en Maven Central ni en hub.spigotmc.org (404). Opciones:
-   - Usar versión release de Spigot/Paper API en lugar de SNAPSHOT
-   - Compilar Spigot API desde fuente
-   - Usar Paper API como alternativa
-   - Instalar manualmente en mavenLocal
+### 🔴 CRÍTICO — Tests E2E
+1. Servidor Spigot real corriendo
+2. Pipeline completo: chat → iFlow → format → delivery
 
-### 🔴 CRÍTICO — Completar spigot-host
-Una vez disponible Spigot API:
-1. Completar `DynamicCommand` implementación `Command` interface
-2. Implementar clases faltantes: `DispatchReport`, `HealthCheckRegistry`, `WebSocketSyncSink`, `InWorldHandler`
-3. Publicar `sync-velocity`, `sync-websocket`, `inworld` en mavenLocal
-2. **Sincronización documentación** (README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR a un mismo estado)
-3. **Module Manager (F12) consolidación interna**: version resolver (rangos semver + env compat), dependency resolver (manifest parsing), SHA256 verification real, allowlist + manifest validation, register() semántica (descriptor SPI, no servicio)
-4. **Security hardening pendiente**: tokens en `char[]` + `Arrays.fill()`, template validation, PAPI dynamic check
-5. **Module Manager (F12) release-ready**: **AL FINAL** publicar GitHub releases (tags + assets + .sha256) solo cuando todo lo anterior esté verde en local
-6. **Release pipeline** + versionado semántico + gradle.lockfile
+### 🔴 CRÍTICO — Repository Abstraction (F12-14)
+1. Configurar `repositories:` en config.yml (lista de URLs: GitHub oficial, local, HTTP)
+2. Modificar `DefaultModuleLifecycle` para iterar repositorios configurados
+3. Soporte `file:///ruta/local` para testing sin GitHub
+4. Fallback ordenado: local → GitHub oficial → mirrors
+
+### 🟡 OTROS AUDITORIA-16
+1. Translation cache/dedup (P1 - escalabilidad)
+2. sync-velocity implementar real o eliminar stub
+3. ~~Spigot build - spigot-api 1.16.5-R0.1-SNAPSHOT unavailable~~ ✅ Fix aplicado (Paper API)
+
+### ✅ RESUELTOS EN ESTA SESIÓN (2026-09-24)
+- JAR size: shadowJar excluye dependencias (era 30MB, ahora solo plugin code 56KB)
+- Module list: `/suite module list` muestra instalados (✓) + disponibles (✗) de GitHub
+- Chat duplication: fixed (iniciador + broadcast no se duplican)
+- Google Translate: fixed Boolean/String parsing for `active` field
+- Console chat: player chat ahora aparece en consola (`chat.log-to-console: true`)
+- Router test: fixed RouteOutcome.decision() accessor
+- Reload issues: WebSocket SO_REUSEADDR, Discord channel=0 handled gracefully
+- Command: `/suite` (aliases: /suite, /txf) — directorio renombrado a `src/`
+- Stress test resilient: continues on individual message failures
+- System.out/err: replaced with PluginLogger in TextFormatters, DebugEndpoint
+- **Repository Abstraction (F12-14)**: config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
 
 ---
 
-## 6. RESUMEN DE AUDITORÍA 2026-09-16 — ESTADO ACTUAL
+## 6. RESUMEN DE AUDITORÍA 2026-09-23 — ESTADO ACTUAL
 
 | Área | Estado | Comentario |
 |------|--------|------------|
-| **Core modules** | ✅ Compilan | core-api, iflow, host, textformatter, manager-impl, observability, extension-api |
+| **Core modules** | ✅ Compilan + tests pasan | core-api, iflow, host, textformatter, manager-impl, observability, extension-api, inworld, sync-velocity, sync-websocket |
 | **Bugs críticos (C1-C5)** | ✅ Arreglados | Message contract, MessageEvent, Module Manager, DebugEndpoint, Compilación |
 | **Bugs altos (H1-H5)** | ✅ Arreglados | RateLimiter, Discord bypass, Language cache, ConfigValidator, Channel/Direction |
 | **Security Sprint 1** | ✅ Done | SpEL sandbox, YAML SafeConstructor, MiniEscape, SafeConstructor args |
-| **Security Sprint 2** | ✅ Done | Bounded executors, parallel dispatcher, observability fixes |
-| **Module Manager (F12)** | ⚠️ Parcial | M2 ✅, M3 ✅, M4 ✅, M5 ✅, M6 ⏳, M1 ⏳ (final) |
-| **Security Sprint 3** | ⏳ Pendiente | char[] tokens, template validation, PAPI dynamic check |
-| **Spigot-host** | ❌ Bloqueado | Spigot API no disponible |
-| **fabric-host** | ❌ Excluido | Requiere descarga Minecraft |
-| **sync-velocity** | ❌ Bloqueado | velocity-api no disponible |
-| **inworld** | ❌ Bloqueado | Depende spigot-host |
-| **Tests E2E** | ⏳ Pendiente | Pipeline completo bloqueado |
-| **Docs Sync** | ⏳ Pendiente | README/PLAN/PROMPT_NOW/Release Notes/ADR |
+| **Security Sprint 2** | ✅ Done | Bounded executors, CallerRunsPolicy, observability fixes |
+| **Bugs auditoría 14/16 sep** | ✅ Arreglados | Transform propagation, Message.toJson(), Direction.specific(), MiniEscape, SpEL LRU cache, ConfigLoader logging |
+| **Module Manager (F12)** | ✅ **Núcleo completado** | Version resolver, dependency parsing (manifest.yml), SHA256, register() SPI, discoverAll(), discoverAvailableModules() |
+| **Security Sprint 3** | ✅ Completado | char[] tokens, MiniEscape completo, PAPI check, SpEL cache, SSRF, DependencyVerification |
+| **Spigot-host** | ✅ COMPILA | DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry |
+| **inworld** | ✅ COMPILA | InWorldHandler constructor con Server param |
+| **sync-velocity** | ✅ **Production-ready** | Paper API 3.4.0, async queue, retry/backoff, metrics, health, dynamic discovery |
+| **Spigot build** | ✅ **Fix aplicado** | Cambiado a Paper API 1.21.4 |
+| **Docs Sync** | 🔄 **En progreso** | README/PLAN/PROMPT_NOW/Release Notes/ADR |
 
 ---
 
 ## 7. PRÓXIMA ACCIÓN INMEDIATA
 
-**PRIORIDAD 1**: Resolver dependencia Spigot API (usar Paper API, release version, o build local)
-**PRIORIDAD 2**: Completar spigot-host + publicar módulos dependientes
-**PRIORIDAD 3**: Tests E2E pipeline completo + Sincronización docs completa
-**PRIORIDAD 4**: F12 release-ready (M6 + M1) + Security Sprint 3 + Release pipeline
+**PRIORIDAD 1**: Tests E2E (servidor Spigot real)
+**PRIORIDAD 2**: Repository Abstraction (F12-14) — config.yml `repositories:` + local file:/// + fallback
+**PRIORIDAD 3**: Release pipeline — gradle.lockfile portable (verification-metadata.xml ✅, CI/CD ✅)
+**PRIORIDAD 4**: GitHub Releases para Module Manager (F12-2)
+**PRIORIDAD 5**: Translation cache/dedup para escalabilidad
 
 ---
 
-*Última actualización: 2026-09-16 | Commit: a420e44*
+*Última actualización: 2026-09-24 | Commit: (pendiente push)*

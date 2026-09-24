@@ -1,0 +1,51 @@
+# TextFormatter Suite — strings de UI del host.
+# Todo valor es editable; {} / %s son argumentos posicionales.
+# Restaurar originales: /suite reset (respaldo en backup/).
+prefix: "[suite] "
+not-initialized: "[suite] no inicializado"
+usage: "[suite] uso: /suite <lang|reload|status|toggle|reset|module|suite>"
+enabled: "[suite] activo: {} canales, traductor '{}'"
+reload-ok: "[suite] recargado: {} canales, traductor '{}'"
+reload-error: "[suite] error al recargar: {}"
+status:
+  channels: "[suite] canales: {}"
+  translator: "[suite] traductor activo: {}"
+  knobs: "[suite] engine.parallel: {} · sonido: {} · claim: {}"
+lang:
+  current: "[suite] tu idioma: {}"
+  updated: "[suite] idioma actualizado: {}"
+  invalid: "[suite] valor inválido: usa auto | off | <código> (ej. es, en, zh-CN)"
+  other-admin: "[suite] setear el idioma de otro requiere admin"
+  player-offline: "[suite] jugador no conectado: {}"
+  console: "[suite] consola no tiene idioma; usa /suite lang <jugador> <valor>"
+toggle:
+  current: "[suite] traducción: {}"
+reset:
+  ok: "[suite] configs restauradas (respaldo en backup/); storage.yml intacto"
+  error: "[suite] error al restaurar: {}"
+file:
+  reset-failed: "reset falló: {}"
+  default-created: "default creado: {}"
+  create-failed: "no se pudo crear {}: {}"
+test:
+  service-unavailable: "§cTest service not available. Is tester module loaded?"
+  starting: "§a[Test] Starting: {}"
+  output: "{}"
+  unknown: "§cUnknown test: {}. Use: full, stress, concurrency"
+  error: "§c[Test] Error: {}"
+module:
+  list.empty: "No hay módulos instalados"
+  list.header: "Módulos instalados ({}):"
+  list.entry: "  - {} ({})"
+  install.started: "Instalando {}:{}"
+  update.started: "Actualizando {}:{}"
+  remove.started: "Eliminando {}"
+  info: "Info de {}: {}"
+  install.no-module: "Uso: /suite module install <módulo> [versión]"
+  update.no-module: "Uso: /suite module update <módulo> [versión]"
+  remove.no-module: "Uso: /suite module remove <módulo>"
+  info.no-module: "Uso: /suite module info <módulo>"
+suite:
+  update.started: "Iniciando actualización completa de la suite ({})"
+  update.finished: "Actualización de la suite completada"
+  update.failed: "Error en actualización: {}"

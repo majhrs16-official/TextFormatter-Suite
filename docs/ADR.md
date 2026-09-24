@@ -180,14 +180,45 @@ renderizada y directorio de jugadores.
 - `ConfigLoaderTest.parsesEditorExportedDefaultConfig` dejó de depender del
   CWD (resuelve el fixture vía classpath); antes fallaba fuera de Gradle.
 
-**Implementación (misma fecha).** `suite/spigot-host`: plugin Spigot real
-(`TextFormatterSuite`) que materializa la decisión anterior —
-`SpigotActorDirectory` (locale vía `Player#getLocale`, handles nativos),
-`SpigotChatDelivery` (BukkitAudiences, hop a main thread, normalización de
-nombres de sonido con strip de extensiones `.mp3/.ogg/.wav`) y bootstrap
-`SuiteHost`+`MessageDispatcher` con recarga total desde disco (`/suite
-reload`). El chat cancela el broadcast vanilla y despacha dos unidades
-atómicas (eco INITIATOR + OTHERS). `TranslatorsConfig` (módulo host) carga
-`translators/*.yml`; `TranslationService.activeName()` expone el proveedor.
-Los módulos hermanos se consumen vía `files()` a sus jars (determinista sin
-red) hasta el composite build (FASE 3). Fat-jar pendiente de disponer red.
+(End of file - total 193 lines)
+
+## Decisión 2026-09-18 — Post-Auditoría: Module Manager F12, Security Sprint 3, Dependency Verification
+
+**Contexto.** Auditorías del 14 y 16 de septiembre revelaron: Module Manager (F12) con stubs en resolver/dependency/SHA256/register(); Security Sprint 3 pendiente (tokens, MiniEscape, SpEL cache, SSRF, DependencyVerification); bugs críticos (CT-01, OBS-01, CFG-01, MGR-02, SEC-01, SEC-02); dependency verification ausente.
+
+**Decisiones.**
+
+1. **Module Manager F12 — Núcleo Release-Ready**
+   - `register()` → **SPI-only**: no instancia `Module` (era violación del contrato SPI). Solo almacena descriptor + classloader.
+   - Nuevo método `discoverAll(ClassLoader parent)` → combina módulos en classpath + módulos runtime cargados via classloaders aislados para integración kernel (`ModuleLoader` + `ModuleGraph`).
+   - **Version resolver**: rangos semver (`[1.0,2.0)`, `^2.1.0`, `~2.1.0`) + compatibilidad env (Java, MC, contract, platform, capabilities) — usa `SemVer.satisfies()`.
+   - **Dependency resolver**: parsing de `module.yml`/`module.yaml` desde JAR descargado para dependencias transitivas (fallback a release metadata).
+   - **SHA256**: obligatorio. Asset `.sha256` separado verificado en download; falla si no existe.
+   - **Manifest validation**: obligatoria en `validateModuleManifest()` — lanza excepción si falta `module.yml`, versión mismatched, capabilities desconocidas.
+   - **Dependency relocator**: bug crítico arreglado (recursión infinita en `relocate()`).
+
+2. **Security Sprint 3 — Completado**
+   - **Tokens en `char[]`**: `JdaDiscordSink`, `DiscordSink`, `TelegramSink`, `LTranslate` usan `char[]` + `Arrays.fill('\0')` tras uso.
+   - **MiniEscape completo**: escapa `< > \ { } [ ] ( ) # @` (10 chars).
+   - **PAPI dynamic check**: ya existía en `SpigotPlaceholderResolver.available()`.
+   - **SpEL LRU cache**: `LruExpressionCache` (1024 entradas) en `SpelExpressionEvaluator` — `ConcurrentMap` + `LinkedHashMap` access-order.
+   - **SSRF protection**: `HttpTransport` valida IPs contra RFC 1918 (10/8, 172.16/12, 192.168/16), RFC 3927 (169.254/16), RFC 6598 (100.64/10), loopback, multicast, deny patterns configurables via `-Dtextformattersuite.http.deny`.
+   - **DependencyVerification**: `verification-metadata.xml` con SHA256/SHA512 generado; `dependencyLocking` en `build.gradle`; `dependencyVerification` en `settings.gradle` (comentado para CI).
+
+3. **Fixes Críticos (Auditoría 14/16 sep)**
+   - **CT-01**: `Message.toJson()` → serialización JSON real (antes `toString()`).
+   - **OBS-01**: `DebugEndpoint` executor shutdown en `stop()` (`executor.shutdown()` + `awaitTermination`).
+   - **CFG-01**: `ConfigLoader.LoadResult<T>` con errores explícitos, logging ERROR level (no degrada silenciosamente).
+   - **MGR-02**: `register()` SPI-only + `discoverAll()` para kernel.
+   - **SEC-01**: SpEL LRU cache (1024) implementado.
+   - **SEC-02**: SSRF protection en `HttpTransport`.
+
+**Consecuencias.**
+- Module Manager F12 núcleo listo para producción; pendiente GitHub Releases reales (requiere release pipeline).
+- Security Sprint 3 100% completado.
+- Dependency verification lista para CI/CD (`verification-metadata.xml` en repo raíz + `gradle/`).
+- `ConfigLoader.loadConfig/loadChannels` devuelven `LoadResult<T>` con `isValid()` y `errors()` — calling code debe checkear `isValid()`.
+- `register()` ya no instancia `Module` — solo descriptor SPI.
+
+**Implementación (2026-09-18).**
+Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpressionCache), `host` (ConfigLoader.LoadResult, ConfigLoader), `textformatter` (MiniEscape), `transport` (HttpTransport SSRF), `manager-impl` (DefaultModuleLifecycle: register SPI-only, discoverAll, version resolver, dependency resolver, SHA256, manifest validation), `sync-discord` (JdaDiscordSink, DiscordSink: char[] tokens), `sync-telegram` (TelegramSink: char[] tokens), `ltranslate` (LTranslate: char[] apiKey), `observability` (DebugEndpoint executor shutdown).

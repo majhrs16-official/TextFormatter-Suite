@@ -1,0 +1,23 @@
+general:
+  language: en
+
+iflow:
+  engine:
+    parallel: false
+
+sonido:
+  enabled: true
+
+chat:
+  claim-mode: cancel-event
+  log-to-console: true
+
+repositories:
+  - name: "official"
+    url: "https://api.github.com/repos/majhrs16-official/TextFormatter-Suite"
+    type: "github"
+    enabled: true
+  - name: "local"
+    url: "file:///opt/textformatter-modules"
+    type: "local"
+    enabled: false

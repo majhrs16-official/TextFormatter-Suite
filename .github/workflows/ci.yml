@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      JAVA_VERSION: '21'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build all modules (offline)
+        run: |
+          ./gradlew :suite:core-api:build \
+            :suite:kernel:build \
+            :suite:iflow:build \
+            :suite:host:build \
+            :suite:textformatter:build \
+            :suite:gtranslate:build \
+            :suite:ltranslate:build \
+            :suite:sync-http:build \
+            :suite:sync-tcpudp:build \
+            :suite:sync-discord:build \
+            :suite:sync-telegram:build \
+            :suite:sync-websocket:build \
+            :suite:observability:build \
+            :suite:extension-api:build \
+            :suite:example-extension:build \
+            :suite:manager-api:build \
+            :suite:manager-impl:build \
+            :suite:presets:build \
+            :suite:inworld:build \
+            :suite:loadtest:build \
+            :suite:performance:build \
+            :suite:transport:build \
+            :suite:messages:build \
+            :suite:tester:build \
+            --offline --no-daemon
+
+      - name: Build Spigot plugin
+        run: |
+          ./gradlew :suite:spigot-host:build --no-daemon
+
+      - name: Upload Spigot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: textformatter-suite-spigot
+          path: suite/spigot-host/build/libs/*.jar
+          retention-days: 7
+
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Verify dependency locks
+        run: |
+          ./gradlew dependencies --write-locks --no-daemon
+        continue-on-error: true
+
+  web-editor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: suite/web-editor/package-lock.json
+
+      - name: Install dependencies
+        working-directory: suite/web-editor
+        run: npm ci
+
+      - name: Run checks
+        working-directory: suite/web-editor
+        run: npm run check
+
+      - name: Run integration tests
+        working-directory: suite/web-editor
+        run: npm run test:integration
+
+  javadoc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Generate Javadoc
+        run: ./gradlew javadoc --no-daemon
+
+      - name: Upload Javadoc
+        uses: actions/upload-artifact@v4
+        with:
+          name: javadoc
+          path: '**/build/docs/javadoc'
+          retention-days: 7

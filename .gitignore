@@ -3,6 +3,9 @@
 build/
 out/
 
+# Local extensions directory (project-relative tmp, not system /tmp)
+tmp/
+
 # IDE
 .idea/
 *.iml

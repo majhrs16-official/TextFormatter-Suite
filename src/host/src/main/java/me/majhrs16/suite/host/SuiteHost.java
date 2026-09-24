@@ -1,0 +1,203 @@
+package me.majhrs16.suite.host;
+
+import me.majhrs16.suite.api.message.Actor;
+import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.TranslationService;
+import me.majhrs16.suite.host.config.ConfigLoader;
+import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.iflow.DefaultRouter;
+import me.majhrs16.suite.iflow.RouteDecision;
+import me.majhrs16.suite.iflow.RouteOutcome;
+import me.majhrs16.suite.iflow.Router;
+import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.textformatter.TextFormatter;
+import me.majhrs16.suite.textformatter.TextFormatters;
+import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.textformatter.template.TemplateContext;
+
+import net.kyori.adventure.text.Component;
+
+import java.nio.file.Path;
+import java.util.ServiceLoader;
+
+/**
+ * Platform-neutral facade that assembles the suite from its file layout and
+ * exposes the one-call pipeline used by Spigot/Fabric hosts:
+ *
+ * <pre>{@code
+ *   RoutingResult r = host.deliver(message, recipient);
+ *   if (r.delivered())   host.recipient(recipient).showMessage(r.rendered());
+ *   else if (r.redirect) console.sendMessage(r.rendered());
+ * }</pre>
+ *
+ * <p>This is the glue the module jars alone must not contain: it wires
+ * {@link TranslationService} + {@link Router} + {@link TextFormatter} and
+ * resolves the recipient's language for rendering.</p>
+ */
+public final class SuiteHost {
+
+    private final HostConfig config;
+    private final ChannelRegistry channels;
+    private final TranslationService translation;
+    private final Router router;
+    private final TextFormatter formatter;
+    private final PluginLogger logger;
+    private final ChatDelivery chatDelivery;
+
+    SuiteHost(HostConfig config,
+              ChannelRegistry channels,
+              TranslationService translation,
+              Router router,
+              TextFormatter formatter,
+              PluginLogger logger,
+              ChatDelivery chatDelivery) {
+        this.config = config;
+        this.channels = channels;
+        this.translation = translation;
+        this.router = router;
+        this.formatter = formatter;
+        this.logger = logger;
+        this.chatDelivery = chatDelivery;
+    }
+
+    /** Bootstraps from a config directory following the suite layout. */
+    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
+                                      TranslationService translation, PluginLogger logger) {
+        return bootstrap(configDir, permissions, translation, null, logger);
+    }
+
+    /**
+     * Bootstraps with an external placeholder resolver (e.g. PlaceholderAPI
+     * on Spigot); {@code null} keeps built-in variables only.
+     */
+    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
+                                      TranslationService translation,
+                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
+                                      PluginLogger logger) {
+        return bootstrap(configDir, permissions, translation, placeholders, logger, ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null));
+    }
+
+    /**
+     * Bootstraps with a explicitly provided {@link ChatDelivery} implementation.
+     * Use {@link #bootstrap(Path, PermissionChecker, TranslationService, PluginLogger)}
+     * for ServiceLoader-auto-discovery.
+     */
+    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
+                                      TranslationService translation,
+                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
+                                      PluginLogger logger,
+                                      ChatDelivery chatDelivery) {
+        ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(configDir, logger);
+        if (!configResult.isValid() && logger != null) {
+            for (String err : configResult.errors()) {
+                logger.error("Config error: " + err);
+            }
+        }
+        ConfigLoader.LoadResult<ChannelRegistry> channelsResult = ConfigLoader.loadChannels(configDir, logger);
+        if (!channelsResult.isValid() && logger != null) {
+            for (String err : channelsResult.errors()) {
+                logger.error("Channel config error: " + err);
+            }
+        }
+        HostConfig config = configResult.config();
+        ChannelRegistry channels = channelsResult.config();
+        Router router = new DefaultRouter(channels, permissions);
+        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
+        return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
+    }
+
+    public HostConfig config() {
+        return config;
+    }
+
+    public ChannelRegistry channels() {
+        return channels;
+    }
+
+    public TranslationService translation() {
+        return translation;
+    }
+
+    public Router router() {
+        return router;
+    }
+
+    public TextFormatter formatter() {
+        return formatter;
+    }
+
+    /**
+     * Resolves the source language for a message once and returns a new Message
+     * with the resolved source language cached. This avoids repeated detection
+     * when delivering to multiple recipients.
+     */
+    public Message resolveSourceLanguage(Message message) {
+        if (message.resolvedSourceLanguage() != null) {
+            return message;
+        }
+        Language resolved = effectiveSource(message);
+        return message.withResolvedSourceLanguage(resolved);
+    }
+
+    /**
+     * Full pipeline for one recipient: resolve their language, route through
+     * iFlow and render with TextFormatter when delivery is allowed.
+     */
+    public RoutingResult deliver(Message message, Actor recipient) {
+        Language lang = effectiveLanguage(recipient);
+        RouteOutcome outcome = router.route(message, recipient);
+        RouteDecision decision = outcome.decision();
+        Message transformedMessage = outcome.message();
+
+        if (decision.target() == PolicyTarget.REDIRECT) {
+            return new RoutingResult(decision, renderFor(transformedMessage, recipient, lang), transformedMessage, true);
+        }
+        if (!decision.delivered()) {
+            return new RoutingResult(decision, Component.empty(), transformedMessage, false);
+        }
+        return new RoutingResult(decision, renderFor(transformedMessage, recipient, lang), transformedMessage, false);
+    }
+
+    private Component renderFor(Message message, Actor recipient, Language lang) {
+        TemplateContext context = TemplateContext.builder(
+                message.sender(), effectiveSource(message), lang)
+            .content(message.text())
+            .translate(message.shouldTranslate())
+            .build();
+        return formatter.format(message, context);
+    }
+
+    private Language effectiveSource(Message message) {
+        // Use already-resolved source language if available
+        if (message.resolvedSourceLanguage() != null) {
+            return message.resolvedSourceLanguage();
+        }
+        if (message.langSource() != null && message.langSource() != Language.AUTO) {
+            return message.langSource();
+        }
+        if (translation.isAvailable()) {
+            Language detected = translation.detect(message.text());
+            return detected == Language.AUTO ? config.defaultLanguage() : detected;
+        }
+        return config.defaultLanguage();
+    }
+
+    private Language effectiveLanguage(Actor recipient) {
+        if (recipient.language() != null) {
+            return recipient.language();
+        }
+        return config.defaultLanguage();
+    }
+
+    /**
+     * Checks if an actor has a permission.
+     * Delegates to the PermissionChecker provided at bootstrap.
+     */
+    public boolean hasPermission(Actor actor, String permission) {
+        return router.hasPermission(actor, permission);
+    }
+}

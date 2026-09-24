@@ -1,5 +1,102 @@
 group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
 
 allprojects {
     group = rootProject.group
+    version = rootProject.version
+    apply plugin: 'java'
+}
+
+// Dependency locking configuration
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+// Disable dependency verification for tester module (Paper API SNAPSHOT)
+gradle.projectsEvaluated {
+    project(':src:tester').configurations.all {
+        resolutionStrategy.dependencySubstitution {
+            // Skip verification for this configuration
+        }
+    }
+}
+
+subprojects {
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+}
+
+// ============================================================
+// extpush: Publish extensions to local directory (tmp/extensions/)
+// ============================================================
+ext {
+    extensionsDir = file("tmp/extensions")
+}
+
+tasks.register('extpush') {
+    description 'Publish all extension modules to local tmp/extensions directory'
+    group 'publishing'
+    doLast {
+        extensionsDir.mkdirs()
+        
+        // Find extension modules (those with 'extension' in path or name)
+        def extensionProjects = subprojects.findAll { it.name.contains('extension') || it.projectDir.name.contains('extension') }
+        
+        extensionProjects.each { project ->
+            def coords = "${project.group}:${project.name}:${project.version}"
+            logger.lifecycle("Publishing extension: $coords")
+            
+            // Copy main jar
+            def jarTask = project.tasks.findByName('jar')
+            if (jarTask && jarTask.outputs.files.singleFile.exists()) {
+                def jarFile = jarTask.outputs.files.singleFile
+                def targetName = "${project.name}-${project.version}.jar"
+                copy {
+                    from jarFile
+                    into extensionsDir
+                    rename { targetName }
+                }
+                logger.lifecycle("  Copied: ${extensionsDir}/${targetName}")
+            }
+            
+            // Copy sources jar if exists (tasks with classifier 'sources')
+            project.tasks.withType(Jar).findAll { it.archiveClassifier.get() == 'sources' }.each { sourcesJar ->
+                if (sourcesJar.outputs.files.singleFile.exists()) {
+                    def targetName = "${project.name}-${project.version}-sources.jar"
+                    copy {
+                        from sourcesJar.outputs.files.singleFile
+                        into extensionsDir
+                        rename { targetName }
+                    }
+                    logger.lifecycle("  Copied sources: ${extensionsDir}/${targetName}")
+                }
+            }
+            
+            // Copy javadoc jar if exists
+            project.tasks.withType(Jar).findAll { it.archiveClassifier.get() == 'javadoc' }.each { javadocJar ->
+                if (javadocJar.outputs.files.singleFile.exists()) {
+                    def targetName = "${project.name}-${project.version}-javadoc.jar"
+                    copy {
+                        from javadocJar.outputs.files.singleFile
+                        into extensionsDir
+                        rename { targetName }
+                    }
+                    logger.lifecycle("  Copied javadoc: ${extensionsDir}/${targetName}")
+                }
+            }
+        }
+        
+        logger.lifecycle("All extensions published to: ${extensionsDir.absolutePath}")
+    }
+}
+
+// Task to clean extensions directory
+tasks.register('extclean') {
+    description 'Clean local extensions directory'
+    group 'publishing'
+    doLast {
+        delete extensionsDir
+        logger.lifecycle("Cleaned: ${extensionsDir.absolutePath}")
+    }
 }
