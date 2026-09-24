@@ -9,7 +9,6 @@ pluginManagement {
 rootProject.name = 'textformatter-suite'
 
 include 'src:core-api'
-include 'src:coretranslator'
 include 'src:kernel'
 include 'src:iflow'
 include 'src:host'
@@ -36,4 +35,3 @@ include 'src:transport'
 include 'src:messages'
 include 'src:tester'
 include 'src:performance'
-include 'src:loadtest'

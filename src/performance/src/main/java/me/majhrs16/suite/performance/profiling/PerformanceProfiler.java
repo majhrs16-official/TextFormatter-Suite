@@ -31,15 +31,32 @@ record MethodProfile(
     long minTimeNanos,
     long maxTimeNanos,
     double avgTimeNanos
-) {}
+) {
+    public MethodProfile withSample(long durationNanos) {
+        long newTotal = totalTimeNanos + durationNanos;
+        long newCount = callCount + 1;
+        long newMin = callCount == 0 ? durationNanos : Math.min(minTimeNanos, durationNanos);
+        long newMax = Math.max(maxTimeNanos, durationNanos);
+        double newAvg = (double) newTotal / newCount;
+        return new MethodProfile(methodName, newTotal, newCount, newMin, newMax, newAvg);
+    }
+}
 
 record MemorySnapshot(
     long heapUsed,
+    long heapCommitted,
     long heapMax,
     long nonHeapUsed,
     long nonHeapMax,
-    long poolCount,
-    String[] poolNames
+    Map<String, Long> bufferPoolUsage,
+    GcStats gcStats
+) {}
+
+record GcCollectorInfo(
+    String name,
+    long collectionCount,
+    long collectionTime,
+    String[] memoryPoolNames
 ) {}
 
 record GcStats(
@@ -48,6 +65,9 @@ record GcStats(
 ) {
     public double getOverheadPercent(long uptimeMs) {
         return uptimeMs > 0 ? (double) totalTimeMs / uptimeMs * 100 : 0;
+    }
+    public long getTotalTime() {
+        return totalTimeMs;
     }
 }
 
@@ -84,7 +104,11 @@ record SystemMetrics(
     int availableProcessors,
     long uptimeMs,
     double processCpuLoadPercent
-) {}
+) {
+    public double cpuLoad() {
+        return cpuLoadPercent;
+    }
+}
 
 record ProfilingReport(
     long totalCpuTimeNanos,
@@ -173,7 +197,7 @@ public final class PerformanceProfiler {
      */
     public ProfilingReport stopProfiling() {
         if (!profiling) {
-            return new ProfilingReport(0, 0, 0, 0, 0, Map.of(), null, null, null);
+            return new ProfilingReport(0, 0, 0, 0, 0, Map.of(), null, null, null, null);
         }
         
         profiling = false;
@@ -208,10 +232,9 @@ public final class PerformanceProfiler {
     public void recordMethodExecution(String methodName, long durationNanos) {
         methodProfiles.compute(methodName, (key, existing) -> {
             if (existing == null) {
-                return new MethodProfile(methodName, durationNanos);
+                return new MethodProfile(methodName, durationNanos, 1, durationNanos, durationNanos, durationNanos);
             }
-            existing.addSample(durationNanos);
-            return existing;
+            return existing.withSample(durationNanos);
         });
     }
 
@@ -252,14 +275,15 @@ public final class PerformanceProfiler {
         long heapCommitted = heapUsage.getCommitted();
         long heapMax = heapUsage.getMax();
         long nonHeapUsed = nonHeapUsage.getUsed();
+        long nonHeapMax = nonHeapUsage.getMax();
         
         peakMemoryUsage.updateAndGet(current -> Math.max(current, heapUsed + nonHeapUsed));
         totalAllocatedMemory.addAndGet(heapUsed + nonHeapUsed);
         
         return new MemorySnapshot(
             heapUsed, heapCommitted, heapMax,
-            nonHeapUsed,
-            getBufferPoolUsage(),
+            nonHeapUsed, nonHeapMax,
+            getBufferPoolUsageMap(),
             getGcStats()
         );
     }
@@ -578,7 +602,7 @@ public final class PerformanceProfiler {
         methodProfiles.clear();
     }
 
-    private Map<String, Long> getBufferPoolUsage() {
+    private Map<String, Long> getBufferPoolUsageMap() {
         Map<String, Long> result = new ConcurrentHashMap<>();
         for (BufferPoolMXBean pool : bufferPoolMXBeans) {
             result.put(pool.getName(), pool.getMemoryUsed());
