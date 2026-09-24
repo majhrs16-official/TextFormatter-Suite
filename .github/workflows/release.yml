@@ -39,34 +39,53 @@ jobs:
 
       - name: Build all modules
         run: |
-          ./gradlew :suite:core-api:publishMavenPublicationToMavenLocal \
-            :suite:kernel:publishMavenPublicationToMavenLocal \
-            :suite:iflow:publishMavenPublicationToMavenLocal \
-            :suite:host:publishMavenPublicationToMavenLocal \
-            :suite:textformatter:publishMavenPublicationToMavenLocal \
-            :suite:gtranslate:publishMavenPublicationToMavenLocal \
-            :suite:ltranslate:publishMavenPublicationToMavenLocal \
-            :suite:sync-http:publishMavenPublicationToMavenLocal \
-            :suite:sync-tcpudp:publishMavenPublicationToMavenLocal \
-            :suite:sync-discord:publishMavenPublicationToMavenLocal \
-            :suite:sync-telegram:publishMavenPublicationToMavenLocal \
-            :suite:sync-websocket:publishMavenPublicationToMavenLocal \
-            :suite:observability:publishMavenPublicationToMavenLocal \
-            :suite:extension-api:publishMavenPublicationToMavenLocal \
-            :suite:example-extension:publishMavenPublicationToMavenLocal \
-            :suite:manager-api:publishMavenPublicationToMavenLocal \
-            :suite:manager-impl:publishMavenPublicationToMavenLocal \
-            :suite:presets:publishMavenPublicationToMavenLocal \
-            :suite:inworld:publishMavenPublicationToMavenLocal \
-            :suite:loadtest:publishMavenPublicationToMavenLocal \
-            :suite:performance:publishMavenPublicationToMavenLocal \
-            :suite:transport:publishMavenPublicationToMavenLocal \
-            :suite:messages:publishMavenPublicationToMavenLocal \
-            :suite:tester:publishMavenPublicationToMavenLocal \
+          ./gradlew :src:core-api:build :src:core-api:publishToMavenLocal \
+            :src:kernel:build :src:kernel:publishToMavenLocal \
+            :src:iflow:build :src:iflow:publishToMavenLocal \
+            :src:host:build :src:host:publishToMavenLocal \
+            :src:textformatter:build :src:textformatter:publishToMavenLocal \
+            :src:gtranslate:build :src:gtranslate:publishToMavenLocal \
+            :src:ltranslate:build :src:ltranslate:publishToMavenLocal \
+            :src:sync-http:build :src:sync-http:publishToMavenLocal \
+            :src:sync-tcpudp:build :src:sync-tcpudp:publishToMavenLocal \
+            :src:sync-discord:build :src:sync-discord:publishToMavenLocal \
+            :src:sync-telegram:build :src:sync-telegram:publishToMavenLocal \
+            :src:sync-websocket:build :src:sync-websocket:publishToMavenLocal \
+            :src:sync-velocity:build :src:sync-velocity:publishToMavenLocal \
+            :src:observability:build :src:observability:publishToMavenLocal \
+            :src:extension-api:build :src:extension-api:publishToMavenLocal \
+            :src:example-extension:build :src:example-extension:publishToMavenLocal \
+            :src:manager-api:build :src:manager-api:publishToMavenLocal \
+            :src:manager-impl:build :src:manager-impl:publishToMavenLocal \
+            :src:presets:build :src:presets:publishToMavenLocal \
+            :src:inworld:build :src:inworld:publishToMavenLocal \
+            :src:loadtest:build :src:loadtest:publishToMavenLocal \
+            :src:performance:build :src:performance:publishToMavenLocal \
+            :src:transport:build :src:transport:publishToMavenLocal \
+            :src:messages:build :src:messages:publishToMavenLocal \
+            :src:tester:build :src:tester:publishToMavenLocal \
             --no-daemon
 
       - name: Build Spigot plugin (fat-jar)
-        run: ./gradlew :suite:spigot-host:shadowJar --no-daemon
+        run: ./gradlew :src:spigot-host:build --no-daemon
+
+      - name: Generate SHA256 for all module JARs
+        run: |
+          mkdir -p release-artifacts
+          # Copy all module JARs and generate SHA256
+          for jar in src/*/build/libs/*.jar; do
+            if [[ -f "$jar" && ! "$jar" == *-sources.jar && ! "$jar" == *-javadoc.jar ]]; then
+              cp "$jar" release-artifacts/
+              sha256sum "$jar" | cut -d' ' -f1 > "release-artifacts/$(basename "$jar").sha256"
+            fi
+          done
+          # Copy Spigot fat-jar
+          cp src/spigot-host/build/libs/*.jar release-artifacts/ 2>/dev/null || true
+          for jar in release-artifacts/*.jar; do
+            if [[ -f "$jar" && ! "$jar" == *-sources.jar && ! "$jar" == *-javadoc.jar ]]; then
+              sha256sum "$jar" | cut -d' ' -f1 > "$jar.sha256"
+            fi
+          done
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -81,10 +100,11 @@ jobs:
             
             ### Artefactos
             - Plugin Spigot (fat-jar): `textformatter-suite-spigot-${{ steps.version.outputs.version }}.jar`
-            - Módulos Java publicados en Maven Local
+            - Módulos Java (JAR + SHA256): publicados en GitHub Releases
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            suite/spigot-host/build/libs/textformatter-suite-spigot-*.jar
+            release-artifacts/*.jar
+            release-artifacts/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

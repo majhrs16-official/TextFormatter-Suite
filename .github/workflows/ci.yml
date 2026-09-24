@@ -28,43 +28,44 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build all modules (offline)
+      - name: Build all modules
         run: |
-          ./gradlew :suite:core-api:build \
-            :suite:kernel:build \
-            :suite:iflow:build \
-            :suite:host:build \
-            :suite:textformatter:build \
-            :suite:gtranslate:build \
-            :suite:ltranslate:build \
-            :suite:sync-http:build \
-            :suite:sync-tcpudp:build \
-            :suite:sync-discord:build \
-            :suite:sync-telegram:build \
-            :suite:sync-websocket:build \
-            :suite:observability:build \
-            :suite:extension-api:build \
-            :suite:example-extension:build \
-            :suite:manager-api:build \
-            :suite:manager-impl:build \
-            :suite:presets:build \
-            :suite:inworld:build \
-            :suite:loadtest:build \
-            :suite:performance:build \
-            :suite:transport:build \
-            :suite:messages:build \
-            :suite:tester:build \
-            --offline --no-daemon
+          ./gradlew :src:core-api:build \
+            :src:kernel:build \
+            :src:iflow:build \
+            :src:host:build \
+            :src:textformatter:build \
+            :src:gtranslate:build \
+            :src:ltranslate:build \
+            :src:sync-http:build \
+            :src:sync-tcpudp:build \
+            :src:sync-discord:build \
+            :src:sync-telegram:build \
+            :src:sync-websocket:build \
+            :src:sync-velocity:build \
+            :src:observability:build \
+            :src:extension-api:build \
+            :src:example-extension:build \
+            :src:manager-api:build \
+            :src:manager-impl:build \
+            :src:presets:build \
+            :src:inworld:build \
+            :src:loadtest:build \
+            :src:performance:build \
+            :src:transport:build \
+            :src:messages:build \
+            :src:tester:build \
+            --no-daemon
 
       - name: Build Spigot plugin
         run: |
-          ./gradlew :suite:spigot-host:build --no-daemon
+          ./gradlew :src:spigot-host:build --no-daemon
 
       - name: Upload Spigot artifact
         uses: actions/upload-artifact@v4
         with:
           name: textformatter-suite-spigot
-          path: suite/spigot-host/build/libs/*.jar
+          path: src/spigot-host/build/libs/*.jar
           retention-days: 7
 
   dependency-check:
@@ -95,18 +96,18 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: suite/web-editor/package-lock.json
+          cache-dependency-path: src/web-editor/package-lock.json
 
       - name: Install dependencies
-        working-directory: suite/web-editor
+        working-directory: src/web-editor
         run: npm ci
 
       - name: Run checks
-        working-directory: suite/web-editor
+        working-directory: src/web-editor
         run: npm run check
 
       - name: Run integration tests
-        working-directory: suite/web-editor
+        working-directory: src/web-editor
         run: npm run test:integration
 
   javadoc:
