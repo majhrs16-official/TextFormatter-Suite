@@ -1,4 +1,4 @@
-package me.majhrs16.suite.performance.optimization;
+package me.majhrs16.suite.performance.profiling;
 
 import me.majhrs16.suite.api.spi.PluginLogger;
 
@@ -6,6 +6,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ThreadInfo;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -51,6 +52,7 @@ public final class HotspotDetector {
     public HotspotDetector(PluginLogger logger, long hotThresholdNanos, int minSamples, long samplingIntervalMs) {
         this.threadMXBean = ManagementFactory.getThreadMXBean();
         this.memoryMXBean = ManagementFactory.getMemoryMXBean();
+        this.gcBeans = ManagementFactory.getGarbageCollectorMXBeans();
         this.logger = null;
         
         this.hotThresholdNanos = hotThresholdNanos;
@@ -65,7 +67,6 @@ public final class HotspotDetector {
         if (running) return;
         
         // Enable thread CPU time measurement
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
         if (threadMXBean.isThreadCpuTimeSupported()) {
             threadMXBean.setThreadCpuTimeEnabled(true);
         }
@@ -129,8 +130,7 @@ public final class HotspotDetector {
         try {
             return supplier.get();
         } finally {
-            recordExecution(Thread.currentThread().getStackTrace()[1].getMethodName(), 
-                System.nanoTime() - startTime.get());
+            recordExecution(methodName, System.nanoTime() - start);
         }
     }
 
@@ -150,8 +150,8 @@ public final class HotspotDetector {
      */
     public List<AllocationHotspot> getTopAllocationHotspots(int n) {
         return allocationHotspots.values().stream()
-            .filter(h -> h.getCount() >= 5)
-            .sorted(Comparator.comparingLong(AllocationHotspot::getTotalBytes).reversed())
+            .filter(h -> h.count() >= 5)
+            .sorted(Comparator.comparingLong(AllocationHotspot::totalBytes).reversed())
             .limit(n)
             .toList();
     }
@@ -188,7 +188,6 @@ public final class HotspotDetector {
     // ============================================================
 
     private void samplingLoop() {
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
         if (threadMXBean.isThreadCpuTimeSupported()) {
             threadMXBean.setThreadCpuTimeEnabled(true);
         }
@@ -196,7 +195,6 @@ public final class HotspotDetector {
         while (running) {
             try {
                 // Sample thread CPU times
-                ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
                 long[] threadIds = threadMXBean.getAllThreadIds();
                 
                 for (long tid : threadIds) {
@@ -206,7 +204,6 @@ public final class HotspotDetector {
                         String methodKey = info.getThreadName() + "::" + 
                             (info.getStackTrace().length > 0 ? info.getStackTrace()[0].getMethodName() : "unknown");
                         
-                        long cpuTime = threadMXBean.getThreadCpuTime(info.getThreadId());
                         recordExecution(methodKey, cpuTime);
                     }
                 }
@@ -231,8 +228,7 @@ public final class HotspotDetector {
      * Detects thread contention points.
      */
     private List<ContentionPoint> getThreadContention() {
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
-        ThreadInfo[] infos = ManagementFactory.getThreadMXBean().dumpAllThreads(true, true);
+        ThreadInfo[] infos = threadMXBean.dumpAllThreads(true, true);
         
         List<ContentionPoint> contentions = new ArrayList<>();
         for (ThreadInfo info : infos) {
@@ -248,7 +244,7 @@ public final class HotspotDetector {
         }
         
         return contentions.stream()
-            .sorted(Comparator.comparingLong(ContentionPoint::getBlockedTime).reversed())
+            .sorted(Comparator.comparingLong(ContentionPoint::blockedTimeMs).reversed())
             .limit(10)
             .toList();
     }
@@ -292,20 +288,29 @@ public final class HotspotDetector {
         public double getAverageTimeNanos() { return sampleCount > 0 ? (double) totalTimeNanos / sampleCount : 0; }
     }
 
-    public record AllocationHotspot(
-        String site,
-        long totalBytes,
-        long count,
-        long avgSize
-    ) {
+    public static class AllocationHotspot {
+        private final String site;
+        private long totalBytes = 0;
+        private long count = 0;
+        private long avgSize = 0;
+
         public AllocationHotspot(String site, long sizeBytes) {
-            this(site, sizeBytes, 1, sizeBytes);
+            this.site = site;
+            this.totalBytes = sizeBytes;
+            this.count = 1;
+            this.avgSize = sizeBytes;
         }
 
         public synchronized void addAllocation(long sizeBytes) {
             this.totalBytes += sizeBytes;
             this.count++;
+            this.avgSize = count > 0 ? totalBytes / count : 0;
         }
+
+        public String site() { return site; }
+        public long totalBytes() { return totalBytes; }
+        public long count() { return count; }
+        public long avgSize() { return avgSize; }
     }
 
     public record ContentionPoint(

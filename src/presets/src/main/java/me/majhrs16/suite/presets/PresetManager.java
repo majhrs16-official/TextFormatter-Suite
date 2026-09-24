@@ -8,6 +8,7 @@ import me.majhrs16.suite.host.config.HostConfig;
 
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.LoaderOptions;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,7 +23,7 @@ public final class PresetManager {
 
     private final Map<String, Preset> presets = new ConcurrentHashMap<>();
     private final Path presetsDir;
-    private final Yaml yaml = new Yaml(new SafeConstructor());
+    private final Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
 
     public PresetManager(Path presetsDir) {
         this.presetsDir = presetsDir.toAbsolutePath();

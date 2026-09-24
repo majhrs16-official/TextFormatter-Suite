@@ -8,8 +8,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import java.lang.ref.ReferenceQueue;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Intelligent cache optimizer with adaptive eviction policies.
@@ -25,8 +24,8 @@ public final class CacheOptimizer<K, V> {
     // Main cache
     private final ConcurrentHashMap<K, CacheEntry<V>> cache = new ConcurrentHashMap<>();
     
-    // Access tracking for LFU
-    private final ConcurrentHashMap<K, AtomicLong> accessCounts = new ConcurrentHashMap<>();
+    // Access tracking for LFU - using LongAdder for thread-safe counting
+    private final ConcurrentHashMap<K, LongAdder> accessCounts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<K, Long> lastAccess = new ConcurrentHashMap<>();
     
     // LRU tracking
@@ -179,8 +178,11 @@ public final class CacheOptimizer<K, V> {
      */
     public List<Map.Entry<K, Long>> getTopAccessed(int n) {
         return accessCounts.entrySet().stream()
-            .sorted(Map.Entry.<K, Long>comparingByValue().reversed())
+            .sorted(Map.Entry.<K, LongAdder>comparingByValue(
+                Comparator.comparingLong(LongAdder::longValue)
+            ).reversed())
             .limit(n)
+            .map(e -> Map.entry(e.getKey(), e.getValue().longValue()))
             .collect(Collectors.toList());
     }
 
@@ -217,7 +219,7 @@ public final class CacheOptimizer<K, V> {
 
     private void recordAccess(K key) {
         long now = System.currentTimeMillis();
-        accessCounts.compute(key, (k, v) -> v == null ? 1 : v + 1);
+        accessCounts.computeIfAbsent(key, k -> new LongAdder()).increment();
         lastAccess.put(key, System.currentTimeMillis());
         
         // Update LRU order
@@ -238,13 +240,13 @@ public final class CacheOptimizer<K, V> {
         }
     }
 
-private K selectVictim() {
+    private K selectVictim() {
         switch (policy) {
             case LRU:
                 return accessOrder.poll();
             case LFU:
                 return accessCounts.entrySet().stream()
-                    .min(Map.Entry.comparingByValue())
+                    .min(Comparator.comparingLong(e -> e.getValue().longValue()))
                     .map(Map.Entry::getKey)
                     .orElse(null);
             case TTL: {
@@ -269,7 +271,7 @@ private K selectVictim() {
         // Score = (accessCount * 0.3) + (recency * 0.7) where recency = now - lastAccess
         return cache.entrySet().stream()
             .min(Comparator.comparingDouble(e -> {
-                long accesses = accessCounts.getOrDefault(e.getKey(), 0L);
+                long accesses = accessCounts.getOrDefault(e.getKey(), new LongAdder()).longValue();
                 long lastAccessTime = lastAccess.getOrDefault(e.getKey(), 0L);
                 double recencyScore = (now - lastAccessTime) / 1000.0; // seconds since access
                 return (accesses * 0.3) + (recencyScore * 0.7);

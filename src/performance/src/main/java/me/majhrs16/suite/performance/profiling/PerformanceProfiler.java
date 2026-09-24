@@ -152,7 +152,11 @@ public final class PerformanceProfiler {
     private final AtomicLong samplingIntervalMs = new AtomicLong(100);
 
     public PerformanceProfiler() {
-        this.logger = null;
+        this(null);
+    }
+
+    public PerformanceProfiler(PluginLogger logger) {
+        this.logger = logger;
         this.threadMXBean = ManagementFactory.getThreadMXBean();
         this.memoryMXBean = ManagementFactory.getMemoryMXBean();
         this.gcMXBeans = ManagementFactory.getGarbageCollectorMXBeans();
@@ -165,11 +169,6 @@ public final class PerformanceProfiler {
         if (threadMXBean.isThreadCpuTimeSupported()) {
             threadMXBean.setThreadCpuTimeEnabled(true);
         }
-    }
-
-    public PerformanceProfiler(PluginLogger logger) {
-        this();
-        this.logger = logger;
     }
 
     // ============================================================
