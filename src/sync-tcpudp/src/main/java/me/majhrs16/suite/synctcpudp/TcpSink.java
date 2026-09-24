@@ -12,6 +12,7 @@ import java.io.Writer;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -19,8 +20,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Raw TCP edge: outbound connects to a remote listener and writes one JSON
  * line per message; inbound listens on a local port, one line per accepted
  * connection, and feeds the decoder through {@link SyncListener}.
+ * <p>
+ * Security: Uses socket timeouts to prevent slow-client DoS attacks.
+ * </p>
  */
 public final class TcpSink implements SyncSink {
+
+    private static final int SOCKET_TIMEOUT_MS = 30000; // 30 seconds
 
     private final String remoteHost;
     private final int remotePort;
@@ -53,6 +59,8 @@ public final class TcpSink implements SyncSink {
             return;
         }
         server = new ServerSocket(localPort);
+        // Set socket timeout to prevent slow-client DoS
+        server.setSoTimeout(SOCKET_TIMEOUT_MS);
         acceptThread = new Thread(this::acceptLoop, "tcp-sink-inbound");
         acceptThread.setDaemon(true);
         acceptThread.start();
@@ -93,18 +101,26 @@ public final class TcpSink implements SyncSink {
 
     private void acceptLoop() {
         while (running.get()) {
-            try (Socket socket = server.accept()) {
+            try {
+                Socket socket = server.accept();
+                // Set timeout on accepted socket to prevent slow-client DoS
+                socket.setSoTimeout(SOCKET_TIMEOUT_MS);
                 pendingSocket = socket;
-                BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    socket.getInputStream(), StandardCharsets.UTF_8));
-                String line = reader.readLine();
-                if (line == null || line.isBlank()) {
-                    continue;
+                try (socket) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        socket.getInputStream(), StandardCharsets.UTF_8));
+                    String line = reader.readLine();
+                    if (line == null || line.isBlank()) {
+                        continue;
+                    }
+                    SyncListener current = listener;
+                    if (current != null) {
+                        current.onMessage(this, me.majhrs16.suite.transport.MessageCodec.fromJsonString(line));
+                    }
                 }
-                SyncListener current = listener;
-                if (current != null) {
-                    current.onMessage(this, me.majhrs16.suite.transport.MessageCodec.fromJsonString(line));
-                }
+            } catch (SocketTimeoutException e) {
+                // Accept timeout - just continue the loop
+                if (!running.get()) break;
             } catch (IOException e) {
                 if (running.get()) {
                     notifyDisconnect(e.getMessage());

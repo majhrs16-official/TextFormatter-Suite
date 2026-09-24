@@ -2,11 +2,8 @@ package me.majhrs16.suite.host.config;
 
 import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
-import me.majhrs16.suite.gtranslate.GTranslate;
-import me.majhrs16.suite.ltranslate.LTranslate;
-import me.majhrs16.suite.transport.HttpTransport;
-import me.majhrs16.suite.ltranslate.LTranslate;
-import me.majhrs16.suite.gtranslate.GTranslate;
+import me.majhrs16.suite.api.spi.TranslatorProvider;
+import me.majhrs16.suite.api.spi.TranslationException;
 
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -18,23 +15,22 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 
 /**
  * Loads {@code translators/*.yml} (schema v2.2) into a ready
  * {@link TranslatorManager}.
  *
- * <p>Only {@code active: true} providers are registered, google before
- * libre regardless of directory order. Missing directory yields an empty
- * manager (the manager's FALLBACK "none" translator keeps the pipeline
- * functional without translation); a malformed or unknown provider file is
- * skipped, never fatal for the rest.</p>
+ * <p>Only {@code active: true} providers are registered. Providers are
+ * discovered via {@link ServiceLoader} (SPI) rather than hardcoded,
+ * enabling Clean Architecture compliance where host depends on abstractions.</p>
  *
- * <p>{@code pool.max-concurrent} belongs to the schema but no engine exposes
- * a concurrency knob yet, so it is not consumed (F7+).</p>
+ * <p>Order: providers are sorted by rank (google=0, libre=1, then by name).</p>
  */
 public final class TranslatorsConfig {
 
     private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
+    private static final Map<String, TranslatorProvider> PROVIDER_REGISTRY = discoverProviders();
 
     private TranslatorsConfig() {
     }
@@ -51,6 +47,19 @@ public final class TranslatorsConfig {
             }
         }
         return manager;
+    }
+
+    /**
+     * Discovers all TranslatorProvider implementations via ServiceLoader.
+     * Returns a map of provider name -> provider instance.
+     */
+    private static Map<String, TranslatorProvider> discoverProviders() {
+        Map<String, TranslatorProvider> registry = new java.util.HashMap<>();
+        ServiceLoader<TranslatorProvider> loader = ServiceLoader.load(TranslatorProvider.class);
+        for (TranslatorProvider provider : loader) {
+            registry.put(provider.name(), provider);
+        }
+        return registry;
     }
 
     private static List<Provider> readProviders(Path translatorsDir) {
@@ -78,18 +87,31 @@ public final class TranslatorsConfig {
 
             String kind = str(map.get("provider"), fileName(file));
             boolean active = bool(map.get("active"), false);
-            String baseUrl = str(map.get("base-url"), "");
-            String apiKey = str(map.get("api-key"), "");
 
-            Translator settings = switch (kind) {
-                case "google" -> new GTranslate(new HttpTransport());
-                case "libre" -> baseUrl.isBlank()
-                    ? null
-                    : (apiKey.isBlank()
-                        ? new LTranslate(baseUrl, new HttpTransport())
-                        : new LTranslate(baseUrl, apiKey, new HttpTransport()));
-                default -> null;
-            };
+            TranslatorProvider spiProvider = PROVIDER_REGISTRY.get(kind);
+            if (spiProvider == null) {
+                // Unknown provider type - skip with warning
+                return java.util.Optional.empty();
+            }
+
+            // Build config map from YAML (all non-provider/active fields)
+            Map<String, Object> config = new java.util.HashMap<>();
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                String key = entry.getKey();
+                if (!"provider".equals(key) && !"active".equals(key)) {
+                    config.put(key, entry.getValue());
+                }
+            }
+
+            Translator settings = null;
+            if (active && spiProvider.validateConfig(config)) {
+                try {
+                    settings = spiProvider.create(config);
+                } catch (TranslationException e) {
+                    // Provider creation failed - log and skip
+                }
+            }
+
             return java.util.Optional.of(new Provider(kind, active, settings));
         } catch (IOException | RuntimeException e) {
             // YAML malformado o provider desconocido: se ignora ese archivo,

@@ -36,7 +36,8 @@ import java.util.function.Consumer;
  *   <li>{@code /ws/logs} - Server logs streaming</li>
  * </ul>
  *
- * <p>Supports subscription filtering, authentication via token, and message broadcasting.</p>
+ * <p>Supports subscription filtering, authentication via token, message broadcasting,
+ * and protection against oversized payloads and connection flooding.</p>
  */
 public final class WebSocketSyncSink implements SyncSink {
 
@@ -45,6 +46,8 @@ public final class WebSocketSyncSink implements SyncSink {
     private static final String EVENTS_PATH = "/ws/events";
     private static final String SYNC_PATH = "/ws/sync";
     private static final String LOGS_PATH = "/ws/logs";
+    private static final int MAX_MESSAGE_SIZE = 64 * 1024; // 64KB per message
+    private static final int MAX_MESSAGES_PER_SECOND = 100; // Rate limit per connection
 
     private final int port;
     private final String authToken;
@@ -169,6 +172,9 @@ public final class WebSocketSyncSink implements SyncSink {
     private final class SyncWebSocketServer extends WebSocketServer {
 
         private final Gson gson = new Gson();
+        // Rate limiting per connection: track message timestamps
+        private final ConcurrentHashMap<WebSocket, Long> messageTimestamps = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<WebSocket, Integer> messageCount = new ConcurrentHashMap<>();
 
         public SyncWebSocketServer(InetSocketAddress address) {
             super(address);
@@ -192,6 +198,9 @@ public final class WebSocketSyncSink implements SyncSink {
                     logger.warn("WebSocket connection rejected: invalid token from " + conn.getRemoteSocketAddress());
                     return;
                 }
+            } else {
+                // SECURITY WARNING: No auth token configured - accepting unauthenticated connections
+                logger.warn("SECURITY: WebSocket server running without auth token! Unauthenticated connections allowed from " + conn.getRemoteSocketAddress());
             }
 
             allClients.add(conn);
@@ -201,6 +210,9 @@ public final class WebSocketSyncSink implements SyncSink {
         @Override
         public void onClose(WebSocket conn, int code, String reason, boolean remote) {
             allClients.remove(conn);
+            // Clean up rate limiting data
+            messageTimestamps.remove(conn);
+            messageCount.remove(conn);
             // Clean up subscriptions
             Set<String> subs = clientSubscriptions.remove(conn);
             if (subs != null) {
@@ -213,6 +225,34 @@ public final class WebSocketSyncSink implements SyncSink {
 
         @Override
         public void onMessage(WebSocket conn, String message) {
+            // Check message size limit
+            if (message.length() > MAX_MESSAGE_SIZE) {
+                conn.send(createError("Message too large: max " + MAX_MESSAGE_SIZE + " bytes"));
+                logger.warn("WebSocket message size limit exceeded from " + conn.getRemoteSocketAddress());
+                return;
+            }
+
+            // Rate limiting per connection
+            long now = System.currentTimeMillis();
+            long windowStart = now - 1000; // 1 second window
+            
+            // Clean old timestamps
+            Long lastTimestamp = messageTimestamps.get(conn);
+            if (lastTimestamp != null && lastTimestamp < windowStart) {
+                messageTimestamps.remove(conn);
+                messageCount.remove(conn);
+            }
+            
+            // Increment counter
+            int count = messageCount.merge(conn, 1, Integer::sum);
+            messageTimestamps.put(conn, now);
+            
+            if (count > MAX_MESSAGES_PER_SECOND) {
+                conn.send(createError("Rate limit exceeded: max " + MAX_MESSAGES_PER_SECOND + " messages/second"));
+                logger.warn("WebSocket rate limit exceeded from " + conn.getRemoteSocketAddress());
+                return;
+            }
+
             try {
                 JsonObject json = JsonParser.parseString(message).getAsJsonObject();
                 String action = json.get("action").getAsString();

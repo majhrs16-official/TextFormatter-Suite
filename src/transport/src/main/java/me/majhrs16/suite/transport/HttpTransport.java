@@ -99,7 +99,7 @@ public final class HttpTransport implements Transport {
     private HttpURLConnection openConnection(String urlString, String method, Map<String, String> headers, String body) throws IOException {
         URL url = new URL(urlString);
 
-        // SSRF Protection: validate host against deny patterns
+        // SSRF Protection: validate initial URL
         if (ssrfProtectionEnabled) {
             validateUrl(url);
         }
@@ -108,7 +108,8 @@ public final class HttpTransport implements Transport {
         conn.setRequestMethod(method);
         conn.setConnectTimeout((int) timeout.toMillis());
         conn.setReadTimeout((int) timeout.toMillis());
-        conn.setInstanceFollowRedirects(true);
+        // Disable automatic redirects - we handle them manually with validation
+        conn.setInstanceFollowRedirects(false);
         conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
 
         if (headers != null) {
@@ -160,21 +161,66 @@ public final class HttpTransport implements Transport {
     }
 
     private String readResponse(HttpURLConnection conn) throws IOException {
-        int status = conn.getResponseCode();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                status >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line);
+        int redirectCount = 0;
+        final int MAX_REDIRECTS = 5;
+        
+        while (true) {
+            int status = conn.getResponseCode();
+            
+            // Handle redirects manually with validation
+            if (isRedirect(status)) {
+                if (redirectCount >= MAX_REDIRECTS) {
+                    conn.disconnect();
+                    throw new IOException("Too many redirects (" + MAX_REDIRECTS + ")");
+                }
+                
+                String location = conn.getHeaderField("Location");
+                conn.disconnect();
+                
+                if (location == null || location.isBlank()) {
+                    throw new IOException("Redirect without Location header");
+                }
+                
+                // Resolve relative URLs
+                URL newUrl = new URL(conn.getURL(), location);
+                
+                // Validate redirect URL
+                if (ssrfProtectionEnabled) {
+                    validateUrl(newUrl);
+                }
+                
+                // Create new connection for redirect
+                conn = (HttpURLConnection) newUrl.openConnection();
+                conn.setRequestMethod("GET"); // Redirects typically use GET
+                conn.setConnectTimeout((int) timeout.toMillis());
+                conn.setReadTimeout((int) timeout.toMillis());
+                conn.setInstanceFollowRedirects(false);
+                conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
+                
+                redirectCount++;
+                continue;
             }
-            String response = sb.toString();
-            if (status >= 400) {
-                throw new IOException("HTTP " + status + ": " + response);
+            
+            // Not a redirect - read response normally
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    status >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line);
+                }
+                String response = sb.toString();
+                if (status >= 400) {
+                    throw new IOException("HTTP " + status + ": " + response);
+                }
+                return response;
+            } finally {
+                conn.disconnect();
             }
-            return response;
-        } finally {
-            conn.disconnect();
         }
+    }
+    
+    private boolean isRedirect(int status) {
+        return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
     }
 }

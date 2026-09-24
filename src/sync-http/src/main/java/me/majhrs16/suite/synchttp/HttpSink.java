@@ -7,7 +7,9 @@ import me.majhrs16.suite.api.spi.SyncSink;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -24,8 +26,13 @@ import java.util.concurrent.TimeUnit;
  * HTTP edge connector: pushes outbound messages to a webhook URL and exposes
  * a local {@code POST} endpoint that feeds inbound messages to the engine
  * through {@link SyncListener}.
+ * <p>
+ * Security: Limits inbound body size to prevent DoS via large payloads.
+ * </p>
  */
 public final class HttpSink implements SyncSink {
+
+    private static final int MAX_BODY_BYTES = 1024 * 1024; // 1MB limit
 
     private final String outboundUrl;
     private final int inboundPort;
@@ -127,8 +134,24 @@ public final class HttpSink implements SyncSink {
                 exchange.sendResponseHeaders(405, -1);
                 return;
             }
-            String body = new String(exchange.getRequestBody().readAllBytes(),
-                StandardCharsets.UTF_8);
+            
+            // Check Content-Length header if present
+            String contentLengthHeader = exchange.getRequestHeaders().getFirst("Content-Length");
+            if (contentLengthHeader != null) {
+                try {
+                    long contentLength = Long.parseLong(contentLengthHeader);
+                    if (contentLength > MAX_BODY_BYTES) {
+                        exchange.sendResponseHeaders(413, -1); // Payload Too Large
+                        return;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Invalid Content-Length, will be caught by streaming limit
+                }
+            }
+            
+            // Read body with size limit
+            String body = readLimitedBody(exchange.getRequestBody(), MAX_BODY_BYTES);
+            
             SyncListener current = listener;
             if (current != null) {
                 current.onMessage(this, me.majhrs16.suite.transport.MessageCodec.fromJson(body));
@@ -137,5 +160,20 @@ public final class HttpSink implements SyncSink {
         } finally {
             exchange.close();
         }
+    }
+    
+    private String readLimitedBody(InputStream inputStream, int maxBytes) throws IOException {
+        byte[] buffer = new byte[8192];
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        int totalRead = 0;
+        int read;
+        while ((read = inputStream.read(buffer)) != -1) {
+            totalRead += read;
+            if (totalRead > maxBytes) {
+                throw new IOException("Body size exceeds maximum allowed: " + maxBytes + " bytes");
+            }
+            baos.write(buffer, 0, read);
+        }
+        return baos.toString(StandardCharsets.UTF_8);
     }
 }

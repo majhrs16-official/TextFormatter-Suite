@@ -120,8 +120,25 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             .orElse(DEFAULT_GITHUB_RELEASES_URL);
     }
 
-    @Override
+@Override
     public ResolutionResult resolve(ModuleCoordinate coordinate, Environment env, boolean force) {
+        return resolveInternal(coordinate, env, force, new HashSet<>());
+    }
+    
+    /**
+     * Internal resolution method with cycle detection.
+     * @param visited Set of module coordinates currently being resolved (for cycle detection)
+     */
+    private ResolutionResult resolveInternal(ModuleCoordinate coordinate, Environment env, boolean force, Set<ModuleCoordinate> visited) {
+        // Cycle detection
+        if (visited.contains(coordinate)) {
+            return ResolutionResult.failure(
+                "Dependency cycle detected: " + coordinate + " -> " + visited,
+                List.of()
+            );
+        }
+        
+        visited.add(coordinate);
         logger.debug("Resolving module: " + coordinate + " (force=" + force + ")");
 
         // Parse version range if needed
@@ -215,7 +232,8 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
 
                 for (String depStr : depStrings) {
                     ModuleCoordinate depCoord = parseCoordinate(depStr);
-                    ResolutionResult depResult = resolve(depCoord, env, force);
+                    // Pass visited set for cycle detection
+                    ResolutionResult depResult = resolveInternal(depCoord, env, force, visited);
                     if (depResult instanceof ResolutionResult.Success depSuccess) {
                         deps.add(depSuccess.module());
                     } else {
@@ -228,7 +246,7 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
                     }
 }
 
-// Clean up temp file
+ // Clean up temp file
                 Files.deleteIfExists(tempJar);
 
                 ResolvedModule resolved = new ResolvedModule(
@@ -238,15 +256,18 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
                     sizeBytes
                 );
 
+                visited.remove(coordinate);
                 return ResolutionResult.success(resolved, deps);
 
             } catch (Exception e) {
                 logger.error("Resolution failed for " + coordinate, e);
+                visited.remove(coordinate);
                 return ResolutionResult.failure("Resolution error: " + e.getMessage(), List.of());
             }
         }
         
         // No repository found the module
+        visited.remove(coordinate);
         return ResolutionResult.failure(
             "No matching release found for " + coordinate.artifact() + " " + versionSpec + " in any configured repository",
             List.of()
