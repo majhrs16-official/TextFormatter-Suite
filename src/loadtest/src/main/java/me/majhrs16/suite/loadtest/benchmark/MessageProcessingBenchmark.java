@@ -27,6 +27,8 @@ import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 
+import java.util.Optional;
+
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
@@ -152,6 +154,23 @@ public class MessageProcessingBenchmark {
                 return true;
             }
         };
+        
+        // Create mock ChatDelivery for dispatcher (can't use lambda - ChatDelivery not functional interface)
+        final ChatDelivery mockDeliveryForDispatcher = new ChatDelivery() {
+            @Override
+            public void deliver(Actor recipient, Component rendered, Message original) {}
+            
+            @Override
+            public void deliverConsole(Component rendered) {}
+            
+            @Override
+            public void playSound(Actor recipient, SoundSpec sound) {}
+            
+            @Override
+            public boolean hasSound(String soundName) {
+                return true;
+            }
+        };
 
         host = new SuiteHost(
             configResult.config(),
@@ -160,7 +179,7 @@ public class MessageProcessingBenchmark {
             router,
             me.majhrs16.suite.textformatter.TextFormatters.create(channelsResult.config(), mockTranslation, mockPlaceholders, mockLogger),
             mockLogger,
-            mockDelivery
+            mockDeliveryForDispatcher
         );
 
         // Create mock ActorDirectory

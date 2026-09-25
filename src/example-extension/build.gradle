@@ -17,6 +17,9 @@ repositories {
 }
 
 dependencies {
+    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-extension-api:2.1.0-SNAPSHOT'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')

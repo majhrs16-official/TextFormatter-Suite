@@ -4,11 +4,13 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.Formats;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.extension.Extension;
 import me.majhrs16.suite.extension.ExtensionContext;
 import me.majhrs16.suite.extension.ExtensionConfig;
 import me.majhrs16.suite.extension.ExtensionMetadata;
+import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.textformatter.channel.Channel;
 
 import java.util.List;
@@ -76,19 +78,17 @@ public final class ExampleExtension implements Extension {
 
         // Register custom channel
         Channel customChannel = Channel.builder("example.custom")
-            .name("example.custom")
             .permission("example.custom")
-            .messages(List.of("<gold>[Example] %content%</gold>"))
+            .messages(Formats.of("<gold>[Example] %content%</gold>"))
             .showSender(true)
             .type(Channel.Type.CHAT)
             .build();
         context.registerChannel(customChannel);
 
         // Register custom command /suite example
-        context.dispatcher().ifPresent(dispatcher -> {
-            // Note: In real implementation, use command registrar
-            context.logger().info("[ExampleExtension] Registered custom channel and command");
-        });
+        MessageDispatcher dispatcher = context.dispatcher();
+        // Note: In real implementation, use command registrar
+        context.logger().info("[ExampleExtension] Registered custom channel and command");
 
         // Subscribe to events
         context.subscribe("message.processed", event -> {
