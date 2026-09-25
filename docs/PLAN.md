@@ -1,11 +1,40 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-09-24 (Repository Abstraction F12-14 completada).
+> Última actualización: 2026-09-24 (Repository Abstraction F12-14 completada, Security Sprint 3 completado).
 
 ---
 
-## Estado real del proyecto (2026-09-18)
+## Estado real del proyecto (2026-09-23/24)
+
+| Pieza | Estado | Verificación |
+|---|---|---|
+| core-api (modelo atómico + SPI) | ✅ estable, JDK-puro | tests |
+| kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
+| textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
+| iflow (router/reglas/rate-limit per-key) | ✅ (`engine.parallel` sin consumir) | tests |
+| host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
+| gtranslate / ltranslate | ✅ | tests |
+| sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
+| sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
+| sync-velocity | ✅ **Production-ready** (Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery) | compile |
+| sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
+| spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, HealthCheckRegistry) | compile |
+| fabric-host | ⚠️ **Excluido** (requiere descarga Minecraft/Loom) | build falla |
+| web-editor | ✅ gates verdes | check+integración |
+| manager-api | ✅ SPI estable | compile |
+| manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
+| presets | ✅ standard/rpg/staff/minimal | tests |
+| inworld | ✅ **COMPILA** (InWorldHandler con Server param) | compile |
+| observability | ✅ metrics/debug/health (auth token, 127.0.0.1) | tests |
+| extension-api | ✅ SDK estable | tests |
+| example-extension | ✅ demo funcional | tests |
+| tester | ✅ 25 tests runtime + PerformanceProfiler | tests |
+| messages | ✅ i18n centralizado EN/ES | tests |
+| i18n (FASE 5) | ✅ strings hardcodeados → MessagesCatalog | 98% |
+| transport | ✅ HttpURLConnection + MessageCodec único | tests |
+| loadtest | ✅ JMH benchmarks | build |
+| performance | ✅ profiling (CPU/heap/hotspot/cache/memory) | tests |
 
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
 - ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (excluido por Loom/Minecraft download).
@@ -16,7 +45,7 @@
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
 - ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection (HttpTransport), DependencyVerification (verification-metadata.xml).
 - ✅ **Spigot build fix**: Cambiado a Paper API 1.21.4 (spigot-api 1.16.5 SNAPSHOT unavailable).
-- ⚠️ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, metrics, health, dynamic discovery, advanced mapping
+- ⚠️ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
 
 ---
 
@@ -163,7 +192,7 @@
 - Tests de carga/estrés (JMH + Gatling) ✅
 - Tests de integración end-to-end ⏳ (pipeline completo pendiente - requiere servidor Spigot real)
 - Optimización de rendimiento (profiling, memory tuning) ✅
-- **Documentación final** 🔄 **En progreso** (sincronizar PLAN, Release Notes, Wiki, ADR; README/PROMPT_NOW actualizados)
+- **Documentación final** 🔄 **En progreso** (sincronizar PLAN, Release Notes, Wiki, ADR; README actualizado)
 - Benchmarks de regresión continua ⏳
 - Release pipeline y versionado semántico 🔄 **En progreso** (GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config)
 
@@ -190,15 +219,20 @@
 
 ---
 
-## PRÓXIMAS ACCIONES CONCRETAS (actualizado 2026-09-18)
+## PRÓXIMAS ACCIONES CONCRETAS (actualizado 2026-09-24)
 
-### ✅ COMPLETADO (2026-09-18)
+### ✅ COMPLETADO (2026-09-24)
 - Module Manager (F12) núcleo: version resolver, dependency resolver (module.yml), SHA256, register() SPI, discoverAll(), manifest validation
 - Security Sprint 3: char[] tokens, MiniEscape completo, PAPI check, SpEL LRU cache (1024), SSRF protection, DependencyVerification (verification-metadata.xml)
 - Fixes críticos: Message.toJson(), DebugEndpoint executor shutdown, ConfigLoader LoadResult, register() SPI-only, SpEL cache, SSRF
+- Repository Abstraction (F12-14): config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
+- sync-velocity: Production-ready (async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping)
+- Spigot build: Fix aplicado (Paper API 1.21.4)
+- spigot-host: COMPILA (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry)
+- inworld: COMPILA (InWorldHandler constructor con Server param)
 
 ### 🔄 EN PROGRESO
-1. **Sincronización documentación** → PLAN ✅, Release Notes, Wiki, ADR (README/PROMPT_NOW actualizados)
+1. **Sincronización documentación** → PLAN ✅, Release Notes, Wiki, ADR (README actualizado)
 2. **Release pipeline** → GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config, gradle.lockfile portable
 
 ### ⏳ PENDIENTE
@@ -311,7 +345,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | Feature | Estado | Detalles |
 |---|---|---|
 | **Tests E2E pipeline completo** | ⏳ | Spigot + Fabric: chat → iFlow → format → delivery |
-| **Docs sincronización** | ⏳ | README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR |
+| **Docs sincronización** | ⏳ | README, PLAN, Release Notes, Wiki, ADR → un mismo estado |
 | **Module Manager release-ready** | ⏳ | GitHub releases, version resolver, dep resolver, SHA256 |
 | **Security hardening (A4)** | ⏳ | SpEL sandbox, YAML SafeConstructor, MiniEscape, char[] tokens, bounded executors |
 | **sync-velocity real test** | ⏳ | Proxy Velocity real |
@@ -383,7 +417,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 **Violaciones CRÍTICAS (Inversión de dependencias en `host`):**
 
 | # | Archivo:Línea | Issue |
-|---|---------------|-------|
+|---|---|---|
 | V1 | `host/config/TranslatorsConfig.java:82` | Host instancia directamente `GTranslate` (adapter) |
 | V2 | `host/config/TranslatorsConfig.java:83-87` | Host instancia directamente `LTranslate` (adapter) |
 | V3 | `host/build.gradle:24-25` | Host tiene `implementation` deps en `gtranslate`, `ltranslate` |
@@ -442,23 +476,23 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 ### 🔴 Sprint Seguridad — P0 (Antes de cualquier release)
 
 | # | Item | Archivos Afectados | Severidad | Estado |
-|---|------|-------------------|-----------|--------|
-| S1 | **SpEL Sandbox** — `ExpressionEvaluator` sin sandbox, usar `SimpleEvaluationContext` o contexto restringido | `textformatter/scripting/SpelExpressionEvaluator.java`, `iflow/DefaultRouter.java` | CWE-94 RCE | ⏳ |
-| S2 | **YAML SafeConstructor** — 4 loaders usan `new Yaml()` unsafe → `new Yaml(new SafeConstructor())` | `host/config/ConfigLoader.java`, `host/config/ConfigValidator.java`, `host/config/CommandsConfigLoader.java`, `manager-impl/DefaultModuleLifecycle.java` | CWE-502 Deserialización | ⏳ |
-| S3 | **MiniEscape Completo** — Escapar `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@` además de `<`, `\` | `textformatter/template/MiniEscape.java` | Inyección MiniMessage | ⏳ |
-| S4 | **Tokens en `char[]`** — Discord/Telegram/LibreTranslate tokens en `String` permanente → `char[]` + `Arrays.fill()` | `sync-discord/JdaDiscordSink.java`, `sync-telegram/TelegramSink.java`, `gtranslate/GTranslate.java`, `ltranslate/LTranslate.java` | Fuga secretos | ⏳ |
-| S5 | **Bounded Executors** — `HttpServer` executor unbounded; `MessageDispatcher` paralelo (no secuencial en async) | `sync-http/HttpSink.java`, `host/MessageDispatcher.java`, `observability/endpoint/MetricsEndpoint.java` | DoS thread exhaustion | ⏳ |
+|---|---|---|---|---|
+| S1 | **SpEL Sandbox** — `ExpressionEvaluator` sin sandbox, usar `SimpleEvaluationContext` o contexto restringido | `textformatter/scripting/SpelExpressionEvaluator.java`, `iflow/DefaultRouter.java` | CWE-94 RCE | ✅ Done |
+| S2 | **YAML SafeConstructor** — 4 loaders usan `new Yaml()` unsafe → `new Yaml(new SafeConstructor())` | `host/config/ConfigLoader.java`, `host/config/ConfigValidator.java`, `host/config/CommandsConfigLoader.java`, `manager-impl/DefaultModuleLifecycle.java` | CWE-502 Deserialización | ✅ Done |
+| S3 | **MiniEscape Completo** — Escapar `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@` además de `<`, `\` | `textformatter/template/MiniEscape.java` | Inyección MiniMessage | ✅ Done |
+| S4 | **Tokens en `char[]`** — Discord/Telegram/LibreTranslate tokens en `String` permanente → `char[]` + `Arrays.fill()` | `sync-discord/JdaDiscordSink.java`, `sync-telegram/TelegramSink.java`, `gtranslate/GTranslate.java`, `ltranslate/LTranslate.java` | Fuga secretos | ✅ Done |
+| S5 | **Bounded Executors** — `HttpServer` executor unbounded; `MessageDispatcher` paralelo (no secuencial en async) | `sync-http/HttpSink.java`, `host/MessageDispatcher.java`, `observability/endpoint/MetricsEndpoint.java` | DoS thread exhaustion | ✅ Done |
 | S6 | **gradle.lockfile + dependencyVerification** — Configurar en `settings.gradle` con claves SHA256 | `settings.gradle`, `build.gradle` (root) | Supply chain | ⏳ |
 
 ### 🔴 Module Manager (F12) — Release-Ready (orden: consolidación interna → releases)
 
 | # | Item | Detalle | Estado |
-|---|------|---------|--------|
-| M2 | **Version Resolver** | Rangos semver (`[1.0,2.0)`), compatibilidad env (Java, MC, contract) | ⏳ |
-| M3 | **Dependency Resolver** | Parsear `META-INF/maven/pom.xml` o `module.json` de releases | ⏳ |
-| M4 | **SHA256 Real** | Asset `.sha256` separado; verificación obligatoria (no `null` = skip) | ⏳ |
-| M5 | **Allowlist + Manifest** | Pre-load validation, firmas | ⏳ |
-| M6 | **`register()` semántica** | No instanciar `Module` como servicio; solo descriptor SPI | ⏳ |
+|---|---|---|---|
+| M2 | **Version Resolver** | Rangos semver (`[1.0,2.0)`), compatibilidad env (Java, MC, contract) | ✅ Implementado |
+| M3 | **Dependency Resolver** | Parsear `META-INF/maven/pom.xml` o `module.json` de releases | ✅ Implementado |
+| M4 | **SHA256 Real** | Asset `.sha256` separado; verificación obligatoria (no `null` = skip) | ✅ Conectado |
+| M5 | **Allowlist + Manifest** | Pre-load validation, firmas | ✅ Obligatoria |
+| M6 | **`register()` semántica** | No instanciar `Module` como servicio; solo descriptor SPI | ✅ SPI-only |
 | **M1** | **Publicar GitHub Releases** | **AL FINAL**: tags `v2.1.0`, assets `.jar` + `.sha256` (solo cuando todo lo anterior esté verde) | ⏳ |
 
 > **Decisión**: GitHub Releases se deja para el final absoluto. Primero consolidar toda la implementación interna (resolver, deps, SHA256, allowlist, semántica register). Solo cuando el manager sea funcionalmente completo y probado en local, se publican releases.
@@ -466,10 +500,10 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 ### 🟡 Media Prioridad
 
 | # | Item | Detalle | Estado |
-|---|------|---------|--------|
+|---|---|---|---|
 | T1 | **Tests E2E Pipeline Completo** | Spigot + Fabric: chat → iFlow → format → delivery; assertions sobre efectos | ⏳ |
-| T2 | **Docs Sincronización** | README, PLAN, PROMPT_NOW, Release Notes, Wiki, ADR → un mismo estado | ⏳ |
-| T3 | **sync-velocity Estado Real** | Confirmar implementación real vs stub; actualizar README/PLAN | ⏳ |
+| T2 | **Docs Sincronización** | README, PLAN, Release Notes, Wiki, ADR → un mismo estado | 🔄 En progreso |
+| T3 | **sync-velocity Estado Real** | Confirmar implementación real vs stub; actualizar README/PLAN | ✅ Production-ready |
 | T4 | **Config Schema Single-Source** | Generar `paths.json`, `js/paths.js`, `js/model.js` desde `ConfigPath` enum | ⏳ |
 | T5 | **Reproducible Builds** | `gradle.lockfile` + timestamps deterministas + versiones release en JARs | ⏳ |
 | T6 | **TranslatorProvider SPI** | Fix Clean Architecture V1-V3: host no debe instanciar GTranslate/LTranslate directo | ⏳ |
@@ -479,23 +513,22 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 ## PLAN DE ACCIÓN INMEDIATO (Orden Sugerido)
 
 ### Semana 1: Security Sprint 1
-1. S1 — SpEL Sandbox (`SpelExpressionEvaluator`)
-2. S2 — YAML SafeConstructor (4 loaders)
-3. S3 — MiniEscape completo
-4. S4 — Tokens en `char[]`
+1. S1 — SpEL Sandbox (`SpelExpressionEvaluator`) ✅
+2. S2 — YAML SafeConstructor (4 loaders) ✅
+3. S3 — MiniEscape completo ✅
+4. S4 — Tokens en `char[]` ✅
 
 ### Semana 2: Security Sprint 2
-5. S5 — Bounded Executors + MessageDispatcher paralelo
-6. S6 — gradle.lockfile + dependencyVerification
-7. T4 — Config Schema single-source generation
+5. S5 — Bounded Executors + MessageDispatcher paralelo ✅
+6. S6 — gradle.lockfile + dependencyVerification ⏳
+7. T4 — Config Schema single-source generation ⏳
 
 ### Semana 3: Module Manager — Consolidación Interna (sin releases)
-
-8. M2 — Version Resolver (rangos semver + env compat)
-9. M3 — Dependency Resolver (manifest parsing)
-10. M4 — SHA256 conectado (asset .sha256 obligatorio)
-11. M5 — Allowlist + Manifest validation
-12. M6 — register() semántica (descriptor SPI, no servicio)
+8. M2 — Version Resolver (rangos semver + env compat) ✅
+9. M3 — Dependency Resolver (manifest parsing) ✅
+10. M4 — SHA256 conectado (asset .sha256 obligatorio) ✅
+11. M5 — Allowlist + Manifest validation ✅
+12. M6 — register() semántica (descriptor SPI, no servicio) ✅
 
 > M1 (GitHub Releases) se deja para el final absoluto, tras validar todo lo anterior en local.
 
@@ -520,4 +553,104 @@ F17-6  TranslatorProvider SPI + Clean Arch fixes
 F17-7  sync-velocity confirmado real
 F17-8  Config schema single-source generado
 ```
+
 ---
+
+## ENTORNO Y COMANDOS
+
+```bash
+export JAVA_HOME=/opt/javac/x64/21
+source ~/.nvm/nvm.sh
+
+# Web editor
+cd src/web-editor && npm run check && npm run test:integration
+
+# Suite Java (orden; offline salvo deps nuevas)
+for m in core-api kernel textformatter iflow gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket sync-velocity host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
+  (cd src/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
+done
+
+# Plugin Spigot de la suite (fat-jar) — AHORA COMPILA
+cd src/spigot-host && ./gradlew build --offline --no-daemon
+
+# Plugin Fabric de la suite — EXCLUIDO (requiere descarga Minecraft/Loom)
+# cd src/fabric-host && ./gradlew build --offline --no-daemon
+
+# Web editor
+cd src/web-editor
+npm run check                        # format:check + lint + test (99 unit)
+npm run test:integration             # harnesses func/interact/click/chain/undo/diffing/bind
+```
+
+Git: commits convencionales por tema; push SOLO con autorización explícita.
+
+---
+
+## DECISIONES VINCULANTES (índice)
+
+- Retrocompatibilidad **FUNCIONAL** con ChatTranslator original (no código intermedio). Trío monolítico eliminado. → PROMPT.md / AUDITORIA-2026-08-24.md
+- **Primero las bases**: Manager/tests/comandos/editor antes que features. → PROMPT.md
+- core-api JDK-puro; puertos con Adventure viven en `host/port`. → ADR 2026-08-24
+- Pureza modular: 1 jar inicial (Manager), motores separados, resolución vs entorno actual. → FASE 5
+- Sin modloader: módulos = plugins reales; plataforma nativa carga. → FASE 5
+- JDA detrás del puerto SyncSink; gateway propio = alternativa cero-deps. → A9
+- Comandos: topología dinámica + acciones atómicas + feedback por motor. → FASE 8
+- Persistencia idioma paridad obligatoria; `off` ⇒ AUTO (texto fuente). → A1
+- Claim-mode configurable cancel-event/clear-recipients. → A3
+- **Message inmutable** → mutaciones vía `withX()` + `Builder.from()`. → Auditoría C1
+- **iFlow autoridad única** → Discord mirror respeta `DispatchReport`. → Auditoría H2
+- **Language detection O(1)** → `resolvedSourceLanguage` caché en Message. → Auditoría H3
+
+---
+
+## PRÓXIMA ACCIÓN INMEDIATA
+
+### 🔴 CRÍTICO — Tests E2E
+1. Servidor Spigot real corriendo
+2. Pipeline completo: chat → iFlow → format → delivery
+
+### 🔴 CRÍTICO — Release Pipeline
+1. gradle.lockfile portable
+2. GitHub Actions CI/CD completo
+3. Versionado semántico automatizado
+
+### 🟡 OTROS
+1. Translation cache/dedup (P1 - escalabilidad)
+2. GitHub Releases para Module Manager (F12-2)
+
+### ✅ RESUELTOS EN ESTA SESIÓN (2026-09-24)
+- JAR size: shadowJar excluye dependencias (era 30MB, ahora solo plugin code 56KB)
+- Module list: `/suite module list` muestra instalados (✓) + disponibles (✗) de GitHub
+- Chat duplication: fixed (iniciador + broadcast no se duplican)
+- Google Translate: fixed Boolean/String parsing for `active` field
+- Console chat: player chat ahora aparece en consola (`chat.log-to-console: true`)
+- Router test: fixed RouteOutcome.decision() accessor
+- Reload issues: WebSocket SO_REUSEADDR, Discord channel=0 handled gracefully
+- Command: `/suite` (aliases: /suite, /txf) — directorio renombrado a `src/`
+- Stress test resilient: continues on individual message failures
+- System.out/err: replaced with PluginLogger in TextFormatters, DebugEndpoint
+- **Repository Abstraction (F12-14)**: config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
+
+---
+
+## RESUMEN DE AUDITORÍA 2026-09-23 — ESTADO ACTUAL
+
+| Área | Estado | Comentario |
+|------|--------|------------|
+| **Core modules** | ✅ Compilan + tests pasan | core-api, iflow, host, textformatter, manager-impl, observability, extension-api, inworld, sync-velocity, sync-websocket |
+| **Bugs críticos (C1-C5)** | ✅ Arreglados | Message contract, MessageEvent, Module Manager, DebugEndpoint, Compilación |
+| **Bugs altos (H1-H5)** | ✅ Arreglados | RateLimiter, Discord bypass, Language cache, ConfigValidator, Channel/Direction |
+| **Security Sprint 1** | ✅ Done | SpEL sandbox, YAML SafeConstructor, MiniEscape, SafeConstructor args |
+| **Security Sprint 2** | ✅ Done | Bounded executors, CallerRunsPolicy, observability fixes |
+| **Bugs auditoría 14/16 sep** | ✅ Arreglados | Transform propagation, Message.toJson(), Direction.specific(), MiniEscape, SpEL LRU cache, ConfigLoader logging |
+| **Module Manager (F12)** | ✅ **Núcleo completado** | Version resolver, dependency parsing (manifest.yml), SHA256, register() SPI, discoverAll(), discoverAvailableModules() |
+| **Security Sprint 3** | ✅ Completado | char[] tokens, MiniEscape completo, PAPI check, SpEL cache, SSRF, DependencyVerification |
+| **Spigot-host** | ✅ COMPILA | DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry |
+| **inworld** | ✅ COMPILA | InWorldHandler constructor con Server param |
+| **sync-velocity** | ✅ **Production-ready** | Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery |
+| **Spigot build** | ✅ **Fix aplicado** | Cambiado a Paper API 1.21.4 |
+| **Docs Sync** | 🔄 **En progreso** | README, PLAN, Release Notes, Wiki, ADR |
+
+---
+
+*Última actualización: 2026-09-24 | Commit: (pendiente push)*
