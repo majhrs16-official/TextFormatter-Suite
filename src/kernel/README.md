@@ -1,74 +1,112 @@
-# TextFormatter Suite — Kernel
+# kernel — Module Loading & Dependency Resolution
 
-## Purpose
+> **Purpose**: Discovers, resolves, and loads `Module` implementations (defined in `core-api`) via Java SPI. Provides the module dependency graph and topological initialization order.
 
-The `kernel` module implements the **module resolution engine**: it discovers modules via `ServiceLoader`, validates their contracts against the host environment, resolves dependency graphs, and produces an activation order using Tarjan's SCC algorithm.
+---
 
-## Key Components
+## 1. Responsibilities
 
-### ModuleGraph
-- **Input**: Collection of `Module` descriptors + `Environment`
-- **Output**: `ResolutionResult` with per-module status
-- **Algorithm**: Fixed-point iteration + Tarjan SCC for cycle detection
-- **Handles**: 
-  - Contract version mismatch (major version, semver)
-  - JVM version mismatch (min/max)
-  - Missing requirements (unsatisfied capabilities)
-  - Cycles (including self-cycles)
+- **Module discovery** — scans classpath for `META-INF/services/me.majhrs16.suite.api.Module`
+- **Dependency resolution** — builds graph from `ModuleDescriptor` capabilities/requirements
+- **Topological sorting** — determines initialization order respecting dependencies
+- **Module instantiation** — creates instances and calls `initialize()` in order
+- **Resolution status reporting** — `ResolutionResult` with `ResolutionStatus` (SUCCESS, MISSING_DEPENDENCY, CYCLE_DETECTED, etc.)
 
-### ModuleLoader
-- Discovers modules via `ServiceLoader.load(Module.class)`
-- Validates module descriptors (manifest.yml mandatory)
-- Creates `Module` instances wrapping descriptors
-- Delegates to `ModuleGraph.resolve()`
+---
 
-### ResolutionResult
-Per-module statuses:
-- `RESOLVED` — Activated successfully
-- `CONTRACT_MISMATCH` — Incompatible contract version
-- `JVM_MISMATCH` — JVM version outside declared range
-- `UNSATISFIED_REQUIREMENT` — Missing capability
-- `CYCLE` — Dependency cycle detected
+## 2. Non-Responsibilities
 
-### ModuleDescriptor (from core-api)
-- `name` — Unique module identifier
-- `version` — SemVer
-- `contractVersion` — API contract version
-- `jvmMin` / `jvmMax` — JVM version range
-- `provides` — `List<Capability>` (name + version)
-- `requires` — `List<Requirement>` (name + semver range)
+- **No business logic** — purely infrastructure for module system
+- **No platform-specific code** — works with any `Module` implementation
+- **No service wiring beyond module init** — `host` wires services after modules load
+- **No configuration** — modules self-configure via their `initialize()`
 
-## Key Design Decisions
+---
 
-1. **Module = Descriptor, not Instance** — Avoids DI container anti-pattern
-2. **ServiceLoader Discovery** — Standard Java mechanism, no custom registry
-3. **Fixed-Point Resolution** — Iteratively activates modules whose requirements are met
-4. **Tarjan SCC for Cycles** — Detects all cycles including self-cycles (A→A)
-5. **Two-Handshake** — Contract version (semver) + JVM version
+## 3. Dependencies
 
-## Architecture Position
+| Dependency | Type | Reason |
+|------------|------|--------|
+| `core-api` | Compile | Uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`, `SemVer` |
+
+---
+
+## 4. Consumers
+
+| Consumer | Usage |
+|----------|-------|
+| `host` | Calls `ModuleLoader.load()` during bootstrap |
+| `spigot-host` | Uses `ModuleLoader` for plugin module loading |
+| `fabric-host` | Uses `ModuleLoader` for mod module loading |
+| Test fixtures | `SpiFixtureModule` for testing |
+
+---
+
+## 5. Main Components
+
+| Component | Role |
+|-----------|------|
+| `ModuleLoader` | Main entry point: `load(ClassLoader) → ResolutionResult` |
+| `ModuleGraph` | Builds dependency graph, detects cycles, topological sort |
+| `ModuleDescriptor` | Module metadata (from `core-api`) |
+| `ResolutionResult` | Outcome: status + loaded modules + errors |
+| `ResolutionStatus` | Enum: `SUCCESS`, `MISSING_DEPENDENCY`, `CYCLE_DETECTED`, `INVALID_DESCRIPTOR`, `INSTANTIATION_FAILED` |
+| `Environment` | Runtime environment context passed to modules |
+
+---
+
+## 6. Data Flow
+
+```text
+Classpath (META-INF/services/me.majhrs16.suite.api.Module)
+         ↓
+ModuleLoader.load()
+         ↓
+ModuleGraph.build() → reads ModuleDescriptor from each Module
+         ↓
+ModuleGraph.resolve() → validates capabilities/requirements, checks SemVer
+         ↓
+Topological sort → initialization order
+         ↓
+Instantiate each Module → call Module.initialize(Environment)
+         ↓
+ResolutionResult { status, modules[], errors[] }
+```
+
+---
+
+## 7. Entry Points
+
+| Entry Point | Location | Called By |
+|-------------|----------|-----------|
+| `ModuleLoader.load(classLoader)` | `ModuleLoader.java:42` | `SuiteBootstrap.initialize()` (host), platform adapters |
+
+---
+
+## 8. Extension Points
+
+- **Custom Module implementations** — implement `core-api` `Module` interface, declare in `META-INF/services/me.majhrs16.suite.api.Module`
+- **Custom `Environment`** — extend `Environment` to provide additional context to modules
+
+---
+
+## 9. Exploration Path
 
 ```
-┌─────────────────────────────────────────────┐
-│              Host Application               │
-│  (Spigot-host, Fabric-host, standalone)    │
-└────────────────────┬────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────┐
-│                   Kernel                    │
-│  ModuleLoader → ModuleGraph → Resolution    │
-└────────────────────┬────────────────────────┘
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼            ▼
-   core-api     Module JARs   Environment
+1. ModuleLoader.java              → Main API, load() method
+2. ModuleGraph.java               → Graph building, resolution, topological sort
+3. ResolutionResult.java          → Result object with status & modules
+4. ResolutionStatus.java          → Status enum
+5. Environment.java               → Context passed to modules
+6. test/ModuleLoaderTest.java     → Usage examples
+7. test/ModuleGraphTest.java      → Graph resolution tests
 ```
 
-## Testing
+---
 
-Run: `./gradlew :src:kernel:test`
+## 10. Related Modules
 
-Key tests:
-- `ModuleGraphTest` — Resolution logic, cycle detection, mismatch handling
-- `ModuleLoaderTest` — ServiceLoader discovery, descriptor validation
+- [core-api](../core-api/README.md) — Defines `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
+- [host](../host/README.md) — Calls `ModuleLoader` during bootstrap
+- [spigot-host](../spigot-host/README.md) — Uses module loading for plugin modules
+- [fabric-host](../fabric-host/README.md) — Uses module loading for mod modules

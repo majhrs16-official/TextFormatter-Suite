@@ -1,67 +1,202 @@
-# TextFormatter Suite — Spigot Host
+# spigot-host — Bukkit/Paper Platform Adapter
 
-## Purpose
+> **Purpose**: Bukkit/Paper plugin implementation. Provides platform-specific SPI implementations (`ActorDirectory`, `ChatDelivery`, `PlaceholderResolver`, `ConfigValidator`) and registers commands/listeners.
 
-The `spigot-host` module is the **Paper/Spigot platform adapter**. It bridges the platform-neutral `host` module to the Paper/Spigot API.
+---
 
-## Key Components
+## 1. Responsibilities
 
-### TextFormatterSuite (Main Plugin)
-- Extends `JavaPlugin`
-- Bootstraps `SuiteHost` on enable
-- Registers event listeners
-- Manages lifecycle (reload, disable)
-- Registers `/suite` command tree
+- **Plugin entry point** — `TextFormatterSuitePlugin` extends `JavaPlugin`
+- **Platform SPI implementations**:
+  - `SpigotActorDirectory` — resolves players/console by name/UUID
+  - `SpigotChatDelivery` — delivers formatted messages to players (Adventure API)
+  - `SpigotPlaceholderResolver` — resolves PlaceholderAPI + internal placeholders
+  - `SpigotConfigValidator` — validates config against Paper/Bukkit specifics
+- **Command registration** — `DynamicCommandRegistrar` registers `DynamicCommand`s
+- **Event listeners** — chat, join, quit, command events
+- **NMS integration** — `NmsLocaleBridge` for player locale detection
+- **Discord bridge** — `DiscordBridge` for Discord SRV integration
+- **Bootstrap extension** — extends `SuiteBootstrap` with Spigot-specific wiring
 
-### Event Listeners
-- `AsyncPlayerChatEvent` — Chat messages (claim modes: cancel-event / clear-recipients)
-- `PlayerJoinEvent` → `MessageType.JOIN` → `join` channel
-- `PlayerQuitEvent` → `MessageType.LEAVE` → `quit` channel
-- `PlayerDeathEvent` → `MessageType.DEATH` → `death` channel
-- `PlayerAdvancementDoneEvent` → `MessageType.ADVANCEMENT` → `advancement` channel
+---
 
-### Platform Adapters
-- `SpigotActorDirectory` — Bukkit player lookup
-- `SpigotChatDelivery` — Adventure Component → `Player.sendMessage()` (main thread hop)
-- `SpigotUserLanguageStore` — Persistent language prefs (file-based)
-- `SpigotPlaceholderResolver` — PlaceholderAPI integration
-- `SpigotScheduler` — Bukkit scheduler wrapper (ms → ticks conversion)
+## 2. Non-Responsibilities
 
-### Commands (`/suite`)
-Dynamic command tree from `commands.yml` v2:
-- `/suite reload` — Reload config
-- `/suite status` — Module status
-- `/suite lang <player> <code>` — Set language
-- `/suite toggle <player>` — Toggle translation
-- `/suite reset <player>` — Reset language
-- `/suite test <full|stress|concurrency>` — Run Tester module
-- `/suite module <install|update|remove|list|info>` — Module Manager
-- `/suite health` — Health check
-- `/suite metrics` — Prometheus metrics
+- **No core formatting logic** — delegates to `textformatter` via `host`
+- **No routing logic** — delegates to `iflow` via `host`
+- **No translation logic** — delegates to `gtranslate`/`ltranslate` via `host`
+- **No sync logic** — delegates to sync modules via `host`
+- **No module loading** — delegates to `kernel` via `host`
 
-### Sync Integrations
-- `JdaDiscordSink` — Discord bot (JDA)
-- `DiscordBridge` — Discord ↔ Minecraft chat mirror (respects iFlow)
-- `WebSocketSyncSink` — Real-time WS endpoints (/ws/chat, /ws/events, /ws/sync, /ws/logs)
-- `HttpSink` / `TcpSink` / `UdpSink` — Generic sync
+---
 
-### Health & Metrics
-- `HealthCheckRegistry` — JVM, threads, sinks
-- `MetricsEndpoint` — `/metrics` (Prometheus), auth token, localhost only
-- `DebugEndpoint` — `/debug/*` (state, channels, rules, sinks), no `/simulate`
+## 3. Dependencies
 
-## Build
+| Dependency | Type | Reason |
+|------------|------|--------|
+| `core-api` | Compile | All SPIs |
+| `kernel` | Compile | Module loading |
+| `host` | Compile | Bootstrap, dispatch, config |
+| `iflow` | Compile | Routing |
+| `textformatter` | Compile | Formatting |
+| `sync-http` | Compile | HTTP sync |
+| `sync-tcpudp` | Compile | TCP/UDP sync |
+| `sync-discord` | Compile | Discord sync |
+| `sync-telegram` | Compile | Telegram sync |
+| `sync-websocket` | Compile | WebSocket sync |
+| `gtranslate` | Compile | Google Translate |
+| `ltranslate` | Compile | LibreTranslate |
+| `messages` | Compile | Message catalog |
+| `observability` | Compile | Metrics |
+| `manager-impl` | Compile | Module manager |
+| `manager-api` | Compile | Manager API |
+| `inworld` | Compile | In-world integration |
+| `extension-api` | Compile | Extension system |
+| `tester` | Compile | Testing utilities (with Spigot exclusion) |
+| `transport` | Compile | Transport layer |
+| `adventure-platform-bukkit` | Compile | Adventure → Bukkit component conversion |
+| `adventure-text-minimessage` | Compile | MiniMessage parsing |
+| `net.dv8tion:JDA` | Compile | Discord bridge |
+| `paper-api` | CompileOnly | Paper API (1.21.4) |
+| `placeholderapi` | CompileOnly | PlaceholderAPI support |
 
-Fat JAR via Shadow plugin:
-```bash
-./gradlew :src:spigot-host:shadowJar
+---
+
+## 4. Consumers
+
+| Consumer | Usage |
+|----------|-------|
+| — (leaf) | Final plugin artifact; no modules depend on this |
+
+---
+
+## 5. Main Components
+
+| Component | Role |
+|-----------|------|
+| `TextFormatterSuitePlugin` | Main plugin class: `onEnable()`, `onDisable()`, bootstrap |
+| `SpigotActorDirectory` | `ActorDirectory` impl: `Bukkit.getPlayer()`, `getConsoleSender()` |
+| `SpigotChatDelivery` | `ChatDelivery` impl: `player.sendMessage(Adventure component)` |
+| `SpigotPlaceholderResolver` | `PlaceholderResolver` impl: PlaceholderAPI + internal |
+| `DynamicCommandRegistrar` | Registers `DynamicCommand` instances from config |
+| `DynamicCommand` | Command wrapper with tab completion, permission, aliases |
+| `SpigotConfigValidator` | Validates config: channels, formats, permissions |
+| `NmsLocaleBridge` | Detects player locale via NMS (version-dependent) |
+| `DiscordBridge` | Discord SRV integration for linked accounts |
+| `SpigotScheduler` | `BukkitScheduler` wrapper for async tasks |
+| `ChannelSelector` | Selects channel based on event context |
+| `EventRules` | Event cancellation/modification rules |
+| `LangSetting` | Player language preference management |
+
+---
+
+## 6. Data Flow
+
+### Bootstrap
+```text
+TextFormatterSuitePlugin.onEnable()
+         ↓
+create SuiteBootstrap (host) with Spigot classloader
+         ↓
+SuiteBootstrap.initialize() → loads all modules
+         ↓
+Register Spigot-specific SPIs:
+  - ActorDirectory → SpigotActorDirectory
+  - ChatDelivery → SpigotChatDelivery
+  - PlaceholderResolver → SpigotPlaceholderResolver
+  - ConfigValidator → SpigotConfigValidator
+         ↓
+ConfigLoader.load() → validate via SpigotConfigValidator
+         ↓
+DynamicCommandRegistrar.registerAll() → commands from config
+         ↓
+Register event listeners:
+  - AsyncPlayerChatEvent → onChat()
+  - PlayerJoinEvent → onJoin()
+  - PlayerQuitEvent → onQuit()
+  - PlayerCommandPreprocessEvent → onCommand()
+         ↓
+Plugin ready
 ```
-Output: `build/libs/textformatter-suite-spigot-<version>.jar`
 
-**Dependencies excluded from fat JAR** — Modules loaded via Manager at runtime.
+### Chat Event Processing
+```text
+AsyncPlayerChatEvent
+         ↓
+onChat(event)
+         ↓
+SpigotActorDirectory.getActor(player) → Actor
+         ↓
+MessageDispatcher.dispatch(rawMessage, actor, channel)
+         ↓ (host pipeline: route → format → translate → sync)
+         ↓
+SpigotChatDelivery.deliver(recipients, formattedMessage)
+         ↓
+Adventure component → Bukkit component → player.sendMessage()
+```
 
-## Testing
+---
 
-Run: `./gradlew :src:spigot-host:test`
+## 7. Entry Points
 
-Requires Paper API 1.21.4-R0.1-SNAPSHOT (compileOnly).
+| Entry Point | Location | Trigger |
+|-------------|----------|---------|
+| `TextFormatterSuitePlugin.onEnable()` | `TextFormatterSuitePlugin.java` | Plugin load |
+| `TextFormatterSuitePlugin.onDisable()` | `TextFormatterSuitePlugin.java` | Plugin unload |
+| `DynamicCommandRegistrar.registerAll()` | `DynamicCommandRegistrar.java` | Bootstrap |
+| `AsyncPlayerChatEvent` listener | `TextFormatterSuitePlugin.java` | Player chat |
+| `PlayerJoinEvent` listener | `TextFormatterSuitePlugin.java` | Player join |
+| `PlayerQuitEvent` listener | `TextFormatterSuitePlugin.java` | Player quit |
+
+---
+
+## 8. Extension Points
+
+| Extension Point | How to Extend |
+|-----------------|---------------|
+| Custom commands | Add `DynamicCommand` to config, or extend `DynamicCommandRegistrar` |
+| Custom placeholders | Extend `SpigotPlaceholderResolver` or register PlaceholderAPI expansion |
+| Custom chat delivery | Implement `ChatDelivery` (host.port), replace in bootstrap |
+| Custom config validation | Extend `SpigotConfigValidator` |
+| Custom NMS bridge | Extend `NmsLocaleBridge` for new MC versions |
+| Additional listeners | Register in `onEnable()` after bootstrap |
+
+---
+
+## 9. Exploration Path
+
+```
+1. TextFormatterSuitePlugin.java      → Plugin entry point, bootstrap
+2. SpigotActorDirectory.java          → ActorDirectory implementation
+3. SpigotChatDelivery.java            → ChatDelivery implementation
+4. SpigotPlaceholderResolver.java     → PlaceholderResolver implementation
+5. DynamicCommandRegistrar.java       → Command registration
+6. DynamicCommand.java                → Command model
+7. SpigotConfigValidator.java         → Config validation
+8. NmsLocaleBridge.java               → NMS locale detection
+9. DiscordBridge.java                 → Discord SRV integration
+10. host/SuiteBootstrap.java          → Shared bootstrap (parent)
+```
+
+---
+
+## 10. Build Notes
+
+- **Shadow JAR** — produces `textformatter-suite-spigot.jar` with only plugin classes (no dependencies)
+- **Dependencies excluded** — all `me.majhrs16:suite-*` and external deps excluded from shadow JAR
+- **Modules loaded remotely** — `manager-impl` loads modules from GitHub at runtime
+- **Java 21** — requires Java 21 toolchain
+
+---
+
+## 11. Related Modules
+
+- [core-api](../core-api/README.md) — All SPIs implemented here
+- [host](../host/README.md) — Shared bootstrap & pipeline
+- [kernel](../kernel/README.md) — Module loading
+- [textformatter](../textformatter/README.md) — Formatting
+- [iflow](../iflow/README.md) — Routing
+- [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation
+- [sync-http](../sync-http/README.md) / [sync-tcpudp](../sync-tcpudp/README.md) / [sync-discord](../sync-discord/README.md) / etc. — Sync
+- [manager-impl](../manager-impl/README.md) — Remote module loading
+- [fabric-host](../fabric-host/README.md) — Fabric equivalent

@@ -1,96 +1,117 @@
-# TextFormatter Suite — Manager
+# manager-impl — Module Manager Implementation
 
-## Purpose
+> **Purpose**: Implements `manager-api` for remote module loading from GitHub. Resolves, downloads, and installs modules at runtime.
 
-The `manager-api` + `manager-impl` modules provide the **runtime Module Manager**:
-- Discovers available modules (GitHub Releases, local files, HTTP)
-- Resolves versions (semver ranges + environment compatibility)
-- Downloads modules with SHA256 verification
-- Manages isolated ClassLoaders (parent-last)
-- Handles install/update/remove/reload via `/suite module` commands
-- SPI-only registration (no instantiation)
+---
 
-## Architecture
+## 1. Responsibilities
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Module Manager                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ Repository  │  │   Version   │  │   Dependency        │ │
-│  │ Abstraction │──▶│  Resolver   │──▶│   Resolver          │ │
-│  │ (GitHub,    │  │ (semver +   │  │ (module.yml from     │ │
-│  │  local,     │  │  env compat)│  │  JAR manifest)      │ │
-│  │  HTTP)      │  │             │  │                     │ │
-│  └─────────────┘  └─────────────┘  └──────────┬──────────┘ │
-│                                                │            │
-│  ┌─────────────┐  ┌─────────────┐  ┌───────────▼────────┐  │
-│  │  Download   │  │   SHA256    │  │   ClassLoader      │  │
-│  │  (verified) │──▶│ Verification│──▶│  (parent-last,    │  │
-│  └─────────────┘  └─────────────┘  │   isolated)        │  │
-│                                    └──────────┬──────────┘  │
-│                                             │              │
-│                                    ┌────────▼────────┐     │
-│                                    │  ModuleRegistry │     │
-│                                    │  register()     │     │
-│                                    │  discoverAll()  │     │
-│                                    └─────────────────┘     │
-└─────────────────────────────────────────────────────────────┘
-```
+- **GitHub module resolution** — `GitHubModuleResolver` finds modules in GitHub releases
+- **Module installation** — downloads JARs, verifies, installs to local repo
+- **Dependency resolution** — resolves transitive dependencies
+- **Lifecycle management** — `ModuleManager` implements `ModuleLifecycle`
+- **Integration with host** — provides modules to `SuiteBootstrap`
 
-## Key Components
+---
 
-### manager-api (SPI)
-- `ModuleCoordinate` — group:artifact:version
-- `ModuleDescriptor` — Extended with repo metadata
-- `Environment` — Host environment (JVM, MC version, contract)
-- `ModuleLifecycle` — SPI for install/update/remove/reload
-- `ModuleManager` — Main interface (install, update, remove, list, info)
+## 2. Non-Responsibilities
 
-### manager-impl (Implementation)
-- `DefaultModuleManager` — Core logic
-- `Repository` implementations:
-  - `GitHubRepository` — GitHub Releases API
-  - `LocalRepository` — `file://` paths
-  - `HttpRepository` — Generic HTTP
-- `VersionResolver` — Semver range matching + env compatibility
-- `DependencyResolver` — Parses `module.yml` from JAR
-- `SHA256Verifier` — Mandatory verification (separate `.sha256` asset)
-- `IsolatedClassLoader` — URLClassLoader, parent-last
-- `ModuleRegistry` — SPI registration + `discoverAll()` for kernel
+- **No local module loading** — `kernel` handles that
+- **No platform-specific code** — pure Java
+- **No UI** — CLI/API only
 
-## Commands
+---
 
-```
-/suite module install <id> [version]     # Install module
-/suite module update <id> [version]      # Update module
-/suite module remove <id>                # Remove module
-/suite module list                       # List installed + available
-/suite module info <id>                  # Show module details
-/suite update                            # Full suite update
-```
+## 3. Dependencies
 
-## Configuration
+| Dependency | Type | Reason |
+|------------|------|--------|
+| `core-api` | Compile | `Module`, `ModuleDescriptor` |
+| `manager-api` | Compile | Implements `ModuleLifecycle`, `ModuleCoordinate` |
+| `kernel` | Compile | `ModuleLoader` for local installation |
+| `host` | Compile | `SuiteHost` integration |
+| `gson` | Compile | GitHub API JSON parsing |
+| `commons-compress` | Compile | JAR handling |
+| `snakeyaml` | Compile | Config parsing |
+| `okhttp` | Compile | GitHub API HTTP client |
 
-`config.yml` repositories section:
-```yaml
-repositories:
-  - name: "github"
-    type: "github"
-    url: "https://api.github.com/repos/majhrs16-official/TextFormatter-Suite"
-    enabled: true
-  - name: "local"
-    type: "local"
-    url: "file:///path/to/modules"
-    enabled: true
+---
+
+## 4. Consumers
+
+| Consumer | Usage |
+|----------|-------|
+| `spigot-host` | Remote module loading at startup |
+| `fabric-host` | Remote module loading at startup |
+
+---
+
+## 5. Main Components
+
+| Component | Role |
+|-----------|------|
+| `ModuleManager` | Main facade: `install(coord)`, `update(coord)`, `resolveDependencies()` |
+| `GitHubModuleResolver` | Queries GitHub releases for module artifacts |
+| `ModuleInstaller` | Downloads, verifies, installs JARs to local Maven repo |
+| `DependencyResolver` | Resolves transitive dependencies from POMs |
+
+---
+
+## 6. Data Flow
+
+```text
+SuiteBootstrap (via host)
+         ↓
+ModuleManager.install(ModuleCoordinate)
+         ↓
+GitHubModuleResolver.findRelease(coord) → release info
+         ↓
+ModuleInstaller.download(assetUrl) → JAR file
+         ↓
+Verify checksum, install to ~/.m2/repository
+         ↓
+ModuleLoader.load() (kernel) → loads installed module
+         ↓
+Module registered in SuiteHost
 ```
 
-## Security
+---
 
-- SHA256 verification **mandatory** (no skip)
-- Manifest validation required (`module.yml` in JAR)
-- Isolated ClassLoaders prevent dependency conflicts
-- Allowlist enforcement (future)
+## 7. Entry Points
 
-## Testing
+| Entry Point | Location | Called By |
+|-------------|----------|-----------|
+| `ModuleManager.install()` | `ModuleManager.java` | `SuiteBootstrap` (host) |
+| `ModuleManager.resolveDependencies()` | `ModuleManager.java` | Bootstrap |
 
-Run: `./gradlew :src:manager-impl:test :src:manager-api:test`
+---
+
+## 8. Extension Points
+
+| Extension Point | How to Extend |
+|-----------------|---------------|
+| Custom repository | Implement custom `ModuleResolver` (Maven Central, etc.) |
+| Custom verification | Extend `ModuleInstaller` with signature verification |
+| Custom storage | Change local repository location |
+
+---
+
+## 9. Exploration Path
+
+```
+1. ModuleManager.java             → Main facade
+2. GitHubModuleResolver.java      → GitHub API integration
+3. ModuleInstaller.java           → JAR download & install
+4. DependencyResolver.java        → Transitive deps
+5. manager-api/ModuleLifecycle.java → Interface implemented
+```
+
+---
+
+## 10. Related Modules
+
+- [manager-api](../manager-api/README.md) — API being implemented
+- [core-api](../core-api/README.md) — Base types
+- [kernel](../kernel/README.md) — Local module loading
+- [host](../host/README.md) — Integration point
+- [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Consumers
