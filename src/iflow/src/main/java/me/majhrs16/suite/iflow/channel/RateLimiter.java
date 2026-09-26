@@ -5,6 +5,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Sliding-window per-second limiter keyed by {@code (channelPath, actorUuid)}.
@@ -19,6 +20,7 @@ public final class RateLimiter {
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final Clock clock;
     private final ScheduledExecutorService purger;
+    private final ReentrantReadWriteLock bucketsLock = new ReentrantReadWriteLock();
 
     private static final long WINDOW_NANOS = 1_000_000_000L;
     private static final long IDLE_NANOS = 5 * WINDOW_NANOS;
@@ -48,22 +50,47 @@ public final class RateLimiter {
      */
     public boolean tryAcquire(String key, int capacity) {
         long now = clock.nanoTime();
-        Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
-        synchronized (bucket) {
-            bucket.refill(now);
-            if (bucket.tokens >= 1F) {
-                bucket.tokens -= 1F;
-                bucket.lastFill = now;
-                return true;
+        Bucket bucket;
+        bucketsLock.readLock().lock();
+        try {
+            bucket = buckets.get(key);
+            if (bucket == null) {
+                bucketsLock.readLock().unlock();
+                bucketsLock.writeLock().lock();
+                try {
+                    bucket = buckets.get(key);
+                    if (bucket == null) {
+                        bucket = new Bucket(capacity);
+                        buckets.put(key, bucket);
+                    }
+                } finally {
+                    bucketsLock.writeLock().unlock();
+                    bucketsLock.readLock().lock();
+                }
             }
-            return false;
+            synchronized (bucket) {
+                bucket.refill(now);
+                if (bucket.tokens >= 1F) {
+                    bucket.tokens -= 1F;
+                    bucket.lastFill = now;
+                    return true;
+                }
+                return false;
+            }
+        } finally {
+            bucketsLock.readLock().unlock();
         }
     }
 
     /** Evicts buckets that have been idle for at least {@link #IDLE_NANOS}. */
     private void purgeIdle(long now) {
         long cutoff = now - IDLE_NANOS;
-        buckets.entrySet().removeIf(e -> e.getValue().lastFill <= cutoff);
+        bucketsLock.writeLock().lock();
+        try {
+            buckets.entrySet().removeIf(e -> e.getValue().lastFill <= cutoff);
+        } finally {
+            bucketsLock.writeLock().unlock();
+        }
     }
 
     public void close() {

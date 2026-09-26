@@ -44,6 +44,19 @@ sonido:
   enabled: true                     # Enable sound effects globally
 chat:
   claim-mode: cancel-event          # How to claim chat events: cancel-event | clear-recipients
+repositories:                       # Module Manager repositories (F12-14)
+  - name: "github"
+    type: "github"
+    url: "https://api.github.com/repos/majhrs16-official/TextFormatter-Suite"
+    enabled: true
+  - name: "local"
+    type: "local"
+    url: "file:///path/to/modules"
+    enabled: false
+  - name: "http"
+    type: "http"
+    url: "https://myserver.com/releases"
+    enabled: false
 ```
 
 ### Configuration Options
@@ -55,6 +68,32 @@ chat:
 | `iflow.engine.parallel` | boolean | `false` | Enable parallel rule processing |
 | `sonido.enabled` | boolean | `true` | Enable sound effects globally |
 | `chat.claim-mode` | string | `cancel-event` | How to handle vanilla chat: `cancel-event` or `clear-recipients` |
+| `repositories[]` | list | `[]` | Module Manager repositories (GitHub, local file://, HTTP) |
+
+### Repository Configuration (F12-14)
+
+The Module Manager supports multiple repository sources with ordered fallback:
+
+```yaml
+repositories:
+  - name: "github"
+    type: "github"                    # github | local | http
+    url: "https://api.github.com/repos/majhrs16-official/TextFormatter-Suite"
+    enabled: true
+  - name: "local"
+    type: "local"
+    url: "file:///path/to/modules"    # file:// for local, or relative path
+    enabled: false
+  - name: "http"
+    type: "http"
+    url: "https://myserver.com/releases"
+    enabled: false
+```
+
+- Repositories are checked in order (first enabled wins)
+- Local repos use `file://` URLs and `releases.json` format
+- HTTP repos use `/releases` endpoint returning JSON array
+- Fallback order allows local testing without GitHub
 
 ## Channel Configuration (channels/*.yml)
 
@@ -134,7 +173,7 @@ pool:
 ```yaml
 # sync/discord.yml
 enabled: true
-token: "YOUR_BOT_TOKEN"              # Discord bot token
+token: "YOUR_BOT_TOKEN"              # Discord bot token (char[] in memory)
 channel: 123456789012345678          # Discord channel ID (snowflake)
 intents:
   - GUILD_MESSAGES
@@ -146,7 +185,7 @@ intents:
 ```yaml
 # sync/telegram.yml
 enabled: true
-token: "YOUR_BOT_TOKEN"              # Telegram bot token
+token: "YOUR_BOT_TOKEN"              # Telegram bot token (char[] in memory)
 chat-id: -1001234567890              # Chat ID (negative for groups)
 hub: false                           # Hub mode (relay between servers)
 ```
@@ -181,23 +220,16 @@ secret: "shared-secret"               # Shared secret for auth
 servers:
   - "server1"
   - "server2"
-mapping: "* -> chat.hub"              # Channel mapping pattern
+mapping: "* -> chat.hub"              # Channel mapping pattern (regex supported)
 ```
 
-## Translator Configuration
+### WebSocket Sync
 
 ```yaml
-# translators/google.yml
-provider: google
-active: true
-
-# translators/libre.yml
-provider: libre
-active: false
-base-url: https://libretranslate.example.com
-api-key: ""
-pool:
-  max-concurrent: 6
+# sync/websocket.yml
+enabled: true
+token: "your-auth-token"              # Auth token for connections
+port: 9092                            # WebSocket server port
 ```
 
 ## iFlow Rules (rules.yml)
@@ -276,27 +308,11 @@ module:
   update.no-module: "Usage: /suite module update <module> [version]"
   remove.no-module: "Usage: /suite module remove <module>"
   info.no-module: "Usage: /suite module info <module>"
-  install.started: "Installing {0}:{1}"
-  update.started: "Updating {0}:{1}"
-  remove.started: "Removing {0}"
-  info: "Info for {0}: {1}"
-module:
-  list.empty: "No modules loaded"
-  list.header: "Loaded modules ({0}):"
-  list.entry: "  - {0} ({1})"
-  install.started: "Installing {0}:{1}"
-  update.started: "Updating {0}:{1}"
-  remove.started: "Removing {0}"
-  info: "Info for {0}: {1}"
-  install.no-module: "Usage: /suite module install <module> [version]"
-  update.no-module: "Usage: /suite module update <module> [version]"
-  remove.no-module: "Usage: /suite module remove <module>"
-  info.no-module: "Usage: /suite module info <module>"
 suite:
   update.started: "Starting full suite update ({0})"
   update.finished: "Suite update completed"
   suite:
-  update.failed: "Update failed: {0}"
+    update.failed: "Update failed: {0}"
 ```
 
 ## Hot Reload
@@ -313,6 +329,10 @@ All configuration files support hot reload. Use `/suite reload` to apply changes
 | `sync/*.yml` | Sink reconnect |
 | `rules.yml` | Rule engine rebuild |
 | `messages.yml` | Message catalog reload |
+
+### Repository Hot Reload
+
+The Module Manager repositories can be reloaded with `/suite reload` - the repository list is re-read from `config.yml` and the discover cache is cleared.
 
 ## Environment Variable Overrides
 
@@ -338,3 +358,17 @@ Common validation errors:
 - Duplicate channel names
 - Invalid language codes
 - Missing required sync fields
+
+## Module Manager Commands
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/suite module list` | List installed/available modules | `textformattersuite.admin` |
+| `/suite module info <module>` | Show module details | `textformattersuite.admin` |
+| `/suite module install <id> [version]` | Install module | `textformattersuite.admin` |
+| `/suite module update <module> [version]` | Update module | `textformattersuite.admin` |
+| `/suite module remove <module>` | Remove module | `textformattersuite.admin` |
+| `/suite update` | Full suite update | `textformattersuite.admin` |
+| `/suite module list --available` | Show all available modules | `textformattersuite.admin` |
+
+The Module Manager uses the configured repositories to discover and install modules. Local testing is supported via `file://` repositories without GitHub.

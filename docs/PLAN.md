@@ -221,8 +221,8 @@
 
 ## PRÓXIMAS ACCIONES CONCRETAS (actualizado 2026-09-24)
 
-### ✅ COMPLETADO (2026-09-24)
-- Module Manager (F12) núcleo: version resolver, dependency resolver (module.yml), SHA256, register() SPI, discoverAll(), manifest validation
+### ✅ COMPLETADO (2026-09-26)
+- Module Manager (F12) núcleo: version resolver, dependency resolver (module.yml), SHA256, register() SPI, discoverAll(), discoverAvailableModules(), manifest validation
 - Security Sprint 3: char[] tokens, MiniEscape completo, PAPI check, SpEL LRU cache (1024), SSRF protection, DependencyVerification (verification-metadata.xml)
 - Fixes críticos: Message.toJson(), DebugEndpoint executor shutdown, ConfigLoader LoadResult, register() SPI-only, SpEL cache, SSRF
 - Repository Abstraction (F12-14): config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
@@ -230,29 +230,41 @@
 - Spigot build: Fix aplicado (Paper API 1.21.4)
 - spigot-host: COMPILA (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry)
 - inworld: COMPILA (InWorldHandler constructor con Server param)
+- loadtest: COMPILA (TranslationService mock con TranslatorManager)
+- Composite build: Todos los módulos usan `project(':src:...')` dependencies
+- spigot-host: COMPILA con project deps (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry)
+- Module Manager local HTTP repository tests (4 tests)
+- Translation cache/dedup tests (15 tests)
+- gtranslate/ltranslate extended tests (edge cases, malformed, unicode, rate limit)
+- E2E pipeline tests (12 tests)
+- SpEL security tests (14 tests)
+- Module Manager local HTTP repository tests (4 tests)
+- **Web Editor Rules Graph Editor**: 8 tipos nodo (input/cond/transform/loop/sleep/output/redirect/channel_redirect), matcher (channel/sender/receiver/direction), condition (SpEL), 10 actions (cancel/skipTranslate/rewrite/sounds/sleep/setLangSource/setLangTarget/setFormatPapi/setChannel), target (DROP/REJECT/LOG/REDIRECT/CHANNEL_REDIRECT), priority, loopBack, round-trip YAML, i18n EN/ES
+- **Gradle dependency locking**: 28 proyectos con gradle.lockfile (root + 27 subproyectos), task `checkLocks` para auditoría
+- **Config schema centralization**: ConfigSchemaGenerator genera paths.json desde ConfigPath enum; generateSchema/verifySchema tasks
 
 ### 🔄 EN PROGRESO
-1. **Sincronización documentación** → PLAN ✅, Release Notes, Wiki, ADR (README actualizado)
-2. **Release pipeline** → GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config, gradle.lockfile portable
+1. **Release pipeline** → GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config
 
 ### ⏳ PENDIENTE
-3. **Tests E2E** → Pipeline completo (Spigot real): chat → iFlow → format → delivery
-4. **GitHub Releases** para Module Manager (F12-2) + sync-velocity
-5. **Translation cache/dedup** (P1 - escalabilidad enorme)
-6. ~~**sync-velocity** implementar real o eliminar stub~~ ✅ **Production-ready**
-7. ~~**spigot-api 1.16.5-R0.1-SNAPSHOT** unavailable → fix build~~ ✅ **Paper API 1.21.4**
+2. **Tests E2E** → Pipeline completo (Spigot real): chat → iFlow → format → delivery
+3. **GitHub Releases** para Module Manager (F12-2) + sync-velocity
+4. ~~**Translation cache/dedup** (P1 - escalabilidad enorme)~~ ✅ **Implementado** (15 tests pasan)
+5. ~~**sync-velocity** implementar real o eliminar stub~~ ✅ **Production-ready**
+6. ~~**spigot-api 1.16.5-R0.1-SNAPSHOT** unavailable → fix build~~ ✅ **Paper API 1.21.4**
+7. ~~**Gradle lockfile portable**~~ ✅ **28 proyectos con gradle.lockfile**
+6. ~~**Web Editor reglas YAML complejas**~~ ✅ **Rules Graph Editor completo**
 
 ---
 
 ## BUGS CONOCIDOS Y DEUDA (actualizado 2026-09-13)
 
-**Web editor:** P0 arreglados ✅. Queda: ampliar opciones YAML para reglas complejas sin perder usabilidad.
+**Web editor:** P0 arreglados ✅. Rules Graph Editor implementado: 8 tipos nodo (input/cond/transform/loop/sleep/output/redirect/channel_redirect), matcher/condition/actions/target/priority, round-trip YAML, i18n EN/ES.
 
-**Java legacy:** bugs trío monolítico moot (eliminado). Arreglados en suite: `RateLimiter` per-key, `HttpSink` idempotente, `TcpSink`/`UdpSink` volatile, `HttpTransport` → `HttpURLConnection`.
+**Java legacy:** bugs trío monolítico moot (eliminado). Arreglados en suite: `RateLimiter` per-key + `ReentrantReadWriteLock`, `HttpSink` idempotente, `TcpSink`/`UdpSink` volatile, `HttpTransport` → `HttpURLConnection` + SSRF `getAllByName`.
 
 **Arquitectura (deuda viva):**
 - Config schema en copias manuales: `paths.json`, `js/paths.js` (duplica paths.json), `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`. → Centralizar generación.
-- Suite sin composite build en `settings.gradle` raíz (hosts consumen jars vía `files()` / mavenLocal hasta composite build).
 - `suite/coretranslator` deprecated → mantener solo para retrocompatibilidad funcional, no para uso nuevo.
 - `sync-velocity` stub en editor/config → ✅ **Implementado production-ready**.
 - `spigot-api 1.16.5-R0.1-SNAPSHOT` unavailable → ✅ **Fix aplicado: Paper API 1.21.4**.
@@ -260,7 +272,7 @@
 **Seguridad (de auditoría A4 2026-09-06):**
 - **INJ-3 (CWE-94)**: `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usa `StandardEvaluationContext`. ✅ **ARREGLADO** — `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU cache 1024.
 - **INJ-4 (CWE-502)**: 4 loaders YAML usan `new Yaml()` (unsafe constructor) → **deserialización arbitraria**. ✅ **ARREGLADO** — `SafeConstructor` en todos los loaders (ConfigLoader, ConfigValidator, CommandsConfigLoader, DefaultModuleLifecycle).
-- **INJ-1**: `MiniEscape` solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`. ✅ **ARREGLADO** — MiniEscape completo implementado.
+- **INJ-1**: `MiniEscape` solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`. ✅ **ARREGLADO** — MiniEscape completo implementado (10 chars).
 - **SEC-1..4**: Tokens Discord, Telegram, LibreTranslate en `String` permanente en heap. ✅ **ARREGLADO** — `char[]` + `Arrays.fill('\0')` en JdaDiscordSink, DiscordSink, TelegramSink, LTranslate.
 - **DOS-1**: `HttpServer` executor unbounded → thread exhaustion. ✅ **ARREGLADO** — Bounded executors con `CallerRunsPolicy`.
 - **DOS-2**: `MessageDispatcher` secuencial en async chat event → lag servidor 200+ jugadores. ✅ **ARREGLADO** — Parallel dispatcher con bounded executor.

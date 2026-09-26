@@ -17,10 +17,10 @@ java {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-manager-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:manager-api')
+    implementation project(':src:kernel')
+    implementation project(':src:host')
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.apache.commons:commons-compress:1.26.0'
     implementation 'org.yaml:snakeyaml:2.3'

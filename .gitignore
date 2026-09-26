@@ -23,4 +23,4 @@ Thumbs.db
 debug.log
 
 # Suite modules (independent repos)
-suite/web-editor/node_modules/
+src/web-editor/node_modules/

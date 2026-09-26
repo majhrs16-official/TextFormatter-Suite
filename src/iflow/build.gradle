@@ -18,15 +18,15 @@ java {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:textformatter')
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
     implementation 'org.springframework:spring-expression:6.1.12'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     implementation 'com.fasterxml.jackson.core:jackson-annotations:2.17.1'
 
-    testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

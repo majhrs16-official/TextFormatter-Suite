@@ -129,7 +129,9 @@ public final class HttpTransport implements Transport {
 
     /**
      * Validates the URL against SSRF deny patterns.
-     * Resolves the host to IP and checks against private/internal ranges.
+     * Resolves the host to all IPs and checks against private/internal ranges.
+     * Uses getAllByName to prevent DNS rebinding attacks where a hostname
+     * resolves to both public and private IPs.
      */
     private void validateUrl(URL url) throws IOException {
         String host = url.getHost();
@@ -138,25 +140,32 @@ public final class HttpTransport implements Transport {
         }
 
         // Check if host is an IP address
-        InetAddress address;
+        InetAddress[] addresses;
         try {
-            address = InetAddress.getByName(host);
+            addresses = InetAddress.getAllByName(host);
         } catch (Exception e) {
             throw new IOException("Failed to resolve host: " + host, e);
         }
 
-        String ip = address.getHostAddress();
-
-        // Check against deny patterns
-        for (Pattern pattern : DENY_PATTERNS) {
-            if (pattern.matcher(ip).matches()) {
-                throw new IOException("SSRF blocked: destination " + ip + " matches deny pattern " + pattern.pattern());
-            }
+        if (addresses.length == 0) {
+            throw new IOException("Failed to resolve host: " + host);
         }
 
-        // Also check if it's a loopback or site-local
-        if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()) {
-            throw new IOException("SSRF blocked: destination " + ip + " is private/internal address");
+        // Check ALL resolved addresses against deny patterns
+        for (InetAddress address : addresses) {
+            String ip = address.getHostAddress();
+
+            // Check against deny patterns
+            for (Pattern pattern : DENY_PATTERNS) {
+                if (pattern.matcher(ip).matches()) {
+                    throw new IOException("SSRF blocked: destination " + ip + " matches deny pattern " + pattern.pattern());
+                }
+            }
+
+            // Also check if it's a loopback or site-local
+            if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()) {
+                throw new IOException("SSRF blocked: destination " + ip + " is private/internal address");
+            }
         }
     }
 

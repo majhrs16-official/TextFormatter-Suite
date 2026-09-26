@@ -1,10 +1,40 @@
-package me.majhrs16.suite.loadtest.integration
+package me.majhrs16.suite.loadtest.integration;
 
-import org.junit.jupiter.params.provider.Arguments
-import java.util.stream.Stream
-import org.junit.jupiter.params.provider.Arguments
-import java.util.UUID
-import java.util.stream.Stream
+import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.message.Actor;
+import me.majhrs16.suite.api.message.MessageType;
+import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.host.SuiteHost;
+import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.iflow.DefaultRouter;
+import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.spi.PluginLogger;
+
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.ArgumentsSource;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.UUID;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+import org.junit.jupiter.params.provider.Arguments;
 
 /**
  * Test data providers for end-to-end integration tests.
@@ -24,7 +54,7 @@ class E2ETestDataProviders {
             Arguments.of("", "Empty message"),
             Arguments.of("Multi\nLine\nMessage", "Multi-line"),
             Arguments.of("Test with 'quotes' and \"double\"", "Quotes")
-        )
+        );
     }
 
     static Stream<Arguments> channelConfigs() {
@@ -35,7 +65,7 @@ class E2ETestDataProviders {
             Arguments.of("quit", "EVENT", true),
             Arguments.of("death", "EVENT", true),
             Arguments.of("advancement", "EVENT", true)
-        )
+        );
     }
 
     static Stream<Arguments> languagePairs() {
@@ -48,14 +78,15 @@ class E2ETestDataProviders {
             Arguments.of("auto", "es"),
             Arguments.of("en", "auto"),
             Arguments.of("auto", "auto")
-        )
+        );
     }
 
-    static void createDefaultConfigs(java.nio.file.Path dir) throws Exception {
-        java.nio.file.Files.createDirectories(dir.resolve("channels"))
-        java.nio.file.Files.createDirectories(dir.resolve("translators"))
-        java.nio.file.Files.createDirectories(dir.resolve("sync"))
+    static void createDefaultConfigs(Path dir) throws Exception {
+        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("translators"));
+        Files.createDirectories(dir.resolve("sync"));
         
+        // Minimal config.yml
         String configYaml = """
             quick-look: true
             general:
@@ -67,9 +98,10 @@ class E2ETestDataProviders {
               enabled: true
             chat:
               claim-mode: cancel-event
-            """
-        java.nio.file.Files.writeString(dir.resolve("config.yml"), configYaml)
+            """;
+        Files.writeString(dir.resolve("config.yml"), configYaml);
 
+        // Default channels
         String channelYaml = """
             name: chat.global
             permission: ""
@@ -82,19 +114,14 @@ class E2ETestDataProviders {
               - "<green>%content%</green>"
             tooltips: []
             sounds: []
-            """
-        java.nio.file.Files.writeString(dir.resolve("channels/chat.global.yml"), channelYaml)
+            """;
+        Files.writeString(dir.resolve("channels/chat.global.yml"), channelYaml);
         
+        // Default translator
         String translatorYaml = """
             provider: google
             active: true
-            """
-        java.nio.file.Files.writeString(dir.resolve("translators/google.yml"), translatorYaml)
-    }
-
-    static class DummyTranslationService implements me.majhrs16.suite.api.spi.TranslationService {
-        @Override public boolean isAvailable() { return true; }
-        @Override public String translate(String text, String from, String to) { return "[TR] " + text; }
-        @Override public String detect(String text) { return "en"; }
+            """;
+        Files.writeString(dir.resolve("translators/google.yml"), translatorYaml);
     }
 }

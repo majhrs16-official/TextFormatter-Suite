@@ -225,10 +225,11 @@ public final class WebSocketSyncSink implements SyncSink {
 
         @Override
         public void onMessage(WebSocket conn, String message) {
-            // Check message size limit
-            if (message.length() > MAX_MESSAGE_SIZE) {
+            // Check message size limit (bytes, not chars)
+            int messageBytes = message.getBytes(StandardCharsets.UTF_8).length;
+            if (messageBytes > MAX_MESSAGE_SIZE) {
                 conn.send(createError("Message too large: max " + MAX_MESSAGE_SIZE + " bytes"));
-                logger.warn("WebSocket message size limit exceeded from " + conn.getRemoteSocketAddress());
+                logger.warn("WebSocket message size limit exceeded from " + conn.getRemoteSocketAddress() + " (" + messageBytes + " bytes)");
                 return;
             }
 

@@ -200,7 +200,7 @@ INPUT → DETECT → PARSE → TRANSFORM → TRANSLATE → FORMAT → SYNC → O
 ## 📚 Documentación relacionada
 - `docs/PLAN.md` — Plan de ejecución vivo
 - `docs/PROMPT.md` — Prompt rector (solo lectura)
-- `docs/PROMPT_NOW.md` — Plan de acción de corto plazo
+- `docs/PLAN.md` — Plan de ejecución vivo
 - `docs/ADR.md` — Decisiones de arquitectura
 - `docs/PLAN.md` — Plan de ejecución vivo
 - `docs/AUDITORIA.md` — Auditoría 2026-08-16

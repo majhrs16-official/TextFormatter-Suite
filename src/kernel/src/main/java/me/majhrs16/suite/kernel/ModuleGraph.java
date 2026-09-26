@@ -185,6 +185,8 @@ public final class ModuleGraph {
         stack.push(module);
         onStack.add(module);
 
+        boolean hasSelfEdge = latent(module, module, active, available);
+
         for (Module other : unresolved) {
             if (other == module) {
                 continue;
@@ -204,6 +206,10 @@ public final class ModuleGraph {
             }
         }
 
+        if (hasSelfEdge) {
+            lowLink.put(module, index.get(module));
+        }
+
         if (lowLink.get(module).equals(index.get(module))) {
             List<Module> component = new ArrayList<>();
             Module member;
@@ -212,7 +218,7 @@ public final class ModuleGraph {
                 onStack.remove(member);
                 component.add(member);
             } while (member != module);
-            if (component.size() > 1) {
+            if (component.size() > 1 || hasSelfEdge) {
                 components.add(component);
             }
         }

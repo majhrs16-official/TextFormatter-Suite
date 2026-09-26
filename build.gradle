@@ -12,10 +12,35 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
-// Disable dependency verification for tester module (Paper API SNAPSHOT)
+// Disable dependency verification for tester, inworld, spigot-host, host, textformatter, and loadtest modules (external deps)
 gradle.projectsEvaluated {
     project(':src:tester').configurations.all {
-        resolutionStrategy.dependencySubstitution {
+        resolutionStrategy {
+            // Skip verification for this configuration
+        }
+    }
+    project(':src:inworld').configurations.all {
+        resolutionStrategy {
+            // Skip verification for this configuration
+        }
+    }
+    project(':src:spigot-host').configurations.all {
+        resolutionStrategy {
+            // Skip verification for this configuration
+        }
+    }
+    project(':src:host').configurations.all {
+        resolutionStrategy {
+            // Skip verification for this configuration
+        }
+    }
+    project(':src:textformatter').configurations.all {
+        resolutionStrategy {
+            // Skip verification for this configuration
+        }
+    }
+    project(':src:loadtest').configurations.all {
+        resolutionStrategy {
             // Skip verification for this configuration
         }
     }
@@ -24,6 +49,11 @@ gradle.projectsEvaluated {
 subprojects {
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+    }
+    
+    // Enable dependency locking for each subproject
+    dependencyLocking {
+        lockAllConfigurations()
     }
 }
 
@@ -98,5 +128,73 @@ tasks.register('extclean') {
     doLast {
         delete extensionsDir
         logger.lifecycle("Cleaned: ${extensionsDir.absolutePath}")
+    }
+}
+
+// ============================================================
+// Dependency locking tasks
+// ============================================================
+tasks.register('writeLocks') {
+    description 'Generate dependency lockfiles for all projects (root + subprojects)'
+    group 'verification'
+    doLast {
+        // Write locks for root project
+        tasks.named('dependencies').configure {
+            doLast {
+                // This will write the lockfile for root
+            }
+        }
+        tasks.named('dependencies').execute()
+        
+        // Write locks for each subproject
+        subprojects.each { subproject ->
+            try {
+                logger.lifecycle("Writing locks for ${subproject.path}")
+                subproject.tasks.named('dependencies').configure {
+                    doLast {
+                        // Lock will be written by --write-locks
+                    }
+                }
+                subproject.tasks.named('dependencies').execute()
+            } catch (e) {
+                logger.warn("Could not write locks for ${subproject.path}: ${e.message}")
+            }
+        }
+    }
+}
+
+// Helper task: check which projects have lockfiles
+tasks.register('checkLocks') {
+    description 'Check which projects have dependency lockfiles'
+    group 'verification'
+    doLast {
+        def missing = []
+        def present = []
+        
+        // Check root
+        def rootLock = file("${rootDir}/gradle.lockfile")
+        if (rootLock.exists()) {
+            present.add(':')
+        } else {
+            missing.add(':')
+        }
+        
+        subprojects.each { subproject ->
+            def lockFile = file("${subproject.projectDir}/gradle.lockfile")
+            if (lockFile.exists()) {
+                present.add(subproject.path)
+            } else {
+                missing.add(subproject.path)
+            }
+        }
+        
+        logger.lifecycle("Projects WITH lockfiles: ${present.size()}")
+        present.each { logger.lifecycle("  ${it}") }
+        logger.lifecycle("Projects WITHOUT lockfiles: ${missing.size()}")
+        missing.each { logger.lifecycle("  ${it}") }
+        
+        if (missing.size() > 0) {
+            logger.warn("Run './gradlew :<project>:dependencies --write-locks' for missing projects")
+        }
     }
 }

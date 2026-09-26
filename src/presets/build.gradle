@@ -17,15 +17,15 @@ java {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:textformatter')
+    implementation project(':src:iflow')
+    implementation project(':src:host')
     implementation 'org.yaml:snakeyaml:2.3'
     implementation 'org.springframework:spring-expression:6.1.12'
     implementation 'org.springframework:spring-beans:6.1.12'
 
-    testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

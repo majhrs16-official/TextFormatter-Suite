@@ -10,8 +10,8 @@
 - ✅ Hexagonal architecture implementation
 
 #### FASE 4: Platform Adapters
-- ✅ Spigot/Paper host (1.20.6+)
-- ✅ Fabric host (1.21+)
+- ✅ Spigot/Paper host (1.20.6+, compiles with Paper API 1.21.4)
+- ✅ Fabric host (1.21+, compiles with Paper API)
 - ✅ Module lifecycle management
 
 #### FASE 5: i18n & Localization
@@ -38,15 +38,17 @@
 - ✅ Configurable base name
 
 #### FASE 9: sync-velocity
-- ✅ Velocity proxy sync
+- ✅ Velocity proxy sync (Production-ready)
 - ✅ Plugin messaging channel
-- ✅ Server mapping
+- ✅ Async queue with retry/backoff
+- ✅ Health checks & metrics
+- ✅ Dynamic discovery & advanced mapping
 
 #### FASE 10: Observability
-- ✅ Prometheus metrics endpoint
-- ✅ Debug endpoints (/debug/simulate, /debug/dump)
-- ✅ Health checks for sinks
-- ✅ JMX metrics
+- ✅ Prometheus metrics endpoint (`/metrics`)
+- ✅ Debug endpoints (`/debug/dump`, `/debug/state`, `/debug/channels`, `/debug/rules`, `/debug/sinks`)
+- ✅ Health checks for sinks (JVM, threads)
+- ✅ Auth token, 127.0.0.1 binding, no CORS
 
 #### FASE 11: Extensions SDK
 - ✅ Extension SPI
@@ -55,16 +57,22 @@
 - ✅ Capability system
 - ✅ Example extension
 
-#### FASE 12: Module Manager
-- ✅ ModuleCoordinate/Descriptor
-- ✅ GitHub releases downloader
-- ✅ Version resolver
-- ✅ Dependency relocator (shade)
+#### FASE 12: Module Manager (F12) — Núcleo Completado
+- ✅ ModuleCoordinate/Descriptor/Environment
+- ✅ ModuleLifecycle SPI
+- ✅ DefaultModuleLifecycle implementation
+- ✅ GitHub releases downloader (con soporte local/HTTP/File)
+- ✅ Version resolver (semver ranges + env compatibility)
+- ✅ Dependency resolver (parsing module.yml from JAR)
+- ✅ Dependency relocator (shade, fixed infinite recursion)
 - ✅ Isolated ClassLoader (parent-last)
-- ✅ SHA256 verification
-- ✅ Force flag for unsupported versions
-- `/suite module` commands
-- `/suite suite update` command
+- ✅ SHA256 verification (mandatory, separate .sha256 asset)
+- ✅ register() SPI-only (no instancia Module)
+- ✅ discoverAll() / discoverAvailableModules() para integración kernel
+- ✅ Manifest validation obligatoria
+- ✅ Force flag para versiones incompatibles
+- ✅ `/suite module` commands (install/update/list/remove/info)
+- ✅ `/suite suite update` command
 
 #### FASE 13: sync-websocket
 - ✅ WebSocket server (Java-WebSocket)
@@ -73,10 +81,11 @@
 - ✅ Subscription management
 - ✅ Log streaming
 - ✅ Integration in spigot-host/fabric-host
+- ✅ SO_REUSEADDR fix
 
-#### FASE 14: Presets & Transform Engine
+#### FASE 14: Presets & TransformEngine
 - ✅ Presets module (standard, rpg, staff, minimal)
-- ✅ TransformEngine (SpEL sandboxed)
+- ✅ TransformEngine with SpEL sandboxed
 - ✅ TransformOps: rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel
 - ✅ PresetManager with YAML import/export
 - ✅ TransformOp hierarchy with Jackson polymorphic serialization
@@ -86,232 +95,75 @@
 - ✅ InWorldHandler for signs, chests, books
 - ✅ WORLD/RADIUS channel types
 - ✅ Click/hover interactions
-- ✅ Glossary/cache system
+- ✅ Glossary/cache system with TTL
 - ✅ SignChangeEvent handling
 - ✅ Container interactions
 - ✅ Written book reading
 - ✅ Click/hover actions (open_url, run_command, etc.)
-- ✅ Glossary/cache system with TTL
 
-#### FASE 13: sync-websocket
-- ✅ WebSocket server (Java-WebSocket)
-- ✅ Endpoints: /ws/chat, /ws/events, /ws/sync, /ws/logs
-- ✅ Auth via token
-- ✅ Subscription management
-- ✅ Inbound/outbound handling
-- ✅ Log streaming
-- ✅ Host integration
+#### Security Sprint 3 — Completado
+| Item | Implementación |
+|------|----------------|
+| Tokens en `char[]` | `JdaDiscordSink`, `DiscordSink`, `TelegramSink`, `LTranslate` usan `char[]` + `Arrays.fill('\0')` |
+| MiniEscape completo | Escapa `< > \ { } [ ] ( ) # @` (10 chars) |
+| PAPI dynamic check | `SpigotPlaceholderResolver.available()` |
+| SpEL LRU cache | `LruExpressionCache` (1024 entradas) en `SpelExpressionEvaluator` |
+| SSRF protection | `HttpTransport` valida IPs contra RFC 1918/3927/6598, loopback, multicast, deny patterns configurables |
+| DependencyVerification | `verification-metadata.xml` con SHA256/SHA512; `dependencyLocking` en build.gradle |
 
-#### FASE 14: Presets & TransformEngine
-- ✅ Built-in presets (standard, rpg, staff, minimal)
-- ✅ TransformEngine with SpEL sandbox
-- ✅ TransformOp: rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel
-- ✅ PresetManager with built-in + custom presets
-- ✅ Jackson polymorphic serialization
-- ✅ engine.parallel knob
+### Fixes Críticos (Auditoría 14/16 sep + fixes 18 sep)
+- **CT-01**: `Message.toJson()` → serialización JSON real (antes `toString()`)
+- **OBS-01**: `DebugEndpoint` executor shutdown en `stop()`
+- **CFG-01**: `ConfigLoader.LoadResult` con errores explícitos, logging ERROR level
+- **MGR-02**: `register()` SPI-only + `discoverAll()` para kernel
+- **SEC-01**: SpEL LRU cache (1024) implementado
+- **SEC-02**: SSRF protection en `HttpTransport` (deny patterns RFC 1918/3927/6598)
+- **ModuleGraph self-cycle**: Detecta self-edges en Tarjan (A→A)
+- **RateLimiter race**: `ReentrantReadWriteLock` entre `tryAcquire` y `purgeIdle`
+- **WebSocket bytes vs chars**: Límite en bytes UTF-8, no chars
+- **SSRF/DNS hardening**: `InetAddress.getAllByName()` para validar todas las IPs resueltas
 
-#### FASE 13: sync-websocket
-- ✅ WebSocket server (Java-WebSocket)
-- Endpoints: /ws/chat, /ws/events, /ws/sync, /ws/logs
-- Auth via token
-- Subscription management
-- Log streaming
-- Host integration
+### Repository Abstraction (F12-14) — Completado
+- `repositories:` en `config.yml` con soporte GitHub, local (`file://`), HTTP
+- Fallback ordenado entre repositorios
+- Testing local sin GitHub requerido
+- `discoverAvailableModules()` funciona con repositorios locales/HTTP
 
-#### FASE 12: Module Manager
-- ModuleCoordinate/Descriptor/Environment
-- ModuleLifecycle SPI
-- DefaultModuleLifecycle implementation
-- GitHub releases downloader
-- Version resolver with ranges
-- Dependency relocator (shade)
-- Parent-last ClassLoader
-- SHA256 verification
-- Force flag for unsupported versions
-- ModuleManager integration in hosts
+### Build & CI
+- ✅ Composite build: todos los módulos usan `project(':src:...')` dependencies
+- ✅ spigot-host compila con project dependencies (Paper API 1.21.4)
+- ✅ loadtest compila (Adventure deps, fixed TranslationService mock)
+- ✅ inworld compila (Paper API 1.21.4)
+- ✅ loadtest compilación arreglada (mock TranslationService con TranslatorManager)
 
-#### FASE 14: Presets & TransformEngine
-- TransformOp hierarchy (rewrite, sounds, sleep, setLang*, etc.)
-- PresetManager with built-in presets
-- TransformEngine with SpEL sandbox
-- engine.parallel knob
-- Jackson polymorphic serialization
-- 4 built-in presets (standard, rpg, staff, minimal)
+### Testing — Completado/Mejorado
+- ✅ 12 tests E2E pipeline en `E2EPipelineTest.java` (chat → iFlow → format → delivery)
+- ✅ 14 tests SpEL security en `SpelExpressionEvaluatorSecurityTest.java`
+- ✅ 15 tests Translation cache/dedup en `TranslationServiceCacheTest.java`
+- ✅ 4 tests Module Manager HTTP repo en `LocalHttpRepositoryTest.java`
+- ✅ 19 tests extendidos GTranslate (edge cases, malformed, unicode, rate limit)
+- ✅ 15 tests extendidos LTranslate (error handling, unicode, rate limit)
+- ✅ Todos los módulos pasan tests (79 tasks successful)
 
-#### FASE 13: sync-websocket
-- WebSocketSyncSink implementation
-- Endpoints: /ws/chat, /ws/events, /ws/sync, /ws/logs
-- Token auth, subscriptions, inbound/outbound
-- Log streaming via /ws/logs
-- Integration in spigot-host/fabric-host
+### Web Editor — Rules Graph Editor (Nuevo en 2.1.0)
+- ✅ **8 tipos de nodo**: input, cond, transform, loop, sleep, output, redirect, channel_redirect
+- ✅ **Matcher completo**: channel, sender, receiver, direction (8 tipos)
+- ✅ **Condition (SpEL)**: textarea con syntax highlighting, ejemplos integrados
+- ✅ **10 Actions**: cancel(), skipTranslate(), rewrite(), sounds(), sleep(), setLangSource(), setLangTarget(), setFormatPapi(), setChannel()
+- ✅ **Target selector**: DROP, REJECT, LOG, REDIRECT, CHANNEL_REDIRECT
+- ✅ **Priority**: 0-10000 (lower = higher priority)
+- ✅ **Loop back**: selector de nodo cond destino
+- ✅ **Round-trip YAML**: import/export sin pérdida de datos
+- ✅ **i18n EN/ES**: 30+ keys traducidas
+- ✅ **Props panel dinámico**: renderizado específico por tipo de nodo
 
-#### FASE 14: Presets & TransformEngine
-- TransformOp hierarchy
-- PresetManager with built-in presets
-- TransformEngine with SpEL sandbox
-- engine.parallel knob
-- Jackson polymorphic serialization
-- 4 built-in presets (standard, rpg, staff, minimal)
+### Build & Dependency Management
+- ✅ **Gradle dependency locking**: 28 proyectos con `gradle.lockfile` (root + 27 subproyectos)
+- ✅ **Task `checkLocks`**: auditoría de lockfiles faltantes
+- ✅ **Config schema centralization**: `ConfigSchemaGenerator` genera `paths.json` desde `ConfigPath` enum
+- ✅ **generateSchema/verifySchema** tasks para validación
 
-#### FASE 12: Module Manager
-- ModuleCoordinate/Descriptor/Environment
-- DefaultModuleLifecycle
-- GitHub releases downloader
-- Version resolver with ranges
-- Dependency relocator (shade)
-- Parent-last ClassLoader
-- SHA256 verification
-- Force flag for unsupported versions
-- ModuleManager integration in hosts
-
-#### FASE 11: Extensions SDK
-- Extension API (Extension, ExtensionContext, ExtensionConfig, ExtensionMetadata)
-- ExtensionManager with discovery, dependency resolution
-- Capability system
-- Example extension
-- ExtensionContext with channel registration, message dispatch, state, events
-
-#### FASE 10: Observability
-- MetricsEndpoint (/metrics Prometheus, /health)
-- DebugEndpoint (/debug/simulate, /debug/dump, /debug/state, /debug/channels, /debug/rules, /debug/sinks)
-- HealthCheckRegistry (JVM, threads, sinks)
-- MetricsCollector (Prometheus metrics)
-- HealthCheckRegistry (JVM, threads, sinks)
-- Dynamic commands: /suite health, /suite metrics
-
-#### FASE 13: sync-websocket
-- WebSocketSyncSink with Java-WebSocket
-- Endpoints: /ws/chat, /ws/events, /ws/sync, /ws/logs
-- Token auth, subscriptions, inbound/outbound
-- Log streaming
-- Host integration
-
-#### FASE 14: Presets & TransformEngine
-- TransformOp hierarchy
-- PresetManager with built-in presets
-- TransformEngine with SpEL sandbox
-- engine.parallel knob
-- Jackson polymorphic serialization
-- 4 built-in presets
-
-#### FASE 12: Module Manager
-- ModuleCoordinate/Descriptor/Environment
-- DefaultModuleLifecycle
-- GitHub releases downloader
-- Version resolver with ranges
-- Dependency relocator (shade)
-- Parent-last ClassLoader
-- SHA256 verification
-- Force flag for unsupported versions
-- ModuleManager integration in hosts
-
-#### FASE 11: Extensions SDK
-- Extension API (Extension, ExtensionContext, ExtensionConfig, ExtensionMetadata)
-- ExtensionManager: discovery, dependency resolution, load/unload/reload
-- Capability system
-- Example extension
-- ExtensionContext: channel registration, message dispatch, state, events, permissions, config, translation
-
-#### FASE 10: Observability
-- MetricsEndpoint (/metrics Prometheus, /health)
-- DebugEndpoint (/debug/simulate, /debug/dump, /debug/state, /debug/channels)
-- HealthCheckRegistry (JVM, threads, sinks)
-- MetricsCollector (Prometheus metrics)
-- Dynamic commands: /suite health, /suite metrics
-- Debug endpoints: /debug/simulate, /debug/dump, /debug/state, /debug/channels
-
-#### FASE 12: Module Manager
-- ModuleCoordinate/Descriptor/Environment
-- DefaultModuleLifecycle
-- GitHub releases downloader
-- Version resolver with ranges
-- Dependency relocator (shade)
-- Parent-last ClassLoader
-- SHA256 verification
-- Force flag for unsupported versions
-- ModuleManager integration in hosts
-
-#### FASE 11: Extensions SDK
-- Extension API (Extension, ExtensionContext, ExtensionConfig, ExtensionMetadata)
-- ExtensionManager: discovery, dependency resolution, load/unload/reload
-- Capability system
-- Example extension
-- ExtensionContext: channel registration, message dispatch, state, events, permissions, config, translation
-
-#### FASE 10: Observability
-- MetricsEndpoint (/metrics Prometheus, /health)
-- DebugEndpoint (/debug/simulate, /debug/dump, /debug/state, /debug/channels)
-- HealthCheckRegistry (JVM, threads, sinks)
-- MetricsCollector (Prometheus metrics)
-- Dynamic commands: /suite health, /suite metrics
-- Debug endpoints: /debug/simulate, /debug/dump, /debug/state, /debug/channels
-
-#### FASE 11: Extensions SDK
-- Extension API (Extension, ExtensionContext, ExtensionConfig, ExtensionMetadata)
-- ExtensionManager: discovery, dependency resolution, load/unload/reload
-- Capability system
-- Example extension
-- ExtensionContext: channel registration, message dispatch, state, events, permissions, config, translation
-
-#### FASE 9: sync-velocity
-- VelocitySink implementation
-- VelocityPlugin entry point
-- Plugin messaging channel
-- Auth via secret
-- Config: enabled, secret, servers[], mapping
-
-#### FASE 8: Dynamic Commands
-- CommandsConfig/Loader
-- DynamicCommandRegistrar/DynamicCommand
-- /suite module (install/update/list/remove/info)
-- /suite suite update
-- Tab completion
-- Fallback legacy
-
-#### FASE 7: ConfigValidator
-- ConfigValidator in host/config
-- Validates config.yml, channels/*.yml, rules.yml, translators/*.yml, sync/*.yml
-- Issues with shape matching editor: [{nivel, grupo, ruta, mensaje}]
-- Integration in spigot-host/fabric-host reloadSuite()
-
-#### FASE 6: iFlow Enhancements
-- CHANNEL_REDIRECT target
-- Rule: condition/action SpEL
-- Rule: redirectChannel
-- DefaultRouter: SpEL condition/action evaluation
-- ScriptSurface: hasPermission, papi, cancel, setLangTarget, redirect, setFormat, skipTranslate, enableTranslate, setLangSource, setLangSource, setColorMode, setFormatPapi, cloneMessage, toJson, typeIs, directionIs
-- TransformOp: rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel
-
-#### FASE 5: i18n
-- MessagesCatalog singleton
-- EN/ES catalogs
-- /suite lang uses MessagesCatalog
-- FabricPlaceholderResolver
-
-#### FASE 4: fabric-host
-- FabricMod entrypoint
-- FabricActorDirectory
-- FabricChatDelivery
-- Loom 1.6.12, mappings 1.21+build.1
-- Tested on Fabric 1.21
-
-#### FASE 3: Core Refactoring
-- TextFormatterSuitePlugin
-- DynamicCommandRegistrar/DynamicCommand
-- ModuleLifecycle integration
-- ConfigValidator integration
-
-#### FASE 2: Architecture
-- Hexagonal architecture
-- SPI system
-- Module system
-- Host abstraction
-
-#### FASE 1: Foundation
-- Core API
-- Module system
-- SPI contracts
-- Gradle multi-module setup
+---
 
 ### Breaking Changes from 2.0.x
 
@@ -322,10 +174,15 @@
 | Sync | New sink interface |
 | Commands | New dynamic command system |
 | Config | New `extensions` section |
+| Module Manager | `register()` SPI-only, `discoverAll()` nuevo |
 
 ### Migration Guide
-
 See [Migration Guide](12-Migration-Guide.md)
+
+---
+
+## Version 2.0.x (Legacy - Monolithic ChatTranslator)
+*See git history for full changelog*
 
 ---
 

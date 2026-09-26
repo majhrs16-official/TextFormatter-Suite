@@ -87,16 +87,23 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     private final ConcurrentMap<String, ClassLoader> moduleClassLoaders = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ModuleDescriptor> loadedModules = new ConcurrentHashMap<>();
     private final PluginLogger logger;
+    private final List<String> moduleAllowlist;
+
     private final List<HostConfig.Repository> repositories;
 
     public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger) {
-        this(cacheDir, logger, List.of());
+        this(cacheDir, logger, List.of(), List.of());
     }
 
     public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger, List<HostConfig.Repository> repositories) {
+        this(cacheDir, logger, repositories, List.of());
+    }
+
+    public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger, List<HostConfig.Repository> repositories, List<String> moduleAllowlist) {
         this.cacheDir = cacheDir.toAbsolutePath();
         this.logger = logger;
         this.repositories = repositories != null ? repositories : List.of();
+        this.moduleAllowlist = moduleAllowlist != null ? moduleAllowlist : List.of();
         try {
             Files.createDirectories(this.cacheDir);
         } catch (IOException e) {
@@ -405,6 +412,12 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             // M5: Validate module manifest before registration
             validateModuleManifest(classLoader, descriptor);
 
+            // Module Allowlist enforcement (pre-load enforcement)
+            if (!moduleAllowlist.isEmpty() && !moduleAllowlist.contains(descriptor.id())) {
+                logger.warn("Module '" + descriptor.id() + "' is not in the allowlist; registration denied");
+                return false;
+            }
+
             // Per Module contract: Module is a descriptor SPI, not a service.
             // Do NOT instantiate the Module class. The module's services activate
             // through their own platform entry points (Spigot plugin / Fabric mod).
@@ -605,17 +618,18 @@ private void validateModuleManifest(ClassLoader classLoader, ModuleDescriptor de
             if (!repo.enabled()) continue;
             
             try {
-                String releaseUrl;
+                JsonArray releases;
                 if ("github".equalsIgnoreCase(repo.type())) {
-                    releaseUrl = getGitHubApiBase() + "/releases";
-                } else if ("local".equalsIgnoreCase(repo.type()) || "http".equalsIgnoreCase(repo.type())) {
-                    releaseUrl = repo.url() + "/releases";
+                    String response = fetchWithRetry(getGitHubApiBase() + "/releases?per_page=100");
+                    releases = JsonParser.parseString(response).getAsJsonArray();
+                } else if ("local".equalsIgnoreCase(repo.type())) {
+                    releases = readLocalReleases(repo.url());
+                } else if ("http".equalsIgnoreCase(repo.type())) {
+                    String response = fetchWithRetry(repo.url() + "/releases?per_page=100");
+                    releases = JsonParser.parseString(response).getAsJsonArray();
                 } else {
                     continue;
                 }
-                
-                String response = fetchWithRetry(releaseUrl + "?per_page=100");
-                JsonArray releases = JsonParser.parseString(response).getAsJsonArray();
 
                 // Collect unique artifacts from all releases
                 Set<String> artifacts = new LinkedHashSet<>();

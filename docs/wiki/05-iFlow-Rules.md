@@ -52,6 +52,7 @@ edges:
 | `sleep` | Delay | Rate limiting, delays |
 | `output` | Message exit | Deliver to channel |
 | `redirect` | Redirect | Forward to another channel |
+| `channel_redirect` | Change channel | CHANNEL_REDIRECT target |
 
 ### Node Properties
 
@@ -76,6 +77,9 @@ edges:
     - skipTranslate()         # Skip translation
   target:                     # For redirect
     channel: staff.alert
+    # Or for CHANNEL_REDIRECT:
+    # target: CHANNEL_REDIRECT
+    # redirectChannel: staff.alert
   transform:                  # For transform nodes
     - op: rewrite
       template: "<green>%content%</green>"
@@ -207,6 +211,19 @@ transform:
     lang: es
   - op: setFormatPapi
     enabled: true
+  - op: setChannel
+    channel: staff.alert
+```
+
+### Targets
+
+```yaml
+target: LOG              # Allow delivery (default)
+target: DROP             # Silent drop
+target: REJECT           # Reject with feedback to sender
+target: REDIRECT         # Redirect to console
+target: CHANNEL_REDIRECT # Redirect to another channel
+redirectChannel: staff.alert  # Required for CHANNEL_REDIRECT
 ```
 
 ## Rule Examples
@@ -284,7 +301,18 @@ transform:
   target: LOG
 ```
 
-### Anti-Caps Lock
+### Channel Redirect
+
+```yaml
+- id: redirect_to_staff
+  kind: cond
+  label: Redirect to Staff
+  matcher:
+    channel: chat.global
+  condition: "#msg.sender.hasPermission('staff.alert')"
+  target: CHANNEL_REDIRECT
+  redirectChannel: staff.alert
+```
 
 ```yaml
 - id: anti_caps
@@ -296,6 +324,42 @@ transform:
     - op: rewrite
       template: "#msg.texts[0].toLowerCase()"
   condition: "#msg.texts[0] == #msg.texts[0].toUpperCase() and #msg.texts[0].length() > 5"
+```
+
+## Testing
+
+### Test Commands
+
+```bash
+# Run all iFlow tests
+./gradlew :src:iflow:test --offline --no-daemon
+
+# Run specific test
+./gradlew :src:iflow:test --tests DefaultRouterTest --offline --no-daemon
+
+# Run iFlow module tests
+./gradlew :src:iflow:test --tests IflowModuleTest --offline --no-daemon
+```
+
+### Test Coverage
+
+The iFlow module includes comprehensive tests:
+- **DefaultRouterTest**: Priority, permissions, rate limits, redirects, conditions
+- **RateLimiterTest**: Token bucket, per-key isolation, refill, purge race fix (`ReentrantReadWriteLock`)
+- **RuleTest**: Matcher patterns, wildcards, direction kinds
+- **IflowModuleTest**: Module descriptor, capabilities, ServiceLoader registration
+
+### Debug Commands
+
+```bash
+# Enable debug logging
+-Dtextformattersuite.debug=true
+
+# Or in-game
+/suite debug rules on
+/suite debug rules trace PlayerName
+/suite debug rules reload
+/suite debug rules test <player> <message>
 ```
 
 ## Graph Structure

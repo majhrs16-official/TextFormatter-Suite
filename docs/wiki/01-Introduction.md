@@ -10,20 +10,20 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 - **Chat Formatting** - Advanced MiniMessage-based formatting with placeholders, gradients, and hover events
 - **Translation** - Multi-provider translation (Google, LibreTranslate) with auto-detection
 - **Message Routing** - iFlow rule engine with SpEL conditions and actions
-- **Cross-platform** - Spigot/Paper and Fabric support
-- **Real-time Sync** - Discord, Telegram, HTTP, TCP/UDP, WebSocket, Velocity
+- **Cross-platform** - Spigot/Paper (1.20.6+) and Fabric (1.21+) support
+- **Real-time Sync** - Discord, Telegram, HTTP, TCP/UDP, WebSocket, Velocity (production-ready)
 
 ### 🏗️ Architecture
 - **Hexagonal Architecture** - Clean separation of core logic from platform adapters
-- **Modular Design** - 22 independent Gradle modules
-- **SPI-based** - ServiceLoader discovery for extensions
-- **Zero-dependency Core** - Core API has zero external dependencies
+- **Modular Design** - 22 independent Gradle modules with composite build
+- **SPI-based** - ServiceLoader discovery for extensions and modules
+- **Zero-dependency Core** - Core API has zero external dependencies (JDK only)
 
 ### ⚡ Performance
-- **Parallel Processing** - Configurable parallel message processing
+- **Parallel Processing** - Configurable parallel message processing (`engine.parallel`)
 - **Memory Optimized** - Object pooling, weak caches, memory pressure handling
-- **Async Processing** - Non-blocking message pipeline
-- **JMH Benchmarked** - Continuous performance regression testing
+- **Async Processing** - Non-blocking message pipeline with bounded executors
+- **JMH Benchmarked** - Continuous performance regression testing with loadtest module
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 ### Installation
 
 #### Spigot/Paper
-1. Download the latest `textformatter-suite-spigot.jar`
+1. Download the latest `textformatter-suite-spigot.jar` (from GitHub Releases)
 2. Place in your server's `plugins/` folder
 3. Start the server - config files will be generated automatically
 4. Configure `plugins/TextFormatterSuite/config.yml` as needed
@@ -44,9 +44,9 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 #### Fabric
 1. Download the latest `textformatter-suite-fabric.jar`
 2. Place in your server's `mods/` folder (requires Fabric Loader 0.16+)
-2. Start the server - config files will be generated in `config/textformatter-suite/`
-3. Configure as needed
-4. Run `/suite reload` to apply changes
+3. Start the server - config files will be generated in `config/textformatter-suite/`
+4. Configure as needed
+5. Run `/suite reload` to apply changes
 
 ### Basic Configuration
 
@@ -74,7 +74,11 @@ chat:
 | `/suite lang [auto\|off\|<code>]` | Set language | `textformattersuite.user` |
 | `/suite toggle` | Toggle translation | `textformattersuite.user` |
 | `/suite reset` | Reset to defaults | `textformattersuite.admin` |
-| `/suite test` | Run test suite | `textformattersuite.admin` |
+| `/suite test [full\|stress\|concurrency]` | Run test suite | `textformattersuite.admin` |
+| `/suite module [install\|update\|list\|remove\|info]` | Module Manager | `textformattersuite.admin` |
+| `/suite suite update` | Full suite update | `textformattersuite.admin` |
+| `/suite health` | Health check | `textformattersuite.admin` |
+| `/suite metrics` | Prometheus metrics | `textformattersuite.admin` |
 
 ## Architecture Overview
 
@@ -95,13 +99,47 @@ chat:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## Module Overview
+
+| Module | Java | Role |
+|--------|------|------|
+| `suite/core-api` | 17 | SPI + model (JDK-only): `Module`, `Message`, `Translator`, `SyncSink`, `ActorDirectory`, `TranslationService` |
+| `suite/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (Tarjan, self-cycle detection, semver) |
+| `suite/textformatter` | 17 | MiniMessage engine, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` translation |
+| `suite/iflow` | 17 | `DefaultRouter`, `Rule`, `RateLimiter` (per-key, `ReentrantReadWriteLock`) |
+| `suite/gtranslate` | 17 | Google Translate provider (web scraping, UA rotation, rate limit) |
+| `suite/ltranslate` | 17 | LibreTranslate provider (self-hosted/public) |
+| `suite/sync-discord` | 17 | Discord v10 (WebSocket + REST), `char[]` tokens |
+| `suite/sync-telegram` | 17 | Telegram Bot, long-poll + watermark, `char[]` tokens |
+| `suite/sync-http` | 17 | Webhook + REST (`HttpServer`), inbound/outbound |
+| `suite/sync-tcpudp` | 17 | TCP/UDP raw, JSON line/datagram |
+| `suite/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, metrics, health, dynamic discovery |
+| `suite/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, subscriptions) |
+| `suite/host` | 17 | Composition root: `SuiteHost`, `MessageDispatcher`, `ConfigLoader` |
+| `suite/messages` | 17 | i18n EN/ES, `MessagesCatalog` singleton |
+| `suite/tester` | 17 | 25 runtime tests + `PerformanceProfiler` |
+| `suite/transport` | 17 | `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`) |
+| `suite/manager-api` | 17 | Module Manager SPI: `ModuleCoordinate`, `ModuleLifecycle`, `Environment` |
+| `suite/manager-impl` | 17 | **Núcleo completado**: GitHub/local/HTTP downloader, version resolver, dependency resolver, SHA256, relocator, isolated ClassLoader, register SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation |
+| `suite/presets` | 17 | Presets (standard, rpg, staff, minimal) + `TransformEngine` (SpEL sandboxed) |
+| `suite/inworld` | 17 | Signs, chests, books (WORLD/RADIUS), click/hover, glossary/cache |
+| `suite/observability` | 17 | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks |
+| `suite/extension-api` | 17 | Extension SPI: `Extension`, `ExtensionContext`, Capability system |
+| `suite/example-extension` | 17 | Demo extension |
+| `suite/loadtest` | 17 | JMH benchmarks + Gatling |
+| `suite/performance` | 17 | Profiling: `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer` |
+| `suite/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, log streaming) |
+
 ## Next Steps
 
 - [Configuration Guide](02-Configuration.md)
 - [Channel Setup](03-Channels.md)
 - [Translation Setup](04-Translation.md)
 - [iFlow Rules](05-iFlow-Rules.md)
-- [Sync Configuration](05-Sync.md)
+- [Sync Configuration](06-Sync.md)
 - [Web Editor](07-Web-Editor.md)
 - [Commands Reference](08-Commands.md)
 - [Developer Guide](09-Developer-Guide.md)
+- [Module Manager](10-Module-Manager.md)
+- [In-World Features](11-In-World.md)
+- [Observability](12-Observability.md)

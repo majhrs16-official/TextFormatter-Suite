@@ -17,14 +17,14 @@ java {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-observability:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:transport')
+    implementation project(':src:observability')
     implementation 'org.java-websocket:Java-WebSocket:1.5.4'
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.json:json:20231013'
 
-    testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

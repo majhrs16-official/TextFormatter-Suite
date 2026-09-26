@@ -19,26 +19,32 @@ import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.api.message.SoundSpec;
-import net.kyori.adventure.text.Component;
 import me.majhrs16.suite.textformatter.template.MiniEscape;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.spi.TranslatorManager;
+import me.majhrs16.suite.api.spi.Translator;
 
-import java.util.Optional;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
@@ -57,50 +63,58 @@ public class MessageProcessingBenchmark {
     private DefaultRouter router;
     private PermissionChecker permissions;
     private RateLimiter rateLimiter;
+    private TranslationService translation;
 
     @Setup(Level.Trial)
     public void setup() throws Exception {
         // Initialize host with default config
         HostConfig config = HostConfig.defaults();
-        
+
         // Setup channels
         ChannelRegistry.Builder builder = ChannelRegistry.builder();
         // Add standard channels
         channels = builder.build();
-        
+
         // Create test actors
         testSender = new Actor(
-            UUID.randomUUID(), "TestPlayer", 
+            UUID.randomUUID(), "TestPlayer",
             Actor.ActorKind.PLAYER, Language.EN, null);
         testRecipient = new Actor(
-            UUID.randomUUID(), "Recipient", 
+            UUID.randomUUID(), "Recipient",
             Actor.ActorKind.PLAYER, Language.ES, null);
 
         // Setup permissions (allow all)
         permissions = (actor, perm) -> true;
 
-        // Create mock translation service (always returns original text, no actual translation)
-        TranslationService mockTranslation = new TranslationService() {
+        // Create mock translator
+        Translator mockTranslator = new Translator() {
             @Override
-            public String translate(String text, Language source, Language target) {
+            public String translate(String text, String sourceLang, String targetLang) {
                 return text;
             }
-            
+
             @Override
-            public Language detect(String text) {
-                return Language.EN;
+            public String detect(String text) {
+                return "en";
             }
-            
+
             @Override
             public boolean isAvailable() {
                 return true;
             }
-            
+
             @Override
-            public String activeName() {
+            public String name() {
                 return "mock";
             }
-        };
+};
+ 
+         // Create TranslatorManager with mock
+         TranslatorManager mockManager = new TranslatorManager();
+         mockManager.add(mockTranslator);
+
+        // Create TranslationService with mock manager
+        translation = new TranslationService(mockManager);
 
         // Create mock placeholder resolver (no-op)
         PlaceholderResolver mockPlaceholders = new PlaceholderResolver() {
@@ -108,7 +122,7 @@ public class MessageProcessingBenchmark {
             public String resolve(Actor actor, String token) {
                 return "";
             }
-            
+
             @Override
             public boolean available() {
                 return false;
@@ -125,62 +139,37 @@ public class MessageProcessingBenchmark {
         };
 
         // Initialize template renderer with mocks
-        renderer = new TemplateRenderer(mockTranslation, mockPlaceholders, mockLogger);
+        renderer = new TemplateRenderer(translation, mockPlaceholders, mockLogger);
 
         // Initialize router
         router = new DefaultRouter(channels, permissions);
 
         // Initialize rate limiter
-        rateLimiter = new RateLimiter(1000);
+        rateLimiter = new RateLimiter();
 
-        // Create a minimal SuiteHost for dispatcher
+        // Create a minimal SuiteHost for dispatcher using bootstrap
         Path tempDir = Files.createTempDirectory("benchmark-config");
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(tempDir, mockLogger);
         ConfigLoader.LoadResult<ChannelRegistry> channelsResult = ConfigLoader.loadChannels(tempDir, mockLogger);
-        
-        // Create mock ChatDelivery
+
+        // Create mock ChatDelivery using plain text components
         ChatDelivery mockDelivery = new ChatDelivery() {
             @Override
             public void deliver(Actor recipient, Component rendered, Message original) {}
-            
+
             @Override
             public void deliverConsole(Component rendered) {}
-            
+
             @Override
             public void playSound(Actor recipient, SoundSpec sound) {}
-            
-            @Override
-            public boolean hasSound(String soundName) {
-                return true;
-            }
-        };
-        
-        // Create mock ChatDelivery for dispatcher (can't use lambda - ChatDelivery not functional interface)
-        final ChatDelivery mockDeliveryForDispatcher = new ChatDelivery() {
-            @Override
-            public void deliver(Actor recipient, Component rendered, Message original) {}
-            
-            @Override
-            public void deliverConsole(Component rendered) {}
-            
-            @Override
-            public void playSound(Actor recipient, SoundSpec sound) {}
-            
+
             @Override
             public boolean hasSound(String soundName) {
                 return true;
             }
         };
 
-        host = new SuiteHost(
-            configResult.config(),
-            channelsResult.config(),
-            mockTranslation,
-            router,
-            me.majhrs16.suite.textformatter.TextFormatters.create(channelsResult.config(), mockTranslation, mockPlaceholders, mockLogger),
-            mockLogger,
-            mockDeliveryForDispatcher
-        );
+        host = SuiteHost.bootstrap(tempDir, permissions, translation, mockPlaceholders, mockLogger, mockDelivery);
 
         // Create mock ActorDirectory
         ActorDirectory mockActorDirectory = new ActorDirectory() {
@@ -188,7 +177,7 @@ public class MessageProcessingBenchmark {
             public List<Actor> onlinePlayers() {
                 return List.of(testRecipient);
             }
-            
+
             @Override
             public Optional<Actor> byUuid(UUID uuid) {
                 if (testRecipient.uuid().equals(uuid) || testSender.uuid().equals(uuid)) {
@@ -196,14 +185,14 @@ public class MessageProcessingBenchmark {
                 }
                 return Optional.empty();
             }
-            
+
             @Override
             public Optional<Actor> byName(String name) {
                 if ("TestPlayer".equals(name)) return Optional.of(testSender);
                 if ("Recipient".equals(name)) return Optional.of(testRecipient);
                 return Optional.empty();
             }
-            
+
             @Override
             public Actor console() {
                 return new Actor(UUID.randomUUID(), "CONSOLE", Actor.ActorKind.CONSOLE, Language.EN, null);
@@ -212,10 +201,10 @@ public class MessageProcessingBenchmark {
 
         // Initialize dispatcher with test config
         dispatcher = new MessageDispatcher(
-            host, 
-            mockActorDirectory, 
-            (actor, msg) -> {}, 
-            permissions, 
+            host,
+            mockActorDirectory,
+            mockDelivery,
+            permissions,
             mockLogger
         );
     }
@@ -224,6 +213,9 @@ public class MessageProcessingBenchmark {
     public void teardown() {
         if (dispatcher != null) {
             dispatcher.close();
+        }
+        if (rateLimiter != null) {
+            rateLimiter.close();
         }
     }
 
@@ -427,18 +419,18 @@ public class MessageProcessingBenchmark {
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     public void dispatcherMultipleRecipients(Blackhole bh) {
         // Create multiple recipients
-        var recipients = new java.util.ArrayList<me.majhrs16.suite.api.message.Actor>();
+        var recipients = new ArrayList<Actor>();
         for (int i = 0; i < 50; i++) {
-            recipients.add(new me.majhrs16.suite.api.message.Actor(
-                UUID.randomUUID(), "Player" + i, 
-                me.majhrs16.suite.api.message.Actor.ActorKind.PLAYER, 
+            recipients.add(new Actor(
+                UUID.randomUUID(), "Player" + i,
+                Actor.ActorKind.PLAYER,
                 Language.EN, null));
         }
 
         Message message = Message.builder()
             .type(MessageType.CHAT)
             .sender(testSender)
-            .direction(me.majhrs16.suite.api.message.Direction.all())
+            .direction(Direction.all())
             .channel("chat.global")
             .text("Broadcast message")
             .build();
@@ -482,16 +474,16 @@ public class MessageProcessingBenchmark {
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     public void channelLoadYaml(Blackhole bh) {
-        var channel = me.majhrs16.suite.textformatter.channel.Channel.builder("test.channel")
+        var channel = Channel.builder("test.channel")
             .permission("test.permission")
-            .type(me.majhrs16.suite.textformatter.channel.Channel.Type.CHAT)
+            .type(Channel.Type.CHAT)
             .showSender(true)
             .rateLimitPerSecond(10)
-            .langSource(me.majhrs16.suite.api.message.Language.AUTO)
-            .langTarget(me.majhrs16.suite.api.message.Language.AUTO)
+            .langSource(Language.AUTO)
+            .langTarget(Language.AUTO)
             .messages(new me.majhrs16.suite.api.message.Formats(
                 new String[0], new String[]{"<green>%content%</green>"}))
-            .sounds(List.of(new me.majhrs16.suite.api.message.SoundSpec("test.mp3", 1.0f, 1.0f)))
+            .sounds(List.of(new SoundSpec("test.mp3", 1.0f, 1.0f)))
             .build();
         bh.consume(channel);
     }

@@ -225,6 +225,91 @@ The editor is automatically deployed to: `https://majhrs16-official.github.io/Te
 - **Fan-out**: One node → multiple outputs
 - **Cycles**: Allowed (max-steps guard)
 
+### Rules Graph Editor (v2.1.0)
+
+The **Rules** view provides a dedicated visual editor for complex iFlow rules.yml configurations.
+
+#### Accessing Rules Graph
+1. Click **iFlow** in the rail
+2. Switch sidebar to **Rules** tab (Groups ▸ Palette ▸ **Rules** ▸ Extensions)
+3. Use the Rules palette (8 node kinds) and Guard configuration panel
+
+#### Node Types
+
+| Node | Icon | Description | Key Properties |
+|------|------|-------------|----------------|
+| Input | 📥 | Message entry point | Channel |
+| Condition | ⬢ | SpEL filter + actions | Matcher (channel/sender/receiver/direction), Condition (SpEL), Actions (10), Target, Priority |
+| Transform | 🔄 | Rewrite, sounds, sleep | Transforms[] (8 ops) |
+| Loop | 🔄 | Retry/loop logic | Loop back to (cond node) |
+| Sleep | 😴 | Delay | Milliseconds |
+| Output | 📤 | Deliver to channel | Channel |
+| Redirect | ➡️ | Forward to channel | Target channel |
+| Channel Redirect | ↷ | Change message channel | Target channel, Redirect channel |
+
+#### Condition Node — Full Editor
+
+The Condition node has the most comprehensive properties panel:
+
+**Matcher** (all optional, AND logic):
+- **Channel** — exact or glob (e.g., `chat.global`, `staff.*`)
+- **Sender** — player name pattern
+- **Receiver** — recipient name pattern
+- **Direction** — INITIATOR, OTHERS, ALL, CONSOLE, WORLD, RADIUS, PERMISSION, SPECIFIC
+
+**Condition (SpEL)**:
+- Spring Expression Language with context: `#msg.texts[0]`, `#msg.sender`, `#msg.channel`, etc.
+- Example: `'spam' in #msg.texts[0]` or `#msg.sender.hasPermission('admin')`
+
+**Actions** (10 available):
+| Action | Description |
+|--------|-------------|
+| `cancel()` | Discard message |
+| `skipTranslate()` | Bypass translation |
+| `rewrite(template)` | Replace message text |
+| `sounds(add, remove)` | Add/remove sounds |
+| `sleep(ms)` | Delay processing |
+| `setLangSource(lang)` | Force source language |
+| `setLangTarget(lang)` | Force target language |
+| `setFormatPapi(true)` | Enable PAPI placeholders |
+| `setChannel(path)` | Change message channel |
+
+**Target** (disposition):
+- **DROP** — Silent discard
+- **REJECT** — Reject with feedback
+- **LOG** — Log but deliver
+- **REDIRECT** — Forward to target channel
+- **CHANNEL_REDIRECT** — Change message channel path
+
+**Priority**: 0-10000 (lower = higher priority, evaluated first)
+
+#### Loop Node
+- **Loop back to**: Select a Condition node to create retry loops
+- **Priority**: Execution order
+
+#### Sleep Node
+- **Milliseconds**: Delay before continuing (0-60000ms)
+- **Priority**: Execution order
+
+#### Transform Node
+Uses the existing Transform Operations panel (8 ops):
+- `rewrite` — MiniMessage template
+- `sounds` — Add/remove sound names
+- `sleep` — Milliseconds delay
+- `setLangSource` / `setLangTarget` — Language override
+- `setColorMode` — GRADIENT/SOLID/NONE
+- `setFormatPapi` — Enable PAPI
+- `setChannel` — Channel override
+
+#### Guard Configuration (Sidebar → Rules)
+- **Max steps**: 1-2048 (default 512) — prevents infinite loops
+- **Dedup fan-out**: true/false — deduplicate fan-out messages
+
+#### Round-trip YAML
+- Rules graph ↔ `rules.yml` with zero data loss
+- All properties preserved: matcher, condition, actions, target, priority, loopBack, redirects
+- Schema v2.2 manifest validation
+
 ## Import/Export Details
 
 ### Export Formats

@@ -23,7 +23,8 @@ public record HostConfig(
         boolean soundEnabled,
         ClaimMode claimMode,
         boolean logChatToConsole,
-        List<Repository> repositories
+        List<Repository> repositories,
+        List<String> moduleAllowlist
 ) {
 
     /** How the adapter claims a vanilla chat event. */
@@ -44,6 +45,6 @@ public record HostConfig(
     ) {}
 
     public static HostConfig defaults() {
-        return new HostConfig(true, Language.EN, false, true, ClaimMode.CANCEL_EVENT, true, List.of());
+        return new HostConfig(true, Language.EN, false, true, ClaimMode.CANCEL_EVENT, true, List.of(), List.of());
     }
 }

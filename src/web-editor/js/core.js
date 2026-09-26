@@ -11,11 +11,11 @@
     UI.view = v;
     document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.dataset.view === v));
     const tb2 = Suite.views.Dock?.toolbar2 || { docked: true };
-    document.querySelector('#toolbar2').style.display = v === 'iflow' || v === 'txf' || !tb2.docked ? '' : 'none';
+    document.querySelector('#toolbar2').style.display = v === 'iflow' || v === 'txf' || v === 'rules' || !tb2.docked ? '' : 'none';
     Suite.views.renderSidebar();
     Suite.views.renderPalette();
-    if (v === 'iflow') {
-      Suite.views.renderCanvas('iflow');
+    if (v === 'iflow' || v === 'rules') {
+      Suite.views.renderCanvas(v);
     }
     if (v === 'txf') {
       Suite.views.renderTxf();
@@ -41,6 +41,7 @@
       perm: 'Perms',
       kernel: 'Kernel',
       preview: 'Preview',
+      rules: 'Rules Graph',
     };
     c.textContent = map[UI.view] || UI.view;
   }
@@ -52,8 +53,8 @@
     $('#undoBtn').disabled = !StateStore.canUndo();
     $('#redoBtn').disabled = !StateStore.canRedo();
     Suite.views.renderStatus(changedPaths);
-    if (UI.view === 'iflow') {
-      Suite.views.renderCanvas('iflow');
+    if (UI.view === 'iflow' || UI.view === 'rules') {
+      Suite.views.renderCanvas(UI.view);
       Suite.views.renderProps();
     } else if (UI.view === 'txf') {
       Suite.views.renderTxf();
@@ -72,8 +73,8 @@
     Suite.views.renderKernel();
     Suite.views.renderConfigValues();
     Suite.views.buildCrumbs();
-    if (UI.view === 'iflow') {
-      Suite.views.renderCanvas('iflow');
+    if (UI.view === 'iflow' || UI.view === 'rules') {
+      Suite.views.renderCanvas(UI.view);
     } else if (UI.view === 'txf') {
       Suite.views.renderTxf();
     }

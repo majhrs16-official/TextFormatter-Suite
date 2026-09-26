@@ -18,17 +18,21 @@ java {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-gtranslate:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-ltranslate:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-transport:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:textformatter')
+    implementation project(':src:iflow')
+    implementation project(':src:gtranslate')
+    implementation project(':src:ltranslate')
+    implementation project(':src:transport')
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
     implementation 'org.yaml:snakeyaml:2.2'
 
-    implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    implementation project(':src:kernel')
+
+    // For ConfigSchemaGenerator
+    implementation 'com.google.code.gson:gson:2.11.0'
+
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -73,3 +77,44 @@ jacocoTestCoverageVerification {
     } }
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
+
+// Generate schema files for web editor (paths.json, schema-v2.2.md)
+tasks.register('generateSchema', JavaExec) {
+    group = 'build'
+    description = 'Generate web editor schema files from ConfigPath enum'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'me.majhrs16.suite.host.config.ConfigSchemaGenerator'
+    args = [rootProject.layout.buildDirectory.dir('generated-schema').get().asFile.absolutePath]
+    doFirst {
+        // Ensure output directory exists
+        rootProject.layout.buildDirectory.dir('generated-schema').get().asFile.mkdirs()
+    }
+    doLast {
+        // Copy generated files to web-editor
+        def srcDir = rootProject.layout.buildDirectory.dir('generated-schema').get().asFile
+        def destDir = file('src/main/resources/web-editor-schema')
+        copy {
+            from srcDir
+            into destDir
+        }
+    }
+}
+
+// Also add a task to verify schema is up-to-date
+tasks.register('verifySchema', JavaExec) {
+    group = 'verification'
+    description = 'Verify generated schema matches web-editor'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'me.majhrs16.suite.host.config.ConfigSchemaGenerator'
+    args = [rootProject.layout.buildDirectory.dir('generated-schema-verify').get().asFile.absolutePath]
+    doFirst {
+        rootProject.layout.buildDirectory.dir('generated-schema-verify').get().asFile.mkdirs()
+    }
+    doLast {
+        def generated = file(rootProject.layout.buildDirectory.dir('generated-schema-verify').get().asFile.absolutePath + '/paths.json')
+        def existing = file('src/main/resources/web-editor-schema/paths.json')
+        if (!generated.text.equals(existing.text)) {
+            throw new GradleException('Schema out of date! Run :src:host:generateSchema to update.')
+        }
+    }
+}

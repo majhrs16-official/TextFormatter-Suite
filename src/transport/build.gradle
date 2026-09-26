@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
     implementation 'org.json:json:20231013'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')

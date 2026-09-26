@@ -91,8 +91,9 @@ public final class ConfigLoader {
             HostConfig.ClaimMode claimMode = claimMode(nested(map, ConfigPath.CHAT, ConfigPath.CHAT_CLAIM_MODE));
             boolean logChatToConsole = bool(nested(map, ConfigPath.CHAT, ConfigPath.CHAT_LOG_TO_CONSOLE), true);
             List<HostConfig.Repository> repositories = parseRepositories(map, logger);
+            List<String> moduleAllowlist = parseModuleAllowlist(map);
 
-            return LoadResult.success(new HostConfig(quickLook, defaultLang, parallel, sound, claimMode, logChatToConsole, repositories));
+            return LoadResult.success(new HostConfig(quickLook, defaultLang, parallel, sound, claimMode, logChatToConsole, repositories, moduleAllowlist));
         } catch (IOException | RuntimeException e) {
             String msg = "Failed to load config.yml: " + e.getMessage();
             if (logger != null) logger.error(msg, e);
@@ -338,5 +339,21 @@ public final class ConfigLoader {
             }
         }
         return repositories;
+    }
+
+    private static List<String> parseModuleAllowlist(Map<String, Object> map) {
+        Object allowlistObj = map.get("module-allowlist");
+        if (allowlistObj instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<Object> list = (List<Object>) allowlistObj;
+            List<String> result = new ArrayList<>();
+            for (Object item : list) {
+                if (item instanceof String) {
+                    result.add((String) item);
+                }
+            }
+            return result;
+        }
+        return List.of();
     }
 }

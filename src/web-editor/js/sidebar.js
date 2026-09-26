@@ -17,6 +17,18 @@ const EXTENSION_GROUPS = {
   unloaded: 0,
 };
 
+const RULE_KINDS = ['input', 'cond', 'transform', 'loop', 'sleep', 'output', 'redirect', 'channel_redirect'];
+const RULE_KIND_COLORS = {
+  input: 'var(--green)',
+  cond: 'var(--amber)',
+  transform: 'var(--purple)',
+  loop: 'var(--blue)',
+  sleep: 'var(--red)',
+  output: 'var(--green)',
+  redirect: 'var(--red)',
+  channel_redirect: 'var(--red)',
+};
+
   function renderSidebar() {
     const sb = $('#sidebarBody');
     const st = StateStore.getState();
@@ -37,12 +49,17 @@ const EXTENSION_GROUPS = {
         t('palette') +
         '</span>' +
         '<span class="' +
+        (UI.side === 'rules' ? 'on' : '') +
+        '" data-side="rules">' +
+        t('rules') +
+        '</span>' +
+        '<span class="' +
         (UI.side === 'extensions' ? 'on' : '') +
         '" data-side="extensions">' +
         t('extensions') +
         '</span>' +
         '</div>' +
-        (UI.side === 'groups' ? groupsPane() : UI.side === 'extensions' ? extensionsPane() : palettePane());
+        (UI.side === 'groups' ? groupsPane() : UI.side === 'rules' ? rulesPane() : UI.side === 'extensions' ? extensionsPane() : palettePane());
       sb.dataset.side = UI.side;
       // Re-bind event handlers
       sb.querySelectorAll('[data-side]').forEach(
@@ -276,6 +293,27 @@ const EXTENSION_GROUPS = {
     return h;
   }
 
+  function rulesPane() {
+    let h = '<div class="sgroup"><h4>' + t('palette_kinds') + '</h4><div style="display:grid;gap:5px;padding:4px">';
+    for (const k of RULE_KINDS) {
+      h +=
+        '<div class="pal-item" draggable="true" data-kind="' +
+        k +
+        '" style="justify-content:flex-start"><span class="dot" style="background:' +
+        RULE_KIND_COLORS[k] +
+        '"></span>' +
+        t('kind_' + k) +
+        '</div>';
+    }
+    h += '</div></div><div class="sgroup"><h4>' + t('rules_guard') + '</h4><div style="padding:4px">';
+    h += '<label style="font-size:11px">' + t('max_steps') + '</label>';
+    h += '<input type="number" class="tinp" id="guardMaxSteps" style="width:100%;margin-top:2px" value="512" min="1" max="2048">';
+    h += '<label style="font-size:11px;margin-top:6px">' + t('dedup_fanout') + '</label>';
+    h += '<input type="checkbox" id="filterDedupFanout" style="margin-top:2px" checked>';
+    h += '</div></div>';
+    return h;
+  }
+
   function onPalDrag(e) {
     const item = e.target.closest('.pal-item');
     const kind = item.dataset.kind;
@@ -414,7 +452,7 @@ const EXTENSION_GROUPS = {
       });
       Suite.utils.toast(t('toast_added'), 'ok');
     }
-  }
+  },
 
   function channelSpec(name) {
     const st = StateStore.getState();
@@ -423,7 +461,7 @@ const EXTENSION_GROUPS = {
     spec.name = name;
     spec.messages = ['&7👉 &f%player_name%&7: %content%'];
     return spec;
-  }
+  },
 
   function renderPalette() {
     const vp = document.querySelector('.viewport[data-canvas="iflow"]');
@@ -441,7 +479,7 @@ const EXTENSION_GROUPS = {
     }
     stage.querySelectorAll('.node').forEach(n => Suite.views.bindNode(n));
     Suite.views.drawEdges(stage);
-  }
+  },
 
   global.Suite = global.Suite || {};
   global.Suite.views = global.Suite.views || {};
@@ -449,6 +487,7 @@ const EXTENSION_GROUPS = {
     renderSidebar,
     groupsPane,
     palettePane,
+    rulesPane,
     onPalDrag,
     addChannelPrompt,
     channelSpec,
@@ -461,5 +500,8 @@ const EXTENSION_GROUPS = {
     showExtensionConfig,
     GROUPS,
     EXTENSION_GROUPS,
+    RULE_KINDS,
+    RULE_KIND_COLORS,
   });
+});
 })(window || this);

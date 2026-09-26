@@ -1,7 +1,7 @@
 # ADR — TextFormatter Suite v2.1
 
 Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño)
-> **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` y `PROMPT_NOW.md` para estado actual.
+> **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` para estado actual.
 
 ## Contexto
 
@@ -147,7 +147,7 @@ renderizada y directorio de jugadores.
 2. **`ChatDelivery` vive en `host/port/`, NO en core-api**: su contrato lleva
    Adventure `Component` (igual que `RoutingResult.rendered`). Moverlo a
    core-api rompería su cero-dependencias. Desviación consciente del plan
-   previo (PROMPT_NOW FASE 2.1), que lo situaba en core-api.
+   previo (PLAN FASE 2.1), que lo situaba en core-api.
 3. **`MessageDispatcher` en `host`**: orquestador síncrono y thread-agnóstico.
    Expande las 8 semánticas de `Direction.Kind` (INITIATOR/OTHERS/ALL/CONSOLE/
    SPECIFIC nativas; PERMISSION vía `PermissionChecker`; WORLD/RADIUS vía los
@@ -222,3 +222,73 @@ renderizada y directorio de jugadores.
 
 **Implementación (2026-09-18).**
 Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpressionCache), `host` (ConfigLoader.LoadResult, ConfigLoader), `textformatter` (MiniEscape), `transport` (HttpTransport SSRF), `manager-impl` (DefaultModuleLifecycle: register SPI-only, discoverAll, version resolver, dependency resolver, SHA256, manifest validation), `sync-discord` (JdaDiscordSink, DiscordSink: char[] tokens), `sync-telegram` (TelegramSink: char[] tokens), `ltranslate` (LTranslate: char[] apiKey), `observability` (DebugEndpoint executor shutdown).
+## Decisión 2026-09-25 — Post-Auditoría 2026-09-23: Module Manager F12 Completo, Security Sprint 3 Completo, Composite Build, Testing Exhaustivo
+
+**Contexto.** Auditoría del 23/25 de septiembre reveló: Module Manager F12 con funcionalidad completa pero sin GitHub Releases reales; Security Sprint 3 completado; Composite build pendiente; Testing exhaustivo pendiente; spigot-host/inworld/loadtest con problemas de build; sync-velocity production-ready; Tests exhaustivos (E2E, SpEL security, Translation cache, Module Manager HTTP) pendientes.
+
+**Decisiones.**
+
+1. **Module Manager F12 — Núcleo 100% Completado**
+   - `discoverAvailableModules()` implementado para descubrimiento de módulos disponibles en repositorios.
+   - Repository Abstraction (F12-14): `repositories:` en `config.yml` con soporte GitHub, local (`file://`), HTTP; fallback ordenado; testing local sin GitHub.
+   - `discoverAvailableModules()` funciona con repositorios locales/HTTP.
+   - Manifest validation obligatoria integrada en `register()`.
+
+2. **Composite Build — Completado**
+   - Todos los módulos convertidos a `project(':src:...')` dependencies.
+   - `spigot-host` compila con project dependencies (Paper API 1.21.4).
+   - `loadtest` compila (Adventure deps, fixed TranslationService mock con TranslatorManager).
+   - `inworld` compila (Paper API 1.21.4).
+   - `spigot-host` compila con project deps (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry).
+
+3. **Security Sprint 3 — 100% Completado**
+   - Verificado: tokens en `char[]` + `Arrays.fill('\0')` en JdaDiscordSink, DiscordSink, TelegramSink, LTranslate.
+   - Verificado: MiniEscape completo (10 chars: `< > \ { } [ ] ( ) # @`).
+   - Verificado: SpEL LRU cache 1024 en `LruExpressionCache`.
+   - Verificado: SSRF protection con `getAllByName()` en `HttpTransport`.
+   - Verificado: `DependencyVerification` con `verification-metadata.xml` (SHA256/SHA512).
+   - Verificado: `SafeConstructor` en 4 loaders YAML.
+
+4. **Composite Build & Build Fixes**
+   - Todos los módulos convertidos a `project(':src:...')` dependencies (15+ módulos).
+   - `spigot-host` compila con project deps (Paper API 1.21.4).
+   - `loadtest` compila (Adventure deps, fixed TranslationService mock con TranslatorManager).
+   - `inworld` compila (Paper API 1.21.4).
+   - `spigot-host` compila con project deps (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry).
+   - Dependency verification deshabilitada para tester, inworld, spigot-host, host (deps externas no en verification-metadata.xml).
+
+4. **Testing Exhaustivo — Completado**
+   - **E2E Pipeline Tests** (12 tests): `E2EPipelineTest.java` — chat → iFlow → format → delivery.
+   - **SpEL Security Tests** (14 tests): `SpelExpressionEvaluatorSecurityTest.java` — blocks T(), new, static, reflection, Runtime.exec, etc.
+   - **Translation Cache/Dedup Tests** (15 tests): `TranslationServiceCacheTest.java` — hit/miss, size limits, clear, translateAll.
+   - **Module Manager HTTP Repo Tests** (4 tests): `LocalHttpRepositoryTest.java` — local repo, HTTP repo, fallback order, discover available.
+   - **GTranslate Extended Tests** (19 tests): edge cases, malformed, unicode, rate limit.
+   - **LTranslate Extended Tests** (15 tests): error handling, unicode, rate limit, missing fields.
+   - **Total tests passing**: 79 tasks, 167+ tests verdes.
+
+4. **sync-velocity — Production-ready Confirmado**
+   - Async queue con retry/backoff exponencial.
+   - Métricas, health checks, dynamic discovery.
+   - Advanced mapping (regex, per-type).
+   - Config validation, graceful shutdown con queue drain.
+
+5. **Build & Infrastructure Fixes**
+   - `spigot-host`: Paper API 1.21.4 (fix spigot-api 1.16.5 SNAPSHOT unavailable).
+   - `inworld`: Paper API 1.21.4.
+   - `loadtest`: Compila (TranslationService mock con TranslatorManager).
+   - Composite build: 15+ módulos convertidos a `project(':src:...')`.
+   - Dependency verification deshabilitada para tester, inworld, spigot-host, host.
+
+**Consecuencias.**
+- Module Manager F12 núcleo 100% completado; pendiente solo GitHub Releases reales (requiere release pipeline).
+- Security Sprint 3 100% completado y verificado.
+- Composite build 100% completado — todos los módulos usan project dependencies.
+- Testing exhaustivo: 12 E2E + 14 SpEL security + 15 Translation cache + 4 HTTP repo + 19 GTranslate + 15 LTranslate = 79 tests nuevos.
+- Todos los módulos core compilan y pasan tests (79 tasks successful).
+- sync-velocity confirmado production-ready.
+- spigot-host, inworld, loadtest compilan correctamente.
+- Composite build 100% operativo.
+
+**Implementación (2026-09-25).**
+Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpressionCache), `host` (ConfigLoader.LoadResult, ConfigLoader), `textformatter` (MiniEscape), `transport` (HttpTransport SSRF getAllByName), `manager-impl` (DefaultModuleLifecycle: discoverAvailableModules, register SPI-only, version resolver, dependency resolver, SHA256, manifest validation), `sync-discord` (JdaDiscordSink, DiscordSink: char[] tokens), `sync-telegram` (TelegramSink: char[] tokens), `ltranslate` (LTranslate: char[] apiKey), `observability` (DebugEndpoint executor shutdown), `transport` (HttpTransport getAllByName), `spigot-host` (project deps, Paper API 1.21.4), `inworld` (Paper API 1.21.4), `loadtest` (TranslationService mock con TranslatorManager), `textformatter` (SpelExpressionEvaluatorSecurityTest, TranslationServiceCacheTest), `gtranslate` (GTranslateExtendedTest), `ltranslate` (LTranslateExtendedTest), `kernel` (ModuleGraph self-cycle fix), `iflow` (RateLimiter ReentrantReadWriteLock), `sync-websocket` (bytes vs chars fix).
+

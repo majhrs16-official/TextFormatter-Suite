@@ -265,7 +265,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Reload ModuleLifecycle
         Path cacheDir = folder.resolve("manager-cache");
         HostConfig hostConfig = configResult.config();
-        this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, logger, hostConfig.repositories());
+        this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, logger, hostConfig.repositories(), hostConfig.moduleAllowlist());
         logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir + " with " + hostConfig.repositories().size() + " repositories");
     }
 

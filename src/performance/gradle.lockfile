@@ -1,0 +1,42 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+com.fasterxml.jackson.core:jackson-annotations:2.17.1=runtimeClasspath,testRuntimeClasspath
+com.fasterxml.jackson.core:jackson-core:2.17.1=runtimeClasspath,testRuntimeClasspath
+com.fasterxml.jackson.core:jackson-databind:2.17.1=runtimeClasspath,testRuntimeClasspath
+com.fasterxml.jackson:jackson-bom:2.17.1=runtimeClasspath,testRuntimeClasspath
+me.majhrs16:suite-core-api:2.1.0-SNAPSHOT=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+me.majhrs16:suite-gtranslate:2.1.0-SNAPSHOT=runtimeClasspath,testRuntimeClasspath
+me.majhrs16:suite-host:2.1.0-SNAPSHOT=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+me.majhrs16:suite-iflow:2.1.0-SNAPSHOT=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+me.majhrs16:suite-kernel:2.1.0-SNAPSHOT=runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+me.majhrs16:suite-ltranslate:2.1.0-SNAPSHOT=runtimeClasspath,testRuntimeClasspath
+me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+me.majhrs16:suite-transport:2.1.0-SNAPSHOT=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+net.kyori:adventure-api:4.17.0=runtimeClasspath,testRuntimeClasspath
+net.kyori:adventure-bom:4.17.0=runtimeClasspath,testRuntimeClasspath
+net.kyori:adventure-key:4.17.0=runtimeClasspath,testRuntimeClasspath
+net.kyori:adventure-text-minimessage:4.17.0=runtimeClasspath,testRuntimeClasspath
+net.kyori:adventure-text-serializer-plain:4.17.0=runtimeClasspath,testRuntimeClasspath
+net.kyori:examination-api:1.3.0=runtimeClasspath,testRuntimeClasspath
+net.kyori:examination-string:1.3.0=runtimeClasspath,testRuntimeClasspath
+net.sf.jopt-simple:jopt-simple:5.0.4=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.apache.commons:commons-math3:3.6.1=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.apiguardian:apiguardian-api:1.1.2=testCompileClasspath
+org.json:json:20240303=runtimeClasspath,testRuntimeClasspath
+org.junit.jupiter:junit-jupiter-api:5.10.2=testCompileClasspath,testRuntimeClasspath
+org.junit.jupiter:junit-jupiter-engine:5.10.2=testRuntimeClasspath
+org.junit.jupiter:junit-jupiter-params:5.10.2=testCompileClasspath,testRuntimeClasspath
+org.junit.jupiter:junit-jupiter:5.10.2=testCompileClasspath,testRuntimeClasspath
+org.junit.platform:junit-platform-commons:1.10.2=testCompileClasspath,testRuntimeClasspath
+org.junit.platform:junit-platform-engine:1.10.2=testRuntimeClasspath
+org.junit.platform:junit-platform-launcher:1.10.2=testRuntimeClasspath
+org.junit:junit-bom:5.10.2=testCompileClasspath,testRuntimeClasspath
+org.openjdk.jmh:jmh-core:1.37=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.openjdk.jmh:jmh-generator-annprocess:1.37=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.opentest4j:opentest4j:1.3.0=testCompileClasspath,testRuntimeClasspath
+org.springframework:spring-core:6.1.12=runtimeClasspath,testRuntimeClasspath
+org.springframework:spring-expression:6.1.12=runtimeClasspath,testRuntimeClasspath
+org.springframework:spring-jcl:6.1.12=runtimeClasspath,testRuntimeClasspath
+org.yaml:snakeyaml:2.2=runtimeClasspath,testRuntimeClasspath
+empty=annotationProcessor,testAnnotationProcessor

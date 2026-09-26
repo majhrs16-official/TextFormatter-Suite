@@ -84,11 +84,16 @@ Total: **100+ languages** supported
 ### Commands
 
 ```
+# Player commands
 /suite lang                    # Show your current language
 /suite lang <code>             # Set your language (en, es, auto, off, etc.)
-/suite lang <player> <code>    # Admin: set another player's language
 /suite toggle                  # Toggle translation on/off
+
+# Admin commands
+/suite lang <player> <code>    # Admin: set another player's language
 /suite toggle <player>         # Admin: toggle for another player
+/suite lang list               # List supported languages
+/suite lang list codes         # List language codes only
 ```
 
 ### Language Persistence
@@ -197,27 +202,6 @@ Result for Spanish player:
 "¡Bienvenido Juan al Servidor Principal!"
 ```
 
-## Translation Commands
-
-### Player Commands
-
-| Command | Description |
-|---------|-------------|
-| `/suite lang` | Show current language |
-| `/suite lang auto` | Auto-detect |
-| `/suite lang off` | Disable translation |
-| `/suite lang es` | Set to Spanish |
-| `/suite lang en` | Set to English |
-| `/suite toggle` | Toggle on/off |
-
-### Admin Commands
-
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/suite lang <player> <code>` | Set player's language | `textformattersuite.admin` |
-| `/suite toggle <player>` | Toggle player's translation | `textformattersuite.admin` |
-| `/suite lang list` | List supported languages | `textformattersuite.admin` |
-
 ## Translation Providers Detail
 
 ### Google Translate
@@ -249,7 +233,7 @@ base-url: https://translate.yourdomain.com
 api-key: "your-api-key"
 ```
 
-## Translation Cache
+## Translation Cache & Deduplication
 
 ### Cache Configuration
 
@@ -264,10 +248,23 @@ translation:
 
 ### Cache Behavior
 
-- **Key**: `source_text|source_lang|target_lang`
+- **Key**: `source_text|source_lang|target_lang` (SHA-256 hash)
 - **TTL**: 60 minutes default
 - **Max Entries**: 10,000 entries
 - **Eviction**: LRU when max reached
+- **Deduplication**: Identical source text across multiple recipients shares cache entry
+
+### Cache Statistics
+
+The cache provides detailed statistics for monitoring:
+
+```java
+TranslationService.CacheStats stats = service.getCacheStats();
+stats.translationCacheSize();     // Current entries
+stats.detectionCacheSize();       // Language detection cache
+stats.maxTranslationCacheSize();  // Configured limit
+stats.maxDetectionCacheSize();    // Configured limit
+```
 
 ### Cache Commands
 
@@ -343,3 +340,27 @@ Or JVM flag:
 ```bash
 -Dtextformattersuite.translation.debug=true
 ```
+
+## Testing (New in v2.1)
+
+### Translation Cache Tests
+
+The suite includes comprehensive cache tests:
+
+```bash
+./gradlew :src:core-api:test --tests TranslationServiceCacheTest --offline
+```
+
+Tests cover:
+- Cache hit/miss behavior
+- Size limits and LRU eviction
+- Per-language cache isolation
+- `translateAll()` deduplication
+- `clearCaches()` functionality
+- Auto-source language detection caching
+
+### Extended Provider Tests
+
+Extended test suites for edge cases:
+- **GTranslateExtendedTest** (19 tests): malformed responses, empty arrays, null handling, unicode, rate limits
+- **LTranslateExtendedTest** (15 tests): error handling, missing fields, rate limits, unicode, transport exceptions

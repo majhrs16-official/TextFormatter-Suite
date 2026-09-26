@@ -43,7 +43,7 @@ Esta release consolida el núcleo de TextFormatter Suite tras las auditorías de
 
 ## 🔄 En Progreso
 
-- **Documentación**: PLAN.md ✅, Release Notes ✅, Wiki, ADR (README/PROMPT_NOW actualizados)
+- **Documentación**: PLAN.md ✅, Release Notes ✅, Wiki, ADR (README actualizado)
 - **Release Pipeline**: GitHub Actions CI/CD, `verification-metadata.xml`, semantic versioning config
 - **gradle.lockfile** portable (actualmente solo caché Gradle)
 
@@ -124,7 +124,7 @@ cd suite/web-editor && npm run check && npm run test:integration
 ## 📄 Documentación Relacionada
 
 - **PLAN.md** — Estado actualizado 2026-09-18
-- **PROMPT_NOW.md** — Plan maestro vivo
+- **PLAN.md** — Estado actualizado 2026-09-18
 - **AUDITORIA-14-09-2026.md** — Auditoría 14 sep
 - **AUDITORIA-16-09-2026.md** — Auditoría 16 sep
 - **ADR.md** — Decisiones de arquitectura
