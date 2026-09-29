@@ -3,7 +3,7 @@
   'use strict';
 
   const I18N = {
-en: {
+    en: {
       views: 'Views',
       channels: 'Channels',
       palette_kinds: 'Node kinds',
@@ -144,7 +144,7 @@ en: {
       suite_update_finished: 'Suite update completed',
       suite_update_failed: 'Update failed: {0}',
     },
-es: {
+    es: {
       views: 'Vistas',
       channels: 'Canales',
       palette_kinds: 'Tipos de nodo',

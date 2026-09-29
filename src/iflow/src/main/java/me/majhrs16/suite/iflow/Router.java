@@ -35,4 +35,17 @@ public interface Router {
 
     /** @return the active rule set in evaluation order. */
     Collection<Rule> rules();
+
+    /**
+     * Checks rate limit for a message emission (once per message, before fan-out).
+     * Returns true if within budget, false if throttled.
+     * Should be called BEFORE expanding recipients to avoid consuming budget per recipient.
+     */
+    boolean checkEmissionRateLimit(Message message);
+
+    /**
+     * Gets the wait time until the next rate limit window for a message.
+     * Returns nanoseconds until the next window, or 0 if no rate limit applies.
+     */
+    long nanosUntilNextRateLimitWindow(Message message);
 }

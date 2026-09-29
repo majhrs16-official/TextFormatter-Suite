@@ -9,7 +9,7 @@ TextFormatter Suite follows **Hexagonal Architecture** (Ports & Adapters) with a
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Platform Adapters                        │
-│  spigot-host  │  fabric-host  │  velocity-host  │  (future)    │
+│  spigot-host  │  fabric-host (excluido)  │  velocity-host (futuro) │
 ├─────────────────────────────────────────────────────────────────┤
 │                        Suite Host                               │
 │  ┌──────────┬──────────┬──────────┬──────────┬──────────────┐  │
@@ -21,6 +21,8 @@ TextFormatter Suite follows **Hexagonal Architecture** (Ports & Adapters) with a
 │                        core-api (SPI)                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Nota**: `fabric-host` está excluido del build (42 errores compile — usa APIs Spigot/Bukkit en vez de Fabric APIs; requiere reescritura completa a `ServerCommandSource`, `FabricAudiences`, eventos Fabric, Brigadier nativo).
 
 ## Module Development
 
@@ -150,6 +152,99 @@ public class MyTranslator implements Translator {
 // META-INF/services/me.majhrs16.suite.api.spi.Translator
 // Content: com.example.MyTranslator
 ```
+
+---
+
+## Clean Architecture — TranslatorProvider SPI (FASE 13, 2026-09-28)
+
+### Overview
+
+The `host` module now follows **Clean Architecture**: it has **zero compile-time dependencies** on translation provider implementations (`gtranslate`, `ltranslate`). Instead, it depends only on the `core-api` SPI interfaces.
+
+### SPI Interfaces (core-api)
+
+```java
+// core-api/spi/TranslatorProvider.java
+public interface TranslatorProvider {
+    TranslatorManager createManager(Environment env);
+}
+
+// core-api/spi/TranslatorManager.java
+public interface TranslatorManager {
+    Translator getProvider(String id);
+    List<Translator> getAllProviders();
+    Translator getActiveProvider();
+}
+
+// core-api/spi/Translator.java
+public interface Translator {
+    String translate(String text, String from, String to) throws TranslationException;
+    String detect(String text) throws TranslationException;
+    boolean isAvailable();
+    String id();
+}
+
+// core-api/spi/TranslationException.java
+public class TranslationException extends Exception { ... }
+```
+
+### Runtime Discovery
+
+`TranslatorsConfig` in `host` discovers providers via `ServiceLoader`:
+
+```java
+// host/config/TranslatorsConfig.java
+ServiceLoader<TranslatorProvider> loader = ServiceLoader.load(TranslatorProvider.class);
+for (TranslatorProvider provider : loader) {
+    TranslatorManager manager = provider.createManager(env);
+    // register with TranslationService
+}
+```
+
+### For Provider Developers
+
+To add a new translation provider:
+
+1. **Implement `TranslatorProvider`** in your module
+2. **Implement `TranslatorManager`** and `Translator`
+3. **Register in `META-INF/services/me.majhrs16.suite.api.spi.TranslatorProvider`**
+
+```java
+// Your module: MyCustomTranslatorProvider
+public class MyCustomTranslatorProvider implements TranslatorProvider {
+    @Override
+    public TranslatorManager createManager(Environment env) {
+        return new MyCustomTranslatorManager(env);
+    }
+}
+```
+
+```text
+# src/main/resources/META-INF/services/me.majhrs16.suite.api.spi.TranslatorProvider
+com.example.MyCustomTranslatorProvider
+```
+
+4. **No changes to `host` required** — Clean Architecture achieved!
+
+### Testing
+
+Tests use `testImplementation` to make providers available to ServiceLoader:
+
+```gradle
+# host/build.gradle
+testImplementation project(':src:gtranslate')
+testImplementation project(':src:ltranslate')
+```
+
+### Benefits
+
+| Before | After |
+|--------|-------|
+| `host` → `gtranslate`, `ltranslate` (compile) | `host` → `core-api` only (compile) |
+| New provider = modify `host` | New provider = implement SPI only |
+| Hard to test in isolation | Test with mock or real providers via testImplementation |
+
+---
 
 ## Extension Development
 

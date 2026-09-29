@@ -8,7 +8,16 @@
   const StateStore = global.StateStore;
   const UI = global.Suite.i18n.UI;
 
-  const KIND_H = { input: 52, cond: 74, transform: 70, loop: 52, sleep: 52, output: 52, redirect: 52, channel_redirect: 52 };
+  const KIND_H = {
+    input: 52,
+    cond: 74,
+    transform: 70,
+    loop: 52,
+    sleep: 52,
+    output: 52,
+    redirect: 52,
+    channel_redirect: 52,
+  };
 
   function renderCanvas(name) {
     const vp = document.querySelector('.viewport[data-canvas="' + name + '"]');

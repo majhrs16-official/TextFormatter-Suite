@@ -1,6 +1,6 @@
 # host — Shared Bootstrap, Dispatch & Configuration
 
-> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapters (`spigot-host`, `fabric-host`) extend this.
+> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapter (`spigot-host`) extends this; `fabric-host` is **excluded from build** (42 compile errors, Spigot APIs).
 
 ---
 
@@ -33,12 +33,14 @@
 | `kernel` | Compile | `ModuleLoader` for module discovery |
 | `textformatter` | Compile | `TextFormatter`, `ChannelRegistry` |
 | `iflow` | Compile | `Router` for message routing |
-| `gtranslate` | Compile | `GTranslateProvider` for translation |
-| `ltranslate` | Compile | `LTranslateProvider` for translation |
 | `transport` | Compile | `HttpTransport` for webhook sync |
 | `gson` | Compile | Config schema generation |
 | `snakeyaml` | Compile | YAML config parsing |
 | `adventure-text-minimessage` | Compile | Message formatting in config |
+| `gtranslate` | Test | `GTranslateProvider` for translation tests |
+| `ltranslate` | Test | `LTranslateProvider` for translation tests |
+
+> **Clean Architecture**: `host` no longer has compile-time dependencies on translation providers (`gtranslate`, `ltranslate`). Translators are discovered at runtime via `ServiceLoader` using the `TranslatorProvider` SPI (`core-api`). Tests use `testImplementation` to make providers available to ServiceLoader during test execution.
 
 ---
 
@@ -47,7 +49,7 @@
 | Consumer | Usage |
 |----------|-------|
 | `spigot-host` | Extends `SuiteBootstrap`, provides platform SPIs |
-| `fabric-host` | Extends `SuiteBootstrap`, provides platform SPIs |
+| `fabric-host` | **Excluded** — extends `SuiteBootstrap` but not in build |
 | `observability` | Uses `host` services for metrics |
 | `presets` | Uses `host` config & services |
 | `manager-impl` | Uses `host` for module management |
@@ -91,7 +93,7 @@ Module.initialize(Environment) for each
          ↓
 Services registered:
   - ActorDirectory (from platform adapter)
-  - TranslationService (from gtranslate/ltranslate modules)
+  - TranslationService (discovered via ServiceLoader: TranslatorProvider SPI)
   - SyncSink[] (from sync-* modules)
   - Router (from iflow module)
   - TextFormatter (from textformatter module)
@@ -131,7 +133,7 @@ ConfigValidator.validate(config) → errors (platform-specific)
          ↓
 SuiteBootstrap applies config:
   - ChannelRegistry ← channels from HostConfig
-  - TranslatorManager ← translators from TranslatorsConfig
+  - TranslatorManager ← translators from TranslatorsConfig (ServiceLoader discovery)
   - SyncSink config ← sync section
          ↓
 ConfigSchemaGenerator.generate() → web-editor schema files
@@ -184,9 +186,9 @@ ConfigSchemaGenerator.generate() → web-editor schema files
 - [kernel](../kernel/README.md) — Module loading
 - [textformatter](../textformatter/README.md) — Formatting pipeline
 - [iflow](../iflow/README.md) — Routing
-- [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation
+- [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation (SPI providers, runtime discovery)
 - [transport](../transport/README.md) — HTTP transport for sync
 - [spigot-host](../spigot-host/README.md) — Bukkit platform adapter
-- [fabric-host](../fabric-host/README.md) — Fabric platform adapter
+- [fabric-host](../fabric-host/README.md) — **Fabric platform adapter (excluded from build)**
 - [observability](../observability/README.md) — Metrics on host services
 - [presets](../presets/README.md) — Preset management using host config

@@ -1,6 +1,6 @@
 # inworld — In-World Integration
 
-> **Purpose**: Provides in-world (in-game) integration features such as holograms, NPCs, or world-based message displays.
+> **Purpose**: Provides in-world (in-game) integration features such as signs, chests, books with WORLD/RADIUS delivery, click/hover buttons, caching, and glossary. **Compiles with Paper API 1.21.4**.
 
 ---
 

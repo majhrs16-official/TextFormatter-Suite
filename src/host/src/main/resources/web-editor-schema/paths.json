@@ -1,23 +1,11 @@
 {
   "version": 1,
   "paths": {
-    "config.quick.look": {
+    "config.quick-look": {
       "label": "Quick Look",
       "desc": "",
       "type": "string",
       "default": true
-    },
-    "config.iflow": {
-      "label": "IFlow",
-      "desc": "",
-      "type": "string",
-      "default": ""
-    },
-    "config.iflow.engine": {
-      "label": "IFlow Engine",
-      "desc": "",
-      "type": "string",
-      "default": ""
     },
     "config.iflow.engine.parallel": {
       "label": "IFlow Engine Parallel",
@@ -25,23 +13,11 @@
       "type": "boolean",
       "default": false
     },
-    "config.sonido": {
-      "label": "Sonido",
-      "desc": "",
-      "type": "string",
-      "default": ""
-    },
     "config.sonido.enabled": {
       "label": "Sonido Enabled",
       "desc": "",
       "type": "boolean",
       "default": true
-    },
-    "config.general": {
-      "label": "General",
-      "desc": "",
-      "type": "string",
-      "default": ""
     },
     "config.general.language": {
       "label": "General Language",
@@ -49,121 +25,127 @@
       "type": "string",
       "default": "en"
     },
-    "config.chat": {
-      "label": "Chat",
-      "desc": "",
-      "type": "integer",
-      "default": ""
-    },
-    "config.chat.claim.mode": {
+    "config.chat.claim-mode": {
       "label": "Chat Claim Mode",
       "desc": "",
       "type": "integer",
       "default": "cancel-event"
     },
-    "config.chat.log.to.console": {
+    "config.chat.log-to-console": {
       "label": "Chat Log To Console",
       "desc": "",
       "type": "boolean",
       "default": true
     },
-    "config.repositories": {
-      "label": "Repositories",
+    "config.repositories[].name": {
+      "label": "Repository Name",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".name": {
-      "label": "Sound Name",
-      "desc": "",
-      "type": "string",
-      "default": ""
-    },
-    ".url": {
+    "config.repositories[].url": {
       "label": "Repository URL",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".type": {
-      "label": "Channel Type",
+    "config.repositories[].type": {
+      "label": "Repository Type",
       "desc": "",
       "type": "string",
       "default": "chat"
     },
-    ".enabled": {
+    "config.repositories[].enabled": {
       "label": "Repository Enabled",
       "desc": "",
       "type": "boolean",
       "default": true
     },
-    ".permission": {
+    "channels[].name": {
+      "label": "Channel Name",
+      "desc": "",
+      "type": "string",
+      "default": ""
+    },
+    "channels[].permission": {
       "label": "Channel Permission",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".send.permission": {
+    "channels[].send-permission": {
       "label": "Channel Send Permission",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".receive.permission": {
+    "channels[].receive-permission": {
       "label": "Channel Receive Permission",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".messages": {
+    "channels[].messages": {
       "label": "Channel Messages",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".tooltips": {
+    "channels[].tooltips": {
       "label": "Channel Tooltips",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".show.sender": {
+    "channels[].show-sender": {
       "label": "Channel Show Sender",
       "desc": "",
       "type": "boolean",
       "default": true
     },
-    ".rate.limit": {
+    "channels[].rate-limit-per-second": {
       "label": "Channel Rate Limit",
       "desc": "",
       "type": "integer",
       "default": 0
     },
-    ".lang.source": {
+    "channels[].lang-source": {
       "label": "Channel Lang Source",
       "desc": "",
       "type": "string",
       "default": "auto"
     },
-    ".lang.target": {
+    "channels[].lang-target": {
       "label": "Channel Lang Target",
       "desc": "",
       "type": "string",
       "default": "auto"
     },
-    ".sounds": {
+    "channels[].type": {
+      "label": "Channel Type",
+      "desc": "",
+      "type": "string",
+      "default": "chat"
+    },
+    "channels[].sounds": {
       "label": "Channel Sounds",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    ".volume": {
+    "channels[].sounds[].name": {
+      "label": "Sound Name",
+      "desc": "",
+      "type": "string",
+      "default": ""
+    },
+    "channels[].sounds[].volume": {
       "label": "Sound Volume",
       "desc": "",
       "type": "float",
       "default": 1.0
     },
-    ".pitch": {
+    "channels[].sounds[].pitch": {
       "label": "Sound Pitch",
       "desc": "",
       "type": "float",

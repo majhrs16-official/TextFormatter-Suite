@@ -1,10 +1,10 @@
-# Sync Modules — Cross-Server Message Synchronization
+# sync-http — HTTP Webhook Sync Sink
 
-> **Purpose**: Implement `SyncSink` SPI from `core-api` to send/receive messages across servers via various transports (HTTP, TCP, UDP, Discord, Telegram, WebSocket, Velocity).
+> **Purpose**: Implements `SyncSink` SPI from `core-api` for HTTP webhook synchronization (outbound webhooks + inbound REST endpoint). Uses `HttpTransport` from `transport` module.
 
 ---
 
-## Modules
+## Modules in Sync Family
 
 | Module | Transport | Sink Implementation | Key Dependency |
 |--------|-----------|---------------------|----------------|
@@ -57,7 +57,7 @@
 |----------|-------|
 | `host` | `SuiteBootstrap` collects all `SyncSink` instances |
 | `spigot-host` | Syncs messages via registered sinks |
-| `fabric-host` | Syncs messages via registered sinks |
+| `fabric-host` | **Excluded from build** — would sync via registered sinks |
 
 ---
 
@@ -204,4 +204,4 @@ sync:
 - [transport](../transport/README.md) — `HttpTransport`, `MessageCodec`
 - [host](../host/README.md) — Collects sinks, loads sync config
 - [kernel](../kernel/README.md) — Loads sync modules
-- [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Platform adapters using sync
+- [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Platform adapters using sync (**fabric-host excluded**)

@@ -97,9 +97,17 @@ public final class MessageCodec {
         };
 
         JSONArray texts = json.optJSONArray("texts");
-        Formats formats = texts == null
-            ? Formats.empty()
-            : Formats.of(texts.toList().toArray(new String[0]));
+        String[] textArray;
+        if (texts == null) {
+            textArray = new String[0];
+        } else {
+            textArray = new String[texts.length()];
+            for (int i = 0; i < texts.length(); i++) {
+                Object obj = texts.opt(i);
+                textArray[i] = obj == null ? "" : String.valueOf(obj);
+            }
+        }
+        Formats formats = Formats.of(textArray);
 
         Language source = Language.of(json.optString("langSource", "auto")).orElse(Language.AUTO);
         Language target = Language.of(json.optString("langTarget", "auto")).orElse(Language.AUTO);
@@ -109,7 +117,7 @@ public final class MessageCodec {
             .type(MessageType.valueOf(json.optString("type", "CHAT")))
             .sender(sender)
             .direction(dir)
-            .messages(Formats.of(texts == null ? new String[0] : texts.toList().toArray(new String[0])))
+            .messages(formats)
             .channel(json.optString("channel", "chat"))
             .langSource(source)
             .langTarget(target)

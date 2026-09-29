@@ -1,4 +1,40 @@
-{
+/* paths.js — carga y gestiona paths.json (fuente única de verdad para data-bind) */
+(function (global) {
+  'use strict';
+
+  let pathsData = null;
+  let pathsLoaded = false;
+  let loadPromise = null;
+
+  async function loadPaths() {
+    if (pathsLoaded) {
+      return pathsData;
+    }
+    if (loadPromise) {
+      return loadPromise;
+    }
+
+    loadPromise = (async () => {
+      try {
+        const res = await fetch('./paths.json');
+        if (!res.ok) {
+          throw new Error('Failed to load paths.json: ' + res.status);
+        }
+        pathsData = await res.json();
+        pathsLoaded = true;
+        return pathsData;
+      } catch (e) {
+        console.warn('Failed to load paths.json, using fallback:', e);
+        pathsData = getFallbackPaths();
+        pathsLoaded = true;
+        return pathsData;
+      }
+    })();
+    return loadPromise;
+  }
+
+  function getFallbackPaths() {
+    return {
   "version": 1,
   "paths": {
     "config.quick-look": {
@@ -215,7 +251,10 @@
       "label": "Intents (Discord)",
       "desc": "",
       "type": "array",
-      "default": ["GUILD_MESSAGES", "MESSAGE_CONTENT"]
+      "default": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT"
+      ]
     },
     "sync.telegram.enabled": {
       "label": "Habilitado (Telegram)",
@@ -338,4 +377,35 @@
       "default": "batch-first"
     }
   }
-}
+};
+  }
+
+  function getPaths() {
+    if (!pathsLoaded) {
+      console.warn('paths.json not loaded yet, using fallback');
+      return getFallbackPaths().paths;
+    }
+    return pathsData.paths;
+  }
+
+  function getPathMeta(path) {
+    const paths = getPaths();
+    return paths[path];
+  }
+
+  function getAllSwitchPaths() {
+    const paths = getPaths();
+    return Object.entries(paths)
+      .filter(([_, meta]) => meta.type === 'boolean')
+      .map(([path, meta]) => ({ path, ...meta }));
+  }
+
+  global.Suite = global.Suite || {};
+  global.Suite.paths = {
+    load: loadPaths,
+    getPaths: getPaths,
+    getPathMeta: getPathMeta,
+    getAllSwitchPaths: getAllSwitchPaths,
+    getFallbackPaths: getFallbackPaths,
+  };
+})(window || this);

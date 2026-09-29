@@ -11,23 +11,23 @@
 
   const GROUPS = { chat: 0, staff: 0, vip: 0, bypass: 0 };
 
-const EXTENSION_GROUPS = {
-  enabled: 0,
-  disabled: 0,
-  unloaded: 0,
-};
+  const EXTENSION_GROUPS = {
+    enabled: 0,
+    disabled: 0,
+    unloaded: 0,
+  };
 
-const RULE_KINDS = ['input', 'cond', 'transform', 'loop', 'sleep', 'output', 'redirect', 'channel_redirect'];
-const RULE_KIND_COLORS = {
-  input: 'var(--green)',
-  cond: 'var(--amber)',
-  transform: 'var(--purple)',
-  loop: 'var(--blue)',
-  sleep: 'var(--red)',
-  output: 'var(--green)',
-  redirect: 'var(--red)',
-  channel_redirect: 'var(--red)',
-};
+  const RULE_KINDS = ['input', 'cond', 'transform', 'loop', 'sleep', 'output', 'redirect', 'channel_redirect'];
+  const RULE_KIND_COLORS = {
+    input: 'var(--green)',
+    cond: 'var(--amber)',
+    transform: 'var(--purple)',
+    loop: 'var(--blue)',
+    sleep: 'var(--red)',
+    output: 'var(--green)',
+    redirect: 'var(--red)',
+    channel_redirect: 'var(--red)',
+  };
 
   function renderSidebar() {
     const sb = $('#sidebarBody');
@@ -59,7 +59,13 @@ const RULE_KIND_COLORS = {
         t('extensions') +
         '</span>' +
         '</div>' +
-        (UI.side === 'groups' ? groupsPane() : UI.side === 'rules' ? rulesPane() : UI.side === 'extensions' ? extensionsPane() : palettePane());
+        (UI.side === 'groups'
+          ? groupsPane()
+          : UI.side === 'rules'
+            ? rulesPane()
+            : UI.side === 'extensions'
+              ? extensionsPane()
+              : palettePane());
       sb.dataset.side = UI.side;
       // Re-bind event handlers
       sb.querySelectorAll('[data-side]').forEach(
@@ -94,7 +100,7 @@ const RULE_KIND_COLORS = {
         };
       });
       sb.querySelectorAll('[data-ext-action]').forEach(el => {
-        el.onclick = (e) => {
+        el.onclick = e => {
           e.stopPropagation();
           const action = el.dataset.extAction;
           const extId = el.dataset.extId;
@@ -307,7 +313,8 @@ const RULE_KIND_COLORS = {
     }
     h += '</div></div><div class="sgroup"><h4>' + t('rules_guard') + '</h4><div style="padding:4px">';
     h += '<label style="font-size:11px">' + t('max_steps') + '</label>';
-    h += '<input type="number" class="tinp" id="guardMaxSteps" style="width:100%;margin-top:2px" value="512" min="1" max="2048">';
+    h +=
+      '<input type="number" class="tinp" id="guardMaxSteps" style="width:100%;margin-top:2px" value="512" min="1" max="2048">';
     h += '<label style="font-size:11px;margin-top:6px">' + t('dedup_fanout') + '</label>';
     h += '<input type="checkbox" id="filterDedupFanout" style="margin-top:2px" checked>';
     h += '</div></div>';
@@ -337,14 +344,26 @@ const RULE_KIND_COLORS = {
         groups.disabled.push(id);
       }
     }
-    let h = '<div class="sgroup"><h4>' + t('extensions') + ' <span class="badge">' + Object.keys(st.extensions || {}).length + '</span></h4><ul>';
+    let h =
+      '<div class="sgroup"><h4>' +
+      t('extensions') +
+      ' <span class="badge">' +
+      Object.keys(st.extensions || {}).length +
+      '</span></h4><ul>';
     for (const [group, exts] of Object.entries({ enabled: [], disabled: [] })) {
-      const exts = Object.keys(st.extensions || {}).sort().filter(id => {
-        const ext = st.extensions[id];
-        return ext && ext.enabled === (group === 'enabled');
-      });
+      const exts = Object.keys(st.extensions || {})
+        .sort()
+        .filter(id => {
+          const ext = st.extensions[id];
+          return ext && ext.enabled === (group === 'enabled');
+        });
       if (exts.length === 0) continue;
-      h += '<li style="font-size:10px;color:var(--muted);text-transform:uppercase;padding:4px 10px;cursor:default">' + group + ' (' + exts.length + ')</li>';
+      h +=
+        '<li style="font-size:10px;color:var(--muted);text-transform:uppercase;padding:4px 10px;cursor:default">' +
+        group +
+        ' (' +
+        exts.length +
+        ')</li>';
       for (const id of exts) {
         h += extensionItemHTML(id, st.extensions[id]);
       }
@@ -434,6 +453,8 @@ const RULE_KIND_COLORS = {
     if (!ext) return;
     Suite.utils.toast(t('extension_config') + ': ' + id, 'info');
   }
+
+  function addChannelPrompt() {
     const name = window.prompt(t('new_channel_prompt'), t('new_channel'));
     if (name) {
       StateStore.mutate('add channel', () => {
@@ -452,7 +473,7 @@ const RULE_KIND_COLORS = {
       });
       Suite.utils.toast(t('toast_added'), 'ok');
     }
-  },
+  }
 
   function channelSpec(name) {
     const st = StateStore.getState();
@@ -461,7 +482,7 @@ const RULE_KIND_COLORS = {
     spec.name = name;
     spec.messages = ['&7👉 &f%player_name%&7: %content%'];
     return spec;
-  },
+  }
 
   function renderPalette() {
     const vp = document.querySelector('.viewport[data-canvas="iflow"]');
@@ -479,7 +500,7 @@ const RULE_KIND_COLORS = {
     }
     stage.querySelectorAll('.node').forEach(n => Suite.views.bindNode(n));
     Suite.views.drawEdges(stage);
-  },
+  }
 
   global.Suite = global.Suite || {};
   global.Suite.views = global.Suite.views || {};
@@ -503,5 +524,4 @@ const RULE_KIND_COLORS = {
     RULE_KINDS,
     RULE_KIND_COLORS,
   });
-});
 })(window || this);

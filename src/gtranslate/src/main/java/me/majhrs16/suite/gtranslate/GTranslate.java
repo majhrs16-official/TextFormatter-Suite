@@ -45,7 +45,16 @@ public final class GTranslate implements Translator {
         try {
             String body = transport.get(url);
             JSONArray root = new JSONArray(body);
-            return root.optJSONArray(0).optJSONArray(0).optString(0, text);
+            JSONArray sentences = root.optJSONArray(0);
+            if (sentences == null || sentences.length() == 0) {
+                throw new TranslationException("empty translation response from Google");
+            }
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < sentences.length(); i++) {
+                String segment = sentences.optJSONArray(i).optString(0, "");
+                result.append(segment);
+            }
+            return result.toString();
         } catch (Exception e) {
             throw new TranslationException("google translate call failed", e);
         }

@@ -10,7 +10,8 @@
 - Define **message domain types** (`Message`, `ChatMessage`, `Actor`, `Channel`, `MessageType`, `Direction`, `Language`, `ColorMode`, `Formats`, `SoundSpec`)
 - Define **SPI interfaces** for platform/implementation plugins:
   - `ActorDirectory` — resolve actors (players, consoles, etc.) by name/UUID
-  - `TranslationService` / `Translator` / `TranslatorProvider` / `TranslatorManager` — translation pipeline
+  - `Translator` / `TranslatorProvider` / `TranslatorManager` / `TranslationException` — translation pipeline (Clean Architecture: `host` depends only on these SPIs)
+  - `TranslationService` — **legacy** high-level entry point (deprecated; use `TranslatorManager`)
   - `SyncSink` / `SyncListener` — cross-server message synchronization
   - `PlaceholderResolver` — resolve placeholders in messages
   - `ExpressionEvaluator` — evaluate expressions (SpEL) in templates
@@ -44,15 +45,16 @@
 - `kernel` — uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
 - `textformatter` — uses `Message`, `Channel`, `ExpressionEvaluator` SPI
 - `iflow` — uses `Message`, `Channel`, `ActorDirectory` SPI
-- `host` — uses nearly all SPIs and domain types
-- `gtranslate`/`ltranslate` — implement `TranslationService`/`TranslatorProvider`
+- `host` — uses nearly all SPIs and domain types (**Clean Architecture: no compile deps on translators**)
+- `gtranslate`/`ltranslate` — implement `TranslatorProvider` SPI (runtime discovery via ServiceLoader)
 - `transport` — uses `Message` for codecs
 - Sync modules — implement `SyncSink`
 - `observability` — uses `Message`, `Channel`
 - `presets` — uses `Message`, `Channel`
 - `manager-api`/`manager-impl` — use `ModuleDescriptor`, `ModuleCoordinate`
 - `extension-api` — uses `Module` concepts
-- `spigot-host`/`fabric-host` — implement all SPIs
+- `spigot-host` — implements all SPIs
+- `fabric-host` — **excluded from build** (42 compile errors, Spigot APIs)
 
 ---
 
@@ -140,9 +142,9 @@ None — this is a contract library. Entry points are in modules that **implemen
 
 - [kernel](../kernel/README.md) — Loads `Module` implementations
 - [textformatter](../textformatter/README.md) — Implements `ExpressionEvaluator`
-- [host](../host/README.md) — Wires all SPI implementations
-- [gtranslate](../gtranslate/README.md) — Implements `TranslatorProvider`
-- [ltranslate](../ltranslate/README.md) — Implements `TranslatorProvider`
+- [host](../host/README.md) — Wires all SPI implementations (**Clean Architecture: runtime SPI discovery**)
+- [gtranslate](../gtranslate/README.md) — Implements `TranslatorProvider` (SPI)
+- [ltranslate](../ltranslate/README.md) — Implements `TranslatorProvider` (SPI)
 - [sync-http](../sync-http/README.md) — Implements `SyncSink`
 - [spigot-host](../spigot-host/README.md) — Implements platform SPIs
-- [fabric-host](../fabric-host/README.md) — Implements platform SPIs
+- [fabric-host](../fabric-host/README.md) — **Implements platform SPIs (excluded from build)**

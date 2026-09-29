@@ -2,6 +2,7 @@ package me.majhrs16.suite.transport;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -9,6 +10,7 @@ import java.net.InetAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +44,9 @@ public final class HttpTransport implements Transport {
         "^169\\.254\\.",
         // RFC 6598 Carrier-grade NAT
         "^100\\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\\.",
+        // IPv6 ULA (fc00::/7)
+        "^fc[0-9a-f]:",
+        "^fd[0-9a-f]:",
         // Multicast
         "^22[4-9]\\.",
         "^23[0-9]\\.",
@@ -50,12 +55,14 @@ public final class HttpTransport implements Transport {
     );
 
     private static final Pattern[] DENY_PATTERNS;
+    private static final int MAX_RESPONSE_SIZE = 1024 * 1024; // 1MB
 
     static {
         String denyProp = System.getProperty("textformattersuite.http.deny");
-        List<String> patterns = DEFAULT_DENY_PATTERNS;
+        List<String> patterns = new ArrayList<>(DEFAULT_DENY_PATTERNS);
         if (denyProp != null && !denyProp.isBlank()) {
-            patterns = List.of(denyProp.split(","));
+            // Append custom patterns to defaults (amplify, not replace)
+            patterns.addAll(List.of(denyProp.split(",")));
         }
         DENY_PATTERNS = patterns.stream()
             .map(Pattern::compile)
@@ -172,6 +179,7 @@ public final class HttpTransport implements Transport {
     private String readResponse(HttpURLConnection conn) throws IOException {
         int redirectCount = 0;
         final int MAX_REDIRECTS = 5;
+        String requestMethod = conn.getRequestMethod();
         
         while (true) {
             int status = conn.getResponseCode();
@@ -200,7 +208,13 @@ public final class HttpTransport implements Transport {
                 
                 // Create new connection for redirect
                 conn = (HttpURLConnection) newUrl.openConnection();
-                conn.setRequestMethod("GET"); // Redirects typically use GET
+                
+                // Preserve method for 307/308, use GET for 301/302/303
+                if (status == 307 || status == 308) {
+                    conn.setRequestMethod(requestMethod);
+                } else {
+                    conn.setRequestMethod("GET");
+                }
                 conn.setConnectTimeout((int) timeout.toMillis());
                 conn.setReadTimeout((int) timeout.toMillis());
                 conn.setInstanceFollowRedirects(false);
@@ -211,12 +225,27 @@ public final class HttpTransport implements Transport {
             }
             
             // Not a redirect - read response normally
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    status >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8))) {
+            InputStream inputStream;
+            if (status >= 400) {
+                inputStream = conn.getErrorStream();
+                if (inputStream == null) {
+                    inputStream = conn.getInputStream(); // fallback
+                }
+            } else {
+                inputStream = conn.getInputStream();
+            }
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
                 StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line);
+                char[] buffer = new char[8192];
+                int charsRead;
+                int totalChars = 0;
+                while ((charsRead = reader.read(buffer)) != -1) {
+                    totalChars += charsRead;
+                    if (totalChars > MAX_RESPONSE_SIZE) {
+                        throw new IOException("Response body exceeds maximum allowed size: " + MAX_RESPONSE_SIZE + " chars");
+                    }
+                    sb.append(buffer, 0, charsRead);
                 }
                 String response = sb.toString();
                 if (status >= 400) {

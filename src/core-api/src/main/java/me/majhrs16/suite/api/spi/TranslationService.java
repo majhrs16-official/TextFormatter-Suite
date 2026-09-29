@@ -3,6 +3,7 @@ package me.majhrs16.suite.api.spi;
 import me.majhrs16.suite.api.message.Language;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -15,15 +16,22 @@ import java.util.function.Function;
  *
  * <p>Includes caching for translations and language detection to reduce
  * external API calls and improve performance at scale.</p>
+ *
+ * <p>Includes in-flight request deduplication to prevent thundering herd
+ * when multiple recipients request the same translation concurrently.</p>
  */
 public final class TranslationService {
 
     private final TranslatorManager manager;
     
-    // Translation cache: key = "fromCode|toCode|textHash" -> translated text
+    // Translation cache: key = "fromCode|toCode|text" -> translated text
     private final Map<String, String> translationCache = new ConcurrentHashMap<>();
-    // Detection cache: key = textHash -> detected language code
+    // Detection cache: key = "detect|text" -> detected language code
     private final Map<String, String> detectionCache = new ConcurrentHashMap<>();
+    // In-flight deduplication: key = "fromCode|toCode|text" -> CompletableFuture
+    private final Map<String, CompletableFuture<String>> inFlightTranslations = new ConcurrentHashMap<>();
+    // In-flight deduplication for detection
+    private final Map<String, CompletableFuture<Language>> inFlightDetections = new ConcurrentHashMap<>();
     
     // Cache size limits (prevent unbounded growth)
     private static final int MAX_TRANSLATION_CACHE_SIZE = 10000;
@@ -45,8 +53,8 @@ public final class TranslationService {
         }
         String source = localization(from, text);
         
-        // Build cache key
-        String cacheKey = source + "|" + to.code() + "|" + text.hashCode();
+        // Build cache key using full text to avoid hashCode collisions
+        String cacheKey = source + "|" + to.code() + "|" + text;
         
         // Check cache first
         String cached = translationCache.get(cacheKey);
@@ -54,14 +62,27 @@ public final class TranslationService {
             return cached;
         }
         
+        // Deduplicate in-flight requests for the same translation
+        CompletableFuture<String> future = inFlightTranslations.computeIfAbsent(cacheKey, k -> 
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    String translated = manager.active().translate(text, source, to.code());
+                    // Store in cache with size limit
+                    if (translationCache.size() < MAX_TRANSLATION_CACHE_SIZE) {
+                        translationCache.put(cacheKey, translated);
+                    }
+                    return translated;
+                } catch (TranslationException e) {
+                    return text;
+                } finally {
+                    inFlightTranslations.remove(cacheKey);
+                }
+            })
+        );
+        
         try {
-            String translated = manager.active().translate(text, source, to.code());
-            // Store in cache with size limit
-            if (translationCache.size() < MAX_TRANSLATION_CACHE_SIZE) {
-                translationCache.put(cacheKey, translated);
-            }
-            return translated;
-        } catch (TranslationException e) {
+            return future.get();
+        } catch (Exception e) {
             return text;
         }
     }
@@ -85,8 +106,8 @@ public final class TranslationService {
             return Language.EN;
         }
         
-        // Build cache key for detection
-        String cacheKey = "detect|" + text.hashCode();
+        // Build cache key for detection using full text to avoid hashCode collisions
+        String cacheKey = "detect|" + text;
         
         // Check cache first
         String cachedCode = detectionCache.get(cacheKey);
@@ -94,13 +115,27 @@ public final class TranslationService {
             return Language.fromCode(cachedCode).orElse(Language.EN);
         }
         
-        Language detected = Language.fromCode(manager.active().detect(text)).orElse(Language.EN);
+        // Deduplicate in-flight requests for the same detection
+        CompletableFuture<Language> future = inFlightDetections.computeIfAbsent(cacheKey, k -> 
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    Language detected = Language.fromCode(manager.active().detect(text)).orElse(Language.EN);
+                    // Store in cache with size limit
+                    if (detectionCache.size() < MAX_DETECTION_CACHE_SIZE) {
+                        detectionCache.put(cacheKey, detected.code());
+                    }
+                    return detected;
+                } finally {
+                    inFlightDetections.remove(cacheKey);
+                }
+            })
+        );
         
-        // Store in cache with size limit
-        if (detectionCache.size() < MAX_DETECTION_CACHE_SIZE) {
-            detectionCache.put(cacheKey, detected.code());
+        try {
+            return future.get();
+        } catch (Exception e) {
+            return Language.EN;
         }
-        return detected;
     }
 
     /** @return whether any provider is currently usable. */

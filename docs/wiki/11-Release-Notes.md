@@ -11,7 +11,7 @@
 
 #### FASE 4: Platform Adapters
 - ✅ Spigot/Paper host (1.20.6+, compiles with Paper API 1.21.4)
-- ✅ Fabric host (1.21+, compiles with Paper API)
+- ❌ Fabric host — **EXCLUDED** (42 compile errors: uses Spigot/Bukkit APIs instead of Fabric APIs; rewrite needed to `ServerCommandSource`, `FabricAudiences`, Fabric events, Brigadier)
 - ✅ Module lifecycle management
 
 #### FASE 5: i18n & Localization
@@ -158,10 +158,16 @@
 - ✅ **Props panel dinámico**: renderizado específico por tipo de nodo
 
 ### Build & Dependency Management
-- ✅ **Gradle dependency locking**: 28 proyectos con `gradle.lockfile` (root + 27 subproyectos)
+- ✅ **Gradle dependency locking**: 29 proyectos con `gradle.lockfile` (root + 28 subproyectos)
 - ✅ **Task `checkLocks`**: auditoría de lockfiles faltantes
-- ✅ **Config schema centralization**: `ConfigSchemaGenerator` genera `paths.json` desde `ConfigPath` enum
+- ✅ **Config schema centralization**: `ConfigSchemaGenerator` genera `paths.json` + `js/paths.js` + `js/model.js` desde `ConfigPath` enum
 - ✅ **generateSchema/verifySchema** tasks para validación
+
+#### FASE 13 (2026-09-28): Clean Architecture + Release Pipeline + Dependency Verification
+- ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; descubre proveedores via `ServiceLoader` (SPI `TranslatorProvider`) en runtime
+- ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config
+- ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile`, `verification-metadata.xml` con todos los checksums transitivos (incl. jackson-base-2.22.0, junit-bom-5.14.3, adventure-bom-4.13.1)
+- ✅ **fabric-host excluido**: documentado con requisitos de rewrite completo
 
 ---
 

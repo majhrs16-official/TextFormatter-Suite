@@ -11,7 +11,8 @@
     UI.view = v;
     document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.dataset.view === v));
     const tb2 = Suite.views.Dock?.toolbar2 || { docked: true };
-    document.querySelector('#toolbar2').style.display = v === 'iflow' || v === 'txf' || v === 'rules' || !tb2.docked ? '' : 'none';
+    document.querySelector('#toolbar2').style.display =
+      v === 'iflow' || v === 'txf' || v === 'rules' || !tb2.docked ? '' : 'none';
     Suite.views.renderSidebar();
     Suite.views.renderPalette();
     if (v === 'iflow' || v === 'rules') {

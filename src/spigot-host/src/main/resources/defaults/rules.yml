@@ -1,0 +1,54 @@
+# iFlow Rules Configuration
+# Rules are evaluated in priority order (lowest priority number = highest priority)
+# First matching rule wins
+
+# Example: Drop messages containing "spam" in chat.global channel
+# - id: "anti-spam"
+#   priority: 100
+#   target: "DROP"
+#   reason: "Spam detected"
+#   channel: "chat.global"
+#   condition: "'spam' in #msg.texts[0]"
+
+# Example: Skip translation for staff channel
+# - id: "staff-no-translate"
+#   priority: 50
+#   target: "LOG"
+#   reason: "Staff channel - no translation"
+#   channel: "staff.chat"
+#   action: "#message.setTranslate(false)"
+
+# Example: Redirect private messages to a specific channel
+# - id: "private-redirect"
+#   priority: 75
+#   target: "CHANNEL_REDIRECT"
+#   reason: "Private message redirected"
+#   kind: "PRIVATE"
+#   redirect-channel: "private.messages"
+
+# Example: Rewrite message content using SpEL
+# - id: "rewrite-example"
+#   priority: 150
+#   target: "LOG"
+#   reason: "Message rewritten"
+#   condition: "#msg.text?.contains('hello')"
+#   transforms:
+#     - op: "rewrite"
+#       template: "&a[Greeting] %content%"
+
+# Example: Add sounds to messages containing "alert"
+# - id: "alert-sounds"
+#   priority: 200
+#   target: "LOG"
+#   reason: "Alert sound added"
+#   condition: "'alert' in #msg.texts[0]"
+#   transforms:
+#     - op: "sounds"
+#       add: ["BLOCK_NOTE_BLOCK_PLING", "ENTITY_EXPERIENCE_ORB_PICKUP"]
+
+# Example: Rate limit enforcement
+# - id: "rate-limit"
+#   priority: 300
+#   target: "RATE_LIMIT"
+#   reason: "Rate limited"
+#   channel: "chat.global"

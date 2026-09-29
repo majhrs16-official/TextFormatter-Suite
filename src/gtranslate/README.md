@@ -1,16 +1,17 @@
 # gtranslate — Google Translate Provider
 
-> **Purpose**: Implements `TranslatorProvider` and `TranslationService` SPIs from `core-api` using Google Cloud Translation API.
+> **Purpose**: Implements `TranslatorProvider` SPI from `core-api` for Google Translate. **Clean Architecture**: discovered at runtime via `ServiceLoader` — `host` has no compile-time dependency on this module.
 
 ---
 
 ## 1. Responsibilities
 
-- **Google Translate integration** — HTTP calls to Google Translation API
-- **TranslatorProvider implementation** — provides `Translator` instances
-- **TranslationService implementation** — high-level `translate(text, targetLang)` entry point
-- **Module registration** — `GTranslateModule` registers provider/service
+- **Google Translate integration** — HTTP calls to Google Translation API (free web endpoint)
+- **TranslatorProvider implementation** — provides `Translator` instances via `ServiceLoader`
+- **Translator implementation** — `GTranslate` implements `Translator` interface
+- **Module registration** — `GTranslateModule` registers `TranslatorProvider` SPI
 - **Configuration** — reads API key, endpoint from `TranslatorsConfig` (via `host`)
+- **char[] token handling** — API key stored in `char[]` + `Arrays.fill('\0')` after use
 
 ---
 
@@ -18,8 +19,9 @@
 
 - **No fallback logic** — `TranslatorManager` (core-api) handles fallback chains
 - **No language detection** — Google API handles auto-detection
-- **No caching** — could be added at `TranslatorManager` level
+- **No caching** — handled at `TranslatorManager` level
 - **No platform-specific code** — pure Java HTTP client
+- **No direct `host` dependency** — discovered via SPI at runtime
 
 ---
 
@@ -27,20 +29,12 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `TranslatorProvider`, `TranslationService`, `TranslationException` |
+| `core-api` | Compile | `TranslatorProvider`, `Translator`, `TranslatorManager`, `TranslationException` |
 | `transport` | Compile | `HttpTransport`, `MessageCodec` for HTTP calls |
 | `org.json` | Compile | JSON request/response parsing |
 | `kernel` | Test | Test fixtures |
 
----
-
-## 4. Consumers
-
-| Consumer | Usage |
-|----------|-------|
-| `host` | Wires `GTranslateProvider` via `GTranslateModule` |
-| `spigot-host` | Uses translation via `host` |
-| `fabric-host` | Uses translation via `host` |
+> **Clean Architecture**: `host` no longer depends on `gtranslate` at compile-time. Tests use `testImplementation` to make provider available to ServiceLoader during test execution.
 
 ---
 

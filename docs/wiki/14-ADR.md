@@ -276,156 +276,154 @@ Configuration format choice.
 
 ---
 
-## ADR-008: Message Immutability
+## ADR-009: Clean Architecture — TranslatorProvider SPI (FASE 13)
 
 **Status**: Accepted
-**Date**: 2023-06-15
+**Date**: 2026-09-28
 
 ### Context
 
-Messages flow through multiple pipeline stages.
+The `host` module had compile-time dependencies on `gtranslate` and `ltranslate` implementations, violating Clean Architecture (inward dependency rule). This prevented:
+- Compiling `host` without translation providers
+- Adding new translation providers without modifying `host`
+- Testing `host` in isolation
 
 ### Decision
 
-**Messages are immutable**. Use `toBuilder()` for modifications.
+Extract **TranslatorProvider SPI** to `core-api`:
+- `TranslatorProvider` interface (SPI for discovery)
+- `TranslatorManager` (runtime registry via ServiceLoader)
+- `Translator` interface (domain contract)
+- `TranslationException` (domain exception)
+
+`host` depends **only** on `core-api` (compile-time). Translation providers (`gtranslate`, `ltranslate`) implement `TranslatorProvider` and register via `META-INF/services/me.majhrs16.suite.api.spi.TranslatorProvider`.
+
+`TranslatorsConfig` in `host` discovers providers at runtime via `ServiceLoader.load(TranslatorProvider.class)`.
+
+Tests use `testImplementation` to make providers available to ServiceLoader during test execution.
+
+`spigot-host` maintains `implementation` deps on translators for ServiceLoader at plugin runtime (fat-jar excludes them but ModuleManager loads them).
 
 ### Consequences
 
 **Positive:**
-- Thread-safe
-- Predictable behavior
-- Easy debugging
-- Undo/redo friendly
+- `host` compiles without any translation provider
+- New providers = implement `TranslatorProvider` + META-INF registration only
+- Clean Architecture: dependencies point inward to `core-api`
+- Testability: `host` tests can mock or use real providers via testImplementation
+- Runtime flexibility: providers can be added/removed without recompiling `host`
 
 **Negative:**
-- Object allocation overhead
-- Builder pattern verbosity
-- Copy overhead for large messages
-
-### Implementation
-
-```java
-// Instead of mutation:
-message.setText("new text");
-
-// Use builder:
-Message updated = message.toBuilder()
-    .text("new text")
-    .build();
-```
+- Slight runtime overhead (ServiceLoader discovery)
+- More complex bootstrap (TranslatorsConfig must initialize before use)
+- `spigot-host` needs compile deps for ServiceLoader at plugin runtime
 
 ---
 
-## ADR-009: Module Communication via Events
+## ADR-010: Release Pipeline — GitHub Actions CI/CD
 
 **Status**: Accepted
-**Date**: 2023-07-01
+**Date**: 2026-09-28
 
 ### Context
 
-Modules need to communicate without direct dependencies.
+Need automated build, test, and release process for 29-module monorepo with dependency verification.
 
 ### Decision
 
-Use **Event Bus** pattern via `MessageEventBus` (core-api).
+Two GitHub Actions workflows:
+
+**`.github/workflows/ci.yml`** — Runs on every push/PR:
+- Build all 29 modules (`./gradlew build`)
+- Run all tests (`./gradlew test`)
+- Build Spigot plugin fat-jar (`spigot-host:build`)
+- Dependency verification (lockfiles + verification-metadata.xml)
+- Web editor checks (`npm run check` + `npm run test:integration`)
+- Javadoc generation
+
+**`.github/workflows/release.yml`** — Triggers on `v*` tags:
+- Build all modules + `publishToMavenLocal`
+- Build Spigot fat-jar
+- Generate SHA256 for all JARs
+- Create GitHub Release with artifacts + SHA256
+- Semantic versioning: tag `vX.Y.Z` → version `X.Y.Z`; prerelease if tag contains `-`
 
 ### Consequences
 
 **Positive:**
-- Loose coupling
-- Async processing
-- Easy testing
-- Observable system
+- Fully automated CI/CD
+- Reproducible builds via lockfiles + verification metadata
+- Release artifacts with integrity verification
+- Semantic versioning enforced
 
 **Negative:**
-- Eventual consistency
-- Harder debugging
-- Event schema evolution
-
-### Event Structure
-
-```java
-record MessageEvent(Message message, Actor sender, UUID eventId) {
-    Message getMessage();           // Original
-    Message getModifiedMessage();   // Modified by listeners
-    void setMessage(Message);       // Replace message
-    void setCancelled(boolean);     // Cancel processing
-}
-```
+- GitHub Actions minutes cost
+- Requires `GITHUB_TOKEN` for releases
 
 ---
 
-## ADR-009: Configuration as Code (YAML)
+## ADR-011: Dependency Verification — Gradle Lockfiles + Verification Metadata
 
 **Status**: Accepted
-**Date**: 2023-08-01
+**Date**: 2026-09-28
 
 ### Context
 
-Configuration format choice.
+Supply chain security: need reproducible builds and verified dependencies across 29 modules.
 
 ### Decision
 
-**YAML** for all configuration files.
+1. **`dependencyLocking`** in root + all subprojects `build.gradle` → 29 `gradle.lockfile` files (root + 28 subprojects)
+2. **`verification-metadata.xml`** in `gradle/` with SHA256/SHA512 for ALL transitive dependencies
+3. **`checkLocks` task** to audit missing lockfiles (handles intermediate `:src` project)
+4. **Lenient verification** for modules with external plugins/deps: `tester`, `inworld`, `spigot-host`, `host`, `textformatter`, `loadtest`
+
+Added checksums for previously missing: `jackson-base-2.22.0.pom`, `junit-bom-5.14.3.module`, `junit-bom-5.14.3.pom`, `adventure-bom-4.13.1.module`, `adventure-bom-4.13.1.pom` + ~50 fabric-loom transitive artifacts.
 
 ### Consequences
 
 **Positive:**
-- Human readable
-- Comments supported
-- Rich types (lists, maps)
-- Wide tooling support
-- Round-trip preservation
+- Supply chain integrity verified
+- Reproducible builds (lockfiles)
+- CI can fail on unverified dependencies
+- All 29 projects covered
 
 **Negative:**
-- Indentation sensitivity
-- No schema validation by default
-- Duplicate keys silently overwrite
-
-### Mitigations
-
-- JSON Schema validation (`docs/schema-v2.2.md`)
-- Web editor validation
-- ConfigValidator at runtime
+- Maintenance overhead (update metadata on dependency upgrades)
+- Lenient list requires auditing
 
 ---
 
-## ADR-010: Module Communication via Events
+## ADR-012: fabric-host — Excluded from Build
 
 **Status**: Accepted
-**Date**: 2023-07-01
+**Date**: 2026-09-28
 
 ### Context
 
-Modules need to communicate without direct dependencies.
+`fabric-host` module had 42 compilation errors — it was a copy-paste of `spigot-host` using Bukkit/Spigot APIs (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`) instead of Fabric APIs.
 
 ### Decision
 
-Use **Event Bus** pattern via `MessageEventBus` (core-api).
+Exclude `fabric-host` from Gradle build (`settings.gradle`). Document rewrite requirements.
+
+Rewrite to Fabric APIs requires:
+- `ServerCommandSource` instead of `CommandContext`
+- `FabricAudiences` instead of Bukkit audiences
+- Fabric event system (`ServerPlayConnectionEvents`, `ServerMessageEvents`) instead of Bukkit events
+- Brigadier native commands
+- Fabric Loader + Fabric API + Yarn mappings
 
 ### Consequences
 
 **Positive:**
-- Loose coupling
-- Async processing
-- Easy testing
-- Observable system
+- Build passes
+- Clear documentation of what's needed
+- No broken code in CI
 
 **Negative:**
-- Eventual consistency
-- Harder debugging
-- Event schema evolution
-
-### Event Structure
-
-```java
-record MessageEvent(Message message, Actor sender, UUID eventId) {
-    Message getMessage();           // Original
-    Message getModifiedMessage();   // Modified by listeners
-    void setMessage(Message);       // Replace message
-    void setCancelled(boolean);     // Cancel processing
-}
-```
+- No Fabric support currently
+- Requires significant rewrite effort
 
 ---
 

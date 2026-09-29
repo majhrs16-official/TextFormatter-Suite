@@ -97,7 +97,8 @@
       const btn = document.createElement('span');
       btn.className = 'seg-btn';
       btn.dataset.kind = k;
-      btn.innerHTML = '<span class="dot" style="background:' + colorMap[k] + '"></span>' + global.Suite.i18n.t('kind_' + k);
+      btn.innerHTML =
+        '<span class="dot" style="background:' + colorMap[k] + '"></span>' + global.Suite.i18n.t('kind_' + k);
       kindEl.appendChild(btn);
     }
   }
@@ -172,11 +173,11 @@
   function renderTransformProps(n) {
     const form = $('#pfForm');
     const transforms = n.transforms || [];
-    
+
     // Clear existing transform fields (except the kind selector and id)
     const existingTransformFields = form.querySelectorAll('.pf-transform-field');
     existingTransformFields.forEach(el => el.remove());
-    
+
     if (transforms.length === 0) {
       // Show empty state with add button
       const div = document.createElement('div');
@@ -191,20 +192,20 @@
       form.appendChild(div);
       return;
     }
-    
+
     // Render each transform operation
     transforms.forEach((tr, index) => {
       const div = document.createElement('div');
       div.className = 'pf-transform-field';
       div.dataset.index = index;
-      
+
       let html = `
         <div class="pf-transform-header">
           <span class="pf-transform-op">${tr.op}</span>
           <button type="button" class="btn btn-sm btn-danger" onclick="Suite.views.removeTransformOp(${index})">×</button>
         </div>
       `;
-      
+
       switch (tr.op) {
         case 'rewrite':
           html += `
@@ -239,8 +240,9 @@
             <div class="pf-field">
               <label>Source Language</label>
               <select class="pf-lang-source" data-index="${index}">
-                ${['auto', 'en', 'es', 'pt', 'de', 'fr', 'it', 'ja', 'ko', 'zh', 'ar', 'ru'].map(l => 
-                  `<option value="${l}" ${l === (tr.lang || 'auto') ? 'selected' : ''}>${l}</option>`).join('')}
+                ${['auto', 'en', 'es', 'pt', 'de', 'fr', 'it', 'ja', 'ko', 'zh', 'ar', 'ru']
+                  .map(l => `<option value="${l}" ${l === (tr.lang || 'auto') ? 'selected' : ''}>${l}</option>`)
+                  .join('')}
               </select>
             </div>
           `;
@@ -250,8 +252,9 @@
             <div class="pf-field">
               <label>Target Language</label>
               <select class="pf-lang-target" data-index="${index}">
-                ${['auto', 'en', 'es', 'pt', 'de', 'fr', 'it', 'ja', 'ko', 'zh', 'ar', 'ru'].map(l => 
-                  `<option value="${l}" ${l === (tr.lang || 'auto') ? 'selected' : ''}>${l}</option>`).join('')}
+                ${['auto', 'en', 'es', 'pt', 'de', 'fr', 'it', 'ja', 'ko', 'zh', 'ar', 'ru']
+                  .map(l => `<option value="${l}" ${l === (tr.lang || 'auto') ? 'selected' : ''}>${l}</option>`)
+                  .join('')}
               </select>
             </div>
           `;
@@ -285,14 +288,14 @@
           `;
           break;
       }
-      
+
       const transformDiv = document.createElement('div');
       transformDiv.className = 'pf-transform-field';
       transformDiv.dataset.index = index;
       transformDiv.innerHTML = html;
       const form = $('#pfForm');
       form.appendChild(transformDiv);
-      
+
       // Bind events for this transform
       const templateArea = transformDiv.querySelector('.pf-transform-template');
       if (templateArea) {
@@ -306,7 +309,7 @@
           });
         });
       }
-      
+
       const addInput = transformDiv.querySelector('.pf-sounds-add');
       if (addInput) {
         addInput.addEventListener('change', e => {
@@ -314,12 +317,15 @@
           StateStore.mutate('transform', st => {
             const n = st.graph.nodes.find(x => x.id === UI.sel.id);
             if (n && n.transforms[idx]) {
-              n.transforms[idx].add = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+              n.transforms[idx].add = e.target.value
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
             }
           });
         });
       }
-      
+
       const removeInput = transformDiv.querySelector('.pf-sounds-remove');
       if (removeInput) {
         removeInput.addEventListener('change', e => {
@@ -327,12 +333,15 @@
           StateStore.mutate('transform', st => {
             const n = st.graph.nodes.find(x => x.id === UI.sel.id);
             if (n && n.transforms[idx]) {
-              n.transforms[idx].remove = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+              n.transforms[idx].remove = e.target.value
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
             }
           });
         });
       }
-      
+
       const sleepInput = transformDiv.querySelector('.pf-sleep-millis');
       if (sleepInput) {
         sleepInput.addEventListener('change', e => {
@@ -345,7 +354,7 @@
           });
         });
       }
-      
+
       const langSourceSelect = transformDiv.querySelector('.pf-lang-source');
       if (langSourceSelect) {
         langSourceSelect.addEventListener('change', e => {
@@ -358,7 +367,7 @@
           });
         });
       }
-      
+
       const langTargetSelect = transformDiv.querySelector('.pf-lang-target');
       if (langTargetSelect) {
         langTargetSelect.addEventListener('change', e => {
@@ -371,7 +380,7 @@
           });
         });
       }
-      
+
       const colorModeSelect = transformDiv.querySelector('.pf-color-mode');
       if (colorModeSelect) {
         colorModeSelect.addEventListener('change', e => {
@@ -384,7 +393,7 @@
           });
         });
       }
-      
+
       const papiCheckbox = transformDiv.querySelector('.pf-format-papi');
       if (papiCheckbox) {
         papiCheckbox.addEventListener('change', e => {
@@ -397,7 +406,7 @@
           });
         });
       }
-      
+
       const channelInput = transformDiv.querySelector('.pf-set-channel');
       if (channelInput) {
         channelInput.addEventListener('change', e => {
@@ -410,19 +419,19 @@
           });
         });
       }
-    }
+    });
   }
 
   function renderRuleNodeProps(n) {
     const form = $('#pfForm');
     const st = StateStore.getState();
-    
+
     // Remove existing rule-specific fields
     const existingRuleFields = form.querySelectorAll('.pf-rule-field');
     existingRuleFields.forEach(el => el.remove());
-    
+
     let html = '';
-    
+
     // Common fields for all node kinds
     html += `
       <div class="pf-rule-field">
@@ -430,7 +439,7 @@
         <input type="text" class="pf-rule-label" value="${Suite.utils.esc(n.label || '')}" placeholder="Label">
       </div>
     `;
-    
+
     // Kind-specific fields
     switch (n.kind) {
       case 'cond':
@@ -457,18 +466,18 @@
         html += renderInputFields(n);
         break;
     }
-    
+
     if (html) {
       const div = document.createElement('div');
       div.className = 'pf-rule-field';
       div.innerHTML = html;
       form.appendChild(div);
-      
+
       // Bind events
       bindRuleNodeEvents(n);
     }
   }
-  
+
   function renderPriorityField(n) {
     const p = n.priority || 100;
     return `
@@ -478,7 +487,7 @@
       </div>
     `;
   }
-  
+
   function renderCondFields(n) {
     let h = '';
     h += `
@@ -542,7 +551,7 @@
     h += renderPriorityField(n);
     return h;
   }
-  
+
   function renderRedirectFields(n) {
     let h = '';
     h += `
@@ -562,7 +571,7 @@
     h += renderPriorityField(n);
     return h;
   }
-  
+
   function renderSleepFields(n) {
     let h = '';
     const ms = (n.transforms && n.transforms.find(t => t.op === 'sleep'))?.millis || 0;
@@ -575,7 +584,7 @@
     h += renderPriorityField(n);
     return h;
   }
-  
+
   function renderLoopFields(n) {
     let h = '';
     h += `
@@ -583,14 +592,20 @@
         <label>${global.Suite.i18n.t('loop_back_to')}</label>
         <select class="pf-loop-back">
           <option value="">${global.Suite.i18n.t('select_node')}</option>
-          ${st.graph.nodes.filter(x => x.kind === 'cond').map(x => `<option value="${x.id}" ${n.loopBack === x.id ? 'selected' : ''}>${Suite.utils.esc(x.label || x.id)}</option>`).join('')}
+          ${st.graph.nodes
+            .filter(x => x.kind === 'cond')
+            .map(
+              x =>
+                `<option value="${x.id}" ${n.loopBack === x.id ? 'selected' : ''}>${Suite.utils.esc(x.label || x.id)}</option>`
+            )
+            .join('')}
         </select>
       </div>
     `;
     h += renderPriorityField(n);
     return h;
   }
-  
+
   function renderOutputFields(n) {
     let h = '';
     h += `
@@ -602,7 +617,7 @@
     h += renderPriorityField(n);
     return h;
   }
-  
+
   function renderInputFields(n) {
     let h = '';
     h += `
@@ -614,11 +629,11 @@
     h += renderPriorityField(n);
     return h;
   }
-  
+
   function bindRuleNodeEvents(n) {
     const form = $('#pfForm');
     const st = StateStore.getState();
-    
+
     // Label
     const labelInput = form.querySelector('.pf-rule-label');
     if (labelInput) {
@@ -629,7 +644,7 @@
         });
       });
     }
-    
+
     // Cond fields
     const matcherChannel = form.querySelector('.pf-matcher-channel');
     if (matcherChannel) {
@@ -679,7 +694,7 @@
         });
       });
     }
-    
+
     // Condition
     const conditionArea = form.querySelector('.pf-condition');
     if (conditionArea) {
@@ -690,7 +705,7 @@
         });
       });
     }
-    
+
     // Target
     const targetSelect = form.querySelector('.pf-target');
     if (targetSelect) {
@@ -701,7 +716,7 @@
         });
       });
     }
-    
+
     // Actions
     form.querySelectorAll('.pf-add-action').forEach(btn => {
       btn.addEventListener('click', e => {
@@ -716,7 +731,7 @@
         Suite.views.renderProps();
       });
     });
-    
+
     form.querySelectorAll('.pf-remove-action').forEach(btn => {
       btn.addEventListener('click', e => {
         const idx = parseInt(e.target.dataset.index);
@@ -729,7 +744,7 @@
         Suite.views.renderProps();
       });
     });
-    
+
     // Redirect fields
     const redirectChannel = form.querySelector('.pf-redirect-channel');
     if (redirectChannel) {
@@ -747,7 +762,7 @@
         });
       });
     }
-    
+
     // Sleep
     const sleepMillis = form.querySelector('.pf-sleep-millis');
     if (sleepMillis) {
@@ -767,7 +782,7 @@
         });
       });
     }
-    
+
     // Loop back
     const loopBack = form.querySelector('.pf-loop-back');
     if (loopBack) {
@@ -778,7 +793,7 @@
         });
       });
     }
-    
+
     // Output channel
     const outputChannel = form.querySelector('.pf-output-channel');
     if (outputChannel) {
@@ -789,7 +804,7 @@
         });
       });
     }
-    
+
     // Input channel
     const inputChannel = form.querySelector('.pf-input-channel');
     if (inputChannel) {
@@ -800,7 +815,7 @@
         });
       });
     }
-    
+
     // Priority
     const priorityInput = form.querySelector('.pf-priority');
     if (priorityInput) {
@@ -992,39 +1007,39 @@
       );
   }
 
-global.Suite = global.Suite || {};
-      global.Suite.views = global.Suite.views || {};
-      Object.assign(global.Suite.views, { 
-        renderProps, 
-        fillLangSelects, 
-        renderSounds, 
-        bindPropsInputs, 
-        renderTransformProps,
-        addTransformOp: function() {
-          const sel = UI.sel;
-          if (!sel || sel.type !== 'node') return;
-          const n = StateStore.getState().graph.nodes.find(x => x.id === UI.sel.id);
-          if (!n) return;
-          
-          StateStore.mutate('add transform', st => {
-            const n = st.graph.nodes.find(x => x.id === UI.sel.id);
-            if (!n) return;
-            n.transforms = n.transforms || [];
-            n.transforms.push({ op: 'rewrite', template: '' });
-          });
-          Suite.views.renderProps();
-        },
-        removeTransformOp: function(index) {
-          const sel = UI.sel;
-          if (!sel || sel.type !== 'node') return;
-          
-          StateStore.mutate('remove transform', st => {
-            const n = st.graph.nodes.find(x => x.id === UI.sel.id);
-            if (n && n.transforms) {
-              n.transforms.splice(index, 1);
-            }
-          });
-          Suite.views.renderProps();
+  global.Suite = global.Suite || {};
+  global.Suite.views = global.Suite.views || {};
+  Object.assign(global.Suite.views, {
+    renderProps,
+    fillLangSelects,
+    renderSounds,
+    bindPropsInputs,
+    renderTransformProps,
+    addTransformOp: function () {
+      const sel = UI.sel;
+      if (!sel || sel.type !== 'node') return;
+      const n = StateStore.getState().graph.nodes.find(x => x.id === UI.sel.id);
+      if (!n) return;
+
+      StateStore.mutate('add transform', st => {
+        const n = st.graph.nodes.find(x => x.id === UI.sel.id);
+        if (!n) return;
+        n.transforms = n.transforms || [];
+        n.transforms.push({ op: 'rewrite', template: '' });
+      });
+      Suite.views.renderProps();
+    },
+    removeTransformOp: function (index) {
+      const sel = UI.sel;
+      if (!sel || sel.type !== 'node') return;
+
+      StateStore.mutate('remove transform', st => {
+        const n = st.graph.nodes.find(x => x.id === UI.sel.id);
+        if (n && n.transforms) {
+          n.transforms.splice(index, 1);
         }
       });
-    })(window || this);
+      Suite.views.renderProps();
+    },
+  });
+})(window || this);

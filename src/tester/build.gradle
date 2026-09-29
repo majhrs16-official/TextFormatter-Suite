@@ -21,26 +21,25 @@ repositories {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-messages:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:kernel')
+    implementation project(':src:host')
+    implementation project(':src:textformatter')
+    implementation project(':src:iflow')
+    implementation project(':src:messages')
     implementation 'net.kyori:adventure-api:4.17.0'
 
     // Paper API for runtime (matches spigot-host)
     compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
 
     // Test dependencies - need full suite for integration tests
-    testImplementation 'me.majhrs16:suite-gtranslate:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-ltranslate:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-sync-discord:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-sync-http:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-sync-tcpudp:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-sync-telegram:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-sync-websocket:2.1.0-SNAPSHOT'
-    testImplementation 'me.majhrs16:suite-sync-tcpudp:2.1.0-SNAPSHOT'
+    testImplementation project(':src:gtranslate')
+    testImplementation project(':src:ltranslate')
+    testImplementation project(':src:sync-discord')
+    testImplementation project(':src:sync-http')
+    testImplementation project(':src:sync-tcpudp')
+    testImplementation project(':src:sync-telegram')
+    testImplementation project(':src:sync-websocket')
 
     // For Spigot integration tests
     testImplementation platform('org.junit:junit-bom:5.10.2')

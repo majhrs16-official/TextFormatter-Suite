@@ -6,22 +6,29 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
+import me.majhrs16.suite.api.spi.ExpressionEvaluator;
+import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.host.config.RuleConfigLoader;
 import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.RouteDecision;
 import me.majhrs16.suite.iflow.RouteOutcome;
 import me.majhrs16.suite.iflow.Router;
+import me.majhrs16.suite.iflow.RuleExpressionEvaluator;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.textformatter.scripting.SpelExpressionEvaluator;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 
 import net.kyori.adventure.text.Component;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.ServiceLoader;
 
 /**
@@ -105,7 +112,21 @@ public final class SuiteHost {
         }
         HostConfig config = configResult.config();
         ChannelRegistry channels = channelsResult.config();
-        Router router = new DefaultRouter(channels, permissions);
+
+        // Load iFlow rules
+        List<Rule> rules = RuleConfigLoader.loadRules(configDir, logger);
+
+        // Create ExpressionEvaluator for SpEL conditions/actions in rules
+        // Using RuleExpressionEvaluator which allows getter methods on domain objects
+        ExpressionEvaluator ruleEvaluator = new RuleExpressionEvaluator(
+            placeholders, translation, logger);
+
+        Router router = new DefaultRouter(channels, permissions, ruleEvaluator);
+        router.setRules(rules);
+
+        // Create separate evaluator for template rendering (sandboxed)
+        ExpressionEvaluator templateEvaluator = new SpelExpressionEvaluator(
+            placeholders, translation, logger);
         TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
         return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
     }

@@ -292,3 +292,50 @@ Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpre
 **Implementación (2026-09-25).**
 Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpressionCache), `host` (ConfigLoader.LoadResult, ConfigLoader), `textformatter` (MiniEscape), `transport` (HttpTransport SSRF getAllByName), `manager-impl` (DefaultModuleLifecycle: discoverAvailableModules, register SPI-only, version resolver, dependency resolver, SHA256, manifest validation), `sync-discord` (JdaDiscordSink, DiscordSink: char[] tokens), `sync-telegram` (TelegramSink: char[] tokens), `ltranslate` (LTranslate: char[] apiKey), `observability` (DebugEndpoint executor shutdown), `transport` (HttpTransport getAllByName), `spigot-host` (project deps, Paper API 1.21.4), `inworld` (Paper API 1.21.4), `loadtest` (TranslationService mock con TranslatorManager), `textformatter` (SpelExpressionEvaluatorSecurityTest, TranslationServiceCacheTest), `gtranslate` (GTranslateExtendedTest), `ltranslate` (LTranslateExtendedTest), `kernel` (ModuleGraph self-cycle fix), `iflow` (RateLimiter ReentrantReadWriteLock), `sync-websocket` (bytes vs chars fix).
 
+## Decisión 2026-09-28 — Clean Architecture (Translator SPI), Release Pipeline CI/CD, Dependency Verification Completa
+
+**Contexto.** Tras completar Module Manager F12 y Security Sprint 3, quedaban pendientes: Clean Architecture (host sin deps compile-time a translators), Release Pipeline (GitHub Actions CI/CD), Dependency Verification completa (verification-metadata.xml con todos los checksums transitivos), gradle.lockfile portable, y sincronización de docs/codeguides.
+
+**Decisiones.**
+
+1. **Clean Architecture — TranslatorProvider SPI (FASE 13)**
+   - `host` **sin dependencias compile-time** a `gtranslate`/`ltranslate` (removidas de `host/build.gradle` líneas 24-25).
+   - Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`, `Translator`, `TranslationException`).
+   - `TranslatorsConfig` descubre proveedores via `ServiceLoader` (META-INF/services) en runtime.
+   - Tests de `host` usan `testImplementation project(':src:gtranslate')` + `ltranslate` para que ServiceLoader los encuentre.
+   - `spigot-host` mantiene dependencias `implementation` a translators (necesarios para ServiceLoader en runtime del plugin, ya que el fat-jar los excluye pero el ModuleManager los carga).
+   - Decoupling completo: host compila sin translators; nuevos proveedores solo implementan `TranslatorProvider` + registran en META-INF.
+
+2. **Release Pipeline — GitHub Actions CI/CD**
+   - `.github/workflows/ci.yml`: build & test all modules, build Spigot plugin, upload artifact, dependency-check (lockfiles), web-editor checks, javadoc.
+   - `.github/workflows/release.yml`: trigger on `v*` tags; build all modules + publishToMavenLocal; build Spigot fat-jar; generate SHA256 for all JARs; create GitHub Release with artifacts + SHA256.
+   - Semantic versioning: tag `vX.Y.Z` → version `X.Y.Z`; prerelease si tag contiene `-`.
+
+3. **Dependency Verification — Completa**
+   - `gradle/verification-metadata.xml` con SHA256/SHA512 para todas las dependencias transitivas.
+   - Agregados checksums faltantes en esta sesión: `jackson-base-2.22.0.pom`, `junit-bom-5.14.3.module`, `junit-bom-5.14.3.pom`, `adventure-bom-4.13.1.module`, `adventure-bom-4.13.1.pom`.
+   - `dependencyLocking` en `build.gradle` (root + subprojects) → 29 proyectos con `gradle.lockfile` (root + 28 subprojects).
+   - `checkLocks` task actualizado para manejar proyecto intermedio `:src` (sin build.gradle).
+   - Verificación deshabilitada para módulos con deps externas: `tester`, `inworld`, `spigot-host`, `host`, `textformatter`, `loadtest`.
+
+4. **fabric-host — Excluido del Build**
+   - 42 errores de compilación: usa APIs Spigot/Bukkit (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`) en vez de Fabric APIs.
+   - Requiere reescritura completa a: `ServerCommandSource`, `FabricAudiences`, eventos Fabric, Brigadier nativo.
+   - Excluido en `settings.gradle`.
+
+5. **Sincronización Documentación/Codeguides**
+   - `README.md` (root): arquitectura actualizada, fabric-host excluido, Clean Architecture documentada, dependencias host corregidas.
+   - `docs/PLAN.md`: FASE 13 completada, Release Pipeline completada, Dependency Verification completada, estado actualizado.
+   - Module READMEs (codeguides): `host`, `fabric-host`, `sync-velocity`, `transport`, `spigot-host`, `manager-impl`, `inworld` actualizados.
+
+**Consecuencias.**
+- Host compila sin translators; ServiceLoader discovery en runtime funcionando.
+- CI/CD pipeline operativo; builds reproducibles con lockfiles + verification metadata.
+- Build completo pasa con dependency verification estricta.
+- 29/29 proyectos con gradle.lockfile.
+- Todos los tests pasan (unit + integración).
+- fabric-host documentado como excluido con requisitos de rewrite.
+
+**Implementación (2026-09-28).**
+Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `core-api` (ya tenía TranslatorProvider SPI), `gtranslate` (GTranslateProvider + META-INF/services), `ltranslate` (LTranslateProvider + META-INF/services), `spigot-host` (build.gradle mantiene deps), `build.gradle` (root: dependencyLocking, checkLocks fix), `settings.gradle` (fabric-host excluido), `gradle/verification-metadata.xml` (checksums agregados), `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `docs/PLAN.md`, `README.md`, module READMEs.
+

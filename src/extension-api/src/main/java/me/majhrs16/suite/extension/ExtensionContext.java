@@ -79,23 +79,6 @@ public final class ExtensionContext {
     // ============================================================
 
     /**
-     * Registers a channel provided by this extension.
-     * Channel will be unregistered automatically on extension disable.
-     */
-    public void registerChannel(Channel channel) {
-        channels.register(channel);
-        logger.info("[{}] Registered channel: {}", extensionId, channel.name());
-    }
-
-    /**
-     * Unregisters a channel registered by this extension.
-     */
-    public void unregisterChannel(String channelName) {
-        channels.unregister(channelName);
-        logger.info("[{}] Unregistered channel: {}", extensionId, channelName);
-    }
-
-    /**
      * Dispatches a message through the suite pipeline.
      * The extension's ID is attached for tracking.
      */

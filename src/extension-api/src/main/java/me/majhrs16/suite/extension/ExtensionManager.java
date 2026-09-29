@@ -5,6 +5,9 @@ import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -24,15 +27,18 @@ public final class ExtensionManager {
 
     private final PluginLogger logger;
     private final ExtensionContextProvider contextProvider;
+    private final SemVer runningCoreApiVersion;
     private final Map<String, LoadedExtension> loaded = new ConcurrentHashMap<>();
     private final Map<String, ExtensionDescriptor> descriptors = new ConcurrentHashMap<>();
+    private final Map<String, URLClassLoader> classLoaders = new ConcurrentHashMap<>();
     private final Path extensionsDir;
     private volatile boolean running = false;
 
-    public ExtensionManager(PluginLogger logger, ExtensionContextProvider contextProvider, Path extensionsDir) {
+    public ExtensionManager(PluginLogger logger, ExtensionContextProvider contextProvider, Path extensionsDir, SemVer runningCoreApiVersion) {
         this.logger = logger;
         this.contextProvider = contextProvider;
         this.extensionsDir = extensionsDir;
+        this.runningCoreApiVersion = runningCoreApiVersion;
     }
 
     /**
@@ -98,10 +104,10 @@ public final class ExtensionManager {
             return false;
         }
 
-        // Check core API compatibility
-        if (!desc.version().satisfies(desc.requiredCoreApi().toString())) {
+        // Check core API compatibility - compare RUNNING core API version against extension's required
+        if (!runningCoreApiVersion.satisfies(desc.requiredCoreApi().toString())) {
             logger.error("Extension " + id + " requires core-api " + desc.requiredCoreApi() +
-                " but running " + desc.version());
+                " but running core-api is " + runningCoreApiVersion);
             return false;
         }
 
@@ -115,9 +121,10 @@ public final class ExtensionManager {
             }
         }
 
-        // Load extension class
+        // Load extension class with custom classloader
         try {
-            Class<?> clazz = loadExtensionClass(desc);
+            URLClassLoader classLoader = createClassLoader(desc);
+            Class<?> clazz = classLoader.loadClass(desc.mainClass());
             Extension extension = (Extension) clazz.getDeclaredConstructor().newInstance();
 
             // Create context and enable
@@ -125,6 +132,7 @@ public final class ExtensionManager {
             extension.onEnable(ctx);
 
             loaded.put(id, new LoadedExtension(desc, extension, ctx));
+            classLoaders.put(id, classLoader);
             logger.info("Enabled extension: " + id);
             return true;
         } catch (Exception e) {
@@ -146,8 +154,15 @@ public final class ExtensionManager {
             logger.error("Error disabling extension " + id + ": " + e.getMessage());
         }
 
-        // Unload classloader (if using custom classloader)
-        // For now, classes stay loaded but extension is disabled
+        // Close custom classloader
+        URLClassLoader classLoader = classLoaders.remove(id);
+        if (classLoader != null) {
+            try {
+                classLoader.close();
+            } catch (IOException e) {
+                logger.warn("Failed to close classloader for " + id + ": " + e.getMessage());
+            }
+        }
 
         logger.info("Disabled extension: " + id);
     }
@@ -221,11 +236,18 @@ public final class ExtensionManager {
     // Internals
     // ============================================================
 
+    private URLClassLoader createClassLoader(ExtensionDescriptor desc) throws IOException {
+        URL[] urls = new URL[] { desc.jarPath().toUri().toURL() };
+        // Parent is the current classloader (extension-api)
+        return new URLClassLoader(urls, getClass().getClassLoader());
+    }
+
     private Class<?> loadExtensionClass(ExtensionDescriptor desc) throws Exception {
-        // For simplicity, use system classloader.
-        // Production: use custom classloader per extension for isolation.
-        String className = desc.mainClass();
-        return Class.forName(className, true, getClass().getClassLoader());
+        URLClassLoader classLoader = classLoaders.get(desc.id());
+        if (classLoader == null) {
+            classLoader = createClassLoader(desc);
+        }
+        return classLoader.loadClass(desc.mainClass());
     }
 
     // ============================================================

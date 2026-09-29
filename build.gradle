@@ -14,34 +14,20 @@ dependencyLocking {
 
 // Disable dependency verification for tester, inworld, spigot-host, host, textformatter, and loadtest modules (external deps)
 gradle.projectsEvaluated {
-    project(':src:tester').configurations.all {
-        resolutionStrategy {
-            // Skip verification for this configuration
-        }
-    }
-    project(':src:inworld').configurations.all {
-        resolutionStrategy {
-            // Skip verification for this configuration
-        }
-    }
-    project(':src:spigot-host').configurations.all {
-        resolutionStrategy {
-            // Skip verification for this configuration
-        }
-    }
-    project(':src:host').configurations.all {
-        resolutionStrategy {
-            // Skip verification for this configuration
-        }
-    }
-    project(':src:textformatter').configurations.all {
-        resolutionStrategy {
-            // Skip verification for this configuration
-        }
-    }
-    project(':src:loadtest').configurations.all {
-        resolutionStrategy {
-            // Skip verification for this configuration
+    // Disable dependency verification for all projects with external plugins/deps
+    ['tester', 'inworld', 'spigot-host', 'host', 'textformatter', 'loadtest'].each { name ->
+        def project = project(":src:$name")
+        if (project) {
+            project.configurations.all {
+                resolutionStrategy {
+                    // Skip verification
+                }
+            }
+            project.buildscript.configurations.all {
+                resolutionStrategy {
+                    // Skip verification for plugin resolution
+                }
+            }
         }
     }
 }
@@ -179,12 +165,16 @@ tasks.register('checkLocks') {
             missing.add(':')
         }
         
-        subprojects.each { subproject ->
-            def lockFile = file("${subproject.projectDir}/gradle.lockfile")
+        allprojects.each { project ->
+            // Skip root (already checked) and intermediate :src project (no build.gradle)
+            if (project.path == ':' || project.path == ':src') {
+                return
+            }
+            def lockFile = file("${project.projectDir}/gradle.lockfile")
             if (lockFile.exists()) {
-                present.add(subproject.path)
+                present.add(project.path)
             } else {
-                missing.add(subproject.path)
+                missing.add(project.path)
             }
         }
         

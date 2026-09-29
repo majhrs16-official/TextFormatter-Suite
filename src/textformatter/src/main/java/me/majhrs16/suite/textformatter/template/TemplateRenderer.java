@@ -19,6 +19,8 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static java.util.Locale.ROOT;
+
 /**
  * Renders {@link Template templates} into Adventure {@link Component}s.
  *
@@ -212,8 +214,13 @@ public final class TemplateRenderer {
         if (!translation.isAvailable()) {
             return content;
         }
-        return translation.translate(content, from, to);
+        // Translate the content, then re-escape the result to prevent
+        // translated text from being interpreted as MiniMessage markup
+        String translated = translation.translate(content, from, to);
+        return MiniEscape.escape(translated);
     }
+
+    private static final Pattern CLOSE_TR_PATTERN = Pattern.compile(Pattern.quote(CLOSE_TR), Pattern.CASE_INSENSITIVE);
 
     private static List<Span> findSpans(String source) {
         List<Span> spans = new ArrayList<>();
@@ -223,10 +230,12 @@ public final class TemplateRenderer {
             if (open < 0) {
                 break;
             }
-            int close = source.toLowerCase().indexOf(CLOSE_TR, open + OPEN_TR.length());
-            if (close < 0) {
+            Matcher matcher = CLOSE_TR_PATTERN.matcher(source);
+            matcher.region(open + OPEN_TR.length(), source.length());
+            if (!matcher.find()) {
                 break;
             }
+            int close = matcher.start();
             String content = source.substring(open + OPEN_TR.length(), close);
             spans.add(new Span(open, close + CLOSE_TR.length(), content));
             index = close + CLOSE_TR.length();

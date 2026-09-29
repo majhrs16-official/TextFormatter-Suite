@@ -24,7 +24,7 @@ class TemplateRendererTest {
             @Override public String name() { return "test"; }
 
             @Override public String translate(String text, String from, String to) {
-                return "[" + to + "]" + text;
+                return to + ": " + text;
             }
 
             @Override public String detect(String text) { return "en"; }
@@ -89,7 +89,7 @@ class TemplateRendererTest {
             Template.of("<tr>%ct_messages%</tr> mundo"),
             context("hola", Language.EN, Language.ES, true));
 
-        assertEquals("[es]hola mundo", result);
+        assertEquals("es: hola mundo", result);
     }
 
     @Test
@@ -98,7 +98,7 @@ class TemplateRendererTest {
             Template.of("<tr>hola</tr> mundo"),
             context("hola", Language.EN, Language.ES, true));
 
-        assertEquals("[es]hola mundo", result);
+        assertEquals("es: hola mundo", result);
     }
 
     @Test

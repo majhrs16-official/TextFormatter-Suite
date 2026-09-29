@@ -17,6 +17,11 @@ import java.util.Optional;
  * path ancestors, so a group can inherit formats from its parent and only
  * override what it needs. The index is immutable after
  * {@link Builder#build()} and to guarantee deterministic rendering.</p>
+ * <p>
+ * <b>Immutability:</b> Once built via {@link Builder#build()}, the registry
+ * cannot be modified. Extensions that need to add channels should contribute
+ * to the configuration before bootstrap, or create a new registry via
+ * the Builder during reload.</p>
  */
 public final class ChannelRegistry {
 
@@ -69,23 +74,6 @@ public final class ChannelRegistry {
     /** All registered channels, in insertion order. */
     public Collection<Channel> all() {
         return channels.values();
-    }
-
-    /**
-     * Registers a new channel (for extensions).
-     */
-    public void register(Channel channel) {
-        if (channels.containsKey(channel.name())) {
-            throw new IllegalArgumentException("Channel already exists: " + channel.name());
-        }
-        channels.put(channel.name(), channel);
-    }
-
-    /**
-     * Unregisters a channel (for extensions).
-     */
-    public void unregister(String path) {
-        channels.remove(path);
     }
 
     /** All dotted paths, in insertion order. */

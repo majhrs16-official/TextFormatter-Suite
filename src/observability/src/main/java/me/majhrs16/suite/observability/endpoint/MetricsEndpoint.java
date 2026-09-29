@@ -38,8 +38,14 @@ public final class MetricsEndpoint {
     }
 
     public MetricsEndpoint(PluginLogger logger, int port, String path) throws IOException {
+        this(logger, port, path, "127.0.0.1");
+    }
+
+    public MetricsEndpoint(PluginLogger logger, int port, String path, String bindAddress) throws IOException {
         this.logger = logger;
-        this.server = HttpServer.create(new InetSocketAddress(port), 0);
+        // Bind to localhost by default for security; can be overridden via system property or parameter
+        String effectiveBind = System.getProperty("textformattersuite.metrics.bind", bindAddress);
+        this.server = HttpServer.create(new InetSocketAddress(effectiveBind, port), 0);
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "textformatter-metrics-updater");
             t.setDaemon(true);

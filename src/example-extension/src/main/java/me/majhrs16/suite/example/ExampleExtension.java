@@ -11,7 +11,6 @@ import me.majhrs16.suite.extension.ExtensionContext;
 import me.majhrs16.suite.extension.ExtensionConfig;
 import me.majhrs16.suite.extension.ExtensionMetadata;
 import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.textformatter.channel.Channel;
 
 import java.util.List;
 import java.util.Map;
@@ -25,7 +24,6 @@ import me.majhrs16.suite.api.SemVer;
  * Example extension demonstrating the extension API.
  * <p>
  * This extension:
- * - Registers a custom channel "example.custom"
  * - Adds a /suite example command
  * - Listens for messages and logs them
  * - Provides a custom capability
@@ -76,19 +74,13 @@ public final class ExampleExtension implements Extension {
         this.context = context;
         this.enabled = true;
 
-        // Register custom channel
-        Channel customChannel = Channel.builder("example.custom")
-            .permission("example.custom")
-            .messages(Formats.of("<gold>[Example] %content%</gold>"))
-            .showSender(true)
-            .type(Channel.Type.CHAT)
-            .build();
-        context.registerChannel(customChannel);
+        // Note: Channel registration is now done via YAML configuration files,
+        // not programmatically. This example demonstrates other extension capabilities.
 
         // Register custom command /suite example
         MessageDispatcher dispatcher = context.dispatcher();
         // Note: In real implementation, use command registrar
-        context.logger().info("[ExampleExtension] Registered custom channel and command");
+        context.logger().info("[ExampleExtension] Enabled successfully");
 
         // Subscribe to events
         context.subscribe("message.processed", event -> {
@@ -109,9 +101,6 @@ public final class ExampleExtension implements Extension {
     public void onDisable() {
         this.enabled = false;
 
-        // Unregister channel
-        context.unregisterChannel("example.custom");
-
         // Clear state
         context.removeState("startTime");
         context.removeState("messageCount");
@@ -129,7 +118,7 @@ public final class ExampleExtension implements Extension {
         return ExtensionMetadata.builder()
             .id("example-extension")
             .name("Example Extension")
-            .description("Demonstrates the extension API with custom channel and commands")
+            .description("Demonstrates the extension API with custom commands and event handling")
             .author("TextFormatter Suite Team")
             .website("https://github.com/majhrs16/textformatter-suite")
             .license("GPL-3.0")

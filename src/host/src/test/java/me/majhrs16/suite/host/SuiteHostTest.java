@@ -47,7 +47,7 @@ class SuiteHostTest {
         managers.add(new Translator() {
             @Override public String name() { return "fake"; }
             @Override public String translate(String text, String from, String to) {
-                return "[" + to + "]" + text;
+                return to + ": " + text;
             }
             @Override public String detect(String text) { return "en"; }
             @Override public boolean isAvailable() { return true; }
@@ -94,7 +94,7 @@ class SuiteHostTest {
         RoutingResult result = host.deliver(message, ALEX);
 
         assertTrue(result.delivered());
-        assertEquals("Steve: [es]hola", PLAIN.serialize(result.rendered()));
+        assertEquals("Steve: es: hola", PLAIN.serialize(result.rendered()));
     }
 
     @Test

@@ -300,11 +300,11 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                                     ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.install.started", module, version)), false);
                                     return 1;
                                 }))
-                            .executes(ctx -> {
-                                String module = StringArgumentType.getString(ctx, "module");
-                                ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.install.started", module, "latest")), false);
-                                return 1;
-                            }))))
+.executes(ctx -> {
+                                    String module = StringArgumentType.getString(ctx, "module");
+                                    ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.install.started", module, "latest")), false);
+                                    return 1;
+                                })))
                     .then(LiteralArgumentBuilder.literal("update")
                         .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
                             .then(LiteralArgumentBuilder.argument("version", StringArgumentType.string())
@@ -318,14 +318,14 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                                 String module = StringArgumentType.getString(ctx, "module");
                                 ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.update.started", module, "latest")), false);
                                 return 1;
-                            }))))
+                            })))
                     .then(LiteralArgumentBuilder.literal("remove")
                         .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
                             .executes(ctx -> {
                                 String module = StringArgumentType.getString(ctx, "module");
                                 ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("module.remove.started", module)), false);
                                 return 1;
-                            }))))
+                            })))
                     .then(LiteralArgumentBuilder.literal("info")
                         .then(LiteralArgumentBuilder.argument("module", StringArgumentType.string())
                             .executes(ctx -> {
@@ -460,18 +460,23 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         if (EXTENSION_MANAGER != null) {
             EXTENSION_MANAGER.stop();
         }
-        EXTENSION_MANAGER = new ExtensionManager(logger, extId -> {
-            return new me.majhrs16.suite.extension.ExtensionContext(
-                reloaded,
-                dispatcher,
-                logger,
-                translation,
-                languages,
-                dirs,
-                folder,
-                extId
-            );
-        }, folder.resolve("extensions"));
+        EXTENSION_MANAGER = new ExtensionManager(
+            logger, 
+            extId -> {
+                return new me.majhrs16.suite.extension.ExtensionContext(
+                    reloaded,
+                    dispatcher,
+                    logger,
+                    translation,
+                    languages,
+                    dirs,
+                    folder,
+                    extId
+                );
+            }, 
+            folder.resolve("extensions"),
+            me.majhrs16.suite.api.SemVer.parse("2.1.0") // running core API version
+        );
         EXTENSION_MANAGER.start();
     }
 

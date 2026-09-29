@@ -1,6 +1,6 @@
-# fabric-host — Fabric Mod Platform Adapter
+# fabric-host — Fabric Mod Platform Adapter (EXCLUDED FROM BUILD)
 
-> **Purpose**: Fabric mod implementation. Provides platform-specific SPI implementations (`ActorDirectory`, `ChatDelivery`, `PlaceholderResolver`, `ConfigValidator`) and registers event handlers.
+> **Purpose**: Fabric mod implementation. **CURRENTLY EXCLUDED FROM BUILD** — 42 compilation errors due to using Spigot/Bukkit APIs (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`) instead of Fabric APIs. Requires complete rewrite to Fabric APIs: `ServerCommandSource`, `FabricAudiences`, Fabric events, Brigadier native.
 
 ---
 
@@ -27,7 +27,7 @@
 
 ---
 
-## 3. Dependencies
+## 3. Dependencies (NOT APPLICABLE — EXCLUDED FROM BUILD)
 
 | Dependency | Type | Reason |
 |------------|------|--------|
@@ -58,6 +58,8 @@
 | `fabric-api` | ModImplementation | Fabric API |
 | `minecraft` | Minecraft | Minecraft 1.21 |
 | `yarn mappings` | Mappings | Yarn 1.21+build.1 |
+
+> **⚠️ EXCLUDED**: This module is excluded from the Gradle build (`settings.gradle`). It contains 42 compilation errors because it uses Spigot/Bukkit APIs instead of Fabric APIs. Requires full rewrite using Fabric APIs: `ServerCommandSource`, `FabricAudiences`, Fabric event system, Brigadier native commands. See `TextFormatterSuiteMod.java` for specific error locations.
 
 ---
 
@@ -173,11 +175,11 @@ Adventure component → Fabric component → player.sendMessage()
 
 ## 10. Build Notes
 
-- **Fabric Loom** — uses `fabric-loom` Gradle plugin
-- **Maven coordinates** — declares dependencies as `me.majhrs16:suite-*:2.1.0-SNAPSHOT` (not project deps)
-- **Shadow JAR** — produces `textformatter-suite-fabric.jar` (thin + shadow)
+- **EXCLUDED FROM BUILD** — `fabric-host` is excluded in `settings.gradle` due to 42 compilation errors
+- **Rewrite Required** — Current code uses Spigot/Bukkit APIs (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`)
+- **Target APIs** — Fabric rewrite needs: `ServerCommandSource`, `FabricAudiences`, Fabric event system, Brigadier native commands
+- **Fabric Loom** — would use `fabric-loom` Gradle plugin (when rewritten)
 - **Java 21** — requires Java 21 toolchain
-- **Separate build** — likely built/published independently from Spigot
 
 ---
 

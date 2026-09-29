@@ -86,23 +86,93 @@ import java.util.UUID;
 public final class TextFormatterSuitePlugin extends JavaPlugin implements Listener {
 
     /** Immutable wiring snapshot; swapped atomically on reload. */
-    private static final class Runtime {
+    private static final class Runtime implements AutoCloseable {
         final SuiteHost host;
         final MessageDispatcher dispatcher;
         final SpigotActorDirectory directory;
         final UserLanguageStore languages;
         final DiscordBridge bridge;
+        final WebSocketSyncSink wsSink;
+        final me.majhrs16.suite.observability.Observability observability;
+        final me.majhrs16.suite.extension.ExtensionManager extensionManager;
+        final me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle;
+        final InWorldHandler inworldHandler;
         final PluginLogger logger;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
                 SpigotActorDirectory directory, UserLanguageStore languages,
-                DiscordBridge bridge, PluginLogger logger) {
+                DiscordBridge bridge, WebSocketSyncSink wsSink,
+                me.majhrs16.suite.observability.Observability observability,
+                me.majhrs16.suite.extension.ExtensionManager extensionManager,
+                me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle,
+                InWorldHandler inworldHandler,
+                PluginLogger logger) {
             this.host = host;
             this.dispatcher = dispatcher;
             this.directory = directory;
             this.languages = languages;
             this.bridge = bridge;
+            this.wsSink = wsSink;
+            this.observability = observability;
+            this.extensionManager = extensionManager;
+            this.moduleLifecycle = moduleLifecycle;
+            this.inworldHandler = inworldHandler;
             this.logger = logger;
+        }
+
+        @Override
+        public void close() {
+            if (wsSink != null) {
+                try {
+                    wsSink.stop();
+                } catch (Exception e) {
+                    logger.warn("Error closing WebSocket sink: " + e.getMessage());
+                }
+            }
+            if (observability != null) {
+                try {
+                    observability.stop();
+                } catch (Exception e) {
+                    logger.warn("Error stopping Observability: " + e.getMessage());
+                }
+            }
+            if (extensionManager != null) {
+                try {
+                    extensionManager.stop();
+                } catch (Exception e) {
+                    logger.warn("Error stopping ExtensionManager: " + e.getMessage());
+                }
+            }
+            if (moduleLifecycle != null) {
+                try {
+                    // ModuleLifecycle doesn't have a close() method; modules are unloaded via unload()
+                    logger.debug("ModuleLifecycle cleanup (no close method available)");
+                } catch (Exception e) {
+                    logger.warn("Error closing ModuleLifecycle: " + e.getMessage());
+                }
+            }
+            if (inworldHandler != null) {
+                try {
+                    // InWorldHandler doesn't have an unregister() method; events are unregistered automatically on plugin disable
+                    logger.debug("InWorldHandler cleanup (no unregister method available)");
+                } catch (Exception e) {
+                    logger.warn("Error unregistering InWorldHandler: " + e.getMessage());
+                }
+            }
+            if (dispatcher != null) {
+                try {
+                    dispatcher.close();
+                } catch (Exception e) {
+                    logger.warn("Error closing MessageDispatcher: " + e.getMessage());
+                }
+            }
+            if (bridge != null) {
+                try {
+                    bridge.stop();
+                } catch (Exception e) {
+                    logger.warn("Error stopping DiscordBridge: " + e.getMessage());
+                }
+            }
         }
     }
 
@@ -111,10 +181,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     private volatile Runtime runtime;
     private volatile MessagesConfig messages;
     private DynamicCommandRegistrar commandRegistrar;
-    private me.majhrs16.suite.observability.Observability observability;
-    private me.majhrs16.suite.manager.ModuleLifecycle moduleLifecycle;
-    private me.majhrs16.suite.extension.ExtensionManager extensionManager;
-    private me.majhrs16.suite.inworld.InWorldHandler inworldHandler;
 
     @Override
     public void onEnable() {
@@ -137,11 +203,12 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
     @Override
     public void onDisable() {
         Runtime current = runtime;
-        if (current != null && current.bridge != null) {
-            current.bridge.stop();
-        }
-        if (observability != null) {
-            observability.stop();
+        if (current != null) {
+            try {
+                current.close();
+            } catch (Exception e) {
+                getLogger().severe("Error during shutdown: " + e.getMessage());
+            }
         }
         if (audiences != null) {
             audiences.close();
@@ -152,6 +219,16 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
     /** Re-reads the whole file layout from disk (save → apply). */
     public void reloadSuite() {
+        // Close old runtime first
+        Runtime oldRuntime = runtime;
+        if (oldRuntime != null) {
+            try {
+                oldRuntime.close();
+            } catch (Exception e) {
+                getLogger().warning("Error closing old runtime: " + e.getMessage());
+            }
+        }
+
         Path folder = getDataFolder().toPath();
         copyDefaultsIfMissing(folder);
         PluginLogger logger = logger();
@@ -182,56 +259,69 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         SpigotChatDelivery delivery = new SpigotChatDelivery(this, audiences);
         MessageDispatcher dispatcher =
             new MessageDispatcher(reloaded, dirs, delivery, permissions, logger);
-        DiscordBridge previous = runtime == null ? null : runtime.bridge;
-        if (previous != null) {
-            previous.stop();
-        }
         DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger);
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, logger);
         if (bridge != null) {
             bridge.start();
         }
 
-        // Initialize WebSocket Sync Sink
+        // Initialize WebSocket Sync Sink (check enabled field)
+        WebSocketSyncSink wsSink = null;
         try {
             Path wsConfig = folder.resolve("sync/websocket.yml");
             String wsToken = "";
             int wsPort = 9092;
+            String wsBind = "127.0.0.1";
+            boolean wsEnabled = false;
             if (Files.exists(wsConfig)) {
-                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
+                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
                 String content = Files.readString(wsConfig);
                 @SuppressWarnings("unchecked")
-                Map<String, Object> map = (Map<String, Object>) new org.yaml.snakeyaml.Yaml().load(content);
+                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
                 if (map != null) {
                     Object token = map.get("token");
                     if (token instanceof String) wsToken = (String) token;
                     Object port = map.get("port");
                     if (port instanceof Number) wsPort = ((Number) port).intValue();
+                    Object bind = map.get("bind");
+                    if (bind instanceof String) wsBind = (String) bind;
+                    Object enabled = map.get("enabled");
+                    if (enabled instanceof Boolean) wsEnabled = (Boolean) enabled;
                 }
             }
-            WebSocketSyncSink wsSink = new WebSocketSyncSink(wsPort, wsToken, logger);
-            wsSink.setListener(new me.majhrs16.suite.api.spi.SyncListener() {
-                @Override
-                public void onMessage(me.majhrs16.suite.api.spi.SyncSink sink, Message message) {
-                    dispatcher.dispatch(message);
+
+            // SECURITY: Only start if enabled, require token, bind to configured address
+            if (wsEnabled) {
+                if (wsToken == null || wsToken.isBlank()) {
+                    logger.warn("WebSocket sync is enabled but no auth token configured! Refusing to start without token.");
+                } else {
+                    // Use system property or config for bind address
+                    String bindAddress = System.getProperty("textformattersuite.ws.bind", wsBind);
+                    wsSink = new WebSocketSyncSink(wsPort, wsToken, logger, bindAddress);
+                    wsSink.setListener(new me.majhrs16.suite.api.spi.SyncListener() {
+                        @Override
+                        public void onMessage(me.majhrs16.suite.api.spi.SyncSink sink, Message message) {
+                            dispatcher.dispatch(message);
+                        }
+                        @Override
+                        public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink sink, String reason) {
+                            logger.warn("WebSocket sync disconnected: " + reason);
+                        }
+                    });
+                    wsSink.start();
+                    logger.info("WebSocket sync sink started on " + bindAddress + ":" + wsPort);
                 }
-                @Override
-                public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink sink, String reason) {
-                    logger.warn("WebSocket sync disconnected: " + reason);
-                }
-            });
-            wsSink.start();
-            logger.info("WebSocket sync sink started on port " + wsPort);
+            } else {
+                logger.info("WebSocket sync sink is disabled (enabled: false in config)");
+            }
         } catch (Exception e) {
             logger.warn("Failed to start WebSocket sync sink: " + e.getMessage());
         }
 
         // Initialize Observability module
-        if (observability != null) {
-            observability.stop();
-        }
+        me.majhrs16.suite.observability.Observability observability = null;
         try {
-            this.observability = me.majhrs16.suite.observability.Observability.createDefault(
+            observability = me.majhrs16.suite.observability.Observability.createDefault(
                 reloaded, dispatcher, reloaded.channels(), logger);
             observability.start();
             logger.info("Observability module started (metrics:9090, debug:9091)");
@@ -240,7 +330,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
 
         // Reload InWorldHandler
-        this.inworldHandler = new InWorldHandler(reloaded, dispatcher,
+        InWorldHandler inworldHandler = new InWorldHandler(reloaded, dispatcher,
             getServer(),
             reloaded.channels(), logger,
             reloaded.translation(), languages);
@@ -248,29 +338,33 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
         // Reload extensions
         Path extensionsDir = getDataFolder().toPath().resolve("extensions");
-        this.extensionManager = new ExtensionManager(logger, extId -> {
-            return new me.majhrs16.suite.extension.ExtensionContext(
-                reloaded,
-                dispatcher,
-                logger,
-                reloaded.translation(),
-                languages,
-                reloaded.channels(),
-                folder,
-                extId
-            );
-        }, folder.resolve("extensions"));
+        me.majhrs16.suite.extension.ExtensionManager extensionManager = new ExtensionManager(
+            logger, 
+            extId -> {
+                return new me.majhrs16.suite.extension.ExtensionContext(
+                    reloaded,
+                    dispatcher,
+                    logger,
+                    reloaded.translation(),
+                    languages,
+                    reloaded.channels(),
+                    folder,
+                    extId
+                );
+            }, 
+            folder.resolve("extensions"),
+            me.majhrs16.suite.api.SemVer.parse("2.1.0") // running core API version
+        );
         extensionManager.start();
 
         // Reload ModuleLifecycle
         Path cacheDir = folder.resolve("manager-cache");
         HostConfig hostConfig = configResult.config();
-        this.moduleLifecycle = new DefaultModuleLifecycle(cacheDir, logger, hostConfig.repositories(), hostConfig.moduleAllowlist());
+        me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle = new me.majhrs16.suite.manager.DefaultModuleLifecycle(cacheDir, logger, hostConfig.repositories(), hostConfig.moduleAllowlist());
         logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir + " with " + hostConfig.repositories().size() + " repositories");
-    }
 
-    public me.majhrs16.suite.manager.ModuleLifecycle getModuleLifecycle() {
-        return moduleLifecycle;
+        // Create new runtime with all resources
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, moduleLifecycle, inworldHandler, logger);
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -308,6 +402,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             folder.resolve("sync/websocket.yml"));
         copyResource(folder, "defaults/inworld.yml",
             folder.resolve("inworld.yml"));
+        copyResource(folder, "defaults/rules.yml",
+            folder.resolve("rules.yml"));
     }
 
     /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */
@@ -393,7 +489,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Emisor: eco con Direction.initiator() (solo el emisor lo ve)
         // Emisor con lang off → su mensaje no se traduce para nadie.
         if (channel.showSender()) {
-            Message initiatorMsg = dispatch(current, MessageType.CHAT, sender, Direction.initiator(),
+            Message initiatorMsg = build(current, MessageType.CHAT, sender, Direction.initiator(),
                 channelPath, event.getMessage(), !senderOff);
             DispatchReport initiatorReport = current.dispatcher.dispatch(initiatorMsg);
             mirror(current, initiatorMsg, initiatorReport);
@@ -401,7 +497,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
         // Broadcast a los demás (incluye consola via Direction.others() + CONSOLE)
         // NOTA: Direction.others() no incluye consola, necesitamos agregarla
-        Message broadcast = broadcast(current, MessageType.CHAT, sender,
+        Message broadcast = buildBroadcast(current, MessageType.CHAT, sender,
             channelPath, event.getMessage(), !senderOff);
         DispatchReport broadcastReport = current.dispatcher.dispatch(broadcast);
         mirror(current, broadcast, broadcastReport);
@@ -414,9 +510,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
     }
 
-private Message broadcast(Runtime current, MessageType type, Actor sender,
-                              String channelPath, String text, boolean translate) {
-        Message message = Message.builder()
+private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
+                                String channelPath, String text, boolean translate) {
+        return Message.builder()
             .type(type)
             .sender(sender)
             .direction(Direction.others().channel(Channel.CHAT))
@@ -424,8 +520,6 @@ private Message broadcast(Runtime current, MessageType type, Actor sender,
             .text(text)
             .channel(channelPath)
             .build();
-        current.dispatcher.dispatch(message);
-        return message;
     }
 
     private void mirror(Runtime current, Message sent) {
@@ -447,8 +541,14 @@ private Message broadcast(Runtime current, MessageType type, Actor sender,
         if (current == null) {
             return;
         }
-        dispatchTyped(current, MessageType.JOIN, EventRules.CHANNEL_JOIN,
-            current.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
+        // Offload to async to avoid blocking main thread on HTTP translations
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            Runtime rt = runtime;
+            if (rt != null) {
+                dispatchTyped(rt, MessageType.JOIN, EventRules.CHANNEL_JOIN,
+                    rt.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
+            }
+        });
     }
 
     /** Canal convencional {@code quit}. */
@@ -458,8 +558,14 @@ private Message broadcast(Runtime current, MessageType type, Actor sender,
         if (current == null) {
             return;
         }
-        dispatchTyped(current, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
-            current.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
+        // Offload to async to avoid blocking main thread on HTTP translations
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            Runtime rt = runtime;
+            if (rt != null) {
+                dispatchTyped(rt, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
+                    rt.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
+            }
+        });
     }
 
     /** Canal convencional {@code death}; %content% = mensaje vanilla de muerte. */
@@ -472,19 +578,25 @@ private Message broadcast(Runtime current, MessageType type, Actor sender,
         String vanilla = event.getDeathMessage() == null
             ? event.getEntity().getName()
             : event.getDeathMessage();
-        dispatchTyped(current, MessageType.DEATH, EventRules.CHANNEL_DEATH,
-            current.directory.actorOf(event.getEntity()), vanilla);
+        // Offload to async to avoid blocking main thread on HTTP translations
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            Runtime rt = runtime;
+            if (rt != null) {
+                dispatchTyped(rt, MessageType.DEATH, EventRules.CHANNEL_DEATH,
+                    rt.directory.actorOf(event.getEntity()), vanilla);
+            }
+        });
     }
 
     private void dispatch(Runtime current, MessageType type, Actor sender,
                           Direction direction, String channelPath, String text) {
-        dispatch(current, type, sender, direction, channelPath, text, true);
+        build(current, type, sender, direction, channelPath, text, true);
     }
 
-    private Message dispatch(Runtime current, MessageType type, Actor sender,
-                              Direction direction, String channelPath, String text,
-                              boolean translate) {
-        Message message = Message.builder()
+    private Message build(Runtime current, MessageType type, Actor sender,
+                         Direction direction, String channelPath, String text,
+                         boolean translate) {
+        return Message.builder()
             .type(type)
             .sender(sender)
             .direction(direction.channel(Channel.CHAT))
@@ -492,8 +604,6 @@ private Message broadcast(Runtime current, MessageType type, Actor sender,
             .text(text)
             .channel(channelPath)
             .build();
-        current.dispatcher.dispatch(message);
-        return message;
     }
 
     private Message dispatchToConsole(Runtime current, MessageType type, Actor sender,
@@ -761,11 +871,20 @@ private Message broadcast(Runtime current, MessageType type, Actor sender,
 
     public boolean handleTest(SuiteHost host, CommandSender sender, String type) {
         // Create a temporary runtime with the given host
-        Runtime temp = new Runtime(host, runtime != null ? runtime.dispatcher : null,
-            runtime != null ? runtime.directory : null,
-            runtime != null ? runtime.languages : null,
-            runtime != null ? runtime.bridge : null,
-            runtime != null ? runtime.logger : null);
+        Runtime rt = runtime;
+        Runtime temp = new Runtime(
+            host,
+            rt != null ? rt.dispatcher : null,
+            rt != null ? rt.directory : null,
+            rt != null ? rt.languages : null,
+            rt != null ? rt.bridge : null,
+            null, // wsSink
+            null, // observability
+            null, // extensionManager
+            null, // moduleLifecycle
+            null, // inworldHandler
+            rt != null ? rt.logger : null
+        );
         String[] args = type.equals("full") ? new String[0] : new String[]{type};
         return handleTest(temp, sender, args);
     }
@@ -792,7 +911,13 @@ rt.host,
 
     /** Getter para el módulo de observabilidad. */
     public me.majhrs16.suite.observability.Observability getObservability() {
-        return observability;
+        Runtime rt = runtime;
+        return rt != null ? rt.observability : null;
     }
 
+    /** Getter para el ModuleLifecycle. */
+    public me.majhrs16.suite.manager.ModuleLifecycle getModuleLifecycle() {
+        Runtime rt = runtime;
+        return rt != null ? rt.moduleLifecycle : null;
+    }
 }

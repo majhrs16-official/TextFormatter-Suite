@@ -1,15 +1,20 @@
 # manager-impl — Module Manager Implementation
 
-> **Purpose**: Implements `manager-api` for remote module loading from GitHub. Resolves, downloads, and installs modules at runtime.
+> **Purpose**: Implements `manager-api` for remote module loading from GitHub, local filesystem (`file://`), and HTTP repositories. Resolves, downloads, and installs modules at runtime. **Core implementation complete**; GitHub Releases = 0 (pending release pipeline).
 
 ---
 
 ## 1. Responsibilities
 
-- **GitHub module resolution** — `GitHubModuleResolver` finds modules in GitHub releases
-- **Module installation** — downloads JARs, verifies, installs to local repo
-- **Dependency resolution** — resolves transitive dependencies
-- **Lifecycle management** — `ModuleManager` implements `ModuleLifecycle`
+- **Multi-repository module resolution** — `ModuleResolver` interface with implementations:
+  - `GitHubModuleResolver` — GitHub Releases (when published)
+  - `LocalModuleResolver` — `file://` local filesystem (for testing)
+  - `HttpModuleResolver` — generic HTTP endpoints
+- **Ordered fallback** — repositories tried in config order (GitHub → local → HTTP)
+- **Module installation** — downloads JARs, verifies SHA256 (mandatory), installs to local Maven repo
+- **Dependency resolution** — resolves transitive dependencies from `module.yml` manifest
+- **Manifest validation** — mandatory `module.yml` validation pre-load (throws if missing)
+- **Lifecycle management** — `ModuleManager` implements `ModuleLifecycle` (SPI-only register, discoverAll())
 - **Integration with host** — provides modules to `SuiteBootstrap`
 
 ---
@@ -64,15 +69,33 @@ SuiteBootstrap (via host)
          ↓
 ModuleManager.install(ModuleCoordinate)
          ↓
-GitHubModuleResolver.findRelease(coord) → release info
+Repository Abstraction (config.yml repositories[]):
+  GitHubModuleResolver.findRelease(coord) → release info
+  LocalModuleResolver.findRelease(coord) → local JAR
+  HttpModuleResolver.findRelease(coord) → HTTP endpoint
+  (tried in order, first success wins)
          ↓
 ModuleInstaller.download(assetUrl) → JAR file
          ↓
-Verify checksum, install to ~/.m2/repository
+Verify SHA256 (mandatory, asset .sha256 separate)
+         ↓
+Install to ~/.m2/repository
          ↓
 ModuleLoader.load() (kernel) → loads installed module
          ↓
 Module registered in SuiteHost
+```
+
+**Config** (`HostConfig.repositories`):
+```yaml
+repositories:
+  - type: github
+    owner: majhrs16-official
+    repo: TextFormatter-Suite
+  - type: local
+    path: file:///path/to/local/repo
+  - type: http
+    url: https://example.com/maven
 ```
 
 ---
@@ -90,9 +113,12 @@ Module registered in SuiteHost
 
 | Extension Point | How to Extend |
 |-----------------|---------------|
-| Custom repository | Implement custom `ModuleResolver` (Maven Central, etc.) |
+| Custom repository | Implement `ModuleResolver` interface (Maven Central, etc.) |
 | Custom verification | Extend `ModuleInstaller` with signature verification |
 | Custom storage | Change local repository location |
+| Custom manifest parsing | Extend `DependencyResolver` for non-Maven manifests |
+
+---
 
 ---
 

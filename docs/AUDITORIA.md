@@ -1,1841 +1,3244 @@
-Voy a tratar el Markdown adjunto como la especificación de la auditoría. Esa especificación exige reconstruir la arquitectura real, distinguir hechos/inferencias/hipótesis y no convertir preferencias en defectos. 
+# AUDITORÍA TÉCNICA INTEGRAL — TEXTFORMATTER SUITE
 
-# Auditoría técnica integral — TextFormatter Suite
-
-**Fecha:** 25 de septiembre de 2026, 06:00 UTC aprox.
+**Fecha de auditoría:** 2026-09-26, aproximadamente 21:28 UTC
+**Commit auditado:** `9b96ce62798ab473546e9533a6074ebb8f003fd8`
 **Repositorio:** `majhrs16-official/TextFormatter-Suite`
-**Rama:** `main`
-**HEAD auditado:** `f2e009b1ce7723df57d22e0983b5110d2e3cd171`
-**Commit:** [`f2e009b1`](https://github.com/majhrs16-official/TextFormatter-Suite/commit/f2e009b1ce7723df57d22e0983b5110d2e3cd171)
+**Versión declarada:** `2.1.0-SNAPSHOT`
 
 ---
 
-# 1. Resumen ejecutivo
+# 1. Cobertura de auditoría
 
-La conclusión más importante es esta:
+El snapshot auditado contiene aproximadamente:
 
-> **TextFormatter Suite ya no es simplemente un plugin de chat con muchas features. Es una plataforma modular de procesamiento de mensajes con una arquitectura de core bastante seria, SPI, resolución de módulos, adapters de plataforma, routing, sincronización, traducción, configuración declarativa y tooling.**
-
-Y al mismo tiempo:
-
-> **Todavía no está al nivel de madurez que su arquitectura sugiere.**
-
-El proyecto ha evolucionado muchísimo desde la auditoría anterior. De hecho, varios problemas graves encontrados en aquella auditoría fueron corregidos en commits posteriores:
-
-* `PerformanceProfiler` roto → corregido.
-* HTTP inbound sin límite → corregido.
-* WebSocket sin límites → corregido.
-* SSRF mediante redirects → mitigado.
-* `TranslatorsConfig` acoplado a implementaciones → migrado a `TranslatorProvider` SPI.
-* checksums SHA-256 → incorporados.
-* CI actualizado a `src/`.
-* módulos problemáticos → estabilizados.
-* caché/deduplicación de traducciones → incorporada.
-
-Los commits [`45929d4`](https://github.com/majhrs16-official/TextFormatter-Suite/commit/45929d4102a2f54e0c80cabe71b93b59d072df0d), [`ce97f11`](https://github.com/majhrs16-official/TextFormatter-Suite/commit/ce97f113fcd9a70912b8bb1ef2bdef684d825b89) y [`910b623`](https://github.com/majhrs16-official/TextFormatter-Suite/commit/910b623a5732daa7619d9f0987caef5263683ab3) muestran claramente esta secuencia de consolidación.
-
-Por tanto, **la auditoría anterior no debe tomarse como fotografía del estado actual**.
-
-Sin embargo, todavía quedan defectos reales.
-
-Los que considero más importantes ahora mismo son:
-
-1. **`ModuleGraph` no detecta el self-cycle que su propio algoritmo/documentación dice detectar.**
-2. **`RateLimiter` mantiene una carrera potencial con el purger.**
-3. **`HttpTransport` todavía tiene una protección SSRF incompleta frente a DNS multi-address/rebinding.**
-4. **WebSocket limita caracteres, no bytes, pese a documentar el límite como bytes.**
-5. **El proyecto mantiene una cantidad considerable de wiring/configuración duplicada.**
-6. **`node_modules` está dentro del árbol Git**, lo que es una anomalía seria de higiene del repositorio.
-7. **La arquitectura de módulos es mucho más avanzada que el sistema de integración/build que la rodea.**
-8. **La escalabilidad network-level está arquitectónicamente encaminada, pero no demostrada mediante benchmarks equivalentes.**
-
----
-
-# 2. Cobertura
+* **518 archivos**
+* **205 archivos Java**
+* **68 archivos de tests**
+* múltiples módulos Gradle
+* aplicación web/editor
+* documentación y wiki
+* CI/CD
+* metadatos de verificación de dependencias
+* sistema de módulos
+* sistema de extensiones
+* dos adapters de plataforma
+* varios transports/sinks
 
 Se examinó:
 
-* árbol completo del repositorio;
-* estructura `src/`;
-* módulos Java;
-* `core-api`;
-* kernel/module resolution;
-* host;
-* iFlow;
-* TextFormatter;
-* traducción;
-* transporte HTTP;
-* sync HTTP/TCP/UDP/WebSocket/Discord/Telegram/Velocity;
-* manager API/implementation;
-* extension API;
-* observabilidad;
-* performance;
-* loadtest;
-* Spigot/Fabric;
-* Web Editor;
-* Gradle;
-* CI/CD;
-* verification metadata;
-* README;
-* PLAN;
-* ADR;
-* auditorías históricas;
-* commits recientes.
+### Estructura
 
-El repositorio actualmente contiene además `src/web-editor/node_modules`, que aparece efectivamente en el árbol Git.
+* `core-api`
+* `kernel`
+* `textformatter`
+* `iflow`
+* `host`
+* `transport`
+* `gtranslate`
+* `ltranslate`
+* `sync-http`
+* `sync-tcpudp`
+* `sync-discord`
+* `sync-telegram`
+* `sync-websocket`
+* `sync-velocity`
+* `observability`
+* `extension-api`
+* `manager-api`
+* `manager-impl`
+* `presets`
+* `inworld`
+* `performance`
+* `loadtest`
+* `tester`
+* `messages`
+* `coretranslator`
+* `common-legacy`
+* `spigot-host`
+* `fabric-host`
+* `web-editor`
+* `example-extension`
 
-No ejecuté personalmente el build desde el runtime de esta auditoría. Por ello:
+### Código principal revisado directamente
 
-* los resultados declarados por commits se consideran **evidencia documental del proceso de desarrollo**;
-* no los presento como benchmark independiente;
-* el estado actual de CI tampoco puede darse por verificado para HEAD porque el commit actual no tiene status checks asociados.
+Entre otros:
 
-El workflow CI actual, sin embargo, está configurado para compilar prácticamente todos los módulos Java, el plugin Spigot y ejecutar los tests del Web Editor. [CI](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/.github/workflows/ci.yml)
+* `SuiteBootstrap`
+* `SuiteHost`
+* `MessageDispatcher`
+* `Module`
+* `ModuleDescriptor`
+* `ModuleLoader`
+* `ModuleGraph`
+* `DefaultRouter`
+* `RateLimiter`
+* `DefaultTextFormatter`
+* `TemplateRenderer`
+* `SpelExpressionEvaluator`
+* `Channel`
+* `ChannelRegistry`
+* `ScriptSurface`
+* `TransformOp`
+* `TranslationService`
+* `TranslatorManager`
+* `ConfigLoader`
+* `ConfigValidator`
+* `ConfigSchemaGenerator`
+* `HttpTransport`
+* `HttpSink`
+* `TcpSink`
+* `UdpSink`
+* `WebSocketSyncSink`
+* `JdaDiscordSink`
+* `VelocitySink`
+* `ExtensionManager`
+* `DefaultModuleLifecycle`
+* `TextFormatterSuitePlugin`
+* `SpigotChatDelivery`
+* `FabricChatDelivery`
+
+### También se revisó
+
+* `settings.gradle`
+* múltiples `build.gradle`
+* `gradle.lockfile`
+* `verification-metadata.xml`
+* workflows CI/CD
+* workflow de release
+* `PLAN.md`
+* `src/README.md`
+* documentación de módulos
+* CodeGuide recién añadido
+* documentación de arquitectura
+* tests unitarios/integración
+* benchmarks JMH
+* Gatling load tests
+* historial de commits
+* cambios del refactor principal
+
+### Evidencia experimental
+
+No se inventaron benchmarks.
+
+Sí se verificó el estado real de GitHub Actions del propio commit auditado:
+
+**Workflow run:** `36272574778`
+
+Resultado:
+
+* `build-and-test`: **FAIL**
+* `javadoc`: **FAIL**
+* `web-editor`: **FAIL**
+
+Por tanto, el estado actual del repositorio **no es CI-green**.
 
 ---
 
-# 3. Arquitectura real
+# 2. Resumen ejecutivo
 
-La arquitectura actual puede resumirse así:
+## Veredicto técnico
+
+**TextFormatter Suite es un proyecto arquitectónicamente ambicioso y considerablemente mejor estructurado que un plugin Minecraft convencional, pero todavía no está técnicamente maduro como producto network-scale.**
+
+Su mayor virtud no es la cantidad de features, sino que existe un **core bastante bien separado de los adapters de plataforma**, con contratos explícitos, mensajes inmutables, ports para delivery, módulo kernel, routing independiente y un renderer relativamente limpio.
+
+Su principal problema tampoco es una clase concreta.
+
+Es la **distancia entre la arquitectura diseñada y la arquitectura efectivamente integrada**.
+
+Hay varias piezas que individualmente están bien diseñadas pero que todavía no forman un sistema coherente:
 
 ```text
-                  ┌─────────────────────┐
-                  │ Spigot / Fabric     │
-                  │ Platform API        │
-                  └──────────┬──────────┘
-                             │
-                        Adapter layer
-                             │
-                             ▼
-                     ┌──────────────┐
-                     │   SuiteHost  │
-                     └──────┬───────┘
+Arquitectura declarada
+        │
+        ├── Module system
+        ├── Extensions
+        ├── iFlow
+        ├── Sync modules
+        ├── Web editor
+        └── Platform adapters
+                 │
+                 ▼
+        integración parcial
+                 │
+                 ▼
+       comportamiento real actual
+```
+
+El resultado es un proyecto con **buenos componentes, pero integración incompleta**.
+
+Los problemas más importantes encontrados son:
+
+1. **WebSocket sync se inicia aunque `enabled: false` y sin token por defecto.**
+2. Esto deja un endpoint de sincronización potencialmente accesible sin autenticación y capaz de inyectar mensajes.
+3. **Reload de Spigot deja recursos/listeners vivos.**
+4. **Rate limiting se consume por receptor, no por mensaje**, por lo que un broadcast puede agotar el presupuesto simplemente por tener muchos jugadores.
+5. `rules.yml` no está integrado en el bootstrap actual.
+6. El `ExpressionEvaluator` no está conectado al `DefaultRouter` en el camino normal.
+7. Algunas transformaciones (`sleep`, sonidos) se almacenan pero no llegan a ejecutarse completamente.
+8. `ExtensionManager` no puede cargar correctamente extensiones desde JARs externos con su implementación actual.
+9. El chequeo de compatibilidad de extensions compara la versión de la extensión con su Core API requerida.
+10. La caché de traducción usa `hashCode()` como identificador de contenido, permitiendo colisiones funcionales.
+11. `ChannelRegistry` se presenta como extensible, pero internamente se convierte en `unmodifiableMap`, haciendo `register()`/`unregister()` inválidos.
+12. El build actual tiene dependencias `SNAPSHOT` externas que hacen fallar CI.
+13. `fabric-host` ni siquiera está incluido en `settings.gradle`, por lo que no forma parte del build raíz.
+14. El web editor actual tiene errores de sintaxis JavaScript detectados por CI.
+
+Eso es bastante importante:
+
+> **El problema actual de TextFormatter Suite no es falta de arquitectura. Es falta de cierre de integración y estabilización.**
+
+---
+
+# 3. Arquitectura pretendida vs arquitectura real
+
+## Arquitectura pretendida
+
+El proyecto describe algo cercano a:
+
+```text
+                 ┌─────────────────────┐
+                 │ Platform Adapter    │
+                 │ Spigot / Fabric     │
+                 └──────────┬──────────┘
                             │
-          ┌─────────────────┼──────────────────┐
-          ▼                 ▼                  ▼
-       iFlow          TextFormatter       Translation
-          │                 │                  │
-          └─────────────────┼──────────────────┘
                             ▼
-                     MessageDispatcher
+                 ┌─────────────────────┐
+                 │ SuiteBootstrap      │
+                 └──────────┬──────────┘
                             │
-                ┌───────────┼────────────┐
-                ▼           ▼            ▼
-             Chat       Sync sinks    External
-           delivery                  integrations
+                  ModuleLoader / Graph
+                            │
+          ┌─────────────────┼─────────────────┐
+          ▼                 ▼                 ▼
+      TextFormatter       iFlow            Sync
+          │                 │                 │
+          └─────────────────┼─────────────────┘
+                            ▼
+                        core-api
 ```
 
-Paralelamente existe:
+Eso es conceptualmente razonable.
+
+## Arquitectura real
+
+En la práctica:
 
 ```text
-                    Module JAR
-                       │
-                       ▼
-                  ServiceLoader
-                       │
-                       ▼
-               Module descriptor
-                       │
-                       ▼
-                  ModuleGraph
-                       │
-          ┌────────────┼────────────┐
-          ▼            ▼            ▼
-      contract       JVM       capabilities
-      checking      checking      / deps
+Spigot/Fabric
+     │
+     ▼
+Platform entry point
+     │
+     ├── ConfigLoader
+     ├── TranslationService
+     ├── SuiteBootstrap
+     │       │
+     │       ├── ModuleLoader
+     │       ├── ModuleGraph
+     │       │
+     │       └── valida módulos
+     │
+     ├── DefaultRouter
+     ├── TextFormatters.create(...)
+     ├── MessageDispatcher
+     ├── WebSocketSyncSink
+     ├── DiscordBridge
+     ├── Observability
+     ├── ExtensionManager
+     └── ModuleLifecycle
 ```
 
-Esto es importante:
+La diferencia crítica es:
 
-### La modularidad es real.
+**`ModuleGraph` no inicializa los módulos.**
 
-No se limita a:
+`Module` es correctamente tratado como descriptor:
 
-```text
-domain/
-application/
-infrastructure/
+```java
+public interface Module {
+    ModuleDescriptor descriptor();
+}
 ```
 
-con nombres bonitos.
+Eso es una buena decisión.
 
-Existe realmente:
+Los servicios reales se construyen manualmente:
 
-* SPI;
-* `ServiceLoader`;
-* adapters;
-* module descriptors;
-* dependency resolution;
-* capability checking;
-* platform boundaries;
-* API/core separado de implementación.
+```java
+new DefaultRouter(...)
+TextFormatters.create(...)
+new MessageDispatcher(...)
+```
+
+Por tanto, el sistema actual es más exactamente:
+
+> **modular monolith + ports/adapters + descriptor-based module graph**
+
+que un sistema completamente gestionado por el kernel.
+
+Eso no es malo.
+
+De hecho, considero correcto que `Module` no sea instanciado como servicio runtime. El problema es que parte de la documentación todavía describe un lifecycle que ya no corresponde con el código.
 
 ---
 
-# 4. La decisión de `Module` es particularmente buena
+# 4. Flujo real completo
 
-La semántica actual es:
-
-```text
-Module
-   =
-descriptor / SPI
-```
-
-y no:
+El pipeline real de un chat Spigot es aproximadamente:
 
 ```text
-Module
-   =
-objeto de servicio que SuiteBootstrap instancia
+AsyncPlayerChatEvent
+        │
+        ▼
+TextFormatterSuitePlugin.onChat()
+        │
+        ├── claim event
+        ├── determina channel
+        ├── construye Message
+        │
+        ▼
+MessageDispatcher.dispatch()
+        │
+        ├── resolveSourceLanguage()
+        │
+        ├── expand(Direction)
+        │       │
+        │       └── lista de jugadores
+        │
+        ├── bounded executor
+        │
+        ▼
+SuiteHost.deliver(message, recipient)
+        │
+        ├── effectiveLanguage(recipient)
+        │
+        ▼
+DefaultRouter.route()
+        │
+        ├── send permission
+        ├── receive permission
+        ├── rules
+        ├── rate limit
+        └── RouteOutcome
+        │
+        ▼
+TemplateRenderer
+        │
+        ├── built-ins
+        ├── expressions
+        ├── placeholders
+        ├── content
+        ├── <tr>
+        │
+        ▼
+TranslationService
+        │
+        ├── cache
+        └── provider externo
+        │
+        ▼
+MiniMessage
+        │
+        ▼
+Component
+        │
+        ▼
+SpigotChatDelivery
+        │
+        └── scheduler/main thread
 ```
 
-Eso evita convertir el sistema de módulos en un contenedor DI/reflection improvisado.
+Este flujo está bien conceptualmente.
 
-Es probablemente una de las decisiones arquitectónicas más importantes del proyecto.
+Una corrección importante respecto a la documentación:
 
-El `core-api` puede permanecer relativamente limpio mientras los entry points reales de plataforma hacen la composición.
+**el código real hace routing antes de formatting.**
+
+`SuiteHost.deliver()`:
+
+```text
+Router.route()
+      ↓
+transformed Message
+      ↓
+formatter.format()
+```
+
+No:
+
+```text
+formatter
+      ↓
+router
+```
+
+como aparece en partes de la documentación.
 
 ---
 
 # 5. Clean Architecture
 
-## **7.8/10**
+## Evaluación: 5.5/10
 
-La implementación es bastante buena, pero todavía no perfectamente limpia.
-
-La mejora más importante reciente fue precisamente eliminar:
-
-```text
-host
- ├── new GTranslate(...)
- └── new LTranslate(...)
-```
-
-y sustituirlo por:
-
-```text
-host
-   │
-   ▼
-TranslatorProvider
-   │
-   ├── Google implementation
-   └── LibreTranslate implementation
-```
-
-Esto está implementado mediante `ServiceLoader`.
-
-Es una mejora arquitectónica real, no cosmética.
+Hay principios correctos, pero no consideraría que el proyecto implemente Clean Architecture de forma estricta.
 
 ### Lo que está bien
 
-`core-api` permanece relativamente independiente de:
+`core-api` funciona como contrato compartido.
 
-* Bukkit;
-* Fabric;
-* HTTP concreto;
-* Google;
-* LibreTranslate.
+`host` actúa como composition/integration layer.
 
-### Lo que sigue siendo mejorable
-
-Hay zonas de wiring y configuración que todavía concentran conocimiento de infraestructura.
-
-Además, el proyecto conserva varias representaciones del schema/configuración:
+Los adapters de plataforma están en los bordes:
 
 ```text
-schema-v2.2.md
-paths.json
-JS model
-ConfigLoader paths
-editor model
+spigot-host
+fabric-host
 ```
 
-Esto genera riesgo de drift.
+y utilizan interfaces como:
+
+* `ActorDirectory`
+* `ChatDelivery`
+* `PlaceholderResolver`
+* `PluginLogger`
+
+Esto reduce acoplamiento con Bukkit/Fabric.
+
+### Problemas
+
+El `core-api` contiene bastante comportamiento concreto.
+
+Ejemplo:
+
+```text
+TranslationService
+TranslatorManager
+```
+
+no son únicamente ports.
+
+Además:
+
+```text
+host
+ ├── textformatter
+ ├── iflow
+ ├── gtranslate
+ ├── ltranslate
+ └── transport
+```
+
+hace que `host` conozca directamente muchos detalles concretos.
+
+Esto es integración válida, pero no es una separación estricta de application/domain/infrastructure.
+
+El proyecto tampoco posee un verdadero:
+
+```text
+domain
+application
+infrastructure
+```
+
+boundary.
+
+Es más correcto verlo como:
+
+```text
+contracts
+core services
+integration host
+platform adapters
+infrastructure modules
+```
+
+Eso es perfectamente defendible, pero no debería venderse como Clean Architecture pura.
 
 ---
 
 # 6. Hexagonal Architecture
 
-## **8.2/10**
+## Evaluación: 7.0/10
 
-Aquí el proyecto es todavía más fuerte.
+Aquí el proyecto sale mejor parado.
 
-Hay ports/adapters reales:
+Hay ports reales:
 
 ```text
-              ┌────────────────────┐
-              │    Application     │
-              │       Core         │
-              └─────────┬──────────┘
-                        │
-                    Ports/SPI
-                        │
-        ┌───────────────┼────────────────┐
-        ▼               ▼                ▼
-     Spigot           Fabric          Sync
-     adapter          adapter        adapters
+ActorDirectory
+ChatDelivery
+PlaceholderResolver
+Transport
+SyncSink
+SyncListener
 ```
 
-Especialmente buenas:
+y adapters reales:
 
-* `ChatDelivery`;
-* `ActorDirectory`;
-* `Translator`;
-* `TranslatorProvider`;
-* `SyncSink`;
-* `SyncListener`;
-* placeholder SPI;
-* platform adapters.
+```text
+SpigotActorDirectory
+SpigotChatDelivery
+FabricActorDirectory
+FabricChatDelivery
+HttpTransport
+JDA
+Telegram
+WebSocket
+TCP
+UDP
+```
 
-La infraestructura puede cambiar sin convertir el dominio en código Bukkit/Fabric.
+El core no necesita conocer Bukkit para representar un mensaje.
 
-Eso es **hexagonalidad real**.
+Eso es una frontera arquitectónica real.
+
+## Principal debilidad
+
+`host` se ha convertido en un integration hub muy grande.
+
+Eso genera:
+
+```text
+host
+ ├── configuration
+ ├── bootstrap
+ ├── routing
+ ├── dispatch
+ ├── translations
+ └── infrastructure wiring
+```
+
+No es todavía un desastre, pero a largo plazo puede convertirse en un God Module.
 
 ---
 
 # 7. Modularidad
 
-## **8.5/10**
+## Evaluación: 7.5/10
 
-Los módulos actuales incluyen, entre otros:
+La modularidad conceptual es una de las mejores partes del proyecto.
+
+Existen fronteras bastante claras:
 
 ```text
 core-api
 kernel
-host
-iflow
 textformatter
-gtranslate
-ltranslate
+iflow
 transport
-sync-http
-sync-tcpudp
-sync-discord
-sync-telegram
-sync-websocket
-sync-velocity
-observability
-extension-api
+sync-*
+platform-host
+```
+
+También existe una idea correcta de capabilities:
+
+```text
+provides()
+requires()
+```
+
+y `ModuleGraph` utiliza SCC/Tarjan para detectar ciclos.
+
+Eso es bastante más sofisticado que el típico sistema de módulos de plugin.
+
+## Problema
+
+Algunos módulos son realmente módulos de código.
+
+Otros son módulos de distribución.
+
+Otros son módulos de infraestructura.
+
+Otros son módulos experimentales.
+
+Otros son legacy.
+
+Por ejemplo:
+
+```text
+coretranslator
+common-legacy
+performance
+loadtest
+tester
 manager-api
 manager-impl
+extension-api
 presets
-inworld
-loadtest
-performance
-tester
-messages
-spigot-host
-fabric-host
-web-editor
 ```
 
-Eso ya es una plataforma.
+hacen que el árbol sea más difícil de conceptualizar.
 
-### Problema
+A 5 años esto requiere una política clara:
 
-La frontera de módulos es mejor que la integración del build.
-
-El `settings.gradle` actual sí incluye los módulos, pero la arquitectura de publicación y consumo todavía depende bastante de:
-
-* Maven local;
-* artifacts;
-* wiring Gradle;
-* múltiples builds;
-* configuración repetida.
-
-La siguiente evolución lógica sería una integración de build más cohesionada, no necesariamente fusionar módulos.
+> qué módulos son producto, cuáles son tooling y cuáles son transitional.
 
 ---
 
-# 8. Flujo principal
+# 8. Features
 
-Un flujo de chat típico puede conceptualizarse como:
+## 8.1 TextFormatter
 
-```text
-Minecraft event
-      │
-      ▼
-Platform adapter
-      │
-      ▼
-Message
-      │
-      ▼
-MessageDispatcher
-      │
-      ├── source language
-      │
-      ▼
-iFlow / routing
-      │
-      ├── permissions
-      ├── conditions
-      ├── transforms
-      ├── redirects
-      └── rate limiting
-      │
-      ▼
-recipient expansion
-      │
-      ▼
-translation
-      │
-      ▼
-template / formatting
-      │
-      ▼
-delivery
-      │
-      ▼
-Spigot / Fabric / Sync
-```
+**Estado:** sólido.
 
-Eso es una pipeline razonablemente limpia.
-
-La característica más importante es que **la plataforma no es el centro del procesamiento**.
-
-El mensaje es el centro.
-
-Eso permite:
+Muy buen pipeline:
 
 ```text
-Spigot
-Fabric
-Discord
-Velocity
-HTTP
-WebSocket
+template
+ ↓
+built-ins
+ ↓
+expressions
+ ↓
+placeholders
+ ↓
+content
+ ↓
+translation spans
+ ↓
+MiniMessage
 ```
 
-sin tener que reescribir el motor.
+La utilización de `MiniEscape` antes de insertar valores externos es una buena decisión de seguridad.
 
----
+### Fortaleza
 
-# 9. `Message`
-
-## **8.7/10**
-
-La transición hacia mensajes inmutables fue una decisión correcta:
-
-```java
-message.withText(...)
-message.withChannel(...)
-message.withCancelled(...)
-message.withLangTarget(...)
-```
-
-en lugar de modificar el objeto compartido.
-
-También existe `Builder.from()`.
-
-Esto reduce considerablemente los problemas de:
-
-* shared mutable state;
-* carreras;
-* efectos laterales;
-* debugging.
-
-Para un sistema de procesamiento concurrente de mensajes es exactamente la dirección adecuada.
-
----
-
-# 10. iFlow
-
-## **8.2/10**
-
-iFlow es probablemente una de las partes con mayor potencial.
-
-No es simplemente:
-
-```text
-if → else → formatter
-```
-
-La representación de reglas como grafo permite:
-
-```text
-input
-  │
-  ▼
-condition
-  ├──── yes ───► transform
-  │
-  └──── no ────► redirect
-```
-
-incluyendo fan-out, loops controlados y transformaciones.
-
-La introducción de límites como `max-steps` es importante.
+El renderer es razonablemente independiente de Bukkit/Fabric.
 
 ### Riesgo
 
-La complejidad de iFlow puede crecer muy rápidamente.
+Se renderiza individualmente por receptor.
 
-El motor debe seguir evitando que:
+A gran escala:
 
 ```text
-rule
- ↓
-rule
- ↓
-rule
- ↓
-...
+1 mensaje
+×
+500 receptores
+=
+500 renders
 ```
 
-se convierta en una máquina de ejecución arbitraria.
-
-El límite de pasos es una buena defensa.
+Eso es correcto funcionalmente, pero costoso.
 
 ---
 
-# 11. BUG-01 — self-cycle en `ModuleGraph`
+# 8.2 Channels
 
-**Tipo:** Bug
-**Severidad:** Media
-**Confianza:** **Confirmado**
+**Estado:** conceptualmente muy bueno.
 
-El código documenta:
+La resolución jerárquica:
 
-> “A singleton with a self-edge is a cycle.”
+```text
+private.staff.mod
+        ↓
+private.staff
+        ↓
+private
+        ↓
+chat
+```
 
-Pero `strongConnect()` contiene:
+es una buena abstracción.
+
+También está bien la combinación:
+
+```text
+permission
+send-permission
+receive-permission
+```
+
+Permite políticas bastante flexibles.
+
+### Bug
+
+`ChannelRegistry` se construye con:
 
 ```java
-if (other == module) {
-    continue;
-}
+Collections.unmodifiableMap(copy)
+```
+
+pero expone:
+
+```java
+register()
+unregister()
+```
+
+que intentan modificar ese mapa.
+
+Por tanto, la API promete extensibilidad que la implementación no permite.
+
+---
+
+# 8.3 iFlow
+
+**Potencial:** muy alto.
+
+Tiene:
+
+* reglas
+* prioridades
+* conditions
+* transforms
+* redirects
+* channel redirects
+* permissions
+* rate limiting
+* scripting
+
+Es posiblemente la parte con mayor potencial arquitectónico.
+
+Pero actualmente tiene problemas de integración.
+
+---
+
+# 8.4 Translation
+
+La arquitectura de proveedores es buena:
+
+```text
+TranslationService
+       ↓
+TranslatorManager
+       ↓
+Translator
+       ├── Google
+       └── LibreTranslate
+```
+
+La introducción de `TranslatorProvider` mediante SPI en el refactor reciente también es una dirección correcta.
+
+El problema principal es rendimiento y cache.
+
+---
+
+# 8.5 Sync
+
+Existe una colección considerable de transports:
+
+```text
+HTTP
+TCP
+UDP
+Discord
+Telegram
+WebSocket
+Velocity
+```
+
+Pero no debe confundirse:
+
+> **tener un módulo SyncSink no significa que el runtime actual lo esté utilizando.**
+
+El bootstrap no construye automáticamente una infraestructura central de todos ellos.
+
+El WebSocket sí se inicia directamente desde el platform host.
+
+Los demás dependen de wiring específico.
+
+Esto hace que el sistema de sincronización sea más parecido a una colección de adapters que a un bus de eventos cross-server completo.
+
+---
+
+# 8.6 Web editor
+
+La idea es excelente.
+
+Pero el estado actual no es release-ready.
+
+GitHub Actions detectó errores de sintaxis en:
+
+```text
+src/web-editor/js/props.js
+src/web-editor/js/sidebar.js
+```
+
+Por ejemplo:
+
+```text
+js/props.js: SyntaxError
+Unexpected token, expected "," (414:3)
+```
+
+y:
+
+```text
+js/sidebar.js: SyntaxError
+Unexpected token, expected "," (484:36)
 ```
 
 Por tanto:
 
-```text
-A → A
-```
-
-no se convierte jamás en una arista para Tarjan.
-
-Además, el componente singleton solo se añade como ciclo si:
-
-```java
-component.size() > 1
-```
-
-por lo que incluso una SCC singleton con self-edge no terminaría marcada como `CYCLE`.
-
-Esto es un bug genuino, porque contradice explícitamente el contrato del algoritmo.
-
-### Solución
-
-Detectar:
-
-```java
-if (other == module && latent(module, module, active, available)) {
-    // self-cycle
-}
-```
-
-y permitir que el componente singleton sea clasificado como ciclo.
-
-**Prioridad: P1.**
+**el web editor actual no pasa su propio pipeline de CI.**
 
 ---
 
-# 12. BUG-02 — carrera potencial en `RateLimiter`
+# 9. Personalización
 
-**Tipo:** Bug
-**Severidad:** Media
-**Confianza:** Probable/confirmable por análisis estático
+## Evaluación: 8/10
 
-La estructura actual es:
+Aquí TextFormatter destaca.
 
-```java
-Bucket bucket = buckets.computeIfAbsent(key, ...);
+Hay mucha capacidad configurable:
 
-synchronized (bucket) {
-    ...
-}
-```
+* channels
+* permissions
+* languages
+* formats
+* tooltips
+* sounds
+* routing
+* transformations
+* translators
+* sync
+* repositories
+* module allowlist
+* extension system
 
-mientras el purger hace:
+La filosofía de no prohibir configuraciones simplemente porque sean extrañas es apropiada.
 
-```java
-buckets.entrySet().removeIf(...)
-```
-
-Es posible conceptualmente:
+No encontré evidencia suficiente para afirmar que existan restricciones arbitrarias sistemáticas del tipo:
 
 ```text
-Thread A                 Thread B
-
-computeIfAbsent(A)
-                         purgeIdle()
-                         remove(A)
-
-use old Bucket
-                         computeIfAbsent(A)
-                         create new Bucket
+port = -50
 ```
 
-Durante un intervalo pueden existir dos buckets correspondientes a la misma clave lógica.
+como problema arquitectónico.
 
-Esto puede producir una ventana en la que el rate limit efectivo no representa exactamente el estado esperado.
+El problema actual es otro:
 
-No lo considero un fallo catastrófico; sí un problema de precisión bajo concurrencia.
-
-**Prioridad: P2**, salvo que benchmarks demuestren que afecta a la semántica del limiter.
+> algunas configuraciones existen en el schema/editor pero no llegan al runtime.
 
 ---
 
-# 13. HTTP inbound
+# 10. Bugs, defectos y vulnerabilidades
 
-Aquí hubo una corrección muy buena.
+## [TF-01]
 
-La versión anterior utilizaba:
-
-```java
-readAllBytes()
-```
-
-sin límite.
-
-La versión actual establece:
-
-```java
-MAX_BODY_BYTES = 1024 * 1024
-```
-
-y además:
-
-* inspecciona `Content-Length`;
-* utiliza lectura limitada;
-* tiene executor acotado;
-* hace shutdown del executor.
-
-Por tanto los antiguos hallazgos de:
-
-```text
-unbounded request body
-+
-unbounded thread pool
-```
-
-ya no deben considerarse bugs actuales.
-
-Esto es un ejemplo claro de por qué una auditoría tiene que mirar Git y no solamente repetir hallazgos antiguos.
-
----
-
-# 14. WebSocket
-
-También ha mejorado significativamente.
-
-Ahora existe:
-
-```text
-64 KiB max message
-100 messages/sec/connection
-```
-
-y limpieza del estado al cerrar conexiones.
-
-### Defecto menor
-
-El código usa:
-
-```java
-message.length()
-```
-
-pero comunica el límite como:
-
-```text
-bytes
-```
-
-`String.length()` mide unidades UTF-16, no bytes.
-
-Por tanto:
-
-```text
-MAX_MESSAGE_SIZE = 64 KiB
-```
-
-no significa realmente 64 KiB de payload UTF-8.
-
-Esto es un **defecto de precisión**, no una vulnerabilidad crítica.
-
-Si se quiere imponer un límite de wire bytes:
-
-```java
-message.getBytes(StandardCharsets.UTF_8).length
-```
-
-debería ser la medida.
-
----
-
-# 15. BUG-03 — autenticación WebSocket opcional
-
-**Tipo:** Riesgo de seguridad/configuración
-**Severidad:** Media
+**Tipo:** Vulnerabilidad
+**Severidad:** Crítica
 **Confianza:** Confirmado
 
-El servidor acepta conexiones cuando:
+**Ubicación:**
 
-```java
-authToken == null
+```text
+spigot-host
+ -> TextFormatterSuitePlugin.reloadSuite()
 ```
 
-o está vacío.
+y:
 
-El propio código imprime:
+```text
+sync-websocket
+ -> WebSocketSyncSink
+```
+
+### Descripción
+
+El código lee:
+
+```text
+sync/websocket.yml
+```
+
+pero no comprueba el campo:
+
+```yaml
+enabled: false
+```
+
+y aun con el default:
+
+```yaml
+enabled: false
+port: 9092
+token: ""
+```
+
+ejecuta:
+
+```java
+WebSocketSyncSink wsSink = new WebSocketSyncSink(wsPort, wsToken, logger);
+wsSink.start();
+```
+
+### Consecuencia
+
+El servidor WebSocket se inicia aunque esté deshabilitado.
+
+Además, cuando:
+
+```text
+token = ""
+```
+
+el propio WebSocket permite conexiones sin autenticación.
+
+El código incluso registra:
 
 ```text
 SECURITY: WebSocket server running without auth token!
 ```
 
-Esto parece intencional para instalaciones locales, así que **no lo considero automáticamente un bug**.
+### Impacto
 
-Pero para un servidor que escucha en una interfaz accesible externamente, significa:
+El endpoint puede aceptar mensajes externos y pasarlos al:
+
+```java
+SyncListener.onMessage(...)
+```
+
+que en Spigot está conectado a:
+
+```java
+dispatcher.dispatch(message)
+```
+
+Por tanto existe una ruta potencial:
 
 ```text
+Internet/LAN
+   ↓
+9092
+   ↓
 WebSocket
-    ↓
-sin token
-    ↓
-cliente externo
-    ↓
-subscribe / message
+   ↓
+MessageCodec
+   ↓
+SyncListener
+   ↓
+MessageDispatcher
+   ↓
+Minecraft chat
 ```
 
-Por ello la configuración debería distinguir claramente:
+Eso es una superficie de **inyección remota de mensajes**.
 
-```text
-local development
+### Solución
+
+No iniciar el sink si:
+
+```yaml
+enabled: false
 ```
 
-de:
+y, adicionalmente:
 
-```text
-production / externally bound
-```
-
-y posiblemente negarse a arrancar externamente sin autenticación.
+* bind localhost por defecto, o
+* exigir token cuando el bind sea externo
+* rechazar `enabled=true` + token vacío si escucha en `0.0.0.0`
+* almacenar el sink en `Runtime`
+* cerrarlo durante reload/shutdown.
 
 ---
 
-# 16. SSRF
+## [TF-02]
 
-La evolución aquí también es positiva.
+**Tipo:** Defecto de diseño / Bug
+**Severidad:** Alta
+**Confianza:** Confirmado
 
-Actualmente:
+**Ubicación:**
+
+```text
+spigot-host
+ -> TextFormatterSuitePlugin.reloadSuite()
+```
+
+### Problema
+
+En cada reload se crean:
+
+```text
+MessageDispatcher
+WebSocketSyncSink
+Observability
+ExtensionManager
+InWorldHandler
+DiscordBridge
+```
+
+pero no existe una estrategia completa de teardown para todos.
+
+`MessageDispatcher` tiene:
 
 ```java
-setInstanceFollowRedirects(false)
+close()
 ```
 
-y los redirects se procesan manualmente.
+pero `reloadSuite()` no lo llama sobre el runtime anterior.
 
-Cada redirect vuelve a pasar por:
+### Consecuencias
+
+Después de varios:
+
+```text
+/suite reload
+```
+
+pueden quedar:
+
+* executors antiguos
+* listeners antiguos
+* WebSocket servers antiguos
+* extensions antiguas
+* handlers de InWorld antiguos
+
+Además, `InWorldHandler` se registra nuevamente:
 
 ```java
-validateUrl(newUrl)
+registerEvents(inworldHandler, this)
 ```
 
-Esto corrige el problema anterior de:
+sin una desregistración equivalente durante reload.
+
+### Impacto
+
+Un servidor administrado durante días podría acumular:
 
 ```text
-allowed.example
-      ↓ 302
-127.0.0.1
+listener_1
+listener_2
+listener_3
+...
 ```
 
-### Pero queda una limitación
+y trabajo duplicado.
 
-`InetAddress.getByName(host)` devuelve una dirección concreta.
+### Solución
 
-Para una protección SSRF fuerte sería preferible analizar **todas** las direcciones resultantes de:
+El runtime debe ser explícitamente `AutoCloseable`:
 
 ```java
-InetAddress.getAllByName(host)
+interface Runtime extends AutoCloseable {
+    @Override
+    void close();
+}
 ```
 
-porque un hostname puede resolver a:
+y:
 
 ```text
-PUBLIC_IP
-PRIVATE_IP
+oldRuntime.close()
+newRuntime.start()
+atomic swap
 ```
 
-y el comportamiento puede depender de cuál termine utilizando la conexión.
-
-Esto es especialmente relevante en entornos donde DNS está bajo control de terceros.
+No al revés.
 
 ---
 
-# 17. BUG-04 — DNS rebinding / multi-address SSRF
+## [TF-03]
 
-**Tipo:** Vulnerabilidad potencial
-**Severidad:** Media/Alta según exposición
-**Confianza:** Probable
+**Tipo:** Bug
+**Severidad:** Alta
+**Confianza:** Confirmado
 
-La secuencia:
-
-```text
-validate DNS
-     ↓
-getByName()
-     ↓
-public address
-     ↓
-DNS changes / alternative address
-     ↓
-connection
-```
-
-no tiene una garantía criptográfica de que la dirección validada sea exactamente la dirección conectada.
-
-Para un sistema que acepta URLs configurables por usuarios o módulos, una defensa más fuerte requeriría:
-
-* resolver todas las IP;
-* rechazar cualquier conjunto que contenga destinos prohibidos;
-* preferiblemente conectar contra la IP validada;
-* conservar `Host`/TLS SNI correctamente.
-
-**Prioridad: P1 si `HttpTransport` recibe URLs controladas por usuarios. P2 si solo administra configuración confiable.**
-
----
-
-# 18. Traducción
-
-La arquitectura actual ha mejorado.
-
-Antes:
+**Ubicación:**
 
 ```text
-host → GTranslate
-host → LTranslate
+iflow
+ -> DefaultRouter.route()
+ -> RateLimiter.tryAcquire()
 ```
 
-Ahora:
+### Problema
+
+El rate limiter dice:
 
 ```text
-host
- │
- ▼
-TranslatorProvider
- │
- ├── Google
- └── Libre
+messages per second
 ```
 
-Eso es exactamente el tipo de evolución que se esperaba.
-
-Además se agregó caché/deduplicación en una mejora reciente:
+y usa:
 
 ```text
-from | to | textHash
+channel + actorUuid
 ```
 
-y cache de detección de idioma.
+como key.
 
-Esto tiene mucho sentido para una red Minecraft porque el patrón:
+Pero `route()` se ejecuta **una vez por receptor**.
 
-```text
-100 jugadores
-+
-10 mensajes iguales
-+
-varios idiomas
-```
-
-puede multiplicar brutalmente llamadas externas.
-
----
-
-# 19. Rendimiento
-
-## **7.5/10 arquitectónicamente**
-
-Hay buenas decisiones:
-
-* executors acotados;
-* caché de traducción;
-* caché de language detection;
-* rate limiting;
-* procesamiento concurrente;
-* objetos de mensaje inmutables;
-* observabilidad;
-* profiler;
-* loadtest module.
-
-### Pero no hay suficiente evidencia para afirmar:
-
-```text
-X messages/sec
-```
-
-o:
-
-```text
-p99 = X ms
-```
-
-para network-scale.
-
-Eso requiere benchmarks reales.
-
----
-
-# 20. Coste potencial de un mensaje
-
-Un mensaje puede atravesar:
-
-```text
-routing
-→ conditions
-→ formatting
-→ translation
-→ serialization
-→ delivery
-```
-
-El peor caso no es el mensaje local.
-
-Es:
+Por tanto:
 
 ```text
 1 mensaje
-× N recipients
-× M idiomas
-× traducción externa
-× formatting
-× sync
+100 receptores
+rate-limit = 10
 ```
 
-La caché de traducción reduce una de las dimensiones más peligrosas.
-
-Pero el proyecto todavía necesita medir específicamente:
+consume potencialmente:
 
 ```text
-cost/message
-cost/recipient
-cost/translation miss
-cost/translation hit
-allocations/message
+10 tickets
+```
+
+con los primeros 10 receptores.
+
+Los otros 90 pueden quedar throttled.
+
+### Resultado
+
+El límite de mensajes se comporta accidentalmente como:
+
+```text
+deliveries per second
+```
+
+en vez de:
+
+```text
+messages emitted per second
+```
+
+### Solución
+
+Aplicar el rate limit en el nivel de emisión:
+
+```text
+message
+ ↓
+rate-limit once
+ ↓
+fan-out
+ ↓
+recipients
+```
+
+o separar explícitamente:
+
+```text
+MessageRateLimiter
+RecipientDeliveryLimiter
 ```
 
 ---
 
-# 21. Escalabilidad tipo network
+## [TF-04]
+
+**Tipo:** Bug
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+host
+ -> ConfigLoader
+ -> SuiteBootstrap
+ -> DefaultRouter
+```
+
+### Problema
+
+Existe:
+
+```text
+rules.yml
+```
+
+y existe todo el modelo:
+
+```text
+Rule
+TransformOp
+ScriptSurface
+ExpressionEvaluator
+```
+
+pero `ConfigLoader` no carga las reglas.
+
+Además:
+
+```java
+new DefaultRouter(channels, permissions)
+```
+
+no recibe un `ExpressionEvaluator`.
+
+Por tanto:
+
+```java
+expressionEvaluator == null
+```
+
+en el bootstrap normal.
+
+### Consecuencia
+
+Las capacidades documentadas de scripting/conditions/actions no forman parte del pipeline normal.
+
+### Solución
+
+Crear explícitamente:
+
+```text
+RuleConfigLoader
+ExpressionEvaluator
+DefaultRouter(channels, permissions, evaluator)
+router.setRules(...)
+```
+
+durante composición.
+
+---
+
+## [TF-05]
+
+**Tipo:** Bug
+**Severidad:** Media-Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+iflow
+ -> TransformOp.Sleep
+ -> ScriptSurface.setSleepMillis()
+```
+
+### Problema
+
+`Sleep` escribe:
+
+```java
+message.withSleepMillis(...)
+```
+
+pero no existe una etapa posterior del pipeline que consuma ese valor y espere antes de entregar.
+
+Lo mismo sucede con los sonidos transformados.
+
+El mensaje puede almacenar:
+
+```text
+sounds
+sleepMillis
+```
+
+pero `MessageDispatcher` obtiene los sonidos del `Channel`, no ejecuta el estado transformado de la misma manera.
+
+### Consecuencia
+
+Parte del API de transforms es actualmente decorativa/no efectiva.
+
+### Solución
+
+Crear un `DeliveryPlan` explícito:
+
+```text
+RouteOutcome
+   ↓
+DeliveryPlan
+   ├── message
+   ├── delay
+   ├── sounds
+   └── target
+```
+
+y que Dispatcher consuma ese plan.
+
+---
+
+## [TF-06]
+
+**Tipo:** Bug
+**Severidad:** Media
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+core-api
+ -> TranslationService
+```
+
+### Problema
+
+La caché utiliza:
+
+```java
+source + "|" + to.code() + "|" + text.hashCode()
+```
+
+como key.
+
+`String.hashCode()` tiene colisiones conocidas.
+
+Por ejemplo, existen strings distintos con el mismo hash.
+
+### Impacto
+
+Una colisión puede provocar:
+
+```text
+texto A
+ ↓
+traducción A
+ ↓
+cache
+
+texto B
+ ↓
+mismo hash
+ ↓
+traducción A
+```
+
+### Solución mínima
+
+Usar el texto completo:
+
+```java
+source + "|" + to.code() + "|" + text
+```
+
+o un digest de contenido.
+
+No hace falta un sistema de hashing sofisticado para este caso.
+
+---
+
+## [TF-07]
+
+**Tipo:** Bug
+**Severidad:** Media
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+textformatter
+ -> ChannelRegistry
+```
+
+### Problema
+
+El constructor crea:
+
+```java
+Collections.unmodifiableMap(copy)
+```
+
+pero posteriormente:
+
+```java
+register()
+unregister()
+```
+
+intentan modificar `channels`.
+
+Eso termina en:
+
+```text
+UnsupportedOperationException
+```
+
+### Consecuencia
+
+El sistema de extensiones no puede realmente modificar el registry aunque la API lo promete.
+
+### Solución
+
+Opción A:
+
+hacer el registry completamente inmutable y eliminar:
+
+```text
+register()
+unregister()
+```
+
+Opción B:
+
+usar un registry mutable/thread-safe.
+
+Prefiero A para el core y crear un nuevo snapshot durante composición.
+
+---
+
+## [TF-08]
+
+**Tipo:** Bug
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+extension-api
+ -> ExtensionManager.enable()
+```
+
+### Problema
+
+El código comprueba:
+
+```java
+desc.version().satisfies(desc.requiredCoreApi().toString())
+```
+
+pero:
+
+```text
+desc.version()
+```
+
+es la versión de la extensión.
+
+Debería compararse:
+
+```text
+runningCoreApiVersion
+```
+
+contra:
+
+```text
+requiredCoreApi
+```
+
+### Consecuencia
+
+La compatibilidad se evalúa contra el objeto equivocado.
+
+### Solución
+
+Inyectar explícitamente:
+
+```java
+SemVer coreApiVersion
+```
+
+al `ExtensionManager`.
+
+---
+
+## [TF-09]
+
+**Tipo:** Bug
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+extension-api
+ -> ExtensionManager.loadExtensionClass()
+```
+
+### Problema
+
+El código dice:
+
+```java
+// For simplicity, use system classloader.
+return Class.forName(className, true, getClass().getClassLoader());
+```
+
+Esto no carga realmente las clases desde el JAR que el manager descubrió en:
+
+```text
+extensions/
+```
+
+### Consecuencia
+
+El sistema de extensions promete:
+
+```text
+drop JAR
+→ discover
+→ load
+```
+
+pero la clase principal no se carga mediante un classloader asociado al JAR.
+
+### Además
+
+El propio código reconoce:
+
+```text
+Production: use custom classloader
+```
+
+pero actualmente no lo hace.
+
+### Solución
+
+Un `URLClassLoader` por extensión:
+
+```text
+extension.jar
+     ↓
+ExtensionClassLoader
+     ↓
+Extension instance
+```
+
+y cerrar el classloader en `disable()`.
+
+---
+
+## [TF-10]
+
+**Tipo:** Vulnerabilidad
+**Severidad:** Alta
+**Confianza:** Confirmado por código
+
+**Ubicación:**
+
+```text
+sync-http
+ -> HttpSink.handleInbound()
+```
+
+### Problema
+
+El endpoint inbound:
+
+```text
+POST /hook
+```
+
+no tiene autenticación.
+
+Sólo limita:
+
+```text
+1 MB
+```
+
+### Consecuencia
+
+Si se expone en una interfaz accesible:
+
+```text
+attacker
+ ↓
+POST /hook
+ ↓
+MessageCodec
+ ↓
+SyncListener
+```
+
+puede introducir mensajes arbitrarios.
+
+### Solución
+
+Agregar:
+
+* bearer/HMAC token
+* bind localhost por defecto
+* rate limit
+* content-type obligatorio
+* replay protection si se usa cross-server
+
+---
+
+## [TF-11]
+
+**Tipo:** Defecto de integración
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+settings.gradle
+```
+
+### Problema
+
+`fabric-host` existe como módulo y tiene `build.gradle`, pero no está incluido como subproyecto del build raíz.
+
+Además CI no lo compila.
+
+### Consecuencia
+
+La afirmación:
+
+```text
+TextFormatter Suite soporta Spigot + Fabric
+```
+
+no significa:
+
+```text
+CI valida Spigot + Fabric
+```
+
+Actualmente sólo existe cobertura real de build para Spigot.
+
+### Solución
+
+Agregar:
+
+```gradle
+include ':src:fabric-host'
+```
+
+y hacer que CI lo compile explícitamente.
+
+---
+
+## [TF-12]
+
+**Tipo:** Defecto de build
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+performance/build.gradle
+example-extension/build.gradle
+```
+
+### Problema
+
+Esos módulos dependen de:
+
+```text
+me.majhrs16:suite-*:2.1.0-SNAPSHOT
+```
+
+en lugar de dependencias Gradle `project(...)`.
+
+En CI esos artifacts no existen en Maven Central.
+
+El workflow falló exactamente con:
+
+```text
+Could not find me.majhrs16:suite-core-api:2.1.0-SNAPSHOT
+Could not find me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT
+...
+```
+
+### Solución
+
+Para módulos pertenecientes al mismo reactor:
+
+```gradle
+implementation project(':src:core-api')
+```
+
+Para módulos realmente externos:
+
+```text
+publish first
+consume second
+```
+
+pero eso debe estar formalmente modelado.
+
+La solución preferida dentro del monorepo es `project(...)`.
+
+---
+
+## [TF-13]
+
+**Tipo:** Defecto de CI
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+.github/workflows/ci.yml
+```
+
+### Estado actual
+
+`javadoc` falla por dependency verification:
+
+```text
+junit-bom-5.7.2.module
+junit-bom-5.9.1.module
+spring-framework-bom-5.3.24.module
+```
+
+no presentes correctamente en:
+
+```text
+verification-metadata.xml
+```
+
+### Además
+
+`build-and-test` falla por los SNAPSHOT externos descritos arriba.
+
+### Consecuencia
+
+El commit auditado no tiene un pipeline verde.
+
+---
+
+## [TF-14]
+
+**Tipo:** Defecto
+**Severidad:** Alta
+**Confianza:** Confirmado
+
+**Ubicación:**
+
+```text
+web-editor
+ -> js/props.js
+ -> js/sidebar.js
+```
+
+### Problema
+
+CI detecta errores sintácticos JavaScript.
+
+No es una cuestión estética.
+
+Es código que no puede pasar el `format:check`.
+
+### Solución
+
+Corregir sintaxis primero.
+
+Después ejecutar:
+
+```text
+npm run check
+npm run test:integration
+```
+
+antes de considerar el editor estable.
+
+---
+
+# 11. Rendimiento
+
+## Evaluación arquitectónica: 6.5/10
+
+No existen benchmarks de producción suficientes para afirmar:
+
+```text
+X msg/s
+```
+
+por lo que no voy a inventarlos.
+
+Sí pueden identificarse los costes estructurales.
+
+## Coste por mensaje
+
+Para un broadcast:
+
+```text
+O(P)
+```
+
+donde `P` es el número de receptores.
+
+Cada receptor puede ejecutar:
+
+```text
+routing
++
+permissions
++
+rules
++
+formatting
++
+translation
++
+MiniMessage parsing
+```
+
+Esto es inevitable hasta cierto punto, porque el idioma del receptor puede variar.
+
+## Principal hotspot
+
+Translation.
+
+Si hay:
+
+```text
+200 receptores
+10 idiomas
+```
+
+y mensajes nuevos, la caché no necesariamente evita las llamadas externas.
+
+Además, las traducciones son síncronas.
+
+Aunque existe un executor de:
+
+```text
+4–32 workers
+```
+
+eso no convierte un proveedor HTTP en una operación barata.
+
+---
+
+# 12. Concurrencia
+
+## Aspectos buenos
+
+`MessageDispatcher` utiliza:
+
+```text
+ThreadPoolExecutor
+core = 4
+max = 32
+queue = 1000
+CallerRunsPolicy
+```
+
+Esto es muchísimo mejor que:
+
+```java
+Executors.newCachedThreadPool()
+```
+
+para un servidor Minecraft.
+
+También:
+
+* `AtomicReference` para rules
+* `ConcurrentHashMap`
+* `CopyOnWriteArrayList`
+* snapshots inmutables
+* delivery main-thread en adapters
+
+son decisiones razonables.
+
+## Problema
+
+`CallerRunsPolicy` significa que bajo saturación el hilo que llama al dispatcher puede ejecutar trabajo.
+
+En un chat event esto puede convertirse en:
+
+```text
+queue full
+ ↓
+AsyncPlayerChatEvent thread
+ ↓
+ejecuta routing/render
+ ↓
+event tarda
+```
+
+No necesariamente rompe el servidor, pero elimina la garantía de aislamiento bajo saturación.
+
+---
+
+# 13. Escalabilidad
 
 ## Escenario A — servidor pequeño
 
-Arquitectónicamente:
-
 ```text
-<100 jugadores
+10–50 jugadores
 ```
 
-no representa un problema especial.
+La arquitectura es perfectamente razonable después de solucionar los bugs críticos.
 
-El sistema tiene suficiente margen.
+Principal coste:
+
+* traducción
+* MiniMessage
+* fan-out
+
+No es preocupante.
 
 ---
 
 ## Escenario B — red mediana
 
 ```text
-100–500 jugadores
+100–500 jugadores por servidor
 ```
 
-El diseño sigue siendo razonable.
+Puede funcionar, pero empiezan a importar:
 
-Los riesgos principales pasan a ser:
+* 32 workers
+* queue 1000
+* rendering por receptor
+* traducciones
+* rate limiting
+* sync
 
-* traducciones;
-* sincronización;
-* bursts;
-* conexiones externas;
-* GC.
+Aquí el bug del rate limiter se vuelve especialmente visible.
 
 ---
 
 ## Escenario C — red grande
 
 ```text
-500–2000+ jugadores
+500–2000 jugadores por instancia
 ```
 
-La arquitectura empieza a depender mucho más de:
+La arquitectura actual necesita optimización antes de considerarse segura para esta carga.
+
+El problema no es principalmente CPU.
+
+Es:
 
 ```text
-translation cache
-+
-executor sizing
-+
-sync topology
-+
-serialization
-+
-network latency
+fan-out
+×
+per-recipient work
+×
+external translation
 ```
-
-Aquí ya no basta con que el código sea correcto.
-
-Hay que medir.
 
 ---
 
 ## Escenario D — network-scale
 
-Para una red comparable conceptualmente a grandes redes Minecraft:
-
 ```text
+miles de jugadores
 múltiples servidores
-      ↓
-múltiples procesos
-      ↓
-múltiples regiones/instancias
-      ↓
-sync
-      ↓
-bursts
+múltiples proxies
 ```
 
-el proyecto **tiene una arquitectura que podría servir de base**, pero no existe evidencia suficiente para afirmar que el implementation actual soporte esa carga.
+No consideraría la implementación actual preparada para esta escala.
 
-La limitación no es necesariamente el algoritmo de formatting.
+No porque sea imposible.
 
-Es la suma:
+Sino porque faltan varias garantías:
 
 ```text
-external I/O
-+
-translation
-+
-cross-server sync
-+
-serialization
-+
-delivery
-+
-failure handling
+centralized/distributed event transport
+        +
+backpressure
+        +
+message batching
+        +
+translation batching
+        +
+deduplication
+        +
+distributed rate limiting
+        +
+delivery semantics
+        +
+failure isolation
+        +
+bounded queues end-to-end
 ```
 
 ---
 
-# 22. Concurrencia
+# 14. Arquitectura necesaria para network-level
 
-## **7.8/10**
-
-La dirección es buena.
-
-Hay:
-
-* `ConcurrentHashMap`;
-* immutable messages;
-* bounded executors;
-* futures;
-* scheduler;
-* async dispatch;
-* main-thread hops para plataforma.
-
-La principal preocupación es la frontera entre:
+El salto importante sería pasar de:
 
 ```text
-async engine
+Server
+ └── MessageDispatcher
+       └── SyncSink
+```
+
+a algo como:
+
+```text
+Minecraft Server
+      │
+      ▼
+Local Chat Core
+      │
+      ▼
+Message Bus
+      │
+      ├── Server A
+      ├── Server B
+      ├── Server C
+      └── Server N
+```
+
+con:
+
+```text
+Message ID
+Origin
+Timestamp
+TTL
+Sequence
+Idempotency key
+Source server
+Target scope
+```
+
+y garantías explícitas:
+
+```text
+at-most-once
+at-least-once
+deduplicated
+ordered-per-channel
+```
+
+No hace falta implementar todo eso ahora.
+
+Pero sí hace falta definir el modelo si el objetivo final es network-scale.
+
+---
+
+# 15. Seguridad
+
+## Lo bien hecho
+
+Hay varias medidas de seguridad bastante buenas:
+
+### SpEL
+
+`SimpleEvaluationContext.forReadOnlyDataBinding()` limita:
+
+* `T(...)`
+* constructors
+* static methods
+* reflection
+* arbitrary method invocation
+
+Esto está acompañado por tests de seguridad.
+
+### YAML
+
+Se usa:
+
+```text
+SafeConstructor
+LoaderOptions
+```
+
+en el loader principal.
+
+### HTTP
+
+`HttpTransport`:
+
+* desactiva redirects automáticos
+* valida destinos
+* resuelve DNS
+* rechaza varias redes privadas
+* limita redirects
+
+### WebSocket
+
+Existe:
+
+* token
+* límite de payload
+* rate limit por conexión
+
+El problema es que el WebSocket **se arranca sin token cuando el default está vacío**.
+
+Por tanto, la implementación defensiva existe pero el wiring la invalida.
+
+Ese patrón aparece varias veces en el proyecto:
+
+> **el componente individual está endurecido, pero el composition root no siempre respeta ese modelo de seguridad.**
+
+---
+
+# 16. Mantenibilidad
+
+## 1 año
+
+Con correcciones P0/P1:
+
+**buena.**
+
+La modularidad actual permite añadir:
+
+* translators
+* transports
+* channels
+* transforms
+* platform adapters
+
+sin reescribir el core.
+
+## 3 años
+
+El mayor riesgo será:
+
+```text
+host
+spigot-host
+module manager
+configuration
+```
+
+Si siguen acumulando wiring manual, se convertirán en el centro de gravedad del proyecto.
+
+## 5 años
+
+El principal riesgo sería que el sistema termine con:
+
+```text
+host
+ ├── legacy
+ ├── modules
+ ├── manager
+ ├── extensions
+ ├── sync
+ ├── config
+ ├── platform hacks
+ └── compatibility
+```
+
+todo conectado.
+
+La solución no es una reescritura.
+
+Es mantener estrictos boundaries desde ahora.
+
+---
+
+# 17. Legibilidad / onboarding
+
+## 30 minutos
+
+Un desarrollador competente puede entender:
+
+```text
+core-api
+kernel
+host
+textformatter
+iflow
+```
+
+y encontrar los entry points.
+
+**Resultado:** bueno.
+
+## 2 horas
+
+Puede reconstruir:
+
+```text
+Plugin
+ → SuiteHost
+ → Router
+ → Formatter
+ → Delivery
+```
+
+y entender channels/translation.
+
+**Resultado:** bastante bueno.
+
+## 1 día
+
+Puede modificar:
+
+* formatting
+* routing
+* channel config
+* translation
+
+sin demasiados problemas.
+
+## 1 semana
+
+Puede trabajar en:
+
+* sync
+* module manager
+* extensions
+* platform adapters
+
+pero necesitará leer bastante código.
+
+**Resultado general: 7.5/10.**
+
+La incorporación del `src/README.md` es una mejora correcta.
+
+Pero el CodeGuide actual contiene algunas descripciones que ya no coinciden exactamente con la implementación. Por ejemplo, describe inicialización de módulos y un flujo formatter→router que el código actual no realiza.
+
+---
+
+# 18. Testing
+
+La cantidad de tests es razonable.
+
+Hay tests en:
+
+```text
+core-api
+coretranslator
+gtranslate
+host
+iflow
+kernel
+ltranslate
+loadtest
+sync-discord
+sync-http
+sync-tcpudp
+sync-telegram
+sync-velocity
+textformatter
+spigot-host
+web-editor
+```
+
+Eso es positivo.
+
+## Problema
+
+Parte del testing es:
+
+```text
+mock-heavy
+```
+
+y varios tests de infraestructura real están deshabilitados.
+
+Por ejemplo existen tests marcados como:
+
+```java
+@Disabled
+```
+
+para concurrencia/integración que requieren entorno real.
+
+Eso no es necesariamente malo.
+
+Pero significa:
+
+> el número de archivos de test sobreestima la cobertura real de producción.
+
+## Falta especialmente
+
+Tests de:
+
+* reload lifecycle
+* multiple reloads
+* WebSocket default security
+* fanout + rate limiting
+* rules.yml → router
+* extension JAR loading
+* extension unload
+* cross-server duplicate delivery
+* queue saturation
+* translation provider latency
+* 500+ recipients
+* 2000+ recipients
+
+---
+
+# 19. Historial de Git
+
+La evolución reciente es especialmente reveladora.
+
+El gran refactor:
+
+```text
+44d3a309
+2026-09-24
+feat: major refactor and improvements
+```
+
+fue seguido rápidamente por:
+
+```text
+security sprint
+manager M2
+manager M3
+manager M4
+manager M5
+translation cache
+CI refactor
+schema changes
+rules graph editor
+CodeGuide
+```
+
+Entre el refactor principal y el commit auditado hay **14 commits**.
+
+Eso muestra que la arquitectura está:
+
+> **evolucionando rápidamente, pero todavía no completamente estabilizada.**
+
+La secuencia es bastante saludable conceptualmente:
+
+```text
+auditoría
+ ↓
+refactor
+ ↓
+security
+ ↓
+module manager
+ ↓
+cache
+ ↓
+documentation
+```
+
+El problema es que se añadieron features antes de cerrar completamente la integración.
+
+---
+
+# 20. Deuda técnica
+
+## Deuda real
+
+### D1 — Build heterogéneo
+
+Algunos módulos:
+
+```text
+project(...)
+```
+
+otros:
+
+```text
+me.majhrs16:suite-*:SNAPSHOT
+```
+
+Esto fragmenta el reactor.
+
+### D2 — Lifecycle distribuido
+
+No existe un lifecycle central suficientemente fuerte.
+
+### D3 — Configuración duplicada entre runtime/editor/schema
+
+La existencia de:
+
+```text
+ConfigLoader
+ConfigValidator
+ConfigSchemaGenerator
+paths.json
+web editor
+defaults
+```
+
+crea múltiples representaciones de la misma configuración.
+
+### D4 — Módulos legacy
+
+```text
+coretranslator
+common-legacy
+```
+
+deben tener una política explícita:
+
+```text
+maintain
+deprecated
+remove
+```
+
+### D5 — Sync architecture
+
+Hay muchos adapters, pero falta una abstracción central de:
+
+```text
+cross-server event transport
+```
+
+---
+
+# 21. Cosas que NO deberían tocarse
+
+Hay varias decisiones que considero correctas y que no necesitan una reescritura.
+
+## 1. `Module` como descriptor
+
+Mantener:
+
+```java
+Module.descriptor()
+```
+
+y **no convertir Module en lifecycle service**.
+
+La separación:
+
+```text
+descriptor
+≠
+runtime service
+```
+
+es correcta.
+
+## 2. `Message` inmutable
+
+Mantener el modelo immutable/functional:
+
+```text
+message.withX(...)
+```
+
+Es muy útil para concurrencia.
+
+## 3. `ChatDelivery`
+
+Es un buen port.
+
+```text
+core
+ ↓
+ChatDelivery
+ ↓
+Spigot/Fabric
+```
+
+Debe mantenerse.
+
+## 4. `ActorDirectory`
+
+También es un boundary correcto.
+
+## 5. TemplateRenderer
+
+No necesita una reescritura.
+
+La secuencia actual es razonablemente clara.
+
+## 6. MiniMessage escaping
+
+Debe mantenerse como principio obligatorio.
+
+## 7. ModuleGraph
+
+La idea de resolver capabilities y detectar ciclos es válida.
+
+No reemplazarlo por un simple mapa de dependencias sólo porque sea más sencillo.
+
+---
+
+# 22. Evaluación de soluciones
+
+## P0 WebSocket
+
+**Esfuerzo:** pequeño
+**Riesgo:** bajo
+**Beneficio:** enorme
+
+Primero:
+
+```text
+if (!enabled) return;
+```
+
+Después:
+
+```text
+bind localhost by default
 ```
 
 y:
 
 ```text
-platform APIs
+require token for non-local bind
 ```
 
-Esta frontera está bastante bien encapsulada.
+Esto debe hacerse inmediatamente.
 
-`SpigotChatDelivery` es precisamente el sitio correcto para resolver:
+---
+
+## P0 lifecycle
+
+**Esfuerzo:** medio
+**Riesgo:** medio
+**Beneficio:** enorme
+
+Crear:
 
 ```text
-worker thread
-       ↓
-Bukkit main thread
+Runtime.close()
+```
+
+y cerrar todos los recursos.
+
+No reescribir `SuiteHost`.
+
+---
+
+## P0 build
+
+**Esfuerzo:** medio
+**Riesgo:** bajo
+**Beneficio:** enorme
+
+Unificar dependencias del monorepo.
+
+---
+
+## P1 iFlow
+
+**Esfuerzo:** medio
+**Riesgo:** medio
+
+Conectar:
+
+```text
+rules.yml
+ ↓
+RuleLoader
+ ↓
+ExpressionEvaluator
+ ↓
+DefaultRouter
+```
+
+No hace falta modificar el modelo de reglas.
+
+---
+
+## P1 rate limiting
+
+**Esfuerzo:** medio
+**Riesgo:** medio
+
+Separar:
+
+```text
+message admission
+```
+
+de:
+
+```text
+recipient delivery
 ```
 
 ---
 
-# 23. Seguridad
+## P1 ExtensionManager
 
-## **7.3/10**
+**Esfuerzo:** medio
+**Riesgo:** medio
 
-La situación ha mejorado muchísimo.
+Introducir classloader real por extensión.
 
-### Bien
-
-* HTTP body limit.
-* HTTP executor limit.
-* WebSocket message limit.
-* WebSocket rate limit.
-* SSRF redirect validation.
-* SHA-256 module verification.
-* manifest validation.
-* safer YAML constructors en las zonas corregidas.
-* authentication support.
-* localhost restriction del debug endpoint de auditorías anteriores.
-
-### Pendiente importante
-
-**SpEL / expression evaluation.**
-
-Este continúa siendo el componente que más merece una revisión de seguridad.
-
-La pregunta crítica no es:
-
-> "¿SpEL es peligroso?"
-
-sino:
-
-> "¿Qué objetos, métodos, beans, properties y evaluators están realmente expuestos al contexto de evaluación?"
-
-Si el contexto permite reflection o acceso a APIs arbitrarias, el problema puede convertirse en ejecución de código.
-
-La auditoría de ese componente debería ser específica y separada.
+No cambiar la API de Extension.
 
 ---
 
-# 24. Testing
+# 23. Matriz final
 
-La estrategia es bastante buena para un proyecto de este tipo:
-
-```text
-unit
-integration
-web editor tests
-configuration tests
-module tests
-loadtest
-```
-
-También existe CI para:
-
-* Java;
-* Spigot;
-* Web Editor;
-* integración;
-* Javadoc.
-
-El commit `910b623` documenta explícitamente:
-
-```text
-core + sync + spigot-host jar: BUILD SUCCESSFUL
-core tests: BUILD SUCCESSFUL
-```
-
-pero esto sigue siendo evidencia del commit, no una ejecución independiente de esta auditoría.
-
-### Falta importante
-
-Faltan tests E2E que recorran:
-
-```text
-Minecraft event
- → dispatcher
- → iFlow
- → translation
- → formatter
- → delivery
-```
-
-como una sola pipeline.
-
-Ese es probablemente el hueco de testing más importante.
+| Área                         | Puntuación | Estado                   | Principales problemas                                          |
+| ---------------------------- | ---------: | ------------------------ | -------------------------------------------------------------- |
+| Código                       | **7.0/10** | Bueno                    | integración y algunos bugs funcionales                         |
+| Arquitectura                 | **7.2/10** | Buena                    | boundaries todavía incompletos                                 |
+| Clean Architecture           | **5.5/10** | Parcial                  | demasiada integración concreta en host                         |
+| Hexagonal                    | **7.0/10** | Buena                    | ports reales, composition centralizado                         |
+| Modularidad                  | **7.5/10** | Buena                    | módulos numerosos y algo heterogéneos                          |
+| Separación responsabilidades | **7.0/10** | Buena                    | host empieza a crecer demasiado                                |
+| Legibilidad                  | **7.8/10** | Buena                    | estructura bastante discoverable                               |
+| Features                     | **6.5/10** | Amplias                  | varias aún incompletamente conectadas                          |
+| Personalización              | **8.0/10** | Muy buena                | gran superficie configurable                                   |
+| Seguridad                    | **5.0/10** | Insuficiente actualmente | WebSocket default vulnerable                                   |
+| Rendimiento                  | **6.5/10** | Razonable                | fan-out + traducción síncrona                                  |
+| Escalabilidad                | **5.0/10** | Limitada                 | no network-scale todavía                                       |
+| Concurrencia                 | **6.5/10** | Razonable                | lifecycle/backpressure pendientes                              |
+| Testing                      | **6.2/10** | Mixto                    | muchos tests, cobertura real incompleta                        |
+| Mantenibilidad               | **6.8/10** | Buena con riesgo         | host/config lifecycle                                          |
+| Documentación                | **8.0/10** | Muy buena                | bastante documentación, algo desactualizada respecto al código |
 
 ---
 
-# 25. CI/CD
+# 24. Potencial
 
-El workflow actual es mucho más sólido que el de septiembre anterior.
+## Potencial teórico
 
-Especialmente:
+**90/100**
 
-```text
-CI
- ├── Java
- ├── Spigot
- ├── Web editor
- └── Javadoc
-```
+La arquitectura tiene espacio real para convertirse en una plataforma de chat bastante potente.
 
-y release:
+No es simplemente:
 
 ```text
-build
- ↓
-JARs
- ↓
-SHA256
- ↓
-GitHub Release
+listener → format → send
 ```
 
-Esto además conecta correctamente con el Module Manager.
-
-### Problema
-
-El job:
-
-```yaml
-./gradlew dependencies --write-locks
-continue-on-error: true
-```
-
-no constituye realmente una verificación de dependency locking.
-
-Está generando/escribiendo locks y tolerando fallos.
-
-Sería mejor que CI verificara:
+Tiene bases para:
 
 ```text
-lockfile unchanged
-+
-dependency verification valid
-```
-
-en lugar de tratar el proceso como advisory.
-
----
-
-# 26. Repositorio: `node_modules`
-
-Este es un defecto muy claro.
-
-El árbol Git contiene:
-
-```text
-src/web-editor/node_modules/
-```
-
-incluyendo una gran cantidad de archivos de dependencias.
-
-Eso debería normalmente ser:
-
-```text
-.gitignore
-node_modules/
-```
-
-y únicamente:
-
-```text
-package.json
-package-lock.json
-```
-
-versionados.
-
-No afecta directamente al runtime de TextFormatter, pero sí:
-
-* aumenta el repositorio;
-* dificulta navegación;
-* introduce ruido en auditorías;
-* aumenta coste de clones;
-* puede producir diffs enormes;
-* mezcla código propio con dependencias vendorizadas.
-
-**P2.**
-
----
-
-# 27. Documentación y onboarding
-
-## **8.0/10**
-
-La documentación existente es abundante:
-
-* README;
-* Wiki;
-* ADR;
-* PLAN;
-* prompts;
-* auditorías;
-* schema;
-* developer guide;
-* API reference;
-* migration guide;
-* contributing;
-* glossary.
-
-Eso está por encima de lo habitual.
-
-El problema es diferente:
-
-> **hay mucha documentación, pero no necesariamente una única ruta cognitiva para entender el código.**
-
-Precisamente aquí tu idea anterior del `codeguide` tiene muchísimo sentido.
-
-Algo como:
-
-```text
-src/
-└── README.md
-
-core-api/
-└── README.md
-
-kernel/
-└── README.md
-
-host/
-└── README.md
-
-iflow/
-└── README.md
-
-textformatter/
-└── README.md
-```
-
-podría reducir drásticamente el tiempo de onboarding.
-
----
-
-# 28. Onboarding estimado
-
-### 30 minutos
-
-Un desarrollador puede entender:
-
-```text
-qué es TextFormatter
-qué módulos existen
-qué plataformas soporta
-qué es Message
-qué es SuiteHost
-```
-
-### 2 horas
-
-Puede empezar a seguir:
-
-```text
-platform event
-→ Message
-→ dispatcher
-→ routing
-→ delivery
-```
-
-### 1 día
-
-Puede trabajar razonablemente sobre:
-
-* un módulo;
-* una feature;
-* un adapter;
-* configuración.
-
-### 1 semana
-
-Con codeguide + tests + debugging debería poder modificar partes significativas del sistema sin depender continuamente del autor.
-
-Sin ese índice arquitectónico, el repositorio es considerablemente más difícil de recorrer de lo que su diseño merece.
-
----
-
-# 29. Historial de Git
-
-La evolución reciente es una señal positiva.
-
-El patrón ha sido:
-
-```text
-auditoría
- ↓
-bugs identificados
- ↓
-refactor
- ↓
-compile
- ↓
-security hardening
- ↓
-build stabilization
- ↓
-performance improvements
- ↓
-release infrastructure
-```
-
-Los últimos commits muestran una consolidación bastante clara:
-
-```text
-Performance fixes
-        ↓
-security fixes
-        ↓
-translation cache
-        ↓
-CI/release
-        ↓
-build stabilization
-```
-
-No parece que el proyecto esté simplemente agregando features sin resolver deuda.
-
-Está entrando en una etapa diferente:
-
-> **consolidación de infraestructura.**
-
-Eso es bueno.
-
----
-
-# 30. Deuda técnica principal
-
-| ID  | Área                        |  Severidad | Estado          |
-| --- | --------------------------- | ---------: | --------------- |
-| D01 | Schema/config duplicado     |      Media | Vivo            |
-| D02 | Build/composite integration |      Media | Vivo            |
-| D03 | `node_modules` versionado   |      Media | Vivo            |
-| D04 | E2E pipeline Java           |      Media | Vivo            |
-| D05 | SpEL security model         |       Alta | Pendiente       |
-| D06 | DNS/SSRF hardening          | Media/Alta | Parcial         |
-| D07 | ModuleGraph self-cycle      |      Media | Bug             |
-| D08 | RateLimiter purge race      |      Media | Riesgo          |
-| D09 | WebSocket bytes vs chars    |       Baja | Defecto         |
-| D10 | Network-scale benchmarks    |       Alta | Falta evidencia |
-
----
-
-# 31. Matriz de puntuación
-
-| Área                            |     /10 | Estado                                        |
-| ------------------------------- | ------: | --------------------------------------------- |
-| Código                          | **8.0** | Bueno                                         |
-| Arquitectura                    | **8.5** | Muy buena                                     |
-| Clean Architecture              | **7.8** | Buena                                         |
-| Hexagonal                       | **8.2** | Muy buena                                     |
-| Modularidad                     | **8.5** | Muy buena                                     |
-| Separación de responsabilidades | **8.0** | Buena                                         |
-| Legibilidad                     | **7.8** | Buena                                         |
-| Features                        | **8.5** | Muy amplia                                    |
-| Personalización                 | **8.7** | Muy alta                                      |
-| Seguridad                       | **7.3** | Mejorando, aún con riesgos                    |
-| Rendimiento                     | **7.5** | Buena arquitectura, evidencia limitada        |
-| Escalabilidad                   | **7.4** | Potencial alto, no demostrado a network-scale |
-| Concurrencia                    | **7.8** | Buena                                         |
-| Testing                         | **7.8** | Buena, E2E incompleto                         |
-| Mantenibilidad                  | **7.7** | Buena, schema/build generan deuda             |
-| Documentación                   | **8.0** | Amplia, falta mapa de código                  |
-
----
-
-# 32. Potencial
-
-### Potencial teórico
-
-**Muy alto.**
-
-La arquitectura permite convertirse en algo bastante más grande que un formatter:
-
-```text
-Minecraft messaging platform
-        +
-routing engine
-        +
+message model
+routing
 translation
-        +
-cross-server transport
-        +
-extension platform
-        +
-configuration editor
-        +
-runtime module manager
+policy engine
+transports
+extensions
+module system
+platform adapters
+observability
+configuration tooling
 ```
 
 ---
 
-### Potencial arquitectónico
+## Potencial arquitectónico
 
-También es alto.
+**80/100**
 
-La estructura actual no obliga a quedarse en:
+Las fronteras actuales permiten evolucionar considerablemente sin reescribir todo.
+
+La principal limitación es que `host` concentra demasiada integración.
+
+---
+
+## Potencial alcanzado
+
+**≈60/100**
+
+No significa que sólo esté "60% programado".
+
+Significa:
 
 ```text
-Spigot plugin
+capacidad arquitectónica potencial
+vs
+capacidad integrada y demostrablemente estable
 ```
 
-Puede evolucionar hacia:
+La diferencia está principalmente en:
+
+* lifecycle
+* build
+* extensions
+* rules
+* sync
+* web editor
+* CI
+* network-scale semantics
+
+---
+
+# 25. Roadmap
+
+## P0 — Crítico
+
+### P0-1 — Cerrar WebSocket por defecto
+
+**Problema:** endpoint 9092 activo aunque disabled y sin token.
+
+**Beneficio:** elimina la vulnerabilidad más importante encontrada.
+
+**Esfuerzo:** bajo.
+
+**Dependencias:** ninguna.
+
+---
+
+### P0-2 — Lifecycle completo
+
+Implementar:
+
+```text
+Runtime.close()
+```
+
+cerrando:
+
+* dispatcher
+* WebSocket
+* Discord
+* observability
+* extensions
+* module lifecycle
+* listeners
+* schedulers
+
+**Esfuerzo:** medio.
+
+---
+
+### P0-3 — Reparar build reactor
+
+Eliminar dependencias internas:
+
+```text
+me.majhrs16:suite-*:SNAPSHOT
+```
+
+cuando corresponda utilizar:
+
+```gradle
+project(':src:...')
+```
+
+**Esfuerzo:** medio.
+
+---
+
+### P0-4 — CI realmente representativo
+
+Agregar al CI:
+
+```text
+fabric-host
+coretranslator
+common-legacy
+```
+
+o documentar explícitamente que son builds independientes.
+
+**Esfuerzo:** bajo-medio.
+
+---
+
+## P1 — Alto
+
+### P1-1 — Integrar rules.yml
+
+```text
+YAML
+ ↓
+RuleLoader
+ ↓
+DefaultRouter
+```
+
+---
+
+### P1-2 — Corregir rate limiter
+
+Aplicar límite por mensaje emitido, no por receptor.
+
+---
+
+### P1-3 — Reparar ExtensionManager
+
+Classloader real por JAR.
+
+---
+
+### P1-4 — Corregir compatibility check
+
+Comparar:
+
+```text
+runningCoreApi
+vs
+requiredCoreApi
+```
+
+---
+
+### P1-5 — Reparar web editor
+
+Eliminar errores sintácticos y hacer que CI vuelva a verde.
+
+---
+
+### P1-6 — Autenticar HTTP inbound
+
+No permitir:
+
+```text
+POST /hook
+```
+
+sin autenticación cuando se expone externamente.
+
+---
+
+## P2 — Medio
+
+### P2-1
+
+Eliminar `hashCode()` de las keys de traducción.
+
+### P2-2
+
+Resolver la contradicción de mutabilidad de `ChannelRegistry`.
+
+### P2-3
+
+Centralizar configuración y schema.
+
+### P2-4
+
+Definir lifecycle uniforme:
+
+```text
+start()
+stop()
+reload()
+```
+
+para todos los modules.
+
+### P2-5
+
+Separar `host` en subcomponentes si sigue creciendo.
+
+---
+
+## P3 — Bajo
+
+* limpieza legacy
+* mejoras de documentación
+* optimizaciones menores
+* profiling adicional
+* mejoras de DX
+* tooling del CodeGuide
+
+---
+
+# 26. Escala network-level: qué tendría que cambiar
+
+Para una red grande, las prioridades serían:
+
+## 1. Event bus
+
+No depender de sinks arbitrarios como backbone principal.
+
+## 2. Idempotencia
+
+Cada mensaje debería tener:
+
+```text
+messageId
+origin
+sequence
+```
+
+## 3. Deduplicación
+
+Especialmente cuando:
+
+```text
+server A → proxy → server B
+```
+
+puede generar loops.
+
+## 4. Backpressure
+
+Toda cadena debe estar limitada:
+
+```text
+chat event
+ ↓
+queue
+ ↓
+routing
+ ↓
+translation
+ ↓
+sync
+ ↓
+delivery
+```
+
+## 5. Translation batching
+
+No:
+
+```text
+500 HTTP calls
+```
+
+para un solo mensaje.
+
+Idealmente:
+
+```text
+message
+ ↓
+unique target languages
+ ↓
+batch translation
+ ↓
+reuse results
+```
+
+## 6. Per-language fan-out
+
+En lugar de:
+
+```text
+recipient
+ ↓
+translate
+ ↓
+render
+```
+
+hacer:
+
+```text
+message
+ ↓
+group recipients by language
+ ↓
+translate once/language
+ ↓
+render/send
+```
+
+## 7. Distributed rate limiting
+
+El actual `RateLimiter` es local.
+
+Network-level requiere:
+
+```text
+player identity
++
+network scope
+```
+
+si el límite debe ser global.
+
+---
+
+# 27. Mayor fortaleza
+
+La mayor fortaleza de TextFormatter Suite es:
+
+> **la existencia de un core de procesamiento relativamente independiente de la plataforma, con un modelo de mensaje inmutable y ports reales para las operaciones externas.**
+
+Esto permite que:
 
 ```text
 Spigot
 Fabric
 Velocity
-standalone service
-proxy
-bridge
-external integration
+Discord
+HTTP
 ```
 
-sin destruir el core.
+no tengan que convertirse en parte del dominio del formatter.
+
+Esa decisión arquitectónica sí tiene valor a largo plazo.
 
 ---
 
-### Potencial alcanzado
+# 28. Peores defectos actuales
 
-Mi estimación:
+En orden de impacto técnico:
 
-**~65–75% del potencial arquitectónico**, pero con una distinción importante:
+1. **WebSocket inseguro y activado por defecto.**
+2. **Lifecycle/reload incompleto.**
+3. **CI/build roto.**
+4. **Rules/iFlow no completamente conectados al runtime.**
+5. **Rate limiting incorrecto para fan-out.**
+6. **ExtensionManager incompleto.**
+7. **Web editor roto actualmente.**
+8. **Arquitectura de sync todavía fragmentada.**
+9. **Configuración representada en demasiados lugares.**
+10. **Coste de traducción/render por receptor para escala grande.**
+
+---
+
+# 29. Lo que TextFormatter Suite NO es todavía
+
+No lo describiría todavía como:
 
 ```text
-arquitectura diseñada       ~80–85%
-implementación funcional    ~70–75%
-madurez production-scale    ~50–60%
+production-proven network-scale chat platform
 ```
 
-No significa que "falte la mitad del proyecto".
-
-Significa que las partes difíciles que quedan son precisamente las que convierten una arquitectura buena en una plataforma extremadamente robusta:
-
-* seguridad profunda;
-* failure semantics;
-* E2E;
-* benchmarks;
-* compatibilidad;
-* releases;
-* operación a escala.
-
----
-
-# 33. Roadmap
-
-## P0
-
-### P0-1 — cerrar cualquier regresión de build
-
-El proyecto ha mejorado enormemente aquí. El commit `910b623` declara los módulos principales compilando correctamente.
-
-Hay que convertir eso en una propiedad comprobada permanentemente por CI.
-
----
-
-## P1
-
-### P1-1 — auditoría profunda de SpEL
-
-Determinar exactamente:
+Tampoco como:
 
 ```text
-qué puede leer
-qué puede invocar
-qué reflection existe
-qué beans existen
-qué context se utiliza
+fully modular runtime
 ```
 
-y construir tests de seguridad.
-
-### P1-2 — hardening SSRF
-
-Pasar de:
+ni:
 
 ```text
-getByName()
+pure Clean Architecture implementation
 ```
 
-a una política que controle correctamente múltiples IPs y DNS.
+Eso sería exagerar lo que demuestra el código actual.
 
-### P1-3 — E2E
+Lo describiría técnicamente como:
 
-Test:
-
-```text
-event
-→ Message
-→ iFlow
-→ translation
-→ formatting
-→ delivery
-```
+> **un core de chat/formateo/routing modular y multiplataforma en desarrollo avanzado, con una arquitectura de ports/adapters bastante sólida, pero con integración de runtime, lifecycle, tooling y distribución todavía en fase de estabilización.**
 
 ---
 
-## P2
+# 30. Conclusión final
 
-### P2-1 — arreglar self-cycle de ModuleGraph
+## 1. ¿Qué tan bueno es realmente TextFormatter Suite?
 
-Cambio pequeño, beneficio claro.
+**Bueno y técnicamente ambicioso, pero todavía no acabado.**
 
-### P2-2 — revisar race de RateLimiter
-
-No requiere reescritura.
-
-### P2-3 — eliminar `node_modules` del repositorio
-
-Cambio sencillo.
-
-### P2-4 — centralizar schema
-
-Idealmente:
-
-```text
-schema source
-      │
- ┌────┼────┐
- ▼    ▼    ▼
-Java  JS   docs
-```
-
-generados desde una única fuente.
+El código está claramente por encima de un plugin Minecraft monolítico convencional.
 
 ---
 
-## P3
+## 2. ¿Qué partes están excepcionalmente bien diseñadas?
 
-### P3-1 — codeguide por módulo
+Especialmente:
 
-Muy recomendable.
-
-### P3-2 — documentación automática de arquitectura
-
-Generar:
-
-```text
-module graph
-dependency graph
-entry points
-SPI
-```
-
-a partir del código/build.
+* `Message` immutable
+* `ChatDelivery`
+* `ActorDirectory`
+* TemplateRenderer
+* MiniMessage escaping
+* module descriptor model
+* ModuleGraph
+* separación platform/core
+* TranslatorManager
+* bounded dispatcher
+* configuración mediante snapshots
 
 ---
 
-# 34. Qué NO tocaría
-
-Hay varias cosas que **no justificaría reescribir**.
-
-### 1. `Message` inmutable
-
-Mantener.
-
-### 2. `Module` como descriptor SPI
-
-Mantener.
-
-### 3. `ServiceLoader`
-
-Mantener.
-
-### 4. separación core/platform
-
-Mantener.
-
-### 5. `ChatDelivery` como boundary
-
-Mantener.
-
-### 6. bounded executors
-
-Mantener.
-
-### 7. translation cache
-
-Mantener.
-
-### 8. iFlow como grafo
-
-No lo reemplazaría por un sistema de reglas lineales solamente por simplicidad.
-
-### 9. Web Editor schema-first
-
-Mantener.
-
----
-
-# 35. Conclusiones directas
-
-### 1. ¿Qué tan bueno es realmente TextFormatter Suite?
-
-**Es técnicamente un proyecto bastante serio, especialmente considerando que todavía está en desarrollo.**
-
-Su arquitectura está claramente por encima de la típica arquitectura de plugin Minecraft monolítico.
-
-### 2. ¿Qué está excepcionalmente bien diseñado?
+## 3. ¿Qué partes son mediocres?
 
 Principalmente:
 
-```text
-core-api
-Module/SPI
-platform adapters
-Message
-iFlow
-ServiceLoader
-module manager
-separación de infraestructura
-```
+* lifecycle
+* configuración/editor synchronization
+* extension runtime
+* sync integration
+* build orchestration
+* network-scale semantics
 
-### 3. ¿Qué partes son mediocres?
+---
 
-Principalmente:
+## 4. ¿Cuáles son sus peores defectos?
+
+El peor actualmente es el WebSocket:
 
 ```text
-config/schema duplication
-build integration
-algunos detalles de concurrencia
-testing E2E
-seguridad avanzada
+enabled=false
+token=""
 ```
 
-### 4. ¿Peor defecto actual?
+pero el servidor se inicia igualmente.
 
-No es una única clase.
+El segundo gran defecto es el lifecycle de reload.
 
-Es la **diferencia entre sofisticación arquitectónica y evidencia operacional**.
+---
 
-El proyecto tiene arquitectura para hacer cosas grandes, pero todavía necesita demostrar que esas cosas funcionan correctamente bajo carga, fallos y upgrades.
-
-### 5. ¿Mayor fortaleza arquitectónica?
+## 5. ¿Cuál es su mayor fortaleza arquitectónica?
 
 La separación:
 
 ```text
-message engine
-       ↓
-ports/SPI
-       ↓
-platform/infrastructure
+platform
+   ↓
+ports
+   ↓
+core
 ```
 
-Eso es lo que realmente permite que TextFormatter sea Suite y no simplemente otro plugin.
+junto con el modelo inmutable de mensajes.
 
-### 6. ¿Mayor riesgo futuro?
+---
 
-La complejidad.
+## 6. ¿Cuál es su mayor riesgo futuro?
 
-Especialmente:
+Que `host` se convierta en:
 
 ```text
-iFlow
-+
-dynamic modules
-+
-SpEL
-+
-sync
-+
-translation
-+
-configuration
+God module
 ```
 
-pueden generar una superficie combinatoria enorme.
+que conozca absolutamente todo:
 
-### 7. ¿Mantenibilidad?
+```text
+config
+modules
+extensions
+sync
+translation
+platform
+observability
+lifecycle
+```
 
-**Buena actualmente**, con riesgo de deteriorarse si no se centraliza schema/config y no se mejora el mapa de código.
+Si eso sucede, la modularidad actual perdería gran parte de su valor.
 
-### 8. ¿Extensibilidad?
+---
 
-**Muy alta.**
+## 7. ¿Qué tan mantenible es?
 
-Probablemente una de las características más fuertes del proyecto.
+**7/10 actualmente.**
 
-### 9. ¿Multi-plataforma?
+Puede mantenerse bien si se estabilizan boundaries y lifecycle.
 
-**Arquitectónicamente sí.**
+---
 
-El core está correctamente orientado hacia adapters.
+## 8. ¿Qué tan extensible es?
 
-### 10. ¿Preparado para una gran network?
+**8/10 conceptualmente.**
 
-**Como arquitectura base, sí. Como sistema network-scale demostrado, todavía no.**
+La arquitectura ofrece muchos extension points reales.
 
-### 11. ¿Qué falta para network-level?
+El sistema de extensions propiamente dicho necesita terminar de implementarse correctamente.
+
+---
+
+## 9. ¿Qué tan preparado está para múltiples plataformas?
+
+**7/10 arquitectónicamente.**
+
+**5/10 operacionalmente.**
+
+Spigot está mucho más integrado.
+
+Fabric existe, pero ni siquiera participa actualmente en el build raíz/CI.
+
+---
+
+## 10. ¿Qué tan preparado está para una red Minecraft grande?
+
+**5/10 actualmente.**
+
+Puede ser una buena base.
+
+No es todavía una implementación demostrada de network-scale.
+
+---
+
+## 11. ¿Qué tendría que cambiar para network-level?
 
 Principalmente:
 
 ```text
-benchmarks reales
-failure testing
-backpressure formal
-observabilidad de p95/p99
-topología de sync
-control de traducción externa
-load testing distribuido
-E2E
+distributed event semantics
++
+message IDs
++
+deduplication
++
+backpressure
++
+translation batching
++
+language fan-out
++
+distributed rate limiting
++
+failure isolation
++
+metrics p95/p99
 ```
-
-### 12. ¿Qué no debería tocarse?
-
-Core API, Message, SPI, Module descriptor model y platform boundaries.
-
-### 13. ¿Qué haría primero?
-
-En este orden:
-
-```text
-1. SpEL security audit
-2. E2E pipeline tests
-3. ModuleGraph self-cycle
-4. RateLimiter concurrency review
-5. SSRF/DNS hardening
-6. centralización del schema
-7. eliminar node_modules del Git
-8. benchmarks reproducibles
-9. codeguide
-```
-
-### 14. ¿Madurez técnica aproximada?
-
-Mi estimación global del **estado actual**, no del potencial:
-
-> **~75% de madurez técnica para un proyecto de este tipo.**
-
-Y lo interesante es que el porcentaje no está limitado principalmente por falta de features.
-
-Está limitado por la última milla:
-
-```text
-correcto
-   ↓
-robusto
-   ↓
-demostrado
-   ↓
-operable
-   ↓
-network-scale
-```
-
-TextFormatter ya está bastante avanzado en los dos primeros escalones. Los siguientes son los que todavía necesitan evidencia.
 
 ---
 
-## Veredicto final
+## 12. ¿Qué partes NO deberían tocarse?
 
-La imagen que sale de esta auditoría es bastante clara:
+No reescribir:
+
+* `Message`
+* `ChatDelivery`
+* `ActorDirectory`
+* `TemplateRenderer`
+* `Module`
+* `ModuleDescriptor`
+* la separación de adapters
+* el modelo de ports
+
+Hay una base buena ahí.
+
+---
+
+## 13. ¿Qué debería hacerse primero?
+
+Orden exacto:
 
 ```text
-TextFormatter Suite
-        │
-        ├── Arquitectura       █████████░  muy fuerte
-        ├── Modularidad        █████████░  muy fuerte
-        ├── Extensibilidad     █████████░  muy fuerte
-        ├── Features           █████████░  muy fuerte
-        ├── Código             ████████░░  bueno
-        ├── Seguridad          ███████░░░  en consolidación
-        ├── Testing            ████████░░  bueno
-        ├── Operación          ███████░░░  en desarrollo
-        └── Scale proof        ██████░░░░  aún no demostrado
+1. WebSocket security
+2. Runtime lifecycle
+3. Build/CI
+4. rules.yml + iFlow wiring
+5. rate limiter semantics
+6. ExtensionManager
+7. web editor
+8. config/schema consolidation
+9. sync architecture
+10. network-scale optimization
 ```
 
-**No veo un proyecto que necesite ser reescrito.** Veo un proyecto que necesita **consolidar y demostrar** la arquitectura que ya construyó.
+No empezaría una reescritura arquitectónica.
 
-Y hay una señal particularmente positiva en el historial: los problemas graves de la auditoría anterior no se quedaron documentados; durante los últimos días se han ido atacando uno por uno —compilación, seguridad HTTP/WebSocket/SSRF, SPI de traducción, checksums, CI, performance y caché— hasta llegar al HEAD actual. Eso es exactamente el tipo de evolución que uno quiere ver en un proyecto que está pasando de *feature development* a *engineering hardening*. 
+---
+
+## 14. ¿Qué porcentaje del proyecto considero técnicamente maduro?
+
+**≈60%**
+
+Con una interpretación estricta:
+
+```text
+Core conceptual:             ~80%
+Código individual:           ~70%
+Arquitectura:                ~70–75%
+Integración runtime:         ~55–60%
+Tooling/build:               ~50%
+Production hardening:        ~50%
+Network-scale readiness:     ~35–40%
+```
+
+El promedio aproximado termina alrededor del **60% de madurez técnica materializada**.
+
+Eso no significa que el proyecto esté "a medias".
+
+Significa que ya tiene bastante arquitectura y código construido, pero todavía existe una diferencia considerable entre:
+
+```text
+"la capacidad que el diseño pretende ofrecer"
+```
+
+y:
+
+```text
+"la capacidad que el sistema actual demuestra integrada, segura y reproduciblemente"
+```
+
+---
+
+# Dictamen final
+
+TextFormatter Suite **no necesita ser destruido y reescrito**.
+
+De hecho, una reescritura sería contraproducente.
+
+La arquitectura central tiene suficiente calidad para continuar evolucionando.
+
+El proyecto está en una fase muy concreta:
+
+```text
+                    ┌─────────────────────┐
+                    │  Idea / prototipo   │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ Arquitectura sólida │
+                    │       ← AQUÍ        │
+                    └──────────┬──────────┘
+                               │
+                    estabilización necesaria
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ Production-grade    │
+                    │ network platform    │
+                    └─────────────────────┘
+```
+
+El trabajo más importante ahora no es añadir otras veinte features.
+
+Es **hacer que las features existentes formen un único sistema coherente**.
+
+La arquitectura ya justifica seguir invirtiendo en ella.
+
+Lo que falta es cerrar la brecha entre:
+
+**diseño → integración → lifecycle → seguridad → CI → escala.**

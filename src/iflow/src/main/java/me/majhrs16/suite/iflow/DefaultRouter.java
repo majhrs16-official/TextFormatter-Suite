@@ -88,16 +88,42 @@ public final class DefaultRouter implements Router {
             return apply(rule, channel, message, recipient, emitter);
         }
 
-        if (channel.rateLimitPerSecond() > 0) {
-            String key = path + "\u0000" + emitter.uuid();
-            if (!rateLimit.tryAcquire(key, channel.rateLimitPerSecond())) {
-                return RouteOutcome.of(new RouteDecision(PolicyTarget.RATE_LIMIT,
-                    "budget exhausted on " + path + " (" + channel.rateLimitPerSecond() + "/s)",
-                    rateLimit.nanosUntilNextWindow() / 1_000_000L, recipient, emitter), message);
-            }
-        }
+        // Rate limit is now checked at emission level in MessageDispatcher
+        // Per-recipient rate limiting removed (was causing budget to be consumed by fan-out)
         return RouteOutcome.of(new RouteDecision(PolicyTarget.LOG, "default-accept on " + path,
             0, recipient, emitter), message);
+    }
+
+    /**
+     * Checks rate limit for a message emission (once per message, before fan-out).
+     * Returns true if within budget, false if throttled.
+     * This should be called BEFORE expanding recipients to avoid consuming budget per recipient.
+     */
+    public boolean checkEmissionRateLimit(Message message) {
+        String path = message.channel() == null ? "chat" : message.channel();
+        Channel channel = channels.resolve(path);
+        Actor emitter = message.sender();
+        
+        if (channel.rateLimitPerSecond() > 0) {
+            String key = path + "\u0000" + emitter.uuid();
+            return rateLimit.tryAcquire(key, channel.rateLimitPerSecond());
+        }
+        return true;
+    }
+
+/**
+     * Gets the wait time until the next rate limit window for a message.
+     */
+    public long nanosUntilNextRateLimitWindow(Message message) {
+        String path = message.channel() == null ? "chat" : message.channel();
+        Channel channel = channels.resolve(path);
+        Actor emitter = message.sender();
+        
+        if (channel.rateLimitPerSecond() > 0) {
+            String key = path + "\u0000" + emitter.uuid();
+            return rateLimit.nanosUntilNextWindow(key);
+        }
+        return 0;
     }
 
     @Override

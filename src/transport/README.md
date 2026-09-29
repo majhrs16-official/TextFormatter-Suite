@@ -1,15 +1,16 @@
 # transport — Transport Abstraction & HTTP Implementation
 
-> **Purpose**: Defines the `Transport` abstraction and provides `HttpTransport` implementation. Used by sync modules and translation providers for outbound HTTP communication.
+> **Purpose**: Defines the `Transport` abstraction and provides `HttpTransport` implementation. Used by sync modules and translation providers for outbound HTTP communication. Uses `HttpURLConnection` (not `java.net.http.HttpClient`) to avoid module accessibility issues in plugin classloaders (Paper/Spigot).
 
 ---
 
 ## 1. Responsibilities
 
 - **Transport abstraction** — `Transport` interface: `send(request) → response`
-- **HTTP transport** — `HttpTransport` implementation using `java.net.http.HttpClient`
+- **HTTP transport** — `HttpTransport` implementation using `HttpURLConnection` (avoids `java.net.http.HttpClient` module accessibility issues in plugin classloaders)
+- **SSRF Protection** — Validates URLs against private/internal address ranges (RFC 1918, RFC 3927, RFC 6598, loopback, multicast) using `InetAddress.getAllByName()` to prevent DNS rebinding attacks
 - **Message codec** — `MessageCodec` interface for encoding/decoding messages
-- **Configuration** — timeouts, headers, connection pooling via `HttpTransport` config
+- **Configuration** — timeouts, headers, SSRF deny/allow lists via `HttpTransport` config
 
 ---
 
@@ -18,7 +19,7 @@
 - **No business logic** — pure transport layer
 - **No retry logic** — callers handle retries
 - **No authentication** — callers add auth headers
-- **No platform-specific code** — pure Java 11+ `HttpClient`
+- **No platform-specific code** — pure Java 11+ (`HttpURLConnection`)
 
 ---
 
@@ -63,14 +64,20 @@ Caller (sync module, translation provider)
          ↓
 HttpTransport.send(TransportRequest)
          ↓
-java.net.http.HttpClient.send()
+HttpURLConnection.openConnection() → configure timeouts, headers, SSRF validation
          ↓
-Response → TransportResponse
+If POST: write request body to output stream
+         ↓
+Follow redirects manually (max 5) with SSRF validation on each redirect
+         ↓
+Read response → TransportResponse
          ↓
 MessageCodec.decode() if needed
          ↓
 Return to caller
 ```
+
+> **SSRF Protection**: All URLs (initial + redirects) validated against deny patterns (private ranges, loopback, link-local, multicast). Uses `InetAddress.getAllByName()` to resolve all IPs and prevent DNS rebinding.
 
 ---
 

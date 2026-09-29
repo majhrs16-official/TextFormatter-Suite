@@ -64,10 +64,16 @@ public final class WebSocketSyncSink implements SyncSink {
     private final Set<WebSocket> allClients = ConcurrentHashMap.newKeySet();
 
     public WebSocketSyncSink(int port, String authToken, PluginLogger logger) {
+        this(port, authToken, logger, "127.0.0.1");
+    }
+
+    public WebSocketSyncSink(int port, String authToken, PluginLogger logger, String bindAddress) {
         this.port = port > 0 ? port : DEFAULT_PORT;
         this.authToken = authToken;
         this.logger = logger;
-        this.server = new SyncWebSocketServer(new InetSocketAddress(port));
+        // Bind to localhost by default for security; can be overridden via system property or parameter
+        String effectiveBind = System.getProperty("textformattersuite.ws.bind", bindAddress);
+        this.server = new SyncWebSocketServer(new InetSocketAddress(effectiveBind, this.port));
     }
 
     @Override
@@ -172,8 +178,8 @@ public final class WebSocketSyncSink implements SyncSink {
     private final class SyncWebSocketServer extends WebSocketServer {
 
         private final Gson gson = new Gson();
-        // Rate limiting per connection: track message timestamps
-        private final ConcurrentHashMap<WebSocket, Long> messageTimestamps = new ConcurrentHashMap<>();
+        // Rate limiting per connection: track message count per fixed window
+        private final ConcurrentHashMap<WebSocket, Long> windowStartTimes = new ConcurrentHashMap<>();
         private final ConcurrentHashMap<WebSocket, Integer> messageCount = new ConcurrentHashMap<>();
 
         public SyncWebSocketServer(InetSocketAddress address) {
@@ -191,16 +197,16 @@ public final class WebSocketSyncSink implements SyncSink {
             String path = handshake.getResourceDescriptor();
             String token = extractToken(handshake);
 
-            // Validate auth token if configured
-            if (authToken != null && !authToken.isBlank()) {
-                if (!token.equals(authToken)) {
-                    conn.close(4001, "Invalid auth token");
-                    logger.warn("WebSocket connection rejected: invalid token from " + conn.getRemoteSocketAddress());
-                    return;
-                }
-            } else {
-                // SECURITY WARNING: No auth token configured - accepting unauthenticated connections
-                logger.warn("SECURITY: WebSocket server running without auth token! Unauthenticated connections allowed from " + conn.getRemoteSocketAddress());
+            // Validate auth token - REQUIRED for security
+            if (authToken == null || authToken.isBlank()) {
+                conn.close(4001, "Server misconfigured: no auth token set");
+                logger.warn("WebSocket connection rejected: server has no auth token configured from " + conn.getRemoteSocketAddress());
+                return;
+            }
+            if (!token.equals(authToken)) {
+                conn.close(4001, "Invalid auth token");
+                logger.warn("WebSocket connection rejected: invalid token from " + conn.getRemoteSocketAddress());
+                return;
             }
 
             allClients.add(conn);
@@ -211,7 +217,7 @@ public final class WebSocketSyncSink implements SyncSink {
         public void onClose(WebSocket conn, int code, String reason, boolean remote) {
             allClients.remove(conn);
             // Clean up rate limiting data
-            messageTimestamps.remove(conn);
+            windowStartTimes.remove(conn);
             messageCount.remove(conn);
             // Clean up subscriptions
             Set<String> subs = clientSubscriptions.remove(conn);
@@ -233,25 +239,24 @@ public final class WebSocketSyncSink implements SyncSink {
                 return;
             }
 
-            // Rate limiting per connection
+            // Rate limiting per connection (fixed window)
             long now = System.currentTimeMillis();
-            long windowStart = now - 1000; // 1 second window
+            long windowStart = windowStartTimes.getOrDefault(conn, now);
             
-            // Clean old timestamps
-            Long lastTimestamp = messageTimestamps.get(conn);
-            if (lastTimestamp != null && lastTimestamp < windowStart) {
-                messageTimestamps.remove(conn);
-                messageCount.remove(conn);
-            }
-            
-            // Increment counter
-            int count = messageCount.merge(conn, 1, Integer::sum);
-            messageTimestamps.put(conn, now);
-            
-            if (count > MAX_MESSAGES_PER_SECOND) {
-                conn.send(createError("Rate limit exceeded: max " + MAX_MESSAGES_PER_SECOND + " messages/second"));
-                logger.warn("WebSocket rate limit exceeded from " + conn.getRemoteSocketAddress());
-                return;
+            // Check if we're in a new window
+            if (now - windowStart >= 1000) {
+                // New window - reset counter and update window start
+                windowStartTimes.put(conn, now);
+                messageCount.put(conn, 1);
+            } else {
+                // Same window - increment counter
+                int count = messageCount.merge(conn, 1, Integer::sum);
+                
+                if (count > MAX_MESSAGES_PER_SECOND) {
+                    conn.send(createError("Rate limit exceeded: max " + MAX_MESSAGES_PER_SECOND + " messages/second"));
+                    logger.warn("WebSocket rate limit exceeded from " + conn.getRemoteSocketAddress());
+                    return;
+                }
             }
 
             try {

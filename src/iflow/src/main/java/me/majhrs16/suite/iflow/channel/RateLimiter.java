@@ -5,10 +5,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Sliding-window per-second limiter keyed by {@code (channelPath, actorUuid)}.
+ * Token-bucket per-second limiter keyed by {@code (channelPath, actorUuid)}.
  *
  * <p>A channel advertises a budget (messages per second) via
  * {@code rateLimitPerSecond}; this limiter enforces it independently for each
@@ -20,9 +20,8 @@ public final class RateLimiter {
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final Clock clock;
     private final ScheduledExecutorService purger;
-    private final ReentrantReadWriteLock bucketsLock = new ReentrantReadWriteLock();
 
-    private static final long WINDOW_NANOS = 1_000_000_000L;
+    static final long WINDOW_NANOS = 1_000_000_000L;
     private static final long IDLE_NANOS = 5 * WINDOW_NANOS;
 
     public RateLimiter() {
@@ -50,47 +49,22 @@ public final class RateLimiter {
      */
     public boolean tryAcquire(String key, int capacity) {
         long now = clock.nanoTime();
-        Bucket bucket;
-        bucketsLock.readLock().lock();
-        try {
-            bucket = buckets.get(key);
-            if (bucket == null) {
-                bucketsLock.readLock().unlock();
-                bucketsLock.writeLock().lock();
-                try {
-                    bucket = buckets.get(key);
-                    if (bucket == null) {
-                        bucket = new Bucket(capacity);
-                        buckets.put(key, bucket);
-                    }
-                } finally {
-                    bucketsLock.writeLock().unlock();
-                    bucketsLock.readLock().lock();
-                }
+        Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
+        synchronized (bucket) {
+            bucket.refill(now);
+            if (bucket.tokens >= 1F) {
+                bucket.tokens -= 1F;
+                bucket.lastFill = now;
+                return true;
             }
-            synchronized (bucket) {
-                bucket.refill(now);
-                if (bucket.tokens >= 1F) {
-                    bucket.tokens -= 1F;
-                    bucket.lastFill = now;
-                    return true;
-                }
-                return false;
-            }
-        } finally {
-            bucketsLock.readLock().unlock();
+            return false;
         }
     }
 
     /** Evicts buckets that have been idle for at least {@link #IDLE_NANOS}. */
     private void purgeIdle(long now) {
         long cutoff = now - IDLE_NANOS;
-        bucketsLock.writeLock().lock();
-        try {
-            buckets.entrySet().removeIf(e -> e.getValue().lastFill <= cutoff);
-        } finally {
-            bucketsLock.writeLock().unlock();
-        }
+        buckets.entrySet().removeIf(e -> e.getValue().lastFill <= cutoff);
     }
 
     public void close() {
@@ -131,5 +105,22 @@ public final class RateLimiter {
     /** For tests: advances the clock by whole windows. */
     public long nanosUntilNextWindow() {
         return WINDOW_NANOS;
+    }
+
+    /**
+     * Gets approximate nanoseconds until the next rate limit window for a key.
+     * Returns WINDOW_NANOS if the key exists and is rate limited, 0 otherwise.
+     */
+    public long nanosUntilNextWindow(String key) {
+        Bucket bucket = buckets.get(key);
+        if (bucket == null) {
+            return 0;
+        }
+        synchronized (bucket) {
+            long now = clock.nanoTime();
+            long elapsed = now - bucket.lastFill;
+            long remaining = WINDOW_NANOS - (elapsed % WINDOW_NANOS);
+            return Math.max(0, remaining);
+        }
     }
 }

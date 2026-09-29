@@ -6,17 +6,17 @@
 
   const KNOWN_LANGS = ['auto', 'en', 'es', 'pt', 'de', 'fr', 'it', 'ja', 'ko', 'zh', 'ar', 'ru'];
   const CHANNEL_DEFAULTS = {
-    permission: null,
-    'send-permission': null,
-    'receive-permission': null,
-    'show-sender': true,
-    'rate-limit-per-second': 0,
-    'lang-source': 'auto',
-    'lang-target': 'auto',
-    messages: [],
-    tooltips: [],
-    sounds: [],
-  };
+  "permission": null,
+  "send-permission": null,
+  "receive-permission": null,
+  "show-sender": true,
+  "rate-limit-per-second": 0,
+  "lang-source": "auto",
+  "lang-target": "auto",
+  "messages": [],
+  "tooltips": [],
+  "sounds": []
+};
 
   function clone(v) {
     return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
@@ -27,310 +27,392 @@
 
   function defaults() {
     return {
-      config: {
-        'quick-look': true,
-        iflow: {
-          engine: {
-            parallel: false,
-          },
-        },
-        sonido: {
-          enabled: true,
-        },
-        general: {
-          language: 'en',
-        },
-        chat: {
-          'claim-mode': 'cancel-event',
-          'log-to-console': true,
-        },
+  "config": {
+    "quick-look": true,
+    "iflow": {
+      "engine": {
+        "parallel": false
+      }
+    },
+    "sonido": {
+      "enabled": true
+    },
+    "general": {
+      "language": "en"
+    },
+    "chat": {
+      "claim-mode": "cancel-event",
+      "log-to-console": true
+    }
+  },
+  "channels": {
+    "chat.global": {
+      "name": "chat.global",
+      "permission": "cht.chat.global",
+      "send-permission": "cht.chat.global.send",
+      "receive-permission": "cht.chat.global.receive",
+      "show-sender": true,
+      "rate-limit-per-second": 0,
+      "lang-source": "auto",
+      "lang-target": "auto",
+      "messages": [
+        "\u00267👉 \u0026f%player_name%\u00267: %content%",
+        "\u003cgreen\u003e💬 %content%\u003c/green\u003e"
+      ],
+      "tooltips": [
+        "Hover: %lang_source% → %lang_target%"
+      ],
+      "sounds": [
+        {
+          "name": "entity.experience_orb.pickup",
+          "pitch": 1.0,
+          "volume": 1.0
+        }
+      ],
+      "type": "chat"
+    },
+    "chat.hub": {
+      "name": "chat.hub",
+      "permission": "cht.chat.hub",
+      "send-permission": null,
+      "receive-permission": null,
+      "show-sender": true,
+      "rate-limit-per-second": 0,
+      "lang-source": "auto",
+      "lang-target": "auto",
+      "messages": [
+        "\u003cgold\u003e⛨\u003c/gold\u003e %content%"
+      ],
+      "tooltips": [],
+      "sounds": [],
+      "type": "chat"
+    },
+    "staff.alert": {
+      "name": "staff.alert",
+      "permission": "cht.staff.alert",
+      "send-permission": null,
+      "receive-permission": null,
+      "show-sender": false,
+      "rate-limit-per-second": 0,
+      "lang-source": "auto",
+      "lang-target": "auto",
+      "messages": [
+        "\u003cred\u003e⚠ %content%\u003c/red\u003e"
+      ],
+      "tooltips": [],
+      "sounds": [
+        {
+          "name": "block.note_block.pling",
+          "pitch": 1.2,
+          "volume": 0.8
+        }
+      ],
+      "type": "chat"
+    },
+    "vip.chat": {
+      "name": "vip.chat",
+      "permission": "cht.vip.chat",
+      "send-permission": null,
+      "receive-permission": null,
+      "show-sender": true,
+      "rate-limit-per-second": 0,
+      "lang-source": "es",
+      "lang-target": "auto",
+      "messages": [
+        "\u003cpurple\u003e✦ %player_name%: %content%\u003c/purple\u003e"
+      ],
+      "tooltips": [],
+      "sounds": [],
+      "type": "chat"
+    }
+  },
+  "graph": {
+    "guard": {
+      "max-steps": 512
+    },
+    "filter": {
+      "dedup-fanout": true,
+      "priority": "batch-first"
+    },
+    "priority": "batch-first",
+    "nodes": [
+      {
+        "id": "n_chat.global",
+        "kind": "input",
+        "label": "chat.global",
+        "x": 60,
+        "y": 110,
+        "w": 150
       },
-      channels: {
-        'chat.global': {
-          name: 'chat.global',
-          permission: 'cht.chat.global',
-          'send-permission': 'cht.chat.global.send',
-          'receive-permission': 'cht.chat.global.receive',
-          'show-sender': true,
-          'rate-limit-per-second': 0,
-          'lang-source': 'auto',
-          'lang-target': 'auto',
-          messages: [
-            '\u00267👉 \u0026f%player_name%\u00267: %content%',
-            '\u003cgreen\u003e💬 %content%\u003c/green\u003e',
-          ],
-          tooltips: ['Hover: %lang_source% → %lang_target%'],
-          sounds: [
-            {
-              name: 'entity.experience_orb.pickup',
-              pitch: 1.0,
-              volume: 1.0,
-            },
-          ],
-          type: 'chat',
+      {
+        "id": "n_cond",
+        "kind": "cond",
+        "label": "filtro anti-silencio",
+        "matcher": {
+          "channel": "chat.global"
         },
-        'chat.hub': {
-          name: 'chat.hub',
-          permission: 'cht.chat.hub',
-          'send-permission': null,
-          'receive-permission': null,
-          'show-sender': true,
-          'rate-limit-per-second': 0,
-          'lang-source': 'auto',
-          'lang-target': 'auto',
-          messages: ['\u003cgold\u003e⛨\u003c/gold\u003e %content%'],
-          tooltips: [],
-          sounds: [],
-          type: 'chat',
-        },
-        'staff.alert': {
-          name: 'staff.alert',
-          permission: 'cht.staff.alert',
-          'send-permission': null,
-          'receive-permission': null,
-          'show-sender': false,
-          'rate-limit-per-second': 0,
-          'lang-source': 'auto',
-          'lang-target': 'auto',
-          messages: ['\u003cred\u003e⚠ %content%\u003c/red\u003e'],
-          tooltips: [],
-          sounds: [
-            {
-              name: 'block.note_block.pling',
-              pitch: 1.2,
-              volume: 0.8,
-            },
-          ],
-          type: 'chat',
-        },
-        'vip.chat': {
-          name: 'vip.chat',
-          permission: 'cht.vip.chat',
-          'send-permission': null,
-          'receive-permission': null,
-          'show-sender': true,
-          'rate-limit-per-second': 0,
-          'lang-source': 'es',
-          'lang-target': 'auto',
-          messages: ['\u003cpurple\u003e✦ %player_name%: %content%\u003c/purple\u003e'],
-          tooltips: [],
-          sounds: [],
-          type: 'chat',
-        },
-      },
-      graph: {
-        guard: {
-          'max-steps': 512,
-        },
-        filter: {
-          'dedup-fanout': true,
-          priority: 'batch-first',
-        },
-        priority: 'batch-first',
-        nodes: [
-          {
-            id: 'n_chat.global',
-            kind: 'input',
-            label: 'chat.global',
-            x: 60,
-            y: 110,
-            w: 150,
-          },
-          {
-            id: 'n_cond',
-            kind: 'cond',
-            label: 'filtro anti-silencio',
-            matcher: {
-              channel: 'chat.global',
-            },
-            condition: '\u0027spam\u0027 in #msg.texts[0]',
-            actions: ['cancel()', 'skipTranslate()'],
-            target: 'DROP',
-            priority: 100,
-            x: 340,
-            y: 70,
-            w: 150,
-          },
-          {
-            id: 'n_transform',
-            kind: 'transform',
-            label: 'reformatear evento',
-            transforms: [
-              {
-                op: 'rewrite',
-                template: '\u003cgreen\u003e💬 %content%\u003c/green\u003e',
-              },
-              {
-                op: 'sounds',
-                add: ['entity.experience_orb.pickup'],
-                remove: ['block.note_block.pling'],
-              },
-            ],
-            priority: 200,
-            x: 660,
-            y: 40,
-            w: 160,
-          },
-          {
-            id: 'n_loop',
-            kind: 'loop',
-            label: 'bucle re-intento',
-            loopBack: 'n_cond',
-            priority: 300,
-            x: 660,
-            y: 280,
-            w: 140,
-          },
-          {
-            id: 'n_sleep',
-            kind: 'sleep',
-            label: 'delay',
-            transforms: [
-              {
-                op: 'sleep',
-                millis: 1500,
-              },
-            ],
-            priority: 400,
-            x: 1000,
-            y: 60,
-            w: 130,
-          },
-          {
-            id: 'n_clean',
-            kind: 'output',
-            label: 'chat.hub',
-            priority: 500,
-            x: 1000,
-            y: 250,
-            w: 130,
-          },
-          {
-            id: 'n_redirect',
-            kind: 'redirect',
-            label: 'redirigir a staff',
-            target: {
-              channel: 'staff.alert',
-            },
-            priority: 600,
-            x: 340,
-            y: 330,
-            w: 150,
-          },
-          {
-            id: 'n_channel_redirect',
-            kind: 'channel_redirect',
-            label: 'cambiar canal',
-            target: 'CHANNEL_REDIRECT',
-            redirectChannel: 'staff.alert',
-            priority: 700,
-            x: 340,
-            y: 400,
-            w: 150,
-          },
+        "condition": "\u0027spam\u0027 in #msg.texts[0]",
+        "actions": [
+          "cancel()",
+          "skipTranslate()"
         ],
-        edges: [
+        "target": "DROP",
+        "priority": 100,
+        "x": 340,
+        "y": 70,
+        "w": 150
+      },
+      {
+        "id": "n_transform",
+        "kind": "transform",
+        "label": "reformatear evento",
+        "transforms": [
           {
-            from: 'n_chat.global',
-            to: 'n_cond',
+            "op": "rewrite",
+            "template": "\u003cgreen\u003e💬 %content%\u003c/green\u003e"
           },
           {
-            from: 'n_cond',
-            to: 'n_transform',
-          },
-          {
-            from: 'n_transform',
-            to: 'n_sleep',
-          },
-          {
-            from: 'n_sleep',
-            to: 'n_clean',
-          },
-          {
-            from: 'n_transform',
-            to: 'n_loop',
-          },
-          {
-            from: 'n_loop',
-            to: 'n_cond',
-          },
-          {
-            from: 'n_cond',
-            to: 'n_redirect',
-          },
-          {
-            from: 'n_cond',
-            to: 'n_channel_redirect',
-          },
+            "op": "sounds",
+            "add": [
+              "entity.experience_orb.pickup"
+            ],
+            "remove": [
+              "block.note_block.pling"
+            ]
+          }
         ],
+        "priority": 200,
+        "x": 660,
+        "y": 40,
+        "w": 160
       },
-      translators: {
-        google: {
-          provider: 'google',
-          active: true,
-          pool: {
-            'max-concurrent': 6,
-          },
-        },
-        libre: {
-          provider: 'libre',
-          active: false,
-          'base-url': '',
-          'api-key': '',
-          pool: {
-            'max-concurrent': 6,
-          },
-        },
+      {
+        "id": "n_loop",
+        "kind": "loop",
+        "label": "bucle re-intento",
+        "loopBack": "n_cond",
+        "priority": 300,
+        "x": 660,
+        "y": 280,
+        "w": 140
       },
-      sync: {
-        discord: {
-          enabled: false,
-          token: '',
-          channel: 0,
-          intents: ['GUILD_MESSAGES', 'MESSAGE_CONTENT'],
-        },
-        telegram: {
-          enabled: false,
-          token: '',
-          'chat-id': 0,
-          hub: '',
-        },
-        http: {
-          enabled: false,
-          'webhook-url': '',
-          'inbound-port': 0,
-          path: '',
-        },
-        'tcp-udp': {
-          enabled: false,
-          protocol: 'TCP',
-          host: '0.0.0.0',
-          'outbound-port': 0,
-          'inbound-port': 0,
-        },
-        velocity: {
-          enabled: false,
-          secret: '',
-          servers: [],
-          mapping: '* → chat.hub',
-        },
+      {
+        "id": "n_sleep",
+        "kind": "sleep",
+        "label": "delay",
+        "transforms": [
+          {
+            "op": "sleep",
+            "millis": 1500
+          }
+        ],
+        "priority": 400,
+        "x": 1000,
+        "y": 60,
+        "w": 130
       },
-      perms: {
-        roles: ['owner', 'admin', 'moderator', 'guard', 'player', 'guest'],
-        cols: ['send', 'receive', 'bypass-rate', 'mute', 'broadcast', 'ctr.*', 'admin'],
-        matrix: {
-          owner: [1, 1, 1, 1, 1, 1, 1],
-          admin: [1, 1, 1, 1, 1, 1, 0],
-          moderator: [1, 1, 1, 1, 0, 0, 0],
-          guard: [1, 1, 0, 1, 0, 0, 0],
-          player: [1, 1, 0, 0, 0, 0, 0],
-          guest: [0, 1, 0, 0, 0, 0, 0],
-        },
+      {
+        "id": "n_clean",
+        "kind": "output",
+        "label": "chat.hub",
+        "priority": 500,
+        "x": 1000,
+        "y": 250,
+        "w": 130
       },
-      extensions: {},
-      extra: {},
-    };
+      {
+        "id": "n_redirect",
+        "kind": "redirect",
+        "label": "redirigir a staff",
+        "target": {
+          "channel": "staff.alert"
+        },
+        "priority": 600,
+        "x": 340,
+        "y": 330,
+        "w": 150
+      },
+      {
+        "id": "n_channel_redirect",
+        "kind": "channel_redirect",
+        "label": "cambiar canal",
+        "target": "CHANNEL_REDIRECT",
+        "redirectChannel": "staff.alert",
+        "priority": 700,
+        "x": 340,
+        "y": 400,
+        "w": 150
+      }
+    ],
+    "edges": [
+      {
+        "from": "n_chat.global",
+        "to": "n_cond"
+      },
+      {
+        "from": "n_cond",
+        "to": "n_transform"
+      },
+      {
+        "from": "n_transform",
+        "to": "n_sleep"
+      },
+      {
+        "from": "n_sleep",
+        "to": "n_clean"
+      },
+      {
+        "from": "n_transform",
+        "to": "n_loop"
+      },
+      {
+        "from": "n_loop",
+        "to": "n_cond"
+      },
+      {
+        "from": "n_cond",
+        "to": "n_redirect"
+      },
+      {
+        "from": "n_cond",
+        "to": "n_channel_redirect"
+      }
+    ]
+  },
+  "translators": {
+    "google": {
+      "provider": "google",
+      "active": true,
+      "pool": {
+        "max-concurrent": 6
+      }
+    },
+    "libre": {
+      "provider": "libre",
+      "active": false,
+      "base-url": "",
+      "api-key": "",
+      "pool": {
+        "max-concurrent": 6
+      }
+    }
+  },
+  "sync": {
+    "discord": {
+      "enabled": false,
+      "token": "",
+      "channel": 0,
+      "intents": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT"
+      ]
+    },
+    "telegram": {
+      "enabled": false,
+      "token": "",
+      "chat-id": 0,
+      "hub": ""
+    },
+    "http": {
+      "enabled": false,
+      "webhook-url": "",
+      "inbound-port": 0,
+      "path": ""
+    },
+    "tcp-udp": {
+      "enabled": false,
+      "protocol": "TCP",
+      "host": "0.0.0.0",
+      "outbound-port": 0,
+      "inbound-port": 0
+    },
+    "velocity": {
+      "enabled": false,
+      "secret": "",
+      "servers": [],
+      "mapping": "* → chat.hub"
+    }
+  },
+  "perms": {
+    "roles": [
+      "owner",
+      "admin",
+      "moderator",
+      "guard",
+      "player",
+      "guest"
+    ],
+    "cols": [
+      "send",
+      "receive",
+      "bypass-rate",
+      "mute",
+      "broadcast",
+      "ctr.*",
+      "admin"
+    ],
+    "matrix": {
+      "owner": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "admin": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "moderator": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      "guard": [
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "player": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guest": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "extensions": {},
+  "extra": {}
+};
   }
+
 
   /* ── EXPORT ────────────────────────────────────────────── */
   function exportFiles(state, validation) {

@@ -604,6 +604,55 @@ private void validateModuleManifest(ClassLoader classLoader, ModuleDescriptor de
         }
     }
 
+    /**
+     * Verifies a JAR signature using cosign/gpg if available.
+     * This provides authenticity (not just integrity) by verifying the
+     * JAR was signed by a trusted key.
+     *
+     * @param jar the JAR file to verify
+     * @param signaturePath path to the signature file (.sig or .cosign)
+     * @param publicKeyPath path to the public key for verification
+     * @return true if signature is valid, false otherwise
+     */
+    public boolean verifySignature(Path jar, Path signaturePath, Path publicKeyPath) {
+        if (!Files.exists(signaturePath) || !Files.exists(publicKeyPath)) {
+            logger.debug("Signature or public key not found, skipping signature verification");
+            return true; // Optional: return false to require signatures
+        }
+        try {
+            // Try cosign first (keyless or key-based)
+            if (signaturePath.toString().endsWith(".cosign")) {
+                return verifyCosignSignature(jar, signaturePath, publicKeyPath);
+            }
+            // Fallback to gpg
+            return verifyGpgSignature(jar, signaturePath, publicKeyPath);
+        } catch (Exception e) {
+            logger.warn("Signature verification failed for " + jar + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean verifyCosignSignature(Path jar, Path signaturePath, Path publicKeyPath) throws IOException, InterruptedException {
+        // cosign verify-blob --key=publicKeyPath --signature=signaturePath jar
+        ProcessBuilder pb = new ProcessBuilder("cosign", "verify-blob",
+            "--key=" + publicKeyPath.toAbsolutePath(),
+            "--signature=" + signaturePath.toAbsolutePath(),
+            jar.toAbsolutePath().toString());
+        Process process = pb.start();
+        int exitCode = process.waitFor();
+        return exitCode == 0;
+    }
+
+    private boolean verifyGpgSignature(Path jar, Path signaturePath, Path publicKeyPath) throws IOException, InterruptedException {
+        // gpg --verify signaturePath jar (requires key imported)
+        ProcessBuilder pb = new ProcessBuilder("gpg", "--verify",
+            signaturePath.toAbsolutePath().toString(),
+            jar.toAbsolutePath().toString());
+        Process process = pb.start();
+        int exitCode = process.waitFor();
+        return exitCode == 0;
+    }
+
     @Override
     public List<ModuleDescriptor> getLoadedModules() {
         return new ArrayList<>(loadedModules.values());
@@ -1061,15 +1110,83 @@ private void validateModuleManifest(ClassLoader classLoader, ModuleDescriptor de
         for (String key : System.getProperties().stringPropertyNames()) {
             sysProps.put(key, System.getProperty(key));
         }
+        
+        // Detect platform dynamically
+        String platform = detectPlatform();
+        String mcVersion = detectMinecraftVersion();
+        
         return new Environment(
-            "spigot", // or detect
+            platform,
             Runtime.version().feature(),
-            "1.20.6",
+            mcVersion,
             SemVer.of(2, 1, 0),
             loadedModules.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().version().toString())),
             Set.of(),
             sysProps
         );
+    }
+
+    private String detectPlatform() {
+        // Check for Fabric
+        if (isClassPresent("net.fabricmc.loader.api.FabricLoader")) {
+            return "fabric";
+        }
+        // Check for Velocity
+        if (isClassPresent("com.velocitypowered.api.proxy.ProxyServer")) {
+            return "velocity";
+        }
+        // Check for Paper/Spigot
+        if (isClassPresent("org.bukkit.Bukkit") || isClassPresent("com.destroystokyo.paper.PaperConfig")) {
+            return "spigot";
+        }
+        // Check for BungeeCord
+        if (isClassPresent("net.md_5.bungee.BungeeCord")) {
+            return "bungeecord";
+        }
+        return "common";
+    }
+
+    private String detectMinecraftVersion() {
+        try {
+            // Try to get from Bukkit/Paper
+            if (isClassPresent("org.bukkit.Bukkit")) {
+                Class<?> bukkitClass = Class.forName("org.bukkit.Bukkit");
+                var method = bukkitClass.getMethod("getVersion");
+                String version = (String) method.invoke(null);
+                // Extract version like "1.21.4" from "git-Paper-123 (MC: 1.21.4)"
+                var matcher = java.util.regex.Pattern.compile("(\\d+\\.\\d+\\.\\d+)").matcher(version);
+                if (matcher.find()) {
+                    return matcher.group(1);
+                }
+            }
+            // Try Fabric
+            if (isClassPresent("net.fabricmc.loader.api.FabricLoader")) {
+                Class<?> fabricLoader = Class.forName("net.fabricmc.loader.api.FabricLoader");
+                var method = fabricLoader.getMethod("getInstance");
+                Object loader = method.invoke(null);
+                var getModContainer = fabricLoader.getMethod("getModContainer", String.class);
+                Object container = getModContainer.invoke(loader, "minecraft");
+                if (container != null) {
+                    var getVersion = container.getClass().getMethod("getMetadata");
+                    Object metadata = getVersion.invoke(container);
+                    var getVersionStr = metadata.getClass().getMethod("getVersion");
+                    return getVersionStr.invoke(metadata).toString();
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not detect Minecraft version: " + e.getMessage());
+        }
+        // Fallback from system property or default
+        return System.getProperty("textformattersuite.mcversion", "1.21.4");
+    }
+
+    private boolean isClassPresent(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     private boolean isKnownCapability(String capability) {

@@ -20,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -85,6 +86,12 @@ public final class MessageDispatcher {
         // Resolve source language once for the entire message (not per recipient)
         Message messageWithResolvedSource = host.resolveSourceLanguage(message);
 
+        // Check rate limit at emission level (once per message, before fan-out)
+        if (!host.router().checkEmissionRateLimit(messageWithResolvedSource)) {
+            long waitMillis = host.router().nanosUntilNextRateLimitWindow(messageWithResolvedSource) / 1_000_000L;
+            return new DispatchReport(0, 0, 0, 0, 0, "rate limit exceeded: " + waitMillis + "ms");
+        }
+
         List<Actor> recipients = expand(messageWithResolvedSource);
         if (recipients.isEmpty()) {
             return new DispatchReport(0, 0, 0, 0, 0, null);
@@ -105,8 +112,9 @@ public final class MessageDispatcher {
         int channelRedirected = 0;
 
         for (CompletableFuture<RecipientResult> future : futures) {
+            RecipientResult rr = null;
             try {
-                RecipientResult rr = future.get();
+                rr = future.get(10, TimeUnit.SECONDS);
                 Actor recipient = rr.recipient();
                 RoutingResult result = rr.result();
                 RouteDecision decision = result.decision();
@@ -143,9 +151,30 @@ public final class MessageDispatcher {
                     continue;
                 }
                 Message messageForDelivery = result.message() != null ? result.message() : messageWithResolvedSource;
+                
+                // Apply sleep delay if set via transform
+                long sleepMillis = messageForDelivery.sleepMillis();
+                if (sleepMillis > 0) {
+                    try {
+                        Thread.sleep(sleepMillis);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        logger.warn("Sleep interrupted for message delivery to " + recipient.name());
+                    }
+                }
+                
                 delivery.deliver(recipient, result.rendered(), messageForDelivery);
                 delivered++;
                 playChannelSounds(messageForDelivery, recipient);
+            } catch (TimeoutException e) {
+                Actor recipient = rr != null ? rr.recipient() : null;
+                logger.warn("Timeout processing recipient " + (recipient != null ? recipient.name() : "unknown") + " after 10s");
+                silenced++;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                Actor recipient = rr != null ? rr.recipient() : null;
+                logger.warn("Interrupted processing recipient " + (recipient != null ? recipient.name() : "unknown"));
+                silenced++;
             } catch (Exception e) {
                 logger.error("Error processing recipient", e);
                 silenced++;
@@ -232,16 +261,27 @@ public final class MessageDispatcher {
             return;
         }
         Channel channel = host.channels().resolve(message.channel());
+        
+        // Play sounds from channel configuration
         for (SoundSpec sound : channel.sounds()) {
-            try {
-                if (delivery.hasSound(sound.name())) {
-                    delivery.playSound(recipient, sound);
-                } else {
-                    logger.debug("sound '" + sound.name() + "' not in registry; skipped");
-                }
-            } catch (RuntimeException exception) {
-                logger.error("sound '" + sound.name() + "' failed", exception);
+            playSoundIfAvailable(sound, recipient);
+        }
+        
+        // Play additional sounds added via transforms (message-level sounds)
+        for (String soundName : message.sounds()) {
+            playSoundIfAvailable(new SoundSpec(soundName, 1.0f, 1.0f), recipient);
+        }
+    }
+    
+    private void playSoundIfAvailable(SoundSpec sound, Actor recipient) {
+        try {
+            if (delivery.hasSound(sound.name())) {
+                delivery.playSound(recipient, sound);
+            } else {
+                logger.debug("sound '" + sound.name() + "' not in registry; skipped");
             }
+        } catch (RuntimeException exception) {
+            logger.error("sound '" + sound.name() + "' failed", exception);
         }
     }
 

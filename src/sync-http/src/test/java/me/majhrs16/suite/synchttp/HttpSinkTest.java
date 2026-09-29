@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.SyncListener;
+import me.majhrs16.suite.transport.MessageCodec;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -44,7 +45,7 @@ class HttpSinkTest {
         HttpServer webhook = stubWebhook(captured);
         try {
             String url = "http://localhost:" + webhook.getAddress().getPort() + "/webhook";
-            HttpSink sink = new HttpSink(url, 0, "/hook");
+            HttpSink sink = new HttpSink(url, 0, "/hook", "127.0.0.1", null, null);
 
             sink.send(Message.builder()
                 .sender(Actor.unknown("Steve"))
@@ -62,7 +63,7 @@ class HttpSinkTest {
     @Test
     void inboundEndpointDeliversToListener() throws Exception {
         CopyOnWriteArrayList<Message> received = new CopyOnWriteArrayList<>();
-        HttpSink sink = new HttpSink("http://localhost:1/unused", 0, "/hook");
+        HttpSink sink = new HttpSink("http://localhost:1/unused", 0, "/hook", "127.0.0.1", null, null);
         sink.setListener(new SyncListener() {
             @Override public void onMessage(me.majhrs16.suite.api.spi.SyncSink s, Message message) {
                 received.add(message);

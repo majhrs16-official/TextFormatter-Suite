@@ -44,8 +44,8 @@
 | `sync-discord` | Compile | Discord sync |
 | `sync-telegram` | Compile | Telegram sync |
 | `sync-websocket` | Compile | WebSocket sync |
-| `gtranslate` | Compile | Google Translate |
-| `ltranslate` | Compile | LibreTranslate |
+| `gtranslate` | Compile | Google Translate (ServiceLoader at runtime, excluded from shadow JAR) |
+| `ltranslate` | Compile | LibreTranslate (ServiceLoader at runtime, excluded from shadow JAR) |
 | `messages` | Compile | Message catalog |
 | `observability` | Compile | Metrics |
 | `manager-impl` | Compile | Module manager |
@@ -184,8 +184,10 @@ Adventure component → Bukkit component → player.sendMessage()
 
 - **Shadow JAR** — produces `textformatter-suite-spigot.jar` with only plugin classes (no dependencies)
 - **Dependencies excluded** — all `me.majhrs16:suite-*` and external deps excluded from shadow JAR
-- **Modules loaded remotely** — `manager-impl` loads modules from GitHub at runtime
+- **Translation providers** — `gtranslate`/`ltranslate` are compile deps for ServiceLoader discovery at runtime; excluded from shadow JAR
+- **Modules loaded remotely** — `manager-impl` loads modules from GitHub at runtime (when GitHub releases exist)
 - **Java 21** — requires Java 21 toolchain
+- **Paper API 1.21.4** — compiles against Paper 1.21.4-R0.1-SNAPSHOT
 
 ---
 
@@ -199,4 +201,4 @@ Adventure component → Bukkit component → player.sendMessage()
 - [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation
 - [sync-http](../sync-http/README.md) / [sync-tcpudp](../sync-tcpudp/README.md) / [sync-discord](../sync-discord/README.md) / etc. — Sync
 - [manager-impl](../manager-impl/README.md) — Remote module loading
-- [fabric-host](../fabric-host/README.md) — Fabric equivalent
+- [fabric-host](../fabric-host/README.md) — **Fabric equivalent (excluded from build)**

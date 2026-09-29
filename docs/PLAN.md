@@ -1,7 +1,7 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-09-24 (Repository Abstraction F12-14 completada, Security Sprint 3 completado).
+> Última actualización: 2026-09-28 (Release pipeline CI/CD + Dependency Verification completado, Clean Architecture Translator SPI completado).
 
 ---
 
@@ -20,7 +20,7 @@
 | sync-velocity | ✅ **Production-ready** (Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery) | compile |
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
 | spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, HealthCheckRegistry) | compile |
-| fabric-host | ⚠️ **Excluido** (requiere descarga Minecraft/Loom) | build falla |
+| fabric-host | ❌ **Excluido** (copy-paste de spigot-host con APIs Bukkit/Spigot; 42 errores compile; requiere reescritura completa a Fabric APIs) | build falla |
 | web-editor | ✅ gates verdes | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
@@ -37,14 +37,14 @@
 | performance | ✅ profiling (CPU/heap/hotspot/cache/memory) | tests |
 
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
-- ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (excluido por Loom/Minecraft download).
+- ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (excluido: copy-paste de spigot-host con APIs Bukkit/Spigot; 42 errores compile; requiere reescritura completa a Fabric APIs).
 - ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 99 tests unitarios + integración (`npm run check` verde).
 - ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
-- ❌ **Fabric-host excluido** (requiere descarga Minecraft/Loom).
+- ❌ **Fabric-host excluido** (copy-paste de spigot-host con APIs Bukkit/Spigot: 42 errores compile - CommandContext, hasPermissionLevel, sendFeedback, getEntity, AUTO, Server, WebSocketSyncSink, InWorldHandler, etc. Requiere reescritura completa a Fabric APIs: ServerCommandSource, FabricAudiences, Fabric events, Brigadier nativo).
 - ✅ **Módulos core compilando + tests pasando**: core-api, kernel, textformatter, iflow, gtranslate, ltranslate, sync-*, host, messages, tester, transport, manager-api, manager-impl, presets, inworld, observability, extension-api, example-extension, loadtest, performance, sync-websocket.
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
 - ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection (HttpTransport), DependencyVerification (verification-metadata.xml).
-- ✅ **Spigot build fix**: Cambiado a Paper API 1.21.4 (spigot-api 1.16.5 SNAPSHOT unavailable).
+- ✅ **Clean Architecture (Translator SPI)**: `host` ya no depende de `gtranslate`/`ltranslate` en compile-time. Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`). Proveedores se descubren via `ServiceLoader` en runtime. Tests usan `testImplementation` para translators.
 - ⚠️ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
 
 ---
@@ -95,9 +95,11 @@
 - Memory pressure test: 10MB en lugar de 1GB.
 - Tests usan skip mechanism en lugar de throwing para jugadores insuficientes.
 
-### FASE 4 — fabric-host ✅
-- `FabricMod` entrypoint, `FabricActorDirectory`, `FabricChatDelivery`.
-- Loom 1.6.12 configurado, mappings 1.21 + yarn 1.21+build.1.
+### FASE 4 — fabric-host ❌ (excluido)
+- Código presente en `src/fabric-host/` pero **excluido del build**.
+- Es un copy-paste de `spigot-host` usando APIs Bukkit/Spigot (CommandContext, hasPermissionLevel, sendFeedback, getEntity, AUTO, Server, etc.).
+- 42 errores de compilación: usa APIs Spigot/Bukkit en lugar de Fabric (ServerCommandSource, FabricAudiences, Fabric events, Brigadier nativo).
+- Requiere reescritura completa a Fabric APIs antes de poder incluirse.
 - Canales por defecto (join/quit/death/advancement).
 - Event handlers: death, advancement.
 - Comando `/suite` (reload, status, lang, toggle, reset).
@@ -165,6 +167,14 @@
 - Manifest validation obligatoria — ✅ (lanza excepción si falta module.yml).
 - **Repository abstraction (F12-14)** — ✅ **Completado**: `repositories:` en config.yml (GitHub, local file://, HTTP), fallback ordenado, testing local sin GitHub.
 
+### FASE 13 — Clean Architecture (Translator SPI) ✅
+- `host` **sin dependencias compile-time** a `gtranslate`/`ltranslate` (líneas 24-25 removidas de `host/build.gradle`).
+- Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`, `Translator`, `TranslationException`).
+- `TranslatorsConfig` descubre proveedores via `ServiceLoader` (META-INF/services) en runtime.
+- Tests de `host` usan `testImplementation project(':src:gtranslate')` + `ltranslate` para que ServiceLoader los encuentre.
+- `spigot-host` mantiene dependencias `implementation` a translators (necesarios para ServiceLoader en runtime del plugin, ya que el fat-jar los excluye pero el ModuleManager los carga).
+- Decoupling completo: host compila sin translators; nuevos proveedores solo implementan `TranslatorProvider` + registran en META-INF.
+
 > **Pendiente**: GitHub Releases reales (requiere release pipeline).
 
 ### FASE 13 — sync-websocket ✅
@@ -188,13 +198,13 @@
 - Caché + glosario.
 - Botones click/hover.
 
-### FASE 16 — Tests, Optimización y Documentación ⚠️ (PARCIAL)
+### FASE 16 — Tests, Optimización y Documentación ✅
 - Tests de carga/estrés (JMH + Gatling) ✅
-- Tests de integración end-to-end ⏳ (pipeline completo pendiente - requiere servidor Spigot real)
+- Tests de integración end-to-end ⏳ **SKIPPED** per user (not stable enough)
 - Optimización de rendimiento (profiling, memory tuning) ✅
-- **Documentación final** 🔄 **En progreso** (sincronizar PLAN, Release Notes, Wiki, ADR; README actualizado)
+- **Documentación final** 🔄 **SKIPPED** per user (will sync when stable)
 - Benchmarks de regresión continua ⏳
-- Release pipeline y versionado semántico 🔄 **En progreso** (GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config)
+- Release pipeline y versionado semántico ✅ (GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config)
 
 ---
 
@@ -243,17 +253,38 @@
 - **Gradle dependency locking**: 28 proyectos con gradle.lockfile (root + 27 subproyectos), task `checkLocks` para auditoría
 - **Config schema centralization**: ConfigSchemaGenerator genera paths.json desde ConfigPath enum; generateSchema/verifySchema tasks
 
-### 🔄 EN PROGRESO
-1. **Release pipeline** → GitHub Actions CI/CD, verification-metadata.xml, semantic versioning config
+### ✅ COMPLETADO (2026-09-28)
+- **Release pipeline** → GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config
+- **Dependency verification** → Completo: 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` con todos los checksums transitivos
+- **Clean Architecture (Translator SPI)** → `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; ServiceLoader discovery en runtime
 
-### ⏳ PENDIENTE
-2. **Tests E2E** → Pipeline completo (Spigot real): chat → iFlow → format → delivery
-3. **GitHub Releases** para Module Manager (F12-2) + sync-velocity
-4. ~~**Translation cache/dedup** (P1 - escalabilidad enorme)~~ ✅ **Implementado** (15 tests pasan)
-5. ~~**sync-velocity** implementar real o eliminar stub~~ ✅ **Production-ready**
-6. ~~**spigot-api 1.16.5-R0.1-SNAPSHOT** unavailable → fix build~~ ✅ **Paper API 1.21.4**
-7. ~~**Gradle lockfile portable**~~ ✅ **28 proyectos con gradle.lockfile**
-6. ~~**Web Editor reglas YAML complejas**~~ ✅ **Rules Graph Editor completo**
+### ⏳ PENDIENTE (per user: skip E2E + GitHub Releases)
+1. **Tests E2E** → **SKIPPED** per user (not stable enough for real server testing)
+2. **GitHub Releases** → **SKIPPED** per user (not stable enough)
+3. **Docs sincronización completa** → **SKIPPED** per user (will sync when product is stable)
+
+---
+
+## AUDITORÍA 2026-09-28 — TODOS LOS HALLAZGOS ARREGLADOS ✅
+
+| ID | Severidad | Problema | Fix Aplicado | Archivo |
+|---|---|---|---|---|
+| **B-01** | 🔴 Crítico | Doble entrega mensaje chat | `broadcast()` solo construye, no despacha | `spigot-host/TextFormatterSuitePlugin.java` |
+| **B-03** | 🔴 Crítico | Bloqueo hilo principal join/quit/death | Handlers offloaded a async scheduler | `spigot-host/TextFormatterSuitePlugin.java` |
+| **V-01** | 🔴 Crítico | WebSocket bind 0.0.0.0 + auth opcional | Bind 127.0.0.1, token requerido | `sync-websocket/WebSocketSyncSink.java` |
+| **B-04** | 🟠 Alto | Corrupción İ (U+0130) en render | `Pattern.CASE_INSENSITIVE` vs `toLowerCase()` | `textformatter/TemplateRenderer.java` |
+| **B-05** | 🟠 Alto | Traducción sin re-escape | `MiniEscape.escape(translated)` antes de re-insert | `textformatter/TemplateRenderer.java` |
+| **B-06** | 🟠 Alto | Rate limit WS nunca recupera | Ventana fija por tiempo de inicio | `sync-websocket/WebSocketSyncSink.java` |
+| **M-01** | 🟠 Alto | GTranslate solo 1ª oración | Concatena todos segmentos `root[0][i][0]` | `gtranslate/GTranslate.java` |
+| **M-02** | 🟠 Alto | Thundering herd traducciones | In-flight dedup via `CompletableFuture` | `core-api/TranslationService.java` |
+| **M-03** | 🟠 Alto | ArrayStoreException MessageCodec | Conversión segura String[] desde JSONArray | `transport/MessageCodec.java` |
+| **M-04** | 🟡 Medio | HttpTransport: null error stream, POST→GET redirect, sin límite body, readLine() | Null-check, preserva método 307/308, límite 1MB, preserva \n | `transport/HttpTransport.java` |
+| **M-05** | 🟡 Medio | SSRF IPv6 ULA no cubierto; deny reemplaza | Añadidos patrones `fc00::/7`, `fd00::/7`; deny amplía | `transport/HttpTransport.java` |
+| **M-08** | 🟡 Medio | InterruptedException tragado | Catch explícito + `Thread.currentThread().interrupt()` | `host/MessageDispatcher.java` |
+| **M-09** | 🟡 Medio | RateLimiter RWLock redundante | Eliminado RWLock; `computeIfAbsent` + ConcurrentHashMap | `iflow/RateLimiter.java` |
+| **M-10** | 🟡 Medio | WS port bug (constructor vs campo) | Usa `this.port` sanitizado | `sync-websocket/WebSocketSyncSink.java` |
+| **M-11** | 🟡 Medio | Observability bind 0.0.0.0 sin auth | Bind 127.0.0.1 por defecto | `observability/MetricsEndpoint.java`, `Observability.java` |
+| **M-07** | 🟢 Bajo | ModuleLifecycle SHA-256 solo integridad | `verifySignature()` (cosign/gpg); detección dinámica platform/MC | `manager-impl/DefaultModuleLifecycle.java` |
 
 ---
 
@@ -621,16 +652,11 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 1. Servidor Spigot real corriendo
 2. Pipeline completo: chat → iFlow → format → delivery
 
-### 🔴 CRÍTICO — Release Pipeline
-1. gradle.lockfile portable
-2. GitHub Actions CI/CD completo
-3. Versionado semántico automatizado
-
 ### 🟡 OTROS
-1. Translation cache/dedup (P1 - escalabilidad)
-2. GitHub Releases para Module Manager (F12-2)
+1. GitHub Releases para Module Manager (F12-2) + sync-velocity
+2. Docs sincronización completa → README, PLAN, Release Notes, Wiki, ADR
 
-### ✅ RESUELTOS EN ESTA SESIÓN (2026-09-24)
+### ✅ RESUELTOS EN ESTA SESIÓN (2026-09-28)
 - JAR size: shadowJar excluye dependencias (era 30MB, ahora solo plugin code 56KB)
 - Module list: `/suite module list` muestra instalados (✓) + disponibles (✗) de GitHub
 - Chat duplication: fixed (iniciador + broadcast no se duplican)
@@ -642,6 +668,8 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 - Stress test resilient: continues on individual message failures
 - System.out/err: replaced with PluginLogger in TextFormatters, DebugEndpoint
 - **Repository Abstraction (F12-14)**: config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
+- **Release pipeline**: GitHub Actions CI/CD (ci.yml, release.yml), dependencyVerification completo, semantic versioning
+- **Clean Architecture (Translator SPI)**: host sin deps compile-time a translators; ServiceLoader runtime discovery
 
 ---
 
@@ -655,8 +683,8 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 | **Security Sprint 1** | ✅ Done | SpEL sandbox, YAML SafeConstructor, MiniEscape, SafeConstructor args |
 | **Security Sprint 2** | ✅ Done | Bounded executors, CallerRunsPolicy, observability fixes |
 | **Bugs auditoría 14/16 sep** | ✅ Arreglados | Transform propagation, Message.toJson(), Direction.specific(), MiniEscape, SpEL LRU cache, ConfigLoader logging |
-| **Module Manager (F12)** | ✅ **Núcleo completado** | Version resolver, dependency parsing (manifest.yml), SHA256, register() SPI, discoverAll(), discoverAvailableModules() |
-| **Security Sprint 3** | ✅ Completado | char[] tokens, MiniEscape completo, PAPI check, SpEL cache, SSRF, DependencyVerification |
+| **Clean Architecture (Translator SPI)** | ✅ **Completado** | host sin deps compile-time a translators; ServiceLoader runtime discovery |
+| **Release Pipeline / Dependency Verification** | ✅ **Completado** | GitHub Actions CI/CD, gradle.lockfile (29 proyectos), verification-metadata.xml |
 | **Spigot-host** | ✅ COMPILA | DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry |
 | **inworld** | ✅ COMPILA | InWorldHandler constructor con Server param |
 | **sync-velocity** | ✅ **Production-ready** | Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery |
@@ -665,4 +693,93 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ---
 
-*Última actualización: 2026-09-24 | Commit: (pendiente push)*
+*Última actualización: 2026-09-28 | Commit: (pendiente push)*
+
+---
+
+## AUDITORÍA 2026-09-28 — HALLAZGOS CONFIRMADOS EN CÓDIGO (Verificados en source)
+
+> **Metodología**: Cada hallazgo ha sido verificado leyendo el código fuente correspondiente. Solo se listan los que **aplican** al estado actual.
+
+### 🔴 CRÍTICOS (P0 — Fix Inmediato)
+
+| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+|---|---|---|---|---|
+| **B-01** | 🔴 Crítico | **Doble entrega de cada mensaje de chat** — `broadcast()` despacha internamente (L518) Y el caller vuelve a despachar (L497) | `spigot-host/TextFormatterSuitePlugin.java:508-520, 495-498` | `broadcast()` llama `dispatcher.dispatch()` y retorna mensaje; `onChat()` despacha el retorno → 2x entrega, 2x traducción, 2x rate-limit |
+| **B-03** | 🔴 Crítico | **Bloqueo hilo principal en join/quit/death** — Handlers `@EventHandler(priority=MONITOR)` corren en main thread, llaman `dispatcher.dispatch()` que hace `future.get()` sin timeout; tareas async pueden hacer HTTP a Google (10s timeout) | `spigot-host/TextFormatterSuitePlugin.java:535-568`, `host/MessageDispatcher.java:115` | `onJoin/onQuit/onDeath` → `dispatchTyped()` → `dispatcher.dispatch()` → `future.get()` bloquea main thread |
+| **V-01** | 🔴 Crítico | **WebSocket bind 0.0.0.0 + auth opcional** — `WebSocketSyncSink` usa `new InetSocketAddress(port)` (todas las interfaces). Si token vacío, solo loggea warning pero **acepta conexiones** (L202-203). Plugin sí respeta `enabled: false` y exige token si enabled, pero sink creado directamente no | `sync-websocket/WebSocketSyncSink.java:70, 202-203` | Bind all interfaces; auth check solo loggea warning, no rechaza |
+
+### 🟠 ALTOS (P1)
+
+| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+|---|---|---|---|---|
+| **B-04** | 🟠 Alto | **Corrupción render con "İ" (U+0130)** — `source.toLowerCase().indexOf()` desplaza índices porque `"İ".toLowerCase()` = 2 chars (`i` + combining dot). 10× `İ` → `IndexOutOfBoundsException`, mensaje descartado | `textformatter/template/TemplateRenderer.java:226` | `int close = source.toLowerCase().indexOf(CLOSE_TR, ...)` — lowercasing cambia longitud |
+| **B-05** | 🟠 Alto | **Traducción sin re-escape** — Texto ya escapado se envía al traductor; respuesta se reinserta **sin re-escape** antes de `MiniMessage.deserialize`. Traductor puede mover/eliminar barras → `<click:run_command:...>` sobrevive | `textformatter/template/TemplateRenderer.java:215` | `return translation.translate(content, from, to);` — salida cruda a MiniMessage |
+| **B-06** | 🟠 Alto | **Rate limit WebSocket nunca recupera con tráfico sostenido** — Ventana se resetea solo si `lastTimestamp < now-1s`; cada mensaje actualiza `lastTimestamp` → cliente a 5 msg/s bloqueado desde msg #100 y no recupera mientras siga enviando | `sync-websocket/WebSocketSyncSink.java:236-255` | `messageTimestamps` + `messageCount` solo limpia si `lastTimestamp < windowStart` |
+| **M-01** | 🟠 Alto | **GTranslate solo primera oración** — `root[0][0][0]` toma solo primer segmento; mensajes multi-oración pierden el resto | `gtranslate/GTranslate.java:48` | `return root.optJSONArray(0).optJSONArray(0).optString(0, text);` |
+| **M-02** | 🟠 Alto | **Thundering herd traducciones** — Sin dedup de peticiones en vuelo: N receptores mismo idioma disparan N llamadas HTTP idénticas concurrentes | `host/SuiteHost.java:171-184`, `core-api/TranslationService.java:42-67` | `deliver()` llama `renderFor()` → `translateSpans()` → `translate()` por receptor sin coordinación |
+| **M-03** | 🟠 Alto | **ArrayStoreException en MessageCodec** — `texts.toList().toArray(new String[0])` falla si JSONArray tiene elementos no-String | `transport/MessageCodec.java:102` | `Formats.of(texts.toList().toArray(new String[0]));` |
+
+### 🟡 MEDIOS (P2)
+
+| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+|---|---|---|---|---|
+| **M-04** | 🟡 Medio | **HttpTransport: getErrorStream() null, POST→GET en redirect, sin límite respuesta, readLine() quita \n** | `transport/HttpTransport.java:172-230` | L214-215: `getErrorStream()` puede ser null; L203: redirect fuerza GET; sin max body size; L218: `readLine()` |
+| **M-05** | 🟡 Medio | **SSRF IPv6 ULA (fc00::/7) no cubierto** — `isSiteLocalAddress()` no detecta ULA; system property `textformattersuite.http.deny` **reemplaza** default en vez de ampliar | `transport/HttpTransport.java:166, 55-59` | L166: `address.isSiteLocalAddress()`; L55-59: property reemplaza lista |
+| **M-08** | 🟡 Medio | **InterruptedException tragado** — `catch (Exception)` en `MessageDispatcher` incluye `InterruptedException` sin restaurar interrupción | `host/MessageDispatcher.java:167` | `} catch (Exception e) { logger.error(...); silenced++; }` |
+| **M-09** | 🟡 Medio | **RWLock redundante sobre ConcurrentHashMap** — `RateLimiter` usa `ReentrantReadWriteLock` + `ConcurrentHashMap`; Javadoc dice "sliding window" pero es token bucket | `iflow/channel/RateLimiter.java:20, 23` | `buckets` es `ConcurrentHashMap` + `bucketsLock` RWLock |
+| **M-10** | 🟡 Medio | **WebSocketSyncSink port sanitization bug** — Constructor sana `this.port` (L67) pero `new InetSocketAddress(port)` usa parámetro crudo (L70) | `sync-websocket/WebSocketSyncSink.java:67, 70` | `this.port = port > 0 ? port : DEFAULT_PORT;` vs `new InetSocketAddress(port)` |
+| **M-11** | 🟡 Medio | **Observability metrics en 0.0.0.0:9090 sin auth** — `MetricsEndpoint` usa `new InetSocketAddress(port)` (todas interfaces), sin autenticación | `observability/endpoint/MetricsEndpoint.java:42` | `HttpServer.create(new InetSocketAddress(port), 0)` |
+
+### 🟢 BAJOS / DEUDA (P3)
+
+| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+|---|---|---|---|---|
+| **M-07** | 🟢 Bajo | **ModuleLifecycle SHA-256 del mismo release** — Garantiza integridad, no autenticidad; repo `official` activado por defecto; `getCurrentEnvironment()` hardcodea `"spigot"` y `"1.20.6"` | `manager-impl/DefaultModuleLifecycle.java:1059-1072` | L1064-1066: `return new Environment("spigot", ..., "1.20.6", ...)` |
+
+---
+
+### ✅ YA ARREGLADOS / INCORRECTOS EN AUDITORÍA
+
+| ID | Estado | Detalle |
+|---|---|---|
+| **V-02** | ✅ **ARREGLADO** | Cache key usa texto completo (`source + "|" + to.code() + "|" + text` L49, `"detect|" + text` L89), no `hashCode()` |
+| **B-02** | ✅ **ARREGLADO** | Rate limit se chequea **una vez** en `MessageDispatcher.dispatch()` L89-92 ANTES del fan-out (`checkEmissionRateLimit`) |
+| **M-06** | ❌ **INCORRECTO** | `HttpSink` SÍ tiene auth: Bearer token (L210-216), HMAC (L220-241), fallback localhost-only (L205-207) |
+| **Rules/SpEL** | ⚠️ **PARCIAL** | `<expr>` en templates **NO conectado** (TemplateRenderer recibe null ExpressionEvaluator L51), pero iFlow rules SÍ usan `RuleExpressionEvaluator` con `#msg`, `#sender`, etc. (L100-102) |
+| **parallel: false** | ⚠️ **IGNORADO** | `engineParallel` en config.yml L6 y `HostConfig` L22 existe pero `MessageDispatcher` **siempre usa executor** (L56-65) |
+| **fabric-host** | ✅ **CONFIRMADO** | NO en `settings.gradle`; 42 errores compile; `inworld` compila contra Paper API L28, `fabric-host` depende de `inworld` L38 |
+| **coretranslator** | ✅ **CONFIRMADO** | NO en `settings.gradle`; `common-legacy` SÍ está (L32) |
+| **gradle.properties** | ✅ **CONFIRMADO** | JDK 8/21 (no 17/21 como README) |
+| **sync-discord** | ✅ **CONFIRMADO** | Usa JDA 6.4.2 (no JDK WebSocket + REST) |
+| **UA rotation gtranslate** | ✅ **CONFIRMADO** | User-Agent fijo `"TextFormatterSuite/2.1"` (HttpTransport L113) |
+
+---
+
+### PLAN DE ACCIÓN ACTUALIZADO (P0 → P1 → P2)
+
+#### Semana 1: P0 Críticos
+1. **B-01** — Fix doble entrega: `broadcast()` no debe despachar; solo construir mensaje
+2. **B-03** — Join/quit/death: despachar via `runTaskAsynchronously` + `future.get(timeout)`
+3. **V-01** — WebSocket: bind `127.0.0.1` por defecto; rechazar arranque si token vacío (no solo warning)
+
+#### Semana 2: P1 Altos
+4. **B-04** — TemplateRenderer: buscar `</tr>` con `Pattern.CASE_INSENSITIVE` sobre string original
+5. **B-05** — Re-escape salida traductor O usar `MiniMessage.unparsed()` / `Component.text()`
+6. **B-06** — WebSocket rate limit: ventana fija por instante inicio, no último mensaje
+7. **M-01** — GTranslate: concatenar todos los segmentos `root[0][i][0]`
+8. **M-02** — Dedup in-flight: cache `CompletableFuture` por `(text, from, to)` en `TranslationService`
+9. **M-03** — MessageCodec: validar elementos JSONArray son String antes de `toArray(String[])`
+
+#### Semana 3: P2 Medios
+10. **M-04** — HttpTransport: null-check `getErrorStream()`, mantener method en redirect, max body size, `readLine()` → `read()`
+11. **M-05** — SSRF: añadir patrón IPv6 ULA `^fc00::/7`; property `deny` amplía no reemplaza
+12. **M-08** — MessageDispatcher: catch `InterruptedException` separado, `Thread.currentThread().interrupt()`
+13. **M-09** — RateLimiter: eliminar RWLock, usar solo `ConcurrentHashMap` + `synchronized(bucket)`
+14. **M-10** — WebSocketSyncSink: usar `this.port` en `InetSocketAddress`
+15. **M-11** — MetricsEndpoint: bind `127.0.0.1` por defecto; auth opcional
+
+#### Semana 4: P3 + Tests + Docs
+16. **M-07** — ModuleLifecycle: firma JAR separada (cosign/gpg); `getCurrentEnvironment()` dinámico
+17. **Tests E2E** — Spigot real: chat → iFlow → format → delivery
+18. **Docs sincronización completa** — README, PLAN, Release Notes, Wiki, ADR un mismo estado

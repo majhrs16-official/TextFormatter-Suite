@@ -10,7 +10,7 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 - **Chat Formatting** - Advanced MiniMessage-based formatting with placeholders, gradients, and hover events
 - **Translation** - Multi-provider translation (Google, LibreTranslate) with auto-detection
 - **Message Routing** - iFlow rule engine with SpEL conditions and actions
-- **Cross-platform** - Spigot/Paper (1.20.6+) and Fabric (1.21+) support
+- **Cross-platform** - Spigot/Paper (1.20.6+) — Fabric support **planned** (fabric-host currently excluded: 42 compile errors from Spigot API copy-paste; rewrite needed)
 - **Real-time Sync** - Discord, Telegram, HTTP, TCP/UDP, WebSocket, Velocity (production-ready)
 
 ### 🏗️ Architecture
@@ -41,7 +41,17 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 4. Configure `plugins/TextFormatterSuite/config.yml` as needed
 5. Run `/suite reload` to apply changes
 
-#### Fabric
+#### Fabric (Planned — Not Yet Available)
+**Currently excluded from build** (42 compilation errors — uses Spigot/Bukkit APIs instead of Fabric APIs).
+
+Planned rewrite requirements:
+- `ServerCommandSource` instead of `CommandContext`
+- `FabricAudiences` instead of Bukkit audiences
+- Fabric event system instead of Bukkit events
+- Brigadier native commands
+- Fabric Loader + Fabric API + Yarn mappings
+
+When available:
 1. Download the latest `textformatter-suite-fabric.jar`
 2. Place in your server's `mods/` folder (requires Fabric Loader 0.16+)
 3. Start the server - config files will be generated in `config/textformatter-suite/`
@@ -86,7 +96,7 @@ chat:
 ┌─────────────────────────────────────────────────────────────────┐
 │                      TextFormatter Suite                        │
 ├─────────────────────────────────────────────────────────────────┤
-│  spigot-host  │  fabric-host  │  (future: velocity, bungee)    │
+│  spigot-host  │  fabric-host (excluido - rewrite pendiente)    │
 ├─────────────────────────────────────────────────────────────────┤
 │                        suite-host                               │
 │  ┌─────────────┬─────────────┬─────────────┬─────────────────┐ │

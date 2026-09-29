@@ -31,8 +31,14 @@ public final class Observability {
     private Observability(SuiteHost host, MessageDispatcher dispatcher,
                           ChannelRegistry channels, PluginLogger logger,
                           int metricsPort, int debugPort, String debugAuthToken) throws IOException {
+        this(host, dispatcher, channels, logger, metricsPort, debugPort, debugAuthToken, "127.0.0.1");
+    }
+
+    private Observability(SuiteHost host, MessageDispatcher dispatcher,
+                          ChannelRegistry channels, PluginLogger logger,
+                          int metricsPort, int debugPort, String debugAuthToken, String metricsBindAddress) throws IOException {
         this.logger = logger;
-        this.metricsEndpoint = new MetricsEndpoint(logger, metricsPort, "/metrics");
+        this.metricsEndpoint = new MetricsEndpoint(logger, metricsPort, "/metrics", metricsBindAddress);
         this.debugEndpoint = new DebugEndpoint(host, dispatcher, channels, logger, debugAuthToken);
         this.healthCheckRegistry = new HealthCheckRegistry();
 
@@ -46,7 +52,8 @@ public final class Observability {
     public static Observability create(SuiteHost host, MessageDispatcher dispatcher,
                                        ChannelRegistry channels, PluginLogger logger,
                                        int metricsPort, int debugPort, String debugAuthToken) throws IOException {
-        Observability obs = new Observability(host, dispatcher, channels, logger, metricsPort, debugPort, debugAuthToken);
+        String metricsBind = System.getProperty("textformattersuite.metrics.bind", "127.0.0.1");
+        Observability obs = new Observability(host, dispatcher, channels, logger, metricsPort, debugPort, debugAuthToken, metricsBind);
         obs.start();
         return obs;
     }
@@ -56,7 +63,10 @@ public final class Observability {
      */
     public static Observability createDefault(SuiteHost host, MessageDispatcher dispatcher,
                                                ChannelRegistry channels, PluginLogger logger) throws IOException {
-        return create(host, dispatcher, channels, logger, 9090, 9091, null);
+        String metricsBind = System.getProperty("textformattersuite.metrics.bind", "127.0.0.1");
+        Observability obs = new Observability(host, dispatcher, channels, logger, 9090, 9091, null, metricsBind);
+        obs.start();
+        return obs;
     }
 
     private void registerDefaultChecks() {
