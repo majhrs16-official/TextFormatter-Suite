@@ -205,3 +205,11 @@ sync:
 - [host](../host/README.md) — Collects sinks, loads sync config
 - [kernel](../kernel/README.md) — Loads sync modules
 - [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Platform adapters using sync (**fabric-host excluded**)
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **M-06** | HttpSink inbound auth implemented | `HttpSink.handleInbound()` — Bearer token, HMAC-SHA256, fallback localhost-only; nonce/timestamp replay protection |

@@ -129,3 +129,14 @@ Formatted message (Adventure Component)
 - [host](../host/README.md) — Wires `TextFormatter`, loads channel config
 - [iflow](../iflow/README.md) — Uses `TextFormatter` for transform rules
 - [presets](../presets/README.md) — Uses `TextFormatter` and `ChannelRegistry` for presets
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **B-04** | İ (U+0130) corruption in `<tr>` span search | `TemplateRenderer.findSpans()` — uses `Pattern.CASE_INSENSITIVE` instead of `toLowerCase()` |
+| **B-05** | Translation output not re-escaped | `TemplateRenderer.translateSpan()` — applies `MiniEscape.escape()` to translated text |
+| **SEC** | `MiniEscape` complete (10 chars: `< > \ { } [ ] ( ) # @`) | `MiniEscape.escape()` — prevents MiniMessage injection |
+| **SEC** | `SpelExpressionEvaluator` sandboxed | Uses `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU cache (1024) |

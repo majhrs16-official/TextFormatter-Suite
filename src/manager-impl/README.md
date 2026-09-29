@@ -141,3 +141,11 @@ repositories:
 - [kernel](../kernel/README.md) — Local module loading
 - [host](../host/README.md) — Integration point
 - [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Consumers
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **M-07** | SHA-256 only integrity, not authenticity | `DefaultModuleLifecycle.verifySignature()` — supports cosign/gpg signatures; `getCurrentEnvironment()` now dynamically detects platform (Spigot/Fabric/Velocity/Bungee) and MC version |

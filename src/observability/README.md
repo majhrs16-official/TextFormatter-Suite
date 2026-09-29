@@ -120,3 +120,11 @@ Debug endpoint returns:
 - [textformatter](../textformatter/README.md) — Formats debug output
 - [kernel](../kernel/README.md) — Loads module
 - [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Mount HTTP endpoints
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **M-11** | MetricsEndpoint binds 0.0.0.0:9090 without auth | Now binds `127.0.0.1` by default via `textformattersuite.metrics.bind` property; `Observability.createDefault()` passes bind address |

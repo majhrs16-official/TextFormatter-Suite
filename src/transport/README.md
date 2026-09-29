@@ -121,3 +121,12 @@ Return to caller
 - [sync-discord](../sync-discord/README.md) — Discord sync sink
 - [gtranslate](../gtranslate/README.md) — Google Translate
 - [ltranslate](../ltranslate/README.md) — LibreTranslate
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **M-04** | HttpTransport issues fixed | `HttpTransport.readResponse()` — null-check `getErrorStream()`, preserve HTTP method on 307/308 redirects, 1MB response body limit, preserves newlines |
+| **M-05** | SSRF IPv6 ULA (fc00::/7) covered | `HttpTransport` deny patterns — added `^fc[0-9a-f]:` and `^fd[0-9a-f]:`; `textformattersuite.http.deny` property now amplifies defaults instead of replacing |

@@ -141,3 +141,12 @@ MessageDispatcher applies decision:
 - [textformatter](../textformatter/README.md) — Used for `SET_FORMAT` transforms
 - [host](../host/README.md) — Wires `Router`, provides `PermissionChecker` impl
 - [kernel](../kernel/README.md) — Loads `IflowModule`
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **M-08** | InterruptedException swallowed in `MessageDispatcher` | `MessageDispatcher.dispatch()` — explicit catch + `Thread.currentThread().interrupt()` |
+| **M-09** | `RateLimiter` redundant RWLock over ConcurrentHashMap | Removed `ReentrantReadWriteLock`; uses `computeIfAbsent` + `ConcurrentHashMap` + `synchronized(bucket)` |

@@ -114,3 +114,12 @@ translators:
 - [host](../host/README.md) — Wires translation providers, loads config
 - [gtranslate](../gtranslate/README.md) — Alternative provider (Google)
 - [kernel](../kernel/README.md) — Loads `LTranslateModule`
+
+---
+
+## 11. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **M-02** | Translation thundering herd | `TranslationService` (core-api) — in-flight deduplication via `CompletableFuture` cache per `(text, from, to)` |
+| **SEC** | API key in `char[]` + `Arrays.fill('\0')` | `LTranslate` constructor stores key in `char[]`, zeroes after use |

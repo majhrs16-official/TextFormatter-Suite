@@ -202,3 +202,13 @@ Adventure component → Bukkit component → player.sendMessage()
 - [sync-http](../sync-http/README.md) / [sync-tcpudp](../sync-tcpudp/README.md) / [sync-discord](../sync-discord/README.md) / etc. — Sync
 - [manager-impl](../manager-impl/README.md) — Remote module loading
 - [fabric-host](../fabric-host/README.md) — **Fabric equivalent (excluded from build)**
+
+---
+
+## 12. Security Fixes (Audit 2026-09-28)
+
+| Fix | Issue | Location |
+|-----|-------|----------|
+| **B-01** | Double message delivery in `onChat` | `broadcast()` now only builds message, doesn't dispatch; `onChat()` dispatches once |
+| **B-03** | Main thread blocking in join/quit/death | Handlers offloaded to `runTaskAsynchronously` + `dispatcher.dispatch()` uses `future.get(10s)` timeout |
+| **V-01** | WebSocket bind 0.0.0.0 + optional auth | `TextFormatterSuitePlugin` reads `bind` + `token` from `sync/websocket.yml`; passes to `WebSocketSyncSink` which binds 127.0.0.1 and requires token |
