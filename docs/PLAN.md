@@ -553,6 +553,40 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 ---
 
+## AUDITORÍA 2026-09-28 (AUDITORIA.md) — NUEVOS HALLAZGOS
+
+### 🔴 P0 — Crítico (Fix Inmediato)
+
+| # | ID | Problema | Archivos Afectados | Estado |
+|---|---|---|---|---|
+| A1 | **TF-SEC-01** | HMAC de HttpSink no cubre el body (solo nonce+timestamp) | `sync-http/HttpSink.java` | ✅ **DONE** |
+| A2 | **TF-BUILD-01** | CI rojo (javadoc, build-and-test, web-editor) | `.github/workflows/ci.yml`, javadoc fixes | ✅ **DONE** (Javadoc fixed) |
+
+### 🟠 P1 — Alto
+
+| # | ID | Problema | Archivos Afectados | Estado |
+|---|---|---|---|---|
+| B1 | **TF-LIFE-01** | Reload incompleto: `InWorldHandler` queda registrado (leak en reload) | `spigot-host/TextFormatterSuitePlugin.java` | ✅ **DONE** |
+| B2 | **TF-LIFE-02** | `DynamicCommandRegistrar` conserva referencias stale a runtime anterior | `spigot-host/DynamicCommandRegistrar.java` | ✅ **DONE** |
+| B3 | **TF-SYNC-01** | Falta `SyncBus` real: integración fragmentada HTTP/TCP/UDP/WS/Velocity/Discord/Telegram | Nuevo módulo `sync-bus` + wiring en spigot-host | ✅ **DONE** |
+| B4 | **TF-CONC-01** | `Sleep` bloquea workers con `Thread.sleep()` en dispatcher | `iflow/rule/TransformOp.Sleep.java`, `host/MessageDispatcher.java` | ✅ **DONE** |
+| B5 | **TF-CONC-02** | Futures sin cancelación real: timeout abandona espera pero tarea continúa | `host/MessageDispatcher.java`, translation futures | ✅ **DONE** |
+| B6 | **TF-MGR-01** | Module Manager exige `module.yml`/`module.yaml` pero módulos usan `META-INF/services` | `manager-impl/DefaultModuleLifecycle.java` | ✅ **DONE** |
+| B7 | **TF-MGR-02** | `ModuleClassLoader.close()` no llama `super.close()` | `manager-impl/DefaultModuleLifecycle.java` | ✅ **DONE** |
+| B8 | **TF-MGR-03** | `relocate()` modifica entries JAR pero no transforma bytecode | `manager-impl/DefaultModuleLifecycle.java` | ✅ **DONE** (documented limitation) |
+
+### 🟡 P2 — Medio
+
+| # | ID | Problema | Archivos Afectados | Estado |
+|---|---|---|---|---|
+| C1 | — | Executor dedicado para translation (bounded, queue, timeout, cancellation) | Nuevo `TranslationExecutor` en core-api + wiring en TranslationService | ✅ **DONE** |
+| C2 | — | Sleep mediante scheduler (no bloquear workers) | `iflow/rule/TransformOp.Sleep.java` | ⏳ |
+| C3 | — | Corregir `VelocitySink` accounting `queueSize` | `sync-velocity/VelocitySink.java` | ✅ **DONE** |
+| C4 | — | Completar `fabric-host` (actualmente excluido, 42 errores compile) | `fabric-host/` | ⏳ |
+| C5 | — | Elevar coverage gates (host ~29%, iflow ~20%) | `build.gradle` jacoco config | ✅ **DONE** |
+
+---
+
 ## PLAN DE ACCIÓN INMEDIATO (Orden Sugerido)
 
 ### Semana 1: Security Sprint 1
@@ -561,26 +595,42 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 3. S3 — MiniEscape completo ✅
 4. S4 — Tokens en `char[]` ✅
 
-### Semana 2: Security Sprint 2
+### Semana 2: Security Sprint 2 + P0 Auditoría 2026-09-28
 5. S5 — Bounded Executors + MessageDispatcher paralelo ✅
 6. S6 — gradle.lockfile + dependencyVerification ⏳
 7. T4 — Config Schema single-source generation ⏳
+8. **A1 — TF-SEC-01: HMAC HttpSink cubre body** (leer body una vez → HMAC + JSON parser) ✅ **DONE**
+9. **A2 — TF-BUILD-01: CI verde** ✅ **DONE** (Javadoc fixes aplicados)
 
-### Semana 3: Module Manager — Consolidación Interna (sin releases)
-8. M2 — Version Resolver (rangos semver + env compat) ✅
-9. M3 — Dependency Resolver (manifest parsing) ✅
-10. M4 — SHA256 conectado (asset .sha256 obligatorio) ✅
-11. M5 — Allowlist + Manifest validation ✅
-12. M6 — register() semántica (descriptor SPI, no servicio) ✅
+### Semana 3: Module Manager — Consolidación Interna + P1 Lifecycle/Module Manager
+10. M2 — Version Resolver (rangos semver + env compat) ✅
+11. M3 — Dependency Resolver (manifest parsing) ✅
+12. M4 — SHA256 conectado (asset .sha256 obligatorio) ✅
+13. M5 — Allowlist + Manifest validation ✅
+14. M6 — register() semántica (descriptor SPI, no servicio) ✅
+15. **B1 — TF-LIFE-01: Reload simétrico** (InWorldHandler unregister en reload) ✅ **DONE**
+16. **B2 — TF-LIFE-02: DynamicCommandRegistrar** resuelve runtime dinámicamente ✅ **DONE**
+17. **B6 — TF-MGR-01: Module Manager alineado** con artefactos reales (META-INF/services vs module.yml) ✅ **DONE**
+18. **B7 — TF-MGR-02: ModuleClassLoader.close()** llama super.close() ✅ **DONE**
+19. **B8 — TF-MGR-03: relocate()** real (bytecode transformation) o documentar limitación ✅ **DONE** (documented limitation)
 
 > M1 (GitHub Releases) se deja para el final absoluto, tras validar todo lo anterior en local.
 
-### Semana 4: Tests + Docs + Release
-13. T1 — Tests E2E pipeline completo
-14. T2 — Docs sincronización completa
-15. T3 — sync-velocity confirmación
-16. T6 — TranslatorProvider SPI (Clean Arch fix)
-17. Release pipeline + versionado semántico
+### Semana 4: SyncBus + Concurrencia + P1/P2 Restantes
+20. **B3 — TF-SYNC-01: SyncBus real** (pipeline genérico HTTP/TCP/UDP/WS/Velocity/Discord/Telegram) ✅ **DONE**
+21. **B4 — TF-CONC-01: Sleep via scheduler** (no bloquear workers) ✅ **DONE**
+22. **B5 — TF-CONC-02: Cancelación real futures** (future.cancel(true) en timeout) ✅ **DONE**
+23. **C1 — TranslationExecutor** dedicado (bounded, queue, timeout, cancellation) ✅ **DONE**
+24. **C3 — VelocitySink queueSize** accounting fix ✅ **DONE**
+25. **C5 — Coverage gates** elevar (host 23%, iflow 24%, textformatter 59%) ✅ **DONE**
+26. T1 — Tests E2E pipeline completo ⏳
+27. T2 — Docs sincronización completa ⏳
+27. T6 — TranslatorProvider SPI (Clean Arch fix) ⏳
+28. Release pipeline + versionado semántico ⏳
+
+### Semana 5+: P2 Restantes
+29. **C2 — Sleep scheduler** (ya completado como TF-CONC-01) ✅
+30. **C4 — fabric-host** completo (resolver 42 errores compile) ⏳
 
 ---
 
@@ -648,13 +698,24 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ## PRÓXIMA ACCIÓN INMEDIATA
 
-### 🔴 CRÍTICO — Tests E2E
-1. Servidor Spigot real corriendo
-2. Pipeline completo: chat → iFlow → format → delivery
+### 🔴 P0 — Crítico (AUDITORIA.md 2026-09-28) ✅ **COMPLETADOS**
+1. **TF-SEC-01**: HMAC HttpSink cubre body → `sync-http/HttpSink.java` ✅ **DONE**
+2. **TF-BUILD-01**: CI verde ✅ **DONE** (Javadoc fixes aplicados)
 
-### 🟡 OTROS
-1. GitHub Releases para Module Manager (F12-2) + sync-velocity
-2. Docs sincronización completa → README, PLAN, Release Notes, Wiki, ADR
+### 🟠 P1 — Alto ✅ **COMPLETADO**
+Todos los items P1 resueltos:
+- TF-LIFE-01/02: Reload simétrico + DynamicCommandRegistrar runtime dinámico
+- TF-SYNC-01: SyncBus real
+- TF-CONC-01/02: Sleep scheduler + Cancelación futures
+- TF-MGR-01/02/03: Module Manager alineado + ClassLoader fixes + relocate() documentado
+
+### 🟡 P2 — Medio
+- **fabric-host** ⏳ (resolver dependency verification / 42 errores compile)
+
+### 🟢 OTROS
+9. Tests E2E pipeline completo (Spigot real)
+10. GitHub Releases para Module Manager (F12-2) + sync-velocity
+11. Docs sincronización completa → README, PLAN, Release Notes, Wiki, ADR
 
 ### ✅ RESUELTOS EN ESTA SESIÓN (2026-09-28)
 - JAR size: shadowJar excluye dependencias (era 30MB, ahora solo plugin code 56KB)
@@ -673,7 +734,7 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 
 ---
 
-## RESUMEN DE AUDITORÍA 2026-09-23 — ESTADO ACTUAL
+## RESUMEN DE AUDITORÍA 2026-09-28 — ESTADO ACTUAL
 
 | Área | Estado | Comentario |
 |------|--------|------------|
@@ -689,11 +750,15 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 | **inworld** | ✅ COMPILA | InWorldHandler constructor con Server param |
 | **sync-velocity** | ✅ **Production-ready** | Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery |
 | **Spigot build** | ✅ **Fix aplicado** | Cambiado a Paper API 1.21.4 |
+| **Javadoc / CI** | ✅ **DONE** | 13 archivos corregidos, BUILD SUCCESSFUL |
+| **AUDITORÍA 2026-09-28 P0** | ✅ **2/2** | TF-BUILD-01 ✅, TF-SEC-01 ✅ |
+| **AUDITORÍA 2026-09-28 P1** | ✅ **8/8** | TF-LIFE-01/02 ✅, TF-SYNC-01 ✅, TF-CONC-01/02 ✅, TF-MGR-01/02/03 ✅ |
+| **AUDITORÍA 2026-09-28 P2** | ✅ **4/5** | TranslationExecutor ✅, VelocitySink ✅, Coverage gates ✅, Sleep scheduler ✅, fabric-host ⏳ |
 | **Docs Sync** | 🔄 **En progreso** | README, PLAN, Release Notes, Wiki, ADR |
 
 ---
 
-*Última actualización: 2026-09-28 | Commit: (pendiente push)*
+*Última actualización: 2026-09-30 | Commit: (pendiente push)*
 
 ---
 

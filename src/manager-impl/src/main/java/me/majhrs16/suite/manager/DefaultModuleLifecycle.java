@@ -335,6 +335,13 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
             return moduleJar; // No relocation needed
         }
 
+        // TF-MGR-03: This implementation only relocates CLASS FILE NAMES (entry paths),
+        // NOT bytecode references (constant pool, method signatures, field types, etc.).
+        // For true bytecode relocation, a library like ASM/ShadowJar/JarJar is required.
+        // This is sufficient for simple package isolation but may break if relocated
+        // classes are referenced by non-relocated code via reflection or SPI.
+        logger.warn("Module relocation only renames class file entries; bytecode references are NOT transformed. Use with caution.");
+
         try {
             Files.createDirectories(outputDir);
             Path outputJar = outputDir.resolve(moduleJar.getFileName().toString().replace(".jar", "-relocated.jar"));
@@ -462,7 +469,15 @@ private void validateModuleManifest(ClassLoader classLoader, ModuleDescriptor de
             }
 
             if (manifestStream == null) {
-                throw new IllegalStateException("Module " + descriptor.id() + " has no module.yml manifest; manifest is required for registration");
+                // TF-MGR-01: Fallback to META-INF/services for SPI-based modules
+                // Check if this is a valid SPI module with ServiceLoader registration
+                var spiStream = classLoader.getResourceAsStream("META-INF/services/me.majhrs16.suite.api.Module");
+                if (spiStream == null) {
+                    throw new IllegalStateException("Module " + descriptor.id() + " has no module.yml manifest and no META-INF/services/me.majhrs16.suite.api.Module; one is required for registration");
+                }
+                // Valid SPI module - log and skip YAML validation
+                logger.debug("Module " + descriptor.id() + " validated via META-INF/services (SPI)");
+                return;
             }
 
             String manifestContent = new String(manifestStream.readAllBytes(), StandardCharsets.UTF_8);
@@ -1225,7 +1240,7 @@ private void validateModuleManifest(ClassLoader classLoader, ModuleDescriptor de
 
         @Override
         public void close() throws IOException {
-            // Close any resources if needed
+            super.close();
         }
     }
 }

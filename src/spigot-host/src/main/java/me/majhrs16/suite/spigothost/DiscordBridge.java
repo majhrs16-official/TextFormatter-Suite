@@ -22,7 +22,7 @@ import java.util.Map;
  *
  * <ul>
  *   <li>outbound — the plugin mirrors chat broadcasts and typed events via
- *       {@link #mirror(Message)};</li>
+ *       {@link #mirror(Message, DispatchReport)};</li>
  *   <li>inbound — MESSAGE_CREATE becomes a CHAT message on the conventional
  *       {@code discord} channel and runs through the normal dispatcher.</li>
  * </ul>
@@ -40,6 +40,11 @@ public final class DiscordBridge {
         this.sink = sink;
         this.dispatcher = dispatcher;
         this.logger = logger;
+    }
+
+    /** @return the underlying Discord sink for registration with SyncBus. */
+    public JdaDiscordSink getSink() {
+        return sink;
     }
 
     /** @return an active bridge, or {@code null} when disabled/unavailable. */

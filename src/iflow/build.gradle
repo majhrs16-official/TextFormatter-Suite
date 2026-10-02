@@ -64,10 +64,10 @@ jacocoTestReport {
     reports { xml.required = true; html.required = true; csv.required = false }
 }
 
-// FASE T/T1 — umbral anti-regresión (20% líneas - temporal mientras se completa)
+// FASE T/T1 — umbral anti-regresión (cobertura real actual ~24%)
 jacocoTestCoverageVerification {
     violationRules { rule {
-        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.2 }
+        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.24 }
     } }
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }

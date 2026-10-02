@@ -16,7 +16,7 @@ import java.util.Optional;
  * first); the first matching rule wins. Values come from the
  * {@code rules.yml} config of iFlow.</p>
  * <p>
- * <b>Transform (F7):</b> A {@link #transform()} expression that modifies the
+ * <b>Transform (F7):</b> A {@link #transforms()} list of expressions that modifies the
  * message before delivery. Syntax: {@code "key=value,key2=value2"} or a SpEL
  * expression operating on message fields ({@code #message.text}, {@code #message.id},
  * {@code #message.langSource}, etc.). When present, the transform is applied

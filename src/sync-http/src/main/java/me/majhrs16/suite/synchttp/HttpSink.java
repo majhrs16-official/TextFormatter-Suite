@@ -161,12 +161,6 @@ public final class HttpSink implements SyncSink {
                 return;
             }
             
-            // Authentication check
-            if (!authenticate(exchange)) {
-                exchange.sendResponseHeaders(401, -1); // Unauthorized
-                return;
-            }
-            
             // Check Content-Length header if present
             String contentLengthHeader = exchange.getRequestHeaders().getFirst("Content-Length");
             if (contentLengthHeader != null) {
@@ -181,8 +175,14 @@ public final class HttpSink implements SyncSink {
                 }
             }
             
-            // Read body with size limit
+            // Read body with size limit (once, for both HMAC verification and JSON parsing)
             String body = readLimitedBody(exchange.getRequestBody(), MAX_BODY_BYTES);
+            
+            // Authentication check (now with body for HMAC)
+            if (!authenticate(exchange, body)) {
+                exchange.sendResponseHeaders(401, -1); // Unauthorized
+                return;
+            }
             
             // Replay protection: check nonce/timestamp
             if (!checkReplayProtection(exchange, body)) {
@@ -200,7 +200,7 @@ public final class HttpSink implements SyncSink {
         }
     }
     
-    private boolean authenticate(HttpExchange exchange) {
+    private boolean authenticate(HttpExchange exchange, String body) {
         // If no auth configured, allow only localhost
         if (authToken == null && hmacSecret == null) {
             String remoteAddr = exchange.getRemoteAddress().getAddress().getHostAddress();
@@ -230,7 +230,8 @@ public final class HttpSink implements SyncSink {
                         return false; // Timestamp too old/future
                     }
                     
-                    String expectedSig = computeHmac(hmacSecret, nonce + timestamp + getRequestBody(exchange));
+                    // HMAC covers: nonce + timestamp + body (FIX: body included for integrity)
+                    String expectedSig = computeHmac(hmacSecret, nonce + timestamp + body);
                     if (signature.equals(expectedSig)) {
                         return true;
                     }
@@ -257,13 +258,6 @@ public final class HttpSink implements SyncSink {
         } catch (Exception e) {
             throw new IllegalStateException("Failed to compute HMAC", e);
         }
-    }
-    
-    private String getRequestBody(HttpExchange exchange) throws IOException {
-        // We need to read the body for HMAC verification, but it's already consumed
-        // For simplicity, we'll compute HMAC from headers + timestamp + nonce
-        // In production, you'd buffer the body or use a different approach
-        return "";
     }
     
     private boolean checkReplayProtection(HttpExchange exchange, String body) {

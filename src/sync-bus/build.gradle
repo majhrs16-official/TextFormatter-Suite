@@ -1,5 +1,4 @@
 plugins {
-    id 'jacoco'
     id 'java'
     id 'maven-publish'
 }
@@ -19,12 +18,8 @@ java {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
-    implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
-    implementation 'org.springframework:spring-expression:6.1.12'
 
     testImplementation project(':src:kernel')
-
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -45,7 +40,7 @@ publishing {
     publications {
         maven(MavenPublication) {
             from components.java
-            artifactId = 'suite-textformatter'
+            artifactId = 'suite-sync-bus'
         }
     }
     repositories {
@@ -55,17 +50,3 @@ publishing {
         }
     }
 }
-// FASE T/T1 — cobertura medida (xml para CI, html para humano)
-tasks.named('test') { finalizedBy 'jacocoTestReport' }
-jacocoTestReport {
-    dependsOn test
-    reports { xml.required = true; html.required = true; csv.required = false }
-}
-
-// FASE T/T1 — umbral anti-regresión (cobertura real actual ~59%)
-jacocoTestCoverageVerification {
-    violationRules { rule {
-        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.59 }
-    } }
-}
-tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }

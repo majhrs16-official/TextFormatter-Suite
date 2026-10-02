@@ -8,7 +8,7 @@ import me.majhrs16.suite.api.SemVer;
 /**
  * SPI provider for the GTranslate module: provides the {@code translator}
  * capability. The actual {@link GTranslate} service is handed out by the
- * platform host, which wires in the {@link Transport} of its choice.
+ * platform host, which wires in the {@link me.majhrs16.suite.transport.Transport} of its choice.
  */
 public final class GTranslateModule implements Module {
 

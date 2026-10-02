@@ -29,16 +29,14 @@ import java.util.concurrent.ConcurrentMap;
  * <p>
  * The evaluation context uses {@link SimpleEvaluationContext#forReadOnlyDataBinding()}
  * which provides:
+ * </p>
  * <ul>
  *   <li>Read-only access to properties (no writes)</li>
  *   <li>No type references (no T(), no new, no static field access)</li>
  *   <li>No method invocation except property getters</li>
  * </ul>
- * </p>
  * <p>
- * Custom property accessor restrictions are applied via {@link SafePropertyAccessor}
- * when using the standard evaluation context, but for read-only data binding
- * the Spring framework already provides strong sandboxing.
+ * For read-only data binding the Spring framework already provides strong sandboxing.
  * </p>
  */
 public final class SpelExpressionEvaluator implements ExpressionEvaluator {

@@ -144,11 +144,11 @@ public final class SemVer implements Comparable<SemVer> {
      * Checks if this version satisfies a version range specification.
      * Supports:
      * - Exact version: "1.0.0"
-     * - Range: "[1.0.0,2.0.0)", "(1.0.0,2.0.0]", "[1.0.0,2.0.0]"
-     * - Caret: "^1.0.0" (>=1.0.0 <2.0.0)
-     * - Tilde: "~1.0.0" (>=1.0.0 <1.1.0)
+     * - Range: "{@code [1.0.0,2.0.0)}", "{@code (1.0.0,2.0.0]}", "{@code [1.0.0,2.0.0]}"
+     * - Caret: "{@code ^1.0.0}" ({@code >=1.0.0 <2.0.0})
+     * - Tilde: "{@code ~1.0.0}" ({@code >=1.0.0 <1.1.0})
      * - Wildcard: "1.x", "1.0.x"
-     * - Comparison: ">=1.0.0", "<2.0.0", ">1.0.0", "<=2.0.0"
+     * - Comparison: "{@code >=1.0.0}", "{@code <2.0.0}", "{@code >1.0.0}", "{@code <=2.0.0}"
      */
     public boolean satisfies(String rangeSpec) {
         if (rangeSpec == null || rangeSpec.isBlank()) {

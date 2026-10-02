@@ -32,36 +32,70 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Registra comandos dinámicos basados en commands.yml.
  * Reemplaza el onCommand hardcodeado por un árbol dinámico.
+ * <p>
+ * Resuelve el runtime dinámicamente via {@link TextFormatterSuitePlugin#getRuntime()}
+ * para evitar referencias stale después de reload.
+ * </p>
  */
 public final class DynamicCommandRegistrar implements CommandExecutor, TabCompleter {
 
     private final TextFormatterSuitePlugin plugin;
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
-    private final UserLanguageStore languages;
-    private final TranslationService translation;
-    private final PluginLogger logger;
     private final Path configDir;
     private final CommandsConfig commandsConfig;
     private final Map<String, DynamicCommand> registeredCommands = new ConcurrentHashMap<>();
 
-    public DynamicCommandRegistrar(TextFormatterSuitePlugin plugin, SuiteHost host,
-                                   MessageDispatcher dispatcher, UserLanguageStore languages,
-                                   TranslationService translation, PluginLogger logger,
+    public DynamicCommandRegistrar(TextFormatterSuitePlugin plugin,
                                    Path configDir) {
         this.plugin = plugin;
-        this.host = host;
-        this.dispatcher = dispatcher;
-        this.languages = languages;
-        this.translation = translation;
-        this.logger = logger;
         this.configDir = configDir;
 
         // Cargar configuración de comandos
+        TextFormatterSuitePlugin.Runtime rt = plugin.getRuntime();
+        PluginLogger logger = rt != null ? rt.logger() : new PluginLogger() {
+            @Override public void info(String m, Object... a) { plugin.getLogger().info(m); }
+            @Override public void warn(String m, Object... a) { plugin.getLogger().warning(m); }
+            @Override public void error(String m, Object... a) { plugin.getLogger().severe(m); }
+            @Override public void error(String m, Throwable t) { plugin.getLogger().severe(m + " :: " + t); }
+            @Override public void debug(String m, Object... a) { plugin.getLogger().info("[debug] " + m); }
+        };
+
         this.commandsConfig = CommandsConfigLoader.load(configDir, logger)
             .orElseGet(() -> createDefaultConfig());
 
         registerAllCommands();
+    }
+
+    private SuiteHost resolveHost() {
+        TextFormatterSuitePlugin.Runtime rt = plugin.getRuntime();
+        return rt != null ? rt.host() : null;
+    }
+
+    private MessageDispatcher resolveDispatcher() {
+        TextFormatterSuitePlugin.Runtime rt = plugin.getRuntime();
+        return rt != null ? rt.dispatcher() : null;
+    }
+
+    private UserLanguageStore resolveLanguages() {
+        TextFormatterSuitePlugin.Runtime rt = plugin.getRuntime();
+        return rt != null ? rt.languages() : null;
+    }
+
+    private TranslationService resolveTranslation() {
+        TextFormatterSuitePlugin.Runtime rt = plugin.getRuntime();
+        return rt != null ? rt.host().translation() : null;
+    }
+
+    private PluginLogger resolveLogger() {
+        TextFormatterSuitePlugin.Runtime rt = plugin.getRuntime();
+        return rt != null ? rt.logger() : null;
+    }
+
+    private HealthCheckRegistry resolveHealthChecks() {
+        return plugin.getObservability() != null ? plugin.getObservability().getHealthCheckRegistry() : null;
+    }
+
+    private me.majhrs16.suite.manager.ModuleLifecycle resolveModuleLifecycle() {
+        return plugin.getModuleLifecycle();
     }
 
     private CommandsConfig createDefaultConfig() {
@@ -123,7 +157,8 @@ new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Ac
         // Obtener CommandMap via reflexión
         CommandMap commandMap = getCommandMap();
         if (commandMap == null) {
-            logger.error("No se pudo obtener CommandMap; comandos dinámicos no registrados");
+            PluginLogger log = logger();
+            if (log != null) log.error("No se pudo obtener CommandMap; comandos dinámicos no registrados");
             return;
         }
 
@@ -139,7 +174,8 @@ new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Ac
             }
             commandMap.register(plugin.getName(), name, cmd);
             registeredCommands.put(name, cmd);
-            logger.info("Comando dinámico registrado: /" + name);
+            PluginLogger log = logger();
+            if (log != null) log.info("Comando dinámico registrado: /" + name);
         }
     }
 
@@ -149,7 +185,8 @@ new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Ac
             field.setAccessible(true);
             return (CommandMap) field.get(Bukkit.getServer());
         } catch (Exception e) {
-            logger.error("Error obteniendo CommandMap: " + e.getMessage());
+            PluginLogger log = logger();
+            if (log != null) log.error("Error obteniendo CommandMap: " + e.getMessage());
             return null;
         }
     }
@@ -175,16 +212,16 @@ new CommandsConfig.ArgDef("action", "enum(install,update,list,remove,info)", "Ac
         return cmd.tabComplete(sender, alias, args);
     }
 
-    // Getters para uso interno de DynamicCommand
-    SuiteHost host() { return host; }
-    MessageDispatcher dispatcher() { return dispatcher; }
-    UserLanguageStore languages() { return languages; }
-    TranslationService translation() { return translation; }
-    PluginLogger logger() { return logger; }
+    // Getters para uso interno de DynamicCommand (resuelven runtime dinámicamente)
+    SuiteHost host() { return resolveHost(); }
+    MessageDispatcher dispatcher() { return resolveDispatcher(); }
+    UserLanguageStore languages() { return resolveLanguages(); }
+    TranslationService translation() { return resolveTranslation(); }
+    PluginLogger logger() { return resolveLogger(); }
     Path configDir() { return plugin.getDataFolder().toPath(); }
     CommandsConfig commandsConfig() { return commandsConfig; }
     Map<String, CommandsConfig.ActionDef> actions() { return commandsConfig.actions(); }
-    HealthCheckRegistry healthChecks() { return plugin.getObservability().getHealthCheckRegistry(); }
+    HealthCheckRegistry healthChecks() { return resolveHealthChecks(); }
     TextFormatterSuitePlugin plugin() { return plugin; }
-    me.majhrs16.suite.manager.ModuleLifecycle moduleLifecycle() { return plugin.getModuleLifecycle(); }
+    me.majhrs16.suite.manager.ModuleLifecycle moduleLifecycle() { return resolveModuleLifecycle(); }
 }

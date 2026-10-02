@@ -5,6 +5,8 @@ import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.config.MessagesConfig;
+import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.spi.SyncListener;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -32,6 +34,7 @@ public final class DiscordBridge {
     private final PluginLogger logger;
     private final MessagesConfig messages;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final DiscordSyncSink sink;
 
     private DiscordBridge(JDA jda, GuildMessageChannel channel,
                           MessageDispatcher dispatcher, PluginLogger logger,
@@ -41,6 +44,11 @@ public final class DiscordBridge {
         this.dispatcher = dispatcher;
         this.logger = logger;
         this.messages = messages;
+        this.sink = new DiscordSyncSink();
+    }
+
+    public SyncSink getSink() {
+        return sink;
     }
 
     public static DiscordBridge create(Path folder, MessageDispatcher dispatcher, PluginLogger logger) {
@@ -125,5 +133,34 @@ public final class DiscordBridge {
         }
         if (jda != null) jda.shutdown();
         logger.info("Discord bridge stopped");
+    }
+
+    private final class DiscordSyncSink implements SyncSink {
+        private SyncListener listener;
+
+        @Override
+        public String name() {
+            return "discord";
+        }
+
+        @Override
+        public void send(Message message) {
+            mirror(message);
+        }
+
+        @Override
+        public void start() {
+            // Already started in DiscordBridge.start()
+        }
+
+        @Override
+        public void stop() {
+            // Handled by DiscordBridge.stop()
+        }
+
+        @Override
+        public void setListener(SyncListener listener) {
+            this.listener = listener;
+        }
     }
 }

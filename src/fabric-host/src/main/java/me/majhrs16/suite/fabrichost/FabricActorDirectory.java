@@ -4,9 +4,11 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.fabrichost.logic.LangSetting;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +64,7 @@ public final class FabricActorDirectory implements ActorDirectory {
 
     @Override
     public Actor console() {
-        String serverName = server == null ? "Fabric Server" : "Fabric Server";
+        String serverName = "Fabric Server";
         return Actor.console(serverName, null);
     }
 
@@ -104,13 +106,12 @@ public final class FabricActorDirectory implements ActorDirectory {
     private Optional<Language> languageOf(ServerPlayerEntity player) {
         String stored = languageStore == null ? null
             : languageStore.languageOf(player.getUuid()).orElse(null);
-        return me.majhrs16.suite.fabrichost.logic.LangSetting.effective(
-            stored, clientLocale(player));
+        return LangSetting.effective(stored, clientLocale(player));
     }
 
     private static Language clientLocale(ServerPlayerEntity player) {
-        // In Fabric 1.21, locale is accessed differently
-        // Try to get from player's profile or use null
+        // In Fabric 1.21, client locale is not easily accessible from server side
+        // Return null to use stored language or default
         return null;
     }
 }

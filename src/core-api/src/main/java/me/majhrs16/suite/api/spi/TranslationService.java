@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.message.Language;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 /**
@@ -19,10 +20,14 @@ import java.util.function.Function;
  *
  * <p>Includes in-flight request deduplication to prevent thundering herd
  * when multiple recipients request the same translation concurrently.</p>
+ *
+ * <p>Uses a dedicated {@link TranslationExecutor} (bounded pool, queue, timeout,
+ * cancellation) instead of the unbounded ForkJoinPool.commonPool().</p>
  */
-public final class TranslationService {
+public final class TranslationService implements AutoCloseable {
 
     private final TranslatorManager manager;
+    private final TranslationExecutor executor;
     
     // Translation cache: key = "fromCode|toCode|text" -> translated text
     private final Map<String, String> translationCache = new ConcurrentHashMap<>();
@@ -36,9 +41,21 @@ public final class TranslationService {
     // Cache size limits (prevent unbounded growth)
     private static final int MAX_TRANSLATION_CACHE_SIZE = 10000;
     private static final int MAX_DETECTION_CACHE_SIZE = 5000;
+    private static final long TRANSLATION_TIMEOUT_MS = 30_000;
 
     public TranslationService(TranslatorManager manager) {
+        this(manager, TranslationExecutor.createDefault());
+    }
+
+    /**
+     * Creates a TranslationService with a custom executor.
+     *
+     * @param manager  the translator manager (nullable, defaults to empty)
+     * @param executor the dedicated translation executor (nullable, defaults to {@link TranslationExecutor#createDefault()})
+     */
+    public TranslationService(TranslatorManager manager, TranslationExecutor executor) {
         this.manager = manager == null ? new TranslatorManager() : manager;
+        this.executor = executor == null ? TranslationExecutor.createDefault() : executor;
     }
 
     /**
@@ -64,7 +81,7 @@ public final class TranslationService {
         
         // Deduplicate in-flight requests for the same translation
         CompletableFuture<String> future = inFlightTranslations.computeIfAbsent(cacheKey, k -> 
-            CompletableFuture.supplyAsync(() -> {
+            executor.submit(() -> {
                 try {
                     String translated = manager.active().translate(text, source, to.code());
                     // Store in cache with size limit
@@ -77,7 +94,7 @@ public final class TranslationService {
                 } finally {
                     inFlightTranslations.remove(cacheKey);
                 }
-            })
+            }, TRANSLATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         );
         
         try {
@@ -117,7 +134,7 @@ public final class TranslationService {
         
         // Deduplicate in-flight requests for the same detection
         CompletableFuture<Language> future = inFlightDetections.computeIfAbsent(cacheKey, k -> 
-            CompletableFuture.supplyAsync(() -> {
+            executor.submit(() -> {
                 try {
                     Language detected = Language.fromCode(manager.active().detect(text)).orElse(Language.EN);
                     // Store in cache with size limit
@@ -128,7 +145,7 @@ public final class TranslationService {
                 } finally {
                     inFlightDetections.remove(cacheKey);
                 }
-            })
+            }, TRANSLATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         );
         
         try {
@@ -174,6 +191,15 @@ public final class TranslationService {
         int maxTranslationCacheSize,
         int maxDetectionCacheSize
     ) {}
+
+    /**
+     * Closes the translation service, shutting down the dedicated executor.
+     * Should be called when the service is no longer needed (e.g., plugin reload).
+     */
+    @Override
+    public void close() {
+        executor.close();
+    }
 
     private boolean shouldTranslate(Language from, Language to) {
         if (from == null || to == null || to == Language.AUTO) {

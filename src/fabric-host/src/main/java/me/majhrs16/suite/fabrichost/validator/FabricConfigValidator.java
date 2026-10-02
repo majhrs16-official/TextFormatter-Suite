@@ -10,9 +10,9 @@ import java.nio.file.Path;
  * Configuration validator for TextFormatter Suite on Fabric.
  * Delegates to the shared {@link ConfigValidator} in host module.
  */
-public final class ConfigValidator {
+public final class FabricConfigValidator {
 
-    private ConfigValidator() {}
+    private FabricConfigValidator() {}
 
     public static void validate(HostConfig config, PluginLogger logger, Path configDir) {
         ConfigValidator.validate(config, logger, configDir);

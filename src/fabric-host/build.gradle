@@ -28,16 +28,13 @@ dependencies {
     implementation project(':src:iflow')
     implementation project(':src:host')
     implementation project(':src:sync-discord')
-    implementation project(':src:sync-velocity')
+    implementation project(':src:sync-bus')
     implementation project(':src:sync-websocket')
     implementation project(':src:messages')
     implementation project(':src:observability')
     implementation project(':src:extension-api')
     implementation project(':src:manager-impl')
     implementation project(':src:presets')
-    implementation project(':src:inworld')
-    implementation project(':src:loadtest')
-    implementation project(':src:performance')
 
     minecraft 'com.mojang:minecraft:1.21'
     mappings 'net.fabricmc:yarn:1.21+build.1:v2'

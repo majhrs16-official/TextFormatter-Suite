@@ -26,6 +26,8 @@ import me.majhrs16.suite.spigothost.command.DynamicCommandRegistrar;
 import me.majhrs16.suite.spigothost.logic.ChannelSelector;
 import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
+import me.majhrs16.suite.syncbus.DefaultSyncBus;
+import me.majhrs16.suite.syncbus.SyncBus;
 import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
@@ -86,7 +88,7 @@ import java.util.UUID;
 public final class TextFormatterSuitePlugin extends JavaPlugin implements Listener {
 
     /** Immutable wiring snapshot; swapped atomically on reload. */
-    private static final class Runtime implements AutoCloseable {
+    public static final class Runtime implements AutoCloseable {
         final SuiteHost host;
         final MessageDispatcher dispatcher;
         final SpigotActorDirectory directory;
@@ -97,6 +99,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         final me.majhrs16.suite.extension.ExtensionManager extensionManager;
         final me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle;
         final InWorldHandler inworldHandler;
+        final SyncBus syncBus;
         final PluginLogger logger;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
@@ -106,6 +109,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 me.majhrs16.suite.extension.ExtensionManager extensionManager,
                 me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle,
                 InWorldHandler inworldHandler,
+                SyncBus syncBus,
                 PluginLogger logger) {
             this.host = host;
             this.dispatcher = dispatcher;
@@ -117,11 +121,26 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             this.extensionManager = extensionManager;
             this.moduleLifecycle = moduleLifecycle;
             this.inworldHandler = inworldHandler;
+            this.syncBus = syncBus;
             this.logger = logger;
         }
 
+        public SuiteHost host() { return host; }
+        public MessageDispatcher dispatcher() { return dispatcher; }
+        public UserLanguageStore languages() { return languages; }
+        public PluginLogger logger() { return logger; }
+        public InWorldHandler inworldHandler() { return inworldHandler; }
+        public SyncBus syncBus() { return syncBus; }
+
         @Override
         public void close() {
+            if (syncBus != null) {
+                try {
+                    syncBus.close();
+                } catch (Exception e) {
+                    logger.warn("Error closing SyncBus: " + e.getMessage());
+                }
+            }
             if (wsSink != null) {
                 try {
                     wsSink.stop();
@@ -153,8 +172,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             }
             if (inworldHandler != null) {
                 try {
-                    // InWorldHandler doesn't have an unregister() method; events are unregistered automatically on plugin disable
-                    logger.debug("InWorldHandler cleanup (no unregister method available)");
+                    // Unregister from plugin manager to avoid duplicate listeners on reload
+                    org.bukkit.event.HandlerList.unregisterAll(inworldHandler);
+                    logger.debug("InWorldHandler unregistered from plugin manager");
                 } catch (Exception e) {
                     logger.warn("Error unregistering InWorldHandler: " + e.getMessage());
                 }
@@ -189,8 +209,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         getServer().getPluginManager().registerEvents(this, this);
 
         // Inicializar sistema de comandos dinámicos
-        this.commandRegistrar = new DynamicCommandRegistrar(this, runtime.host, runtime.dispatcher,
-            runtime.languages, runtime.host.translation(), runtime.logger, getDataFolder().toPath());
+        this.commandRegistrar = new DynamicCommandRegistrar(this, getDataFolder().toPath());
 
 
 
@@ -298,24 +317,50 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     // Use system property or config for bind address
                     String bindAddress = System.getProperty("textformattersuite.ws.bind", wsBind);
                     wsSink = new WebSocketSyncSink(wsPort, wsToken, logger, bindAddress);
-                    wsSink.setListener(new me.majhrs16.suite.api.spi.SyncListener() {
-                        @Override
-                        public void onMessage(me.majhrs16.suite.api.spi.SyncSink sink, Message message) {
-                            dispatcher.dispatch(message);
-                        }
-                        @Override
-                        public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink sink, String reason) {
-                            logger.warn("WebSocket sync disconnected: " + reason);
-                        }
-                    });
-                    wsSink.start();
-                    logger.info("WebSocket sync sink started on " + bindAddress + ":" + wsPort);
+                    // Listener will be set via SyncBus
+                    logger.info("WebSocket sync sink created on " + bindAddress + ":" + wsPort);
                 }
             } else {
                 logger.info("WebSocket sync sink is disabled (enabled: false in config)");
             }
         } catch (Exception e) {
-            logger.warn("Failed to start WebSocket sync sink: " + e.getMessage());
+            logger.warn("Failed to create WebSocket sync sink: " + e.getMessage());
+        }
+
+        // Initialize SyncBus and register sinks
+        SyncBus syncBus = new DefaultSyncBus(logger);
+
+        // Register Discord sink if bridge is available
+        if (bridge != null && bridge.getSink() != null) {
+            syncBus.register(bridge.getSink());
+            logger.debug("SyncBus: registered Discord sink");
+        }
+
+        // Register WebSocket sink if available
+        if (wsSink != null) {
+            syncBus.register(wsSink);
+            logger.debug("SyncBus: registered WebSocket sink");
+        }
+
+        // Set inbound listener to route through dispatcher
+        syncBus.setInboundListener(new me.majhrs16.suite.api.spi.SyncListener() {
+            @Override
+            public void onMessage(me.majhrs16.suite.api.spi.SyncSink sink, Message message) {
+                dispatcher.dispatch(message);
+            }
+
+            @Override
+            public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink sink, String reason) {
+                logger.warn("SyncBus: sink '" + sink.name() + "' disconnected: " + reason);
+            }
+        });
+
+        // Start SyncBus (starts all registered sinks)
+        try {
+            syncBus.start();
+            logger.info("SyncBus started with " + syncBus.sinkNames().size() + " sink(s): " + syncBus.sinkNames());
+        } catch (Exception e) {
+            logger.error("Failed to start SyncBus: " + e.getMessage(), e);
         }
 
         // Initialize Observability module
@@ -364,7 +409,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir + " with " + hostConfig.repositories().size() + " repositories");
 
         // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, moduleLifecycle, inworldHandler, logger);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, moduleLifecycle, inworldHandler, syncBus, logger);
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -406,7 +451,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             folder.resolve("rules.yml"));
     }
 
-    /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */
+    /** /suite reset: mueve configs de usuario a backup/{@code <ts>}/ y regenera defaults. */
     public boolean resetConfigs(Path folder) {
         try {
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
@@ -883,6 +928,7 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
             null, // extensionManager
             null, // moduleLifecycle
             null, // inworldHandler
+            null, // syncBus
             rt != null ? rt.logger : null
         );
         String[] args = type.equals("full") ? new String[0] : new String[]{type};
@@ -905,7 +951,7 @@ rt.host,
 }
 
 /** Getter para el runtime actual (usado por DynamicCommandRegistrar). */
-    Runtime getRuntime() {
+    public Runtime getRuntime() {
         return runtime;
     }
 

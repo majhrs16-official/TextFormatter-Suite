@@ -16,6 +16,7 @@ import java.util.Map;
  * </p>
  * <p>
  * Supported operations (F7+):
+ * </p>
  * <ul>
  *   <li>{@link Rewrite} — replace the message template/text</li>
  *   <li>{@link Sounds} — add/remove sound specs</li>
@@ -26,7 +27,6 @@ import java.util.Map;
  *   <li>{@link SetFormatPapi} — enable/disable PAPI placeholders</li>
  *   <li>{@link SetChannel} — change the channel path (redirect)</li>
  * </ul>
- * </p>
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "op", visible = true)
 @JsonSubTypes({
@@ -52,10 +52,10 @@ public abstract class TransformOp {
      * Rewrites the message template.
      * <p>
      * YAML example:
-     * <pre>
+     * <pre>{@code
      * - op: rewrite
      *   template: "<green>💬 %content%</green>"
-     * </pre>
+     * }</pre>
      */
     public static final class Rewrite extends TransformOp {
         private final String template;

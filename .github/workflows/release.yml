@@ -52,6 +52,7 @@ jobs:
             :src:sync-telegram:build :src:sync-telegram:publishToMavenLocal \
             :src:sync-websocket:build :src:sync-websocket:publishToMavenLocal \
             :src:sync-velocity:build :src:sync-velocity:publishToMavenLocal \
+            :src:sync-bus:build :src:sync-bus:publishToMavenLocal \
             :src:observability:build :src:observability:publishToMavenLocal \
             :src:extension-api:build :src:extension-api:publishToMavenLocal \
             :src:example-extension:build :src:example-extension:publishToMavenLocal \

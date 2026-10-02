@@ -37,6 +37,7 @@ public final class FabricChatDelivery implements ChatDelivery {
         if (recipient == null) return;
         ServerPlayerEntity player = recipient.handle();
         if (player != null) {
+            // Convert Adventure component to Minecraft Text
             String json = GSON.serialize(rendered);
             Text text = net.minecraft.text.TextCodecs.CODEC.parse(com.mojang.serialization.JsonOps.INSTANCE, com.google.gson.JsonParser.parseString(json)).getOrThrow();
             server.execute(() -> player.sendMessage(text));

@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 /**
  * Configuration validator for TextFormatter Suite on Spigot.
- * Delegates to the shared {@link ConfigValidator} in host module.
+ * Delegates to the shared {@link me.majhrs16.suite.host.config.ConfigValidator} in host module.
  */
 public final class SpigotConfigValidator {
 

@@ -160,12 +160,16 @@ public enum Language {
         this.displayName = displayName;
     }
 
-    /** @return the provider code, e.g. {@code zh-CN} or {@code auto}. */
+    /**
+     * @return the provider code, e.g. {@code zh-CN} or {@code auto}.
+     */
     public String code() {
         return code;
     }
 
-    /** @return a human readable display name in Spanish. */
+    /**
+     * @return a human readable display name in Spanish.
+     */
     public String displayName() {
         return displayName;
     }
@@ -173,6 +177,9 @@ public enum Language {
     /**
      * Resolves a language by its code (case insensitive).
      * Accepts {@code zh-cn}, {@code zh_cn} and {@code zh-CN} equivalently.
+     *
+     * @param code the language code (e.g., {@code es}, {@code en}, {@code zh-CN})
+     * @return the matching {@link Language} or {@code Optional.empty()} if not found
      */
     public static Optional<Language> fromCode(String code) {
         if (code == null) {
@@ -188,6 +195,9 @@ public enum Language {
     /**
      * Like {@link #fromCode(String)} but tolerant to unknown codes: resolves
      * {@code auto} as {@link #AUTO} and any other unknown value as empty.
+     *
+     * @param raw the language code or "auto"
+     * @return the matching {@link Language} or {@code Optional.empty()} if not found
      */
     public static Optional<Language> of(String raw) {
         if (raw == null) {

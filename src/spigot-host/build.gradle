@@ -38,6 +38,7 @@ dependencies {
     implementation project(':src:sync-tcpudp')
     implementation project(':src:sync-telegram')
     implementation project(':src:sync-websocket')
+    implementation project(':src:sync-bus')
     
     implementation project(':src:gtranslate')
     implementation project(':src:ltranslate')
@@ -110,6 +111,7 @@ shadowJar {
         exclude(dependency('me.majhrs16:suite-sync-tcpudp'))
         exclude(dependency('me.majhrs16:suite-sync-telegram'))
         exclude(dependency('me.majhrs16:suite-sync-websocket'))
+        exclude(dependency('me.majhrs16:suite-sync-bus'))
         exclude(dependency('me.majhrs16:suite-gtranslate'))
         exclude(dependency('me.majhrs16:suite-ltranslate'))
         exclude(dependency('me.majhrs16:suite-messages'))

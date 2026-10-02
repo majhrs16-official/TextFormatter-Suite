@@ -43,6 +43,7 @@ jobs:
             :src:sync-telegram:build \
             :src:sync-websocket:build \
             :src:sync-velocity:build \
+            :src:sync-bus:build \
             :src:observability:build \
             :src:extension-api:build \
             :src:example-extension:build \

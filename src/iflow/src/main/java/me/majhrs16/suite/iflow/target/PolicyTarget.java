@@ -7,7 +7,7 @@ package me.majhrs16.suite.iflow.target;
  *   <li>{@link #LOG} — deliver and record the message in the log sink.</li>
  *   <li>{@link #DROP} — discard silently (no delivery, no log).</li>
  *   <li>{@link #REJECT} — discard and mark the connection as lost via
- *       {@link #connectionLostMarker()}.</li>
+ *       {@link #CONNECTION_LOST_MARKER}.</li>
  *   <li>{@link #REDIRECT} — deliver to the console instead of the recipient.</li>
  *   <li>{@link #CHANNEL_REDIRECT} — deliver to a different channel instead of the original.</li>
  *   <li>{@link #RATE_LIMIT} — defer/queue while the per-second budget is

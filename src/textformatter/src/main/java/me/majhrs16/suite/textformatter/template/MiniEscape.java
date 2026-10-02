@@ -5,16 +5,16 @@ package me.majhrs16.suite.textformatter.template;
  * as MiniMessage markup.
  * <p>
  * Escapes characters that have special meaning in MiniMessage:
- * <ul>
- *   <li>`<` `>` — tag delimiters</li>
- *   <li>`\` — escape character</li>
- *   <li>`{` `}` — component/placeholder delimiters</li>
- *   <li>`[` `]` — hover/click event delimiters</li>
- *   <li>`(` `)` — grouping</li>
- *   <li>`#` — hex color prefix</li>
- *   <li>`@` — mention/reference prefix</li>
- * </ul>
  * </p>
+ * <ul>
+ *   <li>{@code <} {@code >} — tag delimiters</li>
+ *   <li>{@code \} — escape character</li>
+ *   <li>{@code {}} — component/placeholder delimiters</li>
+ *   <li>{@code []} — hover/click event delimiters</li>
+ *   <li>{@code ()} — grouping</li>
+ *   <li>{@code #} — hex color prefix</li>
+ *   <li>{@code @} — mention/reference prefix</li>
+ * </ul>
  */
 public final class MiniEscape {
 

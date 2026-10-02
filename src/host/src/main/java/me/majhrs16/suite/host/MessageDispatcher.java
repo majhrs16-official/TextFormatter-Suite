@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -42,12 +43,13 @@ public final class MessageDispatcher {
     private final PermissionChecker permissions;
     private final PluginLogger logger;
     private final ExecutorService executor;
+    private final ScheduledExecutorService sleepScheduler;
 
-    public MessageDispatcher(SuiteHost host,
-                             ActorDirectory actors,
-                             ChatDelivery delivery,
-                             PermissionChecker permissions,
-                             PluginLogger logger) {
+public MessageDispatcher(SuiteHost host,
+                              ActorDirectory actors,
+                              ChatDelivery delivery,
+                              PermissionChecker permissions,
+                              PluginLogger logger) {
         this.host = Objects.requireNonNull(host, "host");
         this.actors = Objects.requireNonNull(actors, "actors");
         this.delivery = Objects.requireNonNull(delivery, "delivery");
@@ -64,6 +66,12 @@ public final class MessageDispatcher {
             },
             new ThreadPoolExecutor.CallerRunsPolicy()
         );
+        // Dedicated scheduler for sleep delays (TF-CONC-01) - doesn't block workers
+        this.sleepScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "msg-dispatcher-sleep-scheduler");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     /**
@@ -152,14 +160,18 @@ public final class MessageDispatcher {
                 }
                 Message messageForDelivery = result.message() != null ? result.message() : messageWithResolvedSource;
                 
-                // Apply sleep delay if set via transform
+                // Apply sleep delay if set via transform - use scheduler to avoid blocking worker threads (TF-CONC-01)
                 long sleepMillis = messageForDelivery.sleepMillis();
                 if (sleepMillis > 0) {
                     try {
-                        Thread.sleep(sleepMillis);
+                        CompletableFuture<Void> sleepFuture = new CompletableFuture<>();
+                        sleepScheduler.schedule(() -> sleepFuture.complete(null), sleepMillis, TimeUnit.MILLISECONDS);
+                        sleepFuture.get(); // Wait for sleep to complete
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         logger.warn("Sleep interrupted for message delivery to " + recipient.name());
+                    } catch (java.util.concurrent.ExecutionException e) {
+                        logger.error("Sleep scheduler error for " + recipient.name(), e);
                     }
                 }
                 
@@ -167,8 +179,10 @@ public final class MessageDispatcher {
                 delivered++;
                 playChannelSounds(messageForDelivery, recipient);
             } catch (TimeoutException e) {
+                // Cancel the underlying task to free up the worker (TF-CONC-02)
+                future.cancel(true);
                 Actor recipient = rr != null ? rr.recipient() : null;
-                logger.warn("Timeout processing recipient " + (recipient != null ? recipient.name() : "unknown") + " after 10s");
+                logger.warn("Timeout processing recipient " + (recipient != null ? recipient.name() : "unknown") + " after 10s; task cancelled");
                 silenced++;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -300,12 +314,17 @@ public final class MessageDispatcher {
      */
     public void close() {
         executor.shutdown();
+        sleepScheduler.shutdown();
         try {
             if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
             }
+            if (!sleepScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                sleepScheduler.shutdownNow();
+            }
         } catch (InterruptedException e) {
             executor.shutdownNow();
+            sleepScheduler.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }

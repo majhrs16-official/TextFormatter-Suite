@@ -67,7 +67,6 @@ public final class VelocitySink implements SyncSink {
     private final AtomicLong messagesReceived = new AtomicLong(0);
     private final AtomicLong messagesFailed = new AtomicLong(0);
     private final AtomicLong messagesRetried = new AtomicLong(0);
-    private final AtomicLong queueSize = new AtomicLong(0);
     private final AtomicLong lastSendTime = new AtomicLong(0);
     private final AtomicReference<Instant> lastErrorTime = new AtomicReference<>();
 
@@ -383,7 +382,7 @@ public final class VelocitySink implements SyncSink {
     }
 
     private void queueForRetry(RegisteredServer server, byte[] data, int retryCount) {
-        if (queueSize.get() >= config.maxQueueSize) {
+        if (sendQueue.size() >= config.maxQueueSize) {
             metricsRecordFailed();
             LOGGER.warn("Send queue full ({}), dropping message to {}", config.maxQueueSize, server.getServerInfo().getName());
             return;
@@ -394,7 +393,6 @@ public final class VelocitySink implements SyncSink {
         
         QueuedMessage qm = new QueuedMessage(data, server, retryCount, nextRetry);
         sendQueue.offer(qm);
-        queueSize.incrementAndGet();
         
         LOGGER.debug("Queued message for retry {} to {} (delay: {})", retryCount, server.getServerInfo().getName(), delay);
     }
@@ -503,7 +501,6 @@ public final class VelocitySink implements SyncSink {
     private void metricsRecordSent() {
         messagesSent.incrementAndGet();
         lastSendTime.set(System.currentTimeMillis());
-        queueSize.set(sendQueue.size());
     }
 
     private void metricsRecordReceived() {
@@ -522,7 +519,7 @@ public final class VelocitySink implements SyncSink {
     private void logMetrics() {
         LOGGER.info("VelocitySink metrics: sent={}, received={}, failed={}, retried={}, queue={}", 
             messagesSent.get(), messagesReceived.get(), messagesFailed.get(), 
-            messagesRetried.get(), queueSize.get());
+            messagesRetried.get(), sendQueue.size());
     }
 
     // Health check
@@ -540,7 +537,7 @@ public final class VelocitySink implements SyncSink {
             "messagesReceived", messagesReceived.get(),
             "messagesFailed", messagesFailed.get(),
             "messagesRetried", messagesRetried.get(),
-            "queueSize", queueSize.get(),
+            "queueSize", sendQueue.size(),
             "lastSendTime", lastSendTime.get() > 0 ? Instant.ofEpochMilli(lastSendTime.get()).toString() : "never",
             "lastErrorTime", lastErrorTime.get() != null ? lastErrorTime.get().toString() : "never"
         ));
@@ -567,5 +564,5 @@ public final class VelocitySink implements SyncSink {
     public long getMessagesSent() { return messagesSent.get(); }
     public long getMessagesReceived() { return messagesReceived.get(); }
     public long getMessagesFailed() { return messagesFailed.get(); }
-    public long getQueueSize() { return queueSize.get(); }
+    public long getQueueSize() { return sendQueue.size(); }
 }

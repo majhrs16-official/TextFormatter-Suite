@@ -12,7 +12,7 @@ import java.util.Objects;
 
 /**
  * Service Provider for LibreTranslate backend.
- * Discovered via {@link ServiceLoader} through {@code META-INF/services/...}.
+ * Discovered via {@link java.util.ServiceLoader} through {@code META-INF/services/...}.
  */
 public final class LTranslateProvider implements TranslatorProvider {
 

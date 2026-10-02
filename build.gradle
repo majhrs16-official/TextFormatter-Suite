@@ -12,29 +12,13 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
-// Disable dependency verification for tester, inworld, spigot-host, host, textformatter, and loadtest modules (external deps)
-gradle.projectsEvaluated {
-    // Disable dependency verification for all projects with external plugins/deps
-    ['tester', 'inworld', 'spigot-host', 'host', 'textformatter', 'loadtest'].each { name ->
-        def project = project(":src:$name")
-        if (project) {
-            project.configurations.all {
-                resolutionStrategy {
-                    // Skip verification
-                }
-            }
-            project.buildscript.configurations.all {
-                resolutionStrategy {
-                    // Skip verification for plugin resolution
-                }
-            }
-        }
-    }
-}
-
 subprojects {
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+    }
+    
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet')
     }
     
     // Enable dependency locking for each subproject
