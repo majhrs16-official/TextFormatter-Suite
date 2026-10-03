@@ -29,6 +29,8 @@ import me.majhrs16.suite.observability.Observability;
 import me.majhrs16.suite.syncbus.DefaultSyncBus;
 import me.majhrs16.suite.syncbus.SyncBus;
 import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
+import me.majhrs16.suite.synctcpudp.TcpSink;
+import me.majhrs16.suite.synctcpudp.UdpSink;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -456,6 +458,74 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 logger.warn("SyncBus: sink '" + sink.name() + "' disconnected: " + reason);
             }
         });
+
+        // Initialize TCP Sync Sink
+        TcpSink tcpSink = null;
+        try {
+            Path tcpConfig = folder.resolve("sync/tcp.yml");
+            if (Files.exists(tcpConfig)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
+                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
+                String content = Files.readString(tcpConfig);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
+                if (map != null) {
+                    Object enabled = map.get("enabled");
+                    if (Boolean.TRUE.equals(enabled)) {
+                        String remoteHost = map.get("remoteHost") != null ? map.get("remoteHost").toString() : "";
+                        int remotePort = map.get("remotePort") != null ? ((Number) map.get("remotePort")).intValue() : 0;
+                        int localPort = map.get("localPort") != null ? ((Number) map.get("localPort")).intValue() : 0;
+                        if (!remoteHost.isBlank() && remotePort > 0) {
+                            tcpSink = new TcpSink(remoteHost, remotePort, localPort);
+                            logger.info("TCP sync sink created: " + remoteHost + ":" + remotePort);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to create TCP sync sink: " + e.getMessage());
+        }
+
+        // Initialize UDP Sync Sink
+        UdpSink udpSink = null;
+        try {
+            Path udpConfig = folder.resolve("sync/udp.yml");
+            if (Files.exists(udpConfig)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
+                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
+                String content = Files.readString(udpConfig);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
+                if (map != null) {
+                    Object enabled = map.get("enabled");
+                    if (Boolean.TRUE.equals(enabled)) {
+                        String remoteHost = map.get("remoteHost") != null ? map.get("remoteHost").toString() : "";
+                        int remotePort = map.get("remotePort") != null ? ((Number) map.get("remotePort")).intValue() : 0;
+                        int localPort = map.get("localPort") != null ? ((Number) map.get("localPort")).intValue() : 0;
+                        if (!remoteHost.isBlank() && remotePort > 0) {
+                            udpSink = new UdpSink(remoteHost, remotePort, localPort);
+                            logger.info("UDP sync sink created: " + remoteHost + ":" + remotePort);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to create UDP sync sink: " + e.getMessage());
+        }
+
+        // Register all sinks with SyncBus
+        if (wsSink != null) {
+            syncBus.register(wsSink);
+            logger.debug("SyncBus: registered WebSocket sink");
+        }
+        if (tcpSink != null) {
+            syncBus.register(tcpSink);
+            logger.debug("SyncBus: registered TCP sink");
+        }
+        if (udpSink != null) {
+            syncBus.register(udpSink);
+            logger.debug("SyncBus: registered UDP sink");
+        }
 
         try {
             syncBus.start();

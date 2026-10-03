@@ -30,6 +30,7 @@ dependencies {
     implementation project(':src:sync-discord')
     implementation project(':src:sync-bus')
     implementation project(':src:sync-websocket')
+    implementation project(':src:sync-tcpudp')
     implementation project(':src:messages')
     implementation project(':src:observability')
     implementation project(':src:extension-api')

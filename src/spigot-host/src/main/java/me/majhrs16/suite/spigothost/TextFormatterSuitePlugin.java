@@ -29,6 +29,8 @@ import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.syncbus.DefaultSyncBus;
 import me.majhrs16.suite.syncbus.SyncBus;
 import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
+import me.majhrs16.suite.synctcpudp.TcpSink;
+import me.majhrs16.suite.synctcpudp.UdpSink;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 
@@ -345,12 +347,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger.warn("Failed to create WebSocket sync sink: " + e.getMessage());
         }
 
-        // Register WebSocket sink if available
-        if (wsSink != null) {
-            syncBus.register(wsSink);
-            logger.debug("SyncBus: registered WebSocket sink");
-        }
-
         // Create DiscordBridge with SyncBus for outbound mirroring
         DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger, syncBus);
         if (bridge != null) {
@@ -360,6 +356,74 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 logger.debug("SyncBus: registered Discord sink");
             }
             bridge.start();
+        }
+
+        // Initialize TCP Sync Sink
+        TcpSink tcpSink = null;
+        try {
+            Path tcpConfig = folder.resolve("sync/tcp.yml");
+            if (Files.exists(tcpConfig)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
+                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
+                String content = Files.readString(tcpConfig);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
+                if (map != null) {
+                    Object enabled = map.get("enabled");
+                    if (Boolean.TRUE.equals(enabled)) {
+                        String remoteHost = map.get("remoteHost") != null ? map.get("remoteHost").toString() : "";
+                        int remotePort = map.get("remotePort") != null ? ((Number) map.get("remotePort")).intValue() : 0;
+                        int localPort = map.get("localPort") != null ? ((Number) map.get("localPort")).intValue() : 0;
+                        if (!remoteHost.isBlank() && remotePort > 0) {
+                            tcpSink = new TcpSink(remoteHost, remotePort, localPort);
+                            logger.info("TCP sync sink created: " + remoteHost + ":" + remotePort);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to create TCP sync sink: " + e.getMessage());
+        }
+
+        // Initialize UDP Sync Sink
+        UdpSink udpSink = null;
+        try {
+            Path udpConfig = folder.resolve("sync/udp.yml");
+            if (Files.exists(udpConfig)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
+                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
+                String content = Files.readString(udpConfig);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
+                if (map != null) {
+                    Object enabled = map.get("enabled");
+                    if (Boolean.TRUE.equals(enabled)) {
+                        String remoteHost = map.get("remoteHost") != null ? map.get("remoteHost").toString() : "";
+                        int remotePort = map.get("remotePort") != null ? ((Number) map.get("remotePort")).intValue() : 0;
+                        int localPort = map.get("localPort") != null ? ((Number) map.get("localPort")).intValue() : 0;
+                        if (!remoteHost.isBlank() && remotePort > 0) {
+                            udpSink = new UdpSink(remoteHost, remotePort, localPort);
+                            logger.info("UDP sync sink created: " + remoteHost + ":" + remotePort);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to create UDP sync sink: " + e.getMessage());
+        }
+
+        // Register all sinks with SyncBus
+        if (wsSink != null) {
+            syncBus.register(wsSink);
+            logger.debug("SyncBus: registered WebSocket sink");
+        }
+        if (tcpSink != null) {
+            syncBus.register(tcpSink);
+            logger.debug("SyncBus: registered TCP sink");
+        }
+        if (udpSink != null) {
+            syncBus.register(udpSink);
+            logger.debug("SyncBus: registered UDP sink");
         }
 
         // Set inbound listener to route through dispatcher
