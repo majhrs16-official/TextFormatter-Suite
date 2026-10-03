@@ -80,7 +80,7 @@ jacocoTestCoverageVerification {
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
 
-// Generate schema files for web editor (paths.json, schema-v2.2.md)
+// Generate schema files for web editor (paths.json, paths.js, model.js)
 tasks.register('generateSchema', JavaExec) {
     group = 'build'
     description = 'Generate web editor schema files from ConfigPath enum'
@@ -92,12 +92,25 @@ tasks.register('generateSchema', JavaExec) {
         rootProject.layout.buildDirectory.dir('generated-schema').get().asFile.mkdirs()
     }
     doLast {
-        // Copy generated files to web-editor
+        // Copy generated files to host resources (for verifySchema)
         def srcDir = rootProject.layout.buildDirectory.dir('generated-schema').get().asFile
         def destDir = file('src/main/resources/web-editor-schema')
         copy {
             from srcDir
             into destDir
+        }
+        // Copy generated files to web-editor js/ directory (single source of truth)
+        def webEditorJsDir = rootProject.file('src/web-editor/js')
+        copy {
+            from srcDir
+            include 'model.js', 'paths.js'
+            into webEditorJsDir
+        }
+        // paths.json goes to web-editor root for fetch()
+        copy {
+            from srcDir
+            include 'paths.json'
+            into rootProject.file('src/web-editor')
         }
     }
 }
