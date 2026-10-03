@@ -116,12 +116,30 @@ public final class RuleExpressionEvaluator implements ExpressionEvaluator {
     }
 
     /**
-     * Custom MethodResolver that allows property accessor methods on allowed domain classes.
-     * Allows zero-argument methods that return non-void values on allowed domain classes.
-     * Blocks all other method invocations including static methods, constructors, methods with args, etc.
+     * Custom MethodResolver that allows property accessor methods on explicitly
+     * allowed domain classes only. Uses a strict ALLOWLIST approach.
+     * <p>
+     * Allows zero-argument methods (property getters) that return non-void values
+     * on explicitly whitelisted domain classes. Blocks all other method invocations
+     * including static methods, constructors, methods with args, etc.
+     * </p>
      */
     private static final class DomainMethodResolver implements MethodResolver {
         private final ReflectiveMethodResolver delegate = new ReflectiveMethodResolver();
+
+        // Explicit allowlist of allowed class prefixes
+        private static final String[] ALLOWED_PREFIXES = {
+            "me.majhrs16.suite.api.message.",
+            "me.majhrs16.suite.textformatter.channel.",
+            "me.majhrs16.suite.iflow."
+        };
+
+        // Explicit blocklist for system/internal classes (defense in depth)
+        private static final String[] BLOCKED_PREFIXES = {
+            "java.", "javax.", "sun.", "com.sun.",
+            "org.springframework.", "org.yaml.",
+            "org.apache.", "org.codehaus.", "org.json."
+        };
 
         @Override
         public MethodExecutor resolve(EvaluationContext context, Object targetObject, String name, List<TypeDescriptor> argumentTypes) throws AccessException {
@@ -129,37 +147,35 @@ public final class RuleExpressionEvaluator implements ExpressionEvaluator {
             if (argumentTypes != null && !argumentTypes.isEmpty()) {
                 throw new AccessException("Method arguments not allowed: " + name);
             }
-            
+
             // Check if target object class is allowed
             if (targetObject != null && !isAllowedClass(targetObject.getClass())) {
                 throw new AccessException("Access to class not allowed: " + targetObject.getClass().getName());
             }
-            
+
             // Delegate to standard resolver for actual method lookup
             return delegate.resolve(context, targetObject, name, argumentTypes);
         }
 
         private boolean isAllowedClass(Class<?> clazz) {
             String name = clazz.getName();
-            // Allow core domain classes
-            if (name.startsWith("me.majhrs16.suite.api.message.")) {
-                return true;
+
+            // First check blocklist (defense in depth)
+            for (String blocked : BLOCKED_PREFIXES) {
+                if (name.startsWith(blocked)) {
+                    return false;
+                }
             }
-            if (name.startsWith("me.majhrs16.suite.textformatter.channel.")) {
-                return true;
+
+            // Then check allowlist - must match at least one allowed prefix
+            for (String allowed : ALLOWED_PREFIXES) {
+                if (name.startsWith(allowed)) {
+                    return true;
+                }
             }
-            if (name.startsWith("me.majhrs16.suite.iflow.")) {
-                return true;
-            }
-            // Block system/internal classes
-            if (name.startsWith("java.") || name.startsWith("javax.") ||
-                name.startsWith("sun.") || name.startsWith("com.sun.") ||
-                name.startsWith("org.springframework.") ||
-                name.startsWith("org.yaml.")) {
-                return false;
-            }
-            // Allow other classes by default (conservative)
-            return true;
+
+            // Default deny - class not in allowlist
+            return false;
         }
     }
 
