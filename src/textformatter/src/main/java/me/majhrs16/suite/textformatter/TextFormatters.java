@@ -3,6 +3,7 @@ package me.majhrs16.suite.textformatter;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
+import me.majhrs16.suite.api.spi.ExpressionEvaluator;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.template.TemplateRenderer;
 
@@ -38,17 +39,25 @@ public final class TextFormatters {
     }
 
     public static TextFormatter create(ChannelRegistry channels) {
-        return create(channels, emptyTranslation(), null, noopLogger());
+        return create(channels, emptyTranslation(), null, noopLogger(), null);
     }
 
     public static TextFormatter create(ChannelRegistry channels,
                                        TranslationService translation,
                                        me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
                                        PluginLogger logger) {
+        return create(channels, translation, placeholders, logger, null);
+    }
+
+    public static TextFormatter create(ChannelRegistry channels,
+                                       TranslationService translation,
+                                       me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
+                                       PluginLogger logger,
+                                       ExpressionEvaluator expressions) {
         Objects.requireNonNull(channels, "channels");
         Objects.requireNonNull(translation, "translation");
         Objects.requireNonNull(logger, "logger");
-        TemplateRenderer renderer = new TemplateRenderer(translation, placeholders, logger);
+        TemplateRenderer renderer = new TemplateRenderer(translation, placeholders, expressions, logger);
         return new DefaultTextFormatter(channels, renderer);
     }
 }

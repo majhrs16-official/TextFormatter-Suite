@@ -258,10 +258,12 @@
 - **Dependency verification** → Completo: 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` con todos los checksums transitivos
 - **Clean Architecture (Translator SPI)** → `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; ServiceLoader discovery en runtime
 
-### ⏳ PENDIENTE (per user: skip E2E + GitHub Releases)
-1. **Tests E2E** → **SKIPPED** per user (not stable enough for real server testing)
-2. **GitHub Releases** → **SKIPPED** per user (not stable enough)
-3. **Docs sincronización completa** → **SKIPPED** per user (will sync when product is stable)
+### 📋 OBLIGATORIO CONTINUO
+1. **Docs sincronización completa** → **SIEMPRE** (README, PLAN, Release Notes, Wiki, ADR — un mismo estado, independientemente de estabilidad del proyecto)
+
+### ⏸️ DESCARTADO TEMPORALMENTE HASTA PRÓXIMO AVISO
+- **Tests E2E** → no se harán (inestabilidad servidor real)
+- **GitHub Releases** → no se publicarán (distribución vía source/build local)
 
 ---
 
@@ -536,9 +538,9 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | M4 | **SHA256 Real** | Asset `.sha256` separado; verificación obligatoria (no `null` = skip) | ✅ Conectado |
 | M5 | **Allowlist + Manifest** | Pre-load validation, firmas | ✅ Obligatoria |
 | M6 | **`register()` semántica** | No instanciar `Module` como servicio; solo descriptor SPI | ✅ SPI-only |
-| **M1** | **Publicar GitHub Releases** | **AL FINAL**: tags `v2.1.0`, assets `.jar` + `.sha256` (solo cuando todo lo anterior esté verde) | ⏳ |
+| M1 | **Publicar GitHub Releases** | **DESCARTADO** — no se harán releases públicos | ❌ |
 
-> **Decisión**: GitHub Releases se deja para el final absoluto. Primero consolidar toda la implementación interna (resolver, deps, SHA256, allowlist, semántica register). Solo cuando el manager sea funcionalmente completo y probado en local, se publican releases.
+> **Decisión**: GitHub Releases **descartado permanentemente**. El Manager se valida en local; distribución vía source/build.
 
 ### 🟡 Media Prioridad
 

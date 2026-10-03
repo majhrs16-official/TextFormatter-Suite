@@ -127,7 +127,7 @@ public final class SuiteHost {
         // Create separate evaluator for template rendering (sandboxed)
         ExpressionEvaluator templateEvaluator = new SpelExpressionEvaluator(
             placeholders, translation, logger);
-        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
+        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger, templateEvaluator);
         return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
     }
 

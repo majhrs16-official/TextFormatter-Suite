@@ -101,6 +101,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         final InWorldHandler inworldHandler;
         final SyncBus syncBus;
         final PluginLogger logger;
+        final TranslationService translationService;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
                 SpigotActorDirectory directory, UserLanguageStore languages,
@@ -110,7 +111,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle,
                 InWorldHandler inworldHandler,
                 SyncBus syncBus,
-                PluginLogger logger) {
+                PluginLogger logger,
+                TranslationService translationService) {
             this.host = host;
             this.dispatcher = dispatcher;
             this.directory = directory;
@@ -123,6 +125,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             this.inworldHandler = inworldHandler;
             this.syncBus = syncBus;
             this.logger = logger;
+            this.translationService = translationService;
         }
 
         public SuiteHost host() { return host; }
@@ -184,6 +187,23 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     dispatcher.close();
                 } catch (Exception e) {
                     logger.warn("Error closing MessageDispatcher: " + e.getMessage());
+                }
+            }
+            // Close the router (which closes the RateLimiter)
+            if (host != null && host.router() != null && host.router() instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) host.router()).close();
+                    logger.debug("Router (RateLimiter) closed");
+                } catch (Exception e) {
+                    logger.warn("Error closing Router: " + e.getMessage());
+                }
+            }
+            if (translationService != null) {
+                try {
+                    translationService.close();
+                    logger.debug("TranslationService closed");
+                } catch (Exception e) {
+                    logger.warn("Error closing TranslationService: " + e.getMessage());
                 }
             }
             if (bridge != null) {
@@ -278,10 +298,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         SpigotChatDelivery delivery = new SpigotChatDelivery(this, audiences);
         MessageDispatcher dispatcher =
             new MessageDispatcher(reloaded, dirs, delivery, permissions, logger);
-        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger);
-        if (bridge != null) {
-            bridge.start();
-        }
+        // Initialize SyncBus first
+        SyncBus syncBus = new DefaultSyncBus(logger);
 
         // Initialize WebSocket Sync Sink (check enabled field)
         WebSocketSyncSink wsSink = null;
@@ -327,19 +345,21 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger.warn("Failed to create WebSocket sync sink: " + e.getMessage());
         }
 
-        // Initialize SyncBus and register sinks
-        SyncBus syncBus = new DefaultSyncBus(logger);
-
-        // Register Discord sink if bridge is available
-        if (bridge != null && bridge.getSink() != null) {
-            syncBus.register(bridge.getSink());
-            logger.debug("SyncBus: registered Discord sink");
-        }
-
         // Register WebSocket sink if available
         if (wsSink != null) {
             syncBus.register(wsSink);
             logger.debug("SyncBus: registered WebSocket sink");
+        }
+
+        // Create DiscordBridge with SyncBus for outbound mirroring
+        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger, syncBus);
+        if (bridge != null) {
+            // Register Discord sink with SyncBus
+            if (bridge.getSink() != null) {
+                syncBus.register(bridge.getSink());
+                logger.debug("SyncBus: registered Discord sink");
+            }
+            bridge.start();
         }
 
         // Set inbound listener to route through dispatcher
@@ -409,7 +429,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir + " with " + hostConfig.repositories().size() + " repositories");
 
         // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, moduleLifecycle, inworldHandler, syncBus, logger);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, moduleLifecycle, inworldHandler, syncBus, logger, translation);
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -929,7 +949,8 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
             null, // moduleLifecycle
             null, // inworldHandler
             null, // syncBus
-            rt != null ? rt.logger : null
+            rt != null ? rt.logger : null,
+            rt != null ? rt.translationService : null
         );
         String[] args = type.equals("full") ? new String[0] : new String[]{type};
         return handleTest(temp, sender, args);

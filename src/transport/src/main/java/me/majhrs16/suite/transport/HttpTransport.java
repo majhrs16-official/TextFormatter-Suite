@@ -87,23 +87,33 @@ public final class HttpTransport implements Transport {
 
     @Override
     public String get(String url) throws IOException {
-        HttpURLConnection conn = openConnection(url, "GET", null, null);
-        return readResponse(conn);
+        return executeRequest(url, "GET", null, null);
     }
 
     @Override
     public String post(String url, String jsonBody) throws IOException {
-        HttpURLConnection conn = openConnection(url, "POST", Map.of("Content-Type", "application/json"), jsonBody);
-        return readResponse(conn);
+        return executeRequest(url, "POST", Map.of("Content-Type", "application/json"), jsonBody);
     }
 
     @Override
     public String post(String url, Map<String, String> headers, String jsonBody) throws IOException {
-        HttpURLConnection conn = openConnection(url, "POST", headers, jsonBody);
-        return readResponse(conn);
+        return executeRequest(url, "POST", headers, jsonBody);
     }
 
-    private HttpURLConnection openConnection(String urlString, String method, Map<String, String> headers, String body) throws IOException {
+    /**
+     * Executes an HTTP request with manual redirect handling that preserves
+     * method, headers, and body for 307/308 redirects.
+     */
+    private String executeRequest(String urlString, String method, Map<String, String> headers, String body) throws IOException {
+        // Cache request data for potential redirect reuse
+        RequestState state = new RequestState(method, headers, body);
+        
+        HttpURLConnection conn = createConnection(urlString, state);
+        
+        return readResponseWithRedirects(conn, state);
+    }
+
+    private HttpURLConnection createConnection(String urlString, RequestState state) throws IOException {
         URL url = new URL(urlString);
 
         // SSRF Protection: validate initial URL
@@ -112,26 +122,125 @@ public final class HttpTransport implements Transport {
         }
 
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod(method);
+        conn.setRequestMethod(state.method);
         conn.setConnectTimeout((int) timeout.toMillis());
         conn.setReadTimeout((int) timeout.toMillis());
         // Disable automatic redirects - we handle them manually with validation
         conn.setInstanceFollowRedirects(false);
         conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
 
-        if (headers != null) {
-            headers.forEach(conn::setRequestProperty);
+        if (state.headers != null) {
+            state.headers.forEach(conn::setRequestProperty);
         }
 
-        if (body != null) {
+        if (state.body != null) {
             conn.setDoOutput(true);
-            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = state.body.getBytes(StandardCharsets.UTF_8);
             conn.setRequestProperty("Content-Length", String.valueOf(bytes.length));
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(bytes);
             }
         }
         return conn;
+    }
+
+    private String readResponseWithRedirects(HttpURLConnection conn, RequestState state) throws IOException {
+        int redirectCount = 0;
+        final int MAX_REDIRECTS = 5;
+        
+        while (true) {
+            int status = conn.getResponseCode();
+            
+            // Handle redirects manually with validation
+            if (isRedirect(status)) {
+                if (redirectCount >= MAX_REDIRECTS) {
+                    conn.disconnect();
+                    throw new IOException("Too many redirects (" + MAX_REDIRECTS + ")");
+                }
+                
+                String location = conn.getHeaderField("Location");
+                conn.disconnect();
+                
+                if (location == null || location.isBlank()) {
+                    throw new IOException("Redirect without Location header");
+                }
+                
+                // Resolve relative URLs
+                URL newUrl = new URL(conn.getURL(), location);
+                
+                // Validate redirect URL
+                if (ssrfProtectionEnabled) {
+                    validateUrl(newUrl);
+                }
+                
+                // Create new connection for redirect
+                conn = createConnection(newUrl.toString(), state);
+                
+                // For 307/308, preserve the original method (already done in createConnection)
+                // For 301/302/303, createConnection will use the original method but we need GET
+                if (status != 307 && status != 308) {
+                    // Override to GET for non-307/308 redirects
+                    conn.setRequestMethod("GET");
+                    // Remove body for GET
+                    conn.setDoOutput(false);
+                }
+                
+                redirectCount++;
+                continue;
+            }
+            
+            // Not a redirect - read response normally
+            InputStream inputStream;
+            if (status >= 400) {
+                inputStream = conn.getErrorStream();
+                if (inputStream == null) {
+                    inputStream = conn.getInputStream(); // fallback
+                }
+            } else {
+                inputStream = conn.getInputStream();
+            }
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                char[] buffer = new char[8192];
+                int charsRead;
+                int totalChars = 0;
+                while ((charsRead = reader.read(buffer)) != -1) {
+                    totalChars += charsRead;
+                    if (totalChars > MAX_RESPONSE_SIZE) {
+                        throw new IOException("Response body exceeds maximum allowed size: " + MAX_RESPONSE_SIZE + " chars");
+                    }
+                    sb.append(buffer, 0, charsRead);
+                }
+                String response = sb.toString();
+                if (status >= 400) {
+                    throw new IOException("HTTP " + status + ": " + response);
+                }
+                return response;
+            } finally {
+                conn.disconnect();
+            }
+        }
+    }
+    
+    private boolean isRedirect(int status) {
+        return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+    }
+    
+    /**
+     * Holds the request state for redirect handling.
+     * Allows re-creating the request on redirect while preserving method, headers, and body.
+     */
+    private static final class RequestState {
+        final String method;
+        final Map<String, String> headers;
+        final String body;
+        
+        RequestState(String method, Map<String, String> headers, String body) {
+            this.method = method;
+            this.headers = headers;
+            this.body = body;
+        }
     }
 
     /**
@@ -181,6 +290,15 @@ public final class HttpTransport implements Transport {
         final int MAX_REDIRECTS = 5;
         String requestMethod = conn.getRequestMethod();
         
+        // Save original request data for 307/308 redirect preservation
+        Map<String, List<String>> originalHeaders = conn.getRequestProperties();
+        byte[] originalBody = null;
+        if ("POST".equals(requestMethod) || "PUT".equals(requestMethod) || "PATCH".equals(requestMethod)) {
+            // We need to re-read the body - but HttpURLConnection doesn't allow reading back the output stream
+            // Store the original URL and body for redirect
+            // Note: This is a limitation - we'd need to cache the body beforehand
+        }
+        
         while (true) {
             int status = conn.getResponseCode();
             
@@ -212,6 +330,9 @@ public final class HttpTransport implements Transport {
                 // Preserve method for 307/308, use GET for 301/302/303
                 if (status == 307 || status == 308) {
                     conn.setRequestMethod(requestMethod);
+                    // For 307/308, we must preserve the original request body and headers
+                    // Note: HttpURLConnection doesn't support re-using output stream, so we need to re-write the body
+                    // This is a known limitation - the caller should handle retries if needed
                 } else {
                     conn.setRequestMethod("GET");
                 }
@@ -256,9 +377,5 @@ public final class HttpTransport implements Transport {
                 conn.disconnect();
             }
         }
-    }
-    
-    private boolean isRedirect(int status) {
-        return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
     }
 }

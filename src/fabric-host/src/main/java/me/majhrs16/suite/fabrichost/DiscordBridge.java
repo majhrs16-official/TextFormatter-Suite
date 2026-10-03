@@ -7,6 +7,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.config.MessagesConfig;
 import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.spi.SyncListener;
+import me.majhrs16.suite.syncbus.SyncBus;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -35,23 +36,25 @@ public final class DiscordBridge {
     private final MessagesConfig messages;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final DiscordSyncSink sink;
+    private final SyncBus syncBus;
 
     private DiscordBridge(JDA jda, GuildMessageChannel channel,
                           MessageDispatcher dispatcher, PluginLogger logger,
-                          MessagesConfig messages) {
+                          MessagesConfig messages, SyncBus syncBus) {
         this.jda = jda;
         this.channel = channel;
         this.dispatcher = dispatcher;
         this.logger = logger;
         this.messages = messages;
         this.sink = new DiscordSyncSink();
+        this.syncBus = syncBus;
     }
 
     public SyncSink getSink() {
         return sink;
     }
 
-    public static DiscordBridge create(Path folder, MessageDispatcher dispatcher, PluginLogger logger) {
+    public static DiscordBridge create(Path folder, MessageDispatcher dispatcher, PluginLogger logger, SyncBus syncBus) {
         Path configPath = folder.resolve("sync/discord.yml");
         if (!Files.exists(configPath)) return null;
         try {
@@ -73,7 +76,7 @@ public final class DiscordBridge {
                 jda.shutdown();
                 return null;
             }
-            return new DiscordBridge(jda, channel, dispatcher, logger, syncConfig);
+            return new DiscordBridge(jda, channel, dispatcher, logger, syncConfig, syncBus);
         } catch (Exception exception) {
             logger.error("Discord bridge init failed", exception);
             return null;
@@ -145,7 +148,11 @@ public final class DiscordBridge {
 
         @Override
         public void send(Message message) {
-            mirror(message);
+            if (syncBus != null) {
+                syncBus.broadcast(message);
+            } else {
+                mirror(message);
+            }
         }
 
         @Override

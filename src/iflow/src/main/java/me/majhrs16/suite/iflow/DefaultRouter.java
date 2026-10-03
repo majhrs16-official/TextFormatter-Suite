@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>rate-limited deliveries report a backoff instead of dropping.</li>
  * </ol>
  */
-public final class DefaultRouter implements Router {
+public final class DefaultRouter implements Router, AutoCloseable {
 
     private final ChannelRegistry channels;
     private final PermissionChecker permissions;
@@ -196,12 +196,13 @@ public final class DefaultRouter implements Router {
 
         // Execute SpEL action if present
         if (rule.action() != null && expressionEvaluator != null) {
-            executeAction(rule, working, emitter, recipient);
-        }
-
-        // Check if action cancelled the message
-        if (working.isCancelled()) {
-            return RouteOutcome.of(new RouteDecision(PolicyTarget.DROP, "cancelled by action", 0, recipient, emitter), working);
+            ScriptSurface actionSurface = executeAction(rule, working, emitter, recipient);
+            // Check if action cancelled the message
+            if (actionSurface.isCancelled()) {
+                return RouteOutcome.of(new RouteDecision(PolicyTarget.DROP, "cancelled by action", 0, recipient, emitter), actionSurface.msg());
+            }
+            // Update working message from action surface
+            working = actionSurface.msg();
         }
 
         // Apply transform operations (F7+)
@@ -254,12 +255,25 @@ public final class DefaultRouter implements Router {
         }
     }
 
-    private void executeAction(Rule rule, Message message, Actor emitter, Actor recipient) {
+    private ScriptSurface executeAction(Rule rule, Message message, Actor emitter, Actor recipient) {
+        // Create a ScriptSurface for the action to use (allows cancel(), skipTranslate(), etc.)
+        ScriptSurface surface = new ScriptSurface(message, emitter, recipient,
+            channels, null, null, permissions::has);
         try {
             Map<String, Object> bindings = createBindings(message, emitter, recipient);
+            // Add ScriptSurface as #surface variable for action expressions
+            bindings.put("surface", surface);
             expressionEvaluator.evaluateObject(rule.action(), bindings);
         } catch (Exception e) {
             // Action evaluation error -> ignore
+        }
+        return surface;
+    }
+
+    @Override
+    public void close() {
+        if (rateLimit != null) {
+            rateLimit.close();
         }
     }
 }

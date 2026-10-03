@@ -30,6 +30,7 @@ public final class MetricsEndpoint {
 
     private final HttpServer server;
     private final ScheduledExecutorService scheduler;
+    private final ThreadPoolExecutor boundedExecutor;
     private final PluginLogger logger;
     private volatile boolean running = false;
 
@@ -59,7 +60,7 @@ public final class MetricsEndpoint {
         server.createContext("/health", new HealthHandler());
 
         // Configure bounded executor to prevent thread exhaustion (DOS-1)
-        ThreadPoolExecutor boundedExecutor = new ThreadPoolExecutor(
+        this.boundedExecutor = new ThreadPoolExecutor(
             2, 8, 60L, TimeUnit.SECONDS,
             new java.util.concurrent.LinkedBlockingQueue<>(50),
             r -> {
@@ -106,6 +107,18 @@ public final class MetricsEndpoint {
         } catch (InterruptedException e) {
             scheduler.shutdownNow();
             Thread.currentThread().interrupt();
+        }
+        // Shutdown the bounded executor used by the HTTP server
+        if (boundedExecutor != null) {
+            boundedExecutor.shutdown();
+            try {
+                if (!boundedExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    boundedExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                boundedExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
         server.stop(0);
         logger.info("Metrics endpoint stopped");

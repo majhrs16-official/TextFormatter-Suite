@@ -90,7 +90,7 @@ import java.util.HashSet;
 public final class TextFormatterSuiteMod implements ModInitializer {
 
     /** Immutable wiring snapshot; swapped atomically on reload. */
-    private static final class Runtime {
+    private static final class Runtime implements AutoCloseable {
         final SuiteHost host;
         final MessageDispatcher dispatcher;
         final FabricActorDirectory directory;
@@ -102,6 +102,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         final FabricInWorldHandler inworldHandler;
         final SyncBus syncBus;
         final PluginLogger logger;
+        final TranslationService translationService;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
                 FabricActorDirectory directory, UserLanguageStore languages,
@@ -110,7 +111,8 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 ExtensionManager extensionManager,
                 FabricInWorldHandler inworldHandler,
                 SyncBus syncBus,
-                PluginLogger logger) {
+                PluginLogger logger,
+                TranslationService translationService) {
             this.host = host;
             this.dispatcher = dispatcher;
             this.directory = directory;
@@ -122,8 +124,10 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             this.inworldHandler = inworldHandler;
             this.syncBus = syncBus;
             this.logger = logger;
+            this.translationService = translationService;
         }
 
+        @Override
         public void close() {
             if (syncBus != null) {
                 try {
@@ -165,6 +169,23 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                     dispatcher.close();
                 } catch (Exception e) {
                     logger.warn("Error closing MessageDispatcher: " + e.getMessage());
+                }
+            }
+            // Close the router (which closes the RateLimiter)
+            if (host != null && host.router() != null && host.router() instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) host.router()).close();
+                    logger.debug("Router (RateLimiter) closed");
+                } catch (Exception e) {
+                    logger.warn("Error closing Router: " + e.getMessage());
+                }
+            }
+            if (translationService != null) {
+                try {
+                    translationService.close();
+                    logger.debug("TranslationService closed");
+                } catch (Exception e) {
+                    logger.warn("Error closing TranslationService: " + e.getMessage());
                 }
             }
             if (bridge != null) {
@@ -364,8 +385,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         FabricChatDelivery delivery = new FabricChatDelivery(SERVER);
         MessageDispatcher dispatcher =
             new MessageDispatcher(reloaded, dirs, delivery, permissions, logger);
-        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger);
-        
+        // Initialize SyncBus first
+        SyncBus syncBus = new DefaultSyncBus(logger);
+
         WebSocketSyncSink wsSink = null;
         try {
             Path wsConfig = folder.resolve("sync/websocket.yml");
@@ -406,17 +428,21 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             logger.warn("Failed to create WebSocket sync sink: " + e.getMessage());
         }
 
-        // Initialize SyncBus and register sinks
-        SyncBus syncBus = new DefaultSyncBus(logger);
-
-        if (bridge != null && bridge.getSink() != null) {
-            syncBus.register(bridge.getSink());
-            logger.debug("SyncBus: registered Discord sink");
-        }
-
+        // Register WebSocket sink if available
         if (wsSink != null) {
             syncBus.register(wsSink);
             logger.debug("SyncBus: registered WebSocket sink");
+        }
+
+        // Create DiscordBridge with SyncBus for outbound mirroring
+        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger, syncBus);
+        if (bridge != null) {
+            // Register Discord sink with SyncBus
+            if (bridge.getSink() != null) {
+                syncBus.register(bridge.getSink());
+                logger.debug("SyncBus: registered Discord sink");
+            }
+            bridge.start();
         }
 
         syncBus.setInboundListener(new me.majhrs16.suite.api.spi.SyncListener() {
@@ -477,7 +503,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         );
         extensionManager.start();
 
-        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, extensionManager, inworldHandler, syncBus, logger);
+        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, extensionManager, inworldHandler, syncBus, logger, translation);
         
         if (bridge != null) {
             bridge.start();

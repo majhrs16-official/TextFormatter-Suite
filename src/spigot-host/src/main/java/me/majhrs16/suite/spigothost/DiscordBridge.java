@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.syncdiscord.JdaDiscordSink;
+import me.majhrs16.suite.syncbus.SyncBus;
 
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -22,7 +23,7 @@ import java.util.Map;
  *
  * <ul>
  *   <li>outbound — the plugin mirrors chat broadcasts and typed events via
- *       {@link #mirror(Message, DispatchReport)};</li>
+ *       {@link SyncBus#broadcast(Message)};</li>
  *   <li>inbound — MESSAGE_CREATE becomes a CHAT message on the conventional
  *       {@code discord} channel and runs through the normal dispatcher.</li>
  * </ul>
@@ -35,11 +36,13 @@ public final class DiscordBridge {
     private final JdaDiscordSink sink;
     private final MessageDispatcher dispatcher;
     private final PluginLogger logger;
+    private final SyncBus syncBus;
 
-    private DiscordBridge(JdaDiscordSink sink, MessageDispatcher dispatcher, PluginLogger logger) {
+    private DiscordBridge(JdaDiscordSink sink, MessageDispatcher dispatcher, PluginLogger logger, SyncBus syncBus) {
         this.sink = sink;
         this.dispatcher = dispatcher;
         this.logger = logger;
+        this.syncBus = syncBus;
     }
 
     /** @return the underlying Discord sink for registration with SyncBus. */
@@ -49,7 +52,7 @@ public final class DiscordBridge {
 
     /** @return an active bridge, or {@code null} when disabled/unavailable. */
     public static DiscordBridge create(Path dataFolder, MessageDispatcher dispatcher,
-                                       PluginLogger logger) {
+                                       PluginLogger logger, SyncBus syncBus) {
         Path file = dataFolder.resolve("sync").resolve("discord.yml");
         if (!Files.exists(file)) {
             return null;
@@ -72,7 +75,7 @@ public final class DiscordBridge {
             if (channelId <= 0) {
                 logger.warn("Discord channel ID not configured (channel=0); bridge created but will not send messages");
             }
-            return new DiscordBridge(new JdaDiscordSink(token, channelId, logger), dispatcher, logger);
+            return new DiscordBridge(new JdaDiscordSink(token, channelId, logger), dispatcher, logger, syncBus);
         } catch (IOException | RuntimeException exception) {
             logger.warn("discord.yml ilegible: " + exception.getMessage());
             return null;
@@ -108,12 +111,17 @@ public final class DiscordBridge {
         sink.stop();
     }
 
-    /** Best-effort outbound copy; only mirrors messages that were delivered. */
+    /** Best-effort outbound copy via SyncBus; only mirrors messages that were delivered. */
     public void mirror(Message outgoing, DispatchReport report) {
         // Only mirror if the message was actually delivered to someone
         if (report.delivered() > 0 || report.channelRedirected() > 0 || report.redirected() > 0) {
             try {
-                sink.send(outgoing);
+                if (syncBus != null) {
+                    syncBus.broadcast(outgoing);
+                } else {
+                    // Fallback if SyncBus not available
+                    sink.send(outgoing);
+                }
             } catch (Exception exception) {
                 logger.debug("espejo Discord falló: " + exception.getMessage());
             }

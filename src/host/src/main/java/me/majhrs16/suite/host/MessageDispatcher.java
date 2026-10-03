@@ -12,6 +12,8 @@ import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.channel.Channel;
 
+import net.kyori.adventure.text.Component;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -160,19 +162,23 @@ public MessageDispatcher(SuiteHost host,
                 }
                 Message messageForDelivery = result.message() != null ? result.message() : messageWithResolvedSource;
                 
-                // Apply sleep delay if set via transform - use scheduler to avoid blocking worker threads (TF-CONC-01)
+                // Apply sleep delay if set via transform - use scheduler to avoid blocking caller thread (TF-CONC-01)
                 long sleepMillis = messageForDelivery.sleepMillis();
                 if (sleepMillis > 0) {
-                    try {
-                        CompletableFuture<Void> sleepFuture = new CompletableFuture<>();
-                        sleepScheduler.schedule(() -> sleepFuture.complete(null), sleepMillis, TimeUnit.MILLISECONDS);
-                        sleepFuture.get(); // Wait for sleep to complete
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        logger.warn("Sleep interrupted for message delivery to " + recipient.name());
-                    } catch (java.util.concurrent.ExecutionException e) {
-                        logger.error("Sleep scheduler error for " + recipient.name(), e);
-                    }
+                    // Schedule delivery after sleep - non-blocking continuation
+                    final Message finalMsg = messageForDelivery;
+                    final Actor finalRecipient = recipient;
+                    final Component finalRendered = result.rendered();
+                    sleepScheduler.schedule(() -> {
+                        try {
+                            delivery.deliver(finalRecipient, finalRendered, finalMsg);
+                            playChannelSounds(finalMsg, finalRecipient);
+                        } catch (Exception e) {
+                            logger.error("Error delivering message after sleep to " + finalRecipient.name(), e);
+                        }
+                    }, sleepMillis, TimeUnit.MILLISECONDS);
+                    delivered++;
+                    continue;
                 }
                 
                 delivery.deliver(recipient, result.rendered(), messageForDelivery);
