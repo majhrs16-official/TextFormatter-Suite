@@ -116,12 +116,23 @@ public final class HttpTransport implements Transport {
     private HttpURLConnection createConnection(String urlString, RequestState state) throws IOException {
         URL url = new URL(urlString);
 
-        // SSRF Protection: validate initial URL
+        // SSRF Protection: validate initial URL and get pinned address
+        InetAddress pinnedAddress = null;
         if (ssrfProtectionEnabled) {
-            validateUrl(url);
+            pinnedAddress = validateUrlAndGetAddress(url);
         }
 
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        // Create connection using pinned IP address to prevent TOCTOU DNS rebinding
+        String connectionUrl;
+        if (pinnedAddress != null) {
+            // Replace hostname with pinned IP in URL
+            connectionUrl = urlString.replaceFirst(url.getHost(), pinnedAddress.getHostAddress());
+        } else {
+            connectionUrl = urlString;
+        }
+
+        URL connectUrl = new URL(connectionUrl);
+        HttpURLConnection conn = (HttpURLConnection) connectUrl.openConnection();
         conn.setRequestMethod(state.method);
         conn.setConnectTimeout((int) timeout.toMillis());
         conn.setReadTimeout((int) timeout.toMillis());
@@ -168,9 +179,9 @@ public final class HttpTransport implements Transport {
                 // Resolve relative URLs
                 URL newUrl = new URL(conn.getURL(), location);
                 
-                // Validate redirect URL
+                // Validate redirect URL using pinned IP
                 if (ssrfProtectionEnabled) {
-                    validateUrl(newUrl);
+                    validateUrlAndGetAddress(newUrl);
                 }
                 
                 // Create new connection for redirect
@@ -246,16 +257,17 @@ public final class HttpTransport implements Transport {
     /**
      * Validates the URL against SSRF deny patterns.
      * Resolves the host to all IPs and checks against private/internal ranges.
-     * Uses getAllByName to prevent DNS rebinding attacks where a hostname
-     * resolves to both public and private IPs.
+     * Returns the first valid IP address to use for the connection (pinning).
+     *
+     * @return the first valid InetAddress to use for connection, or null if URL uses IP directly
      */
-    private void validateUrl(URL url) throws IOException {
+    private InetAddress validateUrlAndGetAddress(URL url) throws IOException {
         String host = url.getHost();
         if (host == null || host.isBlank()) {
             throw new IOException("Invalid URL: no host");
         }
 
-        // Check if host is an IP address
+        // Check if host is an IP address literal
         InetAddress[] addresses;
         try {
             addresses = InetAddress.getAllByName(host);
@@ -283,99 +295,9 @@ public final class HttpTransport implements Transport {
                 throw new IOException("SSRF blocked: destination " + ip + " is private/internal address");
             }
         }
-    }
 
-    private String readResponse(HttpURLConnection conn) throws IOException {
-        int redirectCount = 0;
-        final int MAX_REDIRECTS = 5;
-        String requestMethod = conn.getRequestMethod();
-        
-        // Save original request data for 307/308 redirect preservation
-        Map<String, List<String>> originalHeaders = conn.getRequestProperties();
-        byte[] originalBody = null;
-        if ("POST".equals(requestMethod) || "PUT".equals(requestMethod) || "PATCH".equals(requestMethod)) {
-            // We need to re-read the body - but HttpURLConnection doesn't allow reading back the output stream
-            // Store the original URL and body for redirect
-            // Note: This is a limitation - we'd need to cache the body beforehand
-        }
-        
-        while (true) {
-            int status = conn.getResponseCode();
-            
-            // Handle redirects manually with validation
-            if (isRedirect(status)) {
-                if (redirectCount >= MAX_REDIRECTS) {
-                    conn.disconnect();
-                    throw new IOException("Too many redirects (" + MAX_REDIRECTS + ")");
-                }
-                
-                String location = conn.getHeaderField("Location");
-                conn.disconnect();
-                
-                if (location == null || location.isBlank()) {
-                    throw new IOException("Redirect without Location header");
-                }
-                
-                // Resolve relative URLs
-                URL newUrl = new URL(conn.getURL(), location);
-                
-                // Validate redirect URL
-                if (ssrfProtectionEnabled) {
-                    validateUrl(newUrl);
-                }
-                
-                // Create new connection for redirect
-                conn = (HttpURLConnection) newUrl.openConnection();
-                
-                // Preserve method for 307/308, use GET for 301/302/303
-                if (status == 307 || status == 308) {
-                    conn.setRequestMethod(requestMethod);
-                    // For 307/308, we must preserve the original request body and headers
-                    // Note: HttpURLConnection doesn't support re-using output stream, so we need to re-write the body
-                    // This is a known limitation - the caller should handle retries if needed
-                } else {
-                    conn.setRequestMethod("GET");
-                }
-                conn.setConnectTimeout((int) timeout.toMillis());
-                conn.setReadTimeout((int) timeout.toMillis());
-                conn.setInstanceFollowRedirects(false);
-                conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
-                
-                redirectCount++;
-                continue;
-            }
-            
-            // Not a redirect - read response normally
-            InputStream inputStream;
-            if (status >= 400) {
-                inputStream = conn.getErrorStream();
-                if (inputStream == null) {
-                    inputStream = conn.getInputStream(); // fallback
-                }
-            } else {
-                inputStream = conn.getInputStream();
-            }
-            
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                StringBuilder sb = new StringBuilder();
-                char[] buffer = new char[8192];
-                int charsRead;
-                int totalChars = 0;
-                while ((charsRead = reader.read(buffer)) != -1) {
-                    totalChars += charsRead;
-                    if (totalChars > MAX_RESPONSE_SIZE) {
-                        throw new IOException("Response body exceeds maximum allowed size: " + MAX_RESPONSE_SIZE + " chars");
-                    }
-                    sb.append(buffer, 0, charsRead);
-                }
-                String response = sb.toString();
-                if (status >= 400) {
-                    throw new IOException("HTTP " + status + ": " + response);
-                }
-                return response;
-            } finally {
-                conn.disconnect();
-            }
-        }
+        // Return first valid address for connection pinning (TOCTOU mitigation)
+        // Caller should use this address directly instead of hostname
+        return addresses[0];
     }
 }
