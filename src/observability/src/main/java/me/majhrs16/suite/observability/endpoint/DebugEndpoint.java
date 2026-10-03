@@ -46,20 +46,32 @@ public final class DebugEndpoint {
     private final ChannelRegistry channels;
     private final PluginLogger logger;
     private final String authToken;
+    private final int port;
     private volatile boolean running = false;
     private final long startTime = System.currentTimeMillis();
 
     private final Map<String, Object> lastSimulationResult = new ConcurrentHashMap<>();
-    private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private final ExecutorService executor;
 
     public DebugEndpoint(SuiteHost host, MessageDispatcher dispatcher,
                          ChannelRegistry channels, PluginLogger logger, String authToken) throws IOException {
+        this(host, dispatcher, channels, logger, authToken, 9091);
+    }
+
+    public DebugEndpoint(SuiteHost host, MessageDispatcher dispatcher,
+                         ChannelRegistry channels, PluginLogger logger, String authToken, int port) throws IOException {
         this.host = host;
         this.dispatcher = dispatcher;
         this.channels = channels;
         this.logger = logger;
-        this.authToken = authToken;
-        this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 9091), 0);
+        this.port = port;
+        // Require auth token - generate one if not provided
+        this.authToken = authToken != null && !authToken.isBlank() 
+            ? authToken 
+            : java.util.UUID.randomUUID().toString();
+        
+        this.executor = Executors.newFixedThreadPool(4);
+        this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         this.server.setExecutor(executor);
 
         // Debug endpoints (read-only, no message injection)
@@ -68,8 +80,6 @@ public final class DebugEndpoint {
         server.createContext("/debug/channels", new ChannelsHandler());
         server.createContext("/debug/rules", new RulesHandler());
         server.createContext("/debug/sinks", new SinksHandler());
-
-        // Removed: server.setExecutor(Executors.newFixedThreadPool(4)); // duplicate
     }
 
     public synchronized void start() {
@@ -77,6 +87,9 @@ public final class DebugEndpoint {
         server.start();
         running = true;
         logger.info("Debug endpoint started on port " + server.getAddress().getPort());
+        if (authToken != null && authToken.length() > 8) {
+            logger.info("Debug auth token: " + authToken.substring(0, 8) + "...");
+        }
     }
 
     public synchronized void stop() {
@@ -108,10 +121,6 @@ public final class DebugEndpoint {
 
     private boolean checkAuth(HttpExchange exchange) throws IOException {
         String token = exchange.getRequestHeaders().getFirst("X-Debug-Token");
-        if (authToken == null || authToken.isBlank()) {
-            sendResponse(exchange, 403, "Debug endpoint disabled: no auth token configured", "text/plain");
-            return false;
-        }
         if (!authToken.equals(token)) {
             sendResponse(exchange, 401, "Invalid auth token", "text/plain");
             return false;
