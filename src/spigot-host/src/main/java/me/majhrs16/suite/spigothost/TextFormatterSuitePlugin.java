@@ -28,6 +28,8 @@ import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.syncbus.DefaultSyncBus;
 import me.majhrs16.suite.syncbus.SyncBus;
+import me.majhrs16.suite.synchttp.HttpSink;
+import me.majhrs16.suite.synctelegram.TelegramSink;
 import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
 import me.majhrs16.suite.synctcpudp.TcpSink;
 import me.majhrs16.suite.synctcpudp.UdpSink;
@@ -412,6 +414,32 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger.warn("Failed to create UDP sync sink: " + e.getMessage());
         }
 
+        // Initialize Telegram Sync Sink
+        TelegramSink telegramSink = null;
+        try {
+            Path telegramConfig = folder.resolve("sync/telegram.yml");
+            if (Files.exists(telegramConfig)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
+                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
+                String content = Files.readString(telegramConfig);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
+                if (map != null) {
+                    Object enabled = map.get("enabled");
+                    if (Boolean.TRUE.equals(enabled)) {
+                        String token = map.get("token") != null ? map.get("token").toString() : "";
+                        long chatId = map.get("chatId") != null ? ((Number) map.get("chatId")).longValue() : 0;
+                        if (!token.isBlank() && chatId != 0) {
+                            telegramSink = new TelegramSink(token, chatId, new me.majhrs16.suite.transport.HttpTransport());
+                            logger.info("Telegram sync sink created for chat " + chatId);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to create Telegram sync sink: " + e.getMessage());
+        }
+
         // Register all sinks with SyncBus
         if (wsSink != null) {
             syncBus.register(wsSink);
@@ -424,6 +452,10 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         if (udpSink != null) {
             syncBus.register(udpSink);
             logger.debug("SyncBus: registered UDP sink");
+        }
+        if (telegramSink != null) {
+            syncBus.register(telegramSink);
+            logger.debug("SyncBus: registered Telegram sink");
         }
 
         // Set inbound listener to route through dispatcher

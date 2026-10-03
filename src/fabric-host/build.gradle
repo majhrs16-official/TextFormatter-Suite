@@ -31,6 +31,8 @@ dependencies {
     implementation project(':src:sync-bus')
     implementation project(':src:sync-websocket')
     implementation project(':src:sync-tcpudp')
+    implementation project(':src:sync-telegram')
+    implementation project(':src:transport')
     implementation project(':src:messages')
     implementation project(':src:observability')
     implementation project(':src:extension-api')
