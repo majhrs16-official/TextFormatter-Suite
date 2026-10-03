@@ -85,7 +85,10 @@ public final class TcpSink implements SyncSink {
     @Override
     public void send(Message message) throws IOException {
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(remoteHost, remotePort));
+            // Set connection timeout to prevent blocking indefinitely
+            socket.connect(new InetSocketAddress(remoteHost, remotePort), SOCKET_TIMEOUT_MS);
+            // Also set read/write timeout
+            socket.setSoTimeout(SOCKET_TIMEOUT_MS);
             Writer writer = new OutputStreamWriter(socket.getOutputStream(),
                 StandardCharsets.UTF_8);
             writer.write(me.majhrs16.suite.transport.MessageCodec.toJsonString(message));
