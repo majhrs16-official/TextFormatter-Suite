@@ -49,6 +49,7 @@ public final class Channel {
     private final boolean showSender;
     private final int rateLimitPerSecond;
     private final Type type;
+    private final String signLocation;
 
     private Channel(Builder builder) {
         this.name = builder.name;
@@ -65,6 +66,7 @@ public final class Channel {
         this.showSender = builder.showSender;
         this.rateLimitPerSecond = builder.rateLimitPerSecond;
         this.type = builder.type != null ? builder.type : Type.CHAT;
+        this.signLocation = builder.signLocation;
     }
 
     /** @return unique dotted path of this channel, e.g. {@code chat} or {@code private.other}. */
@@ -122,6 +124,11 @@ public final class Channel {
         return rateLimitPerSecond;
     }
 
+    /** @return sign location as "x,y,z,world" for sign channels, null otherwise. */
+    public String signLocation() {
+        return signLocation;
+    }
+
     /** Effective permission for the sending side. */
     public String sendPolicy() {
         return sendPermission != null ? sendPermission : permission;
@@ -155,6 +162,7 @@ public final class Channel {
         private boolean showSender = true;
         private int rateLimitPerSecond;
         private Type type = Type.CHAT;
+        private String signLocation;
 
         private Builder(String name) {
             this.name = name;
@@ -207,6 +215,11 @@ public final class Channel {
 
         public Builder rateLimitPerSecond(int rateLimitPerSecond) {
             this.rateLimitPerSecond = rateLimitPerSecond;
+            return this;
+        }
+
+        public Builder signLocation(String signLocation) {
+            this.signLocation = signLocation;
             return this;
         }
 

@@ -141,8 +141,24 @@ public final class InWorldHandler implements Listener {
         for (String name : channels.paths()) {
             if (name.startsWith("sign.")) {
                 Channel ch = channels.resolve(name);
-                // Check if this location matches the sign's configured location
-                // This would be stored in the channel config or signCache
+                // Check channel config for sign location
+                String signLoc = ch.signLocation();
+                if (signLoc != null && !signLoc.isBlank()) {
+                    try {
+                        String[] parts = signLoc.split(",");
+                        if (parts.length >= 3) {
+                            int x = Integer.parseInt(parts[0].trim());
+                            int y = Integer.parseInt(parts[1].trim());
+                            int z = Integer.parseInt(parts[2].trim());
+                            String worldName = parts.length > 3 ? parts[3].trim() : loc.getWorld().getName();
+                            if (loc.getBlockX() == x && loc.getBlockY() == y && loc.getBlockZ() == z 
+                                && loc.getWorld().getName().equals(worldName)) {
+                                return name;
+                            }
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
             }
         }
         return null;
@@ -163,9 +179,31 @@ public final class InWorldHandler implements Listener {
     }
 
     private String getFormattedMessage(Message message, String original) {
-        // This would use the host's renderer to format
-        // For now return original
-        return original;
+        // Use the host's formatter to render the message
+        try {
+            Language lang = message.resolvedSourceLanguage() != null 
+                ? message.resolvedSourceLanguage() 
+                : (message.langSource() != null && message.langSource() != Language.AUTO 
+                    ? message.langSource() 
+                    : host.config().defaultLanguage());
+            
+            // Render using the channel's format for the sender (initiator)
+            var ctx = me.majhrs16.suite.textformatter.template.TemplateContext.builder(
+                    message.sender(), 
+                    message.langSource() != null && message.langSource() != Language.AUTO 
+                        ? message.langSource() 
+                        : host.config().defaultLanguage(), 
+                    lang)
+                .content(original)
+                .translate(message.shouldTranslate())
+                .build();
+            
+            net.kyori.adventure.text.Component formatted = host.formatter().format(message, ctx);
+            return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(formatted);
+        } catch (Exception e) {
+            logger.warn("Failed to format sign message: " + e.getMessage());
+            return original;
+        }
     }
 
     // ============================================================
