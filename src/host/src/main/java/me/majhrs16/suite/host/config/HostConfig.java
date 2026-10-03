@@ -34,6 +34,8 @@ public record HostConfig(
         /** Leave the event alive but empty its recipient set (vanilla logs
          *  to console only); the engine owns player delivery. */
         CLEAR_RECIPIENTS,
+        /** Don't suppress vanilla; both suite and vanilla chat appear. */
+        NONE
     }
 
     /** Repository configuration for module downloads. */

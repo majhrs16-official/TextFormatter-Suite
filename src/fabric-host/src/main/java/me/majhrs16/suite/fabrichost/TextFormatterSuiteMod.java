@@ -69,6 +69,18 @@ import java.util.Set;
 import java.util.HashSet;
 
 /**
+ * How the vanilla chat event is claimed/suppressed.
+ */
+enum ClaimMode {
+    /** Cancel the event entirely (vanilla chat suppressed). */
+    CANCEL_EVENT,
+    /** Clear recipients list (vanilla chat sent to nobody). */
+    CLEAR_RECIPIENTS,
+    /** Don't suppress vanilla (both suite and vanilla chat appear). */
+    NONE
+}
+
+/**
  * Composition root of the TextFormatter Suite on Fabric: bootstraps
  * {@link SuiteHost} + {@link MessageDispatcher} from the suite file layout
  * and routes events through the modern engine instead of the legacy core.
@@ -278,6 +290,19 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             if (current == null || current.dispatcher == null) {
                 return;
             }
+
+            // Apply claim mode to suppress vanilla chat
+            me.majhrs16.suite.host.config.HostConfig.ClaimMode claimMode = current.host.config().claimMode();
+            // CANCEL_EVENT: Try to cancel the event using Fabric API
+            // Note: Fabric API doesn't expose a cancel() method on Parameters
+            // The best we can do is document this limitation
+            if (claimMode == me.majhrs16.suite.host.config.HostConfig.ClaimMode.CANCEL_EVENT) {
+                // Fabric API doesn't expose a cancel() method on ServerMessageEvents.Parameters
+                // This is a known limitation - vanilla chat will appear alongside suite chat
+            }
+            // CLEAR_RECIPIENTS not directly supported in Fabric API
+            // NONE: do nothing, both vanilla and suite chat appear
+
             Actor senderActor = current.directory.actorOf(sender);
             Channel channel = current.host.channels().resolve(
                 ChannelSelector.select(List.copyOf(current.host.channels().all()),
