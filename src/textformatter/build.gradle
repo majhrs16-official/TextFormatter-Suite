@@ -62,10 +62,10 @@ jacocoTestReport {
     reports { xml.required = true; html.required = true; csv.required = false }
 }
 
-// FASE T/T1 — umbral anti-regresión (cobertura real actual ~59%)
+// FASE T/T1 — umbral anti-regresión (cobertura real actual ~62%)
 jacocoTestCoverageVerification {
     violationRules { rule {
-        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.59 }
+        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.60 }
     } }
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
