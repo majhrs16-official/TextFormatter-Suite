@@ -147,6 +147,16 @@ public final class DiscordBridge {
         }
 
         @Override
+        public DeliverySemantics deliverySemantics() {
+            return DeliverySemantics.AT_LEAST_ONCE;
+        }
+
+        @Override
+        public Ordering ordering() {
+            return Ordering.PER_CHANNEL;
+        }
+
+        @Override
         public void send(Message message) {
             if (syncBus != null) {
                 syncBus.broadcast(message);

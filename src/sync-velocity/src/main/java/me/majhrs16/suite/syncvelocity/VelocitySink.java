@@ -184,6 +184,16 @@ public final class VelocitySink implements SyncSink {
     }
 
     @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.EXACTLY_ONCE;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.GLOBAL;
+    }
+
+    @Override
     public void start() {
         if (!started.compareAndSet(false, true)) {
             LOGGER.warn("VelocitySink already started");

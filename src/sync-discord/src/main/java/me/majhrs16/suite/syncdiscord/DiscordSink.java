@@ -53,6 +53,16 @@ public final class DiscordSink implements SyncSink {
     }
 
     @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.AT_LEAST_ONCE;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.PER_CHANNEL;
+    }
+
+    @Override
     public void start() {
         SyncListener current = listener;
         if (current != null) {

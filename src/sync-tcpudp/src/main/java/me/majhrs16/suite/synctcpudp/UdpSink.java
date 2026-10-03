@@ -39,6 +39,16 @@ public final class UdpSink implements SyncSink {
         return "udp";
     }
 
+    @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.BEST_EFFORT;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.NONE;
+    }
+
     /** @return the actual bound inbound port once started (0 = ephemeral). */
     public int inboundPort() {
         return socket != null ? socket.getLocalPort() : localPort;

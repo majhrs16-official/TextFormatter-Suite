@@ -40,6 +40,16 @@ public final class TelegramSink implements SyncSink {
     }
 
     @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.AT_LEAST_ONCE;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.PER_CHANNEL;
+    }
+
+    @Override
     public void start() {
         // Outbound is one-shot; inbound is long-polled via poll().
     }

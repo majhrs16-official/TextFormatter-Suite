@@ -82,6 +82,16 @@ public final class WebSocketSyncSink implements SyncSink {
     }
 
     @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.AT_LEAST_ONCE;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.PER_CHANNEL;
+    }
+
+    @Override
     public synchronized void start() throws IOException {
         if (running) return;
 

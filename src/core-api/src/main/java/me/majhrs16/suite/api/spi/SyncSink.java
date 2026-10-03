@@ -14,8 +14,34 @@ import me.majhrs16.suite.api.message.Message;
  */
 public interface SyncSink {
 
+    /** Delivery reliability semantics for this sink. */
+    enum DeliverySemantics {
+        /** Best-effort, no ordering, no retransmission (e.g., UDP). */
+        BEST_EFFORT,
+        /** Ordered, at-least-once with retries (e.g., TCP, WebSocket, HTTP). */
+        AT_LEAST_ONCE,
+        /** Exactly-once with deduplication (e.g., Velocity with acks). */
+        EXACTLY_ONCE
+    }
+
+    /** Ordering guarantee for this sink. */
+    enum Ordering {
+        /** No ordering guarantee. */
+        NONE,
+        /** Messages delivered in send order per channel. */
+        PER_CHANNEL,
+        /** Globally ordered across all channels. */
+        GLOBAL
+    }
+
     /** @return a stable connector id, e.g. {@code discord} or {@code webhook}. */
     String name();
+
+    /** @return delivery reliability semantics for this transport. */
+    DeliverySemantics deliverySemantics();
+
+    /** @return ordering guarantee for this transport. */
+    Ordering ordering();
 
     /** Connects to the remote and arms the inbound listener. */
     void start() throws Exception;

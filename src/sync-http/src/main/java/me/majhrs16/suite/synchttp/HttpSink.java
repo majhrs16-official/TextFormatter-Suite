@@ -37,6 +37,16 @@ import java.util.concurrent.TimeUnit;
  */
 public final class HttpSink implements SyncSink {
 
+    @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.AT_LEAST_ONCE;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.PER_CHANNEL;
+    }
+
     private static final int MAX_BODY_BYTES = 1024 * 1024; // 1MB limit
     private static final int MAX_REPLAY_WINDOW_SECONDS = 300; // 5 minutes for replay protection
 

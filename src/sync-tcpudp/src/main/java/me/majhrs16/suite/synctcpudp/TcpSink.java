@@ -48,6 +48,16 @@ public final class TcpSink implements SyncSink {
         return "tcp";
     }
 
+    @Override
+    public DeliverySemantics deliverySemantics() {
+        return DeliverySemantics.AT_LEAST_ONCE;
+    }
+
+    @Override
+    public Ordering ordering() {
+        return Ordering.PER_CHANNEL;
+    }
+
     /** @return the actual bound inbound port once started (0 = ephemeral). */
     public int inboundPort() {
         return server != null ? server.getLocalPort() : localPort;
