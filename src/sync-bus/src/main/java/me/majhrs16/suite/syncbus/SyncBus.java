@@ -105,4 +105,24 @@ public interface SyncBus extends AutoCloseable {
      * Gets the current inbound listener.
      */
     SyncListener getInboundListener();
+
+    // ========== Metrics ==========
+
+    /** @return total messages broadcast */
+    long getTotalBroadcast();
+
+    /** @return total messages dropped (queue full, retries exhausted) */
+    long getTotalDropped();
+
+    /** @return total retry attempts */
+    long getTotalRetries();
+
+    /** @return total messages deduplicated */
+    long getTotalDeduped();
+
+    /** @return current global queue size */
+    int getGlobalQueueSize();
+
+    /** @return remaining global queue capacity */
+    int getGlobalQueueRemaining();
 }
