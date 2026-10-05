@@ -38,9 +38,16 @@ public final class MessageCodec {
     public static Message fromJson(String raw) {
         JSONObject json = new JSONObject(raw);
         JSONArray texts = json.optJSONArray("texts");
-        String[] contents = texts == null
-            ? new String[0]
-            : texts.toList().toArray(new String[0]);
+        String[] contents;
+        if (texts == null) {
+            contents = new String[0];
+        } else {
+            contents = new String[texts.length()];
+            for (int i = 0; i < texts.length(); i++) {
+                Object obj = texts.opt(i);
+                contents[i] = obj == null ? "" : String.valueOf(obj);
+            }
+        }
         return Message.builder()
             .id(json.has("id") ? UUID.fromString(json.getString("id")) : UUID.randomUUID())
             .type(me.majhrs16.suite.api.message.MessageType.valueOf(

@@ -73,9 +73,17 @@ public final class MessageCodec {
         };
 
         JSONArray texts = json.optJSONArray("texts");
-        Formats formats = texts == null
-            ? Formats.empty()
-            : Formats.of(texts.toList().toArray(new String[0]));
+        Formats formats;
+        if (texts == null) {
+            formats = Formats.empty();
+        } else {
+            String[] textArray = new String[texts.length()];
+            for (int i = 0; i < texts.length(); i++) {
+                Object obj = texts.opt(i);
+                textArray[i] = obj == null ? "" : String.valueOf(obj);
+            }
+            formats = Formats.of(textArray);
+        }
 
         Language source = Language.of(json.optString("langSource", "auto")).orElse(Language.AUTO);
         Language target = Language.of(json.optString("langTarget", "auto")).orElse(Language.AUTO);

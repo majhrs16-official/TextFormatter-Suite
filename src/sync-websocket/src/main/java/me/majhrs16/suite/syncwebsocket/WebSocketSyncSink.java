@@ -95,6 +95,11 @@ public final class WebSocketSyncSink implements SyncSink {
     public synchronized void start() throws IOException {
         if (running) return;
 
+        // Reject startup if no auth token configured (security requirement)
+        if (authToken == null || authToken.isBlank()) {
+            throw new IOException("WebSocket sync sink cannot start: auth token is required but not configured");
+        }
+
         server.start();
         running = true;
         logger.info("WebSocket sync server started on port " + port);
@@ -188,9 +193,10 @@ public final class WebSocketSyncSink implements SyncSink {
     private final class SyncWebSocketServer extends WebSocketServer {
 
         private final Gson gson = new Gson();
-        // Rate limiting per connection: track message count per fixed window
-        private final ConcurrentHashMap<WebSocket, Long> windowStartTimes = new ConcurrentHashMap<>();
+        // Rate limiting per connection: track message count per fixed 1-second window
+        // Key: WebSocket, Value: message count for current window
         private final ConcurrentHashMap<WebSocket, Integer> messageCount = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<WebSocket, Long> windowStartTimes = new ConcurrentHashMap<>();
 
         public SyncWebSocketServer(InetSocketAddress address) {
             super(address);
@@ -249,17 +255,20 @@ public final class WebSocketSyncSink implements SyncSink {
                 return;
             }
 
-            // Rate limiting per connection (fixed window)
+            // Rate limiting per connection (fixed 1-second window aligned to epoch)
             long now = System.currentTimeMillis();
-            long windowStart = windowStartTimes.getOrDefault(conn, now);
+            long windowStart = now / 1000 * 1000; // Align to start of current second
             
-            // Check if we're in a new window
-            if (now - windowStart >= 1000) {
-                // New window - reset counter and update window start
-                windowStartTimes.put(conn, now);
+            // Get or initialize the window start for this connection
+            long storedWindowStart = windowStartTimes.getOrDefault(conn, windowStart);
+            
+            // Check if we're in a new window (fixed window, not sliding)
+            if (windowStart != storedWindowStart) {
+                // New fixed window - reset counter
+                windowStartTimes.put(conn, windowStart);
                 messageCount.put(conn, 1);
             } else {
-                // Same window - increment counter
+                // Same fixed window - increment counter
                 int count = messageCount.merge(conn, 1, Integer::sum);
                 
                 if (count > MAX_MESSAGES_PER_SECOND) {

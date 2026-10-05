@@ -48,6 +48,11 @@ import net.minecraft.entity.damage.DamageSource;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 
@@ -104,7 +109,9 @@ enum ClaimMode {
  */
 public final class TextFormatterSuiteMod implements ModInitializer {
 
-    /** Immutable wiring snapshot; swapped atomically on reload. */
+    /**
+     * Immutable wiring snapshot; swapped atomically on reload.
+     */
     private static final class Runtime implements AutoCloseable {
         final SuiteHost host;
         final MessageDispatcher dispatcher;
@@ -118,6 +125,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         final SyncBus syncBus;
         final PluginLogger logger;
         final TranslationService translationService;
+        final ExecutorService eventExecutor;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
                 FabricActorDirectory directory, UserLanguageStore languages,
@@ -140,6 +148,16 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             this.syncBus = syncBus;
             this.logger = logger;
             this.translationService = translationService;
+            this.eventExecutor = new ThreadPoolExecutor(
+                2, 8, 60L, TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(1000),
+                r -> {
+                    Thread t = new Thread(r, "fabric-event-worker");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+            );
         }
 
         @Override
@@ -210,6 +228,17 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                     logger.warn("Error stopping DiscordBridge: " + e.getMessage());
                 }
             }
+            if (eventExecutor != null) {
+                try {
+                    eventExecutor.shutdown();
+                    if (!eventExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+                        eventExecutor.shutdownNow();
+                    }
+                    logger.debug("Event executor shut down");
+                } catch (Exception e) {
+                    logger.warn("Error shutting down event executor: " + e.getMessage());
+                }
+            }
         }
     }
 
@@ -263,15 +292,25 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             Runtime current = RUNTIME;
             if (current == null) return;
-            dispatchTyped(current, MessageType.JOIN, EventRules.CHANNEL_JOIN,
-                current.directory.actorOf(handler.player), handler.player.getName().getString());
+            current.eventExecutor.submit(() -> {
+                Runtime rt = RUNTIME;
+                if (rt != null) {
+                    dispatchTyped(rt, MessageType.JOIN, EventRules.CHANNEL_JOIN,
+                        rt.directory.actorOf(handler.player), handler.player.getName().getString());
+                }
+            });
         });
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             Runtime current = RUNTIME;
             if (current == null) return;
-            dispatchTyped(current, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
-                current.directory.actorOf(handler.player), handler.player.getName().getString());
+            current.eventExecutor.submit(() -> {
+                Runtime rt = RUNTIME;
+                if (rt != null) {
+                    dispatchTyped(rt, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
+                        rt.directory.actorOf(handler.player), handler.player.getName().getString());
+                }
+            });
         });
 
         // Death event - using mixin or alternative approach for Fabric 1.21
@@ -317,8 +356,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 dispatch(current, MessageType.CHAT, senderActor, Direction.initiator(),
                     channelPath, text, !senderOff);
             }
-            Message broadcast = broadcast(current, MessageType.CHAT, senderActor,
+            Message broadcast = buildBroadcast(current, MessageType.CHAT, senderActor,
                 channelPath, text, !senderOff);
+            current.dispatcher.dispatch(broadcast);
             mirror(current, broadcast);
         });
 
@@ -327,16 +367,21 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             Runtime current = RUNTIME;
             if (current == null) return;
             
-            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-                if (!player.isAlive() && !recentlyDead.contains(player.getUuid())) {
-                    // Player just died
-                    recentlyDead.add(player.getUuid());
-                    String vanilla = player.getDamageTracker().getDeathMessage() != null
-                        ? player.getDamageTracker().getDeathMessage().getString()
-                        : player.getName().getString();
-                    dispatchTyped(current, MessageType.DEATH, EventRules.CHANNEL_DEATH,
-                        current.directory.actorOf(player), vanilla);
-                } else if (player.isAlive() && recentlyDead.contains(player.getUuid())) {
+for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                    if (!player.isAlive() && !recentlyDead.contains(player.getUuid())) {
+                        // Player just died
+                        recentlyDead.add(player.getUuid());
+                        String vanilla = player.getDamageTracker().getDeathMessage() != null
+                            ? player.getDamageTracker().getDeathMessage().getString()
+                            : player.getName().getString();
+                        current.eventExecutor.submit(() -> {
+                            Runtime rt = RUNTIME;
+                            if (rt != null) {
+                                dispatchTyped(rt, MessageType.DEATH, EventRules.CHANNEL_DEATH,
+                                    rt.directory.actorOf(player), vanilla);
+                            }
+                        });
+                    } else if (player.isAlive() && recentlyDead.contains(player.getUuid())) {
                     // Player respawned
                     recentlyDead.remove(player.getUuid());
                 }
@@ -764,9 +809,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         current.dispatcher.dispatch(message);
     }
 
-    private static Message broadcast(Runtime current, MessageType type, Actor sender,
-                                     String channelPath, String text, boolean translate) {
-        Message message = Message.builder()
+    private static Message buildBroadcast(Runtime current, MessageType type, Actor sender,
+                                         String channelPath, String text, boolean translate) {
+        return Message.builder()
             .type(type)
             .sender(sender)
             .direction(Direction.others())
@@ -774,8 +819,6 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             .text(text)
             .channel(channelPath)
             .build();
-        current.dispatcher.dispatch(message);
-        return message;
     }
 
     private static void mirror(Runtime current, Message sent) {
