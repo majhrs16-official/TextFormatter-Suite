@@ -7,8 +7,11 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,6 +19,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Production {@link Transport} backed by {@link HttpURLConnection}.
@@ -27,6 +38,11 @@ import java.util.regex.Pattern;
  * before connecting. Configured with a deny-list of RFC 1918, RFC 3927,
  * RFC 6598 and loopback addresses. Custom allow/deny lists can be added
  * via system properties.
+ * </p>
+ * <p>
+ * TOCTOU Protection: Resolves hostname once, validates all IPs, then connects
+ * directly to the pinned IP while preserving the original hostname for
+ * TLS SNI, hostname verification, and HTTP Host header.
  * </p>
  */
 public final class HttpTransport implements Transport {
@@ -115,6 +131,8 @@ public final class HttpTransport implements Transport {
 
     private HttpURLConnection createConnection(String urlString, RequestState state) throws IOException {
         URL url = new URL(urlString);
+        String originalHost = url.getHost();
+        int port = url.getPort() != -1 ? url.getPort() : (url.getProtocol().equals("https") ? 443 : 80);
 
         // SSRF Protection: validate initial URL and get pinned address
         InetAddress pinnedAddress = null;
@@ -122,23 +140,31 @@ public final class HttpTransport implements Transport {
             pinnedAddress = validateUrlAndGetAddress(url);
         }
 
-        // Create connection using pinned IP address to prevent TOCTOU DNS rebinding
-        String connectionUrl;
+        // Create connection - use pinned IP for connection, original host for Host header/SNI
+        HttpURLConnection conn;
         if (pinnedAddress != null) {
-            // Replace hostname with pinned IP in URL
-            connectionUrl = urlString.replaceFirst(url.getHost(), pinnedAddress.getHostAddress());
+            // Connect directly to pinned IP using a Proxy
+            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(pinnedAddress, port));
+            conn = (HttpURLConnection) url.openConnection(proxy);
+            // Set Host header to original hostname (critical for virtual hosting and SNI)
+            conn.setRequestProperty("Host", originalHost + (port != 80 && port != 443 ? ":" + port : ""));
         } else {
-            connectionUrl = urlString;
+            conn = (HttpURLConnection) url.openConnection();
         }
 
-        URL connectUrl = new URL(connectionUrl);
-        HttpURLConnection conn = (HttpURLConnection) connectUrl.openConnection();
         conn.setRequestMethod(state.method);
         conn.setConnectTimeout((int) timeout.toMillis());
         conn.setReadTimeout((int) timeout.toMillis());
         // Disable automatic redirects - we handle them manually with validation
         conn.setInstanceFollowRedirects(false);
         conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
+
+        // For HTTPS, configure SSL to use original hostname for SNI and verification
+        if (conn instanceof HttpsURLConnection && pinnedAddress != null) {
+            HttpsURLConnection httpsConn = (HttpsURLConnection) conn;
+            httpsConn.setSSLSocketFactory(new PinningSSLSocketFactory(pinnedAddress, originalHost, port));
+            httpsConn.setHostnameVerifier(new PinningHostnameVerifier(originalHost));
+        }
 
         if (state.headers != null) {
             state.headers.forEach(conn::setRequestProperty);
@@ -297,7 +323,135 @@ public final class HttpTransport implements Transport {
         }
 
         // Return first valid address for connection pinning (TOCTOU mitigation)
-        // Caller should use this address directly instead of hostname
+        // Caller will connect to this IP while preserving original hostname for Host/SNI
         return addresses[0];
+    }
+
+    /**
+     * Custom SSLSocketFactory that connects to a pinned IP address while
+     * using the original hostname for TLS SNI and certificate verification.
+     */
+    private static final class PinningSSLSocketFactory extends SSLSocketFactory {
+        private final SSLSocketFactory delegate;
+        private final InetAddress pinnedAddress;
+        private final String originalHost;
+        private final int port;
+
+        PinningSSLSocketFactory(InetAddress pinnedAddress, String originalHost, int port) {
+            this.pinnedAddress = pinnedAddress;
+            this.originalHost = originalHost;
+            this.port = port;
+            // Create a default SSL context as delegate
+            try {
+                SSLContext context = SSLContext.getInstance("TLS");
+                context.init(null, new TrustManager[]{new PinningTrustManager(originalHost)}, null);
+                this.delegate = context.getSocketFactory();
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to create SSL context", e);
+            }
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public java.net.Socket createSocket() throws IOException {
+            return delegate.createSocket();
+        }
+
+        @Override
+        public java.net.Socket createSocket(java.net.Socket socket, String host, int port, boolean autoClose) throws IOException {
+            return delegate.createSocket(socket, host, port, autoClose);
+        }
+
+        @Override
+        public java.net.Socket createSocket(String host, int port) throws IOException {
+            // Connect to pinned IP, but delegate will use originalHost for SNI
+            java.net.Socket socket = new java.net.Socket();
+            socket.connect(new InetSocketAddress(pinnedAddress, this.port), 10000);
+            // Wrap with SSL using original hostname for SNI
+            return delegate.createSocket(socket, originalHost, port, true);
+        }
+
+        @Override
+        public java.net.Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+            java.net.Socket socket = new java.net.Socket();
+            socket.bind(new InetSocketAddress(localHost, localPort));
+            socket.connect(new InetSocketAddress(pinnedAddress, this.port), 10000);
+            return delegate.createSocket(socket, originalHost, port, true);
+        }
+
+        @Override
+        public java.net.Socket createSocket(InetAddress host, int port) throws IOException {
+            java.net.Socket socket = new java.net.Socket();
+            socket.connect(new InetSocketAddress(pinnedAddress, this.port), 10000);
+            return delegate.createSocket(socket, originalHost, port, true);
+        }
+
+        @Override
+        public java.net.Socket createSocket(InetAddress host, int port, InetAddress localHost, int localPort) throws IOException {
+            java.net.Socket socket = new java.net.Socket();
+            socket.bind(new InetSocketAddress(localHost, localPort));
+            socket.connect(new InetSocketAddress(pinnedAddress, this.port), 10000);
+            return delegate.createSocket(socket, originalHost, port, true);
+        }
+    }
+
+    /**
+     * TrustManager that verifies certificate against original hostname.
+     */
+    private static final class PinningTrustManager implements X509TrustManager {
+        private final String originalHost;
+        private final X509TrustManager defaultTrustManager;
+
+        PinningTrustManager(String originalHost) {
+            this.originalHost = originalHost;
+            try {
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init((java.security.KeyStore) null);
+                this.defaultTrustManager = (X509TrustManager) tmf.getTrustManagers()[0];
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to create default trust manager", e);
+            }
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
+            defaultTrustManager.checkClientTrusted(chain, authType);
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
+            defaultTrustManager.checkServerTrusted(chain, authType);
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return defaultTrustManager.getAcceptedIssuers();
+        }
+    }
+
+    /**
+     * HostnameVerifier that verifies against original hostname.
+     */
+    private static final class PinningHostnameVerifier implements HostnameVerifier {
+        private final String originalHost;
+
+        PinningHostnameVerifier(String originalHost) {
+            this.originalHost = originalHost;
+        }
+
+        @Override
+        public boolean verify(String hostname, SSLSession session) {
+            // Verify against original hostname, not the IP we connected to
+            return HttpsURLConnection.getDefaultHostnameVerifier().verify(originalHost, session);
+        }
     }
 }

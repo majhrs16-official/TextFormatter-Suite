@@ -46,17 +46,28 @@ public final class MessageDispatcher {
     private final PluginLogger logger;
     private final ExecutorService executor;
     private final ScheduledExecutorService sleepScheduler;
+    private final boolean engineParallel;
 
-public MessageDispatcher(SuiteHost host,
-                              ActorDirectory actors,
-                              ChatDelivery delivery,
-                              PermissionChecker permissions,
-                              PluginLogger logger) {
+    public MessageDispatcher(SuiteHost host,
+                               ActorDirectory actors,
+                               ChatDelivery delivery,
+                               PermissionChecker permissions,
+                               PluginLogger logger) {
+        this(host, actors, delivery, permissions, logger, host.config().engineParallel());
+    }
+
+    public MessageDispatcher(SuiteHost host,
+                               ActorDirectory actors,
+                               ChatDelivery delivery,
+                               PermissionChecker permissions,
+                               PluginLogger logger,
+                               boolean engineParallel) {
         this.host = Objects.requireNonNull(host, "host");
         this.actors = Objects.requireNonNull(actors, "actors");
         this.delivery = Objects.requireNonNull(delivery, "delivery");
         this.permissions = Objects.requireNonNull(permissions, "permissions");
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.engineParallel = engineParallel;
         // Bounded executor for parallel recipient processing (DOS-2)
         this.executor = new ThreadPoolExecutor(
             4, 32, 60L, TimeUnit.SECONDS,
@@ -107,13 +118,23 @@ public MessageDispatcher(SuiteHost host,
             return new DispatchReport(0, 0, 0, 0, 0, null);
         }
 
-        // Process recipients in parallel using bounded executor
-        List<CompletableFuture<RecipientResult>> futures = recipients.stream()
-            .map(recipient -> CompletableFuture.supplyAsync(() -> {
+        // Process recipients: parallel if engineParallel=true, sequential if false
+        List<CompletableFuture<RecipientResult>> futures;
+        if (engineParallel) {
+            futures = recipients.stream()
+                .map(recipient -> CompletableFuture.supplyAsync(() -> {
+                    RoutingResult result = host.deliver(messageWithResolvedSource, recipient);
+                    return new RecipientResult(recipient, result);
+                }, executor))
+                .collect(Collectors.toList());
+        } else {
+            // Sequential processing: run on caller thread
+            futures = new ArrayList<>();
+            for (Actor recipient : recipients) {
                 RoutingResult result = host.deliver(messageWithResolvedSource, recipient);
-                return new RecipientResult(recipient, result);
-            }, executor))
-            .collect(Collectors.toList());
+                futures.add(CompletableFuture.completedFuture(new RecipientResult(recipient, result)));
+            }
+        }
 
         // Collect results
         int delivered = 0;

@@ -185,7 +185,10 @@ public final class VelocitySink implements SyncSink {
 
     @Override
     public DeliverySemantics deliverySemantics() {
-        return DeliverySemantics.EXACTLY_ONCE;
+        // Changed from EXACTLY_ONCE to AT_LEAST_ONCE per TXF-008:
+        // No ACK protocol exists between sender and receiver, and no deduplication
+        // store on the receiver side. Retries can cause duplicates.
+        return DeliverySemantics.AT_LEAST_ONCE;
     }
 
     @Override

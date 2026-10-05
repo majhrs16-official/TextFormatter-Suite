@@ -6,9 +6,11 @@ import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -185,6 +187,12 @@ public final class DefaultSyncBus implements SyncBus {
         if (removed != null) {
             sinkNamesSnapshot.remove(name);
             removed.shutdown();
+            // Ensure sink.stop() is called to release external resources (sockets, connections, etc.)
+            try {
+                removed.sink.stop();
+            } catch (Exception e) {
+                logger.warn("SyncBus: error stopping sink '" + name + "': " + e.getMessage(), e);
+            }
             logger.debug("SyncBus: unregistered sink '" + name + "'");
             return true;
         }
@@ -221,12 +229,75 @@ public final class DefaultSyncBus implements SyncBus {
                 // Queue full - apply backpressure by running in caller thread (CallerRunsPolicy)
                 submitToGlobalQueue(message);
             }
-            return sinks.size();
+            // Return count of sinks that successfully enqueued the message
+            int enqueued = 0;
+            for (SinkContext ctx : sinks.values()) {
+                if (ctx.enqueue(message)) {
+                    enqueued++;
+                }
+            }
+            return enqueued;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             totalDropped.incrementAndGet();
             return 0;
         }
+    }
+
+    @Override
+    public java.util.Map<String, CompletableFuture<Void>> broadcastAsync(Message message) {
+        java.util.Map<String, CompletableFuture<Void>> futures = new ConcurrentHashMap<>();
+        
+        if (shuttingDown.get() || sinks.isEmpty()) {
+            return futures;
+        }
+
+        // Submit to global queue to process message
+        CompletableFuture<Void> globalFuture = new CompletableFuture<>();
+        try {
+            globalQueue.offer(() -> {
+                try {
+                    processMessage(message);
+                    globalFuture.complete(null);
+                } catch (Exception e) {
+                    globalFuture.completeExceptionally(e);
+                }
+            }, 100, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            globalFuture.completeExceptionally(e);
+        }
+
+        // Create futures for each sink
+        for (SinkContext ctx : sinks.values()) {
+            CompletableFuture<Void> sinkFuture = new CompletableFuture<>();
+            String sinkName = ctx.sink.name();
+            futures.put(sinkName, sinkFuture);
+
+            // Chain sink completion to global future
+            globalFuture.whenComplete((v, ex) -> {
+                if (ex != null) {
+                    sinkFuture.completeExceptionally(ex);
+                } else {
+                    // Wait for sink to process - we'll poll the queue
+                    waitForSinkProcessing(ctx, sinkFuture);
+                }
+            });
+        }
+
+        return futures;
+    }
+
+    private void waitForSinkProcessing(SinkContext ctx, CompletableFuture<Void> future) {
+        // Schedule a check to see if the sink has processed the message
+        scheduler.schedule(() -> {
+            if (!ctx.running.get() || ctx.queue.isEmpty()) {
+                future.complete(null);
+            } else {
+                // Re-check after a short delay
+                waitForSinkProcessing(ctx, future);
+            }
+        }, 100, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -257,15 +328,26 @@ public final class DefaultSyncBus implements SyncBus {
             return;
         }
 
-        for (SinkContext ctx : sinks.values()) {
-            try {
+        List<SinkContext> startedContexts = new ArrayList<>();
+        try {
+            for (SinkContext ctx : sinks.values()) {
                 ctx.sink.start();
                 ctx.start();
+                startedContexts.add(ctx);
                 logger.info("SyncBus: started sink '" + ctx.sink.name() + "'");
-            } catch (Exception e) {
-                logger.error("SyncBus: failed to start sink '" + ctx.sink.name() + "': " + e.getMessage(), e);
-                throw e;
             }
+        } catch (Exception e) {
+            // Rollback: stop all sinks that were successfully started in this call
+            for (SinkContext ctx : startedContexts) {
+                try {
+                    ctx.shutdown();
+                    ctx.sink.stop();
+                } catch (Exception rollbackEx) {
+                    logger.warn("SyncBus: error during rollback stop of sink '" + ctx.sink.name() + "': " + rollbackEx.getMessage());
+                }
+            }
+            started.set(0); // Reset started flag so future start() calls can retry
+            throw e;
         }
     }
 

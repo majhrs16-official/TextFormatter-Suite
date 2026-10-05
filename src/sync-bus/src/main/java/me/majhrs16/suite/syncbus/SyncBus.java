@@ -5,7 +5,9 @@ import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Central hub for cross-platform message synchronization.
@@ -59,9 +61,24 @@ public interface SyncBus extends AutoCloseable {
      * </p>
      *
      * @param message the message to broadcast, must not be null
-     * @return the number of sinks that successfully accepted the message
+     * @return the number of sinks that successfully enqueued the message for delivery
      */
     int broadcast(Message message);
+
+    /**
+     * Sends a message to all registered sinks and returns futures for tracking
+     * actual delivery completion per sink.
+     * <p>
+     * Unlike {@link #broadcast(Message)}, this method returns a map of sink names
+     * to {@link CompletableFuture} that complete when the sink has processed the
+     * message (successfully or with failure). This allows callers to await actual
+     * delivery rather than just queue acceptance.
+     * </p>
+     *
+     * @param message the message to broadcast, must not be null
+     * @return map of sink name to future completing when that sink finishes processing
+     */
+    Map<String, CompletableFuture<Void>> broadcastAsync(Message message);
 
     /**
      * Sends a message to a specific sink by name.

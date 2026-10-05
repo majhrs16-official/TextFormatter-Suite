@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.message.Language;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -79,29 +80,37 @@ public final class TranslationService implements AutoCloseable {
             return cached;
         }
         
-        // Deduplicate in-flight requests for the same translation
-        CompletableFuture<String> future = inFlightTranslations.computeIfAbsent(cacheKey, k -> 
-            executor.submit(() -> {
-                try {
-                    String translated = manager.active().translate(text, source, to.code());
-                    // Store in cache with size limit
-                    if (translationCache.size() < MAX_TRANSLATION_CACHE_SIZE) {
-                        translationCache.put(cacheKey, translated);
-                    }
-                    return translated;
-                } catch (TranslationException e) {
-                    return text;
-                } finally {
-                    inFlightTranslations.remove(cacheKey);
-                }
-            }, TRANSLATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        );
-        
-        try {
-            return future.get();
-        } catch (Exception e) {
-            return text;
-        }
+// Deduplicate in-flight requests for the same translation
+         CompletableFuture<String> future;
+         try {
+             future = inFlightTranslations.computeIfAbsent(cacheKey, k -> 
+                 executor.submit(() -> {
+                     try {
+                         String translated = manager.active().translate(text, source, to.code());
+                         // Store in cache with size limit
+                         if (translationCache.size() < MAX_TRANSLATION_CACHE_SIZE) {
+                             translationCache.put(cacheKey, translated);
+                         }
+                         return translated;
+                     } catch (TranslationException e) {
+                         return text;
+                     }
+                 }, TRANSLATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+             );
+         } catch (RejectedExecutionException e) {
+             // Executor saturated: fallback to source text to avoid message loss
+             return text;
+         }
+         
+         // Ensure in-flight entry is removed regardless of how future completes
+         // (success, exception, timeout cancellation, or rejection)
+         future.whenComplete((result, ex) -> inFlightTranslations.remove(cacheKey, future));
+         
+         try {
+             return future.get();
+         } catch (Exception e) {
+             return text;
+         }
     }
 
     /** Translates a list of fragments, preserving order and skipping empties. */
@@ -132,27 +141,36 @@ public final class TranslationService implements AutoCloseable {
             return Language.fromCode(cachedCode).orElse(Language.EN);
         }
         
-        // Deduplicate in-flight requests for the same detection
-        CompletableFuture<Language> future = inFlightDetections.computeIfAbsent(cacheKey, k -> 
-            executor.submit(() -> {
-                try {
-                    Language detected = Language.fromCode(manager.active().detect(text)).orElse(Language.EN);
-                    // Store in cache with size limit
-                    if (detectionCache.size() < MAX_DETECTION_CACHE_SIZE) {
-                        detectionCache.put(cacheKey, detected.code());
-                    }
-                    return detected;
-                } finally {
-                    inFlightDetections.remove(cacheKey);
-                }
-            }, TRANSLATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        );
-        
-        try {
-            return future.get();
-        } catch (Exception e) {
-            return Language.EN;
-        }
+// Deduplicate in-flight requests for the same detection
+         CompletableFuture<Language> future;
+         try {
+             future = inFlightDetections.computeIfAbsent(cacheKey, k -> 
+                 executor.submit(() -> {
+                     try {
+                         Language detected = Language.fromCode(manager.active().detect(text)).orElse(Language.EN);
+                         // Store in cache with size limit
+                         if (detectionCache.size() < MAX_DETECTION_CACHE_SIZE) {
+                             detectionCache.put(cacheKey, detected.code());
+                         }
+                         return detected;
+                     } finally {
+                         inFlightDetections.remove(cacheKey);
+                     }
+                 }, TRANSLATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+             );
+         } catch (RejectedExecutionException e) {
+             // Executor saturated: fallback to default language
+             return Language.EN;
+         }
+         
+         // Ensure in-flight entry is removed regardless of how future completes
+         future.whenComplete((result, ex) -> inFlightDetections.remove(cacheKey, future));
+         
+         try {
+             return future.get();
+         } catch (Exception e) {
+             return Language.EN;
+         }
     }
 
     /** @return whether any provider is currently usable. */
