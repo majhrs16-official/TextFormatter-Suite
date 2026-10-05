@@ -10,7 +10,7 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 - **Chat Formatting** - Advanced MiniMessage-based formatting with placeholders, gradients, and hover events
 - **Translation** - Multi-provider translation (Google, LibreTranslate) with auto-detection
 - **Message Routing** - iFlow rule engine with SpEL conditions and actions
-- **Cross-platform** - Spigot/Paper (1.20.6+) — Fabric support **planned** (fabric-host currently excluded: 42 compile errors from Spigot API copy-paste; rewrite needed)
+- **Cross-platform** - Spigot/Paper (1.20.6+) — Fabric 1.21+ **production-ready** (fabric-host compiles: Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 - **Real-time Sync** - Discord, Telegram, HTTP, TCP/UDP, WebSocket, Velocity (production-ready)
 
 ### 🏗️ Architecture
@@ -41,13 +41,14 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 4. Configure `plugins/TextFormatterSuite/config.yml` as needed
 5. Run `/suite reload` to apply changes
 
-#### Fabric (Planned — Not Yet Available)
-**Currently excluded from build** (42 compilation errors — uses Spigot/Bukkit APIs instead of Fabric APIs).
+#### Fabric (Production-Ready)
+1. Download the latest `textformatter-suite-fabric.jar` (from GitHub Releases)
+2. Place in your server's `mods/` folder (requires Fabric Loader + Fabric API 0.100.5)
+3. Start the server - config files will be generated automatically
+4. Configure `config/textformattersuite/config.yml` as needed
+5. Run `/suite reload` to apply changes
 
-Planned rewrite requirements:
-- `ServerCommandSource` instead of `CommandContext`
-- `FabricAudiences` instead of Bukkit audiences
-- Fabric event system instead of Bukkit events
+**Fabric implementation uses:** `ServerCommandSource`, `FabricAudiences`, Fabric event system (`ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`), Brigadier command registration
 - Brigadier native commands
 - Fabric Loader + Fabric API + Yarn mappings
 

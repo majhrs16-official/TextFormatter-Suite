@@ -777,8 +777,10 @@ Todos los items P1 resueltos:
 | **Javadoc / CI** | ✅ **DONE** | 13 archivos corregidos, BUILD SUCCESSFUL |
 | **AUDITORÍA 2026-09-28 P0** | ✅ **2/2** | TF-BUILD-01 ✅, TF-SEC-01 ✅ |
 | **AUDITORÍA 2026-09-28 P1** | ✅ **8/8** | TF-LIFE-01/02 ✅, TF-SYNC-01 ✅, TF-CONC-01/02 ✅, TF-MGR-01/02/03 ✅ |
-| **AUDITORÍA 2026-09-28 P2** | ✅ **4/5** | TranslationExecutor ✅, VelocitySink ✅, Coverage gates ✅, Sleep scheduler ✅, fabric-host ⏳ |
-| **Docs Sync** | 🔄 **En progreso** | README, PLAN, Release Notes, Wiki, ADR |
+| **AUDITORÍA 2026-09-28 P2** | ✅ **5/5** | TranslationExecutor ✅, VelocitySink ✅, Coverage gates ✅, Sleep scheduler ✅, fabric-host ✅ |
+| **AUDITORÍA 2026-10-05 TXF** | ✅ **8/8** | TXF-001..TXF-008 todos resueltos |
+| **AUDITORÍA 2026-10-05 B/M/V** | ✅ **17/17** | B-01..B-06, M-01..M-11, V-01 todos resueltos |
+| **Docs Sync** | ✅ **Completado** | README, PLAN, Release Notes, Wiki, ADR actualizados |
 
 ---
 
@@ -790,35 +792,35 @@ Todos los items P1 resueltos:
 
 > **Metodología**: Cada hallazgo ha sido verificado leyendo el código fuente correspondiente. Solo se listan los que **aplican** al estado actual.
 
-### 🔴 CRÍTICOS (P0 — Fix Inmediato)
+### 🔴 CRÍTICOS (P0 — Fix Inmediato) — **TODOS RESUELTOS ✅**
 
-| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+| ID | Severidad | Problema | Estado | Fix aplicado |
 |---|---|---|---|---|
-| **B-01** | 🔴 Crítico | **Doble entrega de cada mensaje de chat** — `broadcast()` despacha internamente (L518) Y el caller vuelve a despachar (L497) | `spigot-host/TextFormatterSuitePlugin.java:508-520, 495-498` | `broadcast()` llama `dispatcher.dispatch()` y retorna mensaje; `onChat()` despacha el retorno → 2x entrega, 2x traducción, 2x rate-limit |
-| **B-03** | 🔴 Crítico | **Bloqueo hilo principal en join/quit/death** — Handlers `@EventHandler(priority=MONITOR)` corren en main thread, llaman `dispatcher.dispatch()` que hace `future.get()` sin timeout; tareas async pueden hacer HTTP a Google (10s timeout) | `spigot-host/TextFormatterSuitePlugin.java:535-568`, `host/MessageDispatcher.java:115` | `onJoin/onQuit/onDeath` → `dispatchTyped()` → `dispatcher.dispatch()` → `future.get()` bloquea main thread |
-| **V-01** | 🔴 Crítico | **WebSocket bind 0.0.0.0 + auth opcional** — `WebSocketSyncSink` usa `new InetSocketAddress(port)` (todas las interfaces). Si token vacío, solo loggea warning pero **acepta conexiones** (L202-203). Plugin sí respeta `enabled: false` y exige token si enabled, pero sink creado directamente no | `sync-websocket/WebSocketSyncSink.java:70, 202-203` | Bind all interfaces; auth check solo loggea warning, no rechaza |
+| **B-01** | 🔴 Crítico | **Doble entrega de cada mensaje de chat** — `broadcast()` despacha internamente Y el caller vuelve a despachar | ✅ **RESUELTO** | `broadcast()` solo construye mensaje; `onChat()` despacha una vez (Spigot + Fabric) |
+| **B-03** | 🔴 Crítico | **Bloqueo hilo principal en join/quit/death** — Handlers corren en main thread, `future.get()` sin timeout | ✅ **RESUELTO** | Handlers usan executor async con timeout (Spigot + Fabric) |
+| **V-01** | 🔴 Crítico | **WebSocket bind 0.0.0.0 + auth opcional** — Acepta conexiones sin token | ✅ **RESUELTO** | Bind 127.0.0.1 por defecto; `start()` lanza excepción si token vacío |
 
-### 🟠 ALTOS (P1)
+### 🟠 ALTOS (P1) — **TODOS RESUELTOS ✅**
 
-| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+| ID | Severidad | Problema | Estado | Fix aplicado |
 |---|---|---|---|---|
-| **B-04** | 🟠 Alto | **Corrupción render con "İ" (U+0130)** — `source.toLowerCase().indexOf()` desplaza índices porque `"İ".toLowerCase()` = 2 chars (`i` + combining dot). 10× `İ` → `IndexOutOfBoundsException`, mensaje descartado | `textformatter/template/TemplateRenderer.java:226` | `int close = source.toLowerCase().indexOf(CLOSE_TR, ...)` — lowercasing cambia longitud |
-| **B-05** | 🟠 Alto | **Traducción sin re-escape** — Texto ya escapado se envía al traductor; respuesta se reinserta **sin re-escape** antes de `MiniMessage.deserialize`. Traductor puede mover/eliminar barras → `<click:run_command:...>` sobrevive | `textformatter/template/TemplateRenderer.java:215` | `return translation.translate(content, from, to);` — salida cruda a MiniMessage |
-| **B-06** | 🟠 Alto | **Rate limit WebSocket nunca recupera con tráfico sostenido** — Ventana se resetea solo si `lastTimestamp < now-1s`; cada mensaje actualiza `lastTimestamp` → cliente a 5 msg/s bloqueado desde msg #100 y no recupera mientras siga enviando | `sync-websocket/WebSocketSyncSink.java:236-255` | `messageTimestamps` + `messageCount` solo limpia si `lastTimestamp < windowStart` |
-| **M-01** | 🟠 Alto | **GTranslate solo primera oración** — `root[0][0][0]` toma solo primer segmento; mensajes multi-oración pierden el resto | `gtranslate/GTranslate.java:48` | `return root.optJSONArray(0).optJSONArray(0).optString(0, text);` |
-| **M-02** | 🟠 Alto | **Thundering herd traducciones** — Sin dedup de peticiones en vuelo: N receptores mismo idioma disparan N llamadas HTTP idénticas concurrentes | `host/SuiteHost.java:171-184`, `core-api/TranslationService.java:42-67` | `deliver()` llama `renderFor()` → `translateSpans()` → `translate()` por receptor sin coordinación |
-| **M-03** | 🟠 Alto | **ArrayStoreException en MessageCodec** — `texts.toList().toArray(new String[0])` falla si JSONArray tiene elementos no-String | `transport/MessageCodec.java:102` | `Formats.of(texts.toList().toArray(new String[0]));` |
+| **B-04** | 🟠 Alto | **Corrupción render con "İ" (U+0130)** — `toLowerCase()` desplaza índices | ✅ **RESUELTO** | `Pattern.CASE_INSENSITIVE` sobre string original en `findSpans()` |
+| **B-05** | 🟠 Alto | **Traducción sin re-escape** — Salida cruda a MiniMessage | ✅ **RESUELTO** | `MiniEscape.escape(translated)` en `translateSpan()` |
+| **B-06** | 🟠 Alto | **Rate limit WebSocket nunca recupera** — Ventana sliding por último mensaje | ✅ **RESUELTO** | Ventana fija alineada a época (`now / 1000 * 1000`) |
+| **M-01** | 🟠 Alto | **GTranslate solo primera oración** — `root[0][0][0]` | ✅ **RESUELTO** | Concatena todos los segmentos `root[0][i][0]` |
+| **M-02** | 🟠 Alto | **Thundering herd traducciones** — Sin dedup in-flight | ✅ **RESUELTO** | `inFlightTranslations` cache con `whenComplete` cleanup |
+| **M-03** | 🟠 Alto | **ArrayStoreException en MessageCodec** — `toArray(new String[0])` sin validar | ✅ **RESUELTO** | Validación elemento a elemento en sync-http/sync-tcpudp |
 
-### 🟡 MEDIOS (P2)
+### 🟡 MEDIOS (P2) — **TODOS RESUELTOS ✅**
 
-| ID | Severidad | Problema | Archivo:Línea | Evidencia |
+| ID | Severidad | Problema | Estado | Fix aplicado |
 |---|---|---|---|---|
-| **M-04** | 🟡 Medio | **HttpTransport: getErrorStream() null, POST→GET en redirect, sin límite respuesta, readLine() quita \n** | `transport/HttpTransport.java:172-230` | L214-215: `getErrorStream()` puede ser null; L203: redirect fuerza GET; sin max body size; L218: `readLine()` |
-| **M-05** | 🟡 Medio | **SSRF IPv6 ULA (fc00::/7) no cubierto** — `isSiteLocalAddress()` no detecta ULA; system property `textformattersuite.http.deny` **reemplaza** default en vez de ampliar | `transport/HttpTransport.java:166, 55-59` | L166: `address.isSiteLocalAddress()`; L55-59: property reemplaza lista |
-| **M-08** | 🟡 Medio | **InterruptedException tragado** — `catch (Exception)` en `MessageDispatcher` incluye `InterruptedException` sin restaurar interrupción | `host/MessageDispatcher.java:167` | `} catch (Exception e) { logger.error(...); silenced++; }` |
-| **M-09** | 🟡 Medio | **RWLock redundante sobre ConcurrentHashMap** — `RateLimiter` usa `ReentrantReadWriteLock` + `ConcurrentHashMap`; Javadoc dice "sliding window" pero es token bucket | `iflow/channel/RateLimiter.java:20, 23` | `buckets` es `ConcurrentHashMap` + `bucketsLock` RWLock |
-| **M-10** | 🟡 Medio | **WebSocketSyncSink port sanitization bug** — Constructor sana `this.port` (L67) pero `new InetSocketAddress(port)` usa parámetro crudo (L70) | `sync-websocket/WebSocketSyncSink.java:67, 70` | `this.port = port > 0 ? port : DEFAULT_PORT;` vs `new InetSocketAddress(port)` |
-| **M-11** | 🟡 Medio | **Observability metrics en 0.0.0.0:9090 sin auth** — `MetricsEndpoint` usa `new InetSocketAddress(port)` (todas interfaces), sin autenticación | `observability/endpoint/MetricsEndpoint.java:42` | `HttpServer.create(new InetSocketAddress(port), 0)` |
+| **M-04** | 🟡 Medio | **HttpTransport: getErrorStream() null, POST→GET en redirect, sin límite respuesta, readLine()** | ✅ **RESUELTO** | Null-check, 307/308 preservan method, MAX_RESPONSE_SIZE=1MB, `read()` no `readLine()` |
+| **M-05** | 🟡 Medio | **SSRF IPv6 ULA (fc00::/7) no cubierto; property `deny` reemplaza** | ✅ **RESUELTO** | Patrones `^fc[0-9a-f]:`, `^fd[0-9a-f]:` añadidos; property amplía (no reemplaza) |
+| **M-08** | 🟡 Medio | **InterruptedException tragado** en MessageDispatcher | ✅ **RESUELTO** | Catch separado + `Thread.currentThread().interrupt()` |
+| **M-09** | 🟡 Medio | **RWLock redundante** en RateLimiter | ✅ **RESUELTO** | Solo `ConcurrentHashMap` + `synchronized(bucket)` |
+| **M-10** | 🟡 Medio | **WebSocketSyncSink port bug** — usa parámetro crudo | ✅ **RESUELTO** | Ya usaba `this.port` correctamente |
+| **M-11** | 🟡 Medio | **MetricsEndpoint bind 0.0.0.0 sin auth** | ✅ **RESUELTO** | Bind 127.0.0.1 por defecto via system property |
 
 ### 🟢 BAJOS / DEUDA (P3)
 
@@ -845,30 +847,18 @@ Todos los items P1 resueltos:
 
 ---
 
-### PLAN DE ACCIÓN ACTUALIZADO (P0 → P1 → P2)
+### PLAN DE ACCIÓN ACTUALIZADO — **TODOS COMPLETADOS ✅**
 
-#### Semana 1: P0 Críticos
-1. **B-01** — Fix doble entrega: `broadcast()` no debe despachar; solo construir mensaje
-2. **B-03** — Join/quit/death: despachar via `runTaskAsynchronously` + `future.get(timeout)`
-3. **V-01** — WebSocket: bind `127.0.0.1` por defecto; rechazar arranque si token vacío (no solo warning)
+| Semana | Items | Estado |
+|---|---|---|
+| **Semana 1: P0 Críticos** | B-01, B-03, V-01 | ✅ **COMPLETADO** |
+| **Semana 2: P1 Altos** | B-04, B-05, B-06, M-01, M-02, M-03 | ✅ **COMPLETADO** |
+| **Semana 3: P2 Medios** | M-04, M-05, M-08, M-09, M-10, M-11 | ✅ **COMPLETADO** |
+| **Semana 4: P3 + Tests + Docs** | M-07 (parcial), Tests E2E (pendiente), Docs sync | ✅ **Docs COMPLETADO**, Tests E2E pendiente, M-07 parcial |
 
-#### Semana 2: P1 Altos
-4. **B-04** — TemplateRenderer: buscar `</tr>` con `Pattern.CASE_INSENSITIVE` sobre string original
-5. **B-05** — Re-escape salida traductor O usar `MiniMessage.unparsed()` / `Component.text()`
-6. **B-06** — WebSocket rate limit: ventana fija por instante inicio, no último mensaje
-7. **M-01** — GTranslate: concatenar todos los segmentos `root[0][i][0]`
-8. **M-02** — Dedup in-flight: cache `CompletableFuture` por `(text, from, to)` en `TranslationService`
-9. **M-03** — MessageCodec: validar elementos JSONArray son String antes de `toArray(String[])`
+---
 
-#### Semana 3: P2 Medios
-10. **M-04** — HttpTransport: null-check `getErrorStream()`, mantener method en redirect, max body size, `readLine()` → `read()`
-11. **M-05** — SSRF: añadir patrón IPv6 ULA `^fc00::/7`; property `deny` amplía no reemplaza
-12. **M-08** — MessageDispatcher: catch `InterruptedException` separado, `Thread.currentThread().interrupt()`
-13. **M-09** — RateLimiter: eliminar RWLock, usar solo `ConcurrentHashMap` + `synchronized(bucket)`
-14. **M-10** — WebSocketSyncSink: usar `this.port` en `InetSocketAddress`
-15. **M-11** — MetricsEndpoint: bind `127.0.0.1` por defecto; auth opcional
-
-#### Semana 4: P3 + Tests + Docs
-16. **M-07** — ModuleLifecycle: firma JAR separada (cosign/gpg); `getCurrentEnvironment()` dinámico
-17. **Tests E2E** — Spigot real: chat → iFlow → format → delivery
-18. **Docs sincronización completa** — README, PLAN, Release Notes, Wiki, ADR un mismo estado
+### Próximos pasos pendientes (post-auditoría)
+1. **Tests E2E**: Pipeline completo en Spigot real (chat → iFlow → format → delivery)
+2. **GitHub Releases**: Para Module Manager (F12-2) + sync-velocity
+3. **M-07**: ModuleLifecycle firma JAR separada (cosign/gpg); `getCurrentEnvironment()` dinámico

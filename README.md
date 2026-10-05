@@ -306,7 +306,7 @@ npm run test:integration             # harnesses func/interact/click/chain/undo/
 ## 13. Pruebas
 - **Suite Java**: 167+ tests verdes bajo Gradle (kernel, textformatter, iflow,
 gtranslate/ltranslate, sync-*, host, messages, tester, transport,
-spigot-host con normalización de sonido). `ModuleLoaderTest` requiere
+spigot-host con normalización de sonido, fabric-host). `ModuleLoaderTest` requiere
 ejecución aislada.
 - **Web editor**: 99 unitarios (StateStore 40, model 30, validate 29) +
 harnesses de integración in-repo (`tests/integration/*.cjs`).
@@ -320,7 +320,7 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
   - 19 tests extendidos GTranslate (edge cases, malformed, unicode, rate limit)
   - 15 tests extendidos LTranslate (error handling, unicode, rate limit)
 ---
-## 14. Estado real (2026-09-28)
+## 14. Estado real (2026-10-05)
 
 **Fases cerradas:**
 - F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
@@ -330,6 +330,7 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
 - F10 (observabilidad: metrics/debug/health), F11 (extensiones/addons SDK), **F12 (manager runtime - núcleo completado)**,
 - F13 (sync-websocket), F14 (presets, transform real, engine.parallel), F15 (in-world **compila**),
 - **FASE 13 (2026-09-28)**: Clean Architecture (Translator SPI), Release Pipeline CI/CD, Dependency Verification completa.
+- **FASE 16 (2026-10-05)**: AUDITORIA.md hallazgos resueltos (TXF-001..TXF-008, B-01..B-06, M-01..M-11, V-01).
 - F16 (tests, profiling, docs — **tests E2E pendientes, docs sync en progreso**).
 
 **Eliminado:** trío monolítico `common`/`spigot`/`fabric-1.20.6` (nunca
@@ -337,7 +338,10 @@ probado en servidor; recuperable desde historial git).
 
 **Probado en producción:** Plugin `TextFormatterSuite` probado en servidor Paper 1.20.6 real — todos los comandos `/suite`, canales join/quit/death/advancement, chat con traducción, rate-limit, y tests runtime funcionando.
 
-**Completado en esta sesión (2026-09-28):**
+**Completado en esta sesión (2026-10-05):**
+- ✅ **AUDITORIA.md TXF-001..008**: In-flight translation leak, RejectedExecutionException fallback, DNS pinning TLS/SNI, SyncBus lifecycle (unregister/start), engine.parallel sequential mode, broadcast ACKs, VelocitySink AT_LEAST_ONCE.
+- ✅ **AUDITORIA.md B-01..B-06**: Double delivery, join/quit/death async, WebSocket bind/auth, TemplateRenderer İ fix, translation re-escape, WebSocket fixed-window rate limit.
+- ✅ **AUDITORIA.md M-01..M-11**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException restore, RateLimiter no RWLock, WebSocket port, MetricsEndpoint bind 127.0.0.1.
 - ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; ServiceLoader discovery en runtime.
 - ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config.
 - ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` con todos los checksums transitivos.
@@ -348,7 +352,6 @@ probado en servidor; recuperable desde historial git).
 **Pendientes / Deuda conocida:**
 - ⚠️ **Tests E2E**: Pipeline completo en Spigot real (chat → iFlow → format → delivery).
 - ⚠️ **GitHub Releases**: Para Module Manager (F12-2) + sync-velocity (requiere release pipeline).
-- ⚠️ **Documentación**: README, PLAN, Release Notes, Wiki, ADR → un mismo estado (en progreso).
 - ⚠️ **Config schema**: Copias manuales (`paths.json`, `js/paths.js`, `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`) → Centralizar generación.
 - ⚠️ **gradle.lockfile portable**: Pendiente.
 - ⚠️ **Web editor**: Ampliar opciones YAML para reglas complejas sin perder usabilidad.

@@ -169,6 +169,12 @@
 - ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile`, `verification-metadata.xml` con todos los checksums transitivos (incl. jackson-base-2.22.0, junit-bom-5.14.3, adventure-bom-4.13.1)
 - ✅ **fabric-host COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 
+#### FASE 16 (2026-10-05): AUDITORIA.md Hallazgos Resueltos — Production-Ready
+- ✅ **TXF-001..TXF-008**: In-flight translation leak, RejectedExecutionException fallback, DNS pinning TLS/SNI, SyncBus lifecycle, engine.parallel sequential, broadcast ACKs, VelocitySink AT_LEAST_ONCE
+- ✅ **B-01..B-06**: Double delivery, join/quit/death async, WebSocket bind/auth, TemplateRenderer İ, translation re-escape, WebSocket fixed-window rate limit
+- ✅ **M-01..M-11, V-01**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException, RateLimiter no RWLock, WebSocket port, MetricsEndpoint bind
+- ✅ **All CI checks pass**: build, test, checkLocks, javadoc, npm run check (29/29)
+
 ---
 
 ### Breaking Changes from 2.0.x

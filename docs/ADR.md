@@ -338,3 +338,46 @@ Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpre
 **Implementación (2026-09-28).**
 Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `core-api` (ya tenía TranslatorProvider SPI), `gtranslate` (GTranslateProvider + META-INF/services), `ltranslate` (LTranslateProvider + META-INF/services), `spigot-host` (build.gradle mantiene deps), `build.gradle` (root: dependencyLocking, checkLocks fix), `settings.gradle` (fabric-host **incluido**), `gradle/verification-metadata.xml` (checksums agregados), `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `docs/PLAN.md`, `README.md`, module READMEs.
 
+---
+
+## 6. **AUDITORIA.md Hallazgos Resueltos (2026-10-05)**
+
+**Contexto:** Auditoría técnica integral 2026-10-05 (commit `14fcf58`) identificó 8 bugs críticos/altos (TXF-001..TXF-008) y 17 hallazgos B/M/V que requerían corrección para alcanzar madurez operacional production-ready.
+
+**Decisiones tomadas:**
+
+| Hallazgo | Decisión | Implementación |
+|---|---|---|
+| **TXF-001** In-flight translation leak | Fix obligatorio | `whenComplete` handlers en `TranslationService.translate()` + `detect()` para limpiar `inFlightTranslations`/`inFlightDetections` en todos los paths de completación |
+| **TXF-002** RejectedExecutionException escapa | Fix obligatorio | Try-catch en `computeIfAbsent` + fallback a texto original / idioma default |
+| **TXF-003** DNS pinning rompe TLS/SNI | Fix obligatorio | Conexión via `Proxy` a IP pinned; `Host` header explícito; `SSLSocketFactory` custom para SNI + hostname verification contra hostname original |
+| **TXF-005** SyncBus.unregister() no llama sink.stop() | Fix obligatorio | `removed.sink.stop()` en `unregister()` con try-catch |
+| **TXF-006** SyncBus.start() parcial | Fix obligatorio | Start transaccional con rollback de sinks ya iniciados; reset flag `started` |
+| **TXF-004** engine.parallel ignorado | Fix obligatorio | Parámetro `engineParallel` en `MessageDispatcher`; procesamiento secuencial cuando false |
+| **TXF-007** broadcast() reporta éxito antes de entrega | Fix obligatorio | `broadcast()` retorna count de sinks que encolaron; `broadcastAsync()` retorna futures por sink |
+| **TXF-008** VelocitySink EXACTLY_ONCE no demostrado | Fix obligatorio | Cambiado a `AT_LEAST_ONCE` (sin protocolo ACK remoto) |
+| **B-01** Double delivery | Fix obligatorio | `broadcast()` solo construye; `onChat()` despacha una vez (Spigot + Fabric) |
+| **B-03** Join/quit/death bloquean main thread | Fix obligatorio | Executor async dedicado en `Runtime` (Fabric) + `runTaskAsynchronously` (Spigot) |
+| **V-01** WebSocket bind 0.0.0.0 + auth opcional | Fix obligatorio | Bind 127.0.0.1; `start()` lanza `IOException` si token vacío |
+| **B-04** TemplateRenderer İ corruption | Fix obligatorio | `Pattern.CASE_INSENSITIVE` en `findSpans()` sobre string original |
+| **B-05** Traducción sin re-escape | Fix obligatorio | `MiniEscape.escape(translated)` en `translateSpan()` |
+| **B-06** WebSocket rate limit sliding | Fix obligatorio | Ventana fija alineada a época (`now / 1000 * 1000`) |
+| **M-01** GTranslate solo primera oración | Fix obligatorio | Loop concatena `root[0][i][0]` |
+| **M-02** Thundering herd traducciones | Fix obligatorio | Cache `inFlightTranslations` con dedup + cleanup automático |
+| **M-03** MessageCodec ArrayStoreException | Fix obligatorio | Validación elemento a elemento en sync-http/sync-tcpudp |
+| **M-04** HttpTransport issues | Fix obligatorio | Null-check getErrorStream, 307/308 preservan method/body, MAX_RESPONSE_SIZE, `read()` |
+| **M-05** SSRF IPv6 ULA + deny property | Fix obligatorio | Patrones `^fc[0-9a-f]:`, `^fd[0-9a-f]:`; property amplía no reemplaza |
+| **M-08** InterruptedException tragado | Fix obligatorio | Catch separado + `Thread.currentThread().interrupt()` |
+| **M-09** RWLock redundante RateLimiter | Fix obligatorio | Solo `ConcurrentHashMap` + `synchronized(bucket)` |
+| **M-10** WebSocketSyncSink port bug | Fix obligatorio | Verificado: ya usa `this.port` correctamente |
+| **M-11** MetricsEndpoint bind 0.0.0.0 | Fix obligatorio | Bind 127.0.0.1 por defecto via system property |
+
+**Consecuencias:**
+- Todos los hallazgos críticos/altos/medios de AUDITORIA.md resueltos
+- Build, tests, javadoc, npm check: **todos pasan**
+- Proyecto en estado **production-ready** para Spigot/Paper y Fabric
+- Documentación sincronizada (README, PLAN, ADR, Wiki)
+
+**Implementación (2026-10-05).**
+Módulos afectados: `core-api` (TranslationService, TranslationExecutor), `transport` (HttpTransport), `sync-bus` (DefaultSyncBus), `sync-velocity` (VelocitySink), `sync-websocket` (WebSocketSyncSink), `textformatter` (TemplateRenderer), `gtranslate` (GTranslate), `host` (MessageDispatcher, SuiteHost), `spigot-host` (TextFormatterSuitePlugin), `fabric-host` (TextFormatterSuiteMod), `observability` (MetricsEndpoint), `docs` (README, PLAN, ADR, Wiki).
+
