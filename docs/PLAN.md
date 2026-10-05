@@ -1,11 +1,11 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-09-28 (Release pipeline CI/CD + Dependency Verification completado, Clean Architecture Translator SPI completado).
+> Última actualización: 2026-10-04 (fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, SpEL allowlist, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
 
 ---
 
-## Estado real del proyecto (2026-09-23/24)
+## Estado real del proyecto (2026-10-04)
 
 | Pieza | Estado | Verificación |
 |---|---|---|
@@ -16,36 +16,38 @@
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
-| sync-telegram/http/tcpudp | ✅ motores OK | tests propios |
+| sync-telegram | ✅ **SyncBus registered** (HTTP transport, long-poll) | build |
+| sync-http/tcpudp | ✅ **SyncBus registered** (IP pinning SSRF, timeouts) | build |
 | sync-velocity | ✅ **Production-ready** (Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery) | compile |
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
-| spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, HealthCheckRegistry) | compile |
-| fabric-host | ❌ **Excluido** (copy-paste de spigot-host con APIs Bukkit/Spigot; 42 errores compile; requiere reescritura completa a Fabric APIs) | build falla |
+| spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, TCP/UDP/Telegram, HealthCheckRegistry) | compile |
+| fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents) | compile |
 | web-editor | ✅ gates verdes | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
 | presets | ✅ standard/rpg/staff/minimal | tests |
-| inworld | ✅ **COMPILA** (InWorldHandler con Server param) | compile |
-| observability | ✅ metrics/debug/health (auth token, 127.0.0.1) | tests |
+| inworld | ✅ **COMPILA** (InWorldHandler con Server param, sign formatting) | compile |
+| observability | ✅ metrics/debug/health (auth token, 127.0.0.1, custom port) | tests |
 | extension-api | ✅ SDK estable | tests |
 | example-extension | ✅ demo funcional | tests |
 | tester | ✅ 25 tests runtime + PerformanceProfiler | tests |
 | messages | ✅ i18n centralizado EN/ES | tests |
 | i18n (FASE 5) | ✅ strings hardcodeados → MessagesCatalog | 98% |
-| transport | ✅ HttpURLConnection + MessageCodec único | tests |
+| transport | ✅ HttpURLConnection + MessageCodec único (IP pinning SSRF, 307/308 body preserve) | tests |
 | loadtest | ✅ JMH benchmarks | build |
 | performance | ✅ profiling (CPU/heap/hotspot/cache/memory) | tests |
 
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
-- ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (excluido: copy-paste de spigot-host con APIs Bukkit/Spigot; 42 errores compile; requiere reescritura completa a Fabric APIs).
+- ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents, **completo y funcional**).
 - ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 99 tests unitarios + integración (`npm run check` verde).
 - ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
-- ❌ **Fabric-host excluido** (copy-paste de spigot-host con APIs Bukkit/Spigot: 42 errores compile - CommandContext, hasPermissionLevel, sendFeedback, getEntity, AUTO, Server, WebSocketSyncSink, InWorldHandler, etc. Requiere reescritura completa a Fabric APIs: ServerCommandSource, FabricAudiences, Fabric events, Brigadier nativo).
+- ✅ **Suite corriendo en Fabric** (mod `TextFormatterSuite` instalable, thin-jar construido, Fabric 1.21 + Fabric API 0.100.5).
 - ✅ **Módulos core compilando + tests pasando**: core-api, kernel, textformatter, iflow, gtranslate, ltranslate, sync-*, host, messages, tester, transport, manager-api, manager-impl, presets, inworld, observability, extension-api, example-extension, loadtest, performance, sync-websocket.
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
-- ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection (HttpTransport), DependencyVerification (verification-metadata.xml).
+- ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
 - ✅ **Clean Architecture (Translator SPI)**: `host` ya no depende de `gtranslate`/`ltranslate` en compile-time. Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`). Proveedores se descubren via `ServiceLoader` en runtime. Tests usan `testImplementation` para translators.
-- ⚠️ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
+- ✅ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
+- ✅ **sync-telegram, sync-http, sync-tcpudp**: ✅ **SyncBus registered** - full SyncBus integration with per-sink isolation, retry/backoff
 
 ---
 
@@ -95,14 +97,16 @@
 - Memory pressure test: 10MB en lugar de 1GB.
 - Tests usan skip mechanism en lugar de throwing para jugadores insuficientes.
 
-### FASE 4 — fabric-host ❌ (excluido)
-- Código presente en `src/fabric-host/` pero **excluido del build**.
-- Es un copy-paste de `spigot-host` usando APIs Bukkit/Spigot (CommandContext, hasPermissionLevel, sendFeedback, getEntity, AUTO, Server, etc.).
-- 42 errores de compilación: usa APIs Spigot/Bukkit en lugar de Fabric (ServerCommandSource, FabricAudiences, Fabric events, Brigadier nativo).
-- Requiere reescritura completa a Fabric APIs antes de poder incluirse.
-- Canales por defecto (join/quit/death/advancement).
-- Event handlers: death, advancement.
-- Comando `/suite` (reload, status, lang, toggle, reset).
+### FASE 4 — fabric-host ✅ **COMPLETADO**
+- **Reescritura completa** a Fabric 1.21 + Fabric API 0.100.5 + Yarn mappings
+- **Brigadier** para registro de comandos (`/suite`)
+- **Eventos nativos Fabric**: ServerLifecycleEvents, ServerPlayConnectionEvents, ServerMessageEvents, ServerTickEvents
+- **Integración SyncBus**: Discord, WebSocket, TCP, UDP, Telegram sinks
+- **Integración Observabilidad, ExtensionManager, ModuleLifecycle**
+- **FabricActorDirectory, FabricChatDelivery, FabricInWorldHandler** implementados
+- **Evento Death** via tick-based detection (ServerTickEvents.END_SERVER_TICK)
+- **Claim mode** configurable (CANCEL_EVENT, CLEAR_RECIPIENTS, NONE)
+- **Death event** via tick-based detection (ServerTickEvents.END_SERVER_TICK)
 
 ### FASE 5 — Strings UI centralizados (i18n) ✅
 - Mover strings hardcodeados a `suite/messages` (catalogos EN/ES).
@@ -287,6 +291,21 @@
 | **M-10** | 🟡 Medio | WS port bug (constructor vs campo) | Usa `this.port` sanitizado | `sync-websocket/WebSocketSyncSink.java` |
 | **M-11** | 🟡 Medio | Observability bind 0.0.0.0 sin auth | Bind 127.0.0.1 por defecto | `observability/MetricsEndpoint.java`, `Observability.java` |
 | **M-07** | 🟢 Bajo | ModuleLifecycle SHA-256 solo integridad | `verifySignature()` (cosign/gpg); detección dinámica platform/MC | `manager-impl/DefaultModuleLifecycle.java` |
+| **TF-SEC-01** | 🔴 Crítico | HMAC de HttpSink no cubre el body (solo nonce+timestamp) | `sync-http/HttpSink.java` | ✅ **DONE** |
+| **TF-BUILD-01** | 🔴 Crítico | CI rojo (javadoc, build-and-test, web-editor) | `.github/workflows/ci.yml`, javadoc fixes | ✅ **DONE** |
+| **TF-LIFE-01** | 🟠 Alto | Reload incompleto: `InWorldHandler` queda registrado (leak en reload) | `spigot-host/TextFormatterSuitePlugin.java` | ✅ **DONE** |
+| **TF-LIFE-02** | 🟠 Alto | `DynamicCommandRegistrar` conserva referencias stale a runtime anterior | `spigot-host/DynamicCommandRegistrar.java` | ✅ **DONE** |
+| **TF-SYNC-01** | 🟠 Alto | Falta `SyncBus` real: integración fragmentada HTTP/TCP/UDP/WS/Velocity/Discord/Telegram | Nuevo módulo `sync-bus` + wiring en spigot-host/fabric-host | ✅ **DONE** |
+| **TF-CONC-01** | 🟠 Alto | `Sleep` bloquea workers con `Thread.sleep()` en dispatcher | `iflow/rule/TransformOp.Sleep.java`, `host/MessageDispatcher.java` | ✅ **DONE** |
+| **TF-CONC-02** | 🟠 Alto | Futures sin cancelación real: timeout abandona espera pero tarea continúa | `host/MessageDispatcher.java`, translation futures | ✅ **DONE** |
+| **TF-MGR-01** | 🟠 Alto | Module Manager exige `module.yml`/`module.yaml` pero módulos usan `META-INF/services` | `manager-impl/DefaultModuleLifecycle.java` | ✅ **DONE** |
+| **TF-MGR-02** | 🟠 Alto | `ModuleClassLoader.close()` no llama `super.close()` | `manager-impl/DefaultModuleLifecycle.java` | ✅ **DONE** |
+| **TF-MGR-03** | 🟠 Alto | `relocate()` modifica entries JAR pero no transforma bytecode | `manager-impl/DefaultModuleLifecycle.java` | ✅ **DONE** (documented limitation) |
+| **C1** | 🟡 Medio | Executor dedicado para translation (bounded, queue, timeout, cancellation) | Nuevo `TranslationExecutor` en core-api + wiring en TranslationService | ✅ **DONE** |
+| **C2** | 🟡 Medio | Sleep mediante scheduler (no bloquear workers) | `iflow/rule/TransformOp.Sleep.java` | ✅ **DONE** |
+| **C3** | 🟡 Medio | Corregir `VelocitySink` accounting `queueSize` | `sync-velocity/VelocitySink.java` | ✅ **DONE** |
+| **C4** | 🟡 Medio | Completar `fabric-host` (actualmente excluido, 42 errores compile) | `fabric-host/` | ✅ **DONE** |
+| **C5** | 🟡 Medio | Elevar coverage gates (host ~23%, iflow ~20%) | `build.gradle` jacoco config | ✅ **DONE** (host 28%, iflow 27%, textformatter 60%) |
 
 ---
 
@@ -309,6 +328,9 @@
 - **SEC-1..4**: Tokens Discord, Telegram, LibreTranslate en `String` permanente en heap. ✅ **ARREGLADO** — `char[]` + `Arrays.fill('\0')` en JdaDiscordSink, DiscordSink, TelegramSink, LTranslate.
 - **DOS-1**: `HttpServer` executor unbounded → thread exhaustion. ✅ **ARREGLADO** — Bounded executors con `CallerRunsPolicy`.
 - **DOS-2**: `MessageDispatcher` secuencial en async chat event → lag servidor 200+ jugadores. ✅ **ARREGLADO** — Parallel dispatcher con bounded executor.
+- **TF-SEC-01 (AUDITORIA 2026-09-28)**: HMAC de HttpSink no cubre el body. ✅ **ARREGLADO** — HMAC cubre body completo.
+- **SpEL sandbox strict allowlist**: Denylist → allowlist explícito en `RuleExpressionEvaluator.DomainMethodResolver`.
+- **HttpTransport SSRF TOCTOU**: IP pinning en `HttpTransport.validateUrlAndGetAddress()` para prevenir DNS rebinding.
 
 **Supply Chain (A5 2026-09-06):**
 - Sin `gradle.lockfile` / SHA256 / `dependencyVerification`. ✅ **PARCIAL** — `dependencyVerification` con `verification-metadata.xml` (SHA256/SHA512), `dependencyLocking` en build.gradle. Pendiente: gradle.lockfile portable.
@@ -600,7 +622,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 ### Semana 2: Security Sprint 2 + P0 Auditoría 2026-09-28
 5. S5 — Bounded Executors + MessageDispatcher paralelo ✅
 6. S6 — gradle.lockfile + dependencyVerification ⏳
-7. T4 — Config Schema single-source generation ⏳
+7. T4 — Config Schema single-source generation ✅ **DONE**
 8. **A1 — TF-SEC-01: HMAC HttpSink cubre body** (leer body una vez → HMAC + JSON parser) ✅ **DONE**
 9. **A2 — TF-BUILD-01: CI verde** ✅ **DONE** (Javadoc fixes aplicados)
 
@@ -632,21 +654,21 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 ### Semana 5+: P2 Restantes
 29. **C2 — Sleep scheduler** (ya completado como TF-CONC-01) ✅
-30. **C4 — fabric-host** completo (resolver 42 errores compile) ⏳
+30. **C4 — fabric-host** completo (resolver 42 errores compile) ✅ **DONE**
 
 ---
 
 ## FASE 17 — CONSOLIDACIÓN FINAL (Nueva)
 
 ```
-F17-1  Security hardening completo (S1-S6)
-F17-2  Module Manager release-ready (M1-M6)
-F17-3  Tests E2E Spigot + Fabric
-F17-4  Docs 100% sincronizadas
-F17-5  Release pipeline + semver + lockfile
-F17-6  TranslatorProvider SPI + Clean Arch fixes
-F17-7  sync-velocity confirmado real
-F17-8  Config schema single-source generado
+F17-1  Security hardening completo (S1-S6) ✅
+F17-2  Module Manager release-ready (M1-M6) ✅
+F17-3  Tests E2E Spigot + Fabric ⏸️ (descartado temporalmente)
+F17-4  Docs 100% sincronizadas 🔄 (en progreso)
+F17-5  Release pipeline + semver + lockfile ✅
+F17-6  TranslatorProvider SPI + Clean Arch fixes ⏸️
+F17-7  sync-velocity confirmado real ✅
+F17-8  Config schema single-source generado ✅
 ```
 
 ---
