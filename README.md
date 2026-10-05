@@ -15,7 +15,7 @@ web-editor de configuración.
 ## 1. Arquitectura (hexagonal)
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  ADAPTERS       spigot-host (compila)    fabric-host (excluido)│
+│  ADAPTERS       spigot-host (compila)    fabric-host (compila)│
 │  (implementan puertos; nunca se importan entre sí)           │
 └───────────────▲─────────────────────────────────────────────┘
 │ implementa puertos + bootstrapea
@@ -65,7 +65,7 @@ web-editor de configuración.
 | `suite/transport` | 17 | `HttpTransport` unificado (`HttpURLConnection`), `MessageCodec` único, SSRF protection (getAllByName, deny patterns RFC 1918/3927/6598). |
 | `suite/web-editor` | JS | UI configuración vanilla ES2022 (GitHub Pages estático). |
 | `suite/spigot-host` | 17 | **Plugin Spigot de la suite** (`TextFormatterSuite`): `SpigotActorDirectory`, `SpigotChatDelivery` (hop a main thread), bootstrap `SuiteHost`+`MessageDispatcher`, `/suite reload|status|test|lang|toggle|reset|module|suite`. Fat-jar construido (shadow). **Compila con Paper API 1.21.4**. |
-| `suite/fabric-host` | 17 | **Plugin Fabric de la suite** (`FabricMod`): **EXCLUIDO del build** (42 errores compile — usa APIs Spigot/Bukkit en vez de Fabric APIs; requiere reescritura completa a `ServerCommandSource`, `FabricAudiences`, eventos Fabric, Brigadier nativo). |
+| `suite/fabric-host` | 17 | **Plugin Fabric de la suite** (`FabricMod`): **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents). |
 | `suite/manager-api` | 17 | SPI del gestor de módulos runtime: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`. |
 | `suite/manager-impl` | 17 | Implementación: GitHub releases downloader (GitHub, local `file://`, HTTP), version resolver (semver + env compat), dependency resolver (parsea module.yml), dependency relocator (fixed), ClassLoader aislado (parent-last), SHA256 verificación (obligatoria, asset `.sha256` separado), register() SPI-only, discoverAll() / discoverAvailableModules() para kernel, manifest validation obligatoria. **Núcleo completado**; pendiente GitHub Releases reales. |
 | `suite/presets` | 17 | Presets de configuración predefinidos (standard, rpg, staff, minimal). |
@@ -294,7 +294,7 @@ cd suite/sync-telegram && ./gradlew test publishToMavenLocal --offline --no-daem
 # Plugin Spigot de la suite (fat-jar)
 cd suite/spigot-host   && ./gradlew build --offline --no-daemon
 
-# Plugin Fabric de la suite (EXCLUIDO - 42 errores compile)
+# Plugin Fabric de la suite
 cd suite/fabric-host   && ./gradlew build --offline --no-daemon
 
 # Web editor
@@ -325,7 +325,7 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
 **Fases cerradas:**
 - F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
 - F3 (channel type system + tester module + default channels).
-- F4 (fabric-host **EXCLUIDO** — 42 errores compile, requiere rewrite a Fabric APIs), F5 (i18n strings UI), F6 (iFlow enriquecido: CHANNEL_REDIRECT, PAPI/permisos en SpEL, transform F7+),
+- F4 (fabric-host **COMPILA** — Fabric 1.21 + Fabric API 0.100.5, Brigadier), F5 (i18n strings UI), F6 (iFlow enriquecido: CHANNEL_REDIRECT, PAPI/permisos en SpEL, transform F7+),
 - F7 (ConfigValidator real), F8 (comandos dinámicos `/suite`), F9 (sync-velocity **production-ready**),
 - F10 (observabilidad: metrics/debug/health), F11 (extensiones/addons SDK), **F12 (manager runtime - núcleo completado)**,
 - F13 (sync-websocket), F14 (presets, transform real, engine.parallel), F15 (in-world **compila**),
@@ -341,7 +341,7 @@ probado en servidor; recuperable desde historial git).
 - ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; ServiceLoader discovery en runtime.
 - ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config.
 - ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` con todos los checksums transitivos.
-- ✅ **fabric-host excluido**: 42 errores compile por uso de APIs Spigot/Bukkit; requiere reescritura completa a Fabric APIs.
+- ✅ **fabric-host COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents).
 - ✅ **Composite build**: Todos los módulos usan `project(':src:...')` dependencies.
 - ✅ **Security Sprint 3**: char[] tokens + Arrays.fill(), MiniEscape completo (10 chars), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection, DependencyVerification, SafeConstructor en 4 loaders YAML.
 

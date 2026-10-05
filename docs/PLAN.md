@@ -304,7 +304,7 @@
 | **C1** | 🟡 Medio | Executor dedicado para translation (bounded, queue, timeout, cancellation) | Nuevo `TranslationExecutor` en core-api + wiring en TranslationService | ✅ **DONE** |
 | **C2** | 🟡 Medio | Sleep mediante scheduler (no bloquear workers) | `iflow/rule/TransformOp.Sleep.java` | ✅ **DONE** |
 | **C3** | 🟡 Medio | Corregir `VelocitySink` accounting `queueSize` | `sync-velocity/VelocitySink.java` | ✅ **DONE** |
-| **C4** | 🟡 Medio | Completar `fabric-host` (actualmente excluido, 42 errores compile) | `fabric-host/` | ✅ **DONE** |
+| **C4** | 🟡 Medio | Completar `fabric-host` (Fabric 1.21 + Fabric API 0.100.5) | `fabric-host/` | ✅ **DONE** |
 | **C5** | 🟡 Medio | Elevar coverage gates (host ~23%, iflow ~20%) | `build.gradle` jacoco config | ✅ **DONE** (host 28%, iflow 27%, textformatter 60%) |
 
 ---
@@ -606,7 +606,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | C1 | — | Executor dedicado para translation (bounded, queue, timeout, cancellation) | Nuevo `TranslationExecutor` en core-api + wiring en TranslationService | ✅ **DONE** |
 | C2 | — | Sleep mediante scheduler (no bloquear workers) | `iflow/rule/TransformOp.Sleep.java` | ⏳ |
 | C3 | — | Corregir `VelocitySink` accounting `queueSize` | `sync-velocity/VelocitySink.java` | ✅ **DONE** |
-| C4 | — | Completar `fabric-host` (actualmente excluido, 42 errores compile) | `fabric-host/` | ⏳ |
+| C4 | — | Completar `fabric-host` (Fabric 1.21 + Fabric API 0.100.5) | `fabric-host/` | ✅ **DONE** |
 | C5 | — | Elevar coverage gates (host ~29%, iflow ~20%) | `build.gradle` jacoco config | ✅ **DONE** |
 
 ---
@@ -654,7 +654,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 ### Semana 5+: P2 Restantes
 29. **C2 — Sleep scheduler** (ya completado como TF-CONC-01) ✅
-30. **C4 — fabric-host** completo (resolver 42 errores compile) ✅ **DONE**
+30. **C4 — fabric-host** completo (Fabric 1.21 + Fabric API 0.100.5) ✅ **DONE**
 
 ---
 
@@ -734,7 +734,7 @@ Todos los items P1 resueltos:
 - TF-MGR-01/02/03: Module Manager alineado + ClassLoader fixes + relocate() documentado
 
 ### 🟡 P2 — Medio
-- **fabric-host** ⏳ (resolver dependency verification / 42 errores compile)
+- **fabric-host** ✅ COMPILA (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 
 ### 🟢 OTROS
 9. Tests E2E pipeline completo (Spigot real)
@@ -837,7 +837,7 @@ Todos los items P1 resueltos:
 | **M-06** | ❌ **INCORRECTO** | `HttpSink` SÍ tiene auth: Bearer token (L210-216), HMAC (L220-241), fallback localhost-only (L205-207) |
 | **Rules/SpEL** | ⚠️ **PARCIAL** | `<expr>` en templates **NO conectado** (TemplateRenderer recibe null ExpressionEvaluator L51), pero iFlow rules SÍ usan `RuleExpressionEvaluator` con `#msg`, `#sender`, etc. (L100-102) |
 | **parallel: false** | ⚠️ **IGNORADO** | `engineParallel` en config.yml L6 y `HostConfig` L22 existe pero `MessageDispatcher` **siempre usa executor** (L56-65) |
-| **fabric-host** | ✅ **CONFIRMADO** | NO en `settings.gradle`; 42 errores compile; `inworld` compila contra Paper API L28, `fabric-host` depende de `inworld` L38 |
+| **fabric-host** | ✅ **COMPILA** | Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents; en `settings.gradle` |
 | **coretranslator** | ✅ **CONFIRMADO** | NO en `settings.gradle`; `common-legacy` SÍ está (L32) |
 | **gradle.properties** | ✅ **CONFIRMADO** | JDK 8/21 (no 17/21 como README) |
 | **sync-discord** | ✅ **CONFIRMADO** | Usa JDA 6.4.2 (no JDK WebSocket + REST) |

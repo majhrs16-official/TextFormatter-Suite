@@ -318,13 +318,12 @@ Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpre
    - `checkLocks` task actualizado para manejar proyecto intermedio `:src` (sin build.gradle).
    - Verificación deshabilitada para módulos con deps externas: `tester`, `inworld`, `spigot-host`, `host`, `textformatter`, `loadtest`.
 
-4. **fabric-host — Excluido del Build**
-   - 42 errores de compilación: usa APIs Spigot/Bukkit (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`) en vez de Fabric APIs.
-   - Requiere reescritura completa a: `ServerCommandSource`, `FabricAudiences`, eventos Fabric, Brigadier nativo.
-   - Excluido en `settings.gradle`.
+4. **fabric-host — COMPILA (Fabric 1.21 + Fabric API 0.100.5)**
+   - Reescritura completa a Fabric APIs: `ServerCommandSource`, `FabricAudiences`, eventos Fabric (`ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`), Brigadier nativo.
+   - Incluido en `settings.gradle` y build CI.
 
 5. **Sincronización Documentación/Codeguides**
-   - `README.md` (root): arquitectura actualizada, fabric-host excluido, Clean Architecture documentada, dependencias host corregidas.
+   - `README.md` (root): arquitectura actualizada, fabric-host COMPILA, Clean Architecture documentada, dependencias host corregidas.
    - `docs/PLAN.md`: FASE 13 completada, Release Pipeline completada, Dependency Verification completada, estado actualizado.
    - Module READMEs (codeguides): `host`, `fabric-host`, `sync-velocity`, `transport`, `spigot-host`, `manager-impl`, `inworld` actualizados.
 
@@ -334,8 +333,8 @@ Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpre
 - Build completo pasa con dependency verification estricta.
 - 29/29 proyectos con gradle.lockfile.
 - Todos los tests pasan (unit + integración).
-- fabric-host documentado como excluido con requisitos de rewrite.
+- fabric-host documentado como COMPILA (Fabric 1.21 + Fabric API 0.100.5).
 
 **Implementación (2026-09-28).**
-Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `core-api` (ya tenía TranslatorProvider SPI), `gtranslate` (GTranslateProvider + META-INF/services), `ltranslate` (LTranslateProvider + META-INF/services), `spigot-host` (build.gradle mantiene deps), `build.gradle` (root: dependencyLocking, checkLocks fix), `settings.gradle` (fabric-host excluido), `gradle/verification-metadata.xml` (checksums agregados), `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `docs/PLAN.md`, `README.md`, module READMEs.
+Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `core-api` (ya tenía TranslatorProvider SPI), `gtranslate` (GTranslateProvider + META-INF/services), `ltranslate` (LTranslateProvider + META-INF/services), `spigot-host` (build.gradle mantiene deps), `build.gradle` (root: dependencyLocking, checkLocks fix), `settings.gradle` (fabric-host **incluido**), `gradle/verification-metadata.xml` (checksums agregados), `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `docs/PLAN.md`, `README.md`, module READMEs.
 

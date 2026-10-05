@@ -167,7 +167,7 @@
 - ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; descubre proveedores via `ServiceLoader` (SPI `TranslatorProvider`) en runtime
 - ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config
 - ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile`, `verification-metadata.xml` con todos los checksums transitivos (incl. jackson-base-2.22.0, junit-bom-5.14.3, adventure-bom-4.13.1)
-- ✅ **fabric-host excluido**: documentado con requisitos de rewrite completo
+- ✅ **fabric-host COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 
 ---
 

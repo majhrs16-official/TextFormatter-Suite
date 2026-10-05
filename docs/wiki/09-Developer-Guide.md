@@ -9,7 +9,7 @@ TextFormatter Suite follows **Hexagonal Architecture** (Ports & Adapters) with a
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Platform Adapters                        │
-│  spigot-host  │  fabric-host (excluido)  │  velocity-host (futuro) │
+│  spigot-host  │  fabric-host (compila)  │  velocity-host (futuro) │
 ├─────────────────────────────────────────────────────────────────┤
 │                        Suite Host                               │
 │  ┌──────────┬──────────┬──────────┬──────────┬──────────────┐  │
@@ -22,7 +22,7 @@ TextFormatter Suite follows **Hexagonal Architecture** (Ports & Adapters) with a
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-> **Nota**: `fabric-host` está excluido del build (42 errores compile — usa APIs Spigot/Bukkit en vez de Fabric APIs; requiere reescritura completa a `ServerCommandSource`, `FabricAudiences`, eventos Fabric, Brigadier nativo).
+> **Nota**: `fabric-host` compila (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents).
 
 ## Module Development
 
