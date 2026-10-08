@@ -62,9 +62,9 @@
           tooltips: ['Hover: %lang_source% → %lang_target%'],
           sounds: [
             {
-              name: 'entity.experience_orb.pickup',
-              pitch: 1.0,
               volume: 1.0,
+              pitch: 1.0,
+              name: 'entity.experience_orb.pickup',
             },
           ],
           type: 'chat',
@@ -96,9 +96,9 @@
           tooltips: [],
           sounds: [
             {
-              name: 'block.note_block.pling',
-              pitch: 1.2,
               volume: 0.8,
+              pitch: 1.2,
+              name: 'block.note_block.pling',
             },
           ],
           type: 'chat',
@@ -123,8 +123,8 @@
           'max-steps': 512,
         },
         filter: {
-          'dedup-fanout': true,
           priority: 'batch-first',
+          'dedup-fanout': true,
         },
         priority: 'batch-first',
         nodes: [

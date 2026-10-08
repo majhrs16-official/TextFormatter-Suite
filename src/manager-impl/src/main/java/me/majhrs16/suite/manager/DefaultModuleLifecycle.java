@@ -317,16 +317,39 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
 
         // Download main module
         Path modulePath = downloadFile(resolved.downloadUrl(), cacheDir.resolve(resolved.descriptor().coordinate().releaseAssetName()), resolved.sha256(), resolved.sizeBytes());
+        // Verify signature if available
+        verifyModuleSignature(resolved.descriptor(), modulePath);
         paths.add(modulePath);
 
         // Download dependencies
         for (ResolvedModule dep : dependencies) {
             String depUrl = getGitHubReleasesUrl() + "/" + dep.descriptor().coordinate().releaseAssetName();
             Path depPath = downloadFile(depUrl, cacheDir.resolve(dep.descriptor().coordinate().releaseAssetName()), dep.sha256(), dep.sizeBytes());
+            verifyModuleSignature(dep.descriptor(), depPath);
             paths.add(depPath);
         }
 
         return paths;
+    }
+
+    private void verifyModuleSignature(ModuleDescriptor descriptor, Path jar) {
+        String signatureUrl = descriptor.properties().get("signature.url");
+        String publicKeyUrl = descriptor.properties().get("signature.publicKey");
+        if (signatureUrl == null || publicKeyUrl == null) {
+            logger.debug("No signature configuration for module " + descriptor.name() + ", skipping signature verification");
+            return;
+        }
+        try {
+            Path signaturePath = downloadFile(signatureUrl, Files.createTempFile("sig-", ".cosign"), null, 0);
+            Path publicKeyPath = downloadFile(publicKeyUrl, Files.createTempFile("key-", ".pem"), null, 0);
+            boolean valid = verifySignature(jar, signaturePath, publicKeyPath);
+            if (!valid) {
+                throw new SecurityException("Signature verification failed for " + descriptor.name() + " (" + jar + ")");
+            }
+            logger.info("Signature verified for module " + descriptor.name());
+        } catch (Exception e) {
+            throw new SecurityException("Failed to verify signature for " + descriptor.name(), e);
+        }
     }
 
     @Override
