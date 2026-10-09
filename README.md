@@ -1,386 +1,362 @@
 # TextFormatter Suite
-Plataforma **agnóstica** de traducción y routing de chat para Minecraft.
-Un conjunto de módulos (JARs independientes) que rehace todo lo que era
-ChatTranslator —y mucho más— bajo un núcleo hexagonal real (ports &
-adapters), motor de reglas, formatos MiniMessage, grafos iFlow y un
-web-editor de configuración.
-> **Nombres.** *Suite* = paraguas (el conjunto de módulos). *ChatTranslator*
-> queda retirado como marca global y se usa únicamente para los traductores
-> **GTranslate** / **LTranslate**. La **retrocompatibilidad es funcional**:
-> paridad de comportamiento con el proyecto original ChatTranslator, **no**
-> con ningún código intermedio. El trío monolítico `common`/`spigot`/
-> `fabric-1.20.6` fue eliminado del árbol (recuperable desde el historial
-> git); los adapters reales son los módulos `*-host`.
----
-## 1. Arquitectura (hexagonal)
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ADAPTERS       spigot-host (compila)    fabric-host (compila)│
-│  (implementan puertos; nunca se importan entre sí)           │
-└───────────────▲─────────────────────────────────────────────┘
-│ implementa puertos + bootstrapea
-┌───────────────┴─────────────────────────────────────────────┐
-│  suite  (módulos Gradle, Java 17/21)                         │
-│  core-api (SPI + modelo, JDK-puro)  kernel  textformatter    │
-│  iflow  gtranslate  ltranslate  sync-*  host                 │
-│  messages  tester  transport  coretranslator                 │
-│  web-editor (JS vanilla)                                     │
-└─────────────────────────────────────────────────────────────┘
-```
-**Reglas de dependencia:**
-- `core-api` = contrato único (SPI `Module`/`Translator`/`SyncSink`/
-`ActorDirectory`/… + modelo `Message`, `TranslatorProvider`). Dependencias: cero (solo JDK).
-- Motores (`kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`,
-`host`, `messages`, `tester`, `transport`, `coretranslator`) dependen
-**solo** de `core-api`. Grafo acíclico.
-- **Clean Architecture**: `host` no depende de `gtranslate`/`ltranslate` en compile-time.
-  Proveedores `Translator` se descubren via `ServiceLoader` (SPI `TranslatorProvider`) en runtime.
-- Adaptadores de plataforma dependen de la suite + exactamente un SDK
-(`spigot-api`, `fabric-api`); nunca entre sí.
-- `web-editor` comunica vía YAML/schema; cero acoplamiento al runtime Java.
-- Descubrimiento de módulos: **ServiceLoader/SPI** (`META-INF/services/…Module`).
-**Sin modloader**: sin ciclo de vida gestionado, sin manifiesto custom.
-- **Handshake doble**: versión JVM de runtime + versión de contrato SPI
-(semver por artefacto `*-api`); mismatch → cargar/degradar/avisar.
----
-## 2. Módulos
-| Módulo | Java | Rol |
-|---|---|---|
-| `suite/core-api` | 17 | SPI interno: `Module`, `ModuleDescriptor`, semver, capabilities, modelo `Message`, `Translator`, `TranslationService`, `SyncSink`, `SyncListener`, `ActorDirectory`, `PlaceholderResolver`, `PluginLogger`. |
-| `suite/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (resolución con Tarjan, detecta ciclos incluyendo self-cycles, `CONTRACT_MISMATCH`, `JVM_MISMATCH`), `Environment`. |
-| `suite/textformatter` | 17 | Motor de formato MiniMessage: `TemplateRenderer`, `TemplateContext`, `MiniEscape` (10 chars), `ChannelRegistry`, transforms. |
-| `suite/iflow` | 17 | Motor de flujo: `DefaultRouter`, `Rule`, `RateLimiter` (token bucket per-key con `ReentrantReadWriteLock`), `PermissionChecker` (base + send/receive). |
-| `suite/coretranslator` | 17 | Puente deprecated que conserva capacidades del original: traducir textos al vuelo vía PAPI (`%cot_*`), capturar/modificar mensajes al vuelo vía API, inyectar lógica compleja vía SpEL. Deprecated = no recomendarlo para uso nuevo; **NO eliminar** (retrocompatibilidad funcional). |
-| `suite/gtranslate` | 17 | Proveedor Google Translate (web scraping + mitigadores UA rotation, rate limit). |
-| `suite/ltranslate` | 17 | Proveedor LibreTranslate (self-hosted o público). |
-| `suite/sync-discord` | 17 | Gateway Discord v10 (WebSocket JDK + REST), intents, embeds; tokens en `char[]`. |
-| `suite/sync-telegram` | 17 | Bot Telegram, long-poll con watermark offset; tokens en `char[]`. |
-| `suite/sync-http` | 17 | Webhook + REST (`HttpServer` JDK), inbound/outbound. |
-| `suite/sync-tcpudp` | 17 | TCP/UDP raw (`TcpSink`/`UdpSink`), JSON por línea/datagrama. |
-| `suite/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, métricas, health, dynamic discovery, mapping avanzado. |
-| `suite/sync-websocket` | 17 | WebSocket sync sink para tiempo real (SO_REUSEADDR, auth token, sub). |
-| `suite/host` | 17 | Composition root: `SuiteHost`, `ConfigLoader` (enum `ConfigPath`), `HostConfig`, `MessageDispatcher` (expande `Direction`→receptores, orquesta por-receptor), port `ChatDelivery` (`host/port/`) y port `ActorDirectory` (`core-api/spi/`). |
-| `suite/messages` | 17 | i18n centralizado: catálogos EN/ES, `MessagesCatalog` singleton. |
-| `suite/tester` | 17 | Test runtime: 25 tests automatizados (routing, eventos, traducción, formato, iFlow, concurrencia, stress, profiling). `PerformanceProfiler` CPU/heap. Skip mechanism. `/suite test full|stress|concurrency`. |
-| `suite/transport` | 17 | `HttpTransport` unificado (`HttpURLConnection`), `MessageCodec` único, SSRF protection (getAllByName, deny patterns RFC 1918/3927/6598). |
-| `suite/web-editor` | JS | UI configuración vanilla ES2022 (GitHub Pages estático). |
-| `suite/spigot-host` | 17 | **Plugin Spigot de la suite** (`TextFormatterSuite`): `SpigotActorDirectory`, `SpigotChatDelivery` (hop a main thread), bootstrap `SuiteHost`+`MessageDispatcher`, `/suite reload|status|test|lang|toggle|reset|module|suite`. Fat-jar construido (shadow). **Compila con Paper API 1.21.4**. |
-| `suite/fabric-host` | 17 | **Plugin Fabric de la suite** (`FabricMod`): **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents). |
-| `suite/manager-api` | 17 | SPI del gestor de módulos runtime: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`. |
-| `suite/manager-impl` | 17 | Implementación: GitHub releases downloader (GitHub, local `file://`, HTTP), version resolver (semver + env compat), dependency resolver (parsea module.yml), dependency relocator (fixed), ClassLoader aislado (parent-last), SHA256 verificación (obligatoria, asset `.sha256` separado), register() SPI-only, discoverAll() / discoverAvailableModules() para kernel, manifest validation obligatoria. **Núcleo completado**; pendiente GitHub Releases reales. |
-| `suite/presets` | 17 | Presets de configuración predefinidos (standard, rpg, staff, minimal). |
-| `suite/inworld` | 17 | Handlers in-world (signos, cofres, libros), WORLD/RADIUS, botones click/hover. **Compila con Paper API 1.21.4**. |
-| `suite/observability` | 17 | Metrics endpoint (`/metrics` Prometheus), Debug endpoint (`/debug/*` con auth token, 127.0.0.1), Health checks (JVM, threads, sinks). |
-| `suite/extension-api` | 17 | SPI de extensiones: `Extension`, `ExtensionContext`, `ExtensionConfig`, `ExtensionMetadata`. |
-| `suite/example-extension` | 17 | Ejemplo de extensión demostrando la API. |
-| `suite/loadtest` | 17 | Tests de carga/estrés (JMH + benchmarks). **Compila** (mock TranslationService con TranslatorManager). |
-| `suite/performance` | 17 | Profiling y optimización (`PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer`, `MemoryOptimizer`). |
-| `suite/common-legacy` | 17 | Referencia histórica (trío monolítico eliminado). |
 
-Dependencias entre motores:
-- `kernel→core-api`
-- `textformatter→core-api` (+Adventure)
-- `iflow→core-api+textformatter`
-- `coretranslator→core-api`
-- `gtranslate/ltranslate→core-api+transport`
-- `host→core-api+textformatter+iflow+messages+tester` (translators via ServiceLoader SPI)
-- `manager-impl→manager-api+core-api+kernel+textformatter+host+gtranslate+ltranslate+sync-*+messages+tester+extension-api`
-- `presets→core-api+textformatter+iflow+host+messages`
-- `inworld→core-api+textformatter+iflow+host+messages`
-- `observability→core-api+textformatter+iflow+host+messages`
-- `extension-api→core-api+iflow+host+messages`
-- `example-extension→extension-api+core-api`
-- `loadtest→core-api+textformatter+iflow+host+messages+tester`
-- `performance→core-api+textformatter+iflow+host+transport`
-- `sync-websocket→core-api+textformatter+host+messages`
-- `spigot-host→core-api+textformatter+iflow+host+messages+tester+manager-impl+presets+inworld+observability+extension-api+sync-*`
----
-## 3. Modelo de mensaje
-Cada evento de chat produce unidades atómicas **`Message`** con su propio
-emisor, **`Direction`** (audiencia), arrays de contenido, grupo de formato,
-colores, sonidos y par de idiomas — **no** hay par from/to embebido. El mensaje
-al iniciador y el broadcast al resto son unidades independientes con formato y
-cancelación independientes. **Inmutables**; las reglas mutan un clon privado
-vía `Message.withX()` methods (`withLangTarget`, `withText`, `withCancelled`, etc.).
-Un `Message` lleva:
-- `type` — `MessageType` (CHAT, PRIVATE, MENTION, JOIN, LEAVE, DEATH,
-ADVANCEMENT, SIGN, INTERNAL, CUSTOM).
-- `sender` — `Actor` (uuid, name, kind, language, native handle).
-- `direction` — `Direction` (INITIATOR, OTHERS, ALL, CONSOLE, WORLD, RADIUS,
-PERMISSION, SPECIFIC) con canal y receptores explícitos opcionales.
-- `messages` / `toolTips` — `Formats` paralelas (textos + MiniMessage).
-- `sounds` — specs `name;volume;pitch`.
-- `colorMode`, `langSource`, `langTarget`, `translate`, `formatPapi`.
-- `resolvedSourceLanguage` — idioma fuente resuelto (caché para evitar detección por receptor).
-- `lastFormatPath` — el grupo de formato que construyó el mensaje.
----
-## 4. Motor de formato (MiniMessage + Adventure)
-- `<tr>text</tr>` marca la parte a traducir (por receptor).
-- `%ct_messages%`, `$ct_messages$`, `{0}` inyectan el texto bruto.
-- `%player_name%`, `%player_uuid%`, `%lang_source%`, `%lang_target%` son
-built-ins; cualquier otro `%variable%` pasa por `PlaceholderResolver`
-(PlaceholderAPI en Spigot, identidad en Fabric).
-- `<expr>…</expr>` evalúa una expresión SpEL.
-- Todos los valores dinámicos se escapan para impedir inyección MiniMessage.
-  `MiniEscape` escapa 10 chars: `< > \ { } [ ] ( ) # @`.
-- `formats.yml` se organiza en **grupos de formato** (cualquier path), cada uno
-con `messages.formats`/`messages.texts`, `toolTips`, `sounds` y opcionalmente
-`sourceLang`/`targetLang`. Un grupo por tipo de evento, renderizado por
-receptor al idioma de ese receptor.
----
-## 5. Motor de reglas (rules.yml → iFlow)
-Reemplaza ConditionalEvents. Las reglas aplican por mensaje antes del formato y
-la entrega; un mensaje cancelado se descarta.
-```yaml
-rules:
-  spam:
-    events: [CHAT]
-    conditions:
-    - "'spam' in #msg.texts[0]"
-    actions:
-    - cancel()
-    - skipTranslate()
-```
-- Cada regla es `(name, List<MessageType>, conditions SpEL, actions SpEL)`.
-- `ScriptSurface` expone operaciones atómicas (`setText`, `setTexts`,
-`setLangSource`, `setLangTarget`, `setColorMode`, `setFormatPapi`,
-`show/hide`, `cancel`, `skipTranslate`) y helpers (`setFormat(path)`,
-`clone()`, `toJson()`). Root SpEL: `#msg`.
-### iFlow (grafos)
-Firewall por receptor/emisor con default-policy por canal y targets `LOG`,
-`DROP`, `REJECT`, `REDIRECT` (a consola), `RATE-LIMIT`, `CHANNEL_REDIRECT`.
-- Entradas múltiples = **mux** (independientes); salidas múltiples = **fan-out**
-(broadcast); ramificación = condición-filtro; ciclos permitidos con guard
-`max-steps` (default 512, DROP + log al superar).
-- El editor lo edita como **grafo de nodos** (`rules.yml`): `input`, `cond`,
-`transform`, `loop`, `sleep`, `output`, `redirect`, con transforms
-`rewrite`/`sounds`/`sleep` (requieren motor F7+, se marcan en manifest).
-- Prioridad = BFS por capas desde entradas; empates por índice de creación.
-- **RateLimiter**: token bucket per-key (`channel + actor`), capacidad por canal
-(`channel.rateLimitPerSecond()`), thread-safe con `ReentrantReadWriteLock`.
-- **iFlow como autoridad única**: Discord mirror respeta decisión del dispatcher
-(solo envía si `delivered > 0`).
----
-## 6. Permisos por canal
-- **Base**: un único permiso `cht.<channel>` = suscripción (poseerlo = adscrito).
-- **Opción**: `send-permission` / `receive-permission` para asimetría nativa
-("todos leen, solo staff escribe"). Default ACCEPT si no se define nada.
-- La asimetría también puede vivir en reglas de iFlow.
----
-## 7. Configuración — Schema v2.2 (fuente única de verdad)
-El editor importa/exporta contra este schema; el **host** (`ConfigLoader`)
-parsa la misma estructura. **Round-trip exacto**: panel → YAML → panel sin
-pérdida. Lo que no quepa aquí es falta de precisión del schema o del motor.
-**Archivos del proyecto** (`textformatter-suite.zip`):
-```
-config.yml            → HostConfig (idéntico a ConfigLoader.loadConfig)
-channels/<canal>.yml  → ChannelRegistry (idéntico a ConfigLoader.loadChannels)
-rules.yml             → grafo iFlow (editor/F7+)
-translators/*.yml     → proveedores (google/libre)
-sync/discord.yml      sync/telegram.yml  sync/http.yml
-sync/tcp-udp.yml      sync/velocity.yml
-sync/websocket.yml
-manifest.json         → versiones + validación + capabilities
-```
-**`config.yml`**: `quick-look`, `general.language`, `iflow.engine.parallel`,
-`sonido.enabled`, `repositories[]` (GitHub, local `file://`, HTTP). Claves
-opcionales; desconocidas se ignoran (degradan).
+> **Actualmente en desarrollo intenso — No apto para producción**
+>
+> Este proyecto evoluciona activamente. Las APIs, funcionalidades, configuraciones y mecanismos internos pueden cambiar sin aviso previo. No hay garantías de estabilidad, compatibilidad hacia atrás ni soporte para entornos de producción. La documentación refleja el estado real del código y las pruebas a fecha de hoy, no el estado ideal al que aspira el proyecto.
 
-**`channels/<id>.yml`**: `name` (es el id; renombrar propaga a rules.yml y
-sync), `type` (CHAT|EVENT), `permission`, `send-permission`, `receive-permission`,
-`show-sender`, `rate-limit-per-second`, `lang-source`, `lang-target`,
-`messages[]`, `tooltips[]`, `sounds[]` (name/volume/pitch).
-
-**`rules.yml`**: `guard.max-steps`, `filter.dedup-fanout`, `priority`, `nodes[]`
-(kind, label, matcher, transforms, target), `edges[]`. Mux/fan-out/condición/
-ciclos (con self-cycle detection).
-
-**`translators/*.yml`**: `provider` (google|libre), `active`, `base-url`,
-`api-key`, `pool.max-concurrent`.
-
-**`sync/*.yml`**: discord (token, channel, intents) · telegram (token,
-chat-id, hub) · http (webhook-url, inbound-port, path) · tcp-udp (protocol,
-host, outbound-port, inbound-port) · velocity (enabled, secret, servers[],
-mapping) · websocket (token, port).
-
-**`manifest.json`**: `schema`, `suite-version`, `generated-at`,
-`capabilities` (`transforms: true/false`), `validation` (errors/warnings/
-blocking/issues).
-
-**Reglas de round-trip**: (1) writer/parser propios, byte-idéntico;
-(2) `config.yml` + `channels/*.yml` parsables por el host (`ConfigLoaderTest`);
-(3) import acepta cualquier export; campos faltantes = defaults; campos
-desconocidos se **conservan**.
 ---
-## 8. Web Editor (F6)
-Artefacto estático único (GitHub Pages), HTML+CSS+JS vanilla, sin build.
-- **Canvas de nodos** como centro de edición: celdas (TextFormatter) y grafos
-(iFlow) con puertos arriba (entradas) y abajo (salidas); zoom `ctrl+rueda`
-(25–400%), pan `espacio+arrastre`, snap 20px, minimapa.
-- **Layout del usuario**: paneles extraíbles/reordenables; tema (oscuro
-default) e idioma (en/es) en localStorage; autosave del proyecto.
-- **Round-trip exacto** YAML (import→panel→export). Schema primero: el editor
-no dibuja nada que el schema no represente.
-- **Preview** replica el pipeline del motor (port JS + fixtures dorados contra
-el host Java), sin red; traducción viva opcional con pool + rate-limit y
-fallback a inglés.
-- **Validación global** → `[{nivel, grupo, ruta, mensaje}]`; badges, rings
-rojos, toasts, manifest. **Nunca se descarga con errores bloqueantes.**
-- **Arquitectura JS**: StateStore (estado + historial undo/redo 80 +
-persistencia + validadores con rollback + diffing de paths + autosave 400ms),
-rendering con diffing, validación incremental por `revision()`, paths.json
-centralizado para data-bind, i18n en/es, docking de paneles.
-- **Pendiente**: ampliar opciones YAML para reglas complejas sin perder usabilidad.
+
+## Qué es TextFormatter Suite
+
+TextFormatter Suite es una **plataforma modular de formateo, traducción y routing de chat para servidores Minecraft**, construida sobre una arquitectura hexagonal (ports & adapters) real. Reemplaza al proyecto monolítico anterior **ChatTranslator** reorganizando sus capacidades en 29 módulos Gradle independientes que se comunican exclusivamente a través de contratos SPI (ServiceLoader) definidos en `core-api`.
+
+**Problema que resuelve:** Los plugins de chat tradicionales mezclan formateo, traducción, permisos, sincronización cross-server y lógica de negocio en una única base de código acoplada a la plataforma (Bukkit/Fabric). TextFormatter Suite separa estas responsabilidades en módulos reemplazables, testeables en aislamiento y desplegables selectivamente.
+
+**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-impl`, etc.) dependen **solo** de `core-api`.
+
+**Lo que NO es:**
+- Un plugin único "todo en uno" listo para descargar y usar
+- Una biblioteca estable con API versionada semánticamente publicada en Maven Central
+- Un reemplazo directo de ChatTranslator v4 sin migración de configuración
+- Un proyecto con releases oficiales, binarios publicados o garantías de soporte
+
 ---
-## 9. Eventos para integraciones externas
-La API está diseñada pero **aún no implementada completamente**.
-Plan: un bus público thread-safe en `core-api` (`MessageEventBus`), alimentado por
-`MessageDispatcher` **antes** de reglas y renderizado:
-```java
-bus.register("anti-swear", event -> {
-if (event.message().text().contains("badword")) {
-event.setCancelled(true);   // o setMessage(...) / setProcessed(true)
-}
-});
-```
-Los listeners correrán en el hilo de dispatch; cancelar/reemplazar/tomar
-control de la entrega serán operaciones del `event`. Este bus es además el
-punto de enganche que reemplaza al evento Bukkit-custom que usaba
-ConditionalEvents y la base sobre la que `coretranslator` recuperará las
-capacidades del original (PAPI al vuelo `%cot_*`, captura/modificación de
-mensajes, SpEL).
+
+## Estado de las funcionalidades (verificación honesta)
+
+| Funcionalidad | Estado | Evidencia |
+|---------------|--------|-----------|
+| **Arquitectura hexagonal (core-api + SPI)** | ✅ Implementada y probada | `core-api` compila sin dependencias; 29 módulos usan ServiceLoader; tests de kernel/module loading pasan |
+| **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 32 tests |
+| **Motor de reglas iFlow** | ✅ Implementada y probada | `DefaultRouter`, `Rule`, `RateLimiter` per-key, `PermissionChecker` (base + send/receive); 19 tests |
+| **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 17+19 tests extendidos |
+| **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 17+15 tests extendidos |
+| **Sync Discord** | ✅ Implementada y probada | Gateway v10 (WebSocket JDK + REST), intents, embeds; tokens `char[]`; 6 tests |
+| **Sync Telegram** | ✅ Implementada y probada | Bot long-poll con watermark offset; tokens `char[]`; 7 tests |
+| **Sync HTTP (webhook + REST)** | ✅ Implementada y probada | `HttpServer` JDK, inbound/outbound; 7 tests |
+| **Sync TCP/UDP** | ✅ Implementada y probada | Raw sockets, JSON línea/datagrama, `MessageCodec`; 7 tests |
+| **Sync WebSocket** | ✅ Implementada y probada | SO_REUSEADDR, auth token, subscripciones, log streaming; build + tests |
+| **Sync Velocity (proxy)** | ✅ Implementada y probada | **Production-ready**: async queue, retry/backoff exponencial, métricas, health, dynamic discovery, mapping avanzado (regex, per-type); compila, tests pasan |
+| **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; build + tests |
+| **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: `AsyncPlayerChatEvent` (claim modes), join/quit/death/advancement channels, `/suite` commands, fat-jar shadow; **compila con Paper API 1.21.4**; probado en servidor real Paper 1.20.6 |
+| **Fabric adapter (`fabric-host`)** | ✅ Implementada y probada | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
+| **Module Manager (runtime)** | ⚠️ Núcleo completado, releases pendientes | GitHub/local/HTTP downloader, version resolver (semver ranges + env compat), dependency resolver (module.yml), relocator (fixed), ClassLoader aislado parent-last, SHA256 obligatorio, `register()` SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation obligatoria; **no hay GitHub Releases públicos** |
+| **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); build + tests |
+| **Presets** | ✅ Implementada y probada | Standard/RPG/Staff/Minimal, `TransformEngine` (SpEL sandboxed), import/export YAML; build |
+| **In-world (signs, chests, books)** | ✅ Compila | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, no probado en servidor |
+| **Extensiones (SDK)** | ✅ Implementada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; build |
+| **Web Editor** | ✅ Implementada y probada | 99 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde |
+| **Config schema v2.2 (single-source)** | ⚠️ Parcial | `ConfigPath` enum → `paths.json`/`js/paths.js`/`js/model.js` via `ConfigSchemaGenerator`; copies manuales en `schema-v2.2.md` |
+| **Dependency Verification** | ✅ Completa | 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` SHA256/SHA512 transitivos, `checkLocks` task |
+| **Security Sprint 3** | ✅ Completa | Tokens `char[]` + `Arrays.fill('\0')`, MiniEscape 10 chars, PAPI dynamic check, SpEL LRU cache 1024, SSRF protection (`getAllByName`), SafeConstructor 4 loaders YAML |
+| **Tests E2E pipeline completo** | ❌ Pendiente | Chat → iFlow → format → delivery en servidor real; 12 tests E2E unitarios existen pero requieren servidor real para validación completa |
+| **GitHub Releases / publicación** | ❌ Pendiente | Workflow `release.yml` existe pero no se han publicado releases oficiales; distribución vía source/build local |
+| **gradle.lockfile portable** | ⚠️ Parcial | Lockfiles existen pero reproducibilidad cross-platform no verificada exhaustivamente |
+
+**Criterio usado:** "Implementada y probada" = código integrado + tests automatizados pasando (unit + integración donde aplica). "Compila" = build exitoso, sin tests de integración en entorno real. "Pendiente" = identificado en plan/docs pero sin implementación verificable.
+
 ---
-## 10. Wiring de plataforma
-Los adapters implementan los puertos del motor y eligen el hilo:
-| Puerto (`core-api/spi` / `host/port`) | Spigot (`spigot-host`) | Fabric (`fabric-host`) |
-|---|---|---|
-| `ActorDirectory` | `SpigotActorDirectory` (idioma: store→locale→null; snapshot anti-CME) | `FabricActorDirectory` |
-| `ChatDelivery` | `SpigotChatDelivery` (BukkitAudiences, hop a main thread, sonidos normalizados) | `FabricChatDelivery` |
-| Evento chat | `AsyncPlayerChatEvent` (LOWEST claim-first; claim configurable: `cancel-event`\|`clear-recipients`) | `ServerMessageEvents.ALLOW_CHAT_MESSAGE` |
-| Join/Quit/Death/Advancement | canales convencionales `join`/`quit`/`death`/`advancement` (presencia = activado) | mismos canales |
-| Idioma por usuario | `UserLanguageStore` (YAML) + `/suite lang [jugador] <auto|off|código>`; `off` = sin traducción | mismo |
-| Permisos | `Player#hasPermission` | `ServerPlayerEntity#hasPermission` |
-| Mundo/radio | `getWorld().getName()` / `distanceSquared` | mismo |
+
+## Enfoque, alcance y objetivos
+
+| Objetivo | Descripción |
+|----------|-------------|
+| **Separación real de responsabilidades** | Cada capacidad (formateo, routing, traducción, sync, observabilidad) es un módulo independiente con contrato SPI propio |
+| **Independencia de plataforma** | `core-api` y módulos funcionales son JDK-puro; solo `spigot-host`/`fabric-host` dependen de APIs de Minecraft |
+| **Extensibilidad sin fork** | Nuevos proveedores de traducción, sinks de sync, formateadores, reglas = implementar SPI + registrar en META-INF/services |
+| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 167+ tests Java + 99 tests JS |
+| **Seguridad por defecto** | Tokens en `char[]`, MiniEscape completo, SpEL sandbox (`SimpleEvaluationContext`), SSRF protection, SafeConstructor YAML |
+| **Reproducibilidad** | Gradle lockfiles + verification metadata para supply chain integrity |
+
+**Fuera de alcance (explícitamente):**
+- Base de datos / persistencia propia (usa YAML files + Module Manager para módulos)
+- UI de administración en juego más allá de `/suite` commands
+- Soporte para versiones antiguas de Minecraft (< 1.20.6 Spigot, < 1.21 Fabric)
+- Garantías de compatibilidad binaria entre versiones SNAPSHOT
+- Panel de control web / dashboard (solo web-editor de configuración estático)
+
 ---
-## 11. Configuración en runtime
-- Nunca toca el stack YAML del servidor: los hosts embuten `snakeyaml`
-dentro del jar y parsean con loaders propios (`host/config/ConfigLoader`,
-`TranslatorsConfig`), tolerantes a archivos corruptos (degradan, no crashean).
-- Defaults (`config.yml`, `channels/chat.global.yml`, `translators/google.yml`)
-van **dentro del jar** (`resources/defaults/`); en primer arranque se copian
-si faltan y **nunca sobrescriben** ediciones del usuario.
-- Estrategia de E/S: lectura directa delegando en el Page Cache del SO;
-`/suite reload` relee todo el layout sin watchers ni polling.
-- **Repository Abstraction (F12-14)**: `repositories:` en `config.yml` con
-soporte GitHub, local (`file://`), HTTP; fallback ordenado; testing local
-sin GitHub.
+
+## Catálogo de módulos (29 módulos Gradle)
+
+### Núcleo y contratos
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `core-api` | Contratos SPI + modelo de dominio (`Module`, `Message`, `TranslationService`, `SyncSink`, `ActorDirectory`, `TranslatorProvider`, semver, capabilities) | ✅ Probado |
+| `kernel` | Module loading, dependency graph (Tarjan), SPI resolution, `Environment` | ✅ Probado (13 tests) |
+| `host` | Composition root: `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`), `ConfigValidator` | ✅ Probado |
+| `messages` | i18n centralizado EN/ES, `MessagesCatalog` singleton | ✅ Probado |
+
+### Formateo y routing
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `textformatter` | MiniMessage engine, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
+| `iflow` | `DefaultRouter`, `Rule`, `RateLimiter` (token bucket per-key), `PermissionChecker`, transforms F7+ | ✅ Probado (19 tests) |
+| `presets` | Presets predefinidos (standard, rpg, staff, minimal), `TransformEngine` (SpEL sandboxed), import/export YAML | ✅ Probado |
+
+### Traducción
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `gtranslate` | Google Translate provider (web scraping, UA rotation, rate limit, concatena segmentos) | ✅ Probado (17+19 tests) |
+| `ltranslate` | LibreTranslate provider (self-hosted/público, long-poll, tokens `char[]`) | ✅ Probado (17+15 tests) |
+
+### Transporte y sincronización
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `transport` | `Transport` abstraction, `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`, RFC 1918/3927/6598) | ✅ Probado |
+| `sync-bus` | **Nuevo**: Pipeline unificado — deduplicación global, aislamiento por sink, retry/backoff, métricas, health | ✅ Probado |
+| `sync-discord` | Discord Gateway v10 (WebSocket JDK + REST), intents, embeds, tokens `char[]` | ✅ Probado (6 tests) |
+| `sync-telegram` | Telegram Bot long-poll, watermark offset, tokens `char[]` | ✅ Probado (7 tests) |
+| `sync-http` | Webhook + REST (`HttpServer` JDK), inbound/outbound | ✅ Probado (7 tests) |
+| `sync-tcpudp` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (7 tests) |
+| `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ✅ Probado |
+| `sync-velocity` | Velocity proxy sink — **production-ready**: async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado |
+
+### Operación y extensibilidad
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `manager-api` | SPI del Module Manager: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle` | ✅ Probado |
+| `manager-impl` | Implementación: GitHub/local/HTTP downloader, version resolver, dependency resolver, SHA256, relocator, ClassLoader aislado, `register()` SPI-only, manifest validation | ⚠️ Núcleo completado |
+| `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado |
+| `example-extension` | Demo de extensión funcional | ✅ Probado |
+| `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ✅ Probado |
+| `inworld` | Signs, chests, books (WORLD/RADIUS), click/hover, caché + glosario | ⚠️ Compila |
+| `performance` | `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer`, `MemoryOptimizer` | ✅ Probado |
+| `loadtest` | JMH benchmarks + Gatling | ✅ Compila |
+| `tester` | 25 tests runtime automatizados (`/suite test full|stress|concurrency`), `PerformanceProfiler` | ✅ Probado |
+
+### Adaptadores de plataforma
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap, `/suite` commands, fat-jar shadow | ✅ Probado en servidor real Paper 1.20.6 |
+| `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ✅ Compila (no probado en servidor real) |
+
+### Legacy / referencial
+| Módulo | Propósito | Estado |
+|--------|-----------|--------|
+| `coretranslator` | Puente deprecated para retrocompatibilidad ChatTranslator v4 (PAPI `%cot_*`, captura mensajes, SpEL) | ⚠️ Deprecated, mantener |
+| `common-legacy` | Referencia histórica del trío monolítico eliminado | 📚 Solo referencia |
+
+> **Documentación por módulo:** Cada módulo en `src/*/README.md` detalla responsabilidades, dependencias, data flow y entry points. Ver [`src/README.md`](src/README.md) para mapa completo y discrepancias conocidas.
+
 ---
-## 12. Construcción
-> Requiere JDK 17 y 21 (toolchain Gradle; `options.release=17` para bytecode).
-> Gradle wrapper 8.13, fabric-loom 1.6.12. Declara las rutas JDK en
-> `org.gradle.java.installations.paths` (`gradle.properties`). Con caché Gradle
-> poblada, todo compila `--offline`.
+
+## Instalación y primeros pasos
+
+### ⚠️ No hay releases oficiales ni binarios publicados
+El proyecto **no publica JARs en Maven Central, GitHub Releases ni ningún repositorio de artefactos**. La única forma verificada de obtener el plugin/mod es **compilar desde fuente**.
+
+### Requisitos previos
+- **JDK 17 y 21** (toolchain Gradle; bytecode target 17)
+- **Gradle 8.13** (wrapper incluido)
+- **Git**
+- Servidor Minecraft para probar:
+  - **Spigot/Paper**: 1.20.6+ (probado en Paper 1.20.6 real)
+  - **Fabric**: 1.21 + Fabric Loader 0.16+ + Fabric API 0.100.5 (compila, no probado en servidor real)
+
+### Compilar desde fuente (verificado)
+
 ```bash
-# Suite (cada módulo es un build independiente)
+# Clonar
+git clone https://github.com/majhrs16-official/TextFormatter-Suite.git
+cd TextFormatter-Suite
+
+# Configurar JDKs (ajustar rutas a tu entorno)
 export JAVA_HOME=/opt/javac/x64/21
-cd suite/core-api      && ./gradlew test publishToMavenLocal --offline --no-daemon
-cd suite/kernel        && ./gradlew test publishToMavenLocal --offline --no-daemon
-cd suite/textformatter && ./gradlew test publishToMavenLocal --offline --no-daemon
-cd suite/iflow         && ./gradlew test publishToMavenLocal --offline --no-daemon
-cd suite/gtranslate    && ./gradlew publishToMavenLocal --offline --no-daemon
-cd suite/ltranslate    && ./gradlew publishToMavenLocal --offline --no-daemon
-cd suite/sync-telegram && ./gradlew test publishToMavenLocal --offline --no-daemon
+# En gradle.properties declarar org.gradle.java.installations.paths para JDK 17 y 21
 
-# Plugin Spigot de la suite (fat-jar)
-cd suite/spigot-host   && ./gradlew build --offline --no-daemon
+# Compilar suite completa (tests + build)
+./gradlew build test checkLocks --no-daemon
 
-# Plugin Fabric de la suite
-cd suite/fabric-host   && ./gradlew build --offline --no-daemon
+# Generar Javadoc
+./gradlew javadoc --no-daemon
+
+# Plugin Spigot (fat-jar en src/spigot-host/build/libs/)
+./gradlew :src:spigot-host:build --no-daemon
+
+# Mod Fabric (en src/fabric-host/build/libs/)
+./gradlew :src:fabric-host:build --no-daemon
+
+# Web Editor (validación + tests)
+cd src/web-editor
+npm ci
+npm run check          # format:check + lint + test (99 unit)
+npm run test:integration
+```
+
+### Instalar en servidor (tras compilar)
+
+**Spigot/Paper:**
+```bash
+cp src/spigot-host/build/libs/textformatter-suite-spigot-*.jar /ruta/servidor/plugins/
+# Iniciar servidor → se genera config en plugins/TextFormatterSuite/
+# Editar plugins/TextFormatterSuite/config.yml
+# /suite reload
+```
+
+**Fabric:**
+```bash
+cp src/fabric-host/build/libs/textformatter-suite-fabric-*.jar /ruta/servidor/mods/
+# Requiere Fabric Loader + Fabric API 0.100.5 en mods/
+# Iniciar servidor → se genera config en config/textformattersuite/
+# Editar config/textformattersuite/config.yml
+# /suite reload
+```
+
+### Verificar carga correcta
+- Comando `/suite` muestra status
+- `/suite status` lista canales, traductor activo, knobs
+- Logs muestran `[TextFormatterSuite] Loaded X modules` y sinks registrados
+
+### Limitaciones conocidas antes de probar
+- **Fabric**: No probado en servidor real; death detection usa tick-based polling
+- **Module Manager**: No hay releases públicos; `discoverAvailableModules()` requiere repo local/HTTP configurado
+- **Config**: Schema v2.2 tiene copias manuales (`paths.json`, `schema-v2.2.md`) no centralizadas
+- **Sin migración automática** desde ChatTranslator v4 o configs legacy
+
+---
+
+## Desarrollo: IDE y terminal
+
+### IntelliJ IDEA (verificado)
+1. **File → Open** → seleccionar carpeta raíz del repo (`TextFormatter-Suite/`)
+2. **Import as Gradle Project** → usar wrapper (`./gradlew`)
+3. **JDK**: seleccionar JDK 21 para el proyecto (toolchain resuelve 17 para bytecode)
+4. **Gradle Sync** → espera resolución de dependencias (primera vez descarga ~200MB)
+5. **Módulos**: 29 subproyectos bajo `:src` aparecen en panel Gradle
+6. **Tasks útiles**:
+   - `:src:core-api:test` — tests núcleo
+   - `:src:spigot-host:build` — fat-jar plugin
+   - `:src:fabric-host:build` — mod fabric
+   - `checkLocks` — audita lockfiles
+   - `javadoc` — genera docs
+
+### Visual Studio Code (verificado)
+1. Extensiones recomendadas: **Extension Pack for Java** (Microsoft), **Gradle for Java** (Microsoft)
+2. **File → Open Folder** → raíz del repo
+3. **Java: Configure Java Runtime** → JDK 21
+4. **Gradle: Reload All Projects** (Ctrl+Shift+P → "Gradle: Reload")
+5. Terminal integrado: `./gradlew tasks` lista tareas disponibles
+
+### Terminal sin IDE (verificado)
+```bash
+# Compilar todo
+export JAVA_HOME=/opt/javac/x64/21
+./gradlew build --no-daemon
+
+# Tests solo módulo específico
+./gradlew :src:iflow:test --no-daemon
+
+# Tests suite completa
+./gradlew test --no-daemon
+
+# Lockfiles + verification
+./gradlew checkLocks --no-daemon
+
+# Javadoc
+./gradlew javadoc --no-daemon
 
 # Web editor
-cd suite/web-editor
-npm run check                        # format:check + lint + test (99 unit)
-npm run test:integration             # harnesses func/interact/click/chain/undo/diffing/bind
+cd src/web-editor && npm run check
 ```
----
-## 13. Pruebas
-- **Suite Java**: 167+ tests verdes bajo Gradle (kernel, textformatter, iflow,
-gtranslate/ltranslate, sync-*, host, messages, tester, transport,
-spigot-host con normalización de sonido, fabric-host). `ModuleLoaderTest` requiere
-ejecución aislada.
-- **Web editor**: 99 unitarios (StateStore 40, model 30, validate 29) +
-harnesses de integración in-repo (`tests/integration/*.cjs`).
-- **Golden tests**: el editor y el host deben validar el mismo config
-(`ConfigLoaderTest.parsesEditorExportedDefaultConfig` verde).
-- **Tests nuevos añadidos**:
-  - 12 tests E2E pipeline en `E2EPipelineTest.java`
-  - 14 tests SpEL security en `SpelExpressionEvaluatorSecurityTest.java`
-  - 15 tests Translation cache/dedup en `TranslationServiceCacheTest.java`
-  - 4 tests Module Manager HTTP repo en `LocalHttpRepositoryTest.java`
-  - 19 tests extendidos GTranslate (edge cases, malformed, unicode, rate limit)
-  - 15 tests extendidos LTranslate (error handling, unicode, rate limit)
----
-## 14. Estado real (2026-10-09)
 
-**Fases cerradas:**
-- F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
-- F3 (channel type system + tester module + default channels).
-- F4 (fabric-host **COMPILA** — Fabric 1.21 + Fabric API 0.100.5, Brigadier), F5 (i18n strings UI), F6 (iFlow enriquecido: CHANNEL_REDIRECT, PAPI/permisos en SpEL, transform F7+),
-- F7 (ConfigValidator real), F8 (comandos dinámicos `/suite`), F9 (sync-velocity **production-ready**),
-- F10 (observabilidad: metrics/debug/health), F11 (extensiones/addons SDK), **F12 (manager runtime - núcleo completado)**,
-- F13 (sync-websocket), F14 (presets, transform real, engine.parallel), F15 (in-world **compila**),
-- **FASE 13 (2026-09-28)**: Clean Architecture (Translator SPI), Release Pipeline CI/CD, Dependency Verification completa.
-- **FASE 16 (2026-10-05)**: AUDITORIA.md hallazgos resueltos (TXF-001..TXF-008, B-01..B-06, M-01..M-11, V-01).
-- **FASE 16 bis (2026-10-09)**: Auditoría externa ZIP resuelta (TXF-ZIP-001..TXF-ZIP-006): duplicate broadcast, broadcastAsync futures, HttpTransport IP pinning, SyncBus lifecycle, DynamicCommand module ops, signature verification mandatory.
-
-**Eliminado:** trío monolítico `common`/`spigot`/`fabric-1.20.6` (nunca
-probado en servidor; recuperable desde historial git).
-
-**Probado en producción:** Plugin `TextFormatterSuite` probado en servidor Paper 1.20.6 real — todos los comandos `/suite`, canales join/quit/death/advancement, chat con traducción, rate-limit, y tests runtime funcionando.
-
-**Completado en esta sesión (2026-10-09):**
-- ✅ **AUDITORIA.md (interna) TXF-001..008**: In-flight translation leak, RejectedExecutionException fallback, DNS pinning TLS/SNI, SyncBus lifecycle (unregister/start), engine.parallel sequential mode, broadcast ACKs, VelocitySink AT_LEAST_ONCE.
-- ✅ **AUDITORIA.md (interna) B-01..B-06**: Double delivery, join/quit/death async, WebSocket bind/auth, TemplateRenderer İ fix, translation re-escape, WebSocket fixed-window rate limit.
-- ✅ **AUDITORIA.md (interna) M-01..M-11**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException restore, RateLimiter no RWLock, WebSocket port, MetricsEndpoint bind 127.0.0.1.
-- ✅ **AUDITORIA.md (externa ZIP) TXF-ZIP-001..006**: Duplicate broadcast, broadcastAsync futures completion, HttpTransport IP pinning (no HTTP proxy), SyncBus lifecycle (explicit states, close cleans up), DynamicCommand module install/update/remove/info, signature verification mandatory for production.
-- ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; ServiceLoader discovery en runtime.
-- ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config.
-- ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` con todos los checksums transitivos.
-- ✅ **fabric-host COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents).
-- ✅ **Composite build**: Todos los módulos usan `project(':src:...')` dependencies.
-- ✅ **Security Sprint 3**: char[] tokens + Arrays.fill(), MiniEscape completo (10 chars), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection, DependencyVerification, SafeConstructor en 4 loaders YAML.
-- ✅ **Presets import/export**: `loadCustomPresets()` parsea YAML, `export()` escribe YAML.
+> **Nota:** Con caché Gradle poblada, todo compila `--offline`. La primera build descarga dependencias (~2-5 min).
 
 ---
-## 15. Problemas críticos arreglados (historial)
 
-| ID | Problema | Fix |
-|---|---|---|
-| **C1** | Contrato `Message` roto | `withX()` methods inmutables, `Builder.from()` |
-| **C2** | `MessageEvent` roto | `cancelled` no final, imports |
-| **C3** | Module Manager stubs | `URLClassLoader`, `register()` SPI-only, `discoverAll()`, manifest validation |
-| **C4** | Debug endpoint inseguro | 127.0.0.1, auth token, sin `/debug/simulate`, executor shutdown |
-| **C5** | HEAD no compilable | Core modules compilan |
-| **H1** | RateLimiter global | Per-key + `ReentrantReadWriteLock` |
-| **H2** | Discord bypass iFlow | `mirror(DispatchReport)` solo si delivered |
-| **H3** | Language detection O(n) | `resolvedSourceLanguage` caché |
-| **CT-01** | `Message.toJson()` | Serialización JSON real |
-| **CFG-01** | ConfigLoader silencioso | `LoadResult<T>` con errores + logging ERROR |
-| **OBS-01** | DebugEndpoint leak | Executor shutdown en stop() |
-| **F12-M2** | Version resolver | Semver ranges + env compat |
-| **F12-M3** | Dependency resolver | Parsing module.yml desde JAR |
-| **F12-M6** | register() semántica | Descriptor SPI only |
-| **F12-14** | Repository Abstraction | `repositories:` config con GitHub, local, HTTP |
+## Compilación y verificación (comandos verificados)
+
+| Objetivo | Comando | Notas |
+|----------|---------|-------|
+| Build completo + tests | `./gradlew build test checkLocks --no-daemon` | 120 tasks, ~40s con caché |
+| Solo tests | `./gradlew test --no-daemon` | 167+ tests Java |
+| Solo build (sin tests) | `./gradlew build -x test --no-daemon` | Más rápido |
+| Plugin Spigot (fat-jar) | `./gradlew :src:spigot-host:build --no-daemon` | En `src/spigot-host/build/libs/` |
+| Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
+| Javadoc | `./gradlew javadoc --no-daemon` | En `build/docs/javadoc/` |
+| Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 29 lockfiles, 0 missing |
+| Verificación dependencias | Configurada en `settings.gradle` + `gradle/verification-metadata.xml` | Lenient para módulos con deps externas |
+| Web editor check | `cd src/web-editor && npm run check` | 29/29 passed |
+| Web editor tests integración | `cd src/web-editor && npm run test:integration` | Harnesses func/interact/click/chain/undo/diffing/bind |
 
 ---
-## 16. Referencias rápidas
 
-| Doc | Contenido |
-|---|---|
-| `docs/PLAN.md` | Plan vivo con fases, estado, próxima acción |
-| `docs/ADR.md` | Decisiones de arquitectura con fechas |
-| `docs/wiki/` | Wiki usuario/dev (config, channels, iFlow, sync, editor, comandos, API, etc.) |
-| `src/*/README.md` | Codeguides por módulo (responsabilidades, deps, data flow, entry points) |
-| `docs/NEW-FEATURES.md` | Tracking de features nuevas por fase |
+## Cómo contribuir
 
-**Probado en producción:** Plugin `TextFormatterSuite` probado en servidor Paper 1.20.6 real — todos los comandos `/suite`, canales join/quit/death/advancement, chat con traducción, rate-limit, y tests runtime funcionando.
+No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orientaciones conservadoras compatibles con el repo:
+
+1. **Investigar**: Lee [`src/README.md`](src/README.md) para entender arquitectura, [`docs/PLAN.md`](docs/PLAN.md) para roadmap, [`docs/ADR.md`](docs/ADR.md) para decisiones previas
+2. **Localizar módulo**: Usa el catálogo arriba o `src/README.md` §3 para encontrar el módulo responsable
+3. **Tests primero**: Añade test unitario/integración que falle antes de fix; ejecuta `./gradlew :src:<modulo>:test`
+4. **Verifica**: `./gradlew build test checkLocks --no-daemon` + `cd src/web-editor && npm run check`
+5. **Commits atómicos**: Un cambio lógico por commit; mensaje convencional (`fix:`, `feat:`, `docs:`, `refactor:`)
+6. **No rompas contratos**: `core-api` es inmutable para consumidores; cambios requieren ADR
+7. **Documenta**: Actualiza `src/<modulo>/README.md` y `docs/PLAN.md` si cambia estado/funcionalidad
+8. **PR**: Abre Pull Request contra `main`; CI ejecuta build + tests + javadoc + web-editor check
+
+---
+
+## Convenciones de desarrollo (observadas en el repo)
+
+| Área | Convención |
+|------|------------|
+| **Organización módulos** | `src/<modulo>/` con `build.gradle` propio; composite build vía `settings.gradle` |
+| **Separación responsabilidades** | `core-api` = contratos (JDK-puro); módulos funcionales dependen solo de `core-api`; adapters dependen de suite + 1 SDK plataforma |
+| **Naming** | Paquetes `me.majhrs16.suite.<modulo>`; interfaces SPI en `...api.spi.*`; implementaciones en módulo correspondiente |
+| **SPI / ServiceLoader** | Todos los puntos de extensión usan `META-INF/services/<interface>`; `core-api` define interfaces, módulos implementan |
+| **Gestión dependencias** | `implementation project(':src:...')` para módulos internos; `compileOnly` para APIs plataforma (Paper, Fabric); `testImplementation` para tests |
+| **Compatibilidad plataformas** | Código compartido en `core-api`/`host`/módulos funcionales; adaptadores en `spigot-host`/`fabric-host` implementan `ActorDirectory`, `ChatDelivery`, `PlaceholderResolver` |
+| **Tests** | JUnit 5; tests unitarios en `src/test/java`; tests integración donde aplica; `ModuleLoaderTest` requiere aislamiento classpath |
+| **Documentación APIs** | Javadoc en código; module READMEs en `src/<modulo>/README.md`; ADR en `docs/ADR.md` para decisiones arquitectónicas |
+| **Errores** | Excepciones checked para errores recuperables; `IllegalStateException`/`SecurityException` para violaciones de contrato; logging SLF4J vía `PluginLogger` SPI |
+| **Configuración** | YAML con snakeyaml `SafeConstructor`; `ConfigLoader` (enum `ConfigPath`) + `ConfigValidator`; defaults en `resources/defaults/` copiados en primer arranque |
+| **Nuevas funcionalidades** | 1) Definir SPI en `core-api` si es punto de extensión; 2) Implementar en módulo dedicado; 3) Registrar vía ServiceLoader; 4) Wiring en `host`/`spigot-host`/`fabric-host`; 5) Tests + docs |
+
+---
+
+## Organización de la documentación
+
+| Documento | Responsabilidad | Enlace |
+|-----------|-----------------|--------|
+| **README.md** (este archivo) | Página principal: presentación, estado, instalación, contribución, enlaces | — |
+| **src/README.md** | Índice técnico: mapa módulos, dependencias, entry points, flows, discrepancias | [`src/README.md`](src/README.md) |
+| **docs/PLAN.md** | Plan vivo: fases, estado actual, próxima acción, deuda conocida | [`docs/PLAN.md`](docs/PLAN.md) |
+| **docs/ADR.md** | Architecture Decision Records: decisiones inmutables con contexto/fecha/consecuencias | [`docs/ADR.md`](docs/ADR.md) |
+| **docs/wiki/01-Introduction.md** | Entrada wiki usuario/dev: quick start, módulos, arquitectura, guías | [`docs/wiki/01-Introduction.md`](docs/wiki/01-Introduction.md) |
+| **docs/wiki/02-Configuration.md** | Guía configuración (config.yml, channels, rules, translators, sync) | [`docs/wiki/02-Configuration.md`](docs/wiki/02-Configuration.md) |
+| **docs/wiki/05-iFlow-Rules.md** | Motor de reglas iFlow: sintaxis, condiciones, actions, targets, grafo | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
+| **docs/wiki/08-Commands.md** | Referencia comandos `/suite` (dinámicos v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
+| **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
+| **docs/commands-v2-spec.md** | Spec técnico `commands.yml` v2 (acciones atómicas, arg binding, permissions) | [`docs/commands-v2-spec.md`](docs/commands-v2-spec.md) |
+| **docs/extension-schema.md** | Schema `extension.yml` v1.0 (metadatos, capabilities, configSchema JSON) | [`docs/extension-schema.md`](docs/extension-schema.md) |
+| **docs/NEW-MANAGER.md** | Especificación reingeniería Module Manager (estilo APT/dpkg) | [`docs/NEW-MANAGER.md`](docs/NEW-MANAGER.md) |
+| **docs/AUDITORIA.md** | Auditoría técnica externa 2026-10-09 (TXF-ZIP-001..006 resueltos) | [`docs/AUDITORIA.md`](docs/AUDITORIA.md) |
+| **src/<modulo>/README.md** | Codeguide por módulo: responsabilidades, deps, data flow, entry points | Ver [`src/README.md`](src/README.md) §3 |
+
+---
+
+## Validación realizada
+
+- [x] Advertencia "Actualmente en desarrollo intenso — No apto para producción" visible al inicio
+- [x] Funcionalidades clasificadas con estados honestos y evidencia (tests, build, probado en servidor)
+- [x] Propósito, enfoque, objetivos y límites explicados sin promesas futuras
+- [x] Catálogo de 29 módulos reales agrupados por responsabilidad con estado
+- [x] Instalación distingue: uso plugin (requiere build previo) vs desarrollo vs tests
+- [x] IDE (IntelliJ, VS Code) y terminal documentados con comandos verificables
+- [x] Comandos build/test/verificación contrastados contra `settings.gradle`/`build.gradle` y tareas reales
+- [x] Contribución: flujo conservador sin inventar políticas inexistentes
+- [x] `src/README.md` conserva su responsabilidad de mapa técnico y se enlaza
+- [x] Documentación técnica extensa en archivos especializados (wiki, ADR, module READMEs)
+- [x] Enlaces internos válidos y rutas relativas correctas desde GitHub
+- [x] No se han inventado capacidades, releases, comandos ni requisitos
+- [x] CI verificado: `./gradlew build test checkLocks` ✅, `./gradlew javadoc` ✅, `npm run check` ✅ (29/29)
+
+---
+
+## Licencia
+
+GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archivos fuente.
+
+---
+
+*Última actualización: 2026-10-09 — Estado sincronizado con commit `26095c1` (docs sync post-auditoría externa). Todos los hallazgos de AUDITORIA.md (internos TXF-001..008, B/M/V; externos TXF-ZIP-001..006) resueltos. CI verde.*
