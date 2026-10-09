@@ -9,6 +9,8 @@ import me.majhrs16.suite.host.config.HostConfig;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -249,12 +251,121 @@ public final class PresetManager {
                     try {
                         String content = Files.readString(p);
                         Map<String, Object> map = (Map<String, Object>) yaml.load(content);
-                        // TODO: Parse custom preset from YAML
+                        if (map != null) {
+                            Preset preset = parsePresetFromMap(map);
+                            if (preset != null) {
+                                presets.put(preset.id(), preset);
+                            }
+                        }
                     } catch (Exception e) {
                         // Log error
                     }
                 });
         } catch (IOException ignored) {}
+    }
+
+    private Preset parsePresetFromMap(Map<String, Object> map) {
+        try {
+            String id = (String) map.get("id");
+            String name = (String) map.get("name");
+            String description = (String) map.get("description");
+            String author = (String) map.get("author");
+            String version = (String) map.get("version");
+            String minSuiteVersion = (String) map.get("minSuiteVersion");
+            @SuppressWarnings("unchecked")
+            List<String> tags = (List<String>) map.getOrDefault("tags", List.of());
+
+            // Parse config
+            @SuppressWarnings("unchecked")
+            Map<String, Object> configMap = (Map<String, Object>) map.get("config");
+            Preset.PresetConfig config = null;
+            if (configMap != null) {
+                config = new Preset.PresetConfig(
+                    (Boolean) configMap.getOrDefault("quickLook", true),
+                    (String) configMap.getOrDefault("language", "en"),
+                    (Boolean) configMap.getOrDefault("parallel", false),
+                    (Boolean) configMap.getOrDefault("soundEnabled", true),
+                    (String) configMap.getOrDefault("claimMode", "cancel-event")
+                );
+            }
+
+            // Parse channels
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> channelsList = (List<Map<String, Object>>) map.getOrDefault("channels", List.of());
+            List<Preset.PresetChannel> channels = new ArrayList<>();
+            for (Map<String, Object> c : channelsList) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> soundsList = (List<Map<String, Object>>) c.getOrDefault("sounds", List.of());
+                List<Preset.PresetSound> sounds = new ArrayList<>();
+                for (Map<String, Object> s : soundsList) {
+                    sounds.add(new Preset.PresetSound(
+                        (String) s.get("name"),
+                        ((Number) s.getOrDefault("volume", 1.0)).floatValue(),
+                        ((Number) s.getOrDefault("pitch", 1.0)).floatValue()
+                    ));
+                }
+                channels.add(new Preset.PresetChannel(
+                    (String) c.get("name"),
+                    (String) c.get("type"),
+                    (String) c.getOrDefault("permission", ""),
+                    (String) c.getOrDefault("sendPermission", ""),
+                    (String) c.getOrDefault("receivePermission", ""),
+                    (Boolean) c.getOrDefault("showSender", true),
+                    ((Number) c.getOrDefault("rateLimitPerSecond", 0)).intValue(),
+                    (String) c.getOrDefault("langSource", "auto"),
+                    (String) c.getOrDefault("langTarget", "auto"),
+                    (List<String>) c.getOrDefault("messages", List.of()),
+                    (List<String>) c.getOrDefault("tooltips", List.of()),
+                    sounds
+                ));
+            }
+
+            // Parse rules
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rulesList = (List<Map<String, Object>>) map.getOrDefault("rules", List.of());
+            List<Preset.PresetRule> rules = new ArrayList<>();
+            for (Map<String, Object> r : rulesList) {
+                rules.add(new Preset.PresetRule(
+                    (String) r.get("id"),
+                    ((Number) r.getOrDefault("priority", 100)).intValue(),
+                    (String) r.getOrDefault("condition", ""),
+                    (String) r.getOrDefault("action", ""),
+                    (String) r.getOrDefault("targetChannel", "")
+                ));
+            }
+
+            // Parse translators
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> translatorsList = (List<Map<String, Object>>) map.getOrDefault("translators", List.of());
+            List<Preset.PresetTranslator> translators = new ArrayList<>();
+            for (Map<String, Object> t : translatorsList) {
+                translators.add(new Preset.PresetTranslator(
+                    (String) t.get("provider"),
+                    (Boolean) t.getOrDefault("active", false),
+                    (String) t.getOrDefault("baseUrl", ""),
+                    (String) t.getOrDefault("apiKey", ""),
+                    ((Number) t.getOrDefault("maxConcurrent", 6)).intValue()
+                ));
+            }
+
+            // Parse sync
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> syncList = (List<Map<String, Object>>) map.getOrDefault("sync", List.of());
+            List<Preset.PresetSync> sync = new ArrayList<>();
+            for (Map<String, Object> s : syncList) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> syncConfig = (Map<String, String>) s.getOrDefault("config", Map.of());
+                sync.add(new Preset.PresetSync(
+                    (String) s.get("type"),
+                    (Boolean) s.getOrDefault("enabled", false),
+                    syncConfig
+                ));
+            }
+
+            return new Preset(id, name, description, author, version, minSuiteVersion, tags, config, channels, rules, translators, sync);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ============================================================
@@ -306,7 +417,98 @@ public final class PresetManager {
         Preset preset = presets.get(presetId);
         if (preset == null) return;
 
-        // TODO: Export to YAML
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", preset.id());
+        map.put("name", preset.name());
+        map.put("description", preset.description());
+        map.put("author", preset.author());
+        map.put("version", preset.version());
+        map.put("minSuiteVersion", preset.minSuiteVersion());
+        map.put("tags", preset.tags());
+
+        // Config
+        Map<String, Object> configMap = new LinkedHashMap<>();
+        configMap.put("quickLook", preset.config().quickLook());
+        configMap.put("language", preset.config().language());
+        configMap.put("parallel", preset.config().parallel());
+        configMap.put("soundEnabled", preset.config().soundEnabled());
+        configMap.put("claimMode", preset.config().claimMode());
+        map.put("config", configMap);
+
+        // Channels
+        List<Map<String, Object>> channelsList = new ArrayList<>();
+        for (Preset.PresetChannel c : preset.channels()) {
+            Map<String, Object> cMap = new LinkedHashMap<>();
+            cMap.put("name", c.name());
+            cMap.put("type", c.type());
+            cMap.put("permission", c.permission());
+            cMap.put("sendPermission", c.sendPermission());
+            cMap.put("receivePermission", c.receivePermission());
+            cMap.put("showSender", c.showSender());
+            cMap.put("rateLimitPerSecond", c.rateLimitPerSecond());
+            cMap.put("langSource", c.langSource());
+            cMap.put("langTarget", c.langTarget());
+            cMap.put("messages", c.messages());
+            cMap.put("tooltips", c.tooltips());
+            List<Map<String, Object>> soundsList = new ArrayList<>();
+            for (Preset.PresetSound s : c.sounds()) {
+                Map<String, Object> sMap = new LinkedHashMap<>();
+                sMap.put("name", s.name());
+                sMap.put("volume", s.volume());
+                sMap.put("pitch", s.pitch());
+                soundsList.add(sMap);
+            }
+            cMap.put("sounds", soundsList);
+            channelsList.add(cMap);
+        }
+        map.put("channels", channelsList);
+
+        // Rules
+        List<Map<String, Object>> rulesList = new ArrayList<>();
+        for (Preset.PresetRule r : preset.rules()) {
+            Map<String, Object> rMap = new LinkedHashMap<>();
+            rMap.put("id", r.id());
+            rMap.put("priority", r.priority());
+            rMap.put("condition", r.condition());
+            rMap.put("action", r.action());
+            rMap.put("targetChannel", r.targetChannel());
+            rulesList.add(rMap);
+        }
+        map.put("rules", rulesList);
+
+        // Translators
+        List<Map<String, Object>> translatorsList = new ArrayList<>();
+        for (Preset.PresetTranslator t : preset.translators()) {
+            Map<String, Object> tMap = new LinkedHashMap<>();
+            tMap.put("provider", t.provider());
+            tMap.put("active", t.active());
+            tMap.put("baseUrl", t.baseUrl());
+            tMap.put("apiKey", t.apiKey());
+            tMap.put("maxConcurrent", t.maxConcurrent());
+            translatorsList.add(tMap);
+        }
+        map.put("translators", translatorsList);
+
+        // Sync
+        List<Map<String, Object>> syncList = new ArrayList<>();
+        for (Preset.PresetSync s : preset.sync()) {
+            Map<String, Object> sMap = new LinkedHashMap<>();
+            sMap.put("type", s.type());
+            sMap.put("enabled", s.enabled());
+            sMap.put("config", s.config());
+            syncList.add(sMap);
+        }
+        map.put("sync", syncList);
+
+        // Write YAML
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        Representer representer = new Representer(options);
+        representer.getPropertyUtils().setSkipMissingProperties(true);
+        Yaml exportYaml = new Yaml(representer, options);
+        String yamlContent = exportYaml.dump(map);
+        Files.writeString(outputFile, yamlContent);
     }
 
     public Collection<Preset> getAll() {

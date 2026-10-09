@@ -90,20 +90,26 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
     private final List<String> moduleAllowlist;
 
     private final List<HostConfig.Repository> repositories;
+    private final boolean requireSignatures;
 
     public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger) {
-        this(cacheDir, logger, List.of(), List.of());
+        this(cacheDir, logger, List.of(), List.of(), false);
     }
 
     public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger, List<HostConfig.Repository> repositories) {
-        this(cacheDir, logger, repositories, List.of());
+        this(cacheDir, logger, repositories, List.of(), false);
     }
 
     public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger, List<HostConfig.Repository> repositories, List<String> moduleAllowlist) {
+        this(cacheDir, logger, repositories, moduleAllowlist, false);
+    }
+
+    public DefaultModuleLifecycle(Path cacheDir, PluginLogger logger, List<HostConfig.Repository> repositories, List<String> moduleAllowlist, boolean requireSignatures) {
         this.cacheDir = cacheDir.toAbsolutePath();
         this.logger = logger;
         this.repositories = repositories != null ? repositories : List.of();
         this.moduleAllowlist = moduleAllowlist != null ? moduleAllowlist : List.of();
+        this.requireSignatures = requireSignatures;
         try {
             Files.createDirectories(this.cacheDir);
         } catch (IOException e) {
@@ -336,7 +342,10 @@ public final class DefaultModuleLifecycle implements ModuleLifecycle {
         String signatureUrl = descriptor.properties().get("signature.url");
         String publicKeyUrl = descriptor.properties().get("signature.publicKey");
         if (signatureUrl == null || publicKeyUrl == null) {
-            logger.debug("No signature configuration for module " + descriptor.name() + ", skipping signature verification");
+            if (requireSignatures) {
+                throw new SecurityException("Signature verification required but not configured for module " + descriptor.name() + " (" + jar + ")");
+            }
+            logger.debug("No signature configuration for module " + descriptor.name() + ", skipping signature verification (requireSignatures=" + requireSignatures + ")");
             return;
         }
         try {

@@ -140,12 +140,14 @@ public final class HttpTransport implements Transport {
             pinnedAddress = validateUrlAndGetAddress(url);
         }
 
-        // Create connection - use pinned IP for connection, original host for Host header/SNI
+        // Create connection - connect directly to pinned IP, preserve original host for Host header/SNI
         HttpURLConnection conn;
         if (pinnedAddress != null) {
-            // Connect directly to pinned IP using a Proxy
-            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(pinnedAddress, port));
-            conn = (HttpURLConnection) url.openConnection(proxy);
+            // Connect directly to pinned IP using a custom URL that points to the IP
+            // but preserve the original host for Host header and SNI
+            String newUrlString = urlString.replaceFirst("://[^:/]+", "://" + pinnedAddress.getHostAddress());
+            URL newUrl = new URL(newUrlString);
+            conn = (HttpURLConnection) newUrl.openConnection();
             // Set Host header to original hostname (critical for virtual hosting and SNI)
             conn.setRequestProperty("Host", originalHost + (port != 80 && port != 443 ? ":" + port : ""));
         } else {

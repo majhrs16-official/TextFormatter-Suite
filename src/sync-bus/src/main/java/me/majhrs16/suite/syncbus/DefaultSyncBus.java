@@ -29,8 +29,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
@@ -57,23 +57,25 @@ public final class DefaultSyncBus implements SyncBus {
     private static final long DEDUP_WINDOW_MS = 60_000;
     private static final int DEDUP_MAX_ENTRIES = 50000;
 
+    // Lifecycle states
+    private enum LifecycleState { NEW, RUNNING, STOPPING, STOPPED }
+
     private final Map<String, SinkContext> sinks = new ConcurrentHashMap<>();
     private final Set<String> sinkNamesSnapshot = new CopyOnWriteArraySet<>();
     private volatile SyncListener inboundListener;
     private final PluginLogger logger;
 
     // Global queue with backpressure - using Runnable wrapper
-    private final BlockingQueue<Runnable> globalQueue;
     private final ThreadPoolExecutor globalExecutor;
+    private final BlockingQueue<Runnable> globalQueue;
     private final ScheduledExecutorService scheduler;
 
     // Deduplication
     private final ConcurrentMap<String, Long> sentMessageIds = new ConcurrentHashMap<>();
-    private final ScheduledFuture<?> dedupCleanupTask;
+    private ScheduledFuture<?> dedupCleanupTask;
 
     // Lifecycle
-    private final AtomicInteger started = new AtomicInteger(0);
-    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+    private final AtomicReference<LifecycleState> state = new AtomicReference<>(LifecycleState.NEW);
 
     // Metrics
     private final AtomicLong totalBroadcast = new AtomicLong(0);
@@ -95,17 +97,9 @@ public final class DefaultSyncBus implements SyncBus {
 
         this.globalQueue = globalExecutor.getQueue();
 
-        // Scheduler for retries and dedup cleanup
+        // Scheduler for retries and dedup cleanup (created but not started until start())
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
             createThreadFactory("syncbus-scheduler"));
-
-        // Deduplication cleanup task
-        this.dedupCleanupTask = scheduler.scheduleAtFixedRate(
-            this::cleanupDedupCache,
-            DEDUP_WINDOW_MS, DEDUP_WINDOW_MS, TimeUnit.MILLISECONDS);
-
-        // Start global processor
-        startGlobalProcessor();
     }
 
     private static ThreadFactory createThreadFactory(String prefix) {
@@ -118,7 +112,7 @@ public final class DefaultSyncBus implements SyncBus {
 
     private void startGlobalProcessor() {
         globalExecutor.submit(() -> {
-            while (!shuttingDown.get()) {
+            while (state.get() == LifecycleState.RUNNING || state.get() == LifecycleState.STOPPING) {
                 try {
                     Runnable task = globalQueue.take();
                     task.run();
@@ -212,8 +206,9 @@ public final class DefaultSyncBus implements SyncBus {
 
     @Override
     public int broadcast(Message message) {
-        if (shuttingDown.get()) {
-            logger.debug("SyncBus: broadcast called during shutdown");
+        LifecycleState currentState = state.get();
+        if (currentState != LifecycleState.RUNNING) {
+            logger.debug("SyncBus: broadcast called during shutdown or before start");
             return 0;
         }
 
@@ -223,20 +218,14 @@ public final class DefaultSyncBus implements SyncBus {
         }
 
         try {
-            // Non-blocking offer with backpressure
+            // Single path: offer to global queue, which fans out via processMessage()
             boolean offered = globalQueue.offer(() -> processMessage(message), 100, TimeUnit.MILLISECONDS);
             if (!offered) {
                 // Queue full - apply backpressure by running in caller thread (CallerRunsPolicy)
                 submitToGlobalQueue(message);
             }
-            // Return count of sinks that successfully enqueued the message
-            int enqueued = 0;
-            for (SinkContext ctx : sinks.values()) {
-                if (ctx.enqueue(message)) {
-                    enqueued++;
-                }
-            }
-            return enqueued;
+            // Return number of registered sinks (fan-out happens in processMessage)
+            return sinks.size();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             totalDropped.incrementAndGet();
@@ -248,14 +237,15 @@ public final class DefaultSyncBus implements SyncBus {
     public java.util.Map<String, CompletableFuture<Void>> broadcastAsync(Message message) {
         java.util.Map<String, CompletableFuture<Void>> futures = new ConcurrentHashMap<>();
         
-        if (shuttingDown.get() || sinks.isEmpty()) {
+        if (state.get() != LifecycleState.RUNNING || sinks.isEmpty()) {
             return futures;
         }
 
         // Submit to global queue to process message
         CompletableFuture<Void> globalFuture = new CompletableFuture<>();
+        boolean offered = false;
         try {
-            globalQueue.offer(() -> {
+            offered = globalQueue.offer(() -> {
                 try {
                     processMessage(message);
                     globalFuture.complete(null);
@@ -266,6 +256,11 @@ public final class DefaultSyncBus implements SyncBus {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             globalFuture.completeExceptionally(e);
+        }
+
+        // If offer failed, complete global future exceptionally to unblock sink futures
+        if (!offered) {
+            globalFuture.completeExceptionally(new IllegalStateException("Global queue full, broadcast rejected"));
         }
 
         // Create futures for each sink
@@ -323,10 +318,21 @@ public final class DefaultSyncBus implements SyncBus {
 
     @Override
     public void start() throws Exception {
-        if (started.getAndSet(1) == 1) {
-            logger.debug("SyncBus: already started");
-            return;
+        if (!state.compareAndSet(LifecycleState.NEW, LifecycleState.RUNNING)) {
+            if (state.get() == LifecycleState.RUNNING) {
+                logger.debug("SyncBus: already started");
+                return;
+            }
+            throw new IllegalStateException("Cannot start SyncBus from state: " + state.get());
         }
+
+        // Start global processor
+        startGlobalProcessor();
+
+        // Start deduplication cleanup task
+        this.dedupCleanupTask = scheduler.scheduleAtFixedRate(
+            this::cleanupDedupCache,
+            DEDUP_WINDOW_MS, DEDUP_WINDOW_MS, TimeUnit.MILLISECONDS);
 
         List<SinkContext> startedContexts = new ArrayList<>();
         try {
@@ -346,21 +352,44 @@ public final class DefaultSyncBus implements SyncBus {
                     logger.warn("SyncBus: error during rollback stop of sink '" + ctx.sink.name() + "': " + rollbackEx.getMessage());
                 }
             }
-            started.set(0); // Reset started flag so future start() calls can retry
+            state.set(LifecycleState.NEW); // Reset state so future start() calls can retry
             throw e;
         }
     }
 
     @Override
     public void stop() {
-        if (started.getAndSet(0) == 0) {
-            logger.debug("SyncBus: already stopped");
+        if (!state.compareAndSet(LifecycleState.RUNNING, LifecycleState.STOPPING)) {
+            if (state.get() == LifecycleState.STOPPED) {
+                logger.debug("SyncBus: already stopped");
+                return;
+            }
+            // If in NEW state, we still need to clean up resources created in constructor
+            if (state.get() == LifecycleState.NEW) {
+                cleanupResources();
+                state.set(LifecycleState.STOPPED);
+                return;
+            }
+            logger.debug("SyncBus: cannot stop from state: " + state.get());
             return;
         }
 
-        shuttingDown.set(true);
+        // Stop all sinks first
+        for (SinkContext ctx : sinks.values()) {
+            try {
+                ctx.shutdown();
+                logger.info("SyncBus: stopped sink '" + ctx.sink.name() + "'");
+            } catch (Exception e) {
+                logger.warn("SyncBus: error stopping sink '" + ctx.sink.name() + "': " + e.getMessage());
+            }
+        }
 
-        // Stop global processor
+        cleanupResources();
+        state.set(LifecycleState.STOPPED);
+    }
+
+    private void cleanupResources() {
+        // Stop global processor (will exit loop when state is not RUNNING/STOPPING)
         globalExecutor.shutdown();
         try {
             if (!globalExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
@@ -371,8 +400,10 @@ public final class DefaultSyncBus implements SyncBus {
             Thread.currentThread().interrupt();
         }
 
-        // Stop scheduler
-        dedupCleanupTask.cancel(false);
+        // Stop scheduler and dedup cleanup
+        if (dedupCleanupTask != null) {
+            dedupCleanupTask.cancel(false);
+        }
         scheduler.shutdown();
         try {
             if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -382,26 +413,16 @@ public final class DefaultSyncBus implements SyncBus {
             scheduler.shutdownNow();
             Thread.currentThread().interrupt();
         }
-
-        // Stop all sinks
-        for (SinkContext ctx : sinks.values()) {
-            try {
-                ctx.shutdown();
-                logger.info("SyncBus: stopped sink '" + ctx.sink.name() + "'");
-            } catch (Exception e) {
-                logger.warn("SyncBus: error stopping sink '" + ctx.sink.name() + "': " + e.getMessage());
-            }
-        }
-    }
-
-    @Override
-    public boolean isEmpty() {
-        return sinks.isEmpty();
     }
 
     @Override
     public void close() {
         stop();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return sinks.isEmpty();
     }
 
     // Public metrics for observability
@@ -458,7 +479,7 @@ public final class DefaultSyncBus implements SyncBus {
         }
 
         boolean enqueue(Message message) {
-            if (!running.get() || shuttingDown.get()) {
+            if (!running.get() || state.get() != LifecycleState.RUNNING) {
                 return false;
             }
             Runnable task = () -> deliverWithRetry(message, 0);
@@ -490,7 +511,7 @@ public final class DefaultSyncBus implements SyncBus {
         }
 
         private void processQueue() {
-            while (running.get() && !shuttingDown.get()) {
+            while (running.get() && state.get() == LifecycleState.RUNNING) {
                 try {
                     Runnable task = queue.poll(100, TimeUnit.MILLISECONDS);
                     if (task == null) continue;
@@ -520,7 +541,7 @@ public final class DefaultSyncBus implements SyncBus {
 
                     int nextAttempt = attempt + 1;
                     scheduler.schedule(() -> {
-                        if (running.get() && !shuttingDown.get()) {
+                        if (running.get() && state.get() == LifecycleState.RUNNING) {
                             queue.offer(() -> deliverWithRetry(message, nextAttempt));
                         }
                     }, delay, TimeUnit.MILLISECONDS);

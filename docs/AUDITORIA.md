@@ -1,3013 +1,708 @@
 # Auditoría técnica integral — TextFormatter Suite
 
-**Fecha de auditoría:** 2026-10-05 04:00 UTC
-**Repositorio:** `majhrs16-official/TextFormatter-Suite`
-**Commit auditado:** `00fc8463658f54bc8aa6c9a1de2b8f0bfe6f4682`
-**Rama:** `main`
+Base de auditoría: archivo ZIP proporcionado · 9 de octubre de 2026
 
-> **Alcance y precisión:** hice una auditoría profunda sobre el repositorio GitHub, incluyendo arquitectura, módulos, documentación, configuración, build, historial y una inspección directa de los componentes críticos y de varios tests. No voy a afirmar que cada línea de cada archivo fue inspeccionada individualmente: el conector disponible no permite enumerar/leer el árbol completo de forma eficiente. Por tanto, esto es una **auditoría técnica amplia y basada en evidencia**, pero no una revisión byte-a-byte de absolutamente todo el repositorio. Los hallazgos de código que marco como *Confirmado* sí están sustentados directamente por el código inspeccionado.
+La auditoría se realizará sobre el contenido de `TextFormatter-Suite-main (1).zip`, no sobre una versión consultada de GitHub. El prompt de auditoría adjunto se utilizará como especificación del trabajo.
 
----
+## 1. Cobertura de auditoría
 
-# 1. Cobertura de auditoría
+Archivo del proyecto
 
-## Inspeccionado directamente
+`TextFormatter-Suite-main (1).zip`
 
-### Arquitectura/core
+1,9 MB comprimidos · 4,25 MB descomprimidos · 968 entradas
 
-* `core-api`
-* `kernel`
-* `host`
-* `textformatter`
-* `iflow`
-* `transport`
-* `messages`
-* `gtranslate`
-* `ltranslate`
+# 208
 
-### Sincronización
+Archivos fuente Java en los módulos principales
 
-* `sync-bus`
-* `sync-http`
-* `sync-tcpudp` mediante documentación y arquitectura
-* `sync-discord` mediante documentación/historial
-* `sync-telegram` mediante historial/documentación
-* `sync-websocket`
-* `sync-velocity`
+# 29
 
-### Plataforma
+Módulos declarados en Gradle
 
-* `spigot-host`
-* `fabric-host`
-* wiring descrito por commits y documentación
-* pipeline común `SuiteBootstrap` / `SuiteHost` / `MessageDispatcher`
+También hay código JavaScript, pruebas Java y JavaScript, documentación, configuraciones YAML/JSON, recursos, workflows y herramientas de carga y rendimiento.
 
-### Extensiones / runtime
+### Limitaciones verificadas
 
-* `manager-api`
-* `manager-impl`
-* `extension-api`
-* `example-extension`
-* `presets`
-* `inworld`
-* `observability`
-* `performance`
-* `loadtest`
-* `tester`
+* Código y configuración: el ZIP se ha descomprimido correctamente y se está examinando su contenido.
 
-### Build/documentación
+* Historial de Git: el archivo no contiene un directorio `.git` identificable en la raíz inspeccionada. No es posible atribuir cambios a commits concretos ni reconstruir con certeza la evolución histórica a partir de esta copia.
 
-* `settings.gradle`
-* `build.gradle`
-* `README.md`
-* `docs/PLAN.md`
-* `docs/ADR.md`
-* varios `src/*/README.md`
-* GitHub Actions / pipeline descrito por historial
-* dependency locking / verification metadata según documentación e historial
+* Pruebas automatizadas: intenté ejecutar `./gradlew test`, pero el wrapper necesita descargar Gradle 8.10 y el entorno no pudo resolver `services.gradle.org`. Por tanto, todavía no hay resultados de ejecución que permitan afirmar que la compilación o las pruebas pasan o fallan.
 
-### Tests
+* Rendimiento: las conclusiones de escalabilidad deberán distinguir entre propiedades deducibles del código y resultados que exigirían benchmarks reales.
 
-Se inspeccionaron tests E2E del pipeline y tests del formatter, además de las cifras declaradas por el proyecto:
+No consideraré que una prueba falla por un defecto del proyecto cuando ni siquiera ha podido iniciarse. Tampoco atribuiré al ZIP un hash de commit que no pueda verificar.
 
-* 167+ tests Java reportados.
-* 99 tests/integraciones del editor.
-* tests específicos de SpEL, traducción, HTTP repository, GTranslate, LTranslate, E2E, concurrencia, etc.
+## 2. Resumen ejecutivo preliminar
 
-### Historial
+El proyecto presenta una separación modular considerable, con contratos compartidos, adaptadores para plataformas, motor de reglas, formateo, traducción y varias integraciones de sincronización. Sin embargo, el número de módulos y la presencia de interfaces no bastan para demostrar que todos los componentes funcionen correctamente en conjunto.
 
-Se revisaron commits relevantes desde la evolución inicial hasta el commit auditado, incluyendo:
+La distinción central de esta auditoría será entre tres niveles:
 
-* separación del monolito
-* introducción de `core-api`
-* Clean Architecture / Translator SPI
-* Security Sprint
-* Module Manager
-* SyncBus
-* Fabric rewrite
-* fixes de concurrencia
-* SSRF
-* configuración single-source
-* CI/CD
-* coverage gates
-* Telegram/TCP/UDP
-* estado final de Fabric.
+1. Arquitectura: si los límites, contratos y direcciones de dependencia son correctos.
 
----
+2. Implementación: si el código respeta esos contratos en condiciones normales y de error.
 
-# 2. Resumen ejecutivo
+3. Operación a escala: si los componentes mantienen sus garantías bajo concurrencia, saturación, fallos parciales y carga sostenida.
 
-## Veredicto corto
+Ya hay un hallazgo importante que requiere atención: la implementación de `DefaultSyncBus` presenta un camino de difusión que encola el mismo mensaje tanto para su procesamiento global como directamente en cada destino. El procesador global vuelve a difundirlo. Esto permite duplicar entregas y, además, el camino directo elude la deduplicación central. También hay un problema independiente en `broadcastAsync`: no se comprueba el resultado de la inserción en la cola global, por lo que, si la cola permanece llena, los futuros pueden quedarse sin completar.
 
-**TextFormatter Suite es un proyecto técnicamente ambicioso y arquitectónicamente bastante superior a lo que normalmente se ve en plugins de Minecraft de este tamaño.**
+Estos son hallazgos derivados del código, no de suposiciones sobre cómo debería comportarse el sistema. Se documentan con mayor precisión en el informe.
 
-No es simplemente un plugin con muchas features.
+## 3. Identificación de la versión auditada
 
-Hay una arquitectura modular real:
+Snapshot ZIP
 
-```text
-                 ┌───────────────────────┐
-                 │   Platform Adapter    │
-                 │ Spigot / Fabric       │
-                 └───────────┬───────────┘
-                             │
-                             ▼
-                     ┌──────────────┐
-                     │     host     │
-                     │ composition  │
-                     └──────┬───────┘
-                            │
-              ┌─────────────┼─────────────┐
-              ▼             ▼             ▼
-          ┌───────┐     ┌────────┐    ┌────────────┐
-          │ iFlow │     │Format  │    │Translation │
-          └───┬───┘     └───┬────┘    └─────┬──────┘
-              │             │               │
-              └─────────────┼───────────────┘
-                            ▼
-                       Message model
-                            │
-                            ▼
-                        SyncBus
-                  ┌──────┬──┼──┬──────┐
-                  ▼      ▼  ▼  ▼      ▼
-                HTTP   TCP UDP WS   Discord
-                                      │
-                                   Telegram
+TextFormatter Suite · rama indicada por el nombre del archivo: `main`
+
+SHA-256 del archivo ZIP
+
+41db873f2895b4c059cd2fd3d5408eed4a04a1a33e7e152c0c0e086bb3c39180
+
+Versión declarada en Gradle: `2.1.0-SNAPSHOT`
+
+El SHA-256 identifica el archivo comprimido, no el commit de Git que lo produjo.
+
+# 4. Arquitectura real
+
+## 4.1. Mapa de módulos
+
+El proyecto declara 29 módulos Gradle. La estructura puede agruparse funcionalmente así:
+
+Adaptadores de plataforma
+
+`spigot-host` · `fabric-host`
+
+Integración y orquestación
+
+`host` · `MessageDispatcher` · `SuiteHost`
+
+Motor de mensajes
+
+`core-api`
+
+`iflow`
+
+`textformatter`
+
+Servicios auxiliares
+
+`gtranslate`
+
+`ltranslate`
+
+`messages`
+
+Sincronización
+
+`transport`
+
+`sync-http` · `sync-tcpudp`
+
+`sync-websocket` · `sync-bus`
+
+`sync-discord` · `sync-telegram` · `sync-velocity`
+
+Extensibilidad y operación
+
+`kernel`
+
+`extension-api`
+
+`manager-api` · `manager-impl`
+
+`observability` · `presets` · `inworld`
+
+Esquema funcional derivado de los módulos y sus dependencias declaradas; no representa una afirmación de que todas las rutas de integración estén activas en ejecución.
+
+También existen `common-legacy`, `example-extension`, `tester`, `loadtest` y `performance`. El editor web se encuentra en `src/web-editor`, pero no está incluido como subproyecto Gradle en `settings.gradle`.
+
+## 4.2. Arquitectura pretendida frente a la implementada
+
+La arquitectura pretendida utiliza contratos compartidos y adaptadores para separar el motor de las plataformas. Esa intención tiene soporte real en el código.
+
+Hay tres observaciones importantes:
+
+* `core-api` contiene modelos, interfaces SPI y contratos que pueden utilizarse sin depender directamente de Bukkit o Fabric.
+
+* `kernel` contiene `ModuleLoader`, `ModuleGraph` y los tipos necesarios para descubrir y resolver descriptores de módulos.
+
+* `host` concentra parte de la composición real del sistema y de la coordinación del procesamiento de mensajes.
+
+La diferencia es que el descubrimiento de módulos no equivale a su activación.
+
+`Module.java` declara explícitamente que cada módulo es un descriptor de dependencias, no un objeto con ciclo de vida. `ModuleLoader` utiliza `ServiceLoader` para descubrir esas implementaciones. No existe un contrato genérico de arranque y parada en esa interfaz.
+
+Esto es coherente con el diseño documentado: los servicios se activan mediante sus entry points de plataforma.
+
+### Defecto arquitectónico: dos rutas de bootstrap
+
+Existen dos mecanismos que no deben confundirse:
+
+* `SuiteBootstrap.bootstrap(...)`: carga configuración, descubre y resuelve descriptores mediante el kernel y construye un `SuiteHost`.
+
+* `SuiteHost.bootstrap(...)`: realiza directamente la composición del motor, configura las reglas, crea el router, los evaluadores de expresiones y el formateador.
+
+Los entry points de Spigot y Fabric encontrados llaman a `SuiteHost.bootstrap(...)`, no a `SuiteBootstrap.bootstrap(...)`.
+
+Clasificación: deuda técnica y duplicación de composición, no necesariamente un bug funcional.
+
+Impacto: un desarrollador que siga el mapa de código y asuma que el bootstrap basado en el kernel es la ruta operativa principal puede interpretar incorrectamente qué validaciones se ejecutan durante el arranque.
+
+Recomendación: documentar una única ruta oficial de inicialización o explicar explícitamente qué responsabilidad tiene cada una. No fusionarlas automáticamente si cumplen propósitos distintos.
+
+## 4.3. Pipeline de procesamiento de mensajes
+
+El flujo principal reconstruido a partir de `SuiteHost`, `MessageDispatcher` y los módulos del motor es:
+
 ```
-
-La arquitectura **sí tiene valor real**, no solamente nomenclatura de Clean/Hexagonal.
-
-Pero hay una diferencia importante:
-
-> **La arquitectura está bastante madura; la implementación operacional todavía no está al mismo nivel de madurez.**
-
-Hay varios problemas que aparecen precisamente cuando se intenta llevar este diseño a carga alta:
-
-* semántica incorrecta de `SyncBus`
-* lifecycle incompleto de sinks
-* afirmaciones de `EXACTLY_ONCE` que no están demostradas
-* traducción bajo saturación
-* un bug de futures que puede dejar entradas permanentes en `inFlightTranslations`
-* pinning DNS de `HttpTransport` implementado de una forma problemática para HTTPS/virtual hosting
-* configuración `engine.parallel` que se lee pero no controla realmente el dispatcher
-* `MessageEvent` existe pero el bus público que se documenta no está materializado como tal
-* documentación de módulos todavía inconsistente con el estado real.
-
-Mi evaluación global actual sería:
-
-# **8.0/10**
-
-Y eso es una buena nota.
-
-No le doy 9+ porque todavía hay una diferencia significativa entre **"arquitectura preparada para network-scale"** y **"runtime demostrado como network-scale"**.
-
----
-
-# 3. Arquitectura pretendida vs arquitectura real
-
-## Pretendida
-
-El README presenta:
-
-```text
-platform adapters
-       ↓
-core-api
-       ↓
-kernel / host / textformatter / iflow / translators / sync
-```
-
-con:
-
-* Hexagonal Architecture
-* Clean Architecture
-* SPI
-* ServiceLoader
-* composición en `host`
-* adapters de plataforma separados.
-
-## Real
-
-La arquitectura real es más interesante.
-
-`core-api` realmente es el contrato:
-
-```text
-core-api
- ├── domain model
- ├── Module SPI
- ├── Translator SPI
- ├── SyncSink SPI
- ├── ActorDirectory
- ├── PlaceholderResolver
- ├── ExpressionEvaluator
- └── message model
-```
-
-Los adapters de plataforma implementan los ports.
-
-`host` es el verdadero **composition/integration layer**.
-
-Y `SuiteBootstrap` actualmente hace algo deliberadamente distinto de un típico mod-loader:
-
-```java
-List<Module> modules = ModuleLoader.discover();
-ModuleGraph graph = new ModuleGraph(env);
-ResolutionResult result = graph.resolve(modules);
-```
-
-pero **no instancia los módulos para arrancarlos**.
-
-Eso coincide con la corrección arquitectónica importante del proyecto:
-
-> `Module` es descriptor/SPI para resolver el grafo; los servicios reales se activan desde los entry points de plataforma.
-
-Eso está correctamente implementado en `SuiteBootstrap`.
-
----
-
-# 4. Clean Architecture
-
-## Evaluación: **8.5/10**
-
-La parte más importante está bien.
-
-La corrección de Translator SPI es particularmente buena:
-
-Antes:
-
-```text
-host
- ├── gtranslate
- └── ltranslate
-```
-
-Ahora:
-
-```text
-             ┌─────────────┐
-             │   host      │
-             └──────┬──────┘
-                    │
-                    ▼
-             ┌─────────────┐
-             │  core-api   │
-             │ Translator  │
-             │ Provider    │
-             └──────┬──────┘
-                    ▲
-             ┌──────┴──────┐
-             │             │
-       gtranslate      ltranslate
-```
-
-`ServiceLoader` rompe correctamente la dependencia compile-time.
-
-Eso es Clean Architecture real.
-
-### Lo que está especialmente bien
-
-* `core-api` no conoce Bukkit/Fabric.
-* `host` no necesita conocer las implementaciones concretas de traducción.
-* `transport` es infraestructura.
-* platform hosts son adapters.
-* composición está fuera del dominio.
-* translator providers pueden evolucionar independientemente.
-
-### Defecto
-
-La separación todavía no es perfecta porque `host` es un **integration hub bastante grande**.
-
-Es correcto arquitectónicamente, pero tiende a convertirse en:
-
-```text
-host
- ├── config
- ├── bootstrap
- ├── dispatch
- ├── translation wiring
- ├── sync wiring
- ├── lifecycle
- ├── schema
- ├── command integration
- └── runtime state
-```
-
-No es todavía un God module catastrófico, pero es el principal candidato a convertirse en uno.
-
----
-
-# 5. Hexagonal Architecture
-
-## Evaluación: **8.8/10**
-
-Aquí el proyecto está especialmente fuerte.
-
-Hay ports claros:
-
-```text
-ActorDirectory
-PlaceholderResolver
-PermissionChecker
-TranslationService
-TranslatorProvider
-SyncSink
-ChatDelivery
-ExpressionEvaluator
-```
-
-y adapters:
-
-```text
-SpigotActorDirectory
-FabricActorDirectory
-
-SpigotChatDelivery
-FabricChatDelivery
-
-GTranslate
-LTranslate
-
-HttpSink
-TcpSink
-UdpSink
-WebSocketSyncSink
-VelocitySink
-DiscordSink
-TelegramSink
-```
-
-La dependencia conceptual es correcta:
-
-```text
-         OUTSIDE
-             │
-        adapters
-             │
-             ▼
-        ports / SPI
-             │
-             ▼
-          core
-```
-
-### Principal problema
-
-Algunos módulos todavía mezclan dos conceptos:
-
-1. `Module` como descriptor.
-2. módulo como unidad de runtime/lifecycle.
-
-El código actual ha corregido esto, pero algunos READMEs siguen describiendo:
-
-```text
-Module.initialize()
-Module.shutdown()
-```
-
-como si fuera el contrato vigente.
-
-Eso es deuda documental, no una violación de runtime.
-
----
-
-# 6. Flujo completo
-
-El pipeline real es aproximadamente:
-
-```text
-Minecraft event
-      │
-      ▼
-Platform adapter
-      │
-      ▼
-ActorDirectory
-      │
-      ▼
-Message
-      │
-      ▼
-resolveSourceLanguage()
-      │
-      ▼
-emission rate-limit
-      │
-      ▼
-Direction expansion
-      │
-      ├── INITIATOR
-      ├── OTHERS
-      ├── ALL
-      ├── WORLD
-      ├── RADIUS
-      ├── PERMISSION
-      └── SPECIFIC
-      │
-      ▼
-bounded executor
-      │
-      ▼
-iFlow
-      │
-      ├── conditions
-      ├── permissions
-      ├── rate-limit
-      ├── transforms
-      ├── redirects
-      └── cancellation
-      │
-      ▼
-TemplateRenderer
-      │
-      ├── built-ins
-      ├── expressions
-      ├── placeholders
-      ├── content
-      ├── <tr>
-      └── MiniMessage
-      │
-      ▼
-TranslationService
-      │
-      ├── cache
-      ├── in-flight dedup
-      └── provider
-      │
-      ▼
-Component
-      │
-      ├── local ChatDelivery
-      │
-      └── SyncBus
-              │
-              ├── Discord
-              ├── Telegram
-              ├── HTTP
-              ├── TCP
-              ├── UDP
-              ├── WebSocket
-              └── Velocity
-```
-
-Esto es una arquitectura bastante seria.
-
----
-
-# 7. Modelo de mensajes
-
-Uno de los mejores diseños del proyecto.
-
-`Message` es esencialmente immutable y las transformaciones utilizan:
-
-```text
-withX()
-Builder.from(message)
-```
-
-en lugar de mutación indiscriminada.
-
-También es acertada la decisión de separar:
-
-```text
-Message
- ├── sender
- ├── direction
- ├── channel
- ├── language
- ├── text
- ├── format
- └── metadata
-```
-
-de la antigua semántica implícita:
-
-```text
-from → to
-```
-
-La representación:
-
-```text
-INITIATOR
-OTHERS
-ALL
-WORLD
-RADIUS
-PERMISSION
-SPECIFIC
-```
-
-es mucho más expresiva.
-
----
-
-# 8. `Direction`
-
-Está bien diseñado.
-
-Especialmente:
-
-```java
-public static Direction specific(Channel channel, Actor... recipients)
-```
-
-hace que el conjunto de destinatarios sea explícito e inmutable mediante copia.
-
-La expansión:
-
-```java
-return resolved.stream().distinct().toList();
-```
-
-evita duplicaciones.
-
-### Riesgo
-
-La política:
-
-> qualifier vacío → fail-open
-
-merece revisión.
-
-En `MessageDispatcher`:
-
-```java
-PERMISSION + qualifier vacío
-    → todos los jugadores
-```
-
-Eso puede ser correcto como filosofía de compatibilidad, pero para permisos de seguridad es una decisión peligrosa.
-
-No lo marcaría como vulnerabilidad sin más contexto porque puede ser intencional.
-
-**Tipo:** defecto de diseño potencial
-**Confianza:** probable.
-
----
-
-# 9. Formatter
-
-## Evaluación: **8.5/10**
-
-`TemplateRenderer` está bastante bien estructurado:
-
-```text
-replaceBuiltins()
-evaluateExpressions()
-resolveExternalTokens()
-replaceContent()
-translateSpans()
-MiniMessage.deserialize()
-```
-
-Esto es mucho mejor que un enorme método de interpolación.
-
-Además se corrigieron dos bugs interesantes:
-
-### Unicode `İ`
-
-Se reemplazó el enfoque:
-
-```java
-source.toLowerCase()
-```
-
-por:
-
-```java
-Pattern.CASE_INSENSITIVE
-```
-
-para localizar `</tr>`.
-
-Correcto.
-
-### Traducción → MiniMessage injection
-
-Ahora:
-
-```java
-String translated = translation.translate(...);
-return MiniEscape.escape(translated);
-```
-
-Eso elimina una clase real de inyección de MiniMessage.
-
----
-
-# 10. SpEL
-
-## Evaluación: **8/10**
-
-La sandbox de templates utiliza:
-
-```java
-SimpleEvaluationContext.forReadOnlyDataBinding()
-```
-
-y la sandbox de reglas usa allowlist explícita.
-
-Esto es mucho mejor que:
-
-```java
-new StandardEvaluationContext()
-```
-
-sin restricciones.
-
-La allowlist:
-
-```text
-me.majhrs16.suite.api.message.*
-me.majhrs16.suite.textformatter.channel.*
-me.majhrs16.suite.iflow.*
-```
-
-con denylist de:
-
-```text
-java.*
-javax.*
-sun.*
-com.sun.*
-org.springframework.*
-...
-```
-
-es una defensa razonable.
-
-### Pero
-
-No consideraría SpEL una frontera de seguridad absoluta simplemente porque exista esta allowlist.
-
-Es una superficie compleja y debería mantenerse con:
-
-* tests de escape
-* fuzzing
-* tests contra nuevas versiones de Spring
-* tests de propiedades/metodos heredados.
-
-Los tests existentes son una fortaleza.
-
----
-
-# 11. iFlow
-
-## Evaluación: **8.4/10**
-
-Es probablemente la feature conceptualmente más ambiciosa.
-
-Tiene:
-
-* reglas
-* condiciones
-* transforms
-* redirects
-* channel redirects
-* rate limiting
-* permisos
-* loops
-* guards
-* fan-out
-* mux
-* SpEL
-* graph representation.
-
-La idea:
-
-```text
-input
-  ↓
-condition
-  ↓
-transform
-  ↓
-output
-```
-
-como grafo configurable es potente.
-
-Especialmente interesante:
-
-```text
-loop
-max-steps
-```
-
-para evitar ciclos infinitos.
-
----
-
-# 12. RateLimiter
-
-La implementación actual es razonable:
-
-```java
-ConcurrentHashMap<String, Bucket>
-synchronized(bucket)
-```
-
-y purga periódica.
-
-La eliminación del:
-
-```text
-ConcurrentHashMap
-+
-ReentrantReadWriteLock
-```
-
-redundante fue una mejora correcta.
-
-### Defecto menor
-
-La capacidad del bucket se fija cuando se crea:
-
-```java
-new Bucket(capacity)
-```
-
-Si la configuración del canal cambia mientras el bucket existe, ese bucket conserva la capacidad anterior.
-
-Si el reload reconstruye completamente el router/limiter, no hay problema.
-
-Si se reutiliza la instancia durante reload, sí.
-
-**Tipo:** Defecto de diseño
-**Severidad:** Baja/Media
-**Confianza:** Probable.
-
----
-
-# 13. Traducción
-
-## Evaluación: **7.8/10**
-
-La arquitectura es buena:
-
-```text
-TranslatorManager
-       │
-       ├── Google
-       └── LibreTranslate
-```
-
-y existe:
-
-* cache
-* detection cache
-* in-flight dedup
-* executor dedicado
-* timeout
-* cancellation.
-
-Pero aquí aparece uno de los problemas técnicos más importantes actuales.
-
----
-
-# 14. [TXF-001] In-flight translation puede quedar bloqueada permanentemente
-
-**Tipo:** Bug
-**Severidad:** Alta
-**Confianza:** Confirmado
-
-**Ubicación:**
-
-`core-api -> TranslationService.translate()`
-
-y:
-
-`core-api -> TranslationExecutor.submit()`
-
-### Problema
-
-La entrada se añade:
-
-```java
-inFlightTranslations.computeIfAbsent(cacheKey, k ->
-    executor.submit(...)
-)
-```
-
-y se elimina desde dentro de la tarea:
-
-```java
-finally {
-    inFlightTranslations.remove(cacheKey);
-}
-```
-
-Pero `TranslationExecutor` puede cancelar el `Future` **antes de que la tarea llegue a ejecutarse**:
-
-```java
-executorFuture.cancel(true);
-future.cancel(true);
-```
-
-Si la tarea estaba esperando en la cola y es cancelada antes de comenzar:
-
-```text
-computeIfAbsent()
-      ↓
-inFlightTranslations[key] = future
-      ↓
-executor queue
-      ↓
-timeout
-      ↓
-executorFuture.cancel(true)
-      ↓
-TASK NEVER RUNS
-      ↓
-finally NUNCA EJECUTA
-      ↓
-inFlightTranslations[key] queda para siempre
-```
-
-Después:
-
-```java
-inFlightTranslations.get(key)
-```
-
-devuelve el future cancelado.
-
-Por tanto, esa traducción puede quedar permanentemente inutilizada durante toda la vida del `TranslationService`.
-
-### Impacto
-
-Bajo saturación del executor:
-
-* la cola puede llenarse
-* requests pueden expirar
-* keys pueden quedar "en vuelo" permanentemente
-* futuras traducciones de ese mismo texto pueden fallar inmediatamente.
-
-### Solución mínima
-
-Eliminar el entry asociado al future también desde el timeout/cancellation, usando identidad:
-
-```java
-inFlightTranslations.remove(cacheKey, future);
-```
-
-La misma consideración aplica a:
-
-```text
-inFlightDetections
-```
-
----
-
-# 15. [TXF-002] Rejection del TranslationExecutor puede escapar
-
-**Tipo:** Bug
-**Severidad:** Media/Alta
-**Confianza:** Confirmado
-
-Cuando el executor está lleno:
-
-```java
-new ThreadPoolExecutor.AbortPolicy()
-```
-
-hace que:
-
-```java
-executor.submit(...)
-```
-
-lance `RejectedExecutionException`.
-
-`computeIfAbsent()` puede propagarla.
-
-`TranslationService.translate()` no captura esa excepción alrededor del `computeIfAbsent`.
-
-Por tanto:
-
-```text
-translation saturation
-        ↓
-RejectedExecutionException
-        ↓
-TranslationService.translate()
-        ↓
-propaga
-        ↓
+Evento de plataforma
+        |
+        v
+Adaptador Spigot / Fabric
+        |
+        v
+Construcción del Message
+        |
+        v
 MessageDispatcher
-        ↓
-recipient silenced
+        |
+        +--> Resolver idioma de origen
+        |
+        +--> Comprobar rate limit de emisión
+        |
+        +--> Expandir Direction a destinatarios
+        |
+        v
+Procesamiento por destinatario
+        |
+        +--> Resolver idioma del destinatario
+        |
+        +--> DefaultRouter / iFlow
+        |       |
+        |       +--> Reglas y permisos
+        |       +--> Transformaciones
+        |       +--> Rate limits de canal
+        |       +--> Decisión de entrega
+        |
+        v
+TextFormatter
+        |
+        +--> Contexto de plantilla
+        +--> Placeholders / expresiones
+        +--> Traducción según configuración
+        +--> Renderizado
+        |
+        v
+ChatDelivery
+        |
+        v
+Entrega a la plataforma
 ```
 
-Esto significa que bajo carga fuerte el sistema no degrada simplemente a:
+Este es el pipeline de entrega principal. La sincronización hacia redes externas constituye otra ruta, que depende de los sinks registrados y de su integración con los adaptadores.
 
-```text
-mensaje original
+### Evaluación
+
+La división entre enrutamiento, representación del mensaje, renderizado y entrega es una fortaleza. Evita que toda la lógica tenga que residir dentro de un listener de Bukkit o Fabric.
+
+No obstante, `MessageDispatcher` realiza también coordinación de concurrencia, recolección de resultados, gestión de retardos, redirecciones y entrega. Esto lo convierte en un componente operacionalmente importante que merece pruebas específicas de concurrencia y ciclo de vida.
+
+# 5. Clean Architecture y arquitectura hexagonal
+
+Estas puntuaciones son evaluaciones estáticas del diseño, no resultados de pruebas de conformidad automatizadas.
+
+| Criterio                        | Puntuación | Justificación                                                                                                                                           |
+| ------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clean Architecture              | 7,5/10     | Los contratos y los modelos compartidos están razonablemente separados de las plataformas, pero la composición está repartida entre rutas de bootstrap. |
+| Hexagonal Architecture          | 7,5/10     | Hay SPI útiles y adaptadores sustituibles, aunque la existencia de contratos no demuestra que todas las integraciones estén aisladas en la práctica.    |
+| Modularidad                     | 7,5/10     | Hay límites por función y dependencias Gradle explícitas, con riesgo de duplicación entre módulos y servicios de infraestructura.                       |
+| Separación de responsabilidades | 7/10       | La separación entre router, formatter y plataforma es buena; algunos componentes de coordinación acumulan responsabilidades operacionales.              |
+
+## 5.1. Qué está realmente bien
+
+* Los modelos de `core-api` no requieren directamente los tipos de Bukkit o Fabric.
+
+* `ChatDelivery` proporciona un punto de extensión para la entrega.
+
+* `TranslationService`, `SyncSink`, `ActorDirectory` y otros SPI permiten desacoplar consumidores de implementaciones concretas.
+
+* Los módulos de traducción y sincronización tienen proyectos separados.
+
+* Los entry points específicos de plataforma pueden encargarse de sus respectivos ciclos de vida.
+
+## 5.2. Qué no debe darse por demostrado
+
+La existencia de `ModuleGraph` no demuestra que el ciclo de vida de todos los módulos se gestione mediante ese grafo. De hecho, la ruta operativa de bootstrap encontrada utiliza composición manual.
+
+Tampoco basta con que los adaptadores implementen interfaces para demostrar que las llamadas bloqueantes, el estado compartido o los errores estén correctamente aislados.
+
+Conclusión arquitectónica: existe una base de diseño modular real. El principal reto es consolidar las garantías operacionales y hacer que las fronteras arquitectónicas declaradas coincidan consistentemente con las rutas de ejecución efectivas.
+
+# 6. Hallazgos clasificados
+
+Los siguientes son los defectos concretos más relevantes identificados en el análisis estático. No representan una lista exhaustiva de todos los problemas posibles del repositorio.
+
+## TXF-ZIP-001 — Difusión duplicada en `DefaultSyncBus`
+
+Alta · Confirmado por código
+
+Tipo: Bug.
+
+Ubicación: `src/sync-bus/src/main/java/me/majhrs16/suite/syncbus/DefaultSyncBus.java` → `broadcast()` y `processMessage()`.
+
+Descripción: el mismo mensaje tiene dos caminos de encolado hacia los sinks.
+
+La implementación hace lo siguiente:
+
+1. Inserta una tarea global que llama a `processMessage(message)`.
+
+2. Encola directamente el mensaje en cada `SinkContext`.
+
+3. Cuando se procesa la tarea global, `processMessage()` vuelve a encolar el mensaje en todos los sinks.
+
+La deduplicación global no protege el segundo camino porque el encolado directo no pasa por `processMessage()`.
+
+Impacto funcional: si un sink está iniciado y tiene capacidad de cola, un único `broadcast()` puede producir dos entregas del mismo mensaje a ese sink.
+
+Impacto en rendimiento: duplica trabajo de cola y procesamiento en el camino afectado, y puede aumentar la saturación.
+
+Condiciones: invocar `broadcast()` con al menos un sink registrado y en funcionamiento, con capacidad suficiente para aceptar ambas inserciones.
+
+Solución sugerida: escoger un único camino de difusión. El método debe delegar el fan-out al procesador global o hacerlo directamente, pero no ambos.
+
+Ejemplo de corrección localizada:
+
+Java
+
 ```
-
-sino que puede perder la entrega de ese receptor.
-
-Eso puede ser aceptable como backpressure, pero debe ser una política deliberada y documentada.
-
-Para un sistema de chat, yo preferiría:
-
-```text
-executor saturated
-      ↓
-translation unavailable
-      ↓
-fallback policy
-      ├── source text
-      └── configured fallback translator
-```
-
-en vez de convertir saturación temporal en pérdida de mensaje.
-
----
-
-# 16. HttpTransport
-
-Aquí hay un problema más serio.
-
-## [TXF-003] DNS pinning mediante sustitución del hostname
-
-**Tipo:** Defecto de diseño / Bug funcional potencial
-**Severidad:** Alta
-**Confianza:** Confirmado en implementación; impacto HTTPS altamente probable.
-
-El código hace:
-
-```java
-InetAddress pinnedAddress = validateUrlAndGetAddress(url);
-
-connectionUrl =
-    urlString.replaceFirst(
-        url.getHost(),
-        pinnedAddress.getHostAddress()
-    );
-```
-
-y posteriormente:
-
-```java
-new URL(connectionUrl)
-```
-
-Esto cambia:
-
-```text
-https://translate.googleapis.com/...
-```
-
-a algo conceptualmente equivalente a:
-
-```text
-https://142.x.x.x/...
-```
-
-### Problema 1 — TLS/SNI
-
-HTTPS normalmente necesita el hostname original para:
-
-* SNI
-* hostname verification
-* certificado TLS.
-
-Al conectar al IP, un certificado válido para:
-
-```text
-translate.googleapis.com
-```
-
-puede no ser válido para:
-
-```text
-142.x.x.x
-```
-
-### Problema 2 — HTTP virtual hosting
-
-Incluso sin TLS:
-
-```text
-Host: example.com
-```
-
-puede convertirse en:
-
-```text
-Host: 1.2.3.4
-```
-
-y el servidor puede entregar otro virtual host.
-
-### Problema 3 — IPv6
-
-`getHostAddress()` puede devolver:
-
-```text
-fd12:3456::1
-```
-
-y sustituirlo directamente dentro de:
-
-```text
-https://hostname/path
-```
-
-requiere manejo de corchetes:
-
-```text
-https://[fd12:3456::1]/path
-```
-
-La implementación no lo hace explícitamente.
-
-### Conclusión
-
-La intención del fix SSRF es correcta.
-
-La implementación de pinning **no es la forma adecuada de preservar simultáneamente SSRF protection + HTTPS hostname semantics**.
-
-Debe conectarse al IP validado manteniendo:
-
-```text
-URL hostname
-Host header
-TLS SNI
-hostname verification
-```
-
-sin volver a resolver DNS.
-
----
-
-# 17. [TXF-004] `engine.parallel` no controla realmente el dispatcher
-
-**Tipo:** Bug / defecto funcional
-**Severidad:** Media
-**Confianza:** Confirmado
-
-`ConfigLoader` lee:
-
-```java
-boolean parallel = ...
-```
-
-y `HostConfig` lo conserva.
-
-Pero `MessageDispatcher` siempre crea:
-
-```java
-ThreadPoolExecutor(
-    4,
-    32,
-    ...
-)
-```
-
-y siempre procesa:
-
-```java
-CompletableFuture.supplyAsync(...)
-```
-
-No existe una rama real:
-
-```text
-parallel = false
-    → sequential
-```
-
-Por tanto:
-
-```yaml
-iflow:
-  engine:
-    parallel: false
-```
-
-no tiene el efecto semántico que su nombre indica.
-
-Esto es particularmente importante porque es una configuración de rendimiento/concurrencia.
-
----
-
-# 18. MessageDispatcher
-
-La implementación actual es bastante buena conceptualmente:
-
-```text
-bounded executor
-CallerRunsPolicy
-future timeout
-future.cancel(true)
-sleep scheduler
-```
-
-pero tiene una propiedad importante:
-
-### `CallerRunsPolicy`
-
-Con suficiente presión:
-
-```text
-executor queue full
-       ↓
-CallerRunsPolicy
-       ↓
-caller ejecuta host.deliver()
-```
-
-Si `dispatch()` se invoca accidentalmente desde el thread principal de Minecraft, el trabajo pesado puede volver al main thread.
-
-No es un bug inmediato porque los adapters actuales intentan escoger correctamente el contexto.
-
-Pero es una **protección de último recurso peligrosa para una plataforma como Minecraft**.
-
-Yo preferiría que el executor de dispatch tuviera una política explícita:
-
-```text
-queue full
-   ↓
-drop / defer / bounded wait
-```
-
-en vez de ejecutar potencialmente:
-
-```text
-SpEL + translation + formatting
-```
-
-en el caller.
-
----
-
-# 19. Sleep transform
-
-El cambio a scheduler fue correcto:
-
-```java
-sleepScheduler.schedule(...)
-```
-
-No bloquea el worker.
-
-Pero hay una consecuencia semántica:
-
-```java
-delivered++;
-```
-
-ocurre cuando **se programa** la entrega, no cuando la entrega sucede.
-
-Por tanto:
-
-```text
-DispatchReport.delivered = 1
-```
-
-puede significar:
-
-```text
-"scheduled"
-```
-
-y no:
-
-```text
-"actually delivered"
-```
-
-Si el callback falla posteriormente, el `DispatchReport` ya fue devuelto.
-
-Esto es importante para:
-
-* métricas
-* SyncBus
-* Discord bridge
-* observabilidad.
-
-**Severidad:** Baja/Media.
-
----
-
-# 20. SyncBus
-
-## Evaluación conceptual: **8/10**
-
-La idea es muy buena:
-
-```text
-             SyncBus
-          /     |      \
-       queue   bulkhead  dedup
-        /        |         \
-     HTTP       Discord    WS
-      │
- retry/backoff
-```
-
-Tiene:
-
-* queue global
-* queues por sink
-* aislamiento
-* retry
-* dedup
-* métricas
-* lifecycle.
-
-Pero aquí aparecen problemas reales.
-
----
-
-# 21. [TXF-005] `SyncBus.unregister()` no detiene el sink
-
-**Tipo:** Bug
-**Severidad:** Alta
-**Confianza:** Confirmado
-
-`DefaultSyncBus.unregister()` hace:
-
-```java
-SinkContext removed = sinks.remove(name);
-
-if (removed != null) {
-    removed.shutdown();
+@Override
+public int broadcast(Message message) {
+    if (shuttingDown.get() || sinks.isEmpty()) {
+        return 0;
+    }
+
+    try {
+        boolean offered = globalQueue.offer(
+            () -> processMessage(message),
+            100,
+            TimeUnit.MILLISECONDS
+        );
+
+        if (!offered) {
+            totalDropped.incrementAndGet();
+            return 0;
+        }
+
+        // El fan-out corresponde exclusivamente a processMessage().
+        // No volver a llamar a ctx.enqueue(message) aquí.
+        return sinks.size();
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        totalDropped.incrementAndGet();
+        return 0;
+    }
 }
 ```
 
-Pero `SinkContext.shutdown()` detiene su executor:
+Este ejemplo ilustra la eliminación de la doble difusión, pero la semántica del retorno requiere una decisión adicional: el número de sinks registrados no garantiza que todos hayan aceptado el mensaje. Si el contrato exige contabilizar las aceptaciones reales, conviene que el procesador global registre esos resultados y los exponga explícitamente.
 
-```java
-executor.shutdown();
-```
+Impacto de la solución: alto beneficio, baja complejidad y riesgo de regresión controlable con pruebas unitarias. Merece la pena resolverlo antes de usar `SyncBus` como mecanismo fiable de difusión.
 
-y **no llama**:
+## TXF-ZIP-002 — Futuros que pueden quedar incompletos en `broadcastAsync`
 
-```java
-sink.stop();
-```
+Alta · Confirmado por código
 
-Por tanto:
+Tipo: Bug.
 
-```text
-SyncBus.unregister("websocket")
-       ↓
-sink worker stopped
-       ↓
-WebSocketSyncSink.stop() NO ejecutado
-       ↓
-socket/server puede seguir vivo
-```
+Ubicación: `DefaultSyncBus.java` → `broadcastAsync()`.
 
-Lo mismo puede afectar:
+Evidencia: el resultado de `globalQueue.offer(...)` se ignora. Si la cola no acepta la tarea, `globalFuture` no se completa en esa rama.
 
-* HTTP server
-* WebSocket server
-* Discord connection
-* Telegram polling
-* otros recursos externos.
+Los futuros individuales dependen de la finalización de `globalFuture`. Por tanto, pueden permanecer pendientes indefinidamente.
 
-Esto es un lifecycle bug real.
+Existe además otro defecto semántico: `waitForSinkProcessing()` considera suficiente que la cola del sink esté vacía. Sin embargo, el trabajador puede haber retirado ya el mensaje y estar procesándolo todavía. En ese caso, el futuro puede completarse antes de que termine la entrega real.
 
-### Solución
+Impacto funcional: el consumidor no puede confiar en que los futuros indiquen finalización efectiva ni que terminen siempre.
 
-```java
-removed.shutdown();
+Condiciones: saturación de la cola global para el primer problema; procesamiento todavía activo con cola vacía para el segundo.
 
-try {
-    removed.sink.stop();
-} catch (Exception e) {
-    ...
-}
-```
+Solución sugerida:
 
-idealmente con orden cuidadosamente definido.
+* Comprobar el resultado de `offer()` y completar los futuros excepcionalmente o aplicar una política explícita de rechazo.
 
----
+* Asociar cada mensaje a un futuro de procesamiento por sink.
 
-# 22. [TXF-006] SyncBus start parcial deja estado inconsistente
+* Completarlo al terminar el envío y sus reintentos, no mediante sondeo del tamaño de la cola.
 
-**Tipo:** Bug
-**Severidad:** Media/Alta
-**Confianza:** Confirmado
+Evaluación: merece la pena corregirlo junto con TXF-ZIP-001. Complejidad media porque requiere definir correctamente el contrato de entrega y sus estados de error.
 
-`start()` hace:
+## TXF-ZIP-003 — La protección de conexiones HTTPS en `HttpTransport` necesita corrección
 
-```java
-started.set(1);
+Alta · Defecto de implementación sustentado por código
 
-for (SinkContext ctx : sinks.values()) {
-    ctx.sink.start();
-    ctx.start();
-}
-```
+Tipo: Bug probable de transporte; la reproducción experimental no está disponible en este entorno.
 
-Si el sink #3 falla:
+Ubicación: `src/transport/src/main/java/me/majhrs16/suite/transport/HttpTransport.java` → `createConnection()` y `PinningSSLSocketFactory`.
 
-```text
-sink 1 → started
-sink 2 → started
-sink 3 → exception
-```
+Evidencia: con la protección SSRF activada, `createConnection()` crea un `Proxy.Type.HTTP` cuya dirección es la IP resuelta del destino y cuyo puerto es el puerto del destino. Después utiliza ese proxy para abrir la conexión.
 
-pero:
+La dirección del servidor de destino no es, por sí misma, la dirección de un proxy HTTP. El establecimiento de un túnel HTTPS a través de un proxy y una conexión TCP directa a una IP fijada son operaciones diferentes.
 
-```java
-started == 1
-```
+La clase también contiene una fábrica TLS personalizada que crea sockets directamente hacia la IP fijada en algunos métodos, mientras que el método que envuelve un socket existente delega en el socket proporcionado. Esas rutas deben verificarse como un conjunto, no de manera aislada.
 
-sigue siendo cierto.
+Impacto funcional: las solicitudes HTTP/HTTPS pueden fallar dependiendo de la ruta que utilice `HttpURLConnection` y del tipo de conexión. Como `HttpTransport` es utilizado por los proveedores de traducción y por integraciones de transporte, el problema puede propagarse a varias features.
 
-Una llamada posterior a `start()` interpreta:
+Condiciones: solicitudes con protección SSRF habilitada, que es la configuración utilizada por defecto en los constructores habituales y por los proveedores de traducción examinados.
 
-```text
-already started
-```
+Solución sugerida: implementar la fijación de IP mediante una conexión directa al destino, preservando correctamente el hostname para TLS SNI y la verificación del certificado. No utilizar la IP de destino como si fuera un proxy HTTP.
 
-aunque algunos sinks no estén iniciados.
+La corrección debe incluir pruebas de integración con:
 
-Además, los sinks anteriores quedan activos.
+* HTTP ordinario.
 
-Esto requiere rollback transaccional:
+* HTTPS con certificado válido.
 
-```text
-start sink 1
-start sink 2
-start sink 3 → fail
+* HTTPS con hostname incorrecto.
 
-rollback:
-    stop sink 2
-    stop sink 1
-```
+* Redirecciones entre hostnames.
 
----
+* Destinos privados bloqueados.
 
-# 23. [TXF-007] `broadcast()` reporta éxito antes de la entrega
+* Hostnames con múltiples direcciones DNS.
 
-**Tipo:** Defecto de diseño
-**Severidad:** Media
-**Confianza:** Confirmado
+Evaluación: merece la pena priorizarlo. La complejidad es media-alta porque la corrección de SSRF no debe eliminar la validación de destinos ni introducir una vulnerabilidad de DNS rebinding.
 
-La API dice:
+## TXF-ZIP-004 — Ciclo de vida incompleto de `DefaultSyncBus`
 
-> number of sinks that successfully accepted the message
+Media · Confirmado por código
 
-pero:
+Tipo: Defecto de diseño con consecuencias de recursos.
 
-```java
-return sinks.size();
-```
+Ubicación: `DefaultSyncBus.java` → constructor, `start()`, `stop()` y `close()`.
 
-se ejecuta antes de que cada `SinkContext` procese realmente el mensaje.
+Descripción: el constructor inicia el procesador global y programa la tarea periódica de limpieza de deduplicación antes de que se invoque `start()`.
 
-Puede ocurrir:
+Sin embargo, `stop()` retorna inmediatamente si `started` vale cero. Por tanto, `close()` no detiene esos recursos si se llama antes de un `start()` satisfactorio. La misma situación puede darse tras ciertos fallos de arranque, cuando el estado vuelve a cero.
 
-```text
-broadcast()
-    ↓
-10 sinks
-    ↓
-return 10
-    ↓
-sink queue full
-    ↓
-drop
-```
+Además, una instancia detenida no puede reiniciarse de forma coherente: el estado `shuttingDown` permanece activado y el scheduler se ha cerrado.
 
-Entonces:
+Impacto: hilos daemon y tareas auxiliares pueden sobrevivir a una inicialización abortada; el ciclo de vida no admite de forma clara una operación stop/start repetida.
 
-```text
-broadcast() == 10
-actual deliveries == 9, 8, ...
-```
+Solución sugerida: hacer explícito el estado del ciclo de vida —por ejemplo, `NEW`, `RUNNING`, `STOPPING` y `STOPPED`— y garantizar que `close()` libere todos los recursos creados, incluso si `start()` nunca llegó a completarse.
 
-Esto vuelve ambiguas las métricas y cualquier lógica que interprete `broadcast()` como ACK.
+Evaluación: complejidad media. Beneficio importante para reloads, pruebas y gestión de errores.
 
----
+## TXF-ZIP-005 — Funcionalidades anunciadas que siguen sin implementación
 
-# 24. [TXF-008] `EXACTLY_ONCE` de Velocity no está demostrado
+Media · Confirmado por código
 
-**Tipo:** Defecto de diseño
-**Severidad:** Alta para escalabilidad/distributed semantics
-**Confianza:** Confirmado
+Tipo: Defecto funcional y deuda técnica.
 
-`VelocitySink` declara:
+Ubicaciones:
 
-```java
-DeliverySemantics.EXACTLY_ONCE
-```
+* `src/spigot-host/src/main/java/me/majhrs16/suite/spigothost/command/DynamicCommand.java`
 
-pero la infraestructura mostrada no proporciona un mecanismo suficiente para demostrar exactly-once:
+* `src/host/src/main/java/me/majhrs16/suite/host/config/CommandExecutor.java`
 
-* no hay ACK de aplicación claramente ligado al message ID
-* no hay commit/ack transaction
-* hay retry
-* hay queue
-* hay red potencialmente duplicada.
+* `src/presets/src/main/java/me/majhrs16/suite/presets/PresetManager.java`
 
-En sistemas distribuidos:
+Evidencia: se encontraron acciones de comandos que devuelven mensajes de «no implementado» para instalación, actualización, eliminación e información de módulos. También hay métodos de edición y lectura de configuración pendientes, y operaciones de importación/exportación de presets marcadas con TODO.
 
-```text
-retry
-```
+En `CommandExecutor.execute(...)`, la implementación actual devuelve `false` en lugar de ejecutar una acción.
 
-sin protocolo de deduplicación remoto significa como máximo:
+Impacto: la presencia de un comando o API no garantiza que la funcionalidad correspondiente esté disponible.
 
-```text
-at-least-once
-```
+Solución sugerida: distinguir en la documentación y en la configuración qué operaciones están implementadas, cuáles están deshabilitadas y cuáles son experimentales. No es necesario eliminar las abstracciones existentes.
 
-salvo que el receptor haga dedup por ID.
+Evaluación: prioridad media para funciones administrativas; mayor si una release presenta estas operaciones como funcionalidades disponibles.
 
-Por tanto, el contrato:
+## TXF-ZIP-006 — Autenticidad de módulos descargados no garantizada por defecto
 
-```text
-EXACTLY_ONCE
-```
+Media · Riesgo de seguridad
 
-debería rebajarse a:
+Tipo: Defecto de diseño de seguridad; no se ha demostrado una explotación.
 
-```text
-AT_LEAST_ONCE
-```
+Ubicación: `src/manager-impl/src/main/java/me/majhrs16/suite/manager/DefaultModuleLifecycle.java` → `download()`, `verifyModuleSignature()` y `verifySignature()`.
 
-hasta que exista un protocolo explícito:
+Evidencia: el gestor verifica checksums SHA-256, pero la verificación de firma es opcional. Si el descriptor no proporciona configuración de firma, el código registra que omite la verificación. La implementación de `verifySignature()` también devuelve `true` cuando no encuentra los archivos de firma o clave.
 
-```text
-message UUID
-   ↓
-receiver dedup store
-   ↓
-ACK(message UUID)
-   ↓
-sender commits delivery
-```
+Impacto: un checksum obtenido de la misma fuente que el artefacto protege contra corrupción accidental, pero no demuestra por sí solo la identidad del publicador. La autenticidad depende también de la confianza en el repositorio, su canal de distribución y la configuración de firma.
 
----
+Solución sugerida: exigir firma verificable para módulos de repositorios no confiables o para releases de producción, con claves de confianza distribuidas por un canal independiente. Mantener los checksums para verificar integridad.
 
-# 25. WebSocket
+Evaluación: merece la pena si se pretende soportar extensiones de terceros o descargas de módulos en producción. Complejidad media; el riesgo de regresión principal es rechazar releases antiguas que todavía no estén firmadas.
 
-La situación actual es mucho mejor que la encontrada en auditorías anteriores.
+# 7. Evaluación por feature
 
-Ahora:
+Las valoraciones siguientes se refieren al diseño y al código inspeccionado, no a una certificación de que cada feature funcione en todas las plataformas.
 
-```java
-if (authToken == null || authToken.isBlank()) {
-    conn.close(...)
-}
-```
+| Feature                               | Valoración | Observación principal                                                                                                                                |
+| ------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core-api`                            | 8/10       | Contratos y modelos compartidos útiles para la portabilidad.                                                                                         |
+| `kernel`                              | 7/10       | Descubrimiento y resolución separados; falta integrar más claramente la validación con la ruta operativa de composición.                             |
+| `textformatter`                       | 8/10       | Motor de plantillas y renderizado independiente de la plataforma, con atención a la seguridad de expresiones.                                        |
+| `iflow`                               | 8/10       | Reglas, permisos, routing y rate limiting tienen una separación funcional razonable.                                                                 |
+| `host`                                | 7/10       | Integra los componentes, pero concentra responsabilidades importantes y tiene dos rutas de bootstrap.                                                |
+| Traducción                            | 7/10       | Proveedores intercambiables y cachés; la ruta HTTP requiere verificación antes de confiar en el comportamiento real.                                 |
+| Sincronización HTTP/TCP/UDP/WebSocket | 6,5/10     | Hay abstracciones reutilizables, pero la corrección de los transportes y su semántica deben verificarse individualmente.                             |
+| `sync-bus`                            | 4,5/10     | La duplicación en `broadcast()` y las garantías defectuosas de `broadcastAsync()` son problemas importantes.                                         |
+| `sync-discord` / `sync-telegram`      | 7/10       | Integraciones específicas separadas; dependen de la fiabilidad del transporte y de su gestión de errores.                                            |
+| `sync-velocity`                       | 7,5/10     | Tiene un módulo propio y configuración específica; no se han podido ejecutar sus pruebas en este entorno.                                            |
+| `observability`                       | 7/10       | Métricas y endpoints aportan visibilidad, pero la seguridad y la configuración de exposición deben evaluarse en cada despliegue.                     |
+| `manager-api` / `manager-impl`        | 6,5/10     | Descarga, resolución y carga aislada de módulos son capacidades potentes; el ciclo de actualización y la confianza de artefactos requieren atención. |
+| `extension-api`                       | 7/10       | Facilita extensibilidad, aunque el ciclo de vida y la compatibilidad deben estar bien definidos.                                                     |
+| `presets`                             | 6/10       | Es una vía útil para reutilizar configuraciones; la importación y exportación no están completamente implementadas.                                  |
+| `spigot-host` / `fabric-host`         | 7/10       | La separación de adaptadores es positiva, pero se necesita integración real por plataforma.                                                          |
+| Editor web                            | 7/10       | Modularizado en JavaScript, con pruebas unitarias e integración declaradas; falta ejecutar las verificaciones en este entorno.                       |
+| Testing y benchmarks                  | 6,5/10     | Existe una base considerable de pruebas y módulos de carga, pero la cobertura efectiva y los resultados no han podido verificarse aquí.              |
 
-y:
+## 7.1. Personalización
 
-```text
-127.0.0.1
-```
+La arquitectura admite diferentes proveedores de traducción, sinks, resolutores de placeholders, reglas y configuraciones de canal. Esto favorece las extensiones sin modificar el motor central.
 
-es el bind predeterminado.
+Las limitaciones identificadas son más concretas:
 
-Además:
+* Algunas acciones administrativas no están implementadas.
 
-* límite 64 KB
-* rate limit
-* subscriptions
-* cleanup
-* SO_REUSEADDR.
+* Los presets no tienen todas las operaciones anunciadas terminadas.
 
-Eso es sólido.
+* Los módulos de infraestructura no comparten necesariamente las mismas garantías de entrega.
 
-La implementación actual del rate limit también corrigió el problema de ventana deslizante incorrecta:
+* El soporte de múltiples plataformas está condicionado por las implementaciones específicas de cada adaptador.
 
-```text
-windowStart
-messageCount
-```
+No considero que las restricciones de configuración sean defectos simplemente por ser restrictivas. La validación debe impedir estados técnicamente imposibles o inseguros, no combinaciones arbitrarias que podrían funcionar correctamente.
 
-es una ventana fija.
+## 7.2. Seguridad
 
----
+La inspección encontró mecanismos positivos:
 
-# 26. Metrics endpoint
+* Uso de `SafeConstructor` para cargar diversas configuraciones YAML.
 
-La corrección a:
+* Un evaluador SpEL para plantillas basado en `SimpleEvaluationContext.forReadOnlyDataBinding()`.
 
-```java
-127.0.0.1
-```
+* Comprobaciones de destinos y límites de respuesta en `HttpTransport`.
 
-es correcta.
+* Requisito de token para iniciar el servidor WebSocket.
 
-Además tiene:
+* Límites de tamaño de mensajes y rate limiting por conexión en el WebSocket.
 
-```text
-bounded executor
-scheduler shutdown
-```
+* Mecanismos de checksum y verificación de firma en el gestor de módulos.
 
-y `/health`.
+Estos mecanismos no equivalen a una garantía global de seguridad. El transporte HTTP necesita la corrección indicada, y la autenticidad de los módulos descargados depende de la configuración de confianza.
 
-Sin embargo `/health` devuelve esencialmente:
+En el editor web se observaron múltiples usos de `innerHTML`. En los fragmentos examinados, varias inserciones escapan los valores mediante `Suite.utils.esc(...)`. No he confirmado una vulnerabilidad XSS explotable a partir de esa observación aislada; haría falta rastrear los datos controlados por el usuario hasta cada contexto de renderizado.
 
-```json
-{
-  "status": "UP"
-}
-```
+# 8. Concurrencia y rendimiento
 
-sin reflejar necesariamente el estado real de:
+## 8.1. `MessageDispatcher`
 
-* sinks
-* queues
-* translation provider
-* module manager.
+El dispatcher utiliza un executor acotado con un máximo de 32 hilos y una cola de 1.000 tareas, además de un scheduler dedicado para retardos. También tiene una opción `engineParallel` que determina si los destinatarios se procesan en paralelo o secuencialmente.
 
-El proyecto afirma health checks más completos en otras capas, por lo que esto es principalmente una cuestión de semantics.
+Hay dos propiedades importantes:
 
----
+* `CallerRunsPolicy` proporciona contrapresión cuando el executor está saturado, pero puede trasladar trabajo al hilo que intenta enviar la tarea.
 
-# 27. Seguridad
+* El timeout de diez segundos limita cuánto espera el dispatcher por un destinatario, pero cancelar un `Future` no garantiza que una operación bloqueante o un proveedor externo interrumpa inmediatamente su trabajo.
 
-## Evaluación: **8.4/10**
+Por ello, es necesario comprobar que el código invocado por el dispatcher no ejecute operaciones bloqueantes en el hilo principal de la plataforma.
 
-La mejora respecto al estado histórico es enorme.
+## 8.2. `SyncBus`
 
-Se corrigieron:
+La capacidad nominal de las colas es considerable:
 
-* SpEL sandbox
-* YAML unsafe construction
-* MiniMessage injection
-* SSRF
-* debug endpoint
-* tokens
-* HMAC
-* replay protection
-* payload limits
-* dependency verification
-* SHA256 artifacts
-* lockfiles.
+* Cola global: 10.000 tareas.
 
-### Fortalezas
+* Cola por sink: 5.000 tareas.
 
-Especialmente buenos:
+* Ventana de deduplicación: 60 segundos.
 
-```text
-SafeConstructor
-MiniEscape
-SpEL allowlist
-bounded executors
-HTTP body limits
-HMAC
-replay timestamps/nonces
-127.0.0.1 binding
-dependency verification
-```
+* Límite de entradas de deduplicación: 50.000.
 
----
+Esos valores no demuestran throughput ni latencia. La duplicación de entregas en `broadcast()` puede aumentar el consumo de las colas y acelerar la saturación.
 
-# 28. Supply chain
+Además, el executor global y su procesador manual comparten la misma cola. La interacción entre los trabajadores internos del executor y el bucle que extrae tareas directamente merece una simplificación: una única estrategia de consumo facilita razonar sobre orden, contrapresión y finalización.
 
-El proyecto ha avanzado mucho:
+## 8.3. Estimaciones de escalabilidad
 
-```text
-gradle.lockfile
-verification-metadata.xml
-SHA256
-manifest validation
-module allowlist
-```
+No hay mediciones válidas obtenidas en esta auditoría. La siguiente tabla expresa riesgos arquitectónicos, no capacidad medida.
 
-Esto es bastante mejor que el típico plugin.
+| Escenario            | Cuello de botella probable                                                     | Evaluación                                                               |
+| -------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| A — Servidor pequeño | Coste por mensaje, traducción y renderizado                                    | Viable en principio, sujeto a la corrección de las rutas de ejecución.   |
+| B — Red mediana      | Fan-out, latencia de traducción, transporte y colas                            | Requiere pruebas de carga y de fallos parciales.                         |
+| C — Red grande       | Sinks lentos, presión de colas, sincronización entre servidores y GC           | No se puede garantizar con el estado actual.                             |
+| D — Network-scale    | Contrapresión distribuida, p99, reconexiones, entrega y recuperación de fallos | No demostrado; la implementación actual del bus debe corregirse primero. |
 
-Pero hay una diferencia:
+Para validar una red grande se necesitan, como mínimo:
 
-### SHA256 ≠ autenticidad
+* Mensajes por segundo y distribución de tamaños.
 
-Un checksum obtenido del mismo canal que distribuye el JAR no demuestra quién creó el JAR.
+* Número de destinatarios por mensaje.
 
-El propio PLAN lo reconoce.
+* Latencia p50, p95 y p99.
 
-Para releases realmente sensibles:
+* Profundidad de colas, descartes y reintentos.
 
-```text
-artifact
-  ↓
-signature
-  ↓
-trusted public key
-```
+* Tiempo y tasa de éxito de traducciones.
 
-sería mejor que depender solamente de:
+* Consumo de CPU, heap y pausas de GC.
 
-```text
-artifact.sha256
-```
+* Pruebas de saturación, desconexión y recuperación de sinks.
 
-No lo considero crítico para el estado actual.
+* Medición de duplicados y pérdida de mensajes.
 
----
+No asigno cifras de throughput porque no hay resultados experimentales que las justifiquen.
 
-# 29. Module Manager
+# 9. Testing, build y evolución
 
-## Evaluación: **7.8/10**
+## 9.1. Inventario de pruebas
 
-Conceptualmente es ambicioso.
+En el ZIP se encontraron:
 
-Tiene:
+* 56 archivos dentro de rutas de pruebas.
 
-* version resolver
-* semver
-* dependency resolver
-* manifest
-* SHA256
-* repository abstraction
-* local repositories
-* HTTP repositories
-* GitHub repositories
-* isolated classloader
-* parent-last
-* discoverAll
-* SPI-only registration.
+* 49 archivos Java de pruebas.
 
-La corrección:
+* 10 archivos de pruebas JavaScript bajo `src/web-editor/tests`.
 
-> `register()` no instancia `Module`
+Hay pruebas para el kernel, el formateador, iFlow, traducción, configuración, transporte, sinks y pipeline de extremo a extremo, además de una simulación de carga.
 
-fue especialmente importante.
+La existencia de esas pruebas es una fortaleza. Sin embargo, no pude ejecutar el conjunto Java porque el wrapper no pudo descargar Gradle. Las pruebas del editor tampoco arrancaron: faltaba la dependencia `jsdom`.
 
-### Principal limitación
+Por tanto, no se dispone de un resultado de ejecución que confirme o refute las pruebas actuales.
 
-El proyecto todavía no tiene una demostración completa del flujo:
+## 9.2. Cobertura funcional que conviene reforzar
 
-```text
-GitHub Release real
-      ↓
-download
-      ↓
-verify
-      ↓
-resolve
-      ↓
-load
-      ↓
-activate
-      ↓
-rollback/update
-```
+Priorizaría las siguientes pruebas:
 
-Por tanto:
+1. `DefaultSyncBus.broadcast()` entrega una única copia por sink.
 
-**núcleo arquitectónico:** fuerte
-**producción distribuida demostrada:** todavía no.
+2. `broadcastAsync()` completa todos los futuros incluso cuando la cola está llena.
 
----
+3. Los futuros de entrega no terminan antes de que el sink complete su trabajo.
 
-# 30. Configuración
+4. `close()` libera recursos si el bus nunca se inició.
 
-La idea de `ConfigPath` como fuente única es excelente.
+5. El ciclo de vida define qué ocurre al intentar reiniciar una instancia detenida.
 
-Antes:
+6. `HttpTransport` funciona correctamente con HTTPS y rechaza destinos privados.
 
-```text
-Java schema
-JS paths
-JS model
-paths.json
-```
+7. Las redirecciones vuelven a validar el destino efectivo.
 
-podían divergir.
+8. El dispatcher mantiene un comportamiento definido cuando se cancela una operación bloqueante.
 
-Ahora:
+9. La composición de Spigot y Fabric realiza el pipeline completo de chat hasta entrega.
 
-```text
-ConfigPath
-     ↓
-generator
-     ├── paths.json
-     ├── paths.js
-     └── model.js
-```
+10. Las funcionalidades administrativas no implementadas están reflejadas correctamente en la documentación y los tests.
 
-Esto reduce drift.
+## 9.3. Historial de Git
 
-### Pero
+El ZIP no contiene el historial necesario para realizar una evaluación fiable de la evolución arquitectónica.
 
-`ConfigLoader` hace degradaciones como:
+Los documentos incluyen fechas, referencias a auditorías anteriores y menciones a commits, pero eso no permite reconstruir por sí solo:
 
-```java
-invalid claim-mode
-    → CANCEL_EVENT
-```
+* qué cambio introdujo cada defecto;
 
-y:
+* si un refactor eliminó deuda o la trasladó;
 
-```java
-invalid channel type
-    → CHAT
-```
+* cuánto tiempo permaneció una regresión;
 
-Eso puede ocultar errores administrativos.
+* si las correcciones se integraron en el commit que corresponde a este ZIP.
 
-El proyecto quiere ser tolerante, lo cual está bien, pero sería mejor distinguir:
+La evaluación de la evolución histórica queda pendiente de una copia con metadatos de Git o un conjunto de commits verificable.
 
-```text
-missing value
-    → default
+# 10. Matriz final de puntuaciones
 
-invalid value
-    → default + explicit validation error
-```
+Las notas resumen el estado del código inspeccionado y están limitadas por la imposibilidad de ejecutar el conjunto completo.
 
-No bloquear necesariamente, pero sí informar de forma estructurada.
+| Área                            | Puntuación /10 | Estado                                                                      |
+| ------------------------------- | -------------- | --------------------------------------------------------------------------- |
+| Código                          | 7,5            | Buena base, con defectos operacionales importantes                          |
+| Arquitectura                    | 7,5            | Separación modular real                                                     |
+| Clean Architecture              | 7,5            | Límites razonables, composición no completamente consolidada                |
+| Hexagonal                       | 7,5            | SPI útiles; aislamiento efectivo por validar                                |
+| Modularidad                     | 7,5            | Amplia, pero con complejidad de integración                                 |
+| Separación de responsabilidades | 7              | Buena en el motor; más compleja en orquestación                             |
+| Legibilidad                     | 7              | Documentación extensa, navegación mejorable por duplicación de rutas        |
+| Features                        | 7              | Amplia funcionalidad, algunas operaciones incompletas                       |
+| Personalización                 | 7,5            | Buen potencial de extensión                                                 |
+| Seguridad                       | 6,5            | Buenas medidas parciales; transporte y autenticidad necesitan atención      |
+| Rendimiento                     | 6,5            | Algunas medidas de control, sin validación experimental                     |
+| Escalabilidad                   | 5,5            | Potencial arquitectónico, garantías de runtime insuficientes                |
+| Concurrencia                    | 6              | Executors acotados, pero problemas de sincronización y ciclo de vida        |
+| Testing                         | 6,5            | Base relevante; ejecución y cobertura efectiva sin verificar                |
+| Mantenibilidad                  | 7              | Buena separación, deuda de composición e integración                        |
+| Documentación                   | 7,5            | Muy extensa; parte del estado declarado necesita contraste con la ejecución |
 
----
+Valoración global estática: 7/10.
 
-# 31. Personalización
+No es una media matemática estricta. Es una valoración cualitativa que pondera especialmente corrección, arquitectura, seguridad y fiabilidad operacional.
 
-## Evaluación: **9/10**
-
-Esta es una de las mejores áreas.
-
-La arquitectura permite combinaciones poco convencionales:
-
-* canales arbitrarios
-* direcciones
-* reglas
-* transforms
-* formatos
-* idiomas
-* permisos
-* sonidos
-* sync
-* repositories
-* presets
-* extensiones.
-
-La filosofía de:
-
-> no rechazar algo simplemente porque sea extraño
-
-está bastante bien reflejada.
-
-No veo evidencia de una tendencia fuerte a prohibir configuraciones simplemente por estética.
-
----
-
-# 32. Features
-
-| Feature                 | Calidad |
-| ----------------------- | ------: |
-| Message model           |    9/10 |
-| Direction/routing       |    9/10 |
-| MiniMessage formatter   |  8.5/10 |
-| iFlow                   |  8.5/10 |
-| Translation abstraction |  8.5/10 |
-| Google Translate        |    8/10 |
-| LibreTranslate          |    8/10 |
-| SyncBus                 |  7.5/10 |
-| HTTP sync               |    8/10 |
-| WebSocket               |    8/10 |
-| Velocity                |  7.5/10 |
-| Discord                 |    8/10 |
-| Telegram                |    8/10 |
-| Config system           |  8.5/10 |
-| Web editor              |  8.5/10 |
-| Observability           |    8/10 |
-| Module manager          |  7.5/10 |
-| Extension API           |    8/10 |
-| In-world                |  7.5/10 |
-| Fabric adapter          |  7.5/10 |
-| Spigot adapter          |    8/10 |
-
----
-
-# 33. Concurrencia
-
-## Evaluación: **7.5/10**
-
-Hay mucho trabajo bueno:
-
-```text
-bounded executors
-CallerRunsPolicy
-timeouts
-future cancellation
-dedicated translation executor
-sleep scheduler
-per-sink queues
-bulkheads
-retry
-ConcurrentHashMap
-Atomic*
-```
-
-Pero precisamente porque el proyecto ya intenta ser altamente concurrente, aparecen bugs más sutiles.
-
-Los principales:
-
-1. translation future leak
-2. executor saturation semantics
-3. CallerRunsPolicy
-4. SyncBus lifecycle
-5. report semantics de sleep
-6. exactly-once no demostrado.
-
----
-
-# 34. Rendimiento
-
-No voy a inventar benchmarks.
-
-## Complejidad conceptual
-
-Para un mensaje:
-
-```text
-O(R)
-```
-
-donde `R` es número de receptores.
-
-Cada receptor puede tener:
-
-```text
-routing
-+
-formatting
-+
-translation
-```
-
-La traducción tiene caching/dedup, por lo que el coste real se aproxima más a:
-
-```text
-O(R × formatting)
-+
-O(U × translation)
-```
-
-donde `U` es el número de combinaciones únicas:
-
-```text
-texto + source + target
-```
-
-Esto es una decisión correcta.
-
----
-
-# 35. Hotspot principal
-
-Para una red grande:
-
-```text
-1000 jugadores
-    ↓
-1 mensaje
-    ↓
-1000 recipient futures
-    ↓
-1000 routing evaluations
-    ↓
-1000 format operations
-```
-
-Incluso si:
-
-```text
-translation = 1 request
-```
-
-el formatter continúa siendo:
-
-```text
-O(R)
-```
-
-Esto es inevitable si cada jugador puede tener:
-
-* idioma distinto
-* permisos distintos
-* placeholders distintos
-* formato distinto
-* dirección distinta.
-
-La arquitectura no tiene un problema conceptual aquí.
-
-Pero significa que **network-scale requiere optimización adicional**, no simplemente más threads.
-
----
-
-# 36. Escalabilidad
-
-## Escenario A — servidor pequeño
-
-### ~10–50 jugadores
-
-**Excelente.**
-
-No veo un problema arquitectónico significativo.
-
----
-
-## Escenario B — red mediana
-
-### ~100–500 jugadores distribuidos
-
-**Viable**, especialmente si:
-
-* traducción está cacheada
-* sinks externos no bloquean el pipeline
-* configuración razonable.
-
-SyncBus empieza a convertirse en un componente importante.
-
----
-
-## Escenario C — red grande
-
-### ~500–2000 jugadores / múltiples servidores
-
-**Viable arquitectónicamente, pero requiere tuning y benchmarks.**
-
-Los principales cuellos:
-
-```text
-recipient fan-out
-translation
-SyncBus queues
-external HTTP
-GC
-SpEL
-```
-
----
-
-# 37. Escenario D — network-scale
-
-Para una red comparable conceptualmente a Hypixel/UniversoCraft:
-
-## Estado actual
-
-**No demostrado.**
-
-Y sería incorrecto decir:
-
-> "sí, soporta Hypixel".
-
-No existe evidencia de benchmark de esa magnitud.
-
-### El diseño podría evolucionar hacia ello.
-
-Pero necesitaría:
-
-```text
-Minecraft server
-       │
-       ▼
-local TextFormatter
-       │
-       ▼
-regional / network message bus
-       │
-       ▼
-dedicated sync infrastructure
-       │
-       ├── Redis/Kafka/NATS/etc.
-       └── network routing
-```
-
-En otras palabras:
-
-**TextFormatter puede ser el procesamiento local del mensaje; no debería convertirse necesariamente en el backbone global de una network gigantesca.**
-
----
-
-# 38. Cuello de botella network-scale
-
-El mayor problema no sería MiniMessage.
-
-Sería:
-
-```text
-translation + recipient-specific processing
-```
-
-y después:
-
-```text
-external synchronization
-```
-
-especialmente:
-
-```text
-HTTP
-Telegram
-Discord
-WebSocket
-```
-
-si son ejecutados en el mismo proceso.
-
----
-
-# 39. Qué necesitaría para network-level
-
-P0/P1 arquitectónico futuro:
-
-```text
-1. benchmark reproducible de 1k/5k/10k recipients
-2. benchmark translation-disabled
-3. benchmark translation-enabled
-4. benchmark multi-language
-5. benchmark SyncBus
-6. failure injection
-7. queue saturation tests
-8. p99 latency
-9. GC profiling
-10. CPU flamegraphs
-```
-
-Y probablemente:
-
-```text
-per-message recipient batching
-translation batching
-precompiled templates
-compiled rule graphs
-async sync transport
-network-level message broker
-```
-
----
-
-# 40. Testing
-
-## Evaluación: **7.5/10**
-
-La cantidad de tests es buena.
-
-Particularmente positivos:
-
-* E2E
-* SpEL security
-* translation cache
-* GTranslate
-* LTranslate
-* HTTP repositories
-* concurrency
-* stress
-* editor integration.
-
-Los coverage gates actuales reportados son aproximadamente:
-
-```text
-host           ~29%
-iflow          ~29%
-textformatter  ~62%
-```
-
-Eso revela algo importante:
-
-> El proyecto tiene bastante testing, pero no tiene cobertura uniforme.
-
-No es necesariamente malo; los módulos de infraestructura y adapters suelen tener menor cobertura.
-
-Pero para afirmar madurez network-level faltan:
-
-* failure injection
-* real network tests
-* lifecycle tests
-* distributed delivery tests
-* saturation tests
-* real Fabric E2E
-* real Velocity E2E.
-
----
-
-# 41. Documentación
-
-## Evaluación: **6.5/10**
-
-Aquí hay una diferencia notable entre código y documentación.
-
-Por ejemplo, `src/fabric-host/README.md` todavía dice:
-
-> **EXCLUDED FROM BUILD — 42 compilation errors**
-
-mientras que el commit actual y `PLAN.md` indican:
-
-```text
-fabric-host = COMPILA
-```
-
-Lo mismo ocurre con `core-api`, `host`, `spigot-host` y otros READMEs que todavía contienen estados históricos.
-
-Esto es importante porque un desarrollador nuevo puede llegar a conclusiones completamente erróneas.
-
-### El root README está mucho más actualizado.
-
-Por tanto:
-
-```text
-root documentation     ≈ 8/10
-module documentation   ≈ 5/10
-PLAN                   ≈ 7/10
-overall                ≈ 6.5/10
-```
-
----
-
-# 42. [TXF-009] Documentación contradictoria
-
-**Tipo:** Deuda técnica
-**Severidad:** Media
-**Confianza:** Confirmado
-
-Ejemplo:
-
-```text
-src/fabric-host/README.md
-```
-
-describe Fabric como excluido y con 42 errores.
-
-Mientras:
-
-```text
-settings.gradle
-PLAN.md
-commits actuales
-```
-
-indican Fabric compilando.
-
-También existen múltiples secciones históricas dentro de `PLAN.md` que continúan mostrando:
-
-```text
-P0 pendiente
-P1 pendiente
-fabric pendiente
-```
-
-aunque posteriormente aparecen como resueltas.
-
-### Impacto
-
-No rompe runtime, pero sí:
-
-* onboarding
-* mantenimiento
-* auditorías futuras
-* interpretación de arquitectura.
-
----
-
-# 43. Historial de Git
-
-La evolución es interesante.
-
-El proyecto pasó aproximadamente por:
-
-```text
-monolito ChatTranslator
-        ↓
-separación modular
-        ↓
-core-api
-        ↓
-hexagonal
-        ↓
-iFlow
-        ↓
-web editor
-        ↓
-security audits
-        ↓
-module manager
-        ↓
-SyncBus
-        ↓
-Clean Translator SPI
-        ↓
-Fabric rewrite
-        ↓
-current consolidation
-```
-
-Esto es una evolución saludable en términos generales.
-
-No parece que la arquitectura haya sido diseñada una vez y abandonada.
-
-Más bien:
-
-> **la arquitectura ha sido sometida a varias rondas de auditoría y posteriormente modificada.**
-
-Eso es una señal positiva.
-
----
-
-# 44. Pero existe una característica del historial
-
-Hay una enorme cantidad de commits de tipo:
-
-```text
-audit fix
-docs sync
-fix audit finding
-audit follow-up
-architecture correction
-```
-
-Eso demuestra rigor, pero también indica que el proyecto ha tenido una fase de **reestructuración extremadamente intensa**.
-
-Para los próximos años convendría cambiar progresivamente de:
-
-```text
-architecture correction
-```
-
-a:
-
-```text
-stability
-benchmark
-compatibility
-release
-```
-
----
-
-# 45. Defectos adicionales relevantes
-
-## [TXF-010]
-
-**Tipo:** Defecto de diseño
-**Severidad:** Media
-**Confianza:** Confirmado
-
-`MessageEvent` existe:
-
-```java
-MessageEvent
-```
-
-pero el bus público descrito en la arquitectura no aparece materializado como una infraestructura equivalente a:
-
-```text
-MessageEventBus
-```
-
-El propio root README todavía describe esa parte como incompleta.
-
-Por tanto:
-
-```text
-MessageEvent API
-```
-
-existe,
-
-pero:
-
-```text
-public extensibility event pipeline
-```
-
-no está al mismo nivel de madurez que el resto.
-
----
-
-## [TXF-011]
-
-**Tipo:** Deuda técnica
-**Severidad:** Baja
-**Confianza:** Confirmado
-
-`RuleExpressionEvaluator` y `SpelExpressionEvaluator` tienen implementaciones propias de:
-
-```text
-LRU cache
-```
-
-basadas en:
-
-```text
-LinkedHashMap + synchronized
-```
-
-Funcionan, pero la API `ConcurrentMap` implementada manualmente es bastante pesada.
-
-Es una abstracción de infraestructura que podría simplificarse.
-
-No lo tocaría ahora salvo que profiling demuestre impacto.
-
----
-
-# 46. Lo que está excepcionalmente bien diseñado
-
-### 1. `core-api`
-
-Probablemente la mejor decisión estructural.
-
-### 2. `Message`
-
-La inmutabilidad y `withX()` están bien pensadas.
-
-### 3. `Direction`
-
-Muy expresivo.
-
-### 4. Translator SPI
-
-La eliminación de dependencia compile-time entre host y proveedores es una mejora arquitectónica real.
-
-### 5. Separación platform/core
-
-La dirección:
-
-```text
-Spigot/Fabric
-      ↓
-ports
-      ↓
-core
-```
-
-está bien conseguida.
-
-### 6. Seguridad
-
-La cantidad de problemas históricos realmente corregidos es significativa.
-
-### 7. Config schema single-source
-
-Buena decisión para evitar drift Java/JS.
-
-### 8. SyncBus
-
-La idea de bulkhead por sink es correcta aunque la implementación todavía tenga defectos lifecycle/semantics.
-
-### 9. iFlow
-
-Tiene un potencial enorme y está diseñado como sistema general de routing, no como colección de `if`s.
-
-### 10. Auditoría iterativa
-
-El historial demuestra que los hallazgos realmente provocaron modificaciones estructurales.
-
----
-
-# 47. Lo mediocre
-
-Principalmente:
-
-* documentación de módulos
-* coverage desigual
-* lifecycle del SyncBus
-* semantics de delivery
-* falta de benchmarks reales
-* Module Manager todavía no probado como sistema completo de releases reales
-* Fabric todavía mucho menos probado que Spigot.
-
----
-
-# 48. Peores defectos actuales
-
-Ordenados:
-
-### 1.
-
-**HttpTransport DNS pinning implementado sustituyendo hostname por IP.**
-
-### 2.
-
-**TranslationExecutor puede dejar futures permanentemente registrados después de timeout pre-ejecución.**
-
-### 3.
-
-**SyncBus unregister no llama `sink.stop()`.**
-
-### 4.
-
-**EXACTLY_ONCE no está realmente garantizado para Velocity.**
-
-### 5.
-
-**`engine.parallel` no tiene efecto real.**
-
-### 6.
-
-**Broadcast accounting de SyncBus no representa delivery real.**
-
-### 7.
-
-**Documentación interna está desincronizada.**
-
----
-
-# 49. Qué NO tocaría
-
-Esto es importante.
-
-No recomendaría una reescritura.
-
-No tocaría innecesariamente:
-
-```text
-core-api
-Message
-Direction
-TranslatorProvider SPI
-ActorDirectory SPI
-ChatDelivery SPI
-SyncSink SPI
-ModuleDescriptor
-ConfigPath
-MiniEscape
-ModuleGraph
-```
-
-Tampoco intentaría "simplificar" la arquitectura eliminando módulos.
-
-El proyecto ya tiene suficientes boundaries reales como para que una reducción artificial probablemente lo empeore.
-
----
-
-# 50. Roadmap
-
-## P0 — Crítico
-
-### P0-1 — Corregir HttpTransport pinning
-
-**Beneficio:** enorme
-**Esfuerzo:** medio
-**Riesgo:** medio
-
-Preservar:
-
-```text
-hostname
-Host
-SNI
-certificate validation
-```
-
-mientras la conexión se realiza al IP validado.
-
----
-
-### P0-2 — Corregir in-flight translation cancellation
-
-**Beneficio:** alto
-**Esfuerzo:** pequeño
-**Riesgo:** bajo
-
-Usar:
-
-```java
-inFlightTranslations.remove(key, future);
-```
-
-también en cancellation/timeout.
-
----
-
-## P1 — Alto
-
-### P1-1 — Lifecycle transaccional de SyncBus
-
-```text
-start failure
-   ↓
-rollback previous sinks
-```
-
-y:
-
-```text
-unregister
-   ↓
-sink.stop()
-```
-
----
-
-### P1-2 — Revisar delivery semantics
-
-No declarar:
-
-```text
-EXACTLY_ONCE
-```
-
-sin ACK/dedup remoto demostrable.
-
----
-
-### P1-3 — Saturación del TranslationExecutor
-
-Definir explícitamente:
-
-```text
-queue full
-```
-
-¿Debe:
-
-* fallback?
-* reject?
-* preserve original?
-* drop?
-* block?
-
-Para chat yo elegiría:
-
-```text
-preserve original text
-```
-
-cuando sea seguro.
-
----
-
-### P1-4 — Hacer real `engine.parallel`
-
-Si:
-
-```yaml
-parallel: false
-```
-
-debe existir realmente:
-
-```text
-sequential dispatcher
-```
-
----
-
-## P2 — Medio
-
-* mejorar `DispatchReport` para distinguir `scheduled` vs `delivered`
-* revisar bucket capacity durante reload
-* eliminar duplicación de caches LRU
-* completar MessageEventBus
-* lifecycle tests
-* SyncBus saturation tests
-* HTTP redirect/TLS tests
-* Fabric E2E
-* Velocity E2E.
-
----
-
-## P3 — Bajo
-
-* sincronización documental automática
-* consolidar README históricos
-* firma criptográfica de releases
-* mejorar health endpoint
-* reducir imports/código muerto
-* simplificar algunas abstracciones.
-
----
-
-# 51. Matriz final
-
-| Área                         | Puntuación | Estado       | Principales problemas                        |
-| ---------------------------- | ---------: | ------------ | -------------------------------------------- |
-| Código                       |    **8.0** | Bueno        | algunos bugs concurrentes                    |
-| Arquitectura                 |    **8.8** | Muy buena    | `host` concentra bastante wiring             |
-| Clean Architecture           |    **8.5** | Muy buena    | algunos boundaries todavía evolucionan       |
-| Hexagonal                    |    **8.8** | Muy buena    | principalmente sólida                        |
-| Modularidad                  |    **8.7** | Muy buena    | gran cantidad de módulos                     |
-| Separación responsabilidades |    **8.2** | Buena        | host puede crecer demasiado                  |
-| Legibilidad                  |    **8.0** | Buena        | algunas implementaciones demasiado complejas |
-| Features                     |    **8.8** | Excelente    | algunas aún no completamente endurecidas     |
-| Personalización              |    **9.0** | Excelente    | muy flexible                                 |
-| Seguridad                    |    **8.4** | Muy buena    | HttpTransport merece revisión                |
-| Rendimiento                  |    **7.5** | Bueno        | falta evidencia a gran escala                |
-| Escalabilidad                |    **7.2** | Prometedora  | no demostrada network-scale                  |
-| Concurrencia                 |    **7.5** | Buena        | futures/queues/lifecycle                     |
-| Testing                      |    **7.8** | Bueno        | cobertura desigual y pocos E2E reales        |
-| Mantenibilidad               |    **8.0** | Buena        | documentación y `host`                       |
-| Documentación                |    **6.5** | Regular/Good | varios READMEs obsoletos                     |
-
-## Global
-
-# **8.0 / 10**
-
----
-
-# 52. Potencial
+# 11. Potencial y madurez
 
 ## Potencial teórico
 
-### **9.5/10**
-
-El modelo puede convertirse en una plataforma de chat bastante general:
-
-```text
-Minecraft
-Discord
-Telegram
-HTTP
-WebSocket
-Velocity
-custom extensions
-custom translators
-custom routers
-```
-
-sin tener que destruir el core.
-
----
+Alto. La combinación de un core compartido, adaptadores de plataforma, proveedores intercambiables, reglas y múltiples mecanismos de sincronización es adecuada para un sistema extensible de chat.
 
 ## Potencial arquitectónico
 
-### **9/10**
+También alto, aunque inferior al teórico. La arquitectura ya proporciona buena parte de las fronteras necesarias para evolucionar hacia una red de servidores, pero los componentes de sincronización, transporte y ciclo de vida tienen que respetar garantías más fuertes.
 
-La arquitectura permite realmente una evolución importante.
+## Potencial materializado
 
-No es una falsa modularidad.
+Estimación cualitativa: aproximadamente el 65–75 % del potencial arquitectónico está materializado en la estructura y las funcionalidades presentes. No es una métrica objetiva de progreso, ni una estimación de porcentaje de código terminado.
 
----
+La diferencia restante no se resuelve añadiendo módulos. Se resuelve haciendo que las funcionalidades existentes tengan contratos operacionales verificables, pruebas de integración y comportamiento predecible bajo fallos.
 
-## Potencial alcanzado
+# 12. Roadmap priorizado
 
-Mi estimación:
+| Prioridad | Trabajo                                                        | Esfuerzo aproximado | Beneficio                                                     |
+| --------- | -------------------------------------------------------------- | ------------------- | ------------------------------------------------------------- |
+| P0        | Corregir la doble difusión de `DefaultSyncBus.broadcast()`     | Bajo                | Elimina duplicados en una ruta crítica                        |
+| P0        | Corregir la finalización y la semántica de `broadcastAsync()`  | Medio               | Hace fiables los contratos asíncronos                         |
+| P0        | Corregir y probar la conexión fijada por IP en `HttpTransport` | Medio-alto          | Recupera fiabilidad HTTP/HTTPS y mantiene la protección SSRF  |
+| P1        | Consolidar el ciclo de vida de `DefaultSyncBus`                | Medio               | Evita recursos huérfanos y estados de reinicio inconsistentes |
+| P1        | Ejecutar las pruebas Java y web en CI y añadir regresiones     | Medio               | Verifica los fixes y evita recurrencias                       |
+| P1        | Endurecer la verificación de firmas del gestor de módulos      | Medio               | Mejora la autenticidad de extensiones                         |
+| P2        | Consolidar/documentar la ruta de bootstrap oficial             | Bajo-medio          | Reduce confusión arquitectónica                               |
+| P2        | Completar las acciones administrativas y presets anunciados    | Medio-alto          | Alinea la funcionalidad con las interfaces expuestas          |
+| P2        | Añadir benchmarks reproducibles y escenarios de fallo          | Medio-alto          | Permite justificar la escalabilidad                           |
+| P3        | Mejorar el onboarding y reducir contradicciones documentales   | Bajo-medio          | Facilita contribuciones y mantenimiento                       |
 
-# **~70–75%**
+Los esfuerzos son estimaciones de planificación, no tiempos medidos. No recomiendo una reescritura completa: los problemas prioritarios identificados admiten correcciones localizadas.
 
-No porque falten features.
+# 13. Conclusión final
 
-De hecho, tiene muchísimas.
+1. ¿Qué tan bueno es realmente TextFormatter Suite? Es un proyecto modular con una base arquitectónica sólida y una amplitud funcional significativa, pero no está demostrado que todas sus integraciones cumplan sus contratos operacionales.
 
-La diferencia está en:
+2. ¿Qué partes están excepcionalmente bien diseñadas? La separación entre modelos compartidos, router, formateador y adaptadores de plataforma; los SPI para servicios intercambiables; y la intención de aislar la infraestructura.
 
-```text
-feature completeness
-        ≠
-operational maturity
-```
+3. ¿Qué partes son mediocres? La integración entre algunos módulos, la consolidación de la composición y determinadas funcionalidades administrativas incompletas.
 
-Ya hay bastante feature completeness.
+4. ¿Cuáles son sus peores defectos? La duplicación en `DefaultSyncBus.broadcast()`, los futuros poco fiables de `broadcastAsync()` y los problemas de diseño de la conexión fijada por IP en `HttpTransport`.
 
-Falta más:
+5. ¿Cuál es su mayor fortaleza arquitectónica? La capacidad de separar el motor del entorno de ejecución y de sustituir proveedores o adaptadores sin rehacer toda la lógica.
 
-* endurecimiento
-* benchmarks
-* lifecycle
-* distributed semantics
-* observabilidad
-* compatibilidad
-* pruebas reales de carga.
+6. ¿Cuál es su mayor riesgo futuro? Confundir una arquitectura preparada para extensibilidad con un runtime que ya garantiza entrega, seguridad, orden y recuperación bajo carga.
 
----
+7. ¿Qué tan mantenible es? Razonablemente mantenible, siempre que se consoliden las rutas de inicialización y se documenten los contratos de concurrencia y ciclo de vida.
 
-# 53. Mantenibilidad a 1/3/5 años
+8. ¿Qué tan extensible es? Potencialmente muy extensible gracias a sus SPI y módulos separados; la calidad de cada nueva integración dependerá de las garantías de su implementación.
 
-## 1 año
+9. ¿Qué tan preparado está para múltiples plataformas? La estructura está diseñada para ello y existen adaptadores Spigot y Fabric. La paridad funcional y el comportamiento real de ambos requieren pruebas de integración.
 
-**Buena**, si se corrigen los problemas actuales.
+10. ¿Qué tan preparado está para una red grande de Minecraft? No puede considerarse demostrado. Hay que corregir primero la semántica del bus y del transporte, y después medir el comportamiento bajo carga.
 
-El mayor riesgo será `host` + SyncBus.
+11. ¿Qué tendría que cambiar para alcanzar escala network-level? Garantías de entrega claras, contrapresión efectiva, transporte fiable, deduplicación coherente, recuperación ante fallos, métricas y pruebas de carga con percentiles de latencia.
 
-## 3 años
+12. ¿Qué partes no deberían tocarse sin una razón concreta? Los contratos centrales de `core-api`, la separación entre routing y rendering, y los SPI que mantienen el core independiente de la plataforma. Los fixes deberían preservar estas fronteras.
 
-Puede seguir siendo muy mantenible si:
+13. ¿Qué debería hacerse primero? Corregir los tres hallazgos P0 y añadir pruebas de regresión antes de introducir nuevas funcionalidades de infraestructura.
 
-```text
-core-api
-host
-sync
-platform
-```
+14. ¿Qué porcentaje aproximado del proyecto está técnicamente maduro? Mi estimación cualitativa es del 65–75 % del potencial arquitectónico, con confianza limitada porque no ha sido posible ejecutar la suite completa ni recuperar el historial de Git.
 
-mantienen boundaries estables.
+La conclusión general es que TextFormatter Suite tiene una arquitectura que merece consolidarse, no sustituirse. El esfuerzo de mayor valor inmediato no consiste en añadir más capas o interfaces, sino en cerrar la brecha entre los contratos declarados y el comportamiento real de las rutas críticas de ejecución.
 
-## 5 años
-
-El riesgo principal será:
-
-```text
-compatibilidad Minecraft
-+
-API evolution
-+
-module manager
-+
-configuration schema
-```
-
-más que el core de routing.
-
----
-
-# 54. Onboarding
-
-## 30 minutos
-
-Un desarrollador puede entender:
-
-```text
-core-api
-host
-MessageDispatcher
-textformatter
-iflow
-```
-
-si empieza por los entry points correctos.
-
-## 2 horas
-
-Puede comprender el pipeline completo.
-
-## 1 día
-
-Puede probablemente modificar:
-
-* formatter
-* rule
-* config
-* adapter.
-
-## 1 semana
-
-Puede trabajar razonablemente en:
-
-* nueva feature
-* nuevo sync sink
-* adapter
-* translator provider.
-
-La documentación contradictoria es el principal obstáculo.
-
----
-
-# 55. Respuestas explícitas a las 14 preguntas finales
-
-### 1. ¿Qué tan bueno es realmente?
-
-**Bueno. 8/10 aproximadamente.**
-
-Y la puntuación es más alta de lo que normalmente daría a un proyecto de este tipo.
-
----
-
-### 2. ¿Qué partes están excepcionalmente bien diseñadas?
-
-Principalmente:
-
-```text
-core-api
-Message
-Direction
-SPI
-platform adapters
-TranslatorProvider
-iFlow
-config schema
-```
-
----
-
-### 3. ¿Qué partes son mediocres?
-
-```text
-documentación
-lifecycle de SyncBus
-delivery semantics
-runtime module management
-evidencia de performance
-```
-
----
-
-### 4. ¿Peores defectos?
-
-Los actuales más importantes:
-
-```text
-HttpTransport pinning
-TranslationExecutor leak
-SyncBus lifecycle
-EXACTLY_ONCE falso/no demostrado
-parallel knob ignorado
-```
-
----
-
-### 5. Mayor fortaleza arquitectónica
-
-# **La separación real entre core, ports y platform adapters.**
-
-Especialmente después del Translator SPI.
-
----
-
-### 6. Mayor riesgo futuro
-
-# **Complejidad operacional.**
-
-No creo que el proyecto vaya a morir por falta de features.
-
-El riesgo es que:
-
-```text
-host
-+
-SyncBus
-+
-ModuleManager
-+
-platform adapters
-+
-translation
-```
-
-se vuelvan demasiado complejos de operar simultáneamente.
-
----
-
-### 7. ¿Qué tan mantenible?
-
-**8/10.**
-
-Muy buena base, con deuda documental.
-
----
-
-### 8. ¿Extensible?
-
-# **9/10.**
-
-Es una de sus mayores fortalezas.
-
----
-
-### 9. ¿Preparado para múltiples plataformas?
-
-# **8.5/10 arquitectónicamente.**
-
-Spigot está más maduro; Fabric ya no es el agujero arquitectónico que era históricamente, pero necesita más evidencia operacional.
-
----
-
-### 10. ¿Preparado para una gran network?
-
-# **7/10 actualmente.**
-
-La arquitectura sí.
-
-La implementación todavía necesita endurecimiento y benchmarks.
-
----
-
-### 11. ¿Qué debe cambiar para network-level?
-
-Principalmente:
-
-```text
-translation backpressure
-SyncBus semantics
-distributed dedup
-real ACK semantics
-benchmarking
-recipient batching
-failure isolation
-network-level broker
-```
-
----
-
-### 12. ¿Qué NO debería tocarse?
-
-Especialmente:
-
-```text
-core-api
-Message
-Direction
-Translator SPI
-ports
-platform boundaries
-ConfigPath
-```
-
-No necesitan una "gran refactorización".
-
----
-
-### 13. ¿Qué debería hacerse primero?
-
-En este orden:
-
-```text
-1. HttpTransport
-2. TranslationExecutor timeout leak
-3. SyncBus lifecycle
-4. delivery semantics
-5. engine.parallel
-6. saturation tests
-7. Fabric/Velocity E2E
-8. network-scale benchmarks
-9. documentación
-```
-
----
-
-### 14. ¿Qué porcentaje está técnicamente maduro?
-
-Mi estimación:
-
-# **~70–75%**
-
-El código central está más maduro que el porcentaje global.
-
-La parte que falta no es tanto:
-
-> "hacer más cosas"
-
-sino:
-
-> **demostrar y endurecer las cosas que ya existen bajo condiciones hostiles y carga alta.**
-
----
-
-# 56. Conclusión final
-
-La conclusión más importante de esta auditoría es que **TextFormatter Suite ya dejó de ser simplemente una reimplementación grande de ChatTranslator**.
-
-El proyecto tiene una arquitectura propia con:
-
-```text
-immutable message model
-        +
-SPI
-        +
-ports/adapters
-        +
-rule engine
-        +
-translation abstraction
-        +
-cross-server bus
-        +
-runtime module manager
-        +
-configuration schema
-        +
-web editor
-        +
-multi-platform adapters
-```
-
-Eso es una plataforma.
-
-Y la arquitectura no es humo: varias decisiones que podrían haber sido simplemente "nombres bonitos" realmente están respaldadas por dependencias y código.
-
-El punto donde todavía está por debajo de su propia arquitectura es el **endurecimiento operacional**.
-
-En particular, los problemas de `SyncBus`, traducción concurrente y `HttpTransport` son interesantes precisamente porque no son fallos de principiante como un `NullPointerException`: aparecen cuando el sistema empieza a comportarse como un sistema distribuido real.
-
-Mi evaluación sería:
-
-```text
-Arquitectura conceptual       9/10
-Arquitectura implementada   8.5/10
-Feature set                 8.8/10
-Seguridad                   8.4/10
-Código                      8.0/10
-Testing                     7.8/10
-Operación                   7.3/10
-Escalabilidad demostrada    6.5/10
-──────────────────────────────────
-Global                      ~8.0/10
-```
-
-Y hay una distinción importante:
-
-> **No veo ninguna razón arquitectónica para reescribir TextFormatter Suite.**
-
-Los problemas encontrados son, en su mayoría, **localizados y solucionables sin destruir la arquitectura existente**.
-
-De hecho, el siguiente salto de calidad del proyecto no debería ser otra gran refactorización. Debería ser pasar de:
-
-```text
-"la arquitectura puede soportarlo"
-```
-
-a:
-
-```text
-"tenemos pruebas reproducibles que demuestran exactamente cuánto puede soportar,
-cómo falla y cómo se recupera."
-```
-
-Ese sería el paso que convertiría el proyecto de **arquitectónicamente muy ambicioso y bastante maduro** a **infraestructura realmente production-grade a escala network**.
+Nota de alcance: este informe es una auditoría estática basada en el ZIP y en las verificaciones que el entorno permitió realizar. No equivale a una auditoría experimental completa ni a una validación de producción.

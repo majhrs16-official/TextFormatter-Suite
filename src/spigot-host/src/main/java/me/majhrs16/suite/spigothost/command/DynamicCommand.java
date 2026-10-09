@@ -11,6 +11,7 @@ import me.majhrs16.suite.host.config.CommandsConfig;
 import me.majhrs16.suite.manager.ModuleCoordinate;
 import me.majhrs16.suite.manager.ModuleDescriptor;
 import me.majhrs16.suite.manager.ModuleLifecycle;
+import me.majhrs16.suite.manager.Environment;
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -253,7 +254,7 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                     sender.sendMessage("§cPermiso de admin requerido");
                     return true;
                 }
-                var ml = moduleLifecycle();
+                ModuleLifecycle ml = moduleLifecycle();
                 if (ml == null) {
                     sender.sendMessage("§c[Module] Manager no inicializado");
                     return true;
@@ -304,9 +305,38 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                             sender.sendMessage("§cUso: /suite module install <módulo> [versión]");
                             return true;
                         }
-                        sender.sendMessage("§a[Module] Instalando " + module + (version.isBlank() ? "" : ":" + version) + "...");
-                        // TODO: implement install via moduleLifecycle
-                        sender.sendMessage("§c[Module] Instalación no implementada aún (requiere reinicio para cargar el módulo)");
+                        sender.sendMessage("§a[Module] Resolviendo " + module + (version.isBlank() ? "" : ":" + version) + "...");
+                        String coordStr = "me.majhrs16:" + module + (version.isBlank() ? "" : ":" + version);
+                        ModuleCoordinate coord = ModuleCoordinate.of("me.majhrs16", module, version.isBlank() ? "latest" : version);
+                        // Run async to avoid blocking main thread
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                // Use reflection to access getCurrentEnvironment from DefaultModuleLifecycle
+                                java.lang.reflect.Method envMethod = ml.getClass().getMethod("getCurrentEnvironment");
+                                Object env = envMethod.invoke(ml);
+                                ModuleLifecycle.ResolutionResult result = ml.resolve(coord, (Environment) env, false);
+                                if (result instanceof ModuleLifecycle.ResolutionResult.Failure fail) {
+                                    sender.sendMessage("§c[Module] Error resolviendo: " + fail.reason());
+                                    return;
+                                }
+                                ModuleLifecycle.ResolutionResult.Success success = (ModuleLifecycle.ResolutionResult.Success) result;
+                                sender.sendMessage("§a[Module] Descargando " + success.module().descriptor().id() + "...");
+                                List<Path> jars = ml.download(success.module(), success.dependencies(), ml.getCacheDir());
+                                sender.sendMessage("§a[Module] Reubicando dependencias...");
+                                Path relocated = ml.relocate(jars.get(0), ml.getCacheDir(), getRelocationsForModule(success.module().descriptor()));
+                                sender.sendMessage("§a[Module] Cargando módulo...");
+                                ClassLoader cl = ml.load(relocated, jars.subList(1, jars.size()), registrar.plugin().getClass().getClassLoader());
+                                sender.sendMessage("§a[Module] Registrando módulo...");
+                                if (ml.register(cl, success.module().descriptor())) {
+                                    sender.sendMessage("§a[Module] ✓ " + success.module().descriptor().id() + " instalado y registrado correctamente");
+                                } else {
+                                    sender.sendMessage("§c[Module] Falló el registro del módulo");
+                                }
+                            } catch (Exception e) {
+                                logger.error("Module install failed: " + module, e);
+                                sender.sendMessage("§c[Module] Error: " + e.getMessage());
+                            }
+                        });
                         return true;
                     }
                     case "update" -> {
@@ -314,9 +344,53 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                             sender.sendMessage("§cUso: /suite module update <módulo> [versión]");
                             return true;
                         }
-                        sender.sendMessage("§a[Module] Actualizando " + module + (version.isBlank() ? "" : ":" + version) + "...");
-                        // TODO: implement update via moduleLifecycle
-                        sender.sendMessage("§c[Module] Actualización no implementada aún (requiere reinicio)");
+                        sender.sendMessage("§a[Module] Buscando actualización para " + module + "...");
+                        // Check if module is installed
+                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
+                        ModuleDescriptor existing = loaded.stream()
+                            .filter(d -> d.coordinate().artifact().equals(module))
+                            .findFirst().orElse(null);
+                        if (existing == null) {
+                            sender.sendMessage("§c[Module] Módulo no instalado: " + module);
+                            return true;
+                        }
+                        String coordStr = "me.majhrs16:" + module + (version.isBlank() ? "" : ":" + version);
+                        ModuleCoordinate coord = ModuleCoordinate.of("me.majhrs16", module, version.isBlank() ? "latest" : version);
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                java.lang.reflect.Method envMethod = ml.getClass().getMethod("getCurrentEnvironment");
+                                Object env = envMethod.invoke(ml);
+                                ModuleLifecycle.ResolutionResult result = ml.resolve(coord, (Environment) env, false);
+                                if (result instanceof ModuleLifecycle.ResolutionResult.Failure fail) {
+                                    sender.sendMessage("§c[Module] Error resolviendo: " + fail.reason());
+                                    return;
+                                }
+                                ModuleLifecycle.ResolutionResult.Success success = (ModuleLifecycle.ResolutionResult.Success) result;
+                                // Check if version is actually newer
+                                if (success.module().descriptor().version().compareTo(existing.version()) <= 0) {
+                                    sender.sendMessage("§e[Module] Ya tienes la versión más reciente: " + existing.version());
+                                    return;
+                                }
+                                sender.sendMessage("§a[Module] Descargando actualización " + success.module().descriptor().id() + "...");
+                                List<Path> jars = ml.download(success.module(), success.dependencies(), ml.getCacheDir());
+                                sender.sendMessage("§a[Module] Reubicando dependencias...");
+                                Path relocated = ml.relocate(jars.get(0), ml.getCacheDir(), getRelocationsForModule(success.module().descriptor()));
+                                sender.sendMessage("§a[Module] Cargando módulo actualizado...");
+                                ClassLoader cl = ml.load(relocated, jars.subList(1, jars.size()), registrar.plugin().getClass().getClassLoader());
+                                // Unregister old first
+                                ml.unregister(existing.id());
+                                ml.unload(existing.id());
+                                sender.sendMessage("§a[Module] Registrando nueva versión...");
+                                if (ml.register(cl, success.module().descriptor())) {
+                                    sender.sendMessage("§a[Module] ✓ " + success.module().descriptor().id() + " actualizado correctamente (v" + existing.version() + " → v" + success.module().descriptor().version() + ")");
+                                } else {
+                                    sender.sendMessage("§c[Module] Falló el registro de la actualización");
+                                }
+                            } catch (Exception e) {
+                                logger.error("Module update failed: " + module, e);
+                                sender.sendMessage("§c[Module] Error: " + e.getMessage());
+                            }
+                        });
                         return true;
                     }
                     case "remove" -> {
@@ -324,9 +398,26 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                             sender.sendMessage("§cUso: /suite module remove <módulo>");
                             return true;
                         }
+                        // Check if module is installed
+                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
+                        ModuleDescriptor existing = loaded.stream()
+                            .filter(d -> d.coordinate().artifact().equals(module))
+                            .findFirst().orElse(null);
+                        if (existing == null) {
+                            sender.sendMessage("§c[Module] Módulo no instalado: " + module);
+                            return true;
+                        }
                         sender.sendMessage("§a[Module] Eliminando " + module + "...");
-                        // TODO: implement remove
-                        sender.sendMessage("§c[Module] Eliminación no implementada aún");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                ml.unregister(existing.id());
+                                ml.unload(existing.id());
+                                sender.sendMessage("§a[Module] ✓ " + module + " eliminado correctamente");
+                            } catch (Exception e) {
+                                logger.error("Module remove failed: " + module, e);
+                                sender.sendMessage("§c[Module] Error: " + e.getMessage());
+                            }
+                        });
                         return true;
                     }
                     case "info" -> {
@@ -334,8 +425,35 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                             sender.sendMessage("§cUso: /suite module info <módulo>");
                             return true;
                         }
-                        // TODO: fetch module info
-                        sender.sendMessage("§a[Module] Info para " + module + " (no implementado aún)");
+                        // Check loaded modules first
+                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
+                        ModuleDescriptor existing = loaded.stream()
+                            .filter(d -> d.coordinate().artifact().equals(module))
+                            .findFirst().orElse(null);
+                        if (existing != null) {
+                            sender.sendMessage("§a[Module] Información (instalado):");
+                            sender.sendMessage("  §fID: §a" + existing.id());
+                            sender.sendMessage("  §fVersión: §a" + existing.version());
+                            sender.sendMessage("  §fDescripción: §7" + existing.description());
+                            sender.sendMessage("  §fAutor: §7" + existing.author());
+                            sender.sendMessage("  §fCore API requerida: §7" + existing.requiredCoreApi());
+                            sender.sendMessage("  §fJava: §7" + existing.minJavaVersion() + " - " + existing.maxJavaVersion());
+                            sender.sendMessage("  §fPlataformas: §7" + String.join(", ", existing.supportedPlatforms()));
+                            sender.sendMessage("  §fDependencias: §7" + (existing.dependencies().isEmpty() ? "(none)" : String.join(", ", existing.dependencies())));
+                            return true;
+                        }
+                        // Check available modules
+                        List<ModuleCoordinate> available = ml.discoverAvailableModules();
+                        ModuleCoordinate availableCoord = available.stream()
+                            .filter(c -> c.artifact().equals(module))
+                            .findFirst().orElse(null);
+                        if (availableCoord != null) {
+                            sender.sendMessage("§e[Module] Información (disponible, no instalado):");
+                            sender.sendMessage("  §fID: §e" + availableCoord.group() + ":" + availableCoord.artifact() + ":" + availableCoord.version());
+                            sender.sendMessage("  §fEstado: §cNo instalado");
+                            return true;
+                        }
+                        sender.sendMessage("§c[Module] Módulo no encontrado: " + module);
                         return true;
                     }
                     default -> {
@@ -351,29 +469,37 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                 }
                 boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
                 sender.sendMessage("§a[Suite] Iniciando actualización completa" + (force ? " (forzada)" : "") + "...");
-                // TODO: implement suite update
-                sender.sendMessage("§c[Suite] Actualización completa no implementada aún");
+                ModuleLifecycle ml = moduleLifecycle();
+                if (ml == null) {
+                    sender.sendMessage("§c[Suite] Manager no inicializado");
+                    return true;
+                }
+                Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                    try {
+                        java.lang.reflect.Method envMethod = ml.getClass().getMethod("getCurrentEnvironment");
+                        Object env = envMethod.invoke(ml);
+                        List<ModuleCoordinate> updated = ml.updateSuite((Environment) env, force);
+                        if (updated.isEmpty()) {
+                            sender.sendMessage("§a[Suite] ✓ No hay actualizaciones disponibles");
+                        } else {
+                            sender.sendMessage("§a[Suite] ✓ Actualización completa: " + updated.size() + " módulos actualizados");
+                            for (ModuleCoordinate u : updated) {
+                                sender.sendMessage("  §a- §f" + u);
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.error("Suite update failed", e);
+                        sender.sendMessage("§c[Suite] Error: " + e.getMessage());
+                    }
+                });
                 return true;
             }
             case "edit" -> {
-                String path = bindings.get("path");
-                String value = bindings.get("value");
-                if (path == null || value == null) {
-                    sender.sendMessage("§cUso: /suite edit <path> <value>");
-                    return true;
-                }
-                // TODO: implementar edición de config.yml
-                sender.sendMessage("§c[edit] No implementado aún");
+                sender.sendMessage("§c[Config] Edición de config no implementada (use el editor web o edite config.yml directamente)");
                 return true;
             }
             case "get" -> {
-                String path = bindings.get("path");
-                if (path == null) {
-                    sender.sendMessage("§cUso: /suite get <path>");
-                    return true;
-                }
-                // TODO: implementar lectura de config.yml
-                sender.sendMessage("§c[get] No implementado aún");
+                sender.sendMessage("§c[Config] Lectura de config no implementada (use el editor web o vea config.yml directamente)");
                 return true;
             }
             default -> {
@@ -401,6 +527,17 @@ public final class DynamicCommand extends org.bukkit.command.Command {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private java.util.Map<String, String> getRelocationsForModule(ModuleDescriptor desc) {
+        java.util.Map<String, String> relocations = new java.util.HashMap<>();
+        String base = "me.majhrs16.suite." + desc.coordinate().artifact().replace("suite-", "");
+        relocations.put(base, base + ".relocated");
+        relocations.put("org.apache.commons", "me.majhrs16.suite.relocated.org.apache.commons");
+        relocations.put("com.google", "me.majhrs16.suite.relocated.com.google");
+        relocations.put("org.yaml", "me.majhrs16.suite.relocated.org.yaml");
+        relocations.put("com.fasterxml.jackson", "me.majhrs16.suite.relocated.com.fasterxml.jackson");
+        return relocations;
     }
 
     @Override
