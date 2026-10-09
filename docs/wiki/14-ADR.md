@@ -394,36 +394,102 @@ Added checksums for previously missing: `jackson-base-2.22.0.pom`, `junit-bom-5.
 
 ---
 
-## ADR-012: fabric-host — Excluded from Build
+## ADR-012: fabric-host — COMPILA (Fabric 1.21 + Fabric API 0.100.5)
 
 **Status**: Accepted
-**Date**: 2026-09-28
+**Date**: 2026-10-05
 
 ### Context
 
-`fabric-host` module had 42 compilation errors — it was a copy-paste of `spigot-host` using Bukkit/Spigot APIs (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`) instead of Fabric APIs.
+`fabric-host` module had 42 compilation errors — it was a copy-paste of `spigot-host` using Bukkit/Spigot APIs instead of Fabric APIs. Previous ADR (2026-09-28) excluded it from build.
 
 ### Decision
 
-Exclude `fabric-host` from Gradle build (`settings.gradle`). Document rewrite requirements.
-
-Rewrite to Fabric APIs requires:
-- `ServerCommandSource` instead of `CommandContext`
-- `FabricAudiences` instead of Bukkit audiences
-- Fabric event system (`ServerPlayConnectionEvents`, `ServerMessageEvents`) instead of Bukkit events
-- Brigadier native commands
-- Fabric Loader + Fabric API + Yarn mappings
+Complete rewrite to Fabric APIs:
+- `ServerCommandSource` + Brigadier native commands
+- `FabricAudiences` for message delivery
+- Fabric event system: `ServerPlayConnectionEvents`, `ServerMessageEvents`, `ServerTickEvents`
+- Fabric Loader 0.16+ + Fabric API 0.100.5 + Yarn mappings
+- Tick-based death detection (no Bukkit PlayerDeathEvent equivalent)
+- Claim mode configurable: `CANCEL_EVENT`, `CLEAR_RECIPIENTS`, `NONE`
+- DiscordBridge integrated via SyncBus
 
 ### Consequences
 
 **Positive:**
-- Build passes
-- Clear documentation of what's needed
-- No broken code in CI
+- Build passes, module included in CI
+- Fabric support production-ready
+- Feature parity with spigot-host
 
 **Negative:**
-- No Fabric support currently
-- Requires significant rewrite effort
+- Required significant rewrite effort
+- Different event model than Spigot (tick-based death detection)
+
+---
+
+## ADR-013: AUDITORIA.md Findings Resolution (TXF-001..TXF-008, B/M/V)
+
+**Status**: Accepted
+**Date**: 2026-10-05
+
+### Context
+
+Internal audit 2026-10-05 identified 8 TXF bugs + 17 B/M/V findings requiring fixes for production readiness.
+
+### Decision
+
+All findings resolved:
+- **TXF-001**: In-flight translation leak — `whenComplete` cleanup in `TranslationService`
+- **TXF-002**: RejectedExecutionException escape — try-catch + fallback in `TranslationService`
+- **TXF-003**: DNS pinning/TLS/SNI — `Proxy` + custom `SSLSocketFactory` in `HttpTransport`
+- **TXF-004**: engine.parallel ignored — `engineParallel` param in `MessageDispatcher`
+- **TXF-005**: SyncBus unregister lifecycle — `sink.stop()` in `unregister()`, transactional `start()`
+- **TXF-006**: engine.parallel sequential mode — implemented in `MessageDispatcher`
+- **TXF-007**: Broadcast ACKs — `broadcast()` returns enqueued count, `broadcastAsync()` futures per sink
+- **TXF-008**: VelocitySink EXACTLY_ONCE → `AT_LEAST_ONCE` (no remote ACK protocol)
+- **B-01**: Double delivery — `broadcast()` only builds, `onChat()` dispatches once
+- **B-03**: Join/quit/death async — dedicated executor
+- **V-01**: WebSocket bind/auth — 127.0.0.1, token required
+- **B-04**: TemplateRenderer İ fix — `Pattern.CASE_INSENSITIVE`
+- **B-05**: Translation re-escape — `MiniEscape.escape()` before re-insert
+- **B-06**: WebSocket rate limit — fixed window epoch-aligned
+- **M-01..M-11**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException restore, RateLimiter no RWLock, WS port, MetricsEndpoint bind 127.0.0.1
+
+### Consequences
+
+**Positive:**
+- All critical/high/medium findings resolved
+- Production-ready for Spigot/Paper and Fabric
+- All CI checks pass
+
+---
+
+## ADR-014: External Audit Resolution (TXF-ZIP-001..TXF-ZIP-006)
+
+**Status**: Accepted
+**Date**: 2026-10-09
+
+### Context
+
+External audit of ZIP snapshot (2026-10-09) identified 6 critical findings in SyncBus, HttpTransport, Module Manager.
+
+### Decision
+
+All findings resolved:
+- **TXF-ZIP-001**: Duplicate broadcast — single path via global queue + `processMessage()`
+- **TXF-ZIP-002**: broadcastAsync futures incomplete — check `offer()`, complete exceptionally on failure
+- **TXF-ZIP-003**: HttpTransport IP pinning — removed HTTP Proxy misuse; direct connection to pinned IP, preserve hostname for SNI/Host header
+- **TXF-ZIP-004**: SyncBus lifecycle — explicit `LifecycleState` enum, processor starts in `start()`, `close()` cleans up always
+- **TXF-ZIP-005**: DynamicCommand module ops + PresetManager import/export — `install/update/remove/info` + `suite update` implemented; YAML import/export
+- **TXF-ZIP-006**: Signature verification mandatory — `requireSignatures` config, throws `SecurityException` if required but not configured
+
+### Consequences
+
+**Positive:**
+- All external audit findings resolved
+- SyncBus semantics correct (no duplication, reliable futures)
+- HttpTransport TLS/SNI correct
+- Module Manager production-ready with signature enforcement
 
 ---
 

@@ -309,7 +309,20 @@
 
 ---
 
-## BUGS CONOCIDOS Y DEUDA (actualizado 2026-09-13)
+## AUDITORÍA 2026-10-09 (ZIP) — TODOS LOS HALLAZGOS ARREGLADOS ✅
+
+| ID | Severidad | Problema | Fix Aplicado | Archivo |
+|---|---|---|---|---|
+| **TXF-ZIP-001** | 🔴 Crítico | Difusión duplicada en `DefaultSyncBus.broadcast()` | Eliminado encolado directo a sinks; único camino via global queue + `processMessage()` | `sync-bus/DefaultSyncBus.java` |
+| **TXF-ZIP-002** | 🔴 Crítico | Futuros incompletos en `broadcastAsync()` | Check `offer()` result; complete `globalFuture` exceptionally si queue full | `sync-bus/DefaultSyncBus.java` |
+| **TXF-ZIP-003** | 🔴 Crítico | IP pinning en `HttpTransport` usa HTTP Proxy incorrecto | Conexión directa a IP pinned; preserva hostname original para Host header/SNI | `transport/HttpTransport.java` |
+| **TXF-ZIP-004** | 🟠 Alto | Ciclo de vida incompleto `DefaultSyncBus` | `LifecycleState` enum (NEW/RUNNING/STOPPING/STOPPED); global processor en `start()`; `close()` limpia siempre | `sync-bus/DefaultSyncBus.java` |
+| **TXF-ZIP-005** | 🟠 Alto | DynamicCommand module ops no implementadas + PresetManager import/export | `install/update/remove/info` + `suite update` implementados; `loadCustomPresets()` parsea YAML, `export()` escribe YAML | `spigot-host/DynamicCommand.java`, `presets/PresetManager.java` |
+| **TXF-ZIP-006** | 🟠 Alto | Verificación de firma opcional | `requireSignatures` en constructor; `verifyModuleSignature()` lanza `SecurityException` si requerido y no configurado | `manager-impl/DefaultModuleLifecycle.java` |
+
+---
+
+## BUGS CONOCIDOS Y DEUDA (actualizado 2026-10-09)
 
 **Web editor:** P0 arreglados ✅. Rules Graph Editor implementado: 8 tipos nodo (input/cond/transform/loop/sleep/output/redirect/channel_redirect), matcher/condition/actions/target/priority, round-trip YAML, i18n EN/ES.
 
@@ -333,9 +346,9 @@
 - **HttpTransport SSRF TOCTOU**: IP pinning en `HttpTransport.validateUrlAndGetAddress()` para prevenir DNS rebinding.
 
 **Supply Chain (A5 2026-09-06):**
-- Sin `gradle.lockfile` / SHA256 / `dependencyVerification`. ✅ **PARCIAL** — `dependencyVerification` con `verification-metadata.xml` (SHA256/SHA512), `dependencyLocking` en build.gradle. Pendiente: gradle.lockfile portable.
+- Sin `gradle.lockfile` / SHA256 / `dependencyVerification`. ✅ **COMPLETO** — `dependencyVerification` con `verification-metadata.xml` (SHA256/SHA512), `dependencyLocking` en build.gradle, 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `checkLocks` task.
 - 8 repos Maven; `mavenLocal()` con precedencia.
-- Builds no reproducibles.
+- Builds no reproducibles → ✅ **ARREGLADO** via lockfiles + verification metadata.
 - Sin allowlist módulos / manifest validation pre-load. ✅ **ARREGLADO** — Manifest validation obligatoria en Module Manager.
 
 ---

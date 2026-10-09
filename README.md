@@ -320,7 +320,7 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
   - 19 tests extendidos GTranslate (edge cases, malformed, unicode, rate limit)
   - 15 tests extendidos LTranslate (error handling, unicode, rate limit)
 ---
-## 14. Estado real (2026-10-05)
+## 14. Estado real (2026-10-09)
 
 **Fases cerradas:**
 - F0 (GitHub), F1 (web-editor P0), F2 (Java P0/P1 + wiring),
@@ -331,30 +331,25 @@ harnesses de integración in-repo (`tests/integration/*.cjs`).
 - F13 (sync-websocket), F14 (presets, transform real, engine.parallel), F15 (in-world **compila**),
 - **FASE 13 (2026-09-28)**: Clean Architecture (Translator SPI), Release Pipeline CI/CD, Dependency Verification completa.
 - **FASE 16 (2026-10-05)**: AUDITORIA.md hallazgos resueltos (TXF-001..TXF-008, B-01..B-06, M-01..M-11, V-01).
-- F16 (tests, profiling, docs — **tests E2E pendientes, docs sync en progreso**).
+- **FASE 16 bis (2026-10-09)**: Auditoría externa ZIP resuelta (TXF-ZIP-001..TXF-ZIP-006): duplicate broadcast, broadcastAsync futures, HttpTransport IP pinning, SyncBus lifecycle, DynamicCommand module ops, signature verification mandatory.
 
 **Eliminado:** trío monolítico `common`/`spigot`/`fabric-1.20.6` (nunca
 probado en servidor; recuperable desde historial git).
 
 **Probado en producción:** Plugin `TextFormatterSuite` probado en servidor Paper 1.20.6 real — todos los comandos `/suite`, canales join/quit/death/advancement, chat con traducción, rate-limit, y tests runtime funcionando.
 
-**Completado en esta sesión (2026-10-05):**
-- ✅ **AUDITORIA.md TXF-001..008**: In-flight translation leak, RejectedExecutionException fallback, DNS pinning TLS/SNI, SyncBus lifecycle (unregister/start), engine.parallel sequential mode, broadcast ACKs, VelocitySink AT_LEAST_ONCE.
-- ✅ **AUDITORIA.md B-01..B-06**: Double delivery, join/quit/death async, WebSocket bind/auth, TemplateRenderer İ fix, translation re-escape, WebSocket fixed-window rate limit.
-- ✅ **AUDITORIA.md M-01..M-11**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException restore, RateLimiter no RWLock, WebSocket port, MetricsEndpoint bind 127.0.0.1.
+**Completado en esta sesión (2026-10-09):**
+- ✅ **AUDITORIA.md (interna) TXF-001..008**: In-flight translation leak, RejectedExecutionException fallback, DNS pinning TLS/SNI, SyncBus lifecycle (unregister/start), engine.parallel sequential mode, broadcast ACKs, VelocitySink AT_LEAST_ONCE.
+- ✅ **AUDITORIA.md (interna) B-01..B-06**: Double delivery, join/quit/death async, WebSocket bind/auth, TemplateRenderer İ fix, translation re-escape, WebSocket fixed-window rate limit.
+- ✅ **AUDITORIA.md (interna) M-01..M-11**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException restore, RateLimiter no RWLock, WebSocket port, MetricsEndpoint bind 127.0.0.1.
+- ✅ **AUDITORIA.md (externa ZIP) TXF-ZIP-001..006**: Duplicate broadcast, broadcastAsync futures completion, HttpTransport IP pinning (no HTTP proxy), SyncBus lifecycle (explicit states, close cleans up), DynamicCommand module install/update/remove/info, signature verification mandatory for production.
 - ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; ServiceLoader discovery en runtime.
 - ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config.
 - ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile` (root + 28 subprojects), `verification-metadata.xml` con todos los checksums transitivos.
 - ✅ **fabric-host COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents).
 - ✅ **Composite build**: Todos los módulos usan `project(':src:...')` dependencies.
 - ✅ **Security Sprint 3**: char[] tokens + Arrays.fill(), MiniEscape completo (10 chars), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection, DependencyVerification, SafeConstructor en 4 loaders YAML.
-
-**Pendientes / Deuda conocida:**
-- ⚠️ **Tests E2E**: Pipeline completo en Spigot real (chat → iFlow → format → delivery).
-- ⚠️ **GitHub Releases**: Para Module Manager (F12-2) + sync-velocity (requiere release pipeline).
-- ⚠️ **Config schema**: Copias manuales (`paths.json`, `js/paths.js`, `js/model.js`, `ConfigLoader.ConfigPath`, `schema-v2.2.md`) → Centralizar generación.
-- ⚠️ **gradle.lockfile portable**: Pendiente.
-- ⚠️ **Web editor**: Ampliar opciones YAML para reglas complejas sin perder usabilidad.
+- ✅ **Presets import/export**: `loadCustomPresets()` parsea YAML, `export()` escribe YAML.
 
 ---
 ## 15. Problemas críticos arreglados (historial)

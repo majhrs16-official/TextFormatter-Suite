@@ -15,15 +15,25 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 
 ### 🏗️ Architecture
 - **Hexagonal Architecture** - Clean separation of core logic from platform adapters
-- **Modular Design** - 22 independent Gradle modules with composite build
+- **Modular Design** - 29 independent Gradle modules with composite build
 - **SPI-based** - ServiceLoader discovery for extensions and modules
 - **Zero-dependency Core** - Core API has zero external dependencies (JDK only)
+- **Clean Architecture** - `host` module has zero compile-time dependencies on `gtranslate`/`ltranslate`; `TranslatorProvider` SPI via ServiceLoader
 
 ### ⚡ Performance
 - **Parallel Processing** - Configurable parallel message processing (`engine.parallel`)
 - **Memory Optimized** - Object pooling, weak caches, memory pressure handling
 - **Async Processing** - Non-blocking message pipeline with bounded executors
 - **JMH Benchmarked** - Continuous performance regression testing with loadtest module
+- **SyncBus** - Unified pipeline with deduplication, per-sink isolation, retry/backoff, metrics
+
+### 🔒 Security
+- **Tokens in `char[]`** - Discord, Telegram, LibreTranslate tokens zeroed after use (`Arrays.fill('\0')`)
+- **MiniEscape Complete** - Escapes 10 chars: `< > \ { } [ ] ( ) # @`
+- **SpEL Sandbox** - `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU cache (1024)
+- **SSRF Protection** - `HttpTransport` validates IPs via `getAllByName()` (RFC 1918/3927/6598)
+- **SafeConstructor** - All YAML loaders use `SafeConstructor` (no arbitrary deserialization)
+- **Signature Verification** - Module Manager supports cosign/gpg verification (mandatory for production)
 
 ## Quick Start
 
@@ -124,9 +134,10 @@ chat:
 | `suite/sync-telegram` | 17 | Telegram Bot, long-poll + watermark, `char[]` tokens |
 | `suite/sync-http` | 17 | Webhook + REST (`HttpServer`), inbound/outbound |
 | `suite/sync-tcpudp` | 17 | TCP/UDP raw, JSON line/datagram |
-| `suite/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, metrics, health, dynamic discovery |
-| `suite/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, subscriptions) |
-| `suite/host` | 17 | Composition root: `SuiteHost`, `MessageDispatcher`, `ConfigLoader` |
+| `suite/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, metrics, health, dynamic discovery, mapping avanzado |
+| `suite/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, subscriptions, log streaming) |
+| `suite/sync-bus` | 17 | **Nuevo**: Pipeline unificado (deduplicación global, aislamiento por sink, retry/backoff, métricas) |
+| `suite/host` | 17 | Composition root: `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`) |
 | `suite/messages` | 17 | i18n EN/ES, `MessagesCatalog` singleton |
 | `suite/tester` | 17 | 25 runtime tests + `PerformanceProfiler` |
 | `suite/transport` | 17 | `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`) |
@@ -139,7 +150,6 @@ chat:
 | `suite/example-extension` | 17 | Demo extension |
 | `suite/loadtest` | 17 | JMH benchmarks + Gatling |
 | `suite/performance` | 17 | Profiling: `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer` |
-| `suite/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, log streaming) |
 
 ## Next Steps
 
