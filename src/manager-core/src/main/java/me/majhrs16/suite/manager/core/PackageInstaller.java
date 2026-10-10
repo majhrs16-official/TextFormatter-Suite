@@ -28,11 +28,13 @@ public final class PackageInstaller {
     private final LocalPackageDatabase database;
     private final Path installRoot;
     private final PluginLogger logger;
+    private final TransactionLog transactionLog;
 
     public PackageInstaller(LocalPackageDatabase database, Path installRoot, PluginLogger logger) {
         this.database = database;
         this.installRoot = installRoot.toAbsolutePath();
         this.logger = logger;
+        this.transactionLog = new TransactionLog(database.getManagerDir(), logger);
     }
 
     /**

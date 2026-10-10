@@ -111,7 +111,7 @@ class LocalPackageDatabaseTest {
         db.registerPackage(entry);
         
         assertTrue(db.isFileOwned("test.jar"));
-        assertEquals(Set.of("test"), db.getFileOwners("test.jar"));
+        assertEquals(Set.of("test_1.0.0_stable"), db.getFileOwners("test.jar"));
     }
 
     @Test

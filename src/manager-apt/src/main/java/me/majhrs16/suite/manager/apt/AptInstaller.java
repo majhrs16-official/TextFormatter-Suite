@@ -103,8 +103,16 @@ public final class AptInstaller {
         for (DependencyResolver.PlanStep step : plan.steps()) {
             RepositoryManager.PackageCandidate candidate = step.candidate();
             try {
+                // First remove the old version if it exists
+                Optional<me.majhrs16.suite.manager.spi.PackageEntry> oldEntry = 
+                    database.getLatestInstalled(candidate.name(), candidate.channel());
+                if (oldEntry.isPresent() && !oldEntry.get().version().equals(candidate.version())) {
+                    logger.info("Removing old version " + oldEntry.get().version() + " of " + candidate.name());
+                    installer.remove(oldEntry.get().name(), oldEntry.get().version(), oldEntry.get().channel(), false);
+                }
+                
                 Path zipPath = downloadPackage(candidate);
-                List<me.majhrs16.suite.manager.spi.PackageEntry> entries = installer.install(zipPath, true); // force for upgrade
+                List<me.majhrs16.suite.manager.spi.PackageEntry> entries = installer.install(zipPath, true);
                 for (me.majhrs16.suite.manager.spi.PackageEntry entry : entries) {
                     upgraded.add(entry.name() + " " + entry.version());
                 }

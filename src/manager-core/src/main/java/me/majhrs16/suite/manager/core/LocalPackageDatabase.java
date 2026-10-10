@@ -30,7 +30,7 @@ public final class LocalPackageDatabase {
     
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final Map<String, PackageEntry> packages = new ConcurrentHashMap<>();
-    private final Map<String, Set<String>> fileOwnership = new ConcurrentHashMap<>(); // file path -> package names
+    private final Map<String, Set<String>> fileOwnership = new ConcurrentHashMap<>(); // file path -> package IDs (name_version_channel)
     private boolean loaded = false;
     private Instant lastModified;
 
@@ -222,17 +222,46 @@ public final class LocalPackageDatabase {
             if (packages.containsKey(key)) {
                 throw new IllegalStateException("Package already installed: " + key);
             }
-            packages.put(key, entry);
             
-            // Update file ownership
-            for (FileEntry file : entry.files().values()) {
+            // Save first, then update in-memory state (atomic: persist then memory)
+            PackageEntry newEntry = entry;
+            doSaveWithNewPackage(newEntry);
+            
+            // Only update in-memory state after successful save
+            packages.put(key, newEntry);
+            
+            // Update file ownership (use full package ID for ownership)
+            for (FileEntry file : newEntry.files().values()) {
                 fileOwnership.computeIfAbsent(file.path(), k -> ConcurrentHashMap.newKeySet())
-                        .add(entry.name());
+                        .add(newEntry.id());
             }
-            
-            save();
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+    
+    /**
+     * Saves the database with a new package added.
+     */
+    private void doSaveWithNewPackage(PackageEntry newEntry) throws IOException {
+        // Write to temp file first
+        Path tempFile = Files.createTempFile(statusFile.getParent(), "status", ".tmp");
+        try {
+            List<PackageEntry> entries = new ArrayList<>(packages.values());
+            entries.add(newEntry);
+            entries.sort(Comparator.comparing(PackageEntry::name)
+                    .thenComparing(e -> Version.parse(e.version()))
+                    .thenComparing(PackageEntry::channel));
+            
+            String content = ManifestParser.serialize(entries);
+            Files.writeString(tempFile, content);
+            
+            // Atomic move
+            Files.move(tempFile, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            lastModified = Instant.now();
+        } catch (Exception e) {
+            Files.deleteIfExists(tempFile);
+            throw e;
         }
     }
 
@@ -244,25 +273,53 @@ public final class LocalPackageDatabase {
         lock.writeLock().lock();
         try {
             String key = name + "_" + version + "_" + channel;
-            PackageEntry entry = packages.remove(key);
+            PackageEntry entry = packages.get(key);
             if (entry == null) {
                 throw new IllegalStateException("Package not installed: " + key);
             }
             
-            // Update file ownership
+            // Save first (without this package), then update in-memory state
+            doSaveWithoutPackage(key);
+            
+            // Only update in-memory state after successful save
+            packages.remove(key);
+            
+            // Update file ownership (use full package ID)
             for (FileEntry file : entry.files().values()) {
                 Set<String> owners = fileOwnership.get(file.path());
                 if (owners != null) {
-                    owners.remove(entry.name());
+                    owners.remove(entry.id());
                     if (owners.isEmpty()) {
                         fileOwnership.remove(file.path());
                     }
                 }
             }
-            
-            save();
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+    
+    /**
+     * Saves the database without a specific package.
+     */
+    private void doSaveWithoutPackage(String keyToRemove) throws IOException {
+        Path tempFile = Files.createTempFile(statusFile.getParent(), "status", ".tmp");
+        try {
+            List<PackageEntry> entries = packages.values().stream()
+                    .filter(e -> !e.id().equals(keyToRemove))
+                    .collect(Collectors.toCollection(ArrayList::new));
+            entries.sort(Comparator.comparing(PackageEntry::name)
+                    .thenComparing(e -> Version.parse(e.version()))
+                    .thenComparing(PackageEntry::channel));
+            
+            String content = ManifestParser.serialize(entries);
+            Files.writeString(tempFile, content);
+            
+            Files.move(tempFile, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            lastModified = Instant.now();
+        } catch (Exception e) {
+            Files.deleteIfExists(tempFile);
+            throw e;
         }
     }
 
@@ -300,7 +357,7 @@ public final class LocalPackageDatabase {
             Map<String, Set<String>> orphaned = new HashMap<>();
             for (FileEntry file : entry.files().values()) {
                 Set<String> owners = fileOwnership.get(file.path());
-                if (owners != null && owners.size() == 1 && owners.contains(entry.name())) {
+                if (owners != null && owners.size() == 1 && owners.contains(entry.id())) {
                     orphaned.put(file.path(), Set.copyOf(owners));
                 }
             }
@@ -389,6 +446,7 @@ public final class LocalPackageDatabase {
     public Path getTmpDir() { return tmpDir; }
     public Path getListsDir() { return listsDir; }
     public Path getStatusFile() { return statusFile; }
+    public Path getManagerDir() { return managerDir; }
 
     public boolean isLoaded() { return loaded; }
 

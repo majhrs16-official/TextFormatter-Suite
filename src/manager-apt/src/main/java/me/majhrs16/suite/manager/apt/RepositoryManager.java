@@ -174,7 +174,8 @@ public final class RepositoryManager {
             for (JsonElement asset : assets) {
                 JsonObject a = asset.getAsJsonObject();
                 String name = a.get("name").getAsString();
-                if (name.endsWith(".jar") && !name.endsWith("-sources.jar") && !name.endsWith("-javadoc.jar")) {
+                // NEW-MANAGER.md requires ZIP distribution with METADATA/package.list
+                if (name.endsWith(".zip") && !name.endsWith("-sources.zip") && !name.endsWith("-javadoc.zip")) {
                     // Extract artifact name
                     String artifact = name.substring(0, name.lastIndexOf('-'));
                     String downloadUrl = a.get("browser_download_url").getAsString();
@@ -298,13 +299,13 @@ public final class RepositoryManager {
     }
 
     private String extractVersionFromUrl(String url) {
-        // Expected format: .../artifact-1.2.3.jar or .../artifact-1.2.3-beta.jar
+        // Expected format: .../artifact-1.2.3.zip or .../artifact-1.2.3-beta.zip
         int lastSlash = url.lastIndexOf('/');
         if (lastSlash < 0) return null;
         String fileName = url.substring(lastSlash + 1);
-        if (!fileName.endsWith(".jar")) return null;
+        if (!(fileName.endsWith(".zip") || fileName.endsWith(".jar"))) return null;
         
-        // Remove .jar
+        // Remove extension
         String withoutExt = fileName.substring(0, fileName.length() - 4);
         // Find last dash before version
         int lastDash = withoutExt.lastIndexOf('-');

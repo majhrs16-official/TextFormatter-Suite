@@ -5,6 +5,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.LoaderOptions;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -39,9 +41,25 @@ public final class RepoConfigParser {
         List<Map<String, Object>> repos = (List<Map<String, Object>>) root.get("repositories");
         
         List<RepositoryConfig> configs = new ArrayList<>();
+        Set<String> seenNames = new HashSet<>();
+        Set<String> seenUrls = new HashSet<>();
+        
         for (int i = 0; i < repos.size(); i++) {
             Map<String, Object> repo = repos.get(i);
-            configs.add(parseRepository(repo, i));
+            RepositoryConfig config = parseRepository(repo, i);
+            
+            // Check for duplicate names
+            if (!seenNames.add(config.name())) {
+                throw new ParseException("Duplicate repository name: " + config.name());
+            }
+            
+            // Check for duplicate URLs
+            String normalizedUrl = normalizeUrl(config.url());
+            if (!seenUrls.add(normalizedUrl)) {
+                throw new ParseException("Duplicate repository URL: " + config.url());
+            }
+            
+            configs.add(config);
         }
 
         // Sort by priority (lower = higher priority)
@@ -51,9 +69,18 @@ public final class RepoConfigParser {
 
     private static RepositoryConfig parseRepository(Map<String, Object> repo, int index) throws ParseException {
         String name = getString(repo, "name", "repo-" + index);
+        if (name.isBlank()) {
+            throw new ParseException("Repository at index " + index + ": name cannot be blank");
+        }
+        
         String url = getString(repo, "url", "");
         if (url.isBlank()) {
             throw new ParseException("Repository " + name + ": missing required 'url' field");
+        }
+        
+        // Validate URL format
+        if (!isValidUrl(url)) {
+            throw new ParseException("Repository " + name + ": invalid URL format: " + url);
         }
 
         String typeStr = getString(repo, "type", "github").toLowerCase();
@@ -66,11 +93,66 @@ public final class RepoConfigParser {
 
         boolean enabled = getBoolean(repo, "enabled", true);
         int priority = getInt(repo, "priority", 100);
+        
+        // Validate priority range
+        if (priority < 0 || priority > 1000) {
+            throw new ParseException("Repository " + name + ": priority must be between 0 and 1000");
+        }
 
         @SuppressWarnings("unchecked")
         Map<String, String> options = (Map<String, String>) repo.getOrDefault("options", Map.of());
+        
+        // Validate options based on repository type
+        validateOptions(name, type, options);
 
         return new RepositoryConfig(name, url, type, enabled, priority, options);
+    }
+
+    private static boolean isValidUrl(String url) {
+        try {
+            new URL(url);
+            return true;
+        } catch (MalformedURLException e) {
+            return false;
+        }
+    }
+
+    private static String normalizeUrl(String url) {
+        try {
+            URL u = new URL(url);
+            return u.getProtocol() + "://" + u.getHost() + (u.getPort() != -1 ? ":" + u.getPort() : "") + u.getPath();
+        } catch (MalformedURLException e) {
+            return url;
+        }
+    }
+
+    private static void validateOptions(String name, RepositoryConfig.RepositoryType type, Map<String, String> options) throws ParseException {
+        switch (type) {
+            case GITHUB -> {
+                // GitHub repos can have 'channel' option
+                if (options.containsKey("channel")) {
+                    String channel = options.get("channel");
+                    if (channel.isBlank()) {
+                        throw new ParseException("Repository " + name + ": channel option cannot be blank");
+                    }
+                }
+            }
+            case LOCAL -> {
+                // Local repos should have file:// URLs
+                if (!options.isEmpty()) {
+                    throw new ParseException("Repository " + name + ": local repositories do not support options");
+                }
+            }
+            case HTTP -> {
+                // HTTP repos can have auth options
+                if (options.containsKey("username") && options.get("username").isBlank()) {
+                    throw new ParseException("Repository " + name + ": username option cannot be blank");
+                }
+                if (options.containsKey("password") && options.get("password").isBlank()) {
+                    throw new ParseException("Repository " + name + ": password option cannot be blank");
+                }
+            }
+        }
     }
 
     private static String getString(Map<String, Object> map, String key, String defaultValue) {
