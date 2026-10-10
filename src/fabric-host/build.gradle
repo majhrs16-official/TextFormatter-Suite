@@ -36,7 +36,9 @@ dependencies {
     implementation project(':src:messages')
     implementation project(':src:observability')
     implementation project(':src:extension-api')
-    implementation project(':src:manager-impl')
+    implementation project(':src:manager-spi')
+    implementation project(':src:manager-core')
+    implementation project(':src:manager-apt')
     implementation project(':src:presets')
 
     minecraft 'com.mojang:minecraft:1.21'

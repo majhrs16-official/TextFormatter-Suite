@@ -49,8 +49,9 @@ dependencies {
     }
     implementation project(':src:transport')
     implementation project(':src:observability')
-    implementation project(':src:manager-impl')
-    implementation project(':src:manager-api')
+    implementation project(':src:manager-spi')
+    implementation project(':src:manager-core')
+    implementation project(':src:manager-apt')
     implementation project(':src:inworld')
     implementation project(':src:extension-api')
     
@@ -119,8 +120,9 @@ shadowJar {
         exclude(dependency('me.majhrs16:suite-tester'))
         exclude(dependency('me.majhrs16:suite-transport'))
         exclude(dependency('me.majhrs16:suite-observability'))
-        exclude(dependency('me.majhrs16:suite-manager-impl'))
-        exclude(dependency('me.majhrs16:suite-manager-api'))
+        exclude(dependency('me.majhrs16:suite-manager-spi'))
+        exclude(dependency('me.majhrs16:suite-manager-core'))
+        exclude(dependency('me.majhrs16:suite-manager-apt'))
         exclude(dependency('me.majhrs16:suite-inworld'))
         exclude(dependency('me.majhrs16:suite-extension-api'))
     }

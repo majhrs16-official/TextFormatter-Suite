@@ -20,7 +20,9 @@ import me.majhrs16.suite.host.config.TranslatorsConfig;
 import me.majhrs16.suite.host.config.YamlUserLanguageStore;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.inworld.InWorldHandler;
-import me.majhrs16.suite.manager.DefaultModuleLifecycle;
+import me.majhrs16.suite.manager.apt.ManagerFacade;
+import me.majhrs16.suite.manager.apt.ModuleLifecycleAdapter;
+import me.majhrs16.suite.manager.ModuleLifecycle;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.spigothost.command.DynamicCommandRegistrar;
 import me.majhrs16.suite.spigothost.logic.ChannelSelector;
@@ -91,134 +93,138 @@ import java.util.UUID;
  */
 public final class TextFormatterSuitePlugin extends JavaPlugin implements Listener {
 
-    /** Immutable wiring snapshot; swapped atomically on reload. */
-    public static final class Runtime implements AutoCloseable {
-        final SuiteHost host;
-        final MessageDispatcher dispatcher;
-        final SpigotActorDirectory directory;
-        final UserLanguageStore languages;
-        final DiscordBridge bridge;
-        final WebSocketSyncSink wsSink;
-        final me.majhrs16.suite.observability.Observability observability;
-        final me.majhrs16.suite.extension.ExtensionManager extensionManager;
-        final me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle;
-        final InWorldHandler inworldHandler;
-        final SyncBus syncBus;
-        final PluginLogger logger;
-        final TranslationService translationService;
+/** Immutable wiring snapshot; swapped atomically on reload. */
+        public static final class Runtime implements AutoCloseable {
+            final SuiteHost host;
+            final MessageDispatcher dispatcher;
+            final SpigotActorDirectory directory;
+            final UserLanguageStore languages;
+            final DiscordBridge bridge;
+            final WebSocketSyncSink wsSink;
+            final me.majhrs16.suite.observability.Observability observability;
+            final me.majhrs16.suite.extension.ExtensionManager extensionManager;
+            final ManagerFacade managerFacade;
+            final ModuleLifecycle moduleLifecycle;
+            final InWorldHandler inworldHandler;
+            final SyncBus syncBus;
+            final PluginLogger logger;
+            final TranslationService translationService;
 
-        Runtime(SuiteHost host, MessageDispatcher dispatcher,
-                SpigotActorDirectory directory, UserLanguageStore languages,
-                DiscordBridge bridge, WebSocketSyncSink wsSink,
-                me.majhrs16.suite.observability.Observability observability,
-                me.majhrs16.suite.extension.ExtensionManager extensionManager,
-                me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle,
-                InWorldHandler inworldHandler,
-                SyncBus syncBus,
-                PluginLogger logger,
-                TranslationService translationService) {
-            this.host = host;
-            this.dispatcher = dispatcher;
-            this.directory = directory;
-            this.languages = languages;
-            this.bridge = bridge;
-            this.wsSink = wsSink;
-            this.observability = observability;
-            this.extensionManager = extensionManager;
-            this.moduleLifecycle = moduleLifecycle;
-            this.inworldHandler = inworldHandler;
-            this.syncBus = syncBus;
-            this.logger = logger;
-            this.translationService = translationService;
+            Runtime(SuiteHost host, MessageDispatcher dispatcher,
+                    SpigotActorDirectory directory, UserLanguageStore languages,
+                    DiscordBridge bridge, WebSocketSyncSink wsSink,
+                    me.majhrs16.suite.observability.Observability observability,
+                    me.majhrs16.suite.extension.ExtensionManager extensionManager,
+                    ManagerFacade managerFacade,
+                    ModuleLifecycle moduleLifecycle,
+                    InWorldHandler inworldHandler,
+                    SyncBus syncBus,
+                    PluginLogger logger,
+                    TranslationService translationService) {
+                this.host = host;
+                this.dispatcher = dispatcher;
+                this.directory = directory;
+                this.languages = languages;
+                this.bridge = bridge;
+                this.wsSink = wsSink;
+                this.observability = observability;
+                this.extensionManager = extensionManager;
+                this.managerFacade = managerFacade;
+                this.moduleLifecycle = moduleLifecycle;
+                this.inworldHandler = inworldHandler;
+                this.syncBus = syncBus;
+                this.logger = logger;
+                this.translationService = translationService;
+            }
+
+            public SuiteHost host() { return host; }
+            public MessageDispatcher dispatcher() { return dispatcher; }
+            public UserLanguageStore languages() { return languages; }
+            public PluginLogger logger() { return logger; }
+            public InWorldHandler inworldHandler() { return inworldHandler; }
+            public SyncBus syncBus() { return syncBus; }
+            public ManagerFacade managerFacade() { return managerFacade; }
+            public ModuleLifecycle moduleLifecycle() { return moduleLifecycle; }
+
+            @Override
+            public void close() {
+                if (syncBus != null) {
+                    try {
+                        syncBus.close();
+                    } catch (Exception e) {
+                        logger.warn("Error closing SyncBus: " + e.getMessage());
+                    }
+                }
+                if (wsSink != null) {
+                    try {
+                        wsSink.stop();
+                    } catch (Exception e) {
+                        logger.warn("Error closing WebSocket sink: " + e.getMessage());
+                    }
+                }
+                if (observability != null) {
+                    try {
+                        observability.stop();
+                    } catch (Exception e) {
+                        logger.warn("Error stopping Observability: " + e.getMessage());
+                    }
+                }
+                if (extensionManager != null) {
+                    try {
+                        extensionManager.stop();
+                    } catch (Exception e) {
+                        logger.warn("Error stopping ExtensionManager: " + e.getMessage());
+                    }
+                }
+                if (managerFacade != null) {
+                    try {
+                        logger.debug("ManagerFacade cleanup");
+                    } catch (Exception e) {
+                        logger.warn("Error closing ManagerFacade: " + e.getMessage());
+                    }
+                }
+                if (inworldHandler != null) {
+                    try {
+                        // Unregister from plugin manager to avoid duplicate listeners on reload
+                        org.bukkit.event.HandlerList.unregisterAll(inworldHandler);
+                        logger.debug("InWorldHandler unregistered from plugin manager");
+                    } catch (Exception e) {
+                        logger.warn("Error unregistering InWorldHandler: " + e.getMessage());
+                    }
+                }
+                if (dispatcher != null) {
+                    try {
+                        dispatcher.close();
+                    } catch (Exception e) {
+                        logger.warn("Error closing MessageDispatcher: " + e.getMessage());
+                    }
+                }
+                // Close the router (which closes the RateLimiter)
+                if (host != null && host.router() != null && host.router() instanceof AutoCloseable) {
+                    try {
+                        ((AutoCloseable) host.router()).close();
+                        logger.debug("Router (RateLimiter) closed");
+                    } catch (Exception e) {
+                        logger.warn("Error closing Router: " + e.getMessage());
+                    }
+                }
+                if (translationService != null) {
+                    try {
+                        translationService.close();
+                        logger.debug("TranslationService closed");
+                    } catch (Exception e) {
+                        logger.warn("Error closing TranslationService: " + e.getMessage());
+                    }
+                }
+                if (bridge != null) {
+                    try {
+                        bridge.stop();
+                    } catch (Exception e) {
+                        logger.warn("Error stopping DiscordBridge: " + e.getMessage());
+                    }
+                }
+            }
         }
-
-        public SuiteHost host() { return host; }
-        public MessageDispatcher dispatcher() { return dispatcher; }
-        public UserLanguageStore languages() { return languages; }
-        public PluginLogger logger() { return logger; }
-        public InWorldHandler inworldHandler() { return inworldHandler; }
-        public SyncBus syncBus() { return syncBus; }
-
-        @Override
-        public void close() {
-            if (syncBus != null) {
-                try {
-                    syncBus.close();
-                } catch (Exception e) {
-                    logger.warn("Error closing SyncBus: " + e.getMessage());
-                }
-            }
-            if (wsSink != null) {
-                try {
-                    wsSink.stop();
-                } catch (Exception e) {
-                    logger.warn("Error closing WebSocket sink: " + e.getMessage());
-                }
-            }
-            if (observability != null) {
-                try {
-                    observability.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping Observability: " + e.getMessage());
-                }
-            }
-            if (extensionManager != null) {
-                try {
-                    extensionManager.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping ExtensionManager: " + e.getMessage());
-                }
-            }
-            if (moduleLifecycle != null) {
-                try {
-                    // ModuleLifecycle doesn't have a close() method; modules are unloaded via unload()
-                    logger.debug("ModuleLifecycle cleanup (no close method available)");
-                } catch (Exception e) {
-                    logger.warn("Error closing ModuleLifecycle: " + e.getMessage());
-                }
-            }
-            if (inworldHandler != null) {
-                try {
-                    // Unregister from plugin manager to avoid duplicate listeners on reload
-                    org.bukkit.event.HandlerList.unregisterAll(inworldHandler);
-                    logger.debug("InWorldHandler unregistered from plugin manager");
-                } catch (Exception e) {
-                    logger.warn("Error unregistering InWorldHandler: " + e.getMessage());
-                }
-            }
-            if (dispatcher != null) {
-                try {
-                    dispatcher.close();
-                } catch (Exception e) {
-                    logger.warn("Error closing MessageDispatcher: " + e.getMessage());
-                }
-            }
-            // Close the router (which closes the RateLimiter)
-            if (host != null && host.router() != null && host.router() instanceof AutoCloseable) {
-                try {
-                    ((AutoCloseable) host.router()).close();
-                    logger.debug("Router (RateLimiter) closed");
-                } catch (Exception e) {
-                    logger.warn("Error closing Router: " + e.getMessage());
-                }
-            }
-            if (translationService != null) {
-                try {
-                    translationService.close();
-                    logger.debug("TranslationService closed");
-                } catch (Exception e) {
-                    logger.warn("Error closing TranslationService: " + e.getMessage());
-                }
-            }
-            if (bridge != null) {
-                try {
-                    bridge.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping DiscordBridge: " + e.getMessage());
-                }
-            }
-        }
-    }
 
     private BukkitAudiences audiences;
     private volatile UserLanguageStore languageStore;
@@ -518,14 +524,27 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         );
         extensionManager.start();
 
-        // Reload ModuleLifecycle
-        Path cacheDir = folder.resolve("manager-cache");
-        HostConfig hostConfig = configResult.config();
-        me.majhrs16.suite.manager.DefaultModuleLifecycle moduleLifecycle = new me.majhrs16.suite.manager.DefaultModuleLifecycle(cacheDir, logger, hostConfig.repositories(), hostConfig.moduleAllowlist());
-        logger.info("ModuleLifecycle (Manager) reloaded at " + cacheDir + " with " + hostConfig.repositories().size() + " repositories");
+        // Initialize ManagerFacade (APT/dpkg architecture)
+        Path managerDir = folder.resolve("manager");
+        String platform = "spigot";
+        String arch = System.getProperty("os.arch", "x64");
+        String os = System.getProperty("os.name", "linux").toLowerCase(java.util.Locale.ROOT);
+        int javaVersion = Integer.parseInt(System.getProperty("java.version").split("\\.")[0]);
+        
+        ManagerFacade managerFacade = new ManagerFacade(managerDir, logger, platform, arch, os, javaVersion);
+        try {
+            managerFacade.initialize();
+        } catch (IOException e) {
+            logger.error("Failed to initialize ManagerFacade: " + e.getMessage(), e);
+            throw new RuntimeException("ManagerFacade initialization failed", e);
+        }
+        logger.info("ManagerFacade initialized at " + managerDir);
+
+        // Create compatibility adapter for old ModuleLifecycle API
+        ModuleLifecycle moduleLifecycle = new ModuleLifecycleAdapter(managerFacade, logger);
 
         // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, moduleLifecycle, inworldHandler, syncBus, logger, translation);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, managerFacade, moduleLifecycle, inworldHandler, syncBus, logger, translation);
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -1042,6 +1061,7 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
             null, // wsSink
             null, // observability
             null, // extensionManager
+            null, // managerFacade
             null, // moduleLifecycle
             null, // inworldHandler
             null, // syncBus
@@ -1078,8 +1098,14 @@ rt.host,
         return rt != null ? rt.observability : null;
     }
 
-    /** Getter para el ModuleLifecycle. */
-    public me.majhrs16.suite.manager.ModuleLifecycle getModuleLifecycle() {
+    /** Getter para el ManagerFacade. */
+    public ManagerFacade getManagerFacade() {
+        Runtime rt = runtime;
+        return rt != null ? rt.managerFacade : null;
+    }
+
+    /** Getter para el ModuleLifecycle (compatibilidad). */
+    public ModuleLifecycle getModuleLifecycle() {
         Runtime rt = runtime;
         return rt != null ? rt.moduleLifecycle : null;
     }

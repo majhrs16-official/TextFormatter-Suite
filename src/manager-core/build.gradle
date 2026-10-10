@@ -1,0 +1,56 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    implementation project(':src:core-api')
+    implementation project(':src:manager-spi')
+    implementation project(':src:kernel')
+    implementation 'org.apache.commons:commons-compress:1.26.0'
+    implementation 'org.yaml:snakeyaml:2.3'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'suite-manager-core'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}

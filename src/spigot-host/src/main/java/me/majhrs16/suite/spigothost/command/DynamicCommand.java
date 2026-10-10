@@ -8,10 +8,15 @@ import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.CommandsConfig;
-import me.majhrs16.suite.manager.ModuleCoordinate;
 import me.majhrs16.suite.manager.ModuleDescriptor;
-import me.majhrs16.suite.manager.ModuleLifecycle;
-import me.majhrs16.suite.manager.Environment;
+import me.majhrs16.suite.manager.apt.ManagerFacade;
+import me.majhrs16.suite.manager.apt.AptInstaller;
+import me.majhrs16.suite.manager.apt.RepositoryManager;
+import me.majhrs16.suite.manager.core.LocalPackageDatabase;
+import me.majhrs16.suite.manager.spi.PackageEntry;
+import me.majhrs16.suite.manager.spi.FileEntry;
+
+import java.util.Optional;
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -21,6 +26,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -49,7 +55,9 @@ public final class DynamicCommand extends org.bukkit.command.Command {
     public CommandsConfig.CommandNode node() { return node; }
 
     private me.majhrs16.suite.manager.ModuleLifecycle moduleLifecycle() {
-        return registrar.moduleLifecycle();
+        ManagerFacade facade = registrar.managerFacade();
+        if (facade == null) return null;
+        return new me.majhrs16.suite.manager.apt.ModuleLifecycleAdapter(facade, registrar.logger());
     }
 
     @Override
@@ -254,210 +262,387 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                     sender.sendMessage("§cPermiso de admin requerido");
                     return true;
                 }
-                ModuleLifecycle ml = moduleLifecycle();
-                if (ml == null) {
+                ManagerFacade mf = registrar.managerFacade();
+                if (mf == null) {
                     sender.sendMessage("§c[Module] Manager no inicializado");
                     return true;
                 }
                 String action = bindings.getOrDefault("action", "list");
                 String module = bindings.getOrDefault("module", "");
                 String version = bindings.getOrDefault("version", "");
+                String channel = bindings.getOrDefault("channel", "stable");
+                boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
 
                 switch (action) {
                     case "list" -> {
-                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
-                        sender.sendMessage("§a[Module] Módulos instalados (" + loaded.size() + "):");
-                        if (loaded.isEmpty()) {
+                        // List installed packages
+                        List<PackageEntry> installed = mf.packageList();
+                        sender.sendMessage("§a[Package] Paquetes instalados (" + installed.size() + "):");
+                        if (installed.isEmpty()) {
                             sender.sendMessage("  §7(none)");
                         } else {
-                            for (ModuleDescriptor d : loaded) {
-                                sender.sendMessage("  §a✓ §f" + d.id() + " §7v" + d.version() + " - " + d.description());
+                            for (PackageEntry e : installed) {
+                                sender.sendMessage("  §a✓ §f" + e.name() + " §7v" + e.version() + " (" + e.channel() + ") - " + e.type());
                             }
                         }
 
-                        // Show available modules from GitHub
-                        sender.sendMessage("§e[Module] Módulos disponibles:");
-                        List<ModuleCoordinate> available = ml.discoverAvailableModules();
+                        // Show available packages from repositories
+                        sender.sendMessage("§e[Package] Paquetes disponibles:");
+                        Map<String, List<RepositoryManager.PackageCandidate>> available = mf.getAvailablePackages();
                         if (available.isEmpty()) {
-                            sender.sendMessage("  §7(none - check GitHub connectivity)");
+                            sender.sendMessage("  §7(none - run /suite repo update)");
                         } else {
-                            for (ModuleCoordinate coord : available) {
-                                String artifact = coord.artifact();
-                                String coordVersion = coord.version().toString();
-                                boolean installed = loaded.stream().anyMatch(d -> d.coordinate().artifact().equals(artifact));
-                                String status = installed ? "§a✓" : "§c✗";
-                                sender.sendMessage("  " + status + " §f" + artifact + " §7v" + coordVersion + (installed ? " §a(instalado)" : ""));
+                            for (Map.Entry<String, List<RepositoryManager.PackageCandidate>> entry : available.entrySet()) {
+                                RepositoryManager.PackageCandidate best = entry.getValue().get(0);
+                                boolean isInstalled = installed.stream().anyMatch(p -> p.name().equals(entry.getKey()));
+                                String status = isInstalled ? "§a✓" : "§c✗";
+                                sender.sendMessage("  " + status + " §f" + entry.getKey() + " §7v" + best.version() + " (" + best.channel() + ") from " + best.repository() + (isInstalled ? " §a(instalado)" : ""));
                             }
                         }
 
                         // Check for updates
-                        List<ModuleCoordinate> updates = ml.checkUpdates();
+                        List<PackageEntry> updates = mf.checkUpdates();
                         if (!updates.isEmpty()) {
-                            sender.sendMessage("§6[Module] Actualizaciones disponibles: " + updates.size());
-                            for (ModuleCoordinate u : updates) {
-                                sender.sendMessage("  §6- §f" + u);
+                            sender.sendMessage("§6[Package] Actualizaciones disponibles: " + updates.size());
+                            for (PackageEntry u : updates) {
+                                sender.sendMessage("  §6- §f" + u.name() + " v" + u.version() + " (" + u.channel() + ")");
                             }
                         }
                         return true;
                     }
                     case "install" -> {
                         if (module.isBlank()) {
-                            sender.sendMessage("§cUso: /suite module install <módulo> [versión]");
+                            sender.sendMessage("§cUso: /suite module install <paquete> [versión] [channel]");
                             return true;
                         }
-                        sender.sendMessage("§a[Module] Resolviendo " + module + (version.isBlank() ? "" : ":" + version) + "...");
-                        String coordStr = "me.majhrs16:" + module + (version.isBlank() ? "" : ":" + version);
-                        ModuleCoordinate coord = ModuleCoordinate.of("me.majhrs16", module, version.isBlank() ? "latest" : version);
-                        // Run async to avoid blocking main thread
+                        sender.sendMessage("§a[Package] Instalando " + module + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
                         Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
                             try {
-                                // Use reflection to access getCurrentEnvironment from DefaultModuleLifecycle
-                                java.lang.reflect.Method envMethod = ml.getClass().getMethod("getCurrentEnvironment");
-                                Object env = envMethod.invoke(ml);
-                                ModuleLifecycle.ResolutionResult result = ml.resolve(coord, (Environment) env, false);
-                                if (result instanceof ModuleLifecycle.ResolutionResult.Failure fail) {
-                                    sender.sendMessage("§c[Module] Error resolviendo: " + fail.reason());
-                                    return;
-                                }
-                                ModuleLifecycle.ResolutionResult.Success success = (ModuleLifecycle.ResolutionResult.Success) result;
-                                sender.sendMessage("§a[Module] Descargando " + success.module().descriptor().id() + "...");
-                                List<Path> jars = ml.download(success.module(), success.dependencies(), ml.getCacheDir());
-                                sender.sendMessage("§a[Module] Reubicando dependencias...");
-                                Path relocated = ml.relocate(jars.get(0), ml.getCacheDir(), getRelocationsForModule(success.module().descriptor()));
-                                sender.sendMessage("§a[Module] Cargando módulo...");
-                                ClassLoader cl = ml.load(relocated, jars.subList(1, jars.size()), registrar.plugin().getClass().getClassLoader());
-                                sender.sendMessage("§a[Module] Registrando módulo...");
-                                if (ml.register(cl, success.module().descriptor())) {
-                                    sender.sendMessage("§a[Module] ✓ " + success.module().descriptor().id() + " instalado y registrado correctamente");
+                                AptInstaller.InstallResult result = mf.repoInstall(List.of(module), version.isBlank() ? "*" : version, channel, force);
+                                if (result.success()) {
+                                    for (String pkg : result.packages()) {
+                                        sender.sendMessage("§a[Package] ✓ " + pkg + " instalado correctamente");
+                                    }
                                 } else {
-                                    sender.sendMessage("§c[Module] Falló el registro del módulo");
+                                    sender.sendMessage("§c[Package] Error: " + result.error());
                                 }
                             } catch (Exception e) {
-                                logger.error("Module install failed: " + module, e);
-                                sender.sendMessage("§c[Module] Error: " + e.getMessage());
-                            }
-                        });
-                        return true;
-                    }
-                    case "update" -> {
-                        if (module.isBlank()) {
-                            sender.sendMessage("§cUso: /suite module update <módulo> [versión]");
-                            return true;
-                        }
-                        sender.sendMessage("§a[Module] Buscando actualización para " + module + "...");
-                        // Check if module is installed
-                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
-                        ModuleDescriptor existing = loaded.stream()
-                            .filter(d -> d.coordinate().artifact().equals(module))
-                            .findFirst().orElse(null);
-                        if (existing == null) {
-                            sender.sendMessage("§c[Module] Módulo no instalado: " + module);
-                            return true;
-                        }
-                        String coordStr = "me.majhrs16:" + module + (version.isBlank() ? "" : ":" + version);
-                        ModuleCoordinate coord = ModuleCoordinate.of("me.majhrs16", module, version.isBlank() ? "latest" : version);
-                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
-                            try {
-                                java.lang.reflect.Method envMethod = ml.getClass().getMethod("getCurrentEnvironment");
-                                Object env = envMethod.invoke(ml);
-                                ModuleLifecycle.ResolutionResult result = ml.resolve(coord, (Environment) env, false);
-                                if (result instanceof ModuleLifecycle.ResolutionResult.Failure fail) {
-                                    sender.sendMessage("§c[Module] Error resolviendo: " + fail.reason());
-                                    return;
-                                }
-                                ModuleLifecycle.ResolutionResult.Success success = (ModuleLifecycle.ResolutionResult.Success) result;
-                                // Check if version is actually newer
-                                if (success.module().descriptor().version().compareTo(existing.version()) <= 0) {
-                                    sender.sendMessage("§e[Module] Ya tienes la versión más reciente: " + existing.version());
-                                    return;
-                                }
-                                sender.sendMessage("§a[Module] Descargando actualización " + success.module().descriptor().id() + "...");
-                                List<Path> jars = ml.download(success.module(), success.dependencies(), ml.getCacheDir());
-                                sender.sendMessage("§a[Module] Reubicando dependencias...");
-                                Path relocated = ml.relocate(jars.get(0), ml.getCacheDir(), getRelocationsForModule(success.module().descriptor()));
-                                sender.sendMessage("§a[Module] Cargando módulo actualizado...");
-                                ClassLoader cl = ml.load(relocated, jars.subList(1, jars.size()), registrar.plugin().getClass().getClassLoader());
-                                // Unregister old first
-                                ml.unregister(existing.id());
-                                ml.unload(existing.id());
-                                sender.sendMessage("§a[Module] Registrando nueva versión...");
-                                if (ml.register(cl, success.module().descriptor())) {
-                                    sender.sendMessage("§a[Module] ✓ " + success.module().descriptor().id() + " actualizado correctamente (v" + existing.version() + " → v" + success.module().descriptor().version() + ")");
-                                } else {
-                                    sender.sendMessage("§c[Module] Falló el registro de la actualización");
-                                }
-                            } catch (Exception e) {
-                                logger.error("Module update failed: " + module, e);
-                                sender.sendMessage("§c[Module] Error: " + e.getMessage());
+                                logger.error("Package install failed: " + module, e);
+                                sender.sendMessage("§c[Package] Error: " + e.getMessage());
                             }
                         });
                         return true;
                     }
                     case "remove" -> {
                         if (module.isBlank()) {
-                            sender.sendMessage("§cUso: /suite module remove <módulo>");
+                            sender.sendMessage("§cUso: /suite module remove <paquete> [versión] [channel]");
                             return true;
                         }
-                        // Check if module is installed
-                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
-                        ModuleDescriptor existing = loaded.stream()
-                            .filter(d -> d.coordinate().artifact().equals(module))
-                            .findFirst().orElse(null);
-                        if (existing == null) {
-                            sender.sendMessage("§c[Module] Módulo no instalado: " + module);
-                            return true;
-                        }
-                        sender.sendMessage("§a[Module] Eliminando " + module + "...");
+                        sender.sendMessage("§a[Package] Eliminando " + module + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
                         Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
                             try {
-                                ml.unregister(existing.id());
-                                ml.unload(existing.id());
-                                sender.sendMessage("§a[Module] ✓ " + module + " eliminado correctamente");
+                                AptInstaller.RemoveResult result = mf.repoRemove(module, version.isBlank() ? "any" : version, channel, true);
+                                if (result.success()) {
+                                    sender.sendMessage("§a[Package] ✓ " + result.packageName() + " eliminado correctamente");
+                                } else {
+                                    sender.sendMessage("§c[Package] Error: " + result.error());
+                                }
                             } catch (Exception e) {
-                                logger.error("Module remove failed: " + module, e);
-                                sender.sendMessage("§c[Module] Error: " + e.getMessage());
+                                logger.error("Package remove failed: " + module, e);
+                                sender.sendMessage("§c[Package] Error: " + e.getMessage());
                             }
                         });
                         return true;
                     }
                     case "info" -> {
                         if (module.isBlank()) {
-                            sender.sendMessage("§cUso: /suite module info <módulo>");
+                            sender.sendMessage("§cUso: /suite module info <paquete> [versión] [channel]");
                             return true;
                         }
-                        // Check loaded modules first
-                        List<ModuleDescriptor> loaded = ml.getLoadedModules();
-                        ModuleDescriptor existing = loaded.stream()
-                            .filter(d -> d.coordinate().artifact().equals(module))
-                            .findFirst().orElse(null);
-                        if (existing != null) {
-                            sender.sendMessage("§a[Module] Información (instalado):");
-                            sender.sendMessage("  §fID: §a" + existing.id());
-                            sender.sendMessage("  §fVersión: §a" + existing.version());
-                            sender.sendMessage("  §fDescripción: §7" + existing.description());
-                            sender.sendMessage("  §fAutor: §7" + existing.author());
-                            sender.sendMessage("  §fCore API requerida: §7" + existing.requiredCoreApi());
-                            sender.sendMessage("  §fJava: §7" + existing.minJavaVersion() + " - " + existing.maxJavaVersion());
-                            sender.sendMessage("  §fPlataformas: §7" + String.join(", ", existing.supportedPlatforms()));
-                            sender.sendMessage("  §fDependencias: §7" + (existing.dependencies().isEmpty() ? "(none)" : String.join(", ", existing.dependencies())));
+                        // Check installed packages first
+                        List<PackageEntry> installed = mf.packageList();
+                        Optional<PackageEntry> existing = installed.stream()
+                                .filter(p -> p.name().equals(module) && (version.isBlank() || p.version().equals(version)))
+                                .findFirst();
+                        if (existing.isPresent()) {
+                            PackageEntry e = existing.get();
+                            sender.sendMessage("§a[Package] Información (instalado):");
+                            sender.sendMessage("  §fNombre: §a" + e.name());
+                            sender.sendMessage("  §fVersión: §a" + e.version());
+                            sender.sendMessage("  §fCanal: §a" + e.channel());
+                            sender.sendMessage("  §fTipo: §a" + e.type());
+                            sender.sendMessage("  §fArquitectura: §a" + e.arch());
+                            sender.sendMessage("  §fPlataforma: §a" + e.platform());
+                            sender.sendMessage("  §fOS: §a" + e.os());
+                            sender.sendMessage("  §fSHA256: §a" + e.sha256());
+                            sender.sendMessage("  §fTamaño: §a" + e.size() + " bytes");
+                            sender.sendMessage("  §fDependencias: §7" + (e.dependencies().isEmpty() ? "(none)" : String.join(", ", e.dependencies())));
+                            sender.sendMessage("  §fArchivos: §7" + e.files().size());
                             return true;
                         }
-                        // Check available modules
-                        List<ModuleCoordinate> available = ml.discoverAvailableModules();
-                        ModuleCoordinate availableCoord = available.stream()
-                            .filter(c -> c.artifact().equals(module))
-                            .findFirst().orElse(null);
-                        if (availableCoord != null) {
-                            sender.sendMessage("§e[Module] Información (disponible, no instalado):");
-                            sender.sendMessage("  §fID: §e" + availableCoord.group() + ":" + availableCoord.artifact() + ":" + availableCoord.version());
-                            sender.sendMessage("  §fEstado: §cNo instalado");
+                        // Check available packages
+                        Map<String, List<RepositoryManager.PackageCandidate>> available = mf.getAvailablePackages();
+                        List<RepositoryManager.PackageCandidate> candidates = available.get(module);
+                        if (candidates != null && !candidates.isEmpty()) {
+                            RepositoryManager.PackageCandidate c = candidates.get(0);
+                            sender.sendMessage("§e[Package] Información (disponible, no instalado):");
+                            sender.sendMessage("  §fNombre: §e" + c.name());
+                            sender.sendMessage("  §fVersión: §e" + c.version());
+                            sender.sendMessage("  §fCanal: §e" + c.channel());
+                            sender.sendMessage("  §fRepositorio: §e" + c.repository());
+                            sender.sendMessage("  §fURL: §e" + c.downloadUrl());
+                            sender.sendMessage("  §fTamaño: §e" + c.size() + " bytes");
+                            sender.sendMessage("  §fSHA256: §e" + c.sha256());
                             return true;
                         }
-                        sender.sendMessage("§c[Module] Módulo no encontrado: " + module);
+                        sender.sendMessage("§c[Package] Paquete no encontrado: " + module);
                         return true;
                     }
                     default -> {
-                        sender.sendMessage("§cSubcomando desconocido: " + action + ". Usa: install, update, list, remove, info");
+                        sender.sendMessage("§cSubcomando desconocido: " + action + ". Usa: list, install, remove, info");
+                        return true;
+                    }
+                }
+            }
+            case "repo" -> {
+                if (!sender.hasPermission("textformattersuite.admin")) {
+                    sender.sendMessage("§cPermiso de admin requerido");
+                    return true;
+                }
+                ManagerFacade mf = registrar.managerFacade();
+                if (mf == null) {
+                    sender.sendMessage("§c[Repo] Manager no inicializado");
+                    return true;
+                }
+                String action = bindings.getOrDefault("action", "update");
+                String pkg = bindings.getOrDefault("package", "");
+                String version = bindings.getOrDefault("version", "");
+                String channel = bindings.getOrDefault("channel", "stable");
+                boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
+                boolean autoRemove = Boolean.parseBoolean(bindings.getOrDefault("auto-remove", "true"));
+
+                switch (action) {
+                    case "update" -> {
+                        sender.sendMessage("§a[Repo] Actualizando índices de repositorios...");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                RepositoryManager.UpdateResult result = mf.repoUpdate();
+                                sender.sendMessage("§a[Repo] Índices actualizados: " + result.updatedCount());
+                                if (result.hasFailures()) {
+                                    for (Map.Entry<String, String> failure : result.failed.entrySet()) {
+                                        sender.sendMessage("§c[Repo] Fallo en " + failure.getKey() + ": " + failure.getValue());
+                                    }
+                                }
+                            } catch (Exception e) {
+                                logger.error("Repo update failed", e);
+                                sender.sendMessage("§c[Repo] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    case "install" -> {
+                        if (pkg.isBlank()) {
+                            sender.sendMessage("§cUso: /suite repo install <paquete> [versión] [channel]");
+                            return true;
+                        }
+                        sender.sendMessage("§a[Repo] Instalando " + pkg + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                AptInstaller.InstallResult result = mf.repoInstall(List.of(pkg), version.isBlank() ? "*" : version, channel, force);
+                                if (result.success()) {
+                                    for (String p : result.packages()) {
+                                        sender.sendMessage("§a[Repo] ✓ " + p + " instalado correctamente");
+                                    }
+                                } else {
+                                    sender.sendMessage("§c[Repo] Error: " + result.error());
+                                }
+                            } catch (Exception e) {
+                                logger.error("Repo install failed: " + pkg, e);
+                                sender.sendMessage("§c[Repo] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    case "remove" -> {
+                        if (pkg.isBlank()) {
+                            sender.sendMessage("§cUso: /suite repo remove <paquete> [versión] [channel]");
+                            return true;
+                        }
+                        sender.sendMessage("§a[Repo] Eliminando " + pkg + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                AptInstaller.RemoveResult result = mf.repoRemove(pkg, version.isBlank() ? "any" : version, channel, autoRemove);
+                                if (result.success()) {
+                                    sender.sendMessage("§a[Repo] ✓ " + result.packageName() + " eliminado correctamente");
+                                } else {
+                                    sender.sendMessage("§c[Repo] Error: " + result.error());
+                                }
+                            } catch (Exception e) {
+                                logger.error("Repo remove failed: " + pkg, e);
+                                sender.sendMessage("§c[Repo] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    case "upgrade" -> {
+                        sender.sendMessage("§a[Repo] Actualizando todos los paquetes...");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                AptInstaller.InstallResult result = mf.repoUpgrade();
+                                if (result.success()) {
+                                    if (result.packages().isEmpty()) {
+                                        sender.sendMessage("§a[Repo] ✓ No hay actualizaciones disponibles");
+                                    } else {
+                                        sender.sendMessage("§a[Repo] ✓ Actualización completa: " + result.packages().size() + " paquetes actualizados");
+                                        for (String u : result.packages()) {
+                                            sender.sendMessage("  §a- §f" + u);
+                                        }
+                                    }
+                                } else {
+                                    sender.sendMessage("§c[Repo] Error: " + result.error());
+                                }
+                            } catch (Exception e) {
+                                logger.error("Repo upgrade failed", e);
+                                sender.sendMessage("§c[Repo] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    case "fix-broken" -> {
+                        sender.sendMessage("§a[Repo] Reparando dependencias rotas...");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                AptInstaller.InstallResult result = mf.repoFixBroken();
+                                if (result.success()) {
+                                    if (result.packages().isEmpty()) {
+                                        sender.sendMessage("§a[Repo] ✓ No hay dependencias rotas");
+                                    } else {
+                                        sender.sendMessage("§a[Repo] ✓ Reparación completa: " + result.packages().size() + " paquetes instalados");
+                                        for (String u : result.packages()) {
+                                            sender.sendMessage("  §a- §f" + u);
+                                        }
+                                    }
+                                } else {
+                                    sender.sendMessage("§c[Repo] Error: " + result.error());
+                                }
+                            } catch (Exception e) {
+                                logger.error("Repo fix-broken failed", e);
+                                sender.sendMessage("§c[Repo] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    default -> {
+                        sender.sendMessage("§cSubcomando desconocido: " + action + ". Usa: update, install, remove, upgrade, fix-broken");
+                        return true;
+                    }
+                }
+            }
+            case "package" -> {
+                if (!sender.hasPermission("textformattersuite.admin")) {
+                    sender.sendMessage("§cPermiso de admin requerido");
+                    return true;
+                }
+                ManagerFacade mf = registrar.managerFacade();
+                if (mf == null) {
+                    sender.sendMessage("§c[Package] Manager no inicializado");
+                    return true;
+                }
+                String action = bindings.getOrDefault("action", "list");
+                String pkg = bindings.getOrDefault("package", "");
+                String file = bindings.getOrDefault("file", "");
+                String version = bindings.getOrDefault("version", "");
+                String channel = bindings.getOrDefault("channel", "stable");
+                boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
+
+                switch (action) {
+                    case "install" -> {
+                        if (file.isBlank()) {
+                            sender.sendMessage("§cUso: /suite package install <archivo.zip>");
+                            return true;
+                        }
+                        Path zipPath = Path.of(file).toAbsolutePath();
+                        if (!Files.exists(zipPath)) {
+                            sender.sendMessage("§c[Package] Archivo no encontrado: " + file);
+                            return true;
+                        }
+                        sender.sendMessage("§a[Package] Instalando paquete local: " + file);
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                List<PackageEntry> entries = mf.packageInstall(zipPath, force);
+                                for (PackageEntry e : entries) {
+                                    sender.sendMessage("§a[Package] ✓ " + e.name() + " v" + e.version() + " (" + e.channel() + ") instalado correctamente");
+                                }
+                            } catch (Exception e) {
+                                logger.error("Package local install failed: " + file, e);
+                                sender.sendMessage("§c[Package] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    case "list" -> {
+                        List<PackageEntry> installed = mf.packageList();
+                        sender.sendMessage("§a[Package] Paquetes instalados (" + installed.size() + "):");
+                        if (installed.isEmpty()) {
+                            sender.sendMessage("  §7(none)");
+                        } else {
+                            for (PackageEntry e : installed) {
+                                sender.sendMessage("  §a✓ §f" + e.name() + " §7v" + e.version() + " (" + e.channel() + ") - " + e.type() + " - " + e.files().size() + " archivos");
+                            }
+                        }
+                        return true;
+                    }
+                    case "remove" -> {
+                        if (pkg.isBlank()) {
+                            sender.sendMessage("§cUso: /suite package remove <paquete> [versión] [channel]");
+                            return true;
+                        }
+                        sender.sendMessage("§a[Package] Eliminando " + pkg + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
+                        Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
+                            try {
+                                mf.packageRemove(pkg, version.isBlank() ? "any" : version, channel, true);
+                                sender.sendMessage("§a[Package] ✓ " + pkg + " eliminado correctamente");
+                            } catch (Exception e) {
+                                logger.error("Package remove failed: " + pkg, e);
+                                sender.sendMessage("§c[Package] Error: " + e.getMessage());
+                            }
+                        });
+                        return true;
+                    }
+                    case "files" -> {
+                        if (pkg.isBlank()) {
+                            sender.sendMessage("§cUso: /suite package files <paquete> [versión] [channel]");
+                            return true;
+                        }
+                        List<me.majhrs16.suite.manager.spi.FileEntry> files = mf.packageFiles(pkg, version.isBlank() ? "any" : version, channel);
+                        if (files.isEmpty()) {
+                            sender.sendMessage("§c[Package] Paquete no encontrado o sin archivos: " + pkg);
+                            return true;
+                        }
+                        sender.sendMessage("§a[Package] Archivos de " + pkg + " (" + files.size() + "):");
+                        for (me.majhrs16.suite.manager.spi.FileEntry f : files) {
+                            sender.sendMessage("  §7- §f" + f.path() + " §7(" + f.size() + " bytes, SHA256: " + f.sha256().substring(0, 16) + "...)");
+                        }
+                        return true;
+                    }
+                    case "verify" -> {
+                        if (pkg.isBlank()) {
+                            sender.sendMessage("§cUso: /suite package verify <paquete> [versión] [channel]");
+                            return true;
+                        }
+                        LocalPackageDatabase.VerificationResult result = mf.packageVerify(pkg, version.isBlank() ? "any" : version, channel);
+                        if (!result.valid()) {
+                            sender.sendMessage("§c[Package] Verificación fallida para " + pkg + ":");
+                            for (LocalPackageDatabase.VerificationIssue issue : result.issues()) {
+                                sender.sendMessage("  §c- §f" + issue.file() + ": §c" + issue.type() + " - " + issue.message());
+                            }
+                        } else {
+                            sender.sendMessage("§a[Package] ✓ Verificación exitosa para " + pkg);
+                        }
+                        return true;
+                    }
+                    default -> {
+                        sender.sendMessage("§cSubcomando desconocido: " + action + ". Usa: install, list, remove, files, verify");
                         return true;
                     }
                 }
@@ -469,23 +654,25 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                 }
                 boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
                 sender.sendMessage("§a[Suite] Iniciando actualización completa" + (force ? " (forzada)" : "") + "...");
-                ModuleLifecycle ml = moduleLifecycle();
-                if (ml == null) {
+                ManagerFacade mf = registrar.managerFacade();
+                if (mf == null) {
                     sender.sendMessage("§c[Suite] Manager no inicializado");
                     return true;
                 }
                 Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
                     try {
-                        java.lang.reflect.Method envMethod = ml.getClass().getMethod("getCurrentEnvironment");
-                        Object env = envMethod.invoke(ml);
-                        List<ModuleCoordinate> updated = ml.updateSuite((Environment) env, force);
-                        if (updated.isEmpty()) {
-                            sender.sendMessage("§a[Suite] ✓ No hay actualizaciones disponibles");
-                        } else {
-                            sender.sendMessage("§a[Suite] ✓ Actualización completa: " + updated.size() + " módulos actualizados");
-                            for (ModuleCoordinate u : updated) {
-                                sender.sendMessage("  §a- §f" + u);
+                        AptInstaller.InstallResult result = mf.repoUpgrade();
+                        if (result.success()) {
+                            if (result.packages().isEmpty()) {
+                                sender.sendMessage("§a[Suite] ✓ No hay actualizaciones disponibles");
+                            } else {
+                                sender.sendMessage("§a[Suite] ✓ Actualización completa: " + result.packages().size() + " paquetes actualizados");
+                                for (String u : result.packages()) {
+                                    sender.sendMessage("  §a- §f" + u);
+                                }
                             }
+                        } else {
+                            sender.sendMessage("§c[Suite] Error: " + result.error());
                         }
                     } catch (Exception e) {
                         logger.error("Suite update failed", e);
