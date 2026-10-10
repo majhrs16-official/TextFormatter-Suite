@@ -45,7 +45,10 @@ public final class ManifestParser {
             } catch (NumberFormatException e) {
                 throw new ParseException("Line " + (i + 1) + ": invalid size: " + fields[2]);
             }
-            String sha256 = fields[2].strip(); // This is wrong - should be fields[3]
+            if (size < 0) {
+                throw new ParseException("Line " + (i + 1) + ": negative size not allowed");
+            }
+            String sha256 = fields[3].strip();
             if (!isValidSha256(sha256)) {
                 throw new ParseException("Line " + (i + 1) + ": invalid SHA256: " + sha256);
             }
@@ -104,26 +107,51 @@ public final class ManifestParser {
 
                 if (inFilesSection) {
                     // File entry format: "  path<TAB>size<TAB>sha256<TAB>owner"
+                    // End files section on empty line or line with field separator
                     if (line.trim().isEmpty()) {
                         inFilesSection = false;
                         continue;
                     }
-                    String[] fileFields = TAB_PATTERN.split(line.trim(), 4);
-                    if (fileFields.length >= 3) {
-                        String path = fileFields[0].strip();
-                        long size;
-                        try {
-                            size = Long.parseLong(fileFields[1].strip());
-                        } catch (NumberFormatException e) {
-                            throw new ParseException("Block " + (blockIndex + 1) + ", file line " + (lineNum + 1) + ": invalid size");
+                    if (line.indexOf(FIELD_SEPARATOR) > 0) {
+                        inFilesSection = false;
+                        // Don't continue - let this line be processed as a field below
+                    } else {
+                        String[] fileFields = TAB_PATTERN.split(line.trim(), 4);
+                        if (fileFields.length >= 3) {
+                            String path = fileFields[0].strip();
+                            long size;
+                            try {
+                                size = Long.parseLong(fileFields[1].strip());
+                            } catch (NumberFormatException e) {
+                                throw new ParseException("Block " + (blockIndex + 1) + ", file line " + (lineNum + 1) + ": invalid size");
+                            }
+                            String sha256 = fileFields[2].strip();
+                            String owner = fileFields.length > 3 ? fileFields[3].strip() : "";
+                            if (!isValidSha256(sha256)) {
+                                throw new ParseException("Block " + (blockIndex + 1) + ", file line " + (lineNum + 1) + ": invalid SHA256: '" + sha256 + "'");
+                            }
+                            if (size < 0) {
+                                throw new ParseException("Block " + (blockIndex + 1) + ", file line " + (lineNum + 1) + ": negative size not allowed");
+                            }
+                            if (files.containsKey(path)) {
+                                throw new ParseException("Block " + (blockIndex + 1) + ", file line " + (lineNum + 1) + ": duplicate file path: " + path);
+                            }
+                            files.put(path, new FileEntry(path, size, sha256, owner));
                         }
-                        String sha256 = fileFields[2].strip();
-                        String owner = fileFields.length > 3 ? fileFields[3].strip() : "";
-                        if (!isValidSha256(sha256)) {
-                            throw new ParseException("Block " + (blockIndex + 1) + ", file line " + (lineNum + 1) + ": invalid SHA256");
-                        }
-                        files.put(path, new FileEntry(path, size, sha256, owner));
+                        continue;
                     }
+                }
+                
+                // If we ended files section, process this line as a field
+                if (!inFilesSection && line.indexOf(FIELD_SEPARATOR) > 0) {
+                    // This will be handled by the field parsing logic below
+                } else if (!inFilesSection) {
+                    continue;
+                }
+                // If we ended files section, process this line as a field
+                if (!inFilesSection && line.indexOf(FIELD_SEPARATOR) > 0) {
+                    // This will be handled by the field parsing logic below
+                } else if (!inFilesSection) {
                     continue;
                 }
 
@@ -258,7 +286,7 @@ public final class ManifestParser {
         }
         
         // Files section
-        sb.append("Files:\n");
+        sb.append("Files: ").append("\n");
         for (FileEntry file : entry.files().values()) {
             sb.append("  ").append(file.path()).append("\t")
                     .append(file.size()).append("\t")

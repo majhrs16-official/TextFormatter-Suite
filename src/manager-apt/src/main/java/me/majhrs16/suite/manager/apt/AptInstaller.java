@@ -169,7 +169,7 @@ public final class AptInstaller {
      */
     private Path downloadPackage(RepositoryManager.PackageCandidate candidate) throws IOException {
         String url = candidate.downloadUrl();
-        String fileName = candidate.name() + "-" + candidate.version() + ".jar";
+        String fileName = candidate.name() + "-" + candidate.version() + ".zip";
         Path dest = tmpDir.resolve(fileName);
         
         logger.debug("Downloading " + candidate.name() + " from " + url);
@@ -190,9 +190,27 @@ public final class AptInstaller {
                 throw new IOException("HTTP " + response.code() + " for " + url);
             }
             
+            // MGR-018: Zip bomb protection - limit download size
+            long contentLength = response.body().contentLength();
+            long maxDownloadSize = candidate.size() + 1024 * 1024; // allow 1MB overhead
+            if (contentLength > 0 && contentLength > maxDownloadSize) {
+                throw new IOException("Download size exceeds expected size + overhead: " + contentLength + " > " + maxDownloadSize);
+            }
+            
             try (var in = response.body().byteStream();
                  var out = Files.newOutputStream(dest, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                in.transferTo(out);
+                // Limit bytes read to prevent zip bomb
+                long bytesRead = 0;
+                long maxBytes = maxDownloadSize;
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) > 0) {
+                    bytesRead += read;
+                    if (bytesRead > maxBytes) {
+                        throw new IOException("Download exceeds maximum allowed size: " + maxBytes);
+                    }
+                    out.write(buffer, 0, read);
+                }
             }
         }
         

@@ -8,10 +8,12 @@ import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.manager.spi.PackageEntry;
+import me.majhrs16.suite.manager.spi.Version;
 
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Compatibility adapter that implements the old ModuleLifecycle interface
@@ -70,43 +72,56 @@ public final class ModuleLifecycleAdapter implements ModuleLifecycle {
     @Override
     public List<Path> download(ResolvedModule resolved, List<ResolvedModule> dependencies, Path cacheDir) {
         // In new system, download happens during install
-        return List.of();
+        throw new UnsupportedOperationException("download() not supported in new package manager; use repoInstall() instead");
     }
 
     @Override
     public Path relocate(Path moduleJar, Path outputDir, Map<String, String> relocations) {
         // In new system, relocation is handled by package installer
-        return moduleJar;
+        throw new UnsupportedOperationException("relocate() not supported in new package manager; use repoInstall() instead");
     }
 
     @Override
     public ClassLoader load(Path moduleJar, List<Path> dependencyJars, ClassLoader parent) {
         // In new system, loading is handled by package installer
-        return parent;
+        throw new UnsupportedOperationException("load() not supported in new package manager; use repoInstall() instead");
     }
 
     @Override
     public boolean register(ClassLoader classLoader, ModuleDescriptor descriptor) {
         // In new system, registration is handled by package installer
-        return true;
+        throw new UnsupportedOperationException("register() not supported in new package manager; use repoInstall() instead");
     }
 
     @Override
     public boolean unregister(String moduleId) {
         // In new system, removal is handled by package installer
-        return true;
+        throw new UnsupportedOperationException("unregister() not supported in new package manager; use repoRemove() instead");
     }
 
     @Override
     public void unload(String moduleId) {
         // In new system, unloading is handled by package installer
+        throw new UnsupportedOperationException("unload() not supported in new package manager; use repoRemove() instead");
     }
 
     @Override
     public List<ModuleCoordinate> checkUpdates() {
-        List<PackageEntry> updates = facade.checkUpdates();
-        return updates.stream()
-                .map(e -> ModuleCoordinate.of("me.majhrs16", e.name(), e.version(), (String) null))
+        Map<String, List<RepositoryManager.PackageCandidate>> available = facade.getAvailablePackages();
+        List<PackageEntry> installed = facade.packageList();
+        
+        return installed.stream()
+                .flatMap(installedPkg -> {
+                    List<RepositoryManager.PackageCandidate> candidates = available.get(installedPkg.name());
+                    if (candidates == null || candidates.isEmpty()) {
+                        return Stream.empty();
+                    }
+                    RepositoryManager.PackageCandidate best = candidates.get(0);
+                    if (Version.parse(best.version()).compareTo(Version.parse(installedPkg.version())) > 0) {
+                        return Stream.of(ModuleCoordinate.of("me.majhrs16", installedPkg.name(), best.version()));
+                    }
+                    return Stream.empty();
+                })
                 .collect(Collectors.toList());
     }
 

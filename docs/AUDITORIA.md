@@ -1,708 +1,835 @@
-# Auditoría técnica integral — TextFormatter Suite
+# Auditoría técnica del Module Manager — TextFormatter Suite
 
-Base de auditoría: archivo ZIP proporcionado · 9 de octubre de 2026
+Repositorio analizado: [majhrs16-official/TextFormatter-Suite](https://github.com/majhrs16-official/TextFormatter-Suite) · Rama `main`
 
-La auditoría se realizará sobre el contenido de `TextFormatter-Suite-main (1).zip`, no sobre una versión consultada de GitHub. El prompt de auditoría adjunto se utilizará como especificación del trabajo.
+## A. Veredicto ejecutivo preliminar
 
-## 1. Cobertura de auditoría
+La inspección inicial confirma que el repositorio contiene una implementación separada en tres módulos principales: `manager-spi`, `manager-core` y `manager-apt`. También existe una especificación específica de reingeniería en [`docs/NEW-MANAGER.md`](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/docs/NEW-MANAGER.md), que debe utilizarse como referencia normativa, en lugar de inferir los requisitos únicamente de los nombres de las clases.
 
-Archivo del proyecto
+Los componentes identificados incluyen:
 
-`TextFormatter-Suite-main (1).zip`
+- `manager-spi`: contratos, descriptores, versiones, configuración de repositorios y parsers.
+- `manager-core`: base de datos local de paquetes e instalación.
+- `manager-apt`: repositorios, resolución de dependencias, adquisición de paquetes y adaptación al ciclo de vida de módulos.
 
-1,9 MB comprimidos · 4,25 MB descomprimidos · 968 entradas
+La existencia de estos tres módulos demuestra una separación estructural inicial, pero no demuestra que exista una separación funcional completa entre APT y dpkg, que las instalaciones sean transaccionales ni que los paquetes sean seguros.
 
-# 208
+La auditoría debe seguir las operaciones reales a través de estos componentes, comprobar quién los invoca y distinguir entre código implementado, código integrado y código que solamente está definido.
 
-Archivos fuente Java en los módulos principales
+Una limitación importante del alcance: el acceso al repositorio remoto permite inspeccionar archivos y estructura, pero todavía no equivale a ejecutar el proyecto en un entorno local. No presentaré compilaciones, pruebas de ejecución ni reproducciones como realizadas sin disponer de sus resultados reales.
 
-# 29
+## B. Mapa de arquitectura real
 
-Módulos declarados en Gradle
+El flujo encontrado no es una implementación puramente declarativa: hay código operativo para consultar índices, seleccionar candidatos, descargar artefactos, extraer archivos y registrar paquetes. Sin embargo, varias de esas operaciones no están conectadas mediante las garantías que exige la especificación.
 
-También hay código JavaScript, pruebas Java y JavaScript, documentación, configuraciones YAML/JSON, recursos, workflows y herramientas de carga y rendimiento.
+\#chatgpt-mermaid-\_r_jv\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(237, 237, 237);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_jv\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_jv\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_jv\_ .error-icon{fill:rgb(48, 48, 48);}#chatgpt-mermaid-\_r_jv\_ .error-text{fill:rgb(237, 237, 237);stroke:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_jv\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_jv\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_jv\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_jv\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_jv\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_jv\_ .marker.cross{stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_jv\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_jv\_ p{margin:0;}#chatgpt-mermaid-\_r_jv\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ .cluster-label text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ .cluster-label span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-\_r_jv\_ .label text,#chatgpt-mermaid-\_r_jv\_ span{fill:rgb(237, 237, 237);color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ .node rect,#chatgpt-mermaid-\_r_jv\_ .node circle,#chatgpt-mermaid-\_r_jv\_ .node ellipse,#chatgpt-mermaid-\_r_jv\_ .node polygon,#chatgpt-mermaid-\_r_jv\_ .node path{fill:rgb(9, 23, 44);stroke:rgb(31, 78, 148);stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .rough-node .label text,#chatgpt-mermaid-\_r_jv\_ .node .label text,#chatgpt-mermaid-\_r_jv\_ .image-shape .label,#chatgpt-mermaid-\_r_jv\_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-\_r_jv\_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .rough-node .label,#chatgpt-mermaid-\_r_jv\_ .node .label,#chatgpt-mermaid-\_r_jv\_ .image-shape .label,#chatgpt-mermaid-\_r_jv\_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-\_r_jv\_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-\_r_jv\_ .root .anchor path{fill:rgb(175, 175, 175)!important;stroke-width:0;stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_jv\_ .arrowheadPath{fill:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_jv\_ .edgePath .path{stroke:rgb(175, 175, 175);stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .flowchart-link{stroke:rgb(175, 175, 175);fill:none;}#chatgpt-mermaid-\_r_jv\_ .edgeLabel{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_jv\_ .edgeLabel p{background-color:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_jv\_ .edgeLabel rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_jv\_ .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#chatgpt-mermaid-\_r_jv\_ .cluster rect{fill:rgb(48, 48, 48);stroke:rgba(255, 255, 255, 0.15);stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .cluster text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ .cluster span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(48, 48, 48);border:1px solid rgba(255, 255, 255, 0.15);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-\_r_jv\_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_jv\_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-\_r_jv\_ .icon-shape,#chatgpt-mermaid-\_r_jv\_ .image-shape{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_jv\_ .icon-shape p,#chatgpt-mermaid-\_r_jv\_ .image-shape p{background-color:rgb(0, 0, 0);padding:2px;}#chatgpt-mermaid-\_r_jv\_ .icon-shape .label rect,#chatgpt-mermaid-\_r_jv\_ .image-shape .label rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_jv\_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-\_r_jv\_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-\_r_jv\_ .node .neo-node{stroke:rgb(31, 78, 148);}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_jv\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_jv\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node .neo-line path{stroke:rgb(31, 78, 148);filter:none;}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_jv\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_jv\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_jv\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_jv\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_jv\_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_jv\_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_jv\_ .node tspan[font-weight="normal"],#chatgpt-mermaid-\_r_jv\_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-\_r_jv\_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .node rect,#chatgpt-mermaid-\_r_jv\_ .node circle,#chatgpt-mermaid-\_r_jv\_ .node ellipse,#chatgpt-mermaid-\_r_jv\_ .node polygon,#chatgpt-mermaid-\_r_jv\_ .node path{fill:rgb(0, 40, 77);stroke:rgba(255, 255, 255, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_jv\_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-\_r_jv\_ .node.mermaid-decision .label-container{fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-dasharray:2,2;}#chatgpt-mermaid-\_r_jv\_ .edgePaths .flowchart-link{stroke:rgb(175, 175, 175);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-\_r_jv\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_jv\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}ManagerFacade.initialize()RepoConfigParserLocalPackageDatabase.initialize()RepositoryManager.loadCachedIndexes()PackageInstallerDependencyResolverAptInstallerrepoInstall()findCandidates()PlanStepdownloadPackage()PackageInstaller.install()LeerMETADATA/package.listValidar dependencias yconflictosExtraer archivosLocalPackageDatabase.registerPackage()library/statuspackageRemove()PackageInstaller.remove()Eliminar archivosLocalPackageDatabase.unregisterPackage()
 
-### Limitaciones verificadas
+El diagrama representa el flujo del código actual. No implica que las operaciones sean transaccionales ni que todos los pasos finalicen correctamente.
 
-* Código y configuración: el ZIP se ha descomprimido correctamente y se está examinando su contenido.
+### Componentes y responsabilidades observadas
 
-* Historial de Git: el archivo no contiene un directorio `.git` identificable en la raíz inspeccionada. No es posible atribuir cambios a commits concretos ni reconstruir con certeza la evolución histórica a partir de esta copia.
+| Componente                                    | Responsabilidad observada                                          | Evaluación inicial                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `manager-spi/.../ManifestParser.java`         | Analiza índices remotos y manifiestos; serializa el estado local.  | Tiene un defecto confirmado en el análisis del índice.                                                      |
+| `manager-spi/.../RepoConfigParser.java`       | Lee y ordena la configuración YAML de repositorios.                | Existe, pero su validación es incompleta.                                                                   |
+| `manager-spi/.../Version.java`                | Compara versiones y evalúa restricciones.                          | Implementación parcial de SemVer y rangos.                                                                  |
+| `manager-core/.../LocalPackageDatabase.java`  | Mantiene el inventario instalado y escribe `library/status`.       | Tiene persistencia y bloqueo, pero no garantiza atomicidad de operaciones completas.                        |
+| `manager-core/.../PackageInstaller.java`      | Instala ZIP locales, verifica archivos y elimina paquetes.         | Tiene validaciones útiles, con problemas importantes de rollback, rutas y propiedad de archivos.            |
+| `manager-apt/.../RepositoryManager.java`      | Descarga índices, conserva caché y selecciona candidatos.          | Funcionalidad real, con defectos de adquisición y selección.                                                |
+| `manager-apt/.../DependencyResolver.java`     | Intenta construir planes de instalación y actualización.           | Parcial: el resolver no construye el grafo transitivo requerido.                                            |
+| `manager-apt/.../AptInstaller.java`           | Descarga artefactos y delega la instalación al componente local.   | Separación conceptual correcta, ejecución no transaccional.                                                 |
+| `manager-apt/.../ManagerFacade.java`          | Inicializa y conecta los componentes; expone operaciones públicas. | Existe una fachada funcional, pero no demuestra integración completa con los comandos y el runtime.         |
+| `manager-apt/.../ModuleLifecycleAdapter.java` | Adapta el sistema nuevo al contrato de ciclo de vida anterior.     | Varios métodos son implementaciones vacías o respuestas de éxito sin realizar la operación correspondiente. |
 
-* Pruebas automatizadas: intenté ejecutar `./gradlew test`, pero el wrapper necesita descargar Gradle 8.10 y el entorno no pudo resolver `services.gradle.org`. Por tanto, todavía no hay resultados de ejecución que permitan afirmar que la compilación o las pruebas pasan o fallan.
+### Integración con el modelo de módulos de TxF
 
-* Rendimiento: las conclusiones de escalabilidad deberán distinguir entre propiedades deducibles del código y resultados que exigirían benchmarks reales.
+`src/host/src/main/java/me/majhrs16/suite/host/SuiteBootstrap.java` documenta y aplica una distinción importante: `Module` se utiliza como descriptor para resolver el grafo, mientras que los servicios reales se activan mediante sus propios puntos de entrada. El bootstrap utiliza `ModuleLoader.discover()` y `ModuleGraph.resolve()`; no instancia reflectivamente cada descriptor como si fuera un servicio.
 
-No consideraré que una prueba falla por un defecto del proyecto cuando ni siquiera ha podido iniciarse. Tampoco atribuiré al ZIP un hash de commit que no pueda verificar.
+Por tanto, no hay evidencia en este flujo de que `SuiteBootstrap` cometa el error de tratar `Module.java` como una clase de servicio que debe instanciarse.
 
-## 2. Resumen ejecutivo preliminar
+Eso no demuestra que el Manager esté correctamente integrado con el ciclo de vida: el adaptador de compatibilidad presenta problemas distintos que se detallan más adelante.
 
-El proyecto presenta una separación modular considerable, con contratos compartidos, adaptadores para plataformas, motor de reglas, formateo, traducción y varias integraciones de sincronización. Sin embargo, el número de módulos y la presencia de interfaces no bastan para demostrar que todos los componentes funcionen correctamente en conjunto.
+## C. Inventario de funcionalidades
 
-La distinción central de esta auditoría será entre tres niveles:
+La siguiente clasificación refleja la evidencia estática del código consultado. «Correcta y verificada» se reserva para propiedades demostradas por la implementación; no significa que se haya ejecutado una prueba de integración.
 
-1. Arquitectura: si los límites, contratos y direcciones de dependencia son correctos.
+### Funcionalidades presentes
 
-2. Implementación: si el código respeta esos contratos en condiciones normales y de error.
+Presentes con una base técnica aprovechable
 
-3. Operación a escala: si los componentes mantienen sus garantías bajo concurrencia, saturación, fallos parciales y carga sostenida.
+- Separación en módulos `manager-spi`, `manager-core` y `manager-apt`.
+- Persistencia local en `library/status`.
+- Escritura mediante archivo temporal y movimiento atómico en `LocalPackageDatabase.save()`.
+- Comparación numérica de los componentes mayor, menor y parche de las versiones válidas.
+- Comprobación de SHA-256 y tamaño de los archivos extraídos.
+- Comprobación léxica de rutas para detectar una parte de los casos de ZIP Slip.
+- Rechazo de la eliminación cuando el registro local identifica dependencias inversas.
 
-Ya hay un hallazgo importante que requiere atención: la implementación de `DefaultSyncBus` presenta un camino de difusión que encola el mismo mensaje tanto para su procesamiento global como directamente en cada destino. El procesador global vuelve a difundirlo. Esto permite duplicar entregas y, además, el camino directo elude la deduplicación central. También hay un problema independiente en `broadcastAsync`: no se comprueba el resultado de la inserción en la cola global, por lo que, si la cola permanece llena, los futuros pueden quedarse sin completar.
+Parciales o incorrectas
 
-Estos son hallazgos derivados del código, no de suposiciones sobre cómo debería comportarse el sistema. Se documentan con mayor precisión en el informe.
+- Actualización y caché de índices.
+- Selección de candidatos por versión y prioridad.
+- Instalación desde ZIP local.
+- Actualización de paquetes instalados.
+- Registro de metapaquetes.
+- Inventario de propiedad de archivos.
+- Recuperación de errores durante instalación y eliminación.
+- Compatibilidad de arquitectura, sistema operativo y plataforma.
+- Adaptación del Manager al ciclo de vida anterior.
 
-## 3. Identificación de la versión auditada
+Ausentes o no demostradas
 
-Snapshot ZIP
+- Resolución transitiva completa con restricciones de versiones.
+- Transacciones multi-paquete con rollback integral.
+- Recuperación persistente de operaciones interrumpidas.
+- Garantía de seguridad frente a enlaces simbólicos.
+- Activación y desactivación efectiva de paquetes descargados.
+- Contrato completo y verificable de los comandos exigidos por la especificación.
+- Pruebas específicas del Manager que demuestren sus garantías de instalación y eliminación.
 
-TextFormatter Suite · rama indicada por el nombre del archivo: `main`
+La distinción fundamental es que el Manager tiene más implementación que un simple esqueleto, pero las rutas críticas de instalación y eliminación todavía no ofrecen garantías suficientes para tratarlo como un gestor de paquetes fiable.
 
-SHA-256 del archivo ZIP
+## D. Hallazgos técnicos
 
-41db873f2895b4c059cd2fd3d5408eed4a04a1a33e7e152c0c0e086bb3c39180
+Los siguientes hallazgos se apoyan en rutas de ejecución concretas del código. «Confirmado» significa que el defecto se desprende de la implementación inspeccionada; no significa que se haya ejecutado una reproducción. No se han ejecutado todavía pruebas dinámicas del Manager.
 
-Versión declarada en Gradle: `2.1.0-SNAPSHOT`
+### MGR-001 — El parser del índice remoto lee el campo equivocado para SHA-256
 
-El SHA-256 identifica el archivo comprimido, no el commit de Git que lo produjo.
 
-# 4. Arquitectura real
 
-## 4.1. Mapa de módulos
+Alta
 
-El proyecto declara 29 módulos Gradle. La estructura puede agruparse funcionalmente así:
+Bug confirmado por inspección
 
-Adaptadores de plataforma
 
-`spigot-host` · `fabric-host`
 
-Integración y orquestación
+- Ubicación: `src/manager-spi/src/main/java/me/majhrs16/suite/manager/spi/ManifestParser.java`, método `parseRemoteIndex()`, aproximadamente líneas 30–50.
+- Categoría: bug funcional, adquisición de paquetes, integridad.
+- Precondiciones: el repositorio utiliza el formato tabulado `nombre<TAB>URL<TAB>tamaño<TAB>SHA256`.
 
-`host` · `MessageDispatcher` · `SuiteHost`
-
-Motor de mensajes
-
-`core-api`
-
-`iflow`
-
-`textformatter`
-
-Servicios auxiliares
-
-`gtranslate`
-
-`ltranslate`
-
-`messages`
-
-Sincronización
-
-`transport`
-
-`sync-http` · `sync-tcpudp`
-
-`sync-websocket` · `sync-bus`
-
-`sync-discord` · `sync-telegram` · `sync-velocity`
-
-Extensibilidad y operación
-
-`kernel`
-
-`extension-api`
-
-`manager-api` · `manager-impl`
-
-`observability` · `presets` · `inworld`
-
-Esquema funcional derivado de los módulos y sus dependencias declaradas; no representa una afirmación de que todas las rutas de integración estén activas en ejecución.
-
-También existen `common-legacy`, `example-extension`, `tester`, `loadtest` y `performance`. El editor web se encuentra en `src/web-editor`, pero no está incluido como subproyecto Gradle en `settings.gradle`.
-
-## 4.2. Arquitectura pretendida frente a la implementada
-
-La arquitectura pretendida utiliza contratos compartidos y adaptadores para separar el motor de las plataformas. Esa intención tiene soporte real en el código.
-
-Hay tres observaciones importantes:
-
-* `core-api` contiene modelos, interfaces SPI y contratos que pueden utilizarse sin depender directamente de Bukkit o Fabric.
-
-* `kernel` contiene `ModuleLoader`, `ModuleGraph` y los tipos necesarios para descubrir y resolver descriptores de módulos.
-
-* `host` concentra parte de la composición real del sistema y de la coordinación del procesamiento de mensajes.
-
-La diferencia es que el descubrimiento de módulos no equivale a su activación.
-
-`Module.java` declara explícitamente que cada módulo es un descriptor de dependencias, no un objeto con ciclo de vida. `ModuleLoader` utiliza `ServiceLoader` para descubrir esas implementaciones. No existe un contrato genérico de arranque y parada en esa interfaz.
-
-Esto es coherente con el diseño documentado: los servicios se activan mediante sus entry points de plataforma.
-
-### Defecto arquitectónico: dos rutas de bootstrap
-
-Existen dos mecanismos que no deben confundirse:
-
-* `SuiteBootstrap.bootstrap(...)`: carga configuración, descubre y resuelve descriptores mediante el kernel y construye un `SuiteHost`.
-
-* `SuiteHost.bootstrap(...)`: realiza directamente la composición del motor, configura las reglas, crea el router, los evaluadores de expresiones y el formateador.
-
-Los entry points de Spigot y Fabric encontrados llaman a `SuiteHost.bootstrap(...)`, no a `SuiteBootstrap.bootstrap(...)`.
-
-Clasificación: deuda técnica y duplicación de composición, no necesariamente un bug funcional.
-
-Impacto: un desarrollador que siga el mapa de código y asuma que el bootstrap basado en el kernel es la ruta operativa principal puede interpretar incorrectamente qué validaciones se ejecutan durante el arranque.
-
-Recomendación: documentar una única ruta oficial de inicialización o explicar explícitamente qué responsabilidad tiene cada una. No fusionarlas automáticamente si cumplen propósitos distintos.
-
-## 4.3. Pipeline de procesamiento de mensajes
-
-El flujo principal reconstruido a partir de `SuiteHost`, `MessageDispatcher` y los módulos del motor es:
+Evidencia:
 
 ```
-Evento de plataforma
-        |
-        v
-Adaptador Spigot / Fabric
-        |
-        v
-Construcción del Message
-        |
-        v
-MessageDispatcher
-        |
-        +--> Resolver idioma de origen
-        |
-        +--> Comprobar rate limit de emisión
-        |
-        +--> Expandir Direction a destinatarios
-        |
-        v
-Procesamiento por destinatario
-        |
-        +--> Resolver idioma del destinatario
-        |
-        +--> DefaultRouter / iFlow
-        |       |
-        |       +--> Reglas y permisos
-        |       +--> Transformaciones
-        |       +--> Rate limits de canal
-        |       +--> Decisión de entrega
-        |
-        v
-TextFormatter
-        |
-        +--> Contexto de plantilla
-        +--> Placeholders / expresiones
-        +--> Traducción según configuración
-        +--> Renderizado
-        |
-        v
-ChatDelivery
-        |
-        v
-Entrega a la plataforma
-```
-
-Este es el pipeline de entrega principal. La sincronización hacia redes externas constituye otra ruta, que depende de los sinks registrados y de su integración con los adaptadores.
-
-### Evaluación
-
-La división entre enrutamiento, representación del mensaje, renderizado y entrega es una fortaleza. Evita que toda la lógica tenga que residir dentro de un listener de Bukkit o Fabric.
-
-No obstante, `MessageDispatcher` realiza también coordinación de concurrencia, recolección de resultados, gestión de retardos, redirecciones y entrega. Esto lo convierte en un componente operacionalmente importante que merece pruebas específicas de concurrencia y ciclo de vida.
-
-# 5. Clean Architecture y arquitectura hexagonal
-
-Estas puntuaciones son evaluaciones estáticas del diseño, no resultados de pruebas de conformidad automatizadas.
-
-| Criterio                        | Puntuación | Justificación                                                                                                                                           |
-| ------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Clean Architecture              | 7,5/10     | Los contratos y los modelos compartidos están razonablemente separados de las plataformas, pero la composición está repartida entre rutas de bootstrap. |
-| Hexagonal Architecture          | 7,5/10     | Hay SPI útiles y adaptadores sustituibles, aunque la existencia de contratos no demuestra que todas las integraciones estén aisladas en la práctica.    |
-| Modularidad                     | 7,5/10     | Hay límites por función y dependencias Gradle explícitas, con riesgo de duplicación entre módulos y servicios de infraestructura.                       |
-| Separación de responsabilidades | 7/10       | La separación entre router, formatter y plataforma es buena; algunos componentes de coordinación acumulan responsabilidades operacionales.              |
-
-## 5.1. Qué está realmente bien
-
-* Los modelos de `core-api` no requieren directamente los tipos de Bukkit o Fabric.
-
-* `ChatDelivery` proporciona un punto de extensión para la entrega.
-
-* `TranslationService`, `SyncSink`, `ActorDirectory` y otros SPI permiten desacoplar consumidores de implementaciones concretas.
-
-* Los módulos de traducción y sincronización tienen proyectos separados.
-
-* Los entry points específicos de plataforma pueden encargarse de sus respectivos ciclos de vida.
-
-## 5.2. Qué no debe darse por demostrado
-
-La existencia de `ModuleGraph` no demuestra que el ciclo de vida de todos los módulos se gestione mediante ese grafo. De hecho, la ruta operativa de bootstrap encontrada utiliza composición manual.
-
-Tampoco basta con que los adaptadores implementen interfaces para demostrar que las llamadas bloqueantes, el estado compartido o los errores estén correctamente aislados.
-
-Conclusión arquitectónica: existe una base de diseño modular real. El principal reto es consolidar las garantías operacionales y hacer que las fronteras arquitectónicas declaradas coincidan consistentemente con las rutas de ejecución efectivas.
-
-# 6. Hallazgos clasificados
-
-Los siguientes son los defectos concretos más relevantes identificados en el análisis estático. No representan una lista exhaustiva de todos los problemas posibles del repositorio.
-
-## TXF-ZIP-001 — Difusión duplicada en `DefaultSyncBus`
-
-Alta · Confirmado por código
-
-Tipo: Bug.
-
-Ubicación: `src/sync-bus/src/main/java/me/majhrs16/suite/syncbus/DefaultSyncBus.java` → `broadcast()` y `processMessage()`.
-
-Descripción: el mismo mensaje tiene dos caminos de encolado hacia los sinks.
-
-La implementación hace lo siguiente:
-
-1. Inserta una tarea global que llama a `processMessage(message)`.
-
-2. Encola directamente el mensaje en cada `SinkContext`.
-
-3. Cuando se procesa la tarea global, `processMessage()` vuelve a encolar el mensaje en todos los sinks.
-
-La deduplicación global no protege el segundo camino porque el encolado directo no pasa por `processMessage()`.
-
-Impacto funcional: si un sink está iniciado y tiene capacidad de cola, un único `broadcast()` puede producir dos entregas del mismo mensaje a ese sink.
-
-Impacto en rendimiento: duplica trabajo de cola y procesamiento en el camino afectado, y puede aumentar la saturación.
-
-Condiciones: invocar `broadcast()` con al menos un sink registrado y en funcionamiento, con capacidad suficiente para aceptar ambas inserciones.
-
-Solución sugerida: escoger un único camino de difusión. El método debe delegar el fan-out al procesador global o hacerlo directamente, pero no ambos.
-
-Ejemplo de corrección localizada:
-
-Java
-
-```
-@Override
-public int broadcast(Message message) {
-    if (shuttingDown.get() || sinks.isEmpty()) {
-        return 0;
-    }
-
-    try {
-        boolean offered = globalQueue.offer(
-            () -> processMessage(message),
-            100,
-            TimeUnit.MILLISECONDS
-        );
-
-        if (!offered) {
-            totalDropped.incrementAndGet();
-            return 0;
-        }
-
-        // El fan-out corresponde exclusivamente a processMessage().
-        // No volver a llamar a ctx.enqueue(message) aquí.
-        return sinks.size();
-    } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        totalDropped.incrementAndGet();
-        return 0;
-    }
+long size = Long.parseLong(fields[2].strip());
+String sha256 = fields[2].strip(); // This is wrong - should be fields[3]
+if (!isValidSha256(sha256)) {
+    throw new ParseException(...);
 }
 ```
 
-Este ejemplo ilustra la eliminación de la doble difusión, pero la semántica del retorno requiere una decisión adicional: el número de sinks registrados no garantiza que todos hayan aceptado el mensaje. Si el contrato exige contabilizar las aceptaciones reales, conviene que el procesador global registre esos resultados y los exponga explícitamente.
+El parser obtiene el tamaño de `fields[2]`, pero vuelve a leer ese mismo campo para obtener el hash. Un tamaño habitual, como `48213`, no es un SHA-256 de 64 caracteres hexadecimales.
 
-Impacto de la solución: alto beneficio, baja complejidad y riesgo de regresión controlable con pruebas unitarias. Merece la pena resolverlo antes de usar `SyncBus` como mecanismo fiable de difusión.
+Comportamiento actual: los índices convencionales con tamaños normales son rechazados por el parser. La descarga de índices no GitHub que pasa por este método falla antes de producir candidatos válidos.
 
-## TXF-ZIP-002 — Futuros que pueden quedar incompletos en `broadcastAsync`
+La consecuencia alcanza también a `RepositoryManager.loadCachedIndexes()`: los índices guardados con el formato tabulado vuelven a analizarse mediante el mismo parser y pueden quedar inutilizables tras reiniciar el servidor.
 
-Alta · Confirmado por código
+Comportamiento esperado: leer el SHA-256 del cuarto campo y rechazar únicamente las entradas realmente inválidas.
 
-Tipo: Bug.
+Confianza: alta. La asignación errónea es explícita en el código. No se ha ejecutado una reproducción.
 
-Ubicación: `DefaultSyncBus.java` → `broadcastAsync()`.
+### MGR-002 — La resolución de dependencias no implementa el grafo transitivo
 
-Evidencia: el resultado de `globalQueue.offer(...)` se ignora. Si la cola no acepta la tarea, `globalFuture` no se completa en esa rama.
 
-Los futuros individuales dependen de la finalización de `globalFuture`. Por tanto, pueden permanecer pendientes indefinidamente.
 
-Existe además otro defecto semántico: `waitForSinkProcessing()` considera suficiente que la cola del sink esté vacía. Sin embargo, el trabajador puede haber retirado ya el mensaje y estar procesándolo todavía. En ese caso, el futuro puede completarse antes de que termine la entrega real.
+Crítica
 
-Impacto funcional: el consumidor no puede confiar en que los futuros indiquen finalización efectiva ni que terminen siempre.
+Bug confirmado por inspección
 
-Condiciones: saturación de la cola global para el primer problema; procesamiento todavía activo con cola vacía para el segundo.
 
-Solución sugerida:
 
-* Comprobar el resultado de `offer()` y completar los futuros excepcionalmente o aplicar una política explícita de rechazo.
+- Ubicación: `src/manager-apt/src/main/java/me/majhrs16/suite/manager/apt/DependencyResolver.java`, métodos `resolveInstall()` y `resolvePackage()`.
+- Categoría: bug funcional, integridad del estado, incumplimiento de especificación.
+- Precondiciones: se intenta instalar un paquete que requiere una dependencia no instalada o que requiere una versión concreta de otra dependencia.
 
-* Asociar cada mensaje a un futuro de procesamiento por sink.
+Evidencia:
 
-* Completarlo al terminar el envío y sus reintentos, no mediante sondeo del tamaño de la cola.
+```
+selected.put(best.name(), best);
+resolved.add(pkgName);
+processing.remove(pkgName);
 
-Evaluación: merece la pena corregirlo junto con TXF-ZIP-001. Complejidad media porque requiere definir correctamente el contrato de entrega y sus estados de error.
+// Resolve dependencies (we'd need to download manifest to get actual deps)
+// For now, assume dependencies are declared in the remote index or we need to fetch manifest
+// This is a simplification - in reality we'd need to download the manifest first
+```
 
-## TXF-ZIP-003 — La protección de conexiones HTTPS en `HttpTransport` necesita corrección
+El código selecciona el candidato, lo marca como resuelto y no examina las dependencias del manifiesto para continuar el recorrido del grafo.
 
-Alta · Defecto de implementación sustentado por código
+Además, `isCompatible()` devuelve `true` incondicionalmente y el método que construye el plan declara que debería realizar una ordenación topológica, pero devuelve los pasos en el orden de selección.
 
-Tipo: Bug probable de transporte; la reproducción experimental no está disponible en este entorno.
+Comportamiento actual: una instalación puede parecer resoluble aunque falten dependencias transitivas o el candidato sea incompatible. El instalador local realiza una segunda comprobación, pero solo contra los paquetes instalados, no contra un plan transitivo completo.
 
-Ubicación: `src/transport/src/main/java/me/majhrs16/suite/transport/HttpTransport.java` → `createConnection()` y `PinningSSLSocketFactory`.
+Consecuencia: una operación válida según el resolver puede fallar durante la instalación, y un conjunto de paquetes puede instalarse parcialmente antes de que aparezca el error.
 
-Evidencia: con la protección SSRF activada, `createConnection()` crea un `Proxy.Type.HTTP` cuya dirección es la IP resuelta del destino y cuyo puerto es el puerto del destino. Después utiliza ese proxy para abrir la conexión.
+Comportamiento esperado: resolver todas las dependencias y restricciones antes de modificar el estado, detectar ciclos y conflictos, y producir un plan completo.
 
-La dirección del servidor de destino no es, por sí misma, la dirección de un proxy HTTP. El establecimiento de un túnel HTTPS a través de un proxy y una conexión TCP directa a una IP fijada son operaciones diferentes.
+Confianza: alta. La ausencia de recorrido de dependencias y la implementación de compatibilidad están explícitas en el código.
 
-La clase también contiene una fábrica TLS personalizada que crea sockets directamente hacia la IP fijada en algunos métodos, mientras que el método que envuelve un socket existente delega en el socket proporcionado. Esas rutas deben verificarse como un conjunto, no de manera aislada.
+### MGR-003 — La instalación multi-paquete no es transaccional y el rollback no revierte los archivos
 
-Impacto funcional: las solicitudes HTTP/HTTPS pueden fallar dependiendo de la ruta que utilice `HttpURLConnection` y del tipo de conexión. Como `HttpTransport` es utilizado por los proveedores de traducción y por integraciones de transporte, el problema puede propagarse a varias features.
 
-Condiciones: solicitudes con protección SSRF habilitada, que es la configuración utilizada por defecto en los constructores habituales y por los proveedores de traducción examinados.
 
-Solución sugerida: implementar la fijación de IP mediante una conexión directa al destino, preservando correctamente el hostname para TLS SNI y la verificación del certificado. No utilizar la IP de destino como si fuera un proxy HTTP.
+Crítica
 
-La corrección debe incluir pruebas de integración con:
+Bug confirmado por inspección
 
-* HTTP ordinario.
 
-* HTTPS con certificado válido.
 
-* HTTPS con hostname incorrecto.
+- Ubicación: `src/manager-core/src/main/java/me/majhrs16/suite/manager/core/PackageInstaller.java`, método `install()`.
+- Categoría: integridad, bug funcional, recuperación.
+- Precondiciones: un ZIP contiene varios registros de paquetes, o falla la extracción de un paquete después de que se hayan escrito algunos archivos.
 
-* Redirecciones entre hostnames.
+El método procesa los paquetes uno por uno. Cada paquete se extrae y después se registra individualmente en la base de datos. Si posteriormente ocurre una excepción de E/S, el bloque de recuperación desregistra los paquetes que ya se habían añadido a `installedEntries`, pero no restaura ni elimina sus archivos extraídos.
 
-* Destinos privados bloqueados.
+Existe una segunda ruta de fallo: si la extracción falla a mitad del paquete actual, los archivos que ya se escribieron para ese paquete tampoco quedan cubiertos por el rollback, porque el registro se agrega a `installedEntries` después de finalizar su extracción.
 
-* Hostnames con múltiples direcciones DNS.
+Comportamiento actual: el estado registrado puede volver a indicar que los paquetes no están instalados mientras permanecen archivos físicos de la operación fallida. Una operación con varios paquetes puede dejar un resultado parcialmente aplicado.
 
-Evaluación: merece la pena priorizarlo. La complejidad es media-alta porque la corrección de SSRF no debe eliminar la validación de destinos ni introducir una vulnerabilidad de DNS rebinding.
+Comportamiento esperado: preparar y validar el conjunto completo antes de confirmar la operación, y disponer de una recuperación que restaure coherentemente los archivos y el estado.
 
-## TXF-ZIP-004 — Ciclo de vida incompleto de `DefaultSyncBus`
+Confianza: alta. Se deriva del orden de las escrituras y de la ausencia de restauración de archivos en las rutas de excepción.
 
-Media · Confirmado por código
+### MGR-004 — El inventario no protege contra escapes mediante enlaces simbólicos
 
-Tipo: Defecto de diseño con consecuencias de recursos.
 
-Ubicación: `DefaultSyncBus.java` → constructor, `start()`, `stop()` y `close()`.
 
-Descripción: el constructor inicia el procesador global y programa la tarea periódica de limpieza de deduplicación antes de que se invoque `start()`.
+Alta
 
-Sin embargo, `stop()` retorna inmediatamente si `started` vale cero. Por tanto, `close()` no detiene esos recursos si se llama antes de un `start()` satisfactorio. La misma situación puede darse tras ciertos fallos de arranque, cuando el estado vuelve a cero.
+Riesgo de seguridad confirmado en el diseño del flujo
 
-Además, una instancia detenida no puede reiniciarse de forma coherente: el estado `shuttingDown` permanece activado y el scheduler se ha cerrado.
 
-Impacto: hilos daemon y tareas auxiliares pueden sobrevivir a una inicialización abortada; el ciclo de vida no admite de forma clara una operación stop/start repetida.
 
-Solución sugerida: hacer explícito el estado del ciclo de vida —por ejemplo, `NEW`, `RUNNING`, `STOPPING` y `STOPPED`— y garantizar que `close()` libere todos los recursos creados, incluso si `start()` nunca llegó a completarse.
+- Ubicación: `src/manager-core/src/main/java/me/majhrs16/suite/manager/core/PackageInstaller.java`, método `extractPackageFiles()`.
+- Categoría: seguridad, integridad del sistema de archivos.
+- Precondiciones: existe un enlace simbólico dentro de una ruta de destino que apunta fuera del directorio de instalación, y un paquete instala un archivo bajo ese enlace.
 
-Evaluación: complejidad media. Beneficio importante para reloads, pruebas y gestión de errores.
+El código normaliza la ruta de destino y verifica que empiece por `installRoot.normalize()`. Esta comprobación protege frente a muchos casos de traversal léxico, pero no demuestra que el destino físico siga dentro del directorio autorizado.
 
-## TXF-ZIP-005 — Funcionalidades anunciadas que siguen sin implementación
+Una ruta como `plugins/administrado/config/archivo` puede superar la comprobación léxica y, sin embargo, atravesar un enlace simbólico existente en `administrado` que apunte a otro directorio.
 
-Media · Confirmado por código
+Comportamiento actual: el código abre el destino mediante las APIs ordinarias de archivos sin una garantía explícita de que los componentes de la ruta no redirijan la escritura fuera del directorio autorizado.
 
-Tipo: Defecto funcional y deuda técnica.
+Consecuencia posible: sobrescritura de archivos ajenos si se cumplen las precondiciones. No se ha demostrado una explotación en una instalación concreta.
 
-Ubicaciones:
+Comportamiento esperado: validar y abrir los destinos de manera segura frente a enlaces simbólicos y cambios concurrentes, además de rechazar rutas inválidas antes de escribir.
 
-* `src/spigot-host/src/main/java/me/majhrs16/suite/spigothost/command/DynamicCommand.java`
+Confianza: alta respecto de la insuficiencia de la defensa; la explotabilidad depende del estado del sistema de archivos.
 
-* `src/host/src/main/java/me/majhrs16/suite/host/config/CommandExecutor.java`
+### MGR-005 — La actualización de paquetes utiliza `force` para sobrescribir archivos sin retirar correctamente la versión anterior
 
-* `src/presets/src/main/java/me/majhrs16/suite/presets/PresetManager.java`
 
-Evidencia: se encontraron acciones de comandos que devuelven mensajes de «no implementado» para instalación, actualización, eliminación e información de módulos. También hay métodos de edición y lectura de configuración pendientes, y operaciones de importación/exportación de presets marcadas con TODO.
 
-En `CommandExecutor.execute(...)`, la implementación actual devuelve `false` en lugar de ejecutar una acción.
+Alta
 
-Impacto: la presencia de un comando o API no garantiza que la funcionalidad correspondiente esté disponible.
+Bug confirmado por inspección
 
-Solución sugerida: distinguir en la documentación y en la configuración qué operaciones están implementadas, cuáles están deshabilitadas y cuáles son experimentales. No es necesario eliminar las abstracciones existentes.
 
-Evaluación: prioridad media para funciones administrativas; mayor si una release presenta estas operaciones como funcionalidades disponibles.
 
-## TXF-ZIP-006 — Autenticidad de módulos descargados no garantizada por defecto
+- Ubicación: `src/manager-apt/src/main/java/me/majhrs16/suite/manager/apt/AptInstaller.java`, método `upgrade()`; `PackageInstaller.java`, métodos `install()` y `checkFileConflicts()`.
+- Categoría: integridad, gestión de versiones, propiedad de archivos.
+- Precondiciones: se instala una versión nueva que comparte rutas con la versión anterior.
 
-Media · Riesgo de seguridad
+La actualización llama a:
 
-Tipo: Defecto de diseño de seguridad; no se ha demostrado una explotación.
+```
+installer.install(zipPath, true);
+```
 
-Ubicación: `src/manager-impl/src/main/java/me/majhrs16/suite/manager/DefaultModuleLifecycle.java` → `download()`, `verifyModuleSignature()` y `verifySignature()`.
+En el instalador local, `force` permite continuar ante conflictos de propiedad de archivos. No existe en ese flujo una operación transaccional que sustituya la versión anterior, retire su registro y preserve el estado previo en caso de fallo.
 
-Evidencia: el gestor verifica checksums SHA-256, pero la verificación de firma es opcional. Si el descriptor no proporciona configuración de firma, el código registra que omite la verificación. La implementación de `verifySignature()` también devuelve `true` cuando no encuentra los archivos de firma o clave.
+La base de datos identifica paquetes por nombre, versión y canal, por lo que las versiones diferentes pueden permanecer registradas simultáneamente.
 
-Impacto: un checksum obtenido de la misma fuente que el artefacto protege contra corrupción accidental, pero no demuestra por sí solo la identidad del publicador. La autenticidad depende también de la confianza en el repositorio, su canal de distribución y la configuración de firma.
+Comportamiento actual: los archivos físicos pueden corresponder a la versión nueva mientras el estado conserva registros de ambas versiones. El inventario de propiedad puede indicar que ambas poseen las mismas rutas.
 
-Solución sugerida: exigir firma verificable para módulos de repositorios no confiables o para releases de producción, con claves de confianza distribuidas por un canal independiente. Mantener los checksums para verificar integridad.
+Consecuencia: verificaciones y eliminaciones posteriores pueden operar sobre una propiedad ambigua. Eliminar la versión antigua no restaura sus contenidos; la política de archivos compartidos puede, en cambio, conservar archivos de la versión nueva.
 
-Evaluación: merece la pena si se pretende soportar extensiones de terceros o descargas de módulos en producción. Complejidad media; el riesgo de regresión principal es rechazar releases antiguas que todavía no estén firmadas.
+Comportamiento esperado: una actualización debe tener una semántica explícita de sustitución, con gestión coherente de versiones, propiedad y recuperación.
 
-# 7. Evaluación por feature
+Confianza: alta para la inconsistencia posible; no se ha reproducido en ejecución.
 
-Las valoraciones siguientes se refieren al diseño y al código inspeccionado, no a una certificación de que cada feature funcione en todas las plataformas.
+### MGR-006 — La eliminación puede desregistrar paquetes aunque no consiga borrar sus archivos
 
-| Feature                               | Valoración | Observación principal                                                                                                                                |
-| ------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `core-api`                            | 8/10       | Contratos y modelos compartidos útiles para la portabilidad.                                                                                         |
-| `kernel`                              | 7/10       | Descubrimiento y resolución separados; falta integrar más claramente la validación con la ruta operativa de composición.                             |
-| `textformatter`                       | 8/10       | Motor de plantillas y renderizado independiente de la plataforma, con atención a la seguridad de expresiones.                                        |
-| `iflow`                               | 8/10       | Reglas, permisos, routing y rate limiting tienen una separación funcional razonable.                                                                 |
-| `host`                                | 7/10       | Integra los componentes, pero concentra responsabilidades importantes y tiene dos rutas de bootstrap.                                                |
-| Traducción                            | 7/10       | Proveedores intercambiables y cachés; la ruta HTTP requiere verificación antes de confiar en el comportamiento real.                                 |
-| Sincronización HTTP/TCP/UDP/WebSocket | 6,5/10     | Hay abstracciones reutilizables, pero la corrección de los transportes y su semántica deben verificarse individualmente.                             |
-| `sync-bus`                            | 4,5/10     | La duplicación en `broadcast()` y las garantías defectuosas de `broadcastAsync()` son problemas importantes.                                         |
-| `sync-discord` / `sync-telegram`      | 7/10       | Integraciones específicas separadas; dependen de la fiabilidad del transporte y de su gestión de errores.                                            |
-| `sync-velocity`                       | 7,5/10     | Tiene un módulo propio y configuración específica; no se han podido ejecutar sus pruebas en este entorno.                                            |
-| `observability`                       | 7/10       | Métricas y endpoints aportan visibilidad, pero la seguridad y la configuración de exposición deben evaluarse en cada despliegue.                     |
-| `manager-api` / `manager-impl`        | 6,5/10     | Descarga, resolución y carga aislada de módulos son capacidades potentes; el ciclo de actualización y la confianza de artefactos requieren atención. |
-| `extension-api`                       | 7/10       | Facilita extensibilidad, aunque el ciclo de vida y la compatibilidad deben estar bien definidos.                                                     |
-| `presets`                             | 6/10       | Es una vía útil para reutilizar configuraciones; la importación y exportación no están completamente implementadas.                                  |
-| `spigot-host` / `fabric-host`         | 7/10       | La separación de adaptadores es positiva, pero se necesita integración real por plataforma.                                                          |
-| Editor web                            | 7/10       | Modularizado en JavaScript, con pruebas unitarias e integración declaradas; falta ejecutar las verificaciones en este entorno.                       |
-| Testing y benchmarks                  | 6,5/10     | Existe una base considerable de pruebas y módulos de carga, pero la cobertura efectiva y los resultados no han podido verificarse aquí.              |
 
-## 7.1. Personalización
 
-La arquitectura admite diferentes proveedores de traducción, sinks, resolutores de placeholders, reglas y configuraciones de canal. Esto favorece las extensiones sin modificar el motor central.
+Alta
 
-Las limitaciones identificadas son más concretas:
+Bug confirmado por inspección
 
-* Algunas acciones administrativas no están implementadas.
 
-* Los presets no tienen todas las operaciones anunciadas terminadas.
 
-* Los módulos de infraestructura no comparten necesariamente las mismas garantías de entrega.
+- Ubicación: `src/manager-core/src/main/java/me/majhrs16/suite/manager/core/PackageInstaller.java`, método `remove()`; `LocalPackageDatabase.java`, método `unregisterPackage()`.
+- Categoría: integridad, eliminación, recuperación.
+- Precondiciones: el sistema de archivos rechaza la eliminación de un archivo que pertenece exclusivamente al paquete.
 
-* El soporte de múltiples plataformas está condicionado por las implementaciones específicas de cada adaptador.
+El método `remove()` captura el error de `Files.deleteIfExists()` y lo registra como advertencia. Después continúa con `database.unregisterPackage()`.
 
-No considero que las restricciones de configuración sean defectos simplemente por ser restrictivas. La validación debe impedir estados técnicamente imposibles o inseguros, no combinaciones arbitrarias que podrían funcionar correctamente.
+Comportamiento actual: el paquete puede desaparecer del estado local aunque algunos archivos sigan en disco. Una operación posterior ya no tendrá necesariamente el inventario de propiedad que permitiría identificar esos residuos.
 
-## 7.2. Seguridad
+Comportamiento esperado: informar de la eliminación incompleta y conservar o recuperar la información de propiedad hasta que el resultado sea coherente.
 
-La inspección encontró mecanismos positivos:
+Confianza: alta. El flujo de control muestra que el error de eliminación no impide desregistrar el paquete.
 
-* Uso de `SafeConstructor` para cargar diversas configuraciones YAML.
+### MGR-007 — La selección de candidatos deriva la versión de la URL en lugar de validar los metadatos del paquete
 
-* Un evaluador SpEL para plantillas basado en `SimpleEvaluationContext.forReadOnlyDataBinding()`.
 
-* Comprobaciones de destinos y límites de respuesta en `HttpTransport`.
 
-* Requisito de token para iniciar el servidor WebSocket.
+Alta
 
-* Límites de tamaño de mensajes y rate limiting por conexión en el WebSocket.
+Bug confirmado por inspección
 
-* Mecanismos de checksum y verificación de firma en el gestor de módulos.
 
-Estos mecanismos no equivalen a una garantía global de seguridad. El transporte HTTP necesita la corrección indicada, y la autenticidad de los módulos descargados depende de la configuración de confianza.
 
-En el editor web se observaron múltiples usos de `innerHTML`. En los fragmentos examinados, varias inserciones escapan los valores mediante `Suite.utils.esc(...)`. No he confirmado una vulnerabilidad XSS explotable a partir de esa observación aislada; haría falta rastrear los datos controlados por el usuario hasta cada contexto de renderizado.
+- Ubicación: `src/manager-apt/src/main/java/me/majhrs16/suite/manager/apt/RepositoryManager.java`, métodos `findCandidates()` y `extractVersionFromUrl()`.
+- Categoría: compatibilidad, selección de versiones, incumplimiento de especificación.
 
-# 8. Concurrencia y rendimiento
+La especificación establece que la identidad y versión del paquete deben validarse contra `METADATA/package.list`. El código actual extrae la versión del nombre del archivo, exige la extensión `.jar` y toma el texto posterior al último guion.
 
-## 8.1. `MessageDispatcher`
+Comportamiento actual:
 
-El dispatcher utiliza un executor acotado con un máximo de 32 hilos y una cola de 1.000 tareas, además de un scheduler dedicado para retardos. También tiene una opción `engineParallel` que determina si los destinatarios se procesan en paralelo o secuencialmente.
+- Un artefacto distribuido como ZIP, según el contrato requerido, no pasa el filtro de extensión.
+- Una versión con sufijo de prerelease, como `1.2.3-beta`, no se interpreta correctamente: el último guion produce `beta`, que no es una versión SemVer válida por sí sola.
+- La versión elegida no se ha contrastado con el manifiesto del artefacto.
 
-Hay dos propiedades importantes:
+Consecuencia: candidatos válidos pueden desaparecer y la selección de versiones puede contradecir los metadatos reales.
 
-* `CallerRunsPolicy` proporciona contrapresión cuando el executor está saturado, pero puede trasladar trabajo al hilo que intenta enviar la tarea.
+Comportamiento esperado: obtener y validar la versión declarada por el paquete, y rechazar discrepancias entre índice y manifiesto.
 
-* El timeout de diez segundos limita cuánto espera el dispatcher por un destinatario, pero cancelar un `Future` no garantiza que una operación bloqueante o un proveedor externo interrumpa inmediatamente su trabajo.
+Confianza: alta.
 
-Por ello, es necesario comprobar que el código invocado por el dispatcher no ejecute operaciones bloqueantes en el hilo principal de la plataforma.
+### MGR-008 — Los paquetes descargados se guardan con extensión `.jar` aunque el contrato de distribución exige ZIP
 
-## 8.2. `SyncBus`
 
-La capacidad nominal de las colas es considerable:
 
-* Cola global: 10.000 tareas.
+Media
 
-* Cola por sink: 5.000 tareas.
+Incumplimiento confirmado
 
-* Ventana de deduplicación: 60 segundos.
 
-* Límite de entradas de deduplicación: 50.000.
 
-Esos valores no demuestran throughput ni latencia. La duplicación de entregas en `broadcast()` puede aumentar el consumo de las colas y acelerar la saturación.
+- Ubicación: `src/manager-apt/src/main/java/me/majhrs16/suite/manager/apt/AptInstaller.java`, método `downloadPackage()`, líneas aproximadas 170–209.
+- Categoría: compatibilidad, adquisición de artefactos.
 
-Además, el executor global y su procesador manual comparten la misma cola. La interacción entre los trabajadores internos del executor y el bucle que extrae tareas directamente merece una simplificación: una única estrategia de consumo facilita razonar sobre orden, contrapresión y finalización.
+El nombre de destino se construye como `nombre-versión.jar`. El instalador, en cambio, espera una distribución ZIP que contenga `METADATA/package.list` y la procesa mediante `ZipFile`.
 
-## 8.3. Estimaciones de escalabilidad
+El formato interno puede seguir siendo legible pese a la extensión incorrecta, pero la convención contradice el contrato de distribución y puede confundir herramientas, operadores y otros componentes que inspeccionen el archivo por su extensión.
 
-No hay mediciones válidas obtenidas en esta auditoría. La siguiente tabla expresa riesgos arquitectónicos, no capacidad medida.
+Confianza: alta.
 
-| Escenario            | Cuello de botella probable                                                     | Evaluación                                                               |
-| -------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| A — Servidor pequeño | Coste por mensaje, traducción y renderizado                                    | Viable en principio, sujeto a la corrección de las rutas de ejecución.   |
-| B — Red mediana      | Fan-out, latencia de traducción, transporte y colas                            | Requiere pruebas de carga y de fallos parciales.                         |
-| C — Red grande       | Sinks lentos, presión de colas, sincronización entre servidores y GC           | No se puede garantizar con el estado actual.                             |
-| D — Network-scale    | Contrapresión distribuida, p99, reconexiones, entrega y recuperación de fallos | No demostrado; la implementación actual del bus debe corregirse primero. |
+### MGR-009 — Las dependencias con restricciones no se validan de manera coherente
 
-Para validar una red grande se necesitan, como mínimo:
 
-* Mensajes por segundo y distribución de tamaños.
 
-* Número de destinatarios por mensaje.
+Alta
 
-* Latencia p50, p95 y p99.
+Bug confirmado por inspección
 
-* Profundidad de colas, descartes y reintentos.
 
-* Tiempo y tasa de éxito de traducciones.
 
-* Consumo de CPU, heap y pausas de GC.
+- Ubicación: `PackageInstaller.checkDependencies()` y `LocalPackageDatabase.getReverseDependencies()`.
+- Categoría: dependencias, integridad del estado.
 
-* Pruebas de saturación, desconexión y recuperación de sinks.
+El parser guarda `Dependencies` como una lista de cadenas separadas por comas. El instalador local compara cada cadena con el nombre exacto de un paquete instalado, y la detección de dependencias inversas aplica el mismo criterio de igualdad textual.
 
-* Medición de duplicados y pérdida de mensajes.
+Comportamiento actual: una dependencia expresada como `library >= 1.2.0` no coincide con un paquete cuyo nombre es `library`. Por tanto, el instalador puede rechazar una dependencia que está satisfecha o dejar de detectar correctamente que un paquete es necesario.
 
-No asigno cifras de throughput porque no hay resultados experimentales que las justifiquen.
+Comportamiento esperado: parsear las dependencias como identidades más restricciones de versión, y utilizar el mismo modelo en la resolución, instalación y eliminación.
 
-# 9. Testing, build y evolución
+Confianza: alta.
 
-## 9.1. Inventario de pruebas
+### MGR-010 — La base de datos local no restaura su estado en memoria cuando falla la persistencia
 
-En el ZIP se encontraron:
 
-* 56 archivos dentro de rutas de pruebas.
 
-* 49 archivos Java de pruebas.
+Alta
 
-* 10 archivos de pruebas JavaScript bajo `src/web-editor/tests`.
+Bug confirmado por inspección
 
-Hay pruebas para el kernel, el formateador, iFlow, traducción, configuración, transporte, sinks y pipeline de extremo a extremo, además de una simulación de carga.
 
-La existencia de esas pruebas es una fortaleza. Sin embargo, no pude ejecutar el conjunto Java porque el wrapper no pudo descargar Gradle. Las pruebas del editor tampoco arrancaron: faltaba la dependencia `jsdom`.
 
-Por tanto, no se dispone de un resultado de ejecución que confirme o refute las pruebas actuales.
+- Ubicación: `src/manager-core/src/main/java/me/majhrs16/suite/manager/core/LocalPackageDatabase.java`, métodos `registerPackage()` y `unregisterPackage()`.
+- Categoría: integridad, recuperación.
 
-## 9.2. Cobertura funcional que conviene reforzar
+Ambos métodos modifican primero las estructuras en memoria y después llaman a `save()`. Si la escritura falla, el método propaga la excepción, pero no revierte las modificaciones ya realizadas en los mapas de paquetes y propiedad.
 
-Priorizaría las siguientes pruebas:
+Comportamiento actual: una llamada que falla puede dejar el estado en memoria distinto del estado persistido en `library/status`.
 
-1. `DefaultSyncBus.broadcast()` entrega una única copia por sink.
+La escritura atómica del archivo protege frente a ciertos fallos durante su sustitución, pero no hace atómica la combinación de memoria, archivos instalados y registro persistente.
 
-2. `broadcastAsync()` completa todos los futuros incluso cuando la cola está llena.
+Comportamiento esperado: una operación fallida no debe dejar una divergencia silenciosa entre la base de datos en memoria y la persistida.
 
-3. Los futuros de entrega no terminan antes de que el sink complete su trabajo.
+Confianza: alta.
 
-4. `close()` libera recursos si el bus nunca se inició.
+### MGR-011 — La gestión de archivos compartidos identifica propietarios por nombre, no por identidad completa del paquete
 
-5. El ciclo de vida define qué ocurre al intentar reiniciar una instancia detenida.
 
-6. `HttpTransport` funciona correctamente con HTTPS y rechaza destinos privados.
 
-7. Las redirecciones vuelven a validar el destino efectivo.
+Alta
 
-8. El dispatcher mantiene un comportamiento definido cuando se cancela una operación bloqueante.
+Bug confirmado por inspección
 
-9. La composición de Spigot y Fabric realiza el pipeline completo de chat hasta entrega.
 
-10. Las funcionalidades administrativas no implementadas están reflejadas correctamente en la documentación y los tests.
 
-## 9.3. Historial de Git
+- Ubicación: `LocalPackageDatabase.java`, métodos `registerPackage()`, `unregisterPackage()`, `checkOrphanedFiles()` y `getFileOwners()`.
+- Categoría: integridad, propiedad de archivos.
 
-El ZIP no contiene el historial necesario para realizar una evaluación fiable de la evolución arquitectónica.
+La base de datos registra propietarios como nombres de paquete, aunque la identidad completa incluye nombre, versión y canal.
 
-Los documentos incluyen fechas, referencias a auditorías anteriores y menciones a commits, pero eso no permite reconstruir por sí solo:
+Comportamiento actual: dos versiones del mismo paquete que declaren un mismo archivo se representan con el mismo propietario en el conjunto de nombres. Al retirar una de ellas, se elimina ese nombre del conjunto, aunque otra versión del mismo paquete siga instalada.
 
-* qué cambio introdujo cada defecto;
+Consecuencia: la base de datos puede dejar de reconocer que un archivo continúa asociado a otra versión. La protección de archivos compartidos no es fiable para versiones coexistentes.
 
-* si un refactor eliminó deuda o la trasladó;
+Confianza: alta.
 
-* cuánto tiempo permaneció una regresión;
+### MGR-012 — El análisis del manifiesto descarta silenciosamente entradas duplicadas de archivos
 
-* si las correcciones se integraron en el commit que corresponde a este ZIP.
 
-La evaluación de la evolución histórica queda pendiente de una copia con metadatos de Git o un conjunto de commits verificable.
 
-# 10. Matriz final de puntuaciones
+Media
 
-Las notas resumen el estado del código inspeccionado y están limitadas por la imposibilidad de ejecutar el conjunto completo.
+Bug confirmado por inspección
 
-| Área                            | Puntuación /10 | Estado                                                                      |
-| ------------------------------- | -------------- | --------------------------------------------------------------------------- |
-| Código                          | 7,5            | Buena base, con defectos operacionales importantes                          |
-| Arquitectura                    | 7,5            | Separación modular real                                                     |
-| Clean Architecture              | 7,5            | Límites razonables, composición no completamente consolidada                |
-| Hexagonal                       | 7,5            | SPI útiles; aislamiento efectivo por validar                                |
-| Modularidad                     | 7,5            | Amplia, pero con complejidad de integración                                 |
-| Separación de responsabilidades | 7              | Buena en el motor; más compleja en orquestación                             |
-| Legibilidad                     | 7              | Documentación extensa, navegación mejorable por duplicación de rutas        |
-| Features                        | 7              | Amplia funcionalidad, algunas operaciones incompletas                       |
-| Personalización                 | 7,5            | Buen potencial de extensión                                                 |
-| Seguridad                       | 6,5            | Buenas medidas parciales; transporte y autenticidad necesitan atención      |
-| Rendimiento                     | 6,5            | Algunas medidas de control, sin validación experimental                     |
-| Escalabilidad                   | 5,5            | Potencial arquitectónico, garantías de runtime insuficientes                |
-| Concurrencia                    | 6              | Executors acotados, pero problemas de sincronización y ciclo de vida        |
-| Testing                         | 6,5            | Base relevante; ejecución y cobertura efectiva sin verificar                |
-| Mantenibilidad                  | 7              | Buena separación, deuda de composición e integración                        |
-| Documentación                   | 7,5            | Muy extensa; parte del estado declarado necesita contraste con la ejecución |
 
-Valoración global estática: 7/10.
 
-No es una media matemática estricta. Es una valoración cualitativa que pondera especialmente corrección, arquitectura, seguridad y fiabilidad operacional.
+- Ubicación: `src/manager-spi/src/main/java/me/majhrs16/suite/manager/spi/ManifestParser.java`, análisis de la sección `Files`.
+- Categoría: validación, integridad del inventario.
 
-# 11. Potencial y madurez
+El parser añade las entradas a un `LinkedHashMap` mediante `files.put(path, ...)`. Si aparece otra entrada con la misma ruta, sustituye la anterior sin rechazar el manifiesto.
 
-## Potencial teórico
+Comportamiento actual: un manifiesto con rutas duplicadas puede terminar representado por una única entrada, perdiéndose la información del registro previo.
 
-Alto. La combinación de un core compartido, adaptadores de plataforma, proveedores intercambiables, reglas y múltiples mecanismos de sincronización es adecuada para un sistema extensible de chat.
+Comportamiento esperado: detectar rutas duplicadas y rechazar los inventarios ambiguos, salvo que exista una regla de duplicación explícita y segura.
 
-## Potencial arquitectónico
+Confianza: alta.
 
-También alto, aunque inferior al teórico. La arquitectura ya proporciona buena parte de las fronteras necesarias para evolucionar hacia una red de servidores, pero los componentes de sincronización, transporte y ciclo de vida tienen que respetar garantías más fuertes.
+### MGR-013 — El contrato de ciclo de vida anterior devuelve éxitos ficticios o no realiza las operaciones solicitadas
 
-## Potencial materializado
 
-Estimación cualitativa: aproximadamente el 65–75 % del potencial arquitectónico está materializado en la estructura y las funcionalidades presentes. No es una métrica objetiva de progreso, ni una estimación de porcentaje de código terminado.
 
-La diferencia restante no se resuelve añadiendo módulos. Se resuelve haciendo que las funcionalidades existentes tengan contratos operacionales verificables, pruebas de integración y comportamiento predecible bajo fallos.
+Alta
 
-# 12. Roadmap priorizado
+Bug confirmado por inspección
 
-| Prioridad | Trabajo                                                        | Esfuerzo aproximado | Beneficio                                                     |
-| --------- | -------------------------------------------------------------- | ------------------- | ------------------------------------------------------------- |
-| P0        | Corregir la doble difusión de `DefaultSyncBus.broadcast()`     | Bajo                | Elimina duplicados en una ruta crítica                        |
-| P0        | Corregir la finalización y la semántica de `broadcastAsync()`  | Medio               | Hace fiables los contratos asíncronos                         |
-| P0        | Corregir y probar la conexión fijada por IP en `HttpTransport` | Medio-alto          | Recupera fiabilidad HTTP/HTTPS y mantiene la protección SSRF  |
-| P1        | Consolidar el ciclo de vida de `DefaultSyncBus`                | Medio               | Evita recursos huérfanos y estados de reinicio inconsistentes |
-| P1        | Ejecutar las pruebas Java y web en CI y añadir regresiones     | Medio               | Verifica los fixes y evita recurrencias                       |
-| P1        | Endurecer la verificación de firmas del gestor de módulos      | Medio               | Mejora la autenticidad de extensiones                         |
-| P2        | Consolidar/documentar la ruta de bootstrap oficial             | Bajo-medio          | Reduce confusión arquitectónica                               |
-| P2        | Completar las acciones administrativas y presets anunciados    | Medio-alto          | Alinea la funcionalidad con las interfaces expuestas          |
-| P2        | Añadir benchmarks reproducibles y escenarios de fallo          | Medio-alto          | Permite justificar la escalabilidad                           |
-| P3        | Mejorar el onboarding y reducir contradicciones documentales   | Bajo-medio          | Facilita contribuciones y mantenimiento                       |
 
-Los esfuerzos son estimaciones de planificación, no tiempos medidos. No recomiendo una reescritura completa: los problemas prioritarios identificados admiten correcciones localizadas.
 
-# 13. Conclusión final
+- Ubicación: `src/manager-apt/src/main/java/me/majhrs16/suite/manager/apt/ModuleLifecycleAdapter.java`.
+- Categoría: integración, API pública, comportamiento inesperado.
 
-1. ¿Qué tan bueno es realmente TextFormatter Suite? Es un proyecto modular con una base arquitectónica sólida y una amplitud funcional significativa, pero no está demostrado que todas sus integraciones cumplan sus contratos operacionales.
+La implementación incluye métodos como `load()`, que devuelve el `parent` como cargador, `register()`, que devuelve `true`, y `unregister()`, que también devuelve `true`, sin realizar la operación de carga, registro o desregistro que su contrato aparenta ofrecer. `download()` devuelve una lista vacía y `relocate()` devuelve la ruta original.
 
-2. ¿Qué partes están excepcionalmente bien diseñadas? La separación entre modelos compartidos, router, formateador y adaptadores de plataforma; los SPI para servicios intercambiables; y la intención de aislar la infraestructura.
+Además, `resolve()` llama a `facade.repoInstall(...)`, que ejecuta la instalación, pese a que el método se presenta como una operación de resolución.
 
-3. ¿Qué partes son mediocres? La integración entre algunos módulos, la consolidación de la composición y determinadas funcionalidades administrativas incompletas.
+Comportamiento actual: un consumidor del contrato antiguo puede interpretar una respuesta positiva como prueba de que un módulo está cargado o registrado, cuando el adaptador no ha realizado esa operación.
 
-4. ¿Cuáles son sus peores defectos? La duplicación en `DefaultSyncBus.broadcast()`, los futuros poco fiables de `broadcastAsync()` y los problemas de diseño de la conexión fijada por IP en `HttpTransport`.
+Comportamiento esperado: cada método debe cumplir su contrato o informar explícitamente que la operación no está soportada.
 
-5. ¿Cuál es su mayor fortaleza arquitectónica? La capacidad de separar el motor del entorno de ejecución y de sustituir proveedores o adaptadores sin rehacer toda la lógica.
+Confianza: alta para los métodos observados; la consecuencia exacta depende del consumidor.
 
-6. ¿Cuál es su mayor riesgo futuro? Confundir una arquitectura preparada para extensibilidad con un runtime que ya garantiza entrega, seguridad, orden y recuperación bajo carga.
+### MGR-014 — La detección de actualizaciones devuelve los paquetes instalados, no los candidatos nuevos
 
-7. ¿Qué tan mantenible es? Razonablemente mantenible, siempre que se consoliden las rutas de inicialización y se documenten los contratos de concurrencia y ciclo de vida.
 
-8. ¿Qué tan extensible es? Potencialmente muy extensible gracias a sus SPI y módulos separados; la calidad de cada nueva integración dependerá de las garantías de su implementación.
 
-9. ¿Qué tan preparado está para múltiples plataformas? La estructura está diseñada para ello y existen adaptadores Spigot y Fabric. La paridad funcional y el comportamiento real de ambos requieren pruebas de integración.
+Media
 
-10. ¿Qué tan preparado está para una red grande de Minecraft? No puede considerarse demostrado. Hay que corregir primero la semántica del bus y del transporte, y después medir el comportamiento bajo carga.
+Bug confirmado por inspección
 
-11. ¿Qué tendría que cambiar para alcanzar escala network-level? Garantías de entrega claras, contrapresión efectiva, transporte fiable, deduplicación coherente, recuperación ante fallos, métricas y pruebas de carga con percentiles de latencia.
 
-12. ¿Qué partes no deberían tocarse sin una razón concreta? Los contratos centrales de `core-api`, la separación entre routing y rendering, y los SPI que mantienen el core independiente de la plataforma. Los fixes deberían preservar estas fronteras.
 
-13. ¿Qué debería hacerse primero? Corregir los tres hallazgos P0 y añadir pruebas de regresión antes de introducir nuevas funcionalidades de infraestructura.
+- Ubicación: `src/manager-apt/src/main/java/me/majhrs16/suite/manager/apt/ManagerFacade.java`, método `checkUpdates()`.
+- Categoría: bug funcional, experiencia operativa.
 
-14. ¿Qué porcentaje aproximado del proyecto está técnicamente maduro? Mi estimación cualitativa es del 65–75 % del potencial arquitectónico, con confianza limitada porque no ha sido posible ejecutar la suite completa ni recuperar el historial de Git.
+Cuando encuentra un candidato más reciente, el método agrega `installed` a la lista de actualizaciones, en lugar del candidato disponible.
 
-La conclusión general es que TextFormatter Suite tiene una arquitectura que merece consolidarse, no sustituirse. El esfuerzo de mayor valor inmediato no consiste en añadir más capas o interfaces, sino en cerrar la brecha entre los contratos declarados y el comportamiento real de las rutas críticas de ejecución.
+Comportamiento actual: el resultado identifica los paquetes instalados que tienen una actualización disponible, no la versión candidata que debería presentarse como actualización.
 
-Nota de alcance: este informe es una auditoría estática basada en el ZIP y en las verificaciones que el entorno permitió realizar. No equivale a una auditoría experimental completa ni a una validación de producción.
+Esto puede servir como lista de paquetes pendientes, pero no permite inferir que el método entregue las versiones nuevas.
+
+Comportamiento esperado: diferenciar claramente el paquete instalado de la versión candidata.
+
+Confianza: alta.
+
+### MGR-015 — La configuración no valida suficientemente la identidad de los repositorios ni los tipos de entrada
+
+
+
+Media
+
+Defecto confirmado
+
+
+
+- Ubicación: `src/manager-spi/src/main/java/me/majhrs16/suite/manager/spi/RepoConfigParser.java`.
+- Categoría: configuración, determinismo, mantenimiento.
+
+El parser acepta valores predeterminados para el nombre y la prioridad, y convierte determinados tipos de datos con coerciones. No comprueba de forma suficiente la unicidad de nombres, los conflictos de identidad ni que los tipos de todos los campos tengan la forma esperada antes de convertirlos.
+
+La caché de índices se identifica mediante el nombre del repositorio, mientras que los archivos se guardan utilizando un nombre saneado. Dos nombres distintos pueden transformarse en el mismo nombre de archivo.
+
+Consecuencia posible: colisiones de caché, ambigüedad entre orígenes o resultados dependientes de la configuración. No se ha demostrado una colisión concreta en una instalación real.
+
+Confianza: alta respecto de la falta de validación; media respecto de la consecuencia operativa.
+
+### MGR-016 — El soporte de GitHub Releases no demuestra una adquisición coherente con el contrato de paquetes
+
+
+
+Media
+
+Defecto confirmado
+
+
+
+- Ubicación: `RepositoryManager.java`, métodos `buildIndexUrl()` y `parseGitHubReleases()`.
+- Categoría: adquisición, compatibilidad, integridad.
+
+La ruta especial de GitHub analiza releases y busca assets `.jar` junto con un asset de hash denominado `nombre.jar.sha256`. El sistema convierte el tag en versión y deriva el nombre del artefacto desde el nombre del asset.
+
+Esto no equivale al contrato requerido de un índice tabulado con ZIP, metadatos internos autoritativos y validación de la identidad del paquete contra el manifiesto.
+
+Además, la conversión de URL a endpoint de releases no demuestra que todos los formatos de URL de repositorio configurables se conviertan en endpoints válidos.
+
+Confianza: alta respecto de la diferencia de contrato; no se ha probado cada variante de URL.
+
+### MGR-017 — No existe una recuperación persistente demostrada para operaciones interrumpidas
+
+
+
+Alta
+
+Funcionalidad ausente
+
+
+
+- Ubicación: `LocalPackageDatabase.java`, `PackageInstaller.java` y `AptInstaller.java`.
+- Categoría: integridad, recuperación.
+
+La base de datos escribe `library/status` mediante un archivo temporal y un movimiento atómico, pero el flujo de instalación no persiste un diario transaccional ni una lista recuperable de operaciones incompletas.
+
+Comportamiento actual: la inicialización vuelve a leer el estado persistido. No se demuestra un mecanismo que reconstruya o revierta automáticamente archivos escritos antes de una interrupción del proceso.
+
+Comportamiento esperado: detectar las operaciones incompletas y recuperar o declarar explícitamente un estado inconsistente.
+
+Confianza: alta respecto de la ausencia en los flujos inspeccionados.
+
+### MGR-018 — La implementación no demuestra límites de tamaño ni defensas contra bombas de descompresión
+
+
+
+Media
+
+Riesgo de seguridad
+
+
+
+- Ubicación: `AptInstaller.downloadPackage()` y `PackageInstaller.extractPackageFiles()`.
+- Categoría: seguridad, disponibilidad.
+
+La descarga se copia mediante `transferTo()` y la extracción también utiliza una copia sin límite de bytes descomprimidos o número de entradas en el flujo observado.
+
+Se verifica el tamaño final de los archivos declarados, pero esto no equivale a imponer límites globales antes o durante la extracción.
+
+Consecuencia posible: consumo excesivo de disco, memoria o tiempo si se procesa un artefacto malicioso o desproporcionado.
+
+Confianza: alta respecto de la ausencia de límites explícitos en estas rutas; el impacto depende del artefacto y del entorno.
+
+### Otros defectos relevantes confirmados por inspección
+
+Los hallazgos anteriores son los de mayor impacto. Hay, además, problemas específicos que afectan al comportamiento esperado del operador.
+
+| ID      | Defecto                                                                                                         | Ubicación                                               | Consecuencia                                                                                 |
+| ------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| MGR-019 | El tamaño esperado del ZIP se comprueba solo si el tamaño del manifiesto principal es positivo.                 | `PackageInstaller.install()`                            | Un tamaño omitido o cero evita esa comprobación local.                                       |
+| MGR-020 | El parser acepta valores negativos para `Size` si son numéricamente válidos.                                    | `ManifestParser.buildPackageEntry()`                    | El campo no cumple una validación estricta de rango.                                         |
+| MGR-021 | La eliminación de archivos registra errores como advertencias y continúa.                                       | `PackageInstaller.remove()`                             | Puede haber archivos residuales sin inventario.                                              |
+| MGR-022 | `Version.satisfies()` devuelve `true` para una restricción vacía.                                               | `Version.java`                                          | Una restricción ausente significa «sin restricción», no una comprobación de compatibilidad.  |
+| MGR-023 | La comparación SemVer no contempla correctamente todos los rangos de prerelease, comodines y límites numéricos. | `Version.java`                                          | Determinadas restricciones válidas pueden resolverse incorrectamente o provocar errores.     |
+| MGR-024 | Los campos `Arch`, `Platform` y `OS` se parsean, pero el resolver no los aplica.                                | `DependencyResolver.isCompatible()`                     | La compatibilidad declarada no se convierte en una garantía de instalación.                  |
+| MGR-025 | La caché no conserva necesariamente la identidad de origen de forma inequívoca.                                 | `RepositoryManager.loadCachedIndexes()` y `updateAll()` | Los índices dependen de nombres de repositorio y de su transformación en nombres de archivo. |
+| MGR-026 | No se demuestra una política de limpieza integral de temporales tras fallos.                                    | `AptInstaller.downloadPackage()`                        | Los artefactos pueden permanecer en `library/tmp/`.                                          |
+
+MGR-019 y MGR-020 no implican que cualquier paquete con un tamaño cero sea instalable: el hash y las demás comprobaciones pueden seguir rechazándolo. El defecto es que la validación de tamaño no es estricta y uniforme.
+
+MGR-023 requiere una precisión: la clase `Version` sí implementa una parte importante de SemVer, incluyendo comparación numérica de `major.minor.patch` y orden de versiones prerelease frente a versiones estables. El problema es la cobertura incompleta de casos límite, no que toda comparación de versiones sea lexicográfica.
+
+## E. Comportamientos esperados frente a comportamientos reales
+
+| Operación                  | Comportamiento real encontrado                                                         | Evaluación                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Inicializar el Manager     | Lee `repo.yml`, inicializa el estado local y carga los índices en caché.               | Parcial; el arranque puede continuar con cero repositorios configurados.                    |
+| Actualizar índices         | Descarga, analiza y guarda los índices por repositorio.                                | Parcial; el parser convencional tiene un defecto que impide aceptar entradas válidas.       |
+| Consultar candidatos       | Filtra por nombre, versión derivada de la URL, canal y prioridad.                      | Incorrecto frente al contrato de metadatos autoritativos.                                   |
+| Resolver dependencias      | Selecciona candidatos y construye pasos en orden de selección.                         | No garantiza transitividad, compatibilidad ni orden topológico.                             |
+| Instalar desde repositorio | Descarga, verifica el artefacto y delega en el instalador local.                       | Parcial; no garantiza una operación atómica para el conjunto.                               |
+| Instalar ZIP local         | Analiza el manifiesto, comprueba algunos conflictos, extrae y registra paquetes.       | Parcial; puede dejar archivos residuales y estado divergente tras un fallo.                 |
+| Actualizar paquetes        | Resuelve candidatos e instala con `force=true`.                                        | Incorrecto para una actualización que deba preservar la coherencia de versiones y archivos. |
+| Eliminar paquetes          | Comprueba dependencias inversas, elimina archivos y desregistra.                       | Parcial; puede eliminar registros aunque falle la eliminación física.                       |
+| Verificar archivos         | Compara tamaño y SHA-256 de archivos inventariados.                                    | Parcialmente correcto; depende de que el inventario sea íntegro y las rutas sean seguras.   |
+| Recuperarse de un fallo    | La inicialización vuelve a leer el estado persistido.                                  | No hay recuperación transaccional completa demostrada.                                      |
+| Activar un módulo          | El adaptador no implementa la carga ni el registro real en los métodos inspeccionados. | No garantizado por el Manager.                                                              |
+
+### Qué está garantizado y qué no
+
+Garantías parciales presentes:
+
+- El archivo `library/status` se escribe mediante temporal y movimiento atómico cuando `save()` finaliza correctamente.
+- Los archivos extraídos pasan por comprobaciones de tamaño y SHA-256.
+- Se detectan varios casos de rutas que escapan léxicamente del directorio de instalación.
+- Las dependencias inversas simples, declaradas únicamente mediante nombres, bloquean ciertas eliminaciones.
+
+Comportamientos condicionados:
+
+- La descarga es verificada respecto al hash y tamaño del índice cuando el candidato llega correctamente a `AptInstaller`.
+- La instalación local valida las dependencias según las cadenas que interpreta.
+- La eliminación conserva archivos que el inventario identifica como compartidos, pero esa identificación no es fiable cuando coexisten versiones del mismo nombre.
+
+Comportamientos no garantizados:
+
+- Que un plan represente el grafo completo de dependencias.
+- Que una operación multi-paquete se confirme o revierta como una unidad.
+- Que la eliminación preserve siempre los archivos necesarios para otros paquetes.
+- Que los archivos instalados pertenezcan físicamente al directorio autorizado frente a enlaces simbólicos.
+- Que un paquete instalado quede activado en Bukkit, Fabric o Forge.
+- Que el estado en memoria y el persistido permanezcan coherentes tras un fallo de escritura.
+
+## F. Aspectos correctos que deben preservarse conceptualmente
+
+La auditoría no justifica descartar indiscriminadamente todo el código. Hay componentes con una base técnica útil.
+
+### 1. Separación de responsabilidades
+
+`manager-spi`, `manager-core` y `manager-apt` expresan una división razonable entre contratos, estado local y adquisición de paquetes.
+
+Esta división coincide con el principio de la especificación: APT debe preparar candidatos y planes; la instalación local debe controlar los cambios en el estado instalado.
+
+El problema principal es que las garantías de los contratos todavía no están implementadas de extremo a extremo.
+
+### 2. Base de datos local y formato compartido
+
+`LocalPackageDatabase` mantiene el estado en `library/status`, independiente de la disponibilidad de los repositorios. Esto es correcto como principio arquitectónico.
+
+También es razonable reutilizar `ManifestParser` para leer los manifiestos de los paquetes y el estado local, siempre que ambos formatos tengan reglas compatibles y validación estricta.
+
+La escritura temporal y el movimiento atómico de `save()` son una buena medida para evitar que una escritura normal deje un archivo parcialmente escrito. No deben confundirse, sin embargo, con una transacción completa de instalación.
+
+### 3. Verificación criptográfica de archivos
+
+`AptInstaller` calcula SHA-256 sobre el archivo descargado, y `PackageInstaller` verifica el tamaño y el hash de los archivos extraídos.
+
+Son controles importantes que merece la pena conservar conceptualmente. Su efectividad depende de que el hash esperado proceda de un índice de confianza y de que el manifiesto y el inventario se validen correctamente.
+
+Un hash demuestra correspondencia con el valor esperado; por sí solo no autentica al editor del paquete ni a un repositorio comprometido.
+
+### 4. Comparación numérica de versiones
+
+`Version.compareTo()` compara numéricamente los componentes principales y contempla la precedencia de versiones prerelease. Es una base mejor que comparar versiones completas como cadenas.
+
+La limitación está en los casos límite y en la implementación de rangos, no en la idea de utilizar un objeto de versión tipado.
+
+### 5. Descriptor de módulos separado del ciclo de vida
+
+`SuiteBootstrap` mantiene la distinción entre descriptores del grafo y servicios reales. Esto es coherente con el modelo arquitectónico de TxF y no debería confundirse con los defectos del adaptador de compatibilidad del Manager.
+
+## G. Matriz de cumplimiento de la especificación
+
+La matriz evalúa los requisitos de `docs/NEW-MANAGER.md` y las áreas adicionales de auditoría solicitadas. Los estados corresponden al código inspeccionado, no a una ejecución del sistema.
+
+Leyenda: CUMPLIDO · PARCIAL · AUSENTE · INCORRECTO · NO VERIFICADO.
+
+| Área / requisito                          | Estado                                       | Evidencia y diagnóstico                                                                                                         |
+| ----------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Arquitectura APT/dpkg                     | PARCIAL                                      | Hay módulos separados, pero el flujo APT no garantiza una operación local transaccional.                                        |
+| Contratos públicos del Manager            | PARCIAL                                      | `ManagerFacade` expone operaciones, pero el adaptador antiguo contiene métodos que no realizan la operación anunciada.          |
+| `Module.java` como descriptor             | CUMPLIDO en `SuiteBootstrap`                 | El bootstrap resuelve el grafo sin instanciar reflectivamente los descriptores.                                                 |
+| Configuración `repo.yml`                  | PARCIAL                                      | Existe `RepoConfigParser`; no se demuestra validación completa de identidad y tipos.                                            |
+| Configuración general `config.yml`        | NO VERIFICADO                                | No se ha seguido exhaustivamente el flujo de configuración de todas las plataformas para establecer su relación con el Manager. |
+| Índice remoto `packages.list`             | INCORRECTO                                   | `ManifestParser.parseRemoteIndex()` usa el campo de tamaño como SHA-256.                                                        |
+| Caché en `library/lists/`                 | INCORRECTO                                   | Los índices convencionales guardados pueden ser rechazados al recargarlos por el mismo defecto del parser.                      |
+| Metadatos `METADATA/package.list`         | PARCIAL                                      | Existe parser multipaquete, pero hay validaciones incompletas y rutas ambiguas en el inventario.                                |
+| Cabecera del manifiesto                   | PARCIAL                                      | Se procesa el primer bloque, pero no se validan todos los invariantes necesarios del paquete principal.                         |
+| Campos obligatorios                       | PARCIAL                                      | Algunos campos son obligatorios; otros tienen valores predeterminados y no todos se aplican operativamente.                     |
+| Semántica de `Type`                       | PARCIAL                                      | Existe `PackageType`, pero no se demuestra un tratamiento integral de paquetes, dependencias y metapaquetes.                    |
+| `Channel`                                 | PARCIAL                                      | Se filtra mediante una opción del repositorio; no se demuestra una política completa de selección de canales.                   |
+| Restricciones de versiones                | INCORRECTO                                   | El resolver no analiza dependencias con restricciones; el instalador compara cadenas con nombres de paquete.                    |
+| Compatibilidad de arquitectura            | INCORRECTO                                   | `DependencyResolver.isCompatible()` devuelve `true`.                                                                            |
+| Compatibilidad de sistema operativo       | INCORRECTO                                   | El campo se almacena, pero no se aplica en el resolver.                                                                         |
+| Compatibilidad de plataforma              | INCORRECTO                                   | El campo se almacena, pero no se aplica en el resolver.                                                                         |
+| Selección determinista de candidatos      | PARCIAL                                      | Ordena por prioridad y versión, pero la versión deriva de la URL y no se valida contra el manifiesto.                           |
+| Dependencias transitivas                  | AUSENTE                                      | El resolver no recorre las dependencias declaradas por los artefactos.                                                          |
+| Ciclos de dependencias                    | PARCIAL                                      | Existe detección de ciclos en la estructura de resolución, pero el recorrido real no construye el grafo transitivo.             |
+| Dependencias compartidas                  | PARCIAL                                      | Hay registro de propiedad, pero la identidad del propietario se reduce al nombre del paquete.                                   |
+| Conflictos entre archivos                 | PARCIAL                                      | Se detectan conflictos de propiedad; `force` permite sobrescribir sin sustituir coherentemente los registros previos.           |
+| Descarga HTTP                             | PARCIAL                                      | Comprueba códigos HTTP y verifica el archivo descargado, pero carece de límites explícitos de descarga.                         |
+| Validación del SHA-256 del ZIP            | PARCIAL                                      | El hash se verifica en la descarga; la coherencia entre índice, manifiesto y origen no está garantizada integralmente.          |
+| Tamaño exacto del ZIP                     | PARCIAL                                      | La comprobación existe, pero el tamaño declarado puede omitirse o ser cero en el manifiesto local.                              |
+| Integridad individual de archivos         | PARCIAL                                      | Se verifican tamaños y hashes tras extraer, pero la operación puede dejar residuos al fallar.                                   |
+| Protección contra ZIP Slip                | PARCIAL                                      | Hay comprobación léxica de rutas; no hay protección completa demostrada frente a enlaces simbólicos.                            |
+| Protección contra bombas de descompresión | AUSENTE en el flujo inspeccionado            | No se observan límites globales explícitos de tamaño descomprimido o cantidad de entradas.                                      |
+| Inventario de archivos                    | PARCIAL                                      | Se registra por paquete, pero no se rechazan todas las ambigüedades de propiedad e inventario.                                  |
+| Estado `library/status`                   | PARCIAL                                      | Existe lectura y escritura, pero no un mecanismo completo de recuperación transaccional.                                        |
+| Escritura atómica de `status`             | PARCIAL                                      | Temporal y movimiento atómico; no cubre conjuntamente los archivos instalados y el estado en memoria.                           |
+| Recuperación de interrupciones            | AUSENTE                                      | No se demuestra un diario persistente de operaciones ni una recuperación integral.                                              |
+| Instalación desde ZIP local               | PARCIAL                                      | Existe flujo real, pero el rollback no revierte todos los archivos.                                                             |
+| Actualización de paquetes                 | INCORRECTO                                   | `force=true` permite sobrescritura sin sustitución transaccional de versiones.                                                  |
+| Eliminación segura                        | INCORRECTO                                   | Puede desregistrar paquetes aunque falle la eliminación física de archivos.                                                     |
+| Metapaquetes                              | PARCIAL                                      | El parser y el instalador admiten varios registros, pero no se demuestra instalación y eliminación coherentes como unidad.      |
+| Almacenamiento `library/packages/`        | PARCIAL                                      | Se crea el directorio; no se demuestra una política completa de almacenamiento de artefactos instalados.                        |
+| Almacenamiento `library/dependencies/`    | PARCIAL                                      | Se crea el directorio; no se demuestra un modelo completo de dependencias físicas compartidas.                                  |
+| Activación y desactivación                | AUSENTE en el adaptador inspeccionado        | Los métodos de ciclo de vida no realizan carga, registro y desregistro reales.                                                  |
+| Integración Bukkit/Fabric/Forge           | NO VERIFICADO en su conjunto                 | El flujo del bootstrap está claro, pero falta una comprobación integral de cada adaptador y punto de entrada.                   |
+| Comandos requeridos                       | NO VERIFICADO en su conjunto                 | No se ha reconstruido el registro completo de comandos de todas las plataformas.                                                |
+| Pruebas específicas del Manager           | AUSENTE en el árbol de pruebas inspeccionado | No aparecen suites de pruebas dedicadas en `manager-core`, `manager-spi` o `manager-apt`.                                       |
+| Compilación completa                      | NO VERIFICADO                                | No se ejecutó Gradle en un checkout local durante esta auditoría.                                                               |
+| Empaquetado y distribución                | PARCIAL                                      | Hay configuración Gradle de los módulos, pero falta verificar los artefactos finales y su integración en cada distribución.     |
+
+### Discrepancia de nombres de configuración
+
+Hay una diferencia importante entre el texto de la solicitud de auditoría y la especificación normativa: la primera menciona `repositories.yml`, mientras que `docs/NEW-MANAGER.md` exige `repo.yml`, separado de `config.yml`.
+
+En la implementación inspeccionada, `ManagerFacade.initialize()` utiliza `repo.yml`. No debe declararse que falta `repositories.yml` como bug sin resolver antes esa discrepancia contractual.
+
+## H. Resultados de pruebas y compilación
+
+### Alcance de las pruebas realizadas
+
+| Comprobación                                                      | Resultado                                                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Inspección del árbol remoto de `main`                             | Realizada mediante la API de GitHub.                                                |
+| Lectura de la especificación `docs/NEW-MANAGER.md`                | Realizada.                                                                          |
+| Inspección estática de los principales componentes del Manager    | Realizada parcialmente sobre sus archivos fuente completos o fragmentos relevantes. |
+| Seguimiento del flujo de instalación, actualización y eliminación | Realizado mediante inspección estática.                                             |
+| Ejecución de tests JUnit                                          | No ejecutada.                                                                       |
+| Compilación Gradle                                                | No ejecutada.                                                                       |
+| Reproducción de bugs en un entorno aislado                        | No ejecutada.                                                                       |
+| Verificación de artefactos de distribución                        | No ejecutada.                                                                       |
+| Pruebas de integración Bukkit/Fabric/Forge                        | No ejecutadas.                                                                      |
+
+El módulo `manager-apt/build.gradle` declara JUnit 5, AssertJ y `useJUnitPlatform()`. Eso demuestra que la infraestructura de pruebas está configurada, no que haya pruebas útiles ni que estas pasen.
+
+En el árbol consultado no aparecen suites específicas de pruebas dentro de los tres módulos del Manager. Es una carencia de cobertura observable en ese árbol, no una prueba de que todas las funcionalidades estén rotas.
+
+No presento resultados de compilación ni tests inventados. Tampoco puedo concluir que el proyecto completo compile o falle: esa comprobación requiere ejecutar las tareas correspondientes sobre un checkout concreto.
+
+## I. Diagnóstico arquitectónico
+
+### ¿Qué componentes son compatibles con el modelo APT/dpkg?
+
+`manager-spi`: conservar conceptualmente, pero no dar por correctos todos sus contratos.
+
+La separación de modelos y parsers es apropiada. `PackageEntry`, `FileEntry`, `PackageType`, `RepositoryConfig` y `Version` permiten expresar buena parte del dominio requerido.
+
+Los defectos de parsing, validación y semántica impiden considerar estos contratos una base terminada. La estructura es aprovechable; las garantías aún no lo son.
+
+`manager-core`: responsabilidades adecuadas, garantías insuficientes.
+
+`LocalPackageDatabase` y `PackageInstaller` corresponden al papel de dpkg. Es correcto que el estado instalado no dependa de la conexión a los repositorios.
+
+La incompatibilidad más importante no es la existencia de estas clases, sino la falta de una unidad transaccional que coordine:
+
+- La modificación de archivos.
+- El inventario de propiedad.
+- El registro persistido.
+- La actualización en memoria.
+- La recuperación ante errores.
+
+La persistencia atómica de un archivo no resuelve por sí sola esta coordinación.
+
+`manager-apt`: separación nominal correcta, resolución funcional incompleta.
+
+`RepositoryManager`, `DependencyResolver` y `AptInstaller` expresan las responsabilidades adecuadas. Sin embargo, el resolver no genera un grafo transitivo real y la adquisición no valida la identidad del candidato contra los metadatos como exige el contrato.
+
+Este es un problema estructural de la implementación del resolver, no un simple bug de presentación o de comandos.
+
+`ManagerFacade`: útil como punto de composición, pero con integración incompleta.
+
+Centralizar la inicialización y exponer operaciones públicas es razonable. No obstante, la fachada no convierte automáticamente en correctos los componentes que conecta.
+
+Además, la inicialización debe manejar explícitamente la ausencia de repositorios o de índices válidos si el sistema pretende operar sin conexión o permitir instalaciones locales.
+
+`ModuleLifecycleAdapter`: incompatible con un contrato de ciclo de vida efectivo.
+
+Este componente presenta la incompatibilidad más clara entre la API anterior y la implementación nueva. Devolver resultados positivos sin ejecutar las operaciones anunciadas no constituye una adaptación funcional.
+
+La separación de paquetes APT/dpkg puede coexistir con el modelo de módulos de TxF, pero no sustituye por sí sola al mecanismo de carga, activación y desactivación de las plataformas.
+
+### Causas raíz y consecuencias
+
+\#chatgpt-mermaid-\_r_lm\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(237, 237, 237);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_lm\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_lm\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_lm\_ .error-icon{fill:rgb(48, 48, 48);}#chatgpt-mermaid-\_r_lm\_ .error-text{fill:rgb(237, 237, 237);stroke:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_lm\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_lm\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_lm\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_lm\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_lm\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_lm\_ .marker.cross{stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_lm\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_lm\_ p{margin:0;}#chatgpt-mermaid-\_r_lm\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ .cluster-label text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ .cluster-label span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-\_r_lm\_ .label text,#chatgpt-mermaid-\_r_lm\_ span{fill:rgb(237, 237, 237);color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ .node rect,#chatgpt-mermaid-\_r_lm\_ .node circle,#chatgpt-mermaid-\_r_lm\_ .node ellipse,#chatgpt-mermaid-\_r_lm\_ .node polygon,#chatgpt-mermaid-\_r_lm\_ .node path{fill:rgb(9, 23, 44);stroke:rgb(31, 78, 148);stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .rough-node .label text,#chatgpt-mermaid-\_r_lm\_ .node .label text,#chatgpt-mermaid-\_r_lm\_ .image-shape .label,#chatgpt-mermaid-\_r_lm\_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-\_r_lm\_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .rough-node .label,#chatgpt-mermaid-\_r_lm\_ .node .label,#chatgpt-mermaid-\_r_lm\_ .image-shape .label,#chatgpt-mermaid-\_r_lm\_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-\_r_lm\_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-\_r_lm\_ .root .anchor path{fill:rgb(175, 175, 175)!important;stroke-width:0;stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_lm\_ .arrowheadPath{fill:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_lm\_ .edgePath .path{stroke:rgb(175, 175, 175);stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .flowchart-link{stroke:rgb(175, 175, 175);fill:none;}#chatgpt-mermaid-\_r_lm\_ .edgeLabel{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_lm\_ .edgeLabel p{background-color:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_lm\_ .edgeLabel rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_lm\_ .labelBkg{background-color:rgba(0, 0, 0, 0.5);}#chatgpt-mermaid-\_r_lm\_ .cluster rect{fill:rgb(48, 48, 48);stroke:rgba(255, 255, 255, 0.15);stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .cluster text{fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ .cluster span{color:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(48, 48, 48);border:1px solid rgba(255, 255, 255, 0.15);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-\_r_lm\_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(237, 237, 237);}#chatgpt-mermaid-\_r_lm\_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-\_r_lm\_ .icon-shape,#chatgpt-mermaid-\_r_lm\_ .image-shape{background-color:rgb(0, 0, 0);text-align:center;}#chatgpt-mermaid-\_r_lm\_ .icon-shape p,#chatgpt-mermaid-\_r_lm\_ .image-shape p{background-color:rgb(0, 0, 0);padding:2px;}#chatgpt-mermaid-\_r_lm\_ .icon-shape .label rect,#chatgpt-mermaid-\_r_lm\_ .image-shape .label rect{opacity:0.5;background-color:rgb(0, 0, 0);fill:rgb(0, 0, 0);}#chatgpt-mermaid-\_r_lm\_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-\_r_lm\_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-\_r_lm\_ .node .neo-node{stroke:rgb(31, 78, 148);}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_lm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_lm\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node .neo-line path{stroke:rgb(31, 78, 148);filter:none;}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_lm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_lm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_lm\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_lm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_lm\_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_lm\_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(153, 206, 255);}#chatgpt-mermaid-\_r_lm\_ .node tspan[font-weight="normal"],#chatgpt-mermaid-\_r_lm\_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-\_r_lm\_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .node rect,#chatgpt-mermaid-\_r_lm\_ .node circle,#chatgpt-mermaid-\_r_lm\_ .node ellipse,#chatgpt-mermaid-\_r_lm\_ .node polygon,#chatgpt-mermaid-\_r_lm\_ .node path{fill:rgb(0, 40, 77);stroke:rgba(255, 255, 255, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_lm\_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-\_r_lm\_ .node.mermaid-decision .label-container{fill:rgb(0, 14, 26);stroke:rgb(26, 62, 95);stroke-dasharray:2,2;}#chatgpt-mermaid-\_r_lm\_ .edgePaths .flowchart-link{stroke:rgb(175, 175, 175);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-\_r_lm\_ .marker{fill:rgb(175, 175, 175);stroke:rgb(175, 175, 175);}#chatgpt-mermaid-\_r_lm\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}Parser y contratosincompletosÍndices y candidatosincorrectosResolución dedependenciasincompletaPlanes que nogarantizancompatibilidadFallos durante lainstalaciónInstalación sintransacción integralArchivos residualesEstado divergentePropiedad por nombrede paqueteConflictos entreversionesEliminación overificación incoherentesAdaptador de ciclo devida incompletoInstalado no equivale aactivado
+
+Las causas raíz que dominan el diagnóstico son:
+
+1. Contratos de metadatos insuficientemente estrictos.
+2. Resolver que no implementa el grafo exigido.
+3. Instalación y eliminación sin transacciones completas.
+4. Modelo de propiedad insuficiente para versiones y paquetes compartidos.
+5. Adaptación incompleta entre gestión de paquetes y ciclo de vida del runtime.
+
+Estos problemas están relacionados, pero no son intercambiables. Corregir el parser no vuelve transaccional la instalación; corregir la persistencia no hace que el resolver conozca dependencias transitivas.
+
+La evidencia justifica sustituir o rediseñar partes fundamentales del resolver y del mecanismo de instalación transaccional. No justifica descartar automáticamente todos los modelos de dominio, parsers auxiliares o mecanismos de hash sin evaluar su utilidad individual.
+
+## J. Conclusión
+
+### 1. ¿El Manager actual hace realmente lo que aparenta hacer?
+
+Parcialmente. Tiene operaciones reales de configuración, consulta de índices, descarga, instalación, persistencia y eliminación. Sin embargo, sus garantías no corresponden todavía a las de un gestor de paquetes completo y fiable.
+
+### 2. ¿Qué operaciones funcionan correctamente y bajo qué condiciones?
+
+La escritura atómica del archivo de estado, las comparaciones numéricas básicas de versiones y las comprobaciones de hashes son mecanismos válidos bajo sus condiciones de uso.
+
+La instalación local puede funcionar con paquetes sencillos, manifiestos válidos, dependencias ya satisfechas y ausencia de conflictos de rutas. No se ha demostrado que ese éxito se mantenga ante fallos intermedios, actualizaciones o paquetes compartidos.
+
+### 3. ¿Cuáles son los bugs más importantes?
+
+Los de mayor impacto son:
+
+- MGR-001: parser del índice que lee el campo incorrecto.
+- MGR-002: ausencia de resolución transitiva real.
+- MGR-003: rollback incompleto de instalación.
+- MGR-004: protección insuficiente frente a enlaces simbólicos.
+- MGR-005: actualización que puede dejar versiones y archivos incoherentes.
+- MGR-006: eliminación que puede desregistrar paquetes con archivos residuales.
+- MGR-009: validación inconsistente de dependencias con restricciones.
+- MGR-010: divergencia entre memoria y estado persistido.
+- MGR-013: adaptador de ciclo de vida que puede comunicar éxito sin realizar la operación.
+
+### 4. ¿Qué comportamientos inesperados puede observar un usuario?
+
+Entre otros:
+
+- Índices válidos que no se pueden cargar.
+- Paquetes que aparecen como resolubles y fallan durante la instalación.
+- Instalaciones fallidas que dejan archivos en disco.
+- Versiones antiguas y nuevas registradas simultáneamente.
+- Eliminaciones que informan éxito operativo pese a dejar archivos residuales.
+- Paquetes instalados que no se encuentran realmente activados.
+- Estado en memoria que difiere del archivo `status` tras un error de persistencia.
+
+### 5. ¿Qué requisitos no están implementados?
+
+No se demuestra la implementación completa de:
+
+- Resolución transitiva con restricciones de versiones.
+- Compatibilidad efectiva por arquitectura, sistema operativo y plataforma.
+- Planificación topológica de operaciones.
+- Transacciones multi-paquete con rollback integral.
+- Recuperación persistente tras interrupciones.
+- Propiedad segura de archivos compartidos.
+- Protección completa contra rutas redirigidas mediante enlaces simbólicos.
+- Activación y desactivación reales mediante el adaptador de ciclo de vida.
+- Contrato completo de comandos, permisos y operación en todas las plataformas.
+
+### 6. ¿Qué componentes actuales son técnicamente sólidos?
+
+La división entre SPI, núcleo local y adquisición remota es razonable. También son aprovechables la base de datos local, la escritura temporal de `status`, el modelo de versiones y la verificación criptográfica, siempre que se completen sus validaciones y contratos.
+
+### 7. ¿Qué problemas impiden considerar el Manager fiable?
+
+La combinación de resolución incompleta, instalación no transaccional, propiedad de archivos insuficiente y recuperación limitada. Estos problemas pueden producir un estado en el que el registro instalado no representa fielmente los archivos físicos del sistema.
+
+### 8. ¿Qué evidencias faltan para una conclusión definitiva?
+
+Faltan la ejecución de las suites de pruebas y de la compilación, la reproducción aislada de los defectos, la inspección completa de los comandos y adaptadores de plataforma, y la verificación de los artefactos de distribución.
+
+Veredicto final: la implementación actual contiene una base arquitectónica aprovechable, pero no cumple la especificación de reingeniería en aspectos fundamentales. No debe considerarse fiable para operaciones generales de instalación, actualización y eliminación hasta que se demuestren las garantías de resolución, integridad, transacción y recuperación exigidas por el contrato.
+
+La evidencia estática justifica una revisión profunda del resolver, del instalador local y del adaptador de ciclo de vida. La decisión de reemplazar el Manager completo debe apoyarse en esa incompatibilidad funcional demostrada, no en la mera existencia de defectos localizados ni en la ausencia de pruebas ejecutadas.

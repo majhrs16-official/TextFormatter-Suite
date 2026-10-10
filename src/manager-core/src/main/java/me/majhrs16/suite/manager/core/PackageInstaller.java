@@ -85,14 +85,34 @@ public final class PackageInstaller {
         // 5. Check for conflicts (file ownership)
         checkFileConflicts(manifest, force);
 
-        // 6. Extract files and build package entries
-        List<PackageEntry> installedEntries = new ArrayList<>();
+        // 6. Extract ALL files to temporary location FIRST (transactional)
+        Path tempExtractDir = null;
+        Map<PackageEntry, Map<String, FileEntry>> allExtractedFiles = new LinkedHashMap<>();
         try {
+            tempExtractDir = Files.createTempDirectory(database.getTmpDir(), "install-");
+            
+            // Extract all packages to temp directory
             for (PackageEntry pkgEntry : manifest.allPackages()) {
-                // Extract files for this package
-                Map<String, FileEntry> extractedFiles = extractPackageFiles(zipPath, pkgEntry);
+                Map<String, FileEntry> extractedFiles = extractPackageFilesToTemp(zipPath, pkgEntry, tempExtractDir);
+                allExtractedFiles.put(pkgEntry, extractedFiles);
+            }
+
+            // 7. Validate all extracted files against manifest
+            for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
+                validateExtractedFiles(entry.getKey(), entry.getValue());
+            }
+
+            // 8. ATOMIC COMMIT: Move all files from temp to final location
+            for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
+                moveFilesToFinalLocation(entry.getKey(), entry.getValue(), tempExtractDir);
+            }
+
+            // 9. Register all packages in database
+            List<PackageEntry> installedEntries = new ArrayList<>();
+            for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
+                PackageEntry pkgEntry = entry.getKey();
+                Map<String, FileEntry> extractedFiles = entry.getValue();
                 
-                // Create entry with actual file info
                 PackageEntry installedEntry = new PackageEntry(
                         pkgEntry.name(),
                         pkgEntry.version(),
@@ -103,10 +123,10 @@ public final class PackageInstaller {
                         pkgEntry.platform(),
                         pkgEntry.url(),
                         pkgEntry.os(),
-                        zipSha256, // Use ZIP SHA256 as artifact identifier
+                        zipSha256,
                         zipSize,
                         extractedFiles,
-                        zipSha256, // Source artifact
+                        zipSha256,
                         pkgEntry.parentPackage(),
                         Map.of(
                                 "Installed-Time", Instant.now().toString(),
@@ -114,22 +134,23 @@ public final class PackageInstaller {
                         )
                 );
                 
-                // Register in database
                 database.registerPackage(installedEntry);
                 installedEntries.add(installedEntry);
                 logger.info("Installed package: " + installedEntry.name() + " " + installedEntry.version() + " (" + installedEntry.channel() + ")");
             }
+
+            return installedEntries;
+
         } catch (IOException e) {
-            // Rollback on failure
-            for (PackageEntry entry : installedEntries) {
+            throw new InstallException("Failed to extract/install package: " + e.getMessage(), e);
+        } finally {
+            // Cleanup temp directory
+            if (tempExtractDir != null) {
                 try {
-                    database.unregisterPackage(entry.name(), entry.version(), entry.channel());
+                    deleteDirectory(tempExtractDir);
                 } catch (IOException ignored) {}
             }
-            throw new InstallException("Failed to extract/install package: " + e.getMessage(), e);
         }
-
-        return installedEntries;
     }
 
     /**
@@ -185,17 +206,25 @@ public final class PackageInstaller {
         }
 
         // Remove files that are exclusively owned by this package
+        List<String> failedDeletions = new ArrayList<>();
         for (Map.Entry<String, Set<String>> orphaned : orphanedFiles.entrySet()) {
             Path filePath = installRoot.resolve(orphaned.getKey());
             try {
-                Files.deleteIfExists(filePath);
-                logger.debug("Removed file: " + orphaned.getKey());
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    logger.debug("Removed file: " + orphaned.getKey());
+                }
             } catch (IOException e) {
-                logger.warn("Failed to remove file " + orphaned.getKey() + ": " + e.getMessage());
+                logger.error("Failed to remove file " + orphaned.getKey() + ": " + e.getMessage());
+                failedDeletions.add(orphaned.getKey());
             }
         }
 
-        // Unregister from database
+        if (!failedDeletions.isEmpty()) {
+            throw new InstallException("Failed to remove files, package not unregistered: " + failedDeletions);
+        }
+
+        // Unregister from database only after all files successfully deleted
         try {
             database.unregisterPackage(entry.name(), entry.version(), entry.channel());
         } catch (IOException e) {
@@ -315,7 +344,7 @@ public final class PackageInstaller {
         }
     }
 
-    private Map<String, FileEntry> extractPackageFiles(Path zipPath, PackageEntry pkgEntry) throws IOException {
+    private Map<String, FileEntry> extractPackageFilesToTemp(Path zipPath, PackageEntry pkgEntry, Path tempDir) throws IOException {
         Map<String, FileEntry> extracted = new LinkedHashMap<>();
         
         try (ZipFile zip = new ZipFile(zipPath.toFile())) {
@@ -331,12 +360,12 @@ public final class PackageInstaller {
                     throw new IOException("File not found in ZIP: " + zipPathStr);
                 }
 
-                Path destPath = installRoot.resolve(fileEntry.path());
+                Path destPath = tempDir.resolve(fileEntry.path());
                 Files.createDirectories(destPath.getParent());
 
                 // Extract with ZIP slip protection
                 Path normalizedDest = destPath.normalize();
-                if (!normalizedDest.startsWith(installRoot.normalize())) {
+                if (!normalizedDest.startsWith(tempDir.normalize())) {
                     throw new IOException("ZIP slip attempt detected: " + fileEntry.path());
                 }
 
@@ -365,6 +394,62 @@ public final class PackageInstaller {
         }
 
         return extracted;
+    }
+
+    private void validateExtractedFiles(PackageEntry pkgEntry, Map<String, FileEntry> extractedFiles) throws IOException {
+        // Verify all expected files are present
+        for (FileEntry expectedFile : pkgEntry.files().values()) {
+            FileEntry actualFile = extractedFiles.get(expectedFile.path());
+            if (actualFile == null) {
+                throw new IOException("Missing extracted file: " + expectedFile.path());
+            }
+            if (!actualFile.sha256().equalsIgnoreCase(expectedFile.sha256())) {
+                throw new IOException("File hash mismatch after extraction: " + expectedFile.path());
+            }
+            if (actualFile.size() != expectedFile.size()) {
+                throw new IOException("File size mismatch after extraction: " + expectedFile.path());
+            }
+        }
+    }
+
+    private void moveFilesToFinalLocation(PackageEntry pkgEntry, Map<String, FileEntry> extractedFiles, Path tempDir) throws IOException {
+        for (FileEntry fileEntry : extractedFiles.values()) {
+            Path srcPath = tempDir.resolve(fileEntry.path());
+            Path destPath = installRoot.resolve(fileEntry.path());
+            
+            // Symlink protection: resolve to real path and verify it's within installRoot
+            Path realDestPath;
+            try {
+                realDestPath = destPath.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            } catch (IOException e) {
+                // File doesn't exist yet, check parent
+                realDestPath = destPath.getParent().toRealPath(LinkOption.NOFOLLOW_LINKS).resolve(destPath.getFileName());
+            }
+            
+            Path realInstallRoot = installRoot.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            if (!realDestPath.startsWith(realInstallRoot)) {
+                throw new IOException("Symlink escape detected: " + fileEntry.path() + " resolves outside install root");
+            }
+            
+            Files.createDirectories(destPath.getParent());
+            
+            // Atomic move: copy then delete source
+            Files.move(srcPath, destPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        }
+    }
+
+    private void deleteDirectory(Path dir) throws IOException {
+        if (Files.exists(dir)) {
+            Files.walk(dir)
+                .sorted(Comparator.reverseOrder())
+                .forEach(path -> {
+                    try {
+                        Files.delete(path);
+                    } catch (IOException e) {
+                        logger.warn("Failed to delete temp file: " + path + " - " + e.getMessage());
+                    }
+                });
+        }
     }
 
     private String computeSha256(Path file) throws IOException {
