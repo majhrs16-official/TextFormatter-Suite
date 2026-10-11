@@ -78,50 +78,136 @@ public final class TransactionLog {
     
     /**
      * Gets all incomplete operations that need recovery.
+     * Groups by operationId and returns only operations whose LAST state is non-terminal.
      */
     public List<LogEntry> getIncompleteOperations() {
-        List<LogEntry> incomplete = new ArrayList<>();
+        Map<String, LogEntry> latestByOperation = new LinkedHashMap<>();
         try {
-            if (!Files.exists(logFile)) return incomplete;
+            if (!Files.exists(logFile)) return Collections.emptyList();
             
             String content = Files.readString(logFile);
             for (String line : content.split("\n")) {
                 if (line.isBlank()) continue;
                 String[] parts = line.split("\\|", 8);
                 if (parts.length >= 8) {
+                    String operationId = parts[0];
                     OperationState state = OperationState.valueOf(parts[5]);
-                    if (state != OperationState.COMPLETED && state != OperationState.FAILED && state != OperationState.ROLLED_BACK) {
-                        incomplete.add(new LogEntry(
-                                parts[0],
-                                OperationType.valueOf(parts[1]),
-                                parts[2],
-                                parts[3],
-                                parts[4],
-                                state,
-                                Instant.parse(parts[6]),
-                                parts[7]
-                        ));
-                    }
+                    LogEntry entry = new LogEntry(
+                            operationId,
+                            OperationType.valueOf(parts[1]),
+                            parts[2],
+                            parts[3],
+                            parts[4],
+                            state,
+                            Instant.parse(parts[6]),
+                            parts[7]
+                    );
+                    // Keep the latest entry for each operationId (log is append-only, so last wins)
+                    latestByOperation.put(operationId, entry);
                 }
             }
         } catch (IOException e) {
             logger.warn("Failed to read transaction log: " + e.getMessage());
         }
-        return incomplete;
+        
+        // Filter to only operations whose FINAL state is non-terminal
+        return latestByOperation.values().stream()
+                .filter(e -> e.state() != OperationState.COMPLETED 
+                          && e.state() != OperationState.FAILED 
+                          && e.state() != OperationState.ROLLED_BACK)
+                .toList();
     }
     
     /**
      * Recovers incomplete transactions on startup.
      * This should be called during initialization to clean up any interrupted operations.
+     * Recovery strategy depends on the last recorded state.
      */
     public void recoverIncompleteTransactions(LocalPackageDatabase database, Path installRoot, PluginLogger logger) {
         List<LogEntry> incomplete = getIncompleteOperations();
         for (LogEntry entry : incomplete) {
-            logger.warn("Found incomplete transaction: " + entry.operationId() + " for " + entry.packageName() + " at state " + entry.state());
+            logger.warn("Found incomplete transaction: " + entry.operationId() + " for " + entry.packageName() 
+                    + " " + entry.version() + " (" + entry.channel() + ") at state " + entry.state());
             
-            // For now, mark as failed and log warning
-            // Full recovery would require more complex logic based on the state
-            markFailed(entry.operationId(), "Recovered after interruption at state: " + entry.state());
+            switch (entry.state()) {
+                case STARTED, EXTRACTING -> {
+                    // Download/extract phase interrupted - nothing to clean up on disk yet
+                    // Package not installed, just mark as failed
+                    markFailed(entry.operationId(), "Interrupted during download/extract: " + entry.state());
+                }
+                case EXTRACTED, VALIDATING, VALIDATED -> {
+                    // Files extracted but not moved/registered - clean up temp extract dir if exists
+                    cleanUpTempExtract(installRoot, entry.packageName(), entry.version(), entry.channel());
+                    markFailed(entry.operationId(), "Interrupted during validation: " + entry.state());
+                }
+                case MOVING, MOVED -> {
+                    // Files moved to install root but not registered - attempt to remove orphaned files
+                    removeOrphanedFiles(database, installRoot, entry.packageName(), entry.version(), entry.channel());
+                    markFailed(entry.operationId(), "Interrupted during move: " + entry.state());
+                }
+                case REGISTERING, REGISTERED -> {
+                    // Package registered in DB but operation not marked complete
+                    // Check if package is actually in DB and remove if so
+                    try {
+                        if (database.getPackage(entry.packageName(), entry.version(), entry.channel()).isPresent()) {
+                            database.unregisterPackage(entry.packageName(), entry.version(), entry.channel());
+                            logger.info("Unregistered partially installed package: " + entry.packageName() + " " + entry.version());
+                        }
+                    } catch (IOException e) {
+                        logger.error("Failed to unregister package during recovery: " + e.getMessage());
+                    }
+                    markFailed(entry.operationId(), "Interrupted during registration: " + entry.state());
+                }
+                default -> {
+                    markFailed(entry.operationId(), "Unknown incomplete state: " + entry.state());
+                }
+            }
+        }
+    }
+    
+    private void cleanUpTempExtract(Path installRoot, String name, String version, String channel) {
+        Path tempDir = installRoot.resolve("library/tmp/" + name + "-" + version);
+        try {
+            if (Files.exists(tempDir)) {
+                Files.walk(tempDir)
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            logger.warn("Failed to delete temp file during recovery: " + e.getMessage());
+                        }
+                    });
+                logger.debug("Cleaned up temp extract directory: " + tempDir);
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to walk temp directory during recovery: " + e.getMessage());
+        }
+    }
+    
+    private void removeOrphanedFiles(LocalPackageDatabase database, Path installRoot, String name, String version, String channel) {
+        try {
+            var pkgOpt = database.getPackage(name, version, channel);
+            if (pkgOpt.isPresent()) {
+                var pkg = pkgOpt.get();
+                for (var fileEntry : pkg.files().entrySet()) {
+                    Path filePath = installRoot.resolve(fileEntry.getKey());
+                    if (Files.exists(filePath)) {
+                        // Only delete if no other package owns this file
+                        var owners = database.getFileOwners(fileEntry.getKey());
+                        if (owners.size() == 1 && owners.contains(pkg.id())) {
+                            try {
+                                Files.delete(filePath);
+                                logger.debug("Removed orphaned file during recovery: " + fileEntry.getKey());
+                            } catch (IOException e) {
+                                logger.warn("Failed to remove orphaned file during recovery: " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error during orphaned file cleanup: " + e.getMessage());
         }
     }
     
