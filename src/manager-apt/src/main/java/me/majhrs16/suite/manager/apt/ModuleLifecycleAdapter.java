@@ -18,6 +18,12 @@ import java.util.stream.Stream;
 /**
  * Compatibility adapter that implements the old ModuleLifecycle interface
  * using the new ManagerFacade (APT/dpkg architecture).
+ * 
+ * <p><strong>Important:</strong> The new APT/dpkg architecture installs packages to disk
+ * and requires a server restart to load them. Dynamic runtime loading/unloading
+ * (download, relocate, load, register, unregister, unload) is NOT supported.
+ * This adapter provides no-op implementations for those methods to maintain
+ * API compatibility without throwing {@link UnsupportedOperationException}.</p>
  */
 public final class ModuleLifecycleAdapter implements ModuleLifecycle {
 
@@ -71,38 +77,49 @@ public final class ModuleLifecycleAdapter implements ModuleLifecycle {
 
     @Override
     public List<Path> download(ResolvedModule resolved, List<ResolvedModule> dependencies, Path cacheDir) {
-        // In new system, download happens during install
-        throw new UnsupportedOperationException("download() not supported in new package manager; use repoInstall() instead");
+        // In APT/dpkg architecture, download happens during install via repoInstall()
+        // This method is not used by the new system.
+        logger.debug("download() called - not supported in APT/dpkg architecture; use repoInstall()");
+        return Collections.emptyList();
     }
 
     @Override
     public Path relocate(Path moduleJar, Path outputDir, Map<String, String> relocations) {
-        // In new system, relocation is handled by package installer
-        throw new UnsupportedOperationException("relocate() not supported in new package manager; use repoInstall() instead");
+        // In APT/dpkg architecture, bytecode relocation is handled during package installation
+        // This method is not used by the new system.
+        logger.debug("relocate() called - not supported in APT/dpkg architecture");
+        return moduleJar;
     }
 
     @Override
     public ClassLoader load(Path moduleJar, List<Path> dependencyJars, ClassLoader parent) {
-        // In new system, loading is handled by package installer
-        throw new UnsupportedOperationException("load() not supported in new package manager; use repoInstall() instead");
+        // In APT/dpkg architecture, modules are loaded by the platform's classloader at startup
+        // after being installed to disk. Dynamic classloader creation is not supported.
+        logger.debug("load() called - not supported in APT/dpkg architecture; modules load on restart");
+        return parent;
     }
 
     @Override
     public boolean register(ClassLoader classLoader, ModuleDescriptor descriptor) {
-        // In new system, registration is handled by package installer
-        throw new UnsupportedOperationException("register() not supported in new package manager; use repoInstall() instead");
+        // In APT/dpkg architecture, registration happens via package installation to disk
+        // and is persisted across restarts. Dynamic registration is not supported.
+        logger.debug("register() called - not supported in APT/dpkg architecture; use repoInstall()");
+        return false;
     }
 
     @Override
     public boolean unregister(String moduleId) {
-        // In new system, removal is handled by package installer
-        throw new UnsupportedOperationException("unregister() not supported in new package manager; use repoRemove() instead");
+        // In APT/dpkg architecture, unregistration happens via package removal from disk
+        // and takes effect after restart. Dynamic unregistration is not supported.
+        logger.debug("unregister() called - not supported in APT/dpkg architecture; use repoRemove()");
+        return false;
     }
 
     @Override
     public void unload(String moduleId) {
-        // In new system, unloading is handled by package installer
-        throw new UnsupportedOperationException("unload() not supported in new package manager; use repoRemove() instead");
+        // In APT/dpkg architecture, unloading requires server restart after package removal.
+        // Dynamic unloading is not supported.
+        logger.debug("unload() called - not supported in APT/dpkg architecture; requires restart");
     }
 
     @Override
