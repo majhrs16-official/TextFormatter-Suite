@@ -417,25 +417,32 @@ public final class DependencyResolver {
     }
 
     private List<PlanStep> buildInstallPlan(Map<String, ResolvedPackage> selected) {
-        // Topological sort by dependencies
+        // Topological sort by dependencies (Kahn's algorithm)
+        // For installation, we need DEPENDENCIES installed BEFORE the packages that depend on them.
+        // Edge direction: dependency -> dependent (so dependents have in-degree > 0)
         Map<String, ResolvedPackage> graph = new HashMap<>(selected);
         Map<String, Integer> inDegree = new HashMap<>();
+        Map<String, Set<String>> dependents = new HashMap<>();
         
-        // Initialize in-degrees
+        // Initialize in-degrees and dependents map
         for (String name : graph.keySet()) {
             inDegree.put(name, 0);
+            dependents.put(name, new HashSet<>());
         }
         
-        // Calculate in-degrees
+        // Build reverse edges: for each pkg -> dep, add edge dep -> pkg
+        // This means dep must be installed before pkg
         for (ResolvedPackage pkg : graph.values()) {
+            String pkgName = pkg.candidate().name();
             for (String dep : pkg.dependencies()) {
                 if (graph.containsKey(dep)) {
-                    inDegree.put(dep, inDegree.getOrDefault(dep, 0) + 1);
+                    dependents.get(dep).add(pkgName);
+                    inDegree.put(pkgName, inDegree.getOrDefault(pkgName, 0) + 1);
                 }
             }
         }
         
-        // Kahn's algorithm for topological sort
+        // Kahn's algorithm: start with nodes that have in-degree 0 (no dependencies, or deps outside graph)
         Queue<String> queue = new ArrayDeque<>();
         for (Map.Entry<String, Integer> entry : inDegree.entrySet()) {
             if (entry.getValue() == 0) {
@@ -448,16 +455,12 @@ public final class DependencyResolver {
             String name = queue.poll();
             sorted.add(name);
             
-            ResolvedPackage pkg = graph.get(name);
-            if (pkg != null) {
-                for (String dep : pkg.dependencies()) {
-                    if (graph.containsKey(dep)) {
-                        int newDegree = inDegree.get(dep) - 1;
-                        inDegree.put(dep, newDegree);
-                        if (newDegree == 0) {
-                            queue.add(dep);
-                        }
-                    }
+            // Decrease in-degree of dependents (packages that depend on this one)
+            for (String dependent : dependents.getOrDefault(name, Collections.emptySet())) {
+                int newDegree = inDegree.get(dependent) - 1;
+                inDegree.put(dependent, newDegree);
+                if (newDegree == 0) {
+                    queue.add(dependent);
                 }
             }
         }
@@ -466,7 +469,7 @@ public final class DependencyResolver {
             throw new ResolutionException("Dependency cycle detected in install plan");
         }
         
-        // Build steps in topological order
+        // Build steps in topological order (dependencies first)
         List<PlanStep> steps = new ArrayList<>();
         for (String name : sorted) {
             ResolvedPackage pkg = graph.get(name);
@@ -548,7 +551,7 @@ public final class DependencyResolver {
         }
     }
 
-    private static class ResolvedPackage {
+    static class ResolvedPackage {
         private final PackageCandidate candidate;
         private final List<String> dependencies;
 

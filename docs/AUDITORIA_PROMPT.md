@@ -2,7 +2,7 @@
 
 Realiza una auditoría técnica, arquitectónica y funcional exhaustiva del proyecto **TextFormatter Suite**.
 
-Repositorio:
+Clona el repositorio:
 
 majhrs16-official/TextFormatter-Suite
 
