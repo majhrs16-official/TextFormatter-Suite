@@ -331,35 +331,51 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 return;
             }
 
-            // Apply claim mode to suppress vanilla chat
-            me.majhrs16.suite.host.config.HostConfig.ClaimMode claimMode = current.host.config().claimMode();
-            // CANCEL_EVENT: Try to cancel the event using Fabric API
-            // Note: Fabric API doesn't expose a cancel() method on Parameters
-            // The best we can do is document this limitation
-            if (claimMode == me.majhrs16.suite.host.config.HostConfig.ClaimMode.CANCEL_EVENT) {
-                // Fabric API doesn't expose a cancel() method on ServerMessageEvents.Parameters
-                // This is a known limitation - vanilla chat will appear alongside suite chat
-            }
-            // CLEAR_RECIPIENTS not directly supported in Fabric API
-            // NONE: do nothing, both vanilla and suite chat appear
+            // Capture all data needed for async processing
+            // Offload to eventExecutor to avoid blocking main thread on HTTP translations
+            final var snapshot = current;
+            final var senderActor = snapshot.directory.actorOf(sender);
+            final var channels = List.copyOf(snapshot.host.channels().all());
+            final var text = message.getContent().getString();
+            final var claimMode = snapshot.host.config().claimMode();
 
-            Actor senderActor = current.directory.actorOf(sender);
-            Channel channel = current.host.channels().resolve(
-                ChannelSelector.select(List.copyOf(current.host.channels().all()),
-                    permission -> hasPermission(senderActor, permission)));
-            String channelPath = channel.name();
-            boolean senderOff = isOff(current, senderActor);
+            snapshot.eventExecutor.submit(() -> {
+                Runtime rt = RUNTIME;
+                if (rt == null || rt.dispatcher == null) {
+                    return;
+                }
+                // Re-validate runtime hasn't changed during async execution
+                if (rt != snapshot) {
+                    // Runtime was reloaded, use fresh snapshot
+                    return;
+                }
 
-            String text = message.getContent().getString();
+                // Apply claim mode to suppress vanilla chat
+                // CANCEL_EVENT: Try to cancel the event using Fabric API
+                // Note: Fabric API doesn't expose a cancel() method on ServerMessageEvents.Parameters
+                // The best we can do is document this limitation
+                if (claimMode == me.majhrs16.suite.host.config.HostConfig.ClaimMode.CANCEL_EVENT) {
+                    // Fabric API doesn't expose a cancel() method on ServerMessageEvents.Parameters
+                    // This is a known limitation - vanilla chat will appear alongside suite chat
+                }
+                // CLEAR_RECIPIENTS not directly supported in Fabric API
+                // NONE: do nothing, both vanilla and suite chat appear
 
-            if (channel.showSender()) {
-                dispatch(current, MessageType.CHAT, senderActor, Direction.initiator(),
+                Channel channel = rt.host.channels().resolve(
+                    ChannelSelector.select(channels,
+                        permission -> hasPermission(senderActor, permission)));
+                String channelPath = channel.name();
+                boolean senderOff = isOff(rt, senderActor);
+
+                if (channel.showSender()) {
+                    dispatch(rt, MessageType.CHAT, senderActor, Direction.initiator(),
+                        channelPath, text, !senderOff);
+                }
+                Message broadcast = buildBroadcast(rt, MessageType.CHAT, senderActor,
                     channelPath, text, !senderOff);
-            }
-            Message broadcast = buildBroadcast(current, MessageType.CHAT, senderActor,
-                channelPath, text, !senderOff);
-            current.dispatcher.dispatch(broadcast);
-            mirror(current, broadcast);
+                rt.dispatcher.dispatch(broadcast);
+                mirror(rt, broadcast);
+            });
         });
 
         // Death event - tick-based detection for Fabric 1.21
