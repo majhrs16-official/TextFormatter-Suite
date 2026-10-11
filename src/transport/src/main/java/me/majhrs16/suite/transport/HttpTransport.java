@@ -60,9 +60,9 @@ public final class HttpTransport implements Transport {
         "^169\\.254\\.",
         // RFC 6598 Carrier-grade NAT
         "^100\\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\\.",
-        // IPv6 ULA (fc00::/7)
-        "^fc[0-9a-f]:",
-        "^fd[0-9a-f]:",
+        // IPv6 ULA (fc00::/7) - covered by binary check in isPrivateAddress()
+        // IPv6 Link-local (fe80::/10) - covered by binary check in isPrivateAddress()
+        // IPv6 Loopback (::1/128) - covered by binary check in isPrivateAddress()
         // Multicast
         "^22[4-9]\\.",
         "^23[0-9]\\.",
@@ -143,9 +143,8 @@ public final class HttpTransport implements Transport {
         // Create connection - connect directly to pinned IP, preserve original host for Host header/SNI
         HttpURLConnection conn;
         if (pinnedAddress != null) {
-            // Connect directly to pinned IP using a custom URL that points to the IP
-            // but preserve the original host for Host header and SNI
-            String newUrlString = urlString.replaceFirst("://[^:/]+", "://" + pinnedAddress.getHostAddress());
+            // Build new URL with pinned IP, handling IPv6 bracket notation
+            String newUrlString = replaceHostInUrl(urlString, pinnedAddress);
             URL newUrl = new URL(newUrlString);
             conn = (HttpURLConnection) newUrl.openConnection();
             // Set Host header to original hostname (critical for virtual hosting and SNI)
@@ -307,19 +306,20 @@ public final class HttpTransport implements Transport {
             throw new IOException("Failed to resolve host: " + host);
         }
 
-        // Check ALL resolved addresses against deny patterns
+        // Check ALL resolved addresses against deny patterns (IPv4 + custom)
+        // and binary CIDR checks for IPv6 private ranges
         for (InetAddress address : addresses) {
             String ip = address.getHostAddress();
 
-            // Check against deny patterns
+            // Check against text-based deny patterns (IPv4, multicast, custom)
             for (Pattern pattern : DENY_PATTERNS) {
                 if (pattern.matcher(ip).matches()) {
                     throw new IOException("SSRF blocked: destination " + ip + " matches deny pattern " + pattern.pattern());
                 }
             }
 
-            // Also check if it's a loopback or site-local
-            if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()) {
+            // Binary check for IPv6 private/internal ranges (ULA, link-local, loopback, etc.)
+            if (isPrivateAddress(address)) {
                 throw new IOException("SSRF blocked: destination " + ip + " is private/internal address");
             }
         }
@@ -327,6 +327,116 @@ public final class HttpTransport implements Transport {
         // Return first valid address for connection pinning (TOCTOU mitigation)
         // Caller will connect to this IP while preserving original hostname for Host/SNI
         return addresses[0];
+    }
+
+    /**
+     * Replaces the host in a URL string with a pinned IP address.
+     * Properly handles IPv6 addresses which are enclosed in brackets.
+     */
+    private String replaceHostInUrl(String urlString, InetAddress pinnedAddress) {
+        String hostAddr = pinnedAddress.getHostAddress();
+        // Check if it's an IPv6 address (contains colons but not dots, or is IPv6 literal)
+        boolean isIpv6 = hostAddr.contains(":") && !hostAddr.contains(".");
+        
+        if (isIpv6) {
+            // IPv6 in URLs must be enclosed in brackets: http://[::1]:8080/path
+            // Pattern: ://[^:/]+  or  ://\[[^\]]+\]
+            return urlString.replaceFirst("://(\\[[^\\]]+\\]|[^:/]+)", "://[" + hostAddr + "]");
+        } else {
+            // IPv4 or hostname: ://[^:/]+
+            return urlString.replaceFirst("://[^:/]+", "://" + hostAddr);
+        }
+    }
+
+    /**
+     * Checks if an InetAddress is a private/internal address that should be blocked by SSRF protection.
+     * Uses binary comparison for accurate CIDR range matching (covers all IPv6 formats).
+     */
+    private boolean isPrivateAddress(InetAddress address) {
+        // Loopback check
+        if (address.isLoopbackAddress()) return true;
+        
+        // IPv4 checks
+        if (address instanceof java.net.Inet4Address) {
+            byte[] bytes = address.getAddress();
+            int ip = ((bytes[0] & 0xFF) << 24) | ((bytes[1] & 0xFF) << 16) | ((bytes[2] & 0xFF) << 8) | (bytes[3] & 0xFF);
+            
+            // 10.0.0.0/8
+            if ((ip & 0xFF000000) == 0x0A000000) return true;
+            // 172.16.0.0/12
+            if ((ip & 0xFFF00000) == 0xAC100000) return true;
+            // 192.168.0.0/16
+            if ((ip & 0xFFFF0000) == 0xC0A80000) return true;
+            // 169.254.0.0/16 (link-local)
+            if ((ip & 0xFFFF0000) == 0xA9FE0000) return true;
+            // 100.64.0.0/10 (CGNAT)
+            if ((ip & 0xFFC00000) == 0x64400000) return true;
+            // 0.0.0.0/8 (reserved)
+            if ((ip & 0xFF000000) == 0x00000000) return true;
+            // 224.0.0.0/4 (multicast)
+            if ((ip & 0xF0000000) == 0xE0000000) return true;
+            
+            return false;
+        }
+        
+        // IPv6 checks - use binary comparison for CIDR ranges
+        if (address instanceof java.net.Inet6Address) {
+            byte[] bytes = address.getAddress();
+            
+            // ::1/128 (loopback)
+            if (isIpv6Loopback(bytes)) return true;
+            
+            // fe80::/10 (link-local)
+            if ((bytes[0] & 0xFF) == 0xFE && (bytes[1] & 0xC0) == 0x80) return true;
+            
+            // fc00::/7 (ULA - Unique Local Addresses)
+            if ((bytes[0] & 0xFE) == 0xFC) return true;
+            
+            // ff00::/8 (multicast)
+            if ((bytes[0] & 0xFF) == 0xFF) return true;
+            
+            // ::/128 (unspecified)
+            if (isIpv6Unspecified(bytes)) return true;
+            
+            // ::ffff:0:0/96 (IPv4-mapped) - check embedded IPv4
+            if (isIpv4Mapped(bytes)) {
+                byte[] ipv4Bytes = new byte[] {bytes[12], bytes[13], bytes[14], bytes[15]};
+                try {
+                    return isPrivateAddress(InetAddress.getByAddress(ipv4Bytes));
+                } catch (Exception e) {
+                    return false;
+                }
+            }
+            
+            // 2001::/32 (Teredo) - optional, could be blocked
+            // 2002::/16 (6to4) - optional
+            
+            return false;
+        }
+        
+        return false;
+    }
+    
+    private boolean isIpv6Loopback(byte[] bytes) {
+        for (int i = 0; i < 15; i++) {
+            if (bytes[i] != 0) return false;
+        }
+        return bytes[15] == 1;
+    }
+    
+    private boolean isIpv6Unspecified(byte[] bytes) {
+        for (byte b : bytes) {
+            if (b != 0) return false;
+        }
+        return true;
+    }
+    
+    private boolean isIpv4Mapped(byte[] bytes) {
+        // ::ffff:0:0/96 = first 10 bytes 0, bytes 10-11 = 0xff
+        for (int i = 0; i < 10; i++) {
+            if (bytes[i] != 0) return false;
+        }
+        return bytes[10] == (byte)0xFF && bytes[11] == (byte)0xFF;
     }
 
     /**
