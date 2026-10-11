@@ -84,6 +84,7 @@ public final class AptInstaller {
 
     /**
      * Upgrades all installed packages (equivalent to `apt upgrade`).
+     * Installs new version FIRST, then removes old version (atomic upgrade).
      */
     public InstallResult upgrade() {
         logger.info("APT upgrade");
@@ -103,17 +104,23 @@ public final class AptInstaller {
         for (DependencyResolver.PlanStep step : plan.steps()) {
             RepositoryManager.PackageCandidate candidate = step.candidate();
             try {
-                // First remove the old version if it exists
-                Optional<me.majhrs16.suite.manager.spi.PackageEntry> oldEntry = 
-                    database.getLatestInstalled(candidate.name(), candidate.channel());
-                if (oldEntry.isPresent() && !oldEntry.get().version().equals(candidate.version())) {
-                    logger.info("Removing old version " + oldEntry.get().version() + " of " + candidate.name());
-                    installer.remove(oldEntry.get().name(), oldEntry.get().version(), oldEntry.get().channel(), false);
-                }
-                
+                // Download and install new version FIRST
                 Path zipPath = downloadPackage(candidate);
                 List<me.majhrs16.suite.manager.spi.PackageEntry> entries = installer.install(zipPath, true);
+                
+                // Only remove old version AFTER successful installation
                 for (me.majhrs16.suite.manager.spi.PackageEntry entry : entries) {
+                    Optional<me.majhrs16.suite.manager.spi.PackageEntry> oldEntry = 
+                        database.getLatestInstalled(entry.name(), entry.channel());
+                    if (oldEntry.isPresent() && !oldEntry.get().version().equals(entry.version())) {
+                        logger.info("Removing old version " + oldEntry.get().version() + " of " + entry.name());
+                        try {
+                            installer.remove(oldEntry.get().name(), oldEntry.get().version(), oldEntry.get().channel(), false);
+                        } catch (Exception e) {
+                            logger.warn("Failed to remove old version of " + entry.name() + ": " + e.getMessage());
+                            // Don't fail the upgrade if old version removal fails
+                        }
+                    }
                     upgraded.add(entry.name() + " " + entry.version());
                 }
             } catch (Exception e) {

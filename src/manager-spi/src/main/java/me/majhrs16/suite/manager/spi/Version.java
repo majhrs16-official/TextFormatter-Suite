@@ -154,10 +154,15 @@ public final class Version implements Comparable<Version> {
             return this.compareTo(parse(spec.substring(2).strip())) != 0;
         }
         if (spec.startsWith("^")) {
-            // Caret: >= version, < next major (or minor if 0.x)
+            // Caret: >= version, < next breaking change
+            // ^0.0.x -> patch level, ^0.y.z -> minor level, ^x.y.z -> major level
             Version base = parse(spec.substring(1).strip());
-            if (base.major == 0) {
-                // 0.x.y -> >= 0.x.y, < 0.(x+1).0
+            if (base.major == 0 && base.minor == 0) {
+                // 0.0.x -> >= 0.0.x, < 0.0.(x+1)
+                Version next = new Version(0, 0, base.patch + 1, null, null, "");
+                return this.compareTo(base) >= 0 && this.compareTo(next) < 0;
+            } else if (base.major == 0) {
+                // 0.y.z -> >= 0.y.z, < 0.(y+1).0
                 Version next = new Version(0, base.minor + 1, 0, null, null, "");
                 return this.compareTo(base) >= 0 && this.compareTo(next) < 0;
             } else {
@@ -167,10 +172,18 @@ public final class Version implements Comparable<Version> {
             }
         }
         if (spec.startsWith("~")) {
-            // Tilde: >= version, < next minor
+            // Tilde: >= version, < next minor/patch
+            // ~0.0.x -> patch level, ~0.y.z -> minor level, ~x.y.z -> minor level
             Version base = parse(spec.substring(1).strip());
-            Version next = new Version(base.major, base.minor + 1, 0, null, null, "");
-            return this.compareTo(base) >= 0 && this.compareTo(next) < 0;
+            if (base.major == 0 && base.minor == 0) {
+                // 0.0.x -> >= 0.0.x, < 0.0.(x+1)
+                Version next = new Version(0, 0, base.patch + 1, null, null, "");
+                return this.compareTo(base) >= 0 && this.compareTo(next) < 0;
+            } else {
+                // 0.y.z or x.y.z -> >= x.y.z, < x.(y+1).0
+                Version next = new Version(base.major, base.minor + 1, 0, null, null, "");
+                return this.compareTo(base) >= 0 && this.compareTo(next) < 0;
+            }
         }
 
         // Exact match or wildcard
@@ -184,12 +197,17 @@ public final class Version implements Comparable<Version> {
     }
 
     private boolean matchesWildcard(String pattern) {
-        // Convert wildcard pattern to regex
+        // Handle standalone wildcard * - matches any version
+        if (pattern.equals("*") || pattern.equals("x") || pattern.equals("X")) {
+            return true;
+        }
+        
+        // Convert wildcard pattern to regex (e.g., 1.2.*, 1.x, 1.*.3)
         String regex = pattern
                 .replace(".", "\\.")
-                .replace("*", "\\d+")
-                .replace("X", "\\d+")
-                .replace("x", "\\d+");
+                .replace("*", "\\d+(?:\\.\\d+)*")
+                .replace("X", "\\d+(?:\\.\\d+)*")
+                .replace("x", "\\d+(?:\\.\\d+)*");
         return this.original.matches(regex);
     }
 

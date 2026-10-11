@@ -6,12 +6,18 @@ import me.majhrs16.suite.manager.core.LocalPackageDatabase;
 import me.majhrs16.suite.manager.core.PackageInstaller;
 import me.majhrs16.suite.manager.spi.PackageEntry;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.manager.spi.ManifestParser;
 import me.majhrs16.suite.manager.apt.RepositoryManager.PackageCandidate;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +36,9 @@ public final class DependencyResolver {
     private final String currentOs;
     private final int currentJavaVersion;
     
+    // HTTP client for downloading manifests (same as AptInstaller)
+    private final OkHttpClient httpClient;
+    
     // Cache for package manifests to avoid repeated downloads
     private final Map<String, PackageManifest> manifestCache = new ConcurrentHashMap<>();
 
@@ -44,6 +53,11 @@ public final class DependencyResolver {
         this.currentArch = currentArch;
         this.currentOs = currentOs;
         this.currentJavaVersion = currentJavaVersion;
+        this.httpClient = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build();
     }
 
     /**
@@ -145,35 +159,68 @@ public final class DependencyResolver {
             throw new ResolutionException("No candidate found for " + pkgName + " " + versionConstraint + " (" + channel + ")");
         }
         
-        // Select best candidate (first after sorting by priority and version)
-        PackageCandidate best = candidates.get(0);
-        
-        // Check compatibility
-        if (!isCompatible(best)) {
-            processing.remove(pkgName);
-            throw new ResolutionException("Package " + best.name() + " " + best.version() + " is not compatible with current environment");
+        // Try candidates in order until one works (fallback)
+        ResolutionException lastException = null;
+        for (PackageCandidate candidate : candidates) {
+            // Check compatibility
+            if (!isCompatible(candidate)) {
+                logger.debug("Candidate " + candidate.name() + " " + candidate.version() + " not compatible, trying next");
+                continue;
+            }
+            
+            try {
+                // Download and parse manifest to get dependencies
+                PackageManifest manifest = fetchAndParseManifest(candidate);
+                
+                // Create resolved package with dependencies
+                ResolvedPackage resolvedPkg = new ResolvedPackage(candidate, manifest.dependencies());
+                
+                selected.put(candidate.name(), resolvedPkg);
+                resolved.add(pkgName);
+                processing.remove(pkgName);
+                
+                // Recursively resolve dependencies
+                for (String depName : manifest.dependencies()) {
+                    String depConstraint = getDependencyConstraint(manifest, depName);
+                    resolvePackage(depName, depConstraint, channel, false, selected, processing, resolved);
+                }
+                
+                // Success - return
+                return;
+                
+            } catch (ResolutionException e) {
+                lastException = e;
+                logger.debug("Candidate " + candidate.name() + " " + candidate.version() + " failed: " + e.getMessage() + ", trying next");
+                // Remove any partially added packages from this failed attempt
+                selected.remove(candidate.name());
+                resolved.remove(pkgName);
+                // Continue to next candidate
+            } catch (Exception e) {
+                lastException = new ResolutionException("Failed to process candidate " + candidate.name() + ": " + e.getMessage(), e);
+                logger.debug("Candidate " + candidate.name() + " " + candidate.version() + " failed with error: " + e.getMessage() + ", trying next");
+                selected.remove(candidate.name());
+                resolved.remove(pkgName);
+                // Continue to next candidate
+            }
         }
         
-        // Download and parse manifest to get dependencies
-        PackageManifest manifest = fetchAndParseManifest(best);
-        
-        // Create resolved package with dependencies
-        ResolvedPackage resolvedPkg = new ResolvedPackage(best, manifest.dependencies());
-        
-        selected.put(best.name(), resolvedPkg);
-        resolved.add(pkgName);
+        // All candidates failed
         processing.remove(pkgName);
-        
-        // Recursively resolve dependencies
-        for (String depName : manifest.dependencies()) {
-            String depConstraint = getDependencyConstraint(manifest, depName);
-            resolvePackage(depName, depConstraint, channel, false, selected, processing, resolved);
+        if (lastException != null) {
+            throw lastException;
+        } else {
+            throw new ResolutionException("All candidates failed for " + pkgName + " " + versionConstraint + " (" + channel + ")");
         }
     }
 
     private String getDependencyConstraint(PackageManifest manifest, String depName) {
-        // For now, return "*" (any version). In a full implementation,
-        // we'd parse version constraints from the manifest.
+        // Parse version constraint from manifest dependencies
+        for (String dep : manifest.dependencies()) {
+            ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dep);
+            if (spec != null && spec.name().equals(depName)) {
+                return spec.constraint().isEmpty() ? "*" : spec.constraint();
+            }
+        }
         return "*";
     }
 
@@ -222,15 +269,34 @@ public final class DependencyResolver {
     private Path downloadPackageToTemp(PackageCandidate candidate, Path dest) throws IOException, InterruptedException {
         String url = candidate.downloadUrl();
         
-        java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(url))
-                .GET()
-                .build();
-        
-        var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofFile(dest));
-        if (response.statusCode() >= 400) {
-            throw new IOException("HTTP " + response.statusCode() + " for " + url);
+        Request request = new Request.Builder().url(url).build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("HTTP " + response.code() + " for " + url);
+            }
+            
+            // MGR-018: Zip bomb protection - limit download size
+            long contentLength = response.body().contentLength();
+            long maxDownloadSize = candidate.size() + 1024 * 1024; // allow 1MB overhead
+            if (contentLength > 0 && contentLength > maxDownloadSize) {
+                throw new IOException("Download size exceeds expected size + overhead: " + contentLength + " > " + maxDownloadSize);
+            }
+            
+            try (var in = response.body().byteStream();
+                 var out = Files.newOutputStream(dest, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                // Limit bytes read to prevent zip bomb
+                long bytesRead = 0;
+                long maxBytes = maxDownloadSize;
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) > 0) {
+                    bytesRead += read;
+                    if (bytesRead > maxBytes) {
+                        throw new IOException("Download exceeds maximum allowed size: " + maxBytes);
+                    }
+                    out.write(buffer, 0, read);
+                }
+            }
         }
         
         // Verify checksum
@@ -286,9 +352,68 @@ public final class DependencyResolver {
     }
 
     private boolean isCompatible(PackageCandidate candidate) {
-        // Check Arch, OS, Platform compatibility from manifest
-        // For now, assume compatible
-        return true;
+        try {
+            PackageManifest manifest = fetchAndParseManifest(candidate);
+            String pkgArch = manifest.mainPackage().arch();
+            String pkgPlatform = manifest.mainPackage().platform();
+            String pkgOs = manifest.mainPackage().os();
+            
+            // Check architecture compatibility
+            if (!isArchCompatible(pkgArch)) {
+                logger.debug("Package " + candidate.name() + " arch " + pkgArch + " not compatible with " + currentArch);
+                return false;
+            }
+            
+            // Check platform compatibility
+            if (!isPlatformCompatible(pkgPlatform)) {
+                logger.debug("Package " + candidate.name() + " platform " + pkgPlatform + " not compatible with " + currentPlatform);
+                return false;
+            }
+            
+            // Check OS compatibility
+            if (!isOsCompatible(pkgOs)) {
+                logger.debug("Package " + candidate.name() + " os " + pkgOs + " not compatible with " + currentOs);
+                return false;
+            }
+            
+            return true;
+        } catch (Exception e) {
+            logger.warn("Failed to check compatibility for " + candidate.name() + ": " + e.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean isArchCompatible(String pkgArch) {
+        if ("none".equalsIgnoreCase(pkgArch) || "any".equalsIgnoreCase(pkgArch) || pkgArch.isBlank()) {
+            return true;
+        }
+        // Normalize common arch names
+        String normalizedPkg = normalizeArch(pkgArch);
+        String normalizedCurrent = normalizeArch(currentArch);
+        return normalizedPkg.equals(normalizedCurrent);
+    }
+    
+    private boolean isPlatformCompatible(String pkgPlatform) {
+        if ("common".equalsIgnoreCase(pkgPlatform) || "any".equalsIgnoreCase(pkgPlatform) || pkgPlatform.isBlank()) {
+            return true;
+        }
+        return pkgPlatform.equalsIgnoreCase(currentPlatform);
+    }
+    
+    private boolean isOsCompatible(String pkgOs) {
+        if ("none".equalsIgnoreCase(pkgOs) || "any".equalsIgnoreCase(pkgOs) || pkgOs.isBlank()) {
+            return true;
+        }
+        return pkgOs.equalsIgnoreCase(currentOs);
+    }
+    
+    private String normalizeArch(String arch) {
+        return switch (arch.toLowerCase()) {
+            case "x86_64", "amd64" -> "x86_64";
+            case "aarch64", "arm64" -> "aarch64";
+            case "i386", "i686", "x86" -> "i386";
+            default -> arch.toLowerCase();
+        };
     }
 
     private List<PlanStep> buildInstallPlan(Map<String, ResolvedPackage> selected) {

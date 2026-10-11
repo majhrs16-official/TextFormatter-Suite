@@ -58,15 +58,54 @@ public final class ManifestParser {
         return entries;
     }
 
-    /**
-     * Parses a multi-block manifest (METADATA/package.list or library/status).
-     * Each block represents one package entry, separated by double blank line.
-     *
-     * @param content the manifest content
-     * @return list of package entries
-     * @throws ParseException if the manifest is malformed
-     */
-    public static List<PackageEntry> parseManifest(String content) throws ParseException {
+/**
+ * Parses a dependency string with optional version constraint.
+ * Format: "package_name" or "package_name@constraint" or "package_name constraint"
+ * Examples: "textformatter", "textformatter@>=1.0.0", "textformatter ^1.0.0"
+ */
+public static record DependencySpec(String name, String constraint) {
+    public static DependencySpec parse(String dep) {
+        String trimmed = dep.strip();
+        if (trimmed.isEmpty()) return null;
+        
+        // Check for @ separator (package@constraint)
+        int atIndex = trimmed.indexOf('@');
+        if (atIndex > 0) {
+            String name = trimmed.substring(0, atIndex).strip();
+            String constraint = trimmed.substring(atIndex + 1).strip();
+            return new DependencySpec(name, constraint.isEmpty() ? "*" : constraint);
+        }
+        
+        // Check for space separator (package constraint)
+        int spaceIndex = trimmed.indexOf(' ');
+        if (spaceIndex > 0) {
+            String name = trimmed.substring(0, spaceIndex).strip();
+            String constraint = trimmed.substring(spaceIndex + 1).strip();
+            return new DependencySpec(name, constraint.isEmpty() ? "*" : constraint);
+        }
+        
+        // No constraint specified
+        return new DependencySpec(trimmed, "*");
+    }
+    
+    @Override
+    public String toString() {
+        if ("*".equals(constraint)) {
+            return name;
+        }
+        return name + "@" + constraint;
+    }
+}
+
+/**
+ * Parses a multi-block manifest (METADATA/package.list or library/status).
+ * Each block represents one package entry, separated by double blank line.
+ *
+ * @param content the manifest content
+ * @return list of package entries
+ * @throws ParseException if the manifest is malformed
+ */
+public static List<PackageEntry> parseManifest(String content) throws ParseException {
         List<PackageEntry> entries = new ArrayList<>();
 
         // Split by double blank line (block separator)
@@ -216,13 +255,13 @@ public final class ManifestParser {
             throw new ParseException("Block " + blockNum + ": invalid Size: " + sizeStr);
         }
 
-        // Parse dependencies (comma-separated)
+        // Parse dependencies (comma-separated) with optional version constraints
         List<String> dependencies = new ArrayList<>();
         if (!dependenciesStr.isBlank()) {
             for (String dep : dependenciesStr.split(",")) {
-                String trimmed = dep.strip();
-                if (!trimmed.isEmpty()) {
-                    dependencies.add(trimmed);
+                DependencySpec spec = DependencySpec.parse(dep);
+                if (spec != null) {
+                    dependencies.add(spec.toString());
                 }
             }
         }
@@ -267,7 +306,17 @@ public final class ManifestParser {
         sb.append("Version: ").append(entry.version()).append("\n");
         sb.append("Channel: ").append(entry.channel()).append("\n");
         sb.append("Type: ").append(entry.type().name()).append("\n");
-        sb.append("Dependencies: ").append(String.join(",", entry.dependencies())).append("\n");
+        
+        // Serialize dependencies with constraints
+        List<String> depStrings = new ArrayList<>();
+        for (String dep : entry.dependencies()) {
+            DependencySpec spec = DependencySpec.parse(dep);
+            if (spec != null) {
+                depStrings.add(spec.toString());
+            }
+        }
+        sb.append("Dependencies: ").append(String.join(",", depStrings)).append("\n");
+        
         sb.append("Arch: ").append(entry.arch()).append("\n");
         sb.append("Platform: ").append(entry.platform()).append("\n");
         sb.append("URL: ").append(entry.url()).append("\n");

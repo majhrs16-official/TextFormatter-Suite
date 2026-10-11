@@ -91,10 +91,10 @@ public final class LocalPackageDatabase {
                 String key = entry.id();
                 packages.put(key, entry);
                 
-                // Build file ownership map
+                // Build file ownership map using full package ID (consistent with registerPackage)
                 for (FileEntry file : entry.files().values()) {
                     fileOwnership.computeIfAbsent(file.path(), k -> ConcurrentHashMap.newKeySet())
-                            .add(entry.name());
+                            .add(entry.id());
                 }
             }
         } catch (ManifestParser.ParseException e) {
@@ -293,6 +293,24 @@ public final class LocalPackageDatabase {
                         fileOwnership.remove(file.path());
                     }
                 }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+    
+    /**
+     * Transfers file ownership from old packages to a new package.
+     * Used during force install to update ownership records.
+     */
+    public void transferFileOwnership(String filePath, String newPackageId) {
+        lock.writeLock().lock();
+        try {
+            Set<String> owners = fileOwnership.get(filePath);
+            if (owners != null) {
+                // Clear old owners and add new one
+                owners.clear();
+                owners.add(newPackageId);
             }
         } finally {
             lock.writeLock().unlock();

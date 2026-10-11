@@ -111,6 +111,21 @@ public final class TransactionLog {
     }
     
     /**
+     * Recovers incomplete transactions on startup.
+     * This should be called during initialization to clean up any interrupted operations.
+     */
+    public void recoverIncompleteTransactions(LocalPackageDatabase database, Path installRoot, PluginLogger logger) {
+        List<LogEntry> incomplete = getIncompleteOperations();
+        for (LogEntry entry : incomplete) {
+            logger.warn("Found incomplete transaction: " + entry.operationId() + " for " + entry.packageName() + " at state " + entry.state());
+            
+            // For now, mark as failed and log warning
+            // Full recovery would require more complex logic based on the state
+            markFailed(entry.operationId(), "Recovered after interruption at state: " + entry.state());
+        }
+    }
+    
+    /**
      * Marks an operation as completed.
      */
     public synchronized void markCompleted(String operationId) {

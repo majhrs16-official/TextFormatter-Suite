@@ -71,6 +71,13 @@ class VersionTest {
         Version v0 = Version.parse("0.2.3");
         assertTrue(v0.satisfies("^0.2.3"));
         assertFalse(v0.satisfies("^0.3.0"));
+        
+        // 0.0.x special case (patch level only)
+        Version v00 = Version.parse("0.0.5");
+        assertTrue(v00.satisfies("^0.0.5"));
+        assertFalse(v00.satisfies("^0.0.4")); // ^0.0.4 = >=0.0.4 <0.0.5, so 0.0.5 doesn't satisfy
+        assertFalse(v00.satisfies("^0.0.6")); // ^0.0.6 = >=0.0.6 <0.0.7, so 0.0.5 < 0.0.6 doesn't satisfy
+        assertFalse(v00.satisfies("^0.1.0")); // different minor
     }
 
     @Test
@@ -79,6 +86,12 @@ class VersionTest {
         assertTrue(v.satisfies("~1.2.3"));
         assertTrue(v.satisfies("~1.2.0"));
         assertFalse(v.satisfies("~1.3.0"));
+        
+        // 0.0.x special case (patch level only)
+        Version v00 = Version.parse("0.0.5");
+        assertTrue(v00.satisfies("~0.0.5"));
+        assertFalse(v00.satisfies("~0.0.6"));
+        assertFalse(v00.satisfies("~0.1.0"));
     }
 
     @Test
@@ -115,6 +128,19 @@ class VersionTest {
         
         Version v0 = Version.parse("0.5.0");
         assertTrue(v0.satisfies("0.5.*"));
+    }
+
+    @Test
+    void satisfies_wildcard_any() {
+        // Standalone * should match any version
+        Version v1 = Version.parse("1.2.3");
+        Version v2 = Version.parse("0.5.0-beta");
+        Version v3 = Version.parse("10.20.30+build");
+        assertTrue(v1.satisfies("*"));
+        assertTrue(v2.satisfies("*"));
+        assertTrue(v3.satisfies("*"));
+        assertTrue(v1.satisfies("x"));
+        assertTrue(v1.satisfies("X"));
     }
 
     @Test

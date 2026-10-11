@@ -117,4 +117,48 @@ class ManifestParserTest {
         assertEquals(entry.channel(), parsed.get(0).channel());
         assertEquals(entry.files().size(), parsed.get(0).files().size());
     }
+
+    @Test
+    void dependencySpec_parseWithoutConstraint() {
+        ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse("textformatter");
+        assertEquals("textformatter", spec.name());
+        assertEquals("*", spec.constraint());
+    }
+
+    @Test
+    void dependencySpec_parseWithAtConstraint() {
+        ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse("textformatter@>=1.0.0");
+        assertEquals("textformatter", spec.name());
+        assertEquals(">=1.0.0", spec.constraint());
+    }
+
+    @Test
+    void dependencySpec_parseWithSpaceConstraint() {
+        ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse("textformatter ^1.0.0");
+        assertEquals("textformatter", spec.name());
+        assertEquals("^1.0.0", spec.constraint());
+    }
+
+    @Test
+    void dependencySpec_toStringWithoutConstraint() {
+        ManifestParser.DependencySpec spec = new ManifestParser.DependencySpec("textformatter", "*");
+        assertEquals("textformatter", spec.toString());
+    }
+
+    @Test
+    void dependencySpec_toStringWithConstraint() {
+        ManifestParser.DependencySpec spec = new ManifestParser.DependencySpec("textformatter", ">=1.0.0");
+        assertEquals("textformatter@>=1.0.0", spec.toString());
+    }
+
+    @Test
+    void parseManifest_dependenciesWithConstraints() throws Exception {
+        String content = "Name: textformatter\nVersion: 2.0.0\nChannel: stable\nType: PACKAGE\nDependencies: iflow@>=1.0.0, gtranslate ^1.0.0\nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\nSize: 51200\nFiles: \n  textformatter.jar\t51200\t1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\ttextformatter";
+        
+        List<PackageEntry> entries = ManifestParser.parseManifest(content);
+        assertEquals(1, entries.size());
+        assertEquals(2, entries.get(0).dependencies().size());
+        assertTrue(entries.get(0).dependencies().contains("iflow@>=1.0.0"));
+        assertTrue(entries.get(0).dependencies().contains("gtranslate@^1.0.0"));
+    }
 }

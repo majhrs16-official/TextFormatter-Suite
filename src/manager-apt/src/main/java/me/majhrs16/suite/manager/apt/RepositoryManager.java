@@ -77,6 +77,8 @@ public final class RepositoryManager {
                 result.updated.add(repo.name());
                 logger.info("Updated repository: " + repo.name() + " (" + entries.size() + " packages)");
             } catch (Exception e) {
+                // Clear stale cache on failure
+                cachedIndexes.remove(repo.name());
                 result.failed.put(repo.name(), e.getMessage());
                 logger.error("Failed to update repository " + repo.name() + ": " + e.getMessage());
             }
@@ -348,6 +350,22 @@ public final class RepositoryManager {
         public boolean hasFailures() { return !failed.isEmpty(); }
         public int updatedCount() { return updated.size(); }
         public int failedCount() { return failed.size(); }
+        
+        /**
+         * Returns true if all enabled repositories were updated successfully.
+         * False if any enabled repository failed to update.
+         */
+        public boolean isFullySuccessful(List<RepositoryConfig> allRepos) {
+            int enabledCount = (int) allRepos.stream().filter(RepositoryConfig::enabled).count();
+            return updated.size() == enabledCount && failed.isEmpty();
+        }
+        
+        /**
+         * Returns a summary string for logging.
+         */
+        public String summary() {
+            return String.format("Updated: %d, Failed: %d", updated.size(), failed.size());
+        }
     }
 
     public static class PackageCandidate {
