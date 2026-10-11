@@ -92,9 +92,9 @@ tasks.jar {
 shadowJar {
     archiveClassifier = ''
     archiveBaseName = 'textformatter-suite-spigot'
-    // Only include plugin classes, not dependencies (modules are loaded via Manager from GitHub)
-    // Exclude all external dependencies - keep only project classes
-    configurations = []
+    // Include project modules required at runtime (fat-jar for standalone plugin)
+    // External platform deps (Paper, Adventure, JDA, etc.) remain excluded
+    configurations = [project.configurations.runtimeClasspath]
     dependencies {
         exclude(dependency('net.kyori:adventure-platform-bukkit'))
         exclude(dependency('net.kyori:adventure-text-minimessage'))
@@ -103,29 +103,10 @@ shadowJar {
         exclude(dependency('org.yaml:snakeyaml'))
         exclude(dependency('io.papermc.paper:paper-api'))
         exclude(dependency('me.clip:placeholderapi'))
-        exclude(dependency('me.majhrs16:suite-core-api'))
-        exclude(dependency('me.majhrs16:suite-kernel'))
-        exclude(dependency('me.majhrs16:suite-iflow'))
-        exclude(dependency('me.majhrs16:suite-host'))
-        exclude(dependency('me.majhrs16:suite-sync-discord'))
-        exclude(dependency('me.majhrs16:suite-sync-http'))
-        exclude(dependency('me.majhrs16:suite-sync-tcpudp'))
-        exclude(dependency('me.majhrs16:suite-sync-telegram'))
-        exclude(dependency('me.majhrs16:suite-sync-websocket'))
-        exclude(dependency('me.majhrs16:suite-sync-bus'))
-        exclude(dependency('me.majhrs16:suite-gtranslate'))
-        exclude(dependency('me.majhrs16:suite-ltranslate'))
-        exclude(dependency('me.majhrs16:suite-messages'))
-        exclude(dependency('me.majhrs16:suite-textformatter'))
-        exclude(dependency('me.majhrs16:suite-tester'))
-        exclude(dependency('me.majhrs16:suite-transport'))
-        exclude(dependency('me.majhrs16:suite-observability'))
-        exclude(dependency('me.majhrs16:suite-manager-spi'))
-        exclude(dependency('me.majhrs16:suite-manager-core'))
-        exclude(dependency('me.majhrs16:suite-manager-apt'))
-        exclude(dependency('me.majhrs16:suite-inworld'))
-        exclude(dependency('me.majhrs16:suite-extension-api'))
+        // Project modules are now included (not excluded)
     }
+    // Merge service files
+    mergeServiceFiles()
 }
 
 processResources {
