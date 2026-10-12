@@ -163,6 +163,10 @@
 - ✅ **Config schema centralization**: `ConfigSchemaGenerator` genera `paths.json` + `js/paths.js` + `js/model.js` desde `ConfigPath` enum
 - ✅ **generateSchema/verifySchema** tasks para validación
 - ✅ **Dependency Verification**: `verification-metadata.xml` con SHA256/SHA512 para 435 dependencias no-SNAPSHOT
+- ✅ **Reproducible Builds (Build-Timestamp)**: JAR manifest incluye `Build-Timestamp` determinístico
+  - SNAPSHOT: epoch (0) → builds byte-idénticos en desarrollo
+  - Release: `BUILD_TIMESTAMP` env var o propiedad `buildTimestamp` (ms since epoch)
+  - Verificación: `unzip -p artifact.jar META-INF/MANIFEST.MF | grep Build-Timestamp`
 
 #### FASE 13 (2026-09-28): Clean Architecture + Release Pipeline + Dependency Verification
 - ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; descubre proveedores via `ServiceLoader` (SPI `TranslatorProvider`) en runtime

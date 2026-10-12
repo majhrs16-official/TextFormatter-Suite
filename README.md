@@ -278,6 +278,8 @@ cd src/web-editor && npm run check
 | Verificación dependencias | Configurada en `settings.gradle` + `gradle/verification-metadata.xml` | Lenient para módulos con deps externas |
 | Web editor check | `cd src/web-editor && npm run check` | 29/29 passed |
 | Web editor tests integración | `cd src/web-editor && npm run test:integration` | Harnesses func/interact/click/chain/undo/diffing/bind |
+| **Build reproducible (release)** | `BUILD_TIMESTAMP=1728000000000 ./gradlew build -Pversion=2.1.0` | JAR con `Build-Timestamp` fijo |
+| **Verificar Build-Timestamp** | `unzip -p artifact.jar META-INF/MANIFEST.MF \| grep Build-Timestamp` | Debe coincidir con timestamp fijado |
 
 ---
 
