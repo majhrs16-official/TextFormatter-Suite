@@ -38,3 +38,7 @@ include 'src:messages'
 include 'src:loadtest'
 include 'src:tester'
 include 'src:performance'
+
+// Dependency Verification (SHA256/SHA512 checksums for supply chain security)
+// verification-metadata.xml should be generated and committed
+// Run: ./gradlew --dependency-verification=strict --write-verification-metadata sha256

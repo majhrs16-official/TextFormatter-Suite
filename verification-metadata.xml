@@ -1,0 +1,1745 @@
+<?xml version="1.0" ?>
+<verification-metadata xmlns="http://www.gradle.org/schema/verification-metadata">
+  <components>
+    <component group="aopalliance" module="aopalliance" version="1.0">
+      <artifact name="aopalliance-1.0.jar" sha256="0e26e161ee03141cfadfd4eec6285eccc621a4877722bfb09a4ec2958e4dcf57"/>
+      <artifact name="aopalliance-1.0.pom" sha256="186ed8d690a4cf8b9cf6301a86f1643417dab5c87ab1fc49f6f488bec1c9d878"/>
+    </component>
+    <component group="ch.qos.logback" module="logback-classic" version="1.4.14">
+      <artifact name="logback-classic-1.4.14.jar" sha256="7884374c1974c6557fdc55bcb7b18ac75ac31416eee8e3756deca8809add357d"/>
+      <artifact name="logback-classic-1.4.14.pom" sha256="321ddca9bc41d09666bede2fd3f097dfa0e4d72d5569d8f8161743ef0d5d3052"/>
+    </component>
+    <component group="ch.qos.logback" module="logback-core" version="1.4.14">
+      <artifact name="logback-core-1.4.14.jar" sha256="97d77df786bbb0c8c9bf4e616dd60331edb90f88ded497eb345d95e6eb5c11cb"/>
+      <artifact name="logback-core-1.4.14.pom" sha256="8ad0c2536459ce5e00ee164fef7af38eaaa267996e3487bef09b16380ea42d2d"/>
+    </component>
+    <component group="club.minnced" module="opus-java-api" version="1.1.1">
+      <artifact name="opus-java-api-1.1.1.jar" sha256="30181d6c295aec7c54e9e0ce5af0cb18f0fab21a15b21c0a7b374d21eeb0f141"/>
+      <artifact name="opus-java-api-1.1.1.pom" sha256="90c48213422425f1c52c44a75304cd4d97f939d93a2c3903b2762cfd69952c92"/>
+    </component>
+    <component group="club.minnced" module="opus-java-natives" version="1.1.1">
+      <artifact name="opus-java-natives-1.1.1.jar" sha256="74bfa75ecf39e163097873a93b5a2cc14ba9d71ff368ea9a61bdbaa43a02abfe"/>
+      <artifact name="opus-java-natives-1.1.1.pom" sha256="e0287763b1359e8319c402de46ac7859bf3dcbfb8d7b3927b51e15da86bec0da"/>
+    </component>
+    <component group="club.minnced" module="opus-java" version="1.1.1">
+      <artifact name="opus-java-1.1.1.jar" sha256="cb4c14a8263f3a45f87289fd4425bf7ddf095f599559b87d1ac4eb58bfcb786c"/>
+      <artifact name="opus-java-1.1.1.pom" sha256="44db4416651dc0d6d3bf74c4c244cbc71f888199ff741665dccf082431093549"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="brotli4j" version="1.13.0">
+      <artifact name="brotli4j-1.13.0.jar" sha256="f240e5910a86445ec98595029be17d7be8f394d76f40d7d29b8aa899f5bd650a"/>
+      <artifact name="brotli4j-1.13.0.pom" sha256="729452e22d482a5ec67963c97db01527a595d655b0cafc57ac54914e46159f84"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="native-linux-aarch64" version="1.13.0">
+      <artifact name="native-linux-aarch64-1.13.0.jar" sha256="8dcb846b7d810f7e6ac339eb4e0bc63c319a406f419628693a7b774eac7a9899"/>
+      <artifact name="native-linux-aarch64-1.13.0.pom" sha256="3bdcfde0d3e437e11ff57c7d7d46b928f41a7acc103a64635e5c20e3f5a90c7f"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="native-linux-x86_64" version="1.13.0">
+      <artifact name="native-linux-x86_64-1.13.0.jar" sha256="804bec27f06d99261a49f35b83d36319ff0867bd8307167d14723191b1011286"/>
+      <artifact name="native-linux-x86_64-1.13.0.pom" sha256="7ea6662ca1fefcc717c05a9794b7b2f1f52486a813db47f5a65620239cba1add"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="native-osx-aarch64" version="1.13.0">
+      <artifact name="native-osx-aarch64-1.13.0.jar" sha256="e0305ab1396e93410faa38c0e379f151a50268fc78f52747d286bfcef94ef324"/>
+      <artifact name="native-osx-aarch64-1.13.0.pom" sha256="e67509278ca51515c5b7c97af4cf9defc2870a93ea3d83dcf20b9df648f92447"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="native-osx-x86_64" version="1.13.0">
+      <artifact name="native-osx-x86_64-1.13.0.jar" sha256="bdd179e0c701ecd91fa32bab065cde8209a3e0663a6a2b8d7af83118d8d077a2"/>
+      <artifact name="native-osx-x86_64-1.13.0.pom" sha256="fe2336e2f643932dc9609cefc1dda276ae746e35c36ba4be428c8b7eb4705f07"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="native-windows-x86_64" version="1.13.0">
+      <artifact name="native-windows-x86_64-1.13.0.jar" sha256="8a958c99aece58cbde9715b1b9a97eff2b906c68ff424ea8b077dc6831d88bd6"/>
+      <artifact name="native-windows-x86_64-1.13.0.pom" sha256="f10f18394a4e39ad7bfd2ec6f38b425117ea3aad9cc4029ed8173a4e069e4e2e"/>
+    </component>
+    <component group="com.aayushatharva.brotli4j" module="service" version="1.13.0">
+      <artifact name="service-1.13.0.jar" sha256="eae6fcfa0c73c266269e5922a37ae36ad14c5dd88e2d7b0044c298ac1904b452"/>
+      <artifact name="service-1.13.0.pom" sha256="5a23000e4e60229691ba61bf5f08665b904cb4333d8b42bf093131517150e5bb"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-annotations" version="2.16.0">
+      <artifact name="jackson-annotations-2.16.0.jar" sha256="831d1c966c84c5a464059bccee2b0a1279e4998fb1719b05bf7dffcae90f06d6"/>
+      <artifact name="jackson-annotations-2.16.0.pom" sha256="1c71148de094f0f78bcb1d10b5c0fcb863c690e0e1343b7dd1d28975f95aa73e"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-annotations" version="2.17.1">
+      <artifact name="jackson-annotations-2.17.1.jar" sha256="43823d6d56d283d165d8dc4044d4c0a2b1e79d08291c21b5219da3660b72bc4c"/>
+      <artifact name="jackson-annotations-2.17.1.pom" sha256="2d189c49f774f43f7438ae562785b56460949975a5c6f79075298704ae167e9c"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-annotations" version="2.22">
+      <artifact name="jackson-annotations-2.22.jar" sha256="2cdddf38d6d492a8a79523852d56494d5e0aa1709f95ad08e9abf46aeed9b89d"/>
+      <artifact name="jackson-annotations-2.22.pom" sha256="3949565902ef7005ec7a7afdf9c5a01cff6dfab7f5a641140222b0bc92c9611e"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-core" version="2.16.0">
+      <artifact name="jackson-core-2.16.0.jar" sha256="2ed345f872559ba6ab4f1d8f48cf88c5b90ce5a4a3416f71b48e543eda2792b0"/>
+      <artifact name="jackson-core-2.16.0.pom" sha256="b30dd26e47a61afaa79367651cf0f11b740b7f275b7dcd6bab873cc569ac1073"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-core" version="2.17.1">
+      <artifact name="jackson-core-2.17.1.jar" sha256="9fafb7b8c787765600d7eabc2a6dcfef24de546797b5600542ddd3f05a836030"/>
+      <artifact name="jackson-core-2.17.1.pom" sha256="16b0ea29d1ec0074c38db662ea4926a10158f84776a8858da1d0b72a7ebd7487"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-core" version="2.22.0">
+      <artifact name="jackson-core-2.22.0.jar" sha256="ac95f01d4ec8c4e4417cd7380bebf8df5a191732bbef8f8f5f9c2557dc01da39"/>
+      <artifact name="jackson-core-2.22.0.pom" sha256="870871b67d6de54d728950079e92ccdfbbea310c5f70e7b319ee1a0e67ca4dc9"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-databind" version="2.16.0">
+      <artifact name="jackson-databind-2.16.0.jar" sha256="ca555d3697ad50d8f2f1a534bf20f0d5c14e2ccaff8899a6c871f124f0b0c8c7"/>
+      <artifact name="jackson-databind-2.16.0.pom" sha256="d79548e4ad4a92138160118a929790229487ce2666fd51710c1661f5093502f6"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-databind" version="2.17.1">
+      <artifact name="jackson-databind-2.17.1.jar" sha256="1db4ecf56c7e21039fed2c633a292600f5a5e1ab756737a8c974300bc0746de0"/>
+      <artifact name="jackson-databind-2.17.1.pom" sha256="4d3576f0309afe85ba4857ef87fe25207f54c72e019c88efe932bd8a1e65c9ee"/>
+    </component>
+    <component group="com.fasterxml.jackson.core" module="jackson-databind" version="2.22.0">
+      <artifact name="jackson-databind-2.22.0.jar" sha256="611e63bf03db6181577beb99419b6419a9c1ac7f7a0e2ca6915bf60c918a54e9"/>
+      <artifact name="jackson-databind-2.22.0.pom" sha256="3d24d6f0e2e7c830a9ce0eb8be891562fa1fc9bc36efbb34a73766989e4b524b"/>
+    </component>
+    <component group="com.fasterxml.jackson" module="jackson-bom" version="2.16.0">
+      <artifact name="jackson-bom-2.16.0.jar" sha256="2fb8c539296b788418322e302ff3d6c68494826d1670522ed68612f371eca495"/>
+      <artifact name="jackson-bom-2.16.0.pom" sha256="dbcae42a01f5ab2c2b871b31eae98dd7b5616a83a613d55d3c2ae316b972377c"/>
+    </component>
+    <component group="com.fasterxml.jackson" module="jackson-bom" version="2.17.1">
+      <artifact name="jackson-bom-2.17.1.jar" sha256="79e043bb00c7330ba920f79eaf574739075ed78c969e0c157ecbb757516444db"/>
+      <artifact name="jackson-bom-2.17.1.pom" sha256="8c2a8794fb97d8a8588142a0118cd76ca9164360a46b814d6c8203d39f0e7b9a"/>
+    </component>
+    <component group="com.fasterxml.jackson" module="jackson-bom" version="2.22.0">
+      <artifact name="jackson-bom-2.22.0.jar" sha256="3fcc8e83bc89087376ec0483ea37c1f53e5b92ece2248761b34526869218f82c"/>
+      <artifact name="jackson-bom-2.22.0.pom" sha256="66c113110b4fa7ff97cff6b372ff8f95c92c2a997b0a1450b1ae0864aa95ddb9"/>
+    </component>
+    <component group="com.github.ben-manes.caffeine" module="caffeine" version="3.1.8">
+      <artifact name="caffeine-3.1.8.jar" sha256="39cf2232c3312063cf07b98de1ce8ceb81c774f973aa139adcfca9e84686c13a"/>
+      <artifact name="caffeine-3.1.8.pom" sha256="7948558c51aad5aa580122a345d1104159bf9e74d43b185360380bf18edde3c5"/>
+    </component>
+    <component group="com.github.oshi" module="oshi-core" version="6.4.10">
+      <artifact name="oshi-core-6.4.10.jar" sha256="c6b22d4673c42d03258e806990130ec41c4b44a3ef37c5cb947b7807238bbcc8"/>
+      <artifact name="oshi-core-6.4.10.pom" sha256="77cd98fcc84dcd6c8df809f79330807bc87d1ade71564e80a9b0cdd9039ad982"/>
+    </component>
+    <component group="com.github.scopt" module="scopt_2.13" version="3.7.1">
+      <artifact name="scopt_2.13-3.7.1.jar" sha256="7d8c3622c36c654fe55115e918be35c7d4ae51b2c14fb6e36234653755cc8409"/>
+      <artifact name="scopt_2.13-3.7.1.pom" sha256="2cf600de18bb5dc39f9e2c427155e41fa40cc159c4f5b6c7502b6b98c0f10ab4"/>
+    </component>
+    <component group="com.google.auto.service" module="auto-service-annotations" version="1.1.1">
+      <artifact name="auto-service-annotations-1.1.1.jar" sha256="46a091e307f9eb42cdf545a74dc576c798b69caaf9dff9e2c7e59ad0891ddbaa"/>
+      <artifact name="auto-service-annotations-1.1.1.pom" sha256="8f101138b69a7ae3661948a04fc0d0b600f78703c809fa31c9e0563027bbfbff"/>
+    </component>
+    <component group="com.google.code.findbugs" module="jsr305" version="3.0.2">
+      <artifact name="jsr305-3.0.2.jar" sha256="b9748bf56c300be0f44a20ba5b99676565bb215d693ce4067097d4b14e4185d5"/>
+      <artifact name="jsr305-3.0.2.pom" sha256="de5301230d9fe2615ab2a1792cfc7bfcfb6b711afe3d3ed1b8dc8ffd562c736a"/>
+    </component>
+    <component group="com.google.code.gson" module="gson" version="2.10.1">
+      <artifact name="gson-2.10.1.jar" sha256="135a4b1997dbe8e13a76872483d9ec5686f49d90e133731e5ddf4df74bbdea75"/>
+      <artifact name="gson-2.10.1.pom" sha256="4c2a516d2df3ee00e76b4145222148ba7d90a45b692b9a185738ad8865461a0b"/>
+    </component>
+    <component group="com.google.code.gson" module="gson" version="2.11.0">
+      <artifact name="gson-2.11.0.jar" sha256="69b37d1f11a5ebef355eed15a1ab77406224bdc6d8eb2cd78160872233153780"/>
+      <artifact name="gson-2.11.0.pom" sha256="73652603a4f32adf021306c0523b8b1f6023c5caf982d959af4220fc2c573138"/>
+    </component>
+    <component group="com.google.crypto.tink" module="tink" version="1.18.0">
+      <artifact name="tink-1.18.0.jar" sha256="43ec44410af11bcd0ec859166a8cf943dac149630fcf900fa5ad8473005743ac"/>
+      <artifact name="tink-1.18.0.pom" sha256="f021ef108c1f5ac1060e1d3162e42ab77a643f90d89305c8b009e95e9b174797"/>
+    </component>
+    <component group="com.google.errorprone" module="error_prone_annotations" version="2.21.1">
+      <artifact name="error_prone_annotations-2.21.1.jar" sha256="fa8fc116995ec5c07adc2fbe0f147bc8cf5bfb3ce96fe3098ac656b191931b1c"/>
+      <artifact name="error_prone_annotations-2.21.1.pom" sha256="829c98c3a7b91b6fe19eeaffc32029c64ce2fb38fa026b7620f6c611fbe77154"/>
+    </component>
+    <component group="com.google.errorprone" module="error_prone_annotations" version="2.22.0">
+      <artifact name="error_prone_annotations-2.22.0.jar" sha256="95a7c055b6e3779b5fb18478f8be1b3de9c8d3bb70a95d2aa48f597a79fb638b"/>
+      <artifact name="error_prone_annotations-2.22.0.pom" sha256="b5279e512f8959cc56010467ac780f2b79164dbc5a9036083c74432161440531"/>
+    </component>
+    <component group="com.google.errorprone" module="error_prone_annotations" version="2.27.0">
+      <artifact name="error_prone_annotations-2.27.0.jar" sha256="a34de149af3f50e38ff08a4993b58aa92db142c6f6a265f742e73e188c659d84"/>
+      <artifact name="error_prone_annotations-2.27.0.pom" sha256="26cb26358ec87602c768c81ab66e8b50558253120a2ea2fd78b3eecb2597a7c2"/>
+    </component>
+    <component group="com.google.errorprone" module="error_prone_annotations" version="2.28.0">
+      <artifact name="error_prone_annotations-2.28.0.jar" sha256="616643e56567b16a68490293a00d0cbf0c42e1be2295ff5d4f842482aeaf121b"/>
+      <artifact name="error_prone_annotations-2.28.0.pom" sha256="41abc7497782e1c29d65bb1a4a07be4e3ac4da41ea6fbae00c20dbcba541a85a"/>
+    </component>
+    <component group="com.google.guava" module="failureaccess" version="1.0.1">
+      <artifact name="failureaccess-1.0.1.jar" sha256="5712602179e2fd80579c2335abf044276be7ce38bd086bcf4c56b18966df6a2d"/>
+      <artifact name="failureaccess-1.0.1.pom" sha256="129f679ea6c6db8dac0fc2a74152ee7fcab082789b5eb0a5b36521e46064cf1e"/>
+    </component>
+    <component group="com.google.guava" module="failureaccess" version="1.0.2">
+      <artifact name="failureaccess-1.0.2.jar" sha256="3208fd5f80d6c1c478dc6bb3392e69f723a2261f91140cb16c862878e75348d8"/>
+      <artifact name="failureaccess-1.0.2.pom" sha256="734730923382ac870cadd21304353864d9af5d0b629048272e7c70aa59f4296a"/>
+    </component>
+    <component group="com.google.guava" module="guava" version="31.0.1-jre">
+      <artifact name="guava-31.0.1-jre.jar" sha256="49268648d9798abdf0348d4b58a62d65ba3595e606623b362f3f6135a640dbcc"/>
+      <artifact name="guava-31.0.1-jre.pom" sha256="7ff37cae8710ca9bef9bacf69ed0a70e43410011b39613a56632e6378e77ecef"/>
+    </component>
+    <component group="com.google.guava" module="guava" version="32.1.2-jre">
+      <artifact name="guava-32.1.2-jre.jar" sha256="a3cc5fba111f09fa0739e824b53217b8eb49658508c1ceb901d214773c6d7d0e"/>
+      <artifact name="guava-32.1.2-jre.pom" sha256="96827faea9051e4ad40e657566e2889e11489906c3f39fe07444b2f9495122c0"/>
+    </component>
+    <component group="com.google.guava" module="guava" version="33.3.1-jre">
+      <artifact name="guava-33.3.1-jre.jar" sha256="809506ea7afad1517a39546ffa0a9cc3a9cf5a5d313c5e9ccc2c92e6ed83d192"/>
+      <artifact name="guava-33.3.1-jre.pom" sha256="0ace83bcff37e5d3d558e65e4c18b0b6a9c5b5f8437bc2b4e4d00246d489341c"/>
+    </component>
+    <component group="com.google.guava" module="listenablefuture" version="9999.0-empty-to-avoid-conflict-with-guava">
+      <artifact name="listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar" sha256="c6e8cc19c0aef62e57ba564a13bd6956f0309218967119f3c4fa666dc35c357e"/>
+      <artifact name="listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.pom" sha256="2d76d95b31b2497b814e0ea654ff6d6bebd606d1a94386d62072df47411db3cf"/>
+    </component>
+    <component group="com.google.inject" module="guice" version="6.0.0">
+      <artifact name="guice-6.0.0.jar" sha256="48c8029885230856e0c1f90219cbb825b6a6c15d6d1e545d997eb2c53159fae4"/>
+      <artifact name="guice-6.0.0.pom" sha256="79142d3722fbc0777191edae1963bbab2a942d84e1f75da44b537033c80abe84"/>
+    </component>
+    <component group="com.google.j2objc" module="j2objc-annotations" version="1.3">
+      <artifact name="j2objc-annotations-1.3.jar" sha256="a07d42a24a2d4ac89945ff754f6c5fb3f6201bffb306834d19c754daf5629d39"/>
+      <artifact name="j2objc-annotations-1.3.pom" sha256="09d061748dbe34b93f10884a7dd66a8a2bf8235b42b45e54507e619926d1e2a3"/>
+    </component>
+    <component group="com.google.j2objc" module="j2objc-annotations" version="3.0.0">
+      <artifact name="j2objc-annotations-3.0.0.jar" sha256="6c8037e034fa9b6207cf775e19f5a21bce9e210c7140b1a910e102a11d4c9aa5"/>
+      <artifact name="j2objc-annotations-3.0.0.pom" sha256="a40f7fe2f467fce1af7b5725f60e068d428a1dd20843d6d6b8b47ddf467cd01c"/>
+    </component>
+    <component group="com.google.protobuf" module="protobuf-java" version="4.28.2">
+      <artifact name="protobuf-java-4.28.2.jar" sha256="643e770f96146eb36ec7b04176f196ac7d0b2732be69d598e765e8eddb1076bd"/>
+      <artifact name="protobuf-java-4.28.2.pom" sha256="112bc32348ab8a0081acb06877e7a9e346a965eb0099f10de454e87f142cc169"/>
+    </component>
+    <component group="com.googlecode.json-simple" module="json-simple" version="1.1.1">
+      <artifact name="json-simple-1.1.1.jar" sha256="be0a7a27545bf211b63d92298613ee3ae12fec79d678b6cd9ab8680db1611da6"/>
+      <artifact name="json-simple-1.1.1.pom" sha256="b4cf100957ace97a6df30ac11116e3b90fac3526e6370c8de86fc4d5013ed40c"/>
+    </component>
+    <component group="com.ibm.icu" module="icu4j" version="73.2">
+      <artifact name="icu4j-73.2.jar" sha256="54f1fd0705bf7c4fec19f7c640e4554b0e611af7139ea94b48bc5ce926bd0d26"/>
+      <artifact name="icu4j-73.2.pom" sha256="50b96f67bfe20546eca062c6190d366638645fe56a9d44fd61b13a9e332306bc"/>
+    </component>
+    <component group="com.moandjiezana.toml" module="toml4j" version="0.7.2">
+      <artifact name="toml4j-0.7.2.jar" sha256="3f035d882f7a4d09fb62780acfa014f25823d53ba2bb82ccdbb28fd0c492e01f"/>
+      <artifact name="toml4j-0.7.2.pom" sha256="819c167d4227b33b2107280289bc089b475f8c0cfed95992f631b855298d6522"/>
+    </component>
+    <component group="com.mojang" module="authlib" version="6.0.54">
+      <artifact name="authlib-6.0.54.jar" sha256="d8a7526613f9fcebadacdf9b358b3665bb4c37fbbfcd61ce19ca0665c3ba6b93"/>
+      <artifact name="authlib-6.0.54.pom" sha256="4789279d52b1526129393c0fdfb2b29f43c64d14ec7d8d2187b171534502ba3d"/>
+    </component>
+    <component group="com.mojang" module="blocklist" version="1.0.10">
+      <artifact name="blocklist-1.0.10.jar" sha256="7e6bdeae875a9ed5d55c6e22bc5593624c8f1d1241ba3309b9930dbf5584ad5f"/>
+      <artifact name="blocklist-1.0.10.pom" sha256="0d155470a127bf4d7a2ed920b666c2687ed9d3af041e056bb00f1456d55c2ccd"/>
+    </component>
+    <component group="com.mojang" module="brigadier" version="1.2.9">
+      <artifact name="brigadier-1.2.9.jar" sha256="5496e17a9ae849392ef3902176fcff1ee4f4dcdc7472bc7a5ba425efd697bf2b"/>
+      <artifact name="brigadier-1.2.9.pom" sha256="478a633f556249231102488aae45bc1d27b4d4e6447145ffdbc2de4e7f6aa3ed"/>
+    </component>
+    <component group="com.mojang" module="brigadier" version="1.3.10">
+      <artifact name="brigadier-1.3.10.jar" sha256="ef3faacee5d7d2b40dc073eabee5f10220f649a842e5aaed39f5b56d59b1a4a7"/>
+      <artifact name="brigadier-1.3.10.pom" sha256="e63d6f3a904f3dba796eed0e655083df47f2535979b58c920f094d3d311cad7e"/>
+    </component>
+    <component group="com.mojang" module="datafixerupper" version="8.0.16">
+      <artifact name="datafixerupper-8.0.16.jar" sha256="efa3405e48f6a98f78b144f2ad10d53619e76ab4668db8de628e1e032ba54f25"/>
+      <artifact name="datafixerupper-8.0.16.pom" sha256="f4e30948fd9e7e1fc6e841e5523b395224748fecc06948a469c2ae42bd6d7265"/>
+    </component>
+    <component group="com.mojang" module="logging" version="1.2.7">
+      <artifact name="logging-1.2.7.jar" sha256="8c463d523f70bd3da872df99051b1791d44286c6c2a6bdff1e4e4ba0d6836f78"/>
+      <artifact name="logging-1.2.7.pom" sha256="54b6a2a86e575cd87bd9e0613be5ebcdf479397236274083763c8f62aa16d175"/>
+    </component>
+    <component group="com.mojang" module="patchy" version="2.2.10">
+      <artifact name="patchy-2.2.10.jar" sha256="f8aa7fd3132cae43e0cc5b7c4af08181e0313dd49d71419ed0697f26b31109ac"/>
+      <artifact name="patchy-2.2.10.pom" sha256="a45bad4a94249af840b2fb7aa79edce0f43119e10fe2e84dc35e657390d69b7d"/>
+    </component>
+    <component group="com.mojang" module="text2speech" version="1.17.9">
+      <artifact name="text2speech-1.17.9.jar" sha256="072e10b850aab99cce8ef878f371bd55f0cef997b4b6ad140114a76eeb1e7773"/>
+      <artifact name="text2speech-1.17.9.pom" sha256="38f08d14fb822e90079fe3f63a19e6957b95812b57690af7d8c00ca083656da2"/>
+    </component>
+    <component group="com.neovisionaries" module="nv-websocket-client" version="2.14">
+      <artifact name="nv-websocket-client-2.14.jar" sha256="3caf7282142d85895bc0ce762a21bf073c89e9762430d288e9a1b4e65b8ec9a2"/>
+      <artifact name="nv-websocket-client-2.14.pom" sha256="bc4e90ab7e6d236b77c5066771312475ffde174ea536a38513510078c3cf77a3"/>
+    </component>
+    <component group="com.softwaremill.quicklens" module="quicklens_2.13" version="1.9.6">
+      <artifact name="quicklens_2.13-1.9.6.jar" sha256="db6617325e1ac0001d3dde0a1d10c827ff7abd4f1b3e40ee9410a928ab640098"/>
+      <artifact name="quicklens_2.13-1.9.6.pom" sha256="690502e672eb430d9ed995b5c414689b7a4b7e32bf5e45017243996913d1bcc4"/>
+    </component>
+    <component group="com.squareup.okhttp3" module="okhttp-jvm" version="5.3.2">
+      <artifact name="okhttp-jvm-5.3.2.jar" sha256="2fb74cff19aeb794c1b3f3efc59307996beaf7e491304c61b0240f576066ddec"/>
+      <artifact name="okhttp-jvm-5.3.2.pom" sha256="472b44579594d998a0f8fe7bd550fd42fa293918662691f378f022b2a149dcab"/>
+    </component>
+    <component group="com.squareup.okhttp3" module="okhttp" version="4.12.0">
+      <artifact name="okhttp-4.12.0.jar" sha256="0d19a17aaa914321bc1e360fc4ca800a67297249edb860937e96350e7a36ff59"/>
+      <artifact name="okhttp-4.12.0.pom" sha256="6937f1aa60822521524183f69979912db6046baabe80e11429cfafc2f7f0f276"/>
+    </component>
+    <component group="com.squareup.okio" module="okio-jvm" version="3.16.4">
+      <artifact name="okio-jvm-3.16.4.jar" sha256="acccf83a48bacdea83df8b0676699211de522d56f5e4ccbe931b1a20c39d015c"/>
+      <artifact name="okio-jvm-3.16.4.pom" sha256="f0349d8e12a847863ef9a2cc32aa43fa2858e40fc063a3ede14f06cb73719e22"/>
+    </component>
+    <component group="com.squareup.okio" module="okio-jvm" version="3.6.0">
+      <artifact name="okio-jvm-3.6.0.jar" sha256="c4f55c8c15da765908668e54b32e833aed26d969cdb735bbeb8bbdfd9279f3a8"/>
+      <artifact name="okio-jvm-3.6.0.pom" sha256="1a0f80aa25da868ffc6221d73acd9fdee62bbb2dad376378c4564e69db8cd015"/>
+    </component>
+    <component group="com.squareup.okio" module="okio" version="3.16.4">
+      <artifact name="okio-3.16.4.jar" sha256="65d5748382fb5979f0091349dd8a92446bce4d8fa4b69b9f86df406d3726e2db"/>
+      <artifact name="okio-3.16.4.pom" sha256="9693aa97b0ca7a69ba7f766aaa26d2b9c499c6003aff0e3dd351ee1fb474aecb"/>
+    </component>
+    <component group="com.squareup.okio" module="okio" version="3.6.0">
+      <artifact name="okio-3.6.0.jar" sha256="94859e98e8357c7b65179fd2e7ecee719a1530e7ae1e4b22d3448daa45c4cd9a"/>
+      <artifact name="okio-3.6.0.pom" sha256="53028fcfbcba1c7bc1bd5c1d2414f9711770d2be0fd9e3f63f6457981ff1dc1b"/>
+    </component>
+    <component group="com.typesafe.akka" module="akka-actor_2.13" version="2.6.20">
+      <artifact name="akka-actor_2.13-2.6.20.jar" sha256="7cf51030420f1cbeea564e8d5dc8e7f0a18e4f0eb7887cb9415104ab0c18995c"/>
+      <artifact name="akka-actor_2.13-2.6.20.pom" sha256="78ef7c687bec48a9b79f05337c7368262f0d6b75094a2b6e19528576f000ef07"/>
+    </component>
+    <component group="com.typesafe.akka" module="akka-slf4j_2.13" version="2.6.20">
+      <artifact name="akka-slf4j_2.13-2.6.20.jar" sha256="642114c8881ec6e5dc06eee51ea494e19294a30d76d8ee6bf380b3b5224a97cc"/>
+      <artifact name="akka-slf4j_2.13-2.6.20.pom" sha256="55f621559b3f9c6cefcb6cf3fa0a0af499e935da0da33fa5a0577b9d6044c5c1"/>
+    </component>
+    <component group="com.typesafe.scala-logging" module="scala-logging_2.13" version="3.9.5">
+      <artifact name="scala-logging_2.13-3.9.5.jar" sha256="af92b85e5002b3320befcef952c912e05daac851bbb4097f33f7c0686d959416"/>
+      <artifact name="scala-logging_2.13-3.9.5.pom" sha256="8f3114def7826248bc257dd5ce0cade44b3d48c9cc2a198c2900a0fa79bc078e"/>
+    </component>
+    <component group="com.typesafe" module="config" version="1.4.1">
+      <artifact name="config-1.4.1.jar" sha256="72ec2ed85b77f28693fe4356441726ea0c8b0feb96f95580e24df6c88144e4eb"/>
+      <artifact name="config-1.4.1.pom" sha256="5cc4e023b1f941aa26067375d95c22e8a2dfd52394db64290e85228aff8fa274"/>
+    </component>
+    <component group="com.typesafe" module="config" version="1.4.3">
+      <artifact name="config-1.4.3.jar" sha256="82e778454cfb6950727ac49f18a10e7d3288b536a4f3e1318545801cfad78a78"/>
+      <artifact name="config-1.4.3.pom" sha256="161ff54e2f8730953c3b04bf7e25b1664c2028fa766ee357ac70a7f96bb8cc16"/>
+    </component>
+    <component group="com.velocitypowered" module="velocity-api" version="3.4.0">
+      <artifact name="velocity-api-3.4.0.jar" sha256="f604c429adda4aa636bb8818525574c0015c877d933de00474551aee76c2f691"/>
+      <artifact name="velocity-api-3.4.0.pom" sha256="aa49fc422eae4b5bb4e76c049e85693ce9d3d2f03d8eaf4b636ae8323e758f2e"/>
+    </component>
+    <component group="commons-codec" module="commons-codec" version="1.16.0">
+      <artifact name="commons-codec-1.16.0.jar" sha256="a4f9198b5ed2cb08fc1c398efab623c6877dc430f5434896d9a97662d3b646f5"/>
+      <artifact name="commons-codec-1.16.0.pom" sha256="db1ad706be355693b68444553aa245ab39f3bd2d573b489d3aa01e9cdf6b292c"/>
+    </component>
+    <component group="commons-io" module="commons-io" version="2.15.1">
+      <artifact name="commons-io-2.15.1.jar" sha256="e4b58842a2444ae1a5bf349a28b7c0bfdb50cb56a8d74cabaeb84a4d8f5ef0cc"/>
+      <artifact name="commons-io-2.15.1.pom" sha256="117b1772d90685e7004e0e6549b5af4d326fae07a634348bb5fe0ab86e9e5f78"/>
+    </component>
+    <component group="commons-logging" module="commons-logging" version="1.2">
+      <artifact name="commons-logging-1.2.jar" sha256="7b7234e8031ce5cbdaa3b3145ac215bcc5c7f8d00061a5b47f646ab50f32b799"/>
+      <artifact name="commons-logging-1.2.pom" sha256="1f5d95b7b5c55f3081c4330486dd3e4f303c5f94a8c938133108b5ce063cec15"/>
+    </component>
+    <component group="io.burt" module="jmespath-core" version="0.6.0">
+      <artifact name="jmespath-core-0.6.0.jar" sha256="099ba164fae6ed0819a74ff2bd5005bdea2e95c57115d25712139659176360cd"/>
+      <artifact name="jmespath-core-0.6.0.pom" sha256="14127442430eb9bf5eefced3786d07bfc7077be665b3184c8c481381a4a40162"/>
+    </component>
+    <component group="io.burt" module="jmespath-jackson" version="0.6.0">
+      <artifact name="jmespath-jackson-0.6.0.jar" sha256="8244ee350a1d71b00439f189e191651d2dac0ed363c3dcd4c5c5652c309b524d"/>
+      <artifact name="jmespath-jackson-0.6.0.pom" sha256="4c613f84a561d55ac00fc2db9fc9ca79684bee880e7db90b0ae2b8e6e4953b99"/>
+    </component>
+    <component group="io.gatling" module="gatling-commons" version="3.10.3">
+      <artifact name="gatling-commons-3.10.3.jar" sha256="81db9063507e1326d499a1cd90182550dae24a4ea40957994daf9e4f0779c8e8"/>
+      <artifact name="gatling-commons-3.10.3.pom" sha256="bd72b8a12f48e08f45b9172f6a5d8c1d75f064335f190d9e7894ebb97c56ebce"/>
+    </component>
+    <component group="io.gatling" module="gatling-core" version="3.10.3">
+      <artifact name="gatling-core-3.10.3.jar" sha256="c58fc73449e0ee4efa4a6342d01d2ce6b22bfb39d4bf31271ac8a8e63b6fc67d"/>
+      <artifact name="gatling-core-3.10.3.pom" sha256="5e1064f2c8fcd6cc6c362d20d0c57abb0bbe9b30b1a7630672ce88d4cd9bca01"/>
+    </component>
+    <component group="io.gatling" module="gatling-http-client" version="3.10.3">
+      <artifact name="gatling-http-client-3.10.3.jar" sha256="224602adc3cc381a0841cadd45c48fd3da540132b37267361e7258b455c547ec"/>
+      <artifact name="gatling-http-client-3.10.3.pom" sha256="307f88a007649018c684722b156f3bd6bfa664a946b4867dbc6151242fce899e"/>
+    </component>
+    <component group="io.gatling" module="gatling-http" version="3.10.3">
+      <artifact name="gatling-http-3.10.3.jar" sha256="48fe7df3e4d85ddb77fd109bcbe75ef75a2e2cde19dbea80146debd9b0487e0e"/>
+      <artifact name="gatling-http-3.10.3.pom" sha256="01ea6e676dac521f0771d9a162693a5a04df009d3f23c59952362addece9c746"/>
+    </component>
+    <component group="io.gatling" module="gatling-jsonpath" version="3.10.3">
+      <artifact name="gatling-jsonpath-3.10.3.jar" sha256="11b5905b439ccda2f56806790c88ee08b979ec359f4ad3fe6c018a87c22735eb"/>
+      <artifact name="gatling-jsonpath-3.10.3.pom" sha256="59624fd6c195925790b213646b94bd183b3976c51cf38a5dea595a652cd83663"/>
+    </component>
+    <component group="io.gatling" module="gatling-netty-util" version="3.10.3">
+      <artifact name="gatling-netty-util-3.10.3.jar" sha256="08fef304e3d5964d935f373d41d3a2182d603ae21fb132ec3bc7b1933cb87062"/>
+      <artifact name="gatling-netty-util-3.10.3.pom" sha256="9a09a92333bfc0dfe845edb7069b39d2dd9c5d28f7bf36fc39d3ac7456af9f8d"/>
+    </component>
+    <component group="io.gatling" module="gatling-shared-enterprise" version="3.10.3">
+      <artifact name="gatling-shared-enterprise-3.10.3.jar" sha256="68663c058da98c9eb5db7f6f6b9750d5491812062561ed17e9e451378cacf422"/>
+      <artifact name="gatling-shared-enterprise-3.10.3.pom" sha256="bc2c64d9ff06f6aa5ac57f71ff45951ee9e16da1f4b45a73f39d3c3b75968e5c"/>
+    </component>
+    <component group="io.gatling" module="gatling-shared-model_2.13" version="0.0.4">
+      <artifact name="gatling-shared-model_2.13-0.0.4.jar" sha256="4e4da59585ae7ab282fd989c34567336fb66ebd2f0b19ebc0c1342571e72584f"/>
+      <artifact name="gatling-shared-model_2.13-0.0.4.pom" sha256="8561d8a17368d5739ac5c3e58bc741b9f765c98b7f67aacb1ff209385c87d10e"/>
+    </component>
+    <component group="io.gatling" module="gatling-shared-util_2.13" version="0.0.5">
+      <artifact name="gatling-shared-util_2.13-0.0.5.jar" sha256="26b832dfc22239e7c4689d0c23e699d14f63424b1ff20b1dae57802eeb45e28f"/>
+      <artifact name="gatling-shared-util_2.13-0.0.5.pom" sha256="7993a9ae295abb9b6938bb8f808aebdfd5055b8a553bf5ca21901ec613eb0ec0"/>
+    </component>
+    <component group="io.github.llamalad7" module="mixinextras-fabric" version="0.4.1">
+      <artifact name="mixinextras-fabric-0.4.1.jar" sha256="8f48143a1f6e74ec7877e633b4bd592abc0b7ec9f4b3d9ec4b65aae825356df3"/>
+      <artifact name="mixinextras-fabric-0.4.1.pom" sha256="0c6a7165d6e52bbe0c6ff842850e373bf7fdca8cd81e1a3eb63cddd03c116640"/>
+    </component>
+    <component group="io.github.metarank" module="cfor_2.13" version="0.3">
+      <artifact name="cfor_2.13-0.3.jar" sha256="b70b86c33777f136b0e3acebbd87f6ed963e51c689df7920e51fb79ae02c0435"/>
+      <artifact name="cfor_2.13-0.3.pom" sha256="8ed3ee17608788f857a611df47d63e6a78c39b9b4018e6af07ce31222166975e"/>
+    </component>
+    <component group="io.leangen.geantyref" module="geantyref" version="1.3.11">
+      <artifact name="geantyref-1.3.11.jar" sha256="c75f3305e98287ba4a40a2ed5673159895cd7ec6f4477da425d96349355ed40b"/>
+      <artifact name="geantyref-1.3.11.pom" sha256="cedefa2609e51ec12f833345c20206aede0679fd231439409641b57539e1a7f5"/>
+    </component>
+    <component group="io.netty.incubator" module="netty-incubator-transport-classes-io_uring" version="0.0.24.Final">
+      <artifact name="netty-incubator-transport-classes-io_uring-0.0.24.Final.jar" sha256="334a90318ccde35ed0257cd9faef6827111d78e4a9ccad12cc069af694b332d2"/>
+      <artifact name="netty-incubator-transport-classes-io_uring-0.0.24.Final.pom" sha256="b38f681e4e1f83144e6c1fdf1cc721508f957378293bfe0ecf613f914369c4c6"/>
+    </component>
+    <component group="io.netty.incubator" module="netty-incubator-transport-native-io_uring" version="0.0.24.Final">
+      <artifact name="netty-incubator-transport-native-io_uring-0.0.24.Final.jar" sha256="efae987fe32a399703132a2c446c9157be8f7f4bf75a36936e0ca00fc661bedc"/>
+      <artifact name="netty-incubator-transport-native-io_uring-0.0.24.Final.pom" sha256="c636315004fad6c7ec4924ca9a8203556155c6413098ecc0e1ef57098cccb177"/>
+    </component>
+    <component group="io.netty" module="netty-buffer" version="4.1.104.Final">
+      <artifact name="netty-buffer-4.1.104.Final.jar" sha256="2b711af8e84eb33cc3186987f1d593c90c303d76ec92b692063c12c96d3b9943"/>
+      <artifact name="netty-buffer-4.1.104.Final.pom" sha256="964e1c462d9fe3278015882b82e17f0371a6fc36839eb329932fc56fcf9d0c3c"/>
+    </component>
+    <component group="io.netty" module="netty-buffer" version="4.1.97.Final">
+      <artifact name="netty-buffer-4.1.97.Final.jar" sha256="5e612f81b305ead8042e92cea66cc11b1870a7414551026ae115d0a6ef329c22"/>
+      <artifact name="netty-buffer-4.1.97.Final.pom" sha256="75461be5aa3457431dddb64255af6e5b7991a1230a8487d9b6c5e8e1ed4c0fa2"/>
+    </component>
+    <component group="io.netty" module="netty-codec-dns" version="4.1.104.Final">
+      <artifact name="netty-codec-dns-4.1.104.Final.jar" sha256="90cf5aee577f738a2d7e20c154f65116bf21e71459a23d35f4e320d7455ab871"/>
+      <artifact name="netty-codec-dns-4.1.104.Final.pom" sha256="594213b470de6c54ebc5ca8b9cda8d614511631fdf97ba12e17db21bfcfd4656"/>
+    </component>
+    <component group="io.netty" module="netty-codec-http2" version="4.1.104.Final">
+      <artifact name="netty-codec-http2-4.1.104.Final.jar" sha256="f0c40def5a962b47af334af78d6b3812d8b9177e0922c9750ddd7267c3ce70b9"/>
+      <artifact name="netty-codec-http2-4.1.104.Final.pom" sha256="3cdf72e064032444df8391a5f3b6777884ba887dcb4a8c258eb02c85ebe782fd"/>
+    </component>
+    <component group="io.netty" module="netty-codec-http" version="4.1.104.Final">
+      <artifact name="netty-codec-http-4.1.104.Final.jar" sha256="1e365bb94eba794331522f56755f8891fd4ac6b9e4a5370f908083879c311ee0"/>
+      <artifact name="netty-codec-http-4.1.104.Final.pom" sha256="e57c113f663cfcb9e196ab3e353234fd06c1c402b7f380eb1b2d10069639426f"/>
+    </component>
+    <component group="io.netty" module="netty-codec-socks" version="4.1.104.Final">
+      <artifact name="netty-codec-socks-4.1.104.Final.jar" sha256="3a53cedeff8e49fc5b20ac09624e3b024cf51bcbd8727f24871d9bcc754141d1"/>
+      <artifact name="netty-codec-socks-4.1.104.Final.pom" sha256="fa45470daf228e4433ae6dbc39284789a7e6fd9458d9642c57d0a88dd853fb7c"/>
+    </component>
+    <component group="io.netty" module="netty-codec" version="4.1.104.Final">
+      <artifact name="netty-codec-4.1.104.Final.jar" sha256="76d183d767227cb82c62dd028ce691e55df4060ab087c6ac49945748c91e5562"/>
+      <artifact name="netty-codec-4.1.104.Final.pom" sha256="997d24be0c797c13937693d64f6f83787a1d40fd604d9cdf0b6612fce6ce91bc"/>
+    </component>
+    <component group="io.netty" module="netty-codec" version="4.1.97.Final">
+      <artifact name="netty-codec-4.1.97.Final.jar" sha256="18cfaa0e4580b01a37a32f4d633bd0f9e5f511f98c7f1a50c19fcef8d88a82fe"/>
+      <artifact name="netty-codec-4.1.97.Final.pom" sha256="e407fa74b17cc9330387618eee0922d11f4ad155d1158934eec1cca2bb53570d"/>
+    </component>
+    <component group="io.netty" module="netty-common" version="4.1.104.Final">
+      <artifact name="netty-common-4.1.104.Final.jar" sha256="13ab4e5f04d5599e1cd0188df4d3944f03240dad7682aa71546a03d9b71ec999"/>
+      <artifact name="netty-common-4.1.104.Final.pom" sha256="28014e7b513cb12980f754b7b151b4968e4ca0fcdca63b9272f85bb2ef92ca92"/>
+    </component>
+    <component group="io.netty" module="netty-common" version="4.1.97.Final">
+      <artifact name="netty-common-4.1.97.Final.jar" sha256="588dab56b2c9f8ecdc1f09a15df40e87124c3d9054e36f819c14b13d2c6569af"/>
+      <artifact name="netty-common-4.1.97.Final.pom" sha256="48f291f2ca3e5414afbd69e110846483ffe0ed1ee566ca8224369f4274b27ead"/>
+    </component>
+    <component group="io.netty" module="netty-handler-proxy" version="4.1.104.Final">
+      <artifact name="netty-handler-proxy-4.1.104.Final.jar" sha256="c6b94cc12d648e45cfeff1de4c8a897f9a44574e29e282d6e8272e20cb224064"/>
+      <artifact name="netty-handler-proxy-4.1.104.Final.pom" sha256="e9d58c4374479dc3a41ba66ff83d809f85d7b3047ad4acdba34dbae3ddc10671"/>
+    </component>
+    <component group="io.netty" module="netty-handler" version="4.1.104.Final">
+      <artifact name="netty-handler-4.1.104.Final.jar" sha256="e5397bfcc0f9701e47eb3b7500e7e4ec3694e6c96650ec87f19b625c1b17949e"/>
+      <artifact name="netty-handler-4.1.104.Final.pom" sha256="ecced955c2396650256ee18450f8bcf629f5aff03080cc91f0775556fad4d875"/>
+    </component>
+    <component group="io.netty" module="netty-handler" version="4.1.97.Final">
+      <artifact name="netty-handler-4.1.97.Final.jar" sha256="769f8da7ad0634593f86292679902d81a412ad5a5d7619504b35385e330da115"/>
+      <artifact name="netty-handler-4.1.97.Final.pom" sha256="abbc1db4f0dba02a76acfc3cb89efb5dfcde3ceb1bf047fec316e375964cba8f"/>
+    </component>
+    <component group="io.netty" module="netty-resolver-dns-classes-macos" version="4.1.104.Final">
+      <artifact name="netty-resolver-dns-classes-macos-4.1.104.Final.jar" sha256="cbbae4f65c29913c41b5d55cfbe2bc616d8e7e766e6f06f22c56e738d78ee295"/>
+      <artifact name="netty-resolver-dns-classes-macos-4.1.104.Final.pom" sha256="105f6e1bc05d2a70086c0ee0d7baa85cdaf4d1b9b72d38a7ace11219e73e2133"/>
+    </component>
+    <component group="io.netty" module="netty-resolver-dns-native-macos" version="4.1.104.Final">
+      <artifact name="netty-resolver-dns-native-macos-4.1.104.Final.jar" sha256="a5e50797dfe0a2a8a8d31172ade663281e5008b89eb3fd6ef0fb1d3479b5e9e8"/>
+      <artifact name="netty-resolver-dns-native-macos-4.1.104.Final.pom" sha256="1af275d9001c3c66f3869814d873da94a302c23354207478818a7b36703473ba"/>
+    </component>
+    <component group="io.netty" module="netty-resolver-dns" version="4.1.104.Final">
+      <artifact name="netty-resolver-dns-4.1.104.Final.jar" sha256="0cb93dfcbb89dc9052644361b44cfb1c8bb75d1fe46af683e4eb3871487a3b22"/>
+      <artifact name="netty-resolver-dns-4.1.104.Final.pom" sha256="ca1c47188ccf1652cd21140a9e432641f25afb64089418652c23bfd0d1c06905"/>
+    </component>
+    <component group="io.netty" module="netty-resolver" version="4.1.104.Final">
+      <artifact name="netty-resolver-4.1.104.Final.jar" sha256="de8a4733e35b3ca06d5976d55c035be30816499bbe492229922c9727e5f30cbb"/>
+      <artifact name="netty-resolver-4.1.104.Final.pom" sha256="12b2efeaa8adf66032d136bd853ee5ebedb2af4a76fa0625bab0c28482c1677b"/>
+    </component>
+    <component group="io.netty" module="netty-resolver" version="4.1.97.Final">
+      <artifact name="netty-resolver-4.1.97.Final.jar" sha256="374ce290a0fc69777c38184bb9210348dc8d96e91e7f442db85a4641eb1bb46c"/>
+      <artifact name="netty-resolver-4.1.97.Final.pom" sha256="dfd400eac52c0e0012271faadd6f830b8062ed9518179fc3e21bfef4b797887b"/>
+    </component>
+    <component group="io.netty" module="netty-tcnative-boringssl-static" version="2.0.62.Final">
+      <artifact name="netty-tcnative-boringssl-static-2.0.62.Final.jar" sha256="9a94da5585a0537c4ec467943b82191a6f7f1d6edb71a8f58f51b893c91fa6da"/>
+      <artifact name="netty-tcnative-boringssl-static-2.0.62.Final.pom" sha256="95ac59e5a9910d3d8d0d9fa7bd10aa9967cdf8b2d97f074191eb41cccaba9048"/>
+    </component>
+    <component group="io.netty" module="netty-tcnative-classes" version="2.0.62.Final">
+      <artifact name="netty-tcnative-classes-2.0.62.Final.jar" sha256="c71e073084a1d6a94ec4f4b39e03240b9c6919875f5fa0cb897e688a28a9beb1"/>
+      <artifact name="netty-tcnative-classes-2.0.62.Final.pom" sha256="eacd46d9d811f7767d4663af989358f0eef51e5dc60f2d513990b37268d6e181"/>
+    </component>
+    <component group="io.netty" module="netty-transport-classes-epoll" version="4.1.104.Final">
+      <artifact name="netty-transport-classes-epoll-4.1.104.Final.jar" sha256="97ec71a50826f6edab87f57fa5dc5c4339a677b24fa67fda8ade9940b90d8e3d"/>
+      <artifact name="netty-transport-classes-epoll-4.1.104.Final.pom" sha256="45992dfd72de9768eca246d31c9a2d1eaad22ae1277744bcd4e8e912d81b3c9d"/>
+    </component>
+    <component group="io.netty" module="netty-transport-classes-epoll" version="4.1.97.Final">
+      <artifact name="netty-transport-classes-epoll-4.1.97.Final.jar" sha256="830a09dd849e0c6530faa6b7ba1d2be9933e6cb78e00a20e9b35d1efde684830"/>
+      <artifact name="netty-transport-classes-epoll-4.1.97.Final.pom" sha256="cf427b7f0ce1cc8c1985c7c72539ac2879cd341b6405bf2f31a27d2f33106885"/>
+    </component>
+    <component group="io.netty" module="netty-transport-native-epoll" version="4.1.104.Final">
+      <artifact name="netty-transport-native-epoll-4.1.104.Final.jar" sha256="bd8c3ed45ac9e49cd246372de201295d9ac67bfd04c64f37b161476ac4af369e"/>
+      <artifact name="netty-transport-native-epoll-4.1.104.Final.pom" sha256="6911930346f5120dec0a139d2174ee7221b91e2f6f6630672c5d00c6fc08feb5"/>
+    </component>
+    <component group="io.netty" module="netty-transport-native-epoll" version="4.1.97.Final">
+      <artifact name="netty-transport-native-epoll-4.1.97.Final.jar" sha256="122aee7c7ce4191c70006eff77c05b4fe96bf0d05a86ff7d7fcd39e9eb46920d"/>
+      <artifact name="netty-transport-native-epoll-4.1.97.Final.pom" sha256="6c6207667e217ed0fe9a583155b4b41e48b3900323a2ebde0f09b72f0228f0ff"/>
+    </component>
+    <component group="io.netty" module="netty-transport-native-unix-common" version="4.1.104.Final">
+      <artifact name="netty-transport-native-unix-common-4.1.104.Final.jar" sha256="2fc1e58a59f36a6f3217214ab4c460ad3ea77e827881e8e2fbe83f7bfec03195"/>
+      <artifact name="netty-transport-native-unix-common-4.1.104.Final.pom" sha256="a0f853f6147114d6e849e3190916bafaab87c42c0f46ebe60da98e3da88a20b9"/>
+    </component>
+    <component group="io.netty" module="netty-transport-native-unix-common" version="4.1.97.Final">
+      <artifact name="netty-transport-native-unix-common-4.1.97.Final.jar" sha256="0d530c4ec1cf7db76d8bd6ed937aed1129e4edee419c0fe184422ea537e57619"/>
+      <artifact name="netty-transport-native-unix-common-4.1.97.Final.pom" sha256="853e7fb6d6dc05f4303d80e2a3abc91c8951949df49cdae5fc7e0a830fe6fa2a"/>
+    </component>
+    <component group="io.netty" module="netty-transport" version="4.1.104.Final">
+      <artifact name="netty-transport-4.1.104.Final.jar" sha256="afb19eeaac62fb509cc580228286eb3a49415425a17aa0c8f47658524dcc4496"/>
+      <artifact name="netty-transport-4.1.104.Final.pom" sha256="883fb1c10014e4951b53be1d038204cbc383fab933bbefa05ce5ab48c9c87737"/>
+    </component>
+    <component group="io.netty" module="netty-transport" version="4.1.97.Final">
+      <artifact name="netty-transport-4.1.97.Final.jar" sha256="aa3ac1cb750f74ddde1a54949cb70361f1cf662a0c642b3c79a9c9e2a2a607c3"/>
+      <artifact name="netty-transport-4.1.97.Final.pom" sha256="c1610d30ee648495c9ca8a534b4a8597c5bf6b98bb00f3d1db9f8dde9ee6a5d5"/>
+    </component>
+    <component group="io.pebbletemplates" module="pebble" version="3.2.2">
+      <artifact name="pebble-3.2.2.jar" sha256="316705d869c665b3b341019818c875e333dc51c2312b228bdf987f918f22e6ca"/>
+      <artifact name="pebble-3.2.2.pom" sha256="9088c17474283bf7ba90514f29e05c40c5d242a7ae5ea4dd4282b761ecdc516b"/>
+    </component>
+    <component group="io.prometheus" module="simpleclient" version="0.16.0">
+      <artifact name="simpleclient-0.16.0.jar" sha256="6992e6fec8d57006214dfb8c594a0a6eb62032260813f1ee676344f8351f6988"/>
+      <artifact name="simpleclient-0.16.0.pom" sha256="8aeb58280bf5200b1198163da385bd2e5d209d45a8b2e1017f5ccfeefd459801"/>
+    </component>
+    <component group="io.prometheus" module="simpleclient_common" version="0.16.0">
+      <artifact name="simpleclient_common-0.16.0.jar" sha256="cde5a28685f9e2d9b56b05d5334d484b4afd19ff70e9513ea8b46c08183379ce"/>
+      <artifact name="simpleclient_common-0.16.0.pom" sha256="5b9e6deb8ce0233dd479b2e9050fc79c3c6ec22196173f1f24942219fb0ba4f2"/>
+    </component>
+    <component group="io.prometheus" module="simpleclient_tracer_common" version="0.16.0">
+      <artifact name="simpleclient_tracer_common-0.16.0.jar" sha256="6181f0662b4d3e4ffc299f50f2a0bc89251c8fb9eb505fd62c356ef0250c39c7"/>
+      <artifact name="simpleclient_tracer_common-0.16.0.pom" sha256="a8c9c70ad590550db1d40c6f58474687c2134555e7286d18c998f0dc75ba6619"/>
+    </component>
+    <component group="io.prometheus" module="simpleclient_tracer_otel" version="0.16.0">
+      <artifact name="simpleclient_tracer_otel-0.16.0.jar" sha256="ac8121030200aa46e850e7a7d343acd8ac9caf6f1719ebddb820ec5cccaeef83"/>
+      <artifact name="simpleclient_tracer_otel-0.16.0.pom" sha256="832d3dbb76c51ab53f52e905525e7e2a55bddb8ec94fade147aff5403c1927e7"/>
+    </component>
+    <component group="io.prometheus" module="simpleclient_tracer_otel_agent" version="0.16.0">
+      <artifact name="simpleclient_tracer_otel_agent-0.16.0.jar" sha256="17fa72121f3d8551b0c337d27e06b936d0a220761d9982ee19abdeb9a80afd6c"/>
+      <artifact name="simpleclient_tracer_otel_agent-0.16.0.pom" sha256="26b0f13aa57accdfd8ef57c07c3a9ff6b220407f5aaeac894ca115eb1ec0ced4"/>
+    </component>
+    <component group="io.suzaku" module="boopickle_2.13" version="1.3.3">
+      <artifact name="boopickle_2.13-1.3.3.jar" sha256="0ee61a28dede8d4f27ccde9f15dbe2ec34a3600267022656a4945ee1ff929102"/>
+      <artifact name="boopickle_2.13-1.3.3.pom" sha256="177cfe7c3b20b25edbd9ad8c00835d6c137770dc10adf386e4bf5d2351846d88"/>
+    </component>
+    <component group="it.unimi.dsi" module="fastutil" version="8.5.12">
+      <artifact name="fastutil-8.5.12.jar" sha256="f3bbb58627d9b6d20eaa288eb10f71cee12d96bebf04f85c20b7207e0435b595"/>
+      <artifact name="fastutil-8.5.12.pom" sha256="45e3e2e58553d1c2d8b5a4ad6a5b95db2231f0dad997ed8d5f1e576d357fd2af"/>
+    </component>
+    <component group="it.unimi.dsi" module="fastutil" version="8.5.15">
+      <artifact name="fastutil-8.5.15.jar" sha256="85d3b3ebe5ac1380b7e4cc94618bc09d5fd54b679636f0e0fe67d14329279195"/>
+      <artifact name="fastutil-8.5.15.pom" sha256="19351819791f405dfab152cb5eda88b9739ec7edbfea12f1c03b19058702eaa6"/>
+    </component>
+    <component group="jakarta.inject" module="jakarta.inject-api" version="2.0.1">
+      <artifact name="jakarta.inject-api-2.0.1.jar" sha256="a7f50c8949376ca5294485e3bc1493686afec8de5a9c66e0c3676c6b9cac40aa"/>
+      <artifact name="jakarta.inject-api-2.0.1.pom" sha256="b3f4e12f5eeb1557b18f6f29d065fd4385f1f7743151e0145e3402709dbfc6ba"/>
+    </component>
+    <component group="javax.inject" module="javax.inject" version="1">
+      <artifact name="javax.inject-1.jar" sha256="ec1c09078365e6bee74521346a1f0916e937518d00656cb217cb6f5aba87908f"/>
+      <artifact name="javax.inject-1.pom" sha256="e7e37e593007565237d8a1a0a8dd67c22cc244bd776dff9dc7fcd72ccc9d8325"/>
+    </component>
+    <component group="me.clip" module="placeholderapi" version="2.11.6">
+      <artifact name="placeholderapi-2.11.6.jar" sha256="48438ff295db43eaa4b4c7162c8b16bf1a4c99284f1a62c5dade471ab9000456"/>
+      <artifact name="placeholderapi-2.11.6.pom" sha256="1abe0d9db38366864d1ced683a539da5604b3f9d4265e08492126f6de1f73c77"/>
+    </component>
+    <component group="net.bytebuddy" module="byte-buddy-agent" version="1.14.11">
+      <artifact name="byte-buddy-agent-1.14.11.jar" sha256="77f4a48994ab7e39e9dc24207b2b6b02cd1dd54c2d9cc5681b8efc666a8712dd"/>
+      <artifact name="byte-buddy-agent-1.14.11.pom" sha256="012b0da05c5c27c2029f2003c05ad05d1826f3126502787431536b0241581c4a"/>
+    </component>
+    <component group="net.bytebuddy" module="byte-buddy-agent" version="1.14.12">
+      <artifact name="byte-buddy-agent-1.14.12.jar" sha256="02dcaaba9635641910aab29c4c696481ad9c81dd448954ea54a888b1d0ee5a9c"/>
+      <artifact name="byte-buddy-agent-1.14.12.pom" sha256="a363d4b3173344a7b661a25f3e9b05f0bb7d3e3ed130d1296ee5190ffb101ab6"/>
+    </component>
+    <component group="net.bytebuddy" module="byte-buddy" version="1.12.21">
+      <artifact name="byte-buddy-1.12.21.jar" sha256="e32ec2cc46a9ea6706b7a5be3de8c6e5d7e452564e8ef73557b4656ca79b197b"/>
+      <artifact name="byte-buddy-1.12.21.pom" sha256="562266d99c93ed72ac22584b3ca9344ee4d35328875608c4a7515581d762627a"/>
+    </component>
+    <component group="net.bytebuddy" module="byte-buddy" version="1.14.11">
+      <artifact name="byte-buddy-1.14.11.jar" sha256="e3f8be8bf46c5080882b8f2807eda406136ac3922eb5ef670680c503d38c3721"/>
+      <artifact name="byte-buddy-1.14.11.pom" sha256="d624f9aa963147e59a1c13b42ec62a65541533984323098379ed407f135359d5"/>
+    </component>
+    <component group="net.bytebuddy" module="byte-buddy" version="1.14.12">
+      <artifact name="byte-buddy-1.14.12.jar" sha256="1e3de8b2fb997570dc98a5676f96e52d17624bd0dde5d26b432601d4bb3c3c2f"/>
+      <artifact name="byte-buddy-1.14.12.pom" sha256="c50dfdcf2385841787fbf73cc7ec7f0331ed379696361c7612785cb393336a45"/>
+    </component>
+    <component group="net.dv8tion" module="JDA" version="6.4.2">
+      <artifact name="JDA-6.4.2.jar" sha256="b9e8b5e3ab622d155729a31b1d2de6d6e4e7e4c33e3d7c20d6454283ca4197d2"/>
+      <artifact name="JDA-6.4.2.pom" sha256="72e5f8eab7c07898de0d35da7a414400d39bc153308f91f942f5e37cb49b09ca"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-api-base" version="0.4.42+6573ed8c90">
+      <artifact name="fabric-api-base-0.4.42+6573ed8c90.jar" sha256="326eeb05e16c4722cc2ed0662c79e5ce4a521829068baf2ed2b7fe9efe338a88"/>
+      <artifact name="fabric-api-base-0.4.42+6573ed8c90.pom" sha256="218b6682d5e43014185b0b6bbb62f5c736b88576afdd8118da73dd7f16636e98"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-api-base" version="0.4.42+6573ed8cd1">
+      <artifact name="fabric-api-base-0.4.42+6573ed8cd1.jar" sha256="5e7c3225f58427a59e70958d3c28a037f9d85e94eea9fd84476b8d821446a80b"/>
+      <artifact name="fabric-api-base-0.4.42+6573ed8cd1.pom" sha256="08d6dbc9e94d38f9ccdf97de774688e5546fc8de8a16a14829811467ea6e765e"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-api-bom" version="0.100.1+1.21">
+      <artifact name="fabric-api-bom-0.100.1+1.21.jar" sha256="412e3f7f2958f63ef50ef7ad5aaea11cfa2bc1a1d11c87099b26be89436be929"/>
+      <artifact name="fabric-api-bom-0.100.1+1.21.pom" sha256="e905e1bb5783d52d08bfe852b149a6ad807db1297fcbaf84bb9ce441f19982c5"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-api-deprecated" version="0.100.5+1.21">
+      <artifact name="fabric-api-deprecated-0.100.5+1.21.jar" sha256="5b53dde86daa8da5a551ce312f1fa2fdd90307577a4bc2c8fb4c97ab5cb564aa"/>
+      <artifact name="fabric-api-deprecated-0.100.5+1.21.pom" sha256="a2bec5bc24bd558a0d0d205edb6d1b5c6ec9c9eb207e56e3236b7d7f43d9119d"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-api-lookup-api-v1" version="1.6.67+b5597344d1">
+      <artifact name="fabric-api-lookup-api-v1-1.6.67+b5597344d1.jar" sha256="36efa45f489d39b3adda710f60438493f2637ef95b50b2c93de15c6c6373b0cf"/>
+      <artifact name="fabric-api-lookup-api-v1-1.6.67+b5597344d1.pom" sha256="b04e51337125711e8522b7b19186c2014dc9fa01d7d667c29f15737547fb4668"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-api" version="0.100.5+1.21">
+      <artifact name="fabric-api-0.100.5+1.21.jar" sha256="a263a4e43f505662b04551eafb8315ef02c4dc16cc916dcfb163ef250b8970c4"/>
+      <artifact name="fabric-api-0.100.5+1.21.pom" sha256="7318b529cb31245f19f44563e6a4fb65d5833325e881ba2aa8cc0038465cd08a"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-biome-api-v1" version="13.0.28+6fc22b99d1">
+      <artifact name="fabric-biome-api-v1-13.0.28+6fc22b99d1.jar" sha256="f4f5fb6c471c1265f4016c04c72c0347a34eee1c27fb4c7d9da81a1bce618e3f"/>
+      <artifact name="fabric-biome-api-v1-13.0.28+6fc22b99d1.pom" sha256="670eed875a72abab5e813cc7cbbc762f38e0887a570cac73b9aa534eafae2021"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-block-api-v1" version="1.0.22+0af3f5a7d1">
+      <artifact name="fabric-block-api-v1-1.0.22+0af3f5a7d1.jar" sha256="4b88a1da80c2beb71ad6f615bf0ba6959a1855cddc7837b8e9f25d8b7c9cb701"/>
+      <artifact name="fabric-block-api-v1-1.0.22+0af3f5a7d1.pom" sha256="e00ae337f002dfb69f94ba5638d62805dc9f676ae9621b9d83c0a811522e2904"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-block-view-api-v2" version="1.0.10+6573ed8cd1">
+      <artifact name="fabric-block-view-api-v2-1.0.10+6573ed8cd1.jar" sha256="2c498ad19d3667ace08d760b8ee4c5fb59b611ddf6f1e2c604b7b91bd8d41c0e"/>
+      <artifact name="fabric-block-view-api-v2-1.0.10+6573ed8cd1.pom" sha256="1fb2a07f74be6ad9773a76e9a6998e8c11901057748a6fc869147fa9796b204a"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-blockrenderlayer-v1" version="1.1.52+0af3f5a7d1">
+      <artifact name="fabric-blockrenderlayer-v1-1.1.52+0af3f5a7d1.jar" sha256="8befe1b5f2cb2478e44f557b0d217a310f6828eb1effc7e63e83293c952dde99"/>
+      <artifact name="fabric-blockrenderlayer-v1-1.1.52+0af3f5a7d1.pom" sha256="ff0e956299ced992bb5468e5c2eea7e02220ba3d759d951a2b99c44c14de2be6"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-client-tags-api-v1" version="1.1.15+6573ed8cd1">
+      <artifact name="fabric-client-tags-api-v1-1.1.15+6573ed8cd1.jar" sha256="f75306c6030a03c7101de67514a67e487e06f0046a6eb8a6256806e225365bb6"/>
+      <artifact name="fabric-client-tags-api-v1-1.1.15+6573ed8cd1.pom" sha256="69bff41cc37db8933bfca272d4ac1913f5667fd2ae1d479e9caa77d0432dd40b"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-command-api-v1" version="1.2.49+f71b366fd1">
+      <artifact name="fabric-command-api-v1-1.2.49+f71b366fd1.jar" sha256="9690e040a970457f72a90aeb44a6b40e12b41aebce277894800e2e158a9bd631"/>
+      <artifact name="fabric-command-api-v1-1.2.49+f71b366fd1.pom" sha256="c01bac351f87cc678002ddff34e8274697c6d38154b0263336f815e3f664cacd"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-command-api-v2" version="2.2.27+6a6dfa1990">
+      <artifact name="fabric-command-api-v2-2.2.27+6a6dfa1990.jar" sha256="27ffb143b42d04f600ebd79b0451095df9dc44a25c3ce2474ced1ee00893cb05"/>
+      <artifact name="fabric-command-api-v2-2.2.27+6a6dfa1990.pom" sha256="b69282ec161b720bb1a55c2da89ad301dceb523b28d233c9837936340decda10"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-command-api-v2" version="2.2.28+6ced4dd9d1">
+      <artifact name="fabric-command-api-v2-2.2.28+6ced4dd9d1.jar" sha256="58329e0dbc080829cd26da3bbd5a8e454bbfb67c199a2d3854be9bf2b836075a"/>
+      <artifact name="fabric-command-api-v2-2.2.28+6ced4dd9d1.pom" sha256="54bcf2be33132a0d4eda48a5be907eee693891d4d90eef931e77852cd7a20642"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-commands-v0" version="0.2.66+df3654b3d1">
+      <artifact name="fabric-commands-v0-0.2.66+df3654b3d1.jar" sha256="be732d0b6391b17ef5e63c28045e1d40f4fc43288b74eae6ebd34535186aff61"/>
+      <artifact name="fabric-commands-v0-0.2.66+df3654b3d1.pom" sha256="fbc4cb3e66c49414663a21ba96044028347650b924e2b5bbe2bcd7ef394d35f8"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-content-registries-v0" version="8.0.14+b5597344d1">
+      <artifact name="fabric-content-registries-v0-8.0.14+b5597344d1.jar" sha256="3703620d6c935a57bf9351b159a8afce0544083815c98a62cd1d47bc923c43fb"/>
+      <artifact name="fabric-content-registries-v0-8.0.14+b5597344d1.pom" sha256="4e75ceca22ef6d461fc0c6f2c806d12150b082bc066d288edb79b37f1b58d9a5"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-convention-tags-v1" version="2.0.16+7f945d5bd1">
+      <artifact name="fabric-convention-tags-v1-2.0.16+7f945d5bd1.jar" sha256="9335cdc8803823ff4707b3c0ed9b507076b3afce7f52aec5b4939b627101ad7c"/>
+      <artifact name="fabric-convention-tags-v1-2.0.16+7f945d5bd1.pom" sha256="654bf4e456631c8d4b5525555fd617d0b76ac508ccb0c8b6e8600777b7efc719"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-convention-tags-v2" version="2.4.0+ee0ac325d1">
+      <artifact name="fabric-convention-tags-v2-2.4.0+ee0ac325d1.jar" sha256="5e20ad69775bb2a8e9201f004c240ea834abd02d9d5c0db1e9651b1070e10ef8"/>
+      <artifact name="fabric-convention-tags-v2-2.4.0+ee0ac325d1.pom" sha256="eb97e7288da4ffcfe33eb84bd6630b52e57ec7b72f6a1544ece35d6bb4d74c05"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-crash-report-info-v1" version="0.2.29+0af3f5a7d1">
+      <artifact name="fabric-crash-report-info-v1-0.2.29+0af3f5a7d1.jar" sha256="62eb9a58a175c1448d2af143909d5d2c4d4b5f4429ba7b5abad162a6c882e81d"/>
+      <artifact name="fabric-crash-report-info-v1-0.2.29+0af3f5a7d1.pom" sha256="eeb124fc0ff515904fc231b6863ec705bc9a1bcb37994a51275c0ea95d85f72d"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-data-attachment-api-v1" version="1.1.24+6a6dfa19d1">
+      <artifact name="fabric-data-attachment-api-v1-1.1.24+6a6dfa19d1.jar" sha256="eb999d20a213beefc8c4871cc51ccab4caa307d23efb5541dc45384317b6db31"/>
+      <artifact name="fabric-data-attachment-api-v1-1.1.24+6a6dfa19d1.pom" sha256="6a27e201632df51723b8d4b7b1036c959ea8a2a25670e70177d3f2eac6a15371"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-data-generation-api-v1" version="20.2.10+16c4ae25d1">
+      <artifact name="fabric-data-generation-api-v1-20.2.10+16c4ae25d1.jar" sha256="af80b90d40954e6b5922964d895d32e9b0837079619e754fdb1f574970dd2e0e"/>
+      <artifact name="fabric-data-generation-api-v1-20.2.10+16c4ae25d1.pom" sha256="4c4725f0b7357178c6ce9f05ccb59e3b32d0ddf5aaba80535c56552ba2b2cedd"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-dimensions-v1" version="4.0.0+6fc22b99d1">
+      <artifact name="fabric-dimensions-v1-4.0.0+6fc22b99d1.jar" sha256="135abdd9bcb3c8b8f0c55756976a2381ba4f7d5eb85f17dc0151e4c272e9e19b"/>
+      <artifact name="fabric-dimensions-v1-4.0.0+6fc22b99d1.pom" sha256="26331ca2e74fb064dea85a78fd01335e97c07999dcc927e561df48af7a367a43"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-entity-events-v1" version="1.6.12+6fc22b99d1">
+      <artifact name="fabric-entity-events-v1-1.6.12+6fc22b99d1.jar" sha256="589911ac35a7f688e8a6cb2966b0a338872a04b57fc4a5b75b0c3fddf80d81c4"/>
+      <artifact name="fabric-entity-events-v1-1.6.12+6fc22b99d1.pom" sha256="7bbe6168f5dc0ab50c6ba3f8d334e2b1a65fc92a83cad6c9b21c87dd60bbec2e"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-events-interaction-v0" version="0.7.10+e633f883d1">
+      <artifact name="fabric-events-interaction-v0-0.7.10+e633f883d1.jar" sha256="4d4f5a42cf13dce977027f32d82408378a7b7ef6adfa70faf97a4e97877d073c"/>
+      <artifact name="fabric-events-interaction-v0-0.7.10+e633f883d1.pom" sha256="2f9021bb8562c7e0de2a34c6078456e56f95a299909da37392bf0159a3f53abc"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-game-rule-api-v1" version="1.0.53+6ced4dd9d1">
+      <artifact name="fabric-game-rule-api-v1-1.0.53+6ced4dd9d1.jar" sha256="5113b99c26786ae6584e9723ca92676d71b7b0cd7371ece2b97092447339da1b"/>
+      <artifact name="fabric-game-rule-api-v1-1.0.53+6ced4dd9d1.pom" sha256="cda80afdd4ec13d5bf38aa2dd659ba0ed61c313852ddc936bc76d807db915277"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-gametest-api-v1" version="2.0.2+6fc22b99d1">
+      <artifact name="fabric-gametest-api-v1-2.0.2+6fc22b99d1.jar" sha256="f8e7fc4f898654e8e21ebcd22abf34b7af7a4f1571b36876a6ceba3c036a07df"/>
+      <artifact name="fabric-gametest-api-v1-2.0.2+6fc22b99d1.pom" sha256="ddee083ae4743b9d35d2e58794c646f591793c105b06e560d1a958534a634033"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-item-api-v1" version="11.0.0+afdfc921d1">
+      <artifact name="fabric-item-api-v1-11.0.0+afdfc921d1.jar" sha256="77f2fbfdf0e88b23dc7c727e95da4dcaff56e6578025bdc74a53a256dc833b3b"/>
+      <artifact name="fabric-item-api-v1-11.0.0+afdfc921d1.pom" sha256="354f7e7c6fae29b0bc3d4e6788b26cae0071a62482f46c4ed4e0018f1b3dc94c"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-item-group-api-v1" version="4.1.2+78017270d1">
+      <artifact name="fabric-item-group-api-v1-4.1.2+78017270d1.jar" sha256="06d4a9ecaa8a1c874c038e09199310b3b5e02e378e0f515bef6a843e727af6a4"/>
+      <artifact name="fabric-item-group-api-v1-4.1.2+78017270d1.pom" sha256="ea23ac20e86992d923fb1657b022e831582741c564aa516de64b07e1ee86ca92"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-key-binding-api-v1" version="1.0.47+0af3f5a7d1">
+      <artifact name="fabric-key-binding-api-v1-1.0.47+0af3f5a7d1.jar" sha256="08bca9cb8e12574bf5e88b53513a12634f4f8884bd9aac057b8fdd3796f8c4d1"/>
+      <artifact name="fabric-key-binding-api-v1-1.0.47+0af3f5a7d1.pom" sha256="14e3cbd6d2ab8139c54301a0f468ffbcde54ad989988e4c7c4f2a9af3940c200"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-keybindings-v0" version="0.2.45+df3654b3d1">
+      <artifact name="fabric-keybindings-v0-0.2.45+df3654b3d1.jar" sha256="c830b2128a6f8d88649be88efa1bd919af96f065776389b18a3cfdd800985ae7"/>
+      <artifact name="fabric-keybindings-v0-0.2.45+df3654b3d1.pom" sha256="c30a914e58ee4275fded57b36edba51afd1dfd78455abb1fcc181061759854fd"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-lifecycle-events-v1" version="2.3.11+8f3583aed1">
+      <artifact name="fabric-lifecycle-events-v1-2.3.11+8f3583aed1.jar" sha256="5cbe03b08c7c822bf36a6452aa25900a6aaa9cd8d673e329fa2d2be22b833078"/>
+      <artifact name="fabric-lifecycle-events-v1-2.3.11+8f3583aed1.pom" sha256="f2fed2aaf9499b8fc53b81934181233ec36f040d8e5828a72e5512ff36a5f73c"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-loot-api-v2" version="3.0.12+3f89f5a5d1">
+      <artifact name="fabric-loot-api-v2-3.0.12+3f89f5a5d1.jar" sha256="67b46e7dc7f480ff0b4805788aa6eb096b2db160e07a66e41e1348fc6d484f0d"/>
+      <artifact name="fabric-loot-api-v2-3.0.12+3f89f5a5d1.pom" sha256="c1df848ef0bd987b6c75684c8c5bed55a6d3e13ab076409cfba21d818de87e35"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-loot-api-v3" version="1.0.0+3f89f5a5d1">
+      <artifact name="fabric-loot-api-v3-1.0.0+3f89f5a5d1.jar" sha256="6601e3496335f59587b80de3184f6db074ce9652edd809660f6581b84b45ac4f"/>
+      <artifact name="fabric-loot-api-v3-1.0.0+3f89f5a5d1.pom" sha256="01eb02ccff1a265f09068a2b79730b4ad825b7bfe312833aac2f8f4b6dd4fb49"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-message-api-v1" version="6.0.13+6573ed8cd1">
+      <artifact name="fabric-message-api-v1-6.0.13+6573ed8cd1.jar" sha256="e88fb8520565c2b2c9768c39f08ea29a1be0d1ef08750216549525710ae40c40"/>
+      <artifact name="fabric-message-api-v1-6.0.13+6573ed8cd1.pom" sha256="0e769888b67e91076d14aaa45799bb05d5a66a2e4d2567ed878e85bf6ebf1fd0"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-model-loading-api-v1" version="2.0.0+fe474d6bd1">
+      <artifact name="fabric-model-loading-api-v1-2.0.0+fe474d6bd1.jar" sha256="f41483e997695070ef2fcbf115bb85ad34f2b32b881d89c3ef6d01d39ebd233f"/>
+      <artifact name="fabric-model-loading-api-v1-2.0.0+fe474d6bd1.pom" sha256="90ddac337db4e41d1fe98a58aa7b31eb21902c9f74dd2f14fa67417e26b0002f"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-networking-api-v1" version="4.1.0+686dcdce90">
+      <artifact name="fabric-networking-api-v1-4.1.0+686dcdce90.jar" sha256="2647f3c3fc6f6f1fec8370805509b4ab73a443d49ba9d111ed54bfd3cf9b6831"/>
+      <artifact name="fabric-networking-api-v1-4.1.0+686dcdce90.pom" sha256="98fff8275bc4ed060709977654f058194393da52542d7437c5f63abbf12d5cf8"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-networking-api-v1" version="4.2.0+ab7edbacd1">
+      <artifact name="fabric-networking-api-v1-4.2.0+ab7edbacd1.jar" sha256="b87067783bcf713df9c18e1546a32fbadfd8f1b1e0632c4d989904e4b8bb816f"/>
+      <artifact name="fabric-networking-api-v1-4.2.0+ab7edbacd1.pom" sha256="869d5d72bc8af5398d35a6564877d1bc98465bedec6c59b43411b5a4d03f89e4"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-object-builder-api-v1" version="15.1.12+d1321076d1">
+      <artifact name="fabric-object-builder-api-v1-15.1.12+d1321076d1.jar" sha256="d041ce0f3e7ec5cf5ffefe68e4b595acafc08c249e564458e41cd44d9bf46b72"/>
+      <artifact name="fabric-object-builder-api-v1-15.1.12+d1321076d1.pom" sha256="28fb133c553e969b477a04a31eaafc62d54c96664f78d4e4483cf7ce158ba117"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-particles-v1" version="4.0.2+6573ed8cd1">
+      <artifact name="fabric-particles-v1-4.0.2+6573ed8cd1.jar" sha256="c224dfb689aa6d96400c8fd49c47f96e557852397ad690930d1f1ea389c03722"/>
+      <artifact name="fabric-particles-v1-4.0.2+6573ed8cd1.pom" sha256="e0ef6f247d92b85c617f37b6646308c84555f35c38f11f6a6bf0fd2f4fdd53e7"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-recipe-api-v1" version="5.0.10+65089712d1">
+      <artifact name="fabric-recipe-api-v1-5.0.10+65089712d1.jar" sha256="831f14110b15473a1e346b2dcacfc4e24d04cad4e4b72465c581b677823452fb"/>
+      <artifact name="fabric-recipe-api-v1-5.0.10+65089712d1.pom" sha256="5e45702beffce6f5cc06ce6543d019dd6f958d1332d3282860a8b67bd0af31da"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-registry-sync-v0" version="5.0.24+6ced4dd9d1">
+      <artifact name="fabric-registry-sync-v0-5.0.24+6ced4dd9d1.jar" sha256="00833521a042e456e7f8b720e2dd02135ddfb0ef2cfec85f22f4470e00d9b1e8"/>
+      <artifact name="fabric-registry-sync-v0-5.0.24+6ced4dd9d1.pom" sha256="c590bff678c87737751b5d9c82dd4c274933237a8b767a3313e7219a0e4958d4"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-renderer-api-v1" version="3.3.0+0ae0b97dd1">
+      <artifact name="fabric-renderer-api-v1-3.3.0+0ae0b97dd1.jar" sha256="f614bd495f8b6383b5d5bda32968621bb377c9ab6785ce1f8bb220879db1b762"/>
+      <artifact name="fabric-renderer-api-v1-3.3.0+0ae0b97dd1.pom" sha256="ebdb425204e3558479e7a652eea683a2a1a079f4c323471992d7f08eb79f0fee"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-renderer-indigo" version="1.6.5+48fb1586d1">
+      <artifact name="fabric-renderer-indigo-1.6.5+48fb1586d1.jar" sha256="e660aa3848b2600cf42e7770dff154ba0e07e231474e1a53f7dd098eaaade2a9"/>
+      <artifact name="fabric-renderer-indigo-1.6.5+48fb1586d1.pom" sha256="be05d069cb2f1a908d5c940e82e4d5a4527945957f8a8704697784c5a7091f0e"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-renderer-registries-v1" version="3.2.67+df3654b3d1">
+      <artifact name="fabric-renderer-registries-v1-3.2.67+df3654b3d1.jar" sha256="d7232b5c0972fd581557744ec8f1e9ebb89b41f59c2bc4fbaedcfe30fe0d069a"/>
+      <artifact name="fabric-renderer-registries-v1-3.2.67+df3654b3d1.pom" sha256="466ed93d1ab2e8532132967a1b1dc01a8a4c4eec93c459bb3746cc30ffd83c86"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-rendering-data-attachment-v1" version="0.3.48+73761d2ed1">
+      <artifact name="fabric-rendering-data-attachment-v1-0.3.48+73761d2ed1.jar" sha256="cc3525aa54bc5a502fafe42ba889910472af15d9461a5736728c24878d55dca3"/>
+      <artifact name="fabric-rendering-data-attachment-v1-0.3.48+73761d2ed1.pom" sha256="7030f076a98e455b5eaa3591b9a58574acd2d57d99d66e2e2908772e0df55316"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-rendering-fluids-v1" version="3.1.6+b5597344d1">
+      <artifact name="fabric-rendering-fluids-v1-3.1.6+b5597344d1.jar" sha256="a87578bb7fd98ae9fda292f1865ee986f6ff44163c9ba4a15b30e3461bdcddad"/>
+      <artifact name="fabric-rendering-fluids-v1-3.1.6+b5597344d1.pom" sha256="0e4776ffc55383522c39a832c056f30932d7c9d59d70d84acc155c65e64d0d87"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-rendering-v0" version="1.1.70+df3654b3d1">
+      <artifact name="fabric-rendering-v0-1.1.70+df3654b3d1.jar" sha256="a9ec3f8d2bdc1bb25458ece3de260c7dea7150a8aac1964329a7a2150c154908"/>
+      <artifact name="fabric-rendering-v0-1.1.70+df3654b3d1.pom" sha256="2896bfdec42ab6d3d6c10cc416c8c4db03b86c2c189dd9068bb537ce21383a02"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-rendering-v1" version="5.0.4+5a8c785ed1">
+      <artifact name="fabric-rendering-v1-5.0.4+5a8c785ed1.jar" sha256="5a55d48ef728550d8028154985942fb55fa4ee6d9fca0cd3c345fc41101c6369"/>
+      <artifact name="fabric-rendering-v1-5.0.4+5a8c785ed1.pom" sha256="2c5297aa8fb652ed01c4f81d7a884a15209330d5cc6d5a997c0a19c87ddb0d08"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-resource-conditions-api-v1" version="4.2.1+d153f344d1">
+      <artifact name="fabric-resource-conditions-api-v1-4.2.1+d153f344d1.jar" sha256="8f52b95ac465c3449dd062425bdd820fe76ab6f06b872b671edf6ac940f5ba34"/>
+      <artifact name="fabric-resource-conditions-api-v1-4.2.1+d153f344d1.pom" sha256="5e5abf410d869ba29378de4fd7fc1587a3c5a408341d5c64b7cb4f4afbed784b"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-resource-loader-v0" version="1.1.5+78017270d1">
+      <artifact name="fabric-resource-loader-v0-1.1.5+78017270d1.jar" sha256="0ee5b8bca52d011cd5090f96a3adaca08446b29a0a09197d7d957169bf77e482"/>
+      <artifact name="fabric-resource-loader-v0-1.1.5+78017270d1.pom" sha256="9cc68333c7ce417ccc2637b527d8f8ab908e0baf7998c44c3438c9325300c33b"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-screen-api-v1" version="2.0.24+b5597344d1">
+      <artifact name="fabric-screen-api-v1-2.0.24+b5597344d1.jar" sha256="15b50d685bb1c27dfa07c662cb9336df5510016513e4335115c34847d0d680b1"/>
+      <artifact name="fabric-screen-api-v1-2.0.24+b5597344d1.pom" sha256="34ce9743ba71f70def0e8b217b49f220f19a593207ea16e002035d839e694bc7"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-screen-handler-api-v1" version="1.3.81+b5597344d1">
+      <artifact name="fabric-screen-handler-api-v1-1.3.81+b5597344d1.jar" sha256="6e1ab49e8699efa1c603ae9be1c1720fbc689d9ef73ed1278daacfd18f7a5f9a"/>
+      <artifact name="fabric-screen-handler-api-v1-1.3.81+b5597344d1.pom" sha256="59fe68e619426149b3fd9cab0b5fd8a5c1d66c4fede8b79c3e0ec70727ba738c"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-sound-api-v1" version="1.0.23+6573ed8cd1">
+      <artifact name="fabric-sound-api-v1-1.0.23+6573ed8cd1.jar" sha256="0089845cb050d2f971871b6d5bb07f60b270b19f566efaaaf55b2f6ddbe4a65d"/>
+      <artifact name="fabric-sound-api-v1-1.0.23+6573ed8cd1.pom" sha256="f74ffe9a94baccb5f64c0a6ddcb30486ac02bff95a3580214a488c258c451ef9"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-transfer-api-v1" version="5.1.15+3dccd343d1">
+      <artifact name="fabric-transfer-api-v1-5.1.15+3dccd343d1.jar" sha256="147d7ffc06a1ea8dae5696a6b6326300b75cb226c2722ed47ceab0f4ca4fa969"/>
+      <artifact name="fabric-transfer-api-v1-5.1.15+3dccd343d1.pom" sha256="0133c8fd1d88d033a1d5e1a9324835d3ae603065c92b1fd764ca73381a238a33"/>
+    </component>
+    <component group="net.fabricmc.fabric-api" module="fabric-transitive-access-wideners-v1" version="6.0.12+6573ed8cd1">
+      <artifact name="fabric-transitive-access-wideners-v1-6.0.12+6573ed8cd1.jar" sha256="620cc31e3adc7079db3244788d76cbb89a682af04f4d82b9fe243414dc4231e1"/>
+      <artifact name="fabric-transitive-access-wideners-v1-6.0.12+6573ed8cd1.pom" sha256="cd2f134794ea5816a679a358659573e1d44309eace9b24261f788cce04531aaa"/>
+    </component>
+    <component group="net.fabricmc.unpick" module="unpick-cli" version="2.3.0">
+      <artifact name="unpick-cli-2.3.0.jar" sha256="570497b9d2911d9def26f8215680a65d6a466d62c680c1af98ac17d838c71858"/>
+      <artifact name="unpick-cli-2.3.0.pom" sha256="c5468baf3e210000950430a80c8b6298a17f2718eb01ddfc86bdd75486130870"/>
+    </component>
+    <component group="net.fabricmc.unpick" module="unpick-format-utils" version="2.3.0">
+      <artifact name="unpick-format-utils-2.3.0.jar" sha256="4b96b7ed73d8a32cd189565d2b5f2e2c943b50507c99f2c7bd595b37b7a2292d"/>
+      <artifact name="unpick-format-utils-2.3.0.pom" sha256="cf74b174e9cb3e03de0c0f35691442e847fabda59c7ae43f1f775e12d82b0574"/>
+    </component>
+    <component group="net.fabricmc.unpick" module="unpick" version="2.3.0">
+      <artifact name="unpick-2.3.0.jar" sha256="e3fc4570a8529e4a86dd2353aa10a82f2d74bada8b3e89fb7241adb02087e764"/>
+      <artifact name="unpick-2.3.0.pom" sha256="3ceceb39ca279d0a40b38ab56fdc34d397a5d096de9a0420abccc329e8fef27f"/>
+    </component>
+    <component group="net.fabricmc" module="cfr" version="0.2.2">
+      <artifact name="cfr-0.2.2.jar" sha256="c8ca428c6711c9bc42949a513418867a34f2b5b861f4cdd7c4ec65007fc94c12"/>
+      <artifact name="cfr-0.2.2.pom" sha256="cbd7e0c2458a32af16b94741c8d0c39eabcb4e3ce3c07d1bbe47448481d120bd"/>
+    </component>
+    <component group="net.fabricmc" module="dev-launch-injector" version="0.2.1+build.8">
+      <artifact name="dev-launch-injector-0.2.1+build.8.jar" sha256="dc0f31550e4172af28961d4fa994f46eaf0714ef097a66ed74a34ad5d22047c9"/>
+      <artifact name="dev-launch-injector-0.2.1+build.8.pom" sha256="9d6c0ab8ad64a0fe57e242bcd2fa904bd67cf3fbf2981934bd92fc397e1e2050"/>
+    </component>
+    <component group="net.fabricmc" module="fabric-fernflower" version="2.0.0">
+      <artifact name="fabric-fernflower-2.0.0.jar" sha256="4b97851eaa449485ee5c0e70c28d5f17e803501fb8f94653d1cff699fe78562c"/>
+      <artifact name="fabric-fernflower-2.0.0.pom" sha256="4c4c51d34589b854edd47428d7d5c84f330000ef6b15166942da6af63590c23e"/>
+    </component>
+    <component group="net.fabricmc" module="fabric-loader" version="0.16.10">
+      <artifact name="fabric-loader-0.16.10.jar" sha256="c775459842472b6228b12681e49c05ce71bdaaec1fae983d583884126b6e01d8"/>
+      <artifact name="fabric-loader-0.16.10.pom" sha256="6fe8d43f05e961a8af5856d9ed8ca60336e16a113765de576507e0c811e7018b"/>
+    </component>
+    <component group="net.fabricmc" module="fabric-mixin-compile-extensions" version="0.6.0">
+      <artifact name="fabric-mixin-compile-extensions-0.6.0.jar" sha256="d510819ac26ec20b633371e103415456c89d3e1cda5d5e3e63839ba6154f669e"/>
+      <artifact name="fabric-mixin-compile-extensions-0.6.0.pom" sha256="85c6b5b03ce7cc6306abb5d38f688ce19741a2ea966be9dcf0d4425d798d9d57"/>
+    </component>
+    <component group="net.fabricmc" module="mapping-io" version="0.2.1">
+      <artifact name="mapping-io-0.2.1.jar" sha256="1c506285b0f0a9e80934a9fcf6e1e13e39cd178ac15e7d1dbf9a401f5d5bd7cf"/>
+      <artifact name="mapping-io-0.2.1.pom" sha256="8911f607dc0eefce3e6acf656840655de9668dccb00925eeb54b0bec7dbba13d"/>
+    </component>
+    <component group="net.fabricmc" module="sponge-mixin" version="0.15.4+mixin.0.8.7">
+      <artifact name="sponge-mixin-0.15.4+mixin.0.8.7.jar" sha256="fedd88de7a14b50a12cb1a0598c44c2a313fda229b968e7b86c615e767707202"/>
+      <artifact name="sponge-mixin-0.15.4+mixin.0.8.7.pom" sha256="87a46dfa477fcc20e2ad7cb52c9a5fe5f2faa7986c37ef2ccaa10ade1dd4aa07"/>
+    </component>
+    <component group="net.fabricmc" module="yarn" version="1.21+build.1">
+      <artifact name="yarn-1.21+build.1.jar" sha256="eabf712c6ea94f608750ef6e29e37332a084facae21d367c031012322e30a08b"/>
+      <artifact name="yarn-1.21+build.1.pom" sha256="624cba314dd84a336048987c1651e6fb87528d071d6ec749bd1a0d8c47c60851"/>
+    </component>
+    <component group="net.java.dev.jna" module="jna-platform" version="5.14.0">
+      <artifact name="jna-platform-5.14.0.jar" sha256="553bcc50572dd4c780abbfa5efb5845ad2080fc3dac2b344b49bbc3544add99a"/>
+      <artifact name="jna-platform-5.14.0.pom" sha256="3b23e8fd0011e868e1ac1f0197d3b8a64c9b76d3b59eed6d17dd78c10a07ceb9"/>
+    </component>
+    <component group="net.java.dev.jna" module="jna" version="4.4.0">
+      <artifact name="jna-4.4.0.jar" sha256="1c1b2ebb76873a0b0f166dddb06e7f01f4f459f3e2c1009462ba04344326f969"/>
+      <artifact name="jna-4.4.0.pom" sha256="9f40bd1b2a0b800b07507d1f43dfc401cad8a766a3b891ecbe4a20e108311149"/>
+    </component>
+    <component group="net.java.dev.jna" module="jna" version="5.14.0">
+      <artifact name="jna-5.14.0.jar" sha256="1739135d19150aa7358dac6124414dd8f785363cc1f7f174a27d9c02385f24f6"/>
+      <artifact name="jna-5.14.0.pom" sha256="16af98477c8babc974623dac7d894c2d8f6ca1e132f6743f8d596f7f745e0a96"/>
+    </component>
+    <component group="net.kyori" module="adventure-api" version="4.15.0">
+      <artifact name="adventure-api-4.15.0.jar" sha256="26b9b0635cc41e0c23529e08cdeaf161d6dbeaf4ca43eb00673f73a85b144613"/>
+      <artifact name="adventure-api-4.15.0.pom" sha256="7052dd56a7fa1759a1023086c9927418821688689c48cfe336038068d45dbdfe"/>
+    </component>
+    <component group="net.kyori" module="adventure-api" version="4.17.0">
+      <artifact name="adventure-api-4.17.0.jar" sha256="cc5c24c4450558ee0f95d95cadab396977b237c7c1f77c7b4fbb7ec27f487c14"/>
+      <artifact name="adventure-api-4.17.0.pom" sha256="fdf885c08183fd0d1c9e76543acbd9657ee9fb9c8a99db5e9739c2ef524d7118"/>
+    </component>
+    <component group="net.kyori" module="adventure-api" version="4.20.0">
+      <artifact name="adventure-api-4.20.0.jar" sha256="46adb7688a2453f1dd1a03ea35e505b290651950062788621511f8e3fbb72a9a"/>
+      <artifact name="adventure-api-4.20.0.pom" sha256="9567f34cfd89215a5936919c34fe022ee63ce7b09d4ed3b2b8e1fb8f7a32a488"/>
+    </component>
+    <component group="net.kyori" module="adventure-api" version="4.26.1">
+      <artifact name="adventure-api-4.26.1.jar" sha256="ba460c6b2208b2cd3f3b99efcbbab9d8dbbb4fad095da18200e5ec0bf25f67c0"/>
+      <artifact name="adventure-api-4.26.1.pom" sha256="9fd65ba7798ddfbba65d494eabb35abaa53aa11b5d113762a4da4981a013e26c"/>
+    </component>
+    <component group="net.kyori" module="adventure-bom" version="4.15.0">
+      <artifact name="adventure-bom-4.15.0.jar" sha256="184778704503ef7d9bcd831ce115c2623d2829c90324590d30229fb0371b996b"/>
+      <artifact name="adventure-bom-4.15.0.pom" sha256="52bcb8d36faf03de1014b474b844bd5bace27da713c506011b77ec9a26db80d6"/>
+    </component>
+    <component group="net.kyori" module="adventure-bom" version="4.17.0">
+      <artifact name="adventure-bom-4.17.0.jar" sha256="22c400bb5023ea5581dc3eac96a2eacf30f6afadf73404792249bb9002eea2c9"/>
+      <artifact name="adventure-bom-4.17.0.pom" sha256="87b6768372faa43d0dccf8ea7ffe3d2645e58e9d74bd00baf7a3e6ed94e3b167"/>
+    </component>
+    <component group="net.kyori" module="adventure-bom" version="4.20.0">
+      <artifact name="adventure-bom-4.20.0.jar" sha256="648624ef8dc2b6d6a297b791a137b948b96c2b2e4a523e7bc4bdd7f4fd802204"/>
+      <artifact name="adventure-bom-4.20.0.pom" sha256="57bbb5bc732db924dc33184a5e69e55757cd18f564c67d244088509fe4a95074"/>
+    </component>
+    <component group="net.kyori" module="adventure-bom" version="4.26.1">
+      <artifact name="adventure-bom-4.26.1.jar" sha256="d386f2c5d4afae890ac24b1c03a836387c9f1f452ddfe300159fa92c309ba62b"/>
+      <artifact name="adventure-bom-4.26.1.pom" sha256="3f714fb956cd4117aa650b58314e97dac1fcdcdebcbc901b4209737f1fceebb8"/>
+    </component>
+    <component group="net.kyori" module="adventure-key" version="4.15.0">
+      <artifact name="adventure-key-4.15.0.jar" sha256="91f15e0eebfe19f7ddae3580902680b3148829717383c8d59da87e963ef01f44"/>
+      <artifact name="adventure-key-4.15.0.pom" sha256="cc4812d1e9f5603615aef08f65b214ba850295df082ef14c67d312c55f459117"/>
+    </component>
+    <component group="net.kyori" module="adventure-key" version="4.17.0">
+      <artifact name="adventure-key-4.17.0.jar" sha256="25534a0a8a18ac2dcb94365be6562d19e454dbe5e9e905fad55853c4ea036f86"/>
+      <artifact name="adventure-key-4.17.0.pom" sha256="f03e13662327abd7eeac8afc0b9d0c89aa4ffd850693d88f40ca9875bc8f1d9a"/>
+    </component>
+    <component group="net.kyori" module="adventure-key" version="4.20.0">
+      <artifact name="adventure-key-4.20.0.jar" sha256="5eeb63ad6a157a24cfb91868a9bbe5ad2bccb6953065922903f0c6b9c396f72e"/>
+      <artifact name="adventure-key-4.20.0.pom" sha256="9681fd45483a762e2ef1e8722cd236ada9ba6d60128fb551d56e08cd186fd558"/>
+    </component>
+    <component group="net.kyori" module="adventure-key" version="4.26.1">
+      <artifact name="adventure-key-4.26.1.jar" sha256="7426c9d99f94c858ef6d9c2614615d35efa28e2169d874a02ecbe5936ee7c2f8"/>
+      <artifact name="adventure-key-4.26.1.pom" sha256="b0a89b04423183f874329d36a72b5f7262f6ce9ea9423167a1819444d5432d2c"/>
+    </component>
+    <component group="net.kyori" module="adventure-nbt" version="4.17.0">
+      <artifact name="adventure-nbt-4.17.0.jar" sha256="827c773392dfa065d8d7f0067132b3d35e98ecca3ff4963c05bd0f790b644855"/>
+      <artifact name="adventure-nbt-4.17.0.pom" sha256="3a52d69e1a6d6f5cbaa4883ccdc4300184f994e5c81e374fcad84eb2db02345a"/>
+    </component>
+    <component group="net.kyori" module="adventure-nbt" version="4.20.0">
+      <artifact name="adventure-nbt-4.20.0.jar" sha256="5513dd45f857f4fa22e5b63fff36f83109e7545c8c3c2381cc72db1d089509e7"/>
+      <artifact name="adventure-nbt-4.20.0.pom" sha256="4db622090b9e6d6bcd9336dfd583904571f06e9c36084de71789999d3b80776d"/>
+    </component>
+    <component group="net.kyori" module="adventure-platform-api" version="4.3.2">
+      <artifact name="adventure-platform-api-4.3.2.jar" sha256="a3b726a4c4564a716375e98885ca775a65671ff8df667cefdb41e499dabad903"/>
+      <artifact name="adventure-platform-api-4.3.2.pom" sha256="dc37fb284d2e58254fa41f57ab811f1cc13f4c51f929f4164324698b80822eec"/>
+    </component>
+    <component group="net.kyori" module="adventure-platform-api" version="4.3.3">
+      <artifact name="adventure-platform-api-4.3.3.jar" sha256="361b98c7c130b0ce06ac678010c9f89297b10073921826f386c31b46b5445e6d"/>
+      <artifact name="adventure-platform-api-4.3.3.pom" sha256="c4f62f2fb9c95123b565392e93295273c5617b9a7cb958d0d3bf5bb6ac8dc779"/>
+    </component>
+    <component group="net.kyori" module="adventure-platform-bukkit" version="4.3.2">
+      <artifact name="adventure-platform-bukkit-4.3.2.jar" sha256="98c575b7ebecf12f78d5870d9f671677935c681522a1747e621115c109b91c1a"/>
+      <artifact name="adventure-platform-bukkit-4.3.2.pom" sha256="11c23919a97128636915f215fd461e81bf245cfef7156932fc54989b00df055c"/>
+    </component>
+    <component group="net.kyori" module="adventure-platform-fabric" version="5.14.2">
+      <artifact name="adventure-platform-fabric-5.14.2.jar" sha256="42a78fb3016ad8b209350025666a11b0a17a3dbf17380fb7c600146ef5b05891"/>
+      <artifact name="adventure-platform-fabric-5.14.2.pom" sha256="9ece8267bf768dfa9eb70a24ddb14757753dcf44ce7fa267c6bb9b4e35ee1a20"/>
+    </component>
+    <component group="net.kyori" module="adventure-platform-facet" version="4.3.2">
+      <artifact name="adventure-platform-facet-4.3.2.jar" sha256="2f22358f7e2c83c7845e8e84a24dcaf1bdb73a3a67598330265f12be154abf77"/>
+      <artifact name="adventure-platform-facet-4.3.2.pom" sha256="90e47cbc8636e4b058ddae5f806b4c1033016a413978574359fa7b1c13bb9c43"/>
+    </component>
+    <component group="net.kyori" module="adventure-platform-viaversion" version="4.3.2">
+      <artifact name="adventure-platform-viaversion-4.3.2.jar" sha256="9b2b85949f313a09323f11e7418e87aa90c58dded0b0f51e70da7b27c258271c"/>
+      <artifact name="adventure-platform-viaversion-4.3.2.pom" sha256="534de4dfd096928cceb4e81f720dd25a2966fe09ef1df1ceb368c0fa1ffaef8d"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-logger-slf4j" version="4.17.0">
+      <artifact name="adventure-text-logger-slf4j-4.17.0.jar" sha256="698a9546e445daf6f16666d2567ca8dae1d3bb2a0d689f04ec654b6974b8d7ec"/>
+      <artifact name="adventure-text-logger-slf4j-4.17.0.pom" sha256="a8bd8f2f9db3dfce91fe9be3b144cde74c91463ba4db06575ad695578091d755"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-logger-slf4j" version="4.20.0">
+      <artifact name="adventure-text-logger-slf4j-4.20.0.jar" sha256="b31061d61abd2292b3cc642ca2a429c6c7f2aa2501c2c0c6e10bd9b6d67d27e9"/>
+      <artifact name="adventure-text-logger-slf4j-4.20.0.pom" sha256="6bee24e2b52b3501a452df1d3f49500f4e6e36d303dd263a060d7b9ed7f7a54e"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-logger-slf4j" version="4.26.1">
+      <artifact name="adventure-text-logger-slf4j-4.26.1.jar" sha256="83ceed6a5a9bb2e1f1d3f609ec95065c07cabf945166c3798b1960e5ef708784"/>
+      <artifact name="adventure-text-logger-slf4j-4.26.1.pom" sha256="ee2a306f8d550522b3b000e0d9f9846f10273cbd8b5bb50c08475f576df8f116"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-minimessage" version="4.17.0">
+      <artifact name="adventure-text-minimessage-4.17.0.jar" sha256="6c9c8ae0834c83800c3a08a4a355949545b37796d78815fe7c787b9eb2ad0ec7"/>
+      <artifact name="adventure-text-minimessage-4.17.0.pom" sha256="1a7a16eb790378bd60cf6fcaecdbb013a637016308ae6d9a8e3d200060296ef0"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-minimessage" version="4.20.0">
+      <artifact name="adventure-text-minimessage-4.20.0.jar" sha256="85664108808ac9eae92480ecc464c98d11975fe1ccb0a4ce8acd94b8be56d6a4"/>
+      <artifact name="adventure-text-minimessage-4.20.0.pom" sha256="ddaadf47c50b2115d87545d0fcf918a92d57f264c68eeb3fe7a17238821d0138"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-minimessage" version="4.26.1">
+      <artifact name="adventure-text-minimessage-4.26.1.jar" sha256="c7d55723127265affa5baaddfa16d37b27e01681f0aa087afd7e4fbea74da184"/>
+      <artifact name="adventure-text-minimessage-4.26.1.pom" sha256="faffdfc257ee39a5ce698e50bbbaf66464a04260f222e9d98c6be305d0dd8504"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-ansi" version="4.17.0">
+      <artifact name="adventure-text-serializer-ansi-4.17.0.jar" sha256="4feb53ac8641c6c9510ddb2d61666365c6a29dc5c18fe7b9bdd974fa3e8ed196"/>
+      <artifact name="adventure-text-serializer-ansi-4.17.0.pom" sha256="de29963080d67f5a0a15d9ae85198b15bbb199dc97f5b45ead7a2c92752a305b"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-ansi" version="4.26.1">
+      <artifact name="adventure-text-serializer-ansi-4.26.1.jar" sha256="59089148552bec5bcf4b605e6a9e577206868e889956881865ce1876733356e4"/>
+      <artifact name="adventure-text-serializer-ansi-4.26.1.pom" sha256="6e7418fd6ad34afd8b5398a506c112552e8b3f2d4a96e51672bf0380c7d7d6b9"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-bungeecord" version="4.3.2">
+      <artifact name="adventure-text-serializer-bungeecord-4.3.2.jar" sha256="333130ab0d90694b5a46c1ec6f8f5af1e5ad997abba59190786df554d4d0df60"/>
+      <artifact name="adventure-text-serializer-bungeecord-4.3.2.pom" sha256="d8a12217c110c7340e39c8d6ea716bb5f59bf7b224815a597c787ef94294735e"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-commons" version="4.20.0">
+      <artifact name="adventure-text-serializer-commons-4.20.0.jar" sha256="c76a3d79c82f6e914db558ade1567edaf581cf7383619d5dca211c7f706537d7"/>
+      <artifact name="adventure-text-serializer-commons-4.20.0.pom" sha256="5110303775f5b5ceec25ee16b413ff7e3c5868550526b2c25fdde8ae7a14aec7"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-commons" version="4.26.1">
+      <artifact name="adventure-text-serializer-commons-4.26.1.jar" sha256="931cf69408002627c2bfd25ffa5e4c78475aceb62c0cc23dd5ca87fc04cad76a"/>
+      <artifact name="adventure-text-serializer-commons-4.26.1.pom" sha256="013008b365bd1928157cea12e53706f52f0a8ed681c8729a8c321ae6ff250efd"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-gson-legacy-impl" version="4.13.1">
+      <artifact name="adventure-text-serializer-gson-legacy-impl-4.13.1.jar" sha256="edd89f46201382510b1931229aa71b0165611ac830270d1b2a4dfaeb7a4e6373"/>
+      <artifact name="adventure-text-serializer-gson-legacy-impl-4.13.1.pom" sha256="50d5b04cb4f5bee3526fa567bedb0e02f22952be69eae6a106b987ac8ce65bce"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-gson" version="4.17.0">
+      <artifact name="adventure-text-serializer-gson-4.17.0.jar" sha256="26871f91a07c1c12aa1cfb5da41f48ca6edbb93d15259785acf55865e40c35ee"/>
+      <artifact name="adventure-text-serializer-gson-4.17.0.pom" sha256="ffbf79d49fae9157169fa429d985305a962740c5cad57557e29b76201619057f"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-gson" version="4.20.0">
+      <artifact name="adventure-text-serializer-gson-4.20.0.jar" sha256="21af764a4d89ba11ad86d67ee8092d6ea025b33c66743f6742c95dc0bc441a9e"/>
+      <artifact name="adventure-text-serializer-gson-4.20.0.pom" sha256="01b13d66fe2921f926be86477de2532610f388c91babb736a85319815a98b6bd"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-gson" version="4.26.1">
+      <artifact name="adventure-text-serializer-gson-4.26.1.jar" sha256="4c220e24caf2064c2a5f2dc6c30da1cf47c40daf6cc0cf409b51e11c1aa7d172"/>
+      <artifact name="adventure-text-serializer-gson-4.26.1.pom" sha256="3113759811e3214a040ade812155c2d1ae15b63c3793d36b7c93f36ca0777ca2"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-json" version="4.17.0">
+      <artifact name="adventure-text-serializer-json-4.17.0.jar" sha256="52b7c2a1e6fdda0a83d7a2e65344e488d74a018b736510ec39f9909501196165"/>
+      <artifact name="adventure-text-serializer-json-4.17.0.pom" sha256="a8867b9f9ffeeae3be2e85ae75821647321271abbbfd9b59b1704af87cff3997"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-json" version="4.20.0">
+      <artifact name="adventure-text-serializer-json-4.20.0.jar" sha256="6e09b2cf56c62b9a24f666533b942d429c2833760216c4261fb58b5a18c96372"/>
+      <artifact name="adventure-text-serializer-json-4.20.0.pom" sha256="38301c04ca754956e8a781f62c26a3c397b082fb339df6957dd886402530ced3"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-json" version="4.26.1">
+      <artifact name="adventure-text-serializer-json-4.26.1.jar" sha256="29ba3b8958a67b9676b0c86f6c01b5ba49d77fd0d63579c6d479d21dd6f07bb0"/>
+      <artifact name="adventure-text-serializer-json-4.26.1.pom" sha256="a07d89d1eaf4aaed14750e4642f89b07e3288718733aa3725ee0fdf84d076057"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-legacy" version="4.17.0">
+      <artifact name="adventure-text-serializer-legacy-4.17.0.jar" sha256="17840cc7e70f92f1eb08068de820876d46e2bfa17e7870a340bc6d56dfc8f3d6"/>
+      <artifact name="adventure-text-serializer-legacy-4.17.0.pom" sha256="bd7a774c19156829397722ab9666b790ed0a001779dd44f0b7e2913c72cfb9da"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-legacy" version="4.20.0">
+      <artifact name="adventure-text-serializer-legacy-4.20.0.jar" sha256="40599a509ffb53a0d9bfd8d03f75e09a048a42ee8378bc9f7d095b52f17fbadd"/>
+      <artifact name="adventure-text-serializer-legacy-4.20.0.pom" sha256="589c2e6bcdeb6d3e721a5766316067154d927cccbe8fbcc49dfafd5446496e00"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-legacy" version="4.26.1">
+      <artifact name="adventure-text-serializer-legacy-4.26.1.jar" sha256="d9986136416714f47763b251c81d69ccbf4b50ffd8ede204f0c4b31f095b640c"/>
+      <artifact name="adventure-text-serializer-legacy-4.26.1.pom" sha256="2c86514e6d2da64d870fac36adf20bc2a5c20b5a7e186823cb3eb70cf03be1d9"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-plain" version="4.15.0">
+      <artifact name="adventure-text-serializer-plain-4.15.0.jar" sha256="2e89533929c19ff4046ba8c5dd3233b6577c0f0b72bbb141d942e3bc4c9433c6"/>
+      <artifact name="adventure-text-serializer-plain-4.15.0.pom" sha256="3df5048abbd0ef7a4fd986d5d7664d96c6c192af798e1365280cd3540ad9706d"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-plain" version="4.17.0">
+      <artifact name="adventure-text-serializer-plain-4.17.0.jar" sha256="f3f143fd4e1704ed633a1cc854c0395030fd92f0e39ccf8770961044defe9a48"/>
+      <artifact name="adventure-text-serializer-plain-4.17.0.pom" sha256="daf4be57d18a521030278d98492d8bd23c684476f3ed5712d82ee5b7a90786e8"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-plain" version="4.20.0">
+      <artifact name="adventure-text-serializer-plain-4.20.0.jar" sha256="0f9221a17dc866cb635b598fc31001d569c7e2141108e7cebdf34508da3f0951"/>
+      <artifact name="adventure-text-serializer-plain-4.20.0.pom" sha256="7925c0eee57b13a6c7d428e858e5463202473d6fb52e111a952793836fb3f75c"/>
+    </component>
+    <component group="net.kyori" module="adventure-text-serializer-plain" version="4.26.1">
+      <artifact name="adventure-text-serializer-plain-4.26.1.jar" sha256="fb30bea38b2df70ed74cfe591042c49dbf49d372de5d96328189e26759553255"/>
+      <artifact name="adventure-text-serializer-plain-4.26.1.pom" sha256="1548ffc0bed518b6c93974b60d688fac7e063a893ed527bcd412714c2c6b27e6"/>
+    </component>
+    <component group="net.kyori" module="ansi" version="1.0.3">
+      <artifact name="ansi-1.0.3.jar" sha256="8ba78b69ba2178f1e2dc5c89bf600df0cfb15229966d9ac812a5c25b19bbc3ba"/>
+      <artifact name="ansi-1.0.3.pom" sha256="920049e37e0b95377923abd55f972a523cf02eae64ebfad6209044d42e2f4160"/>
+    </component>
+    <component group="net.kyori" module="ansi" version="1.1.1">
+      <artifact name="ansi-1.1.1.jar" sha256="c908fab2c0ec5dd8bf7003bd3a6498b0a2e5b97176775643830f861d63155a78"/>
+      <artifact name="ansi-1.1.1.pom" sha256="b271c8cf96d2ce23d6f781763f94dd49cd0fd892f943078b9f358ca80226442c"/>
+    </component>
+    <component group="net.kyori" module="examination-api" version="1.3.0">
+      <artifact name="examination-api-1.3.0.jar" sha256="966415c6ea5e6c28382d91908b8657476a6ce689a2f021aaa42bd93d29a4b9a9"/>
+      <artifact name="examination-api-1.3.0.pom" sha256="34f6f8eb72b56bc68c6d69a52d58ebae75e1bb72ae6fedf9b2dfad713c3593f7"/>
+    </component>
+    <component group="net.kyori" module="examination-string" version="1.3.0">
+      <artifact name="examination-string-1.3.0.jar" sha256="a0b33d22e4b64a7c710f98a0c445cc0f9a91ca03de31e40d3a81519826045c32"/>
+      <artifact name="examination-string-1.3.0.pom" sha256="2d766c824b7aef1cb7a0805b87766dc306de443dc641a12e391f46d9476dc7dc"/>
+    </component>
+    <component group="net.kyori" module="option" version="1.0.0">
+      <artifact name="option-1.0.0.jar" sha256="09c4bf012c3596f11b30ec547ac18d2f6204ed38d00c700f72cd2a53648485d7"/>
+      <artifact name="option-1.0.0.pom" sha256="c2007f03b22d17e6d4278a3eececaa50069c6a6fc7ef3dec4931e0e65008969d"/>
+    </component>
+    <component group="net.kyori" module="option" version="1.1.0">
+      <artifact name="option-1.1.0.jar" sha256="ae71e70291a8493c14466f7ae33588d23c0e1647033e8e490d85c77214aab621"/>
+      <artifact name="option-1.1.0.pom" sha256="4c8fbce936764bf9e33f1f2c966e0e26d15c6ca8afe702ef854ad960f0242387"/>
+    </component>
+    <component group="net.md-5" module="bungeecord-chat" version="1.20-R0.2-deprecated+build.19">
+      <artifact name="bungeecord-chat-1.20-R0.2-deprecated+build.19.jar" sha256="1887dbb0509a9e78df2b56dbd083f933a2ee61170aa3c34446753cab439a640c"/>
+      <artifact name="bungeecord-chat-1.20-R0.2-deprecated+build.19.pom" sha256="cb625b35a5865b62c5a65cc09f115e22ec17f7178b1710bde99a9dc9bf6f8c4f"/>
+    </component>
+    <component group="net.minecraft" module="minecraft-merged-fb838c10a7" version="1.21-net.fabricmc.yarn.1_21.1.21+build.1-v2">
+      <artifact name="minecraft-merged-fb838c10a7-1.21-net.fabricmc.yarn.1_21.1.21+build.1-v2.jar" sha256="e74024f518396e546ceadf5fbebb212cb6929b455ace726e9a5d39b461e29526"/>
+      <artifact name="minecraft-merged-fb838c10a7-1.21-net.fabricmc.yarn.1_21.1.21+build.1-v2.pom" sha256="6348150edca70b1428e52c63c8807368aa05f93b08447aa18814fc76e007ce68"/>
+    </component>
+    <component group="net.minecrell" module="terminalconsoleappender" version="1.3.0">
+      <artifact name="terminalconsoleappender-1.3.0.jar" sha256="6be204add52c0926060fafd13898b7b368619ccdd03caa695a7a6e22972ede2b"/>
+      <artifact name="terminalconsoleappender-1.3.0.pom" sha256="40a0a2b7afdf5dc70056ad06bc8a001729f14353e3d2bc12b75fc311f0fe06d3"/>
+    </component>
+    <component group="net.sf.jopt-simple" module="jopt-simple" version="5.0.4">
+      <artifact name="jopt-simple-5.0.4.jar" sha256="4e8a31ace8fa17ca4b61bfbd60c0c918060263c1e223fd626d77e09307cb9edb"/>
+      <artifact name="jopt-simple-5.0.4.pom" sha256="36eb4f01ce79cc00c6de6c133d8f052b097e3017cd15e0ec1da47a3493d0ff73"/>
+    </component>
+    <component group="net.sf.saxon" module="Saxon-HE" version="10.6">
+      <artifact name="Saxon-HE-10.6.jar" sha256="197fc24bdf8cf3addd5e106f6f6791e935427724040643b41d68019620251cdb"/>
+      <artifact name="Saxon-HE-10.6.pom" sha256="50a8b1f54c8240a5964784230dff1e0997684950d638b1c8e098a452a6d44e5a"/>
+    </component>
+    <component group="net.sf.trove4j" module="core" version="3.1.0">
+      <artifact name="core-3.1.0.jar" sha256="a14affe7ad56f1f88c0ad4481e9e97ce8cb9525968e21e1b23df66791e9753a6"/>
+      <artifact name="core-3.1.0.pom" sha256="a0734fd33626cf10a3fa8b55eac22ba678ca55eec79340c343247dbafefe3fa3"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-api-base" version="0.4.42+6573ed8cd1">
+      <artifact name="fabric-api-base-0.4.42+6573ed8cd1.jar" sha256="68173e6dace1ba20a9720e59eb46f4389e3c607b1f634b5e22baeac5079fb0e7"/>
+      <artifact name="fabric-api-base-0.4.42+6573ed8cd1.pom" sha256="07bb7a98bd5b15911e285e0d19bded3120eaded82a501cdd048e1d23f7af2b31"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-api-lookup-api-v1" version="1.6.67+b5597344d1">
+      <artifact name="fabric-api-lookup-api-v1-1.6.67+b5597344d1.jar" sha256="768e312334d18f733a1454ca05e569dbd143f642eb2a936e8c5ca8dff86bd9d5"/>
+      <artifact name="fabric-api-lookup-api-v1-1.6.67+b5597344d1.pom" sha256="25194894bb2145f7702d4a405c9019c635971f3436b64332c598010e38e924a0"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-api" version="0.100.5+1.21">
+      <artifact name="fabric-api-0.100.5+1.21.jar" sha256="b5065f2827831c87b8914ca07b2752f9199765b7889ffb369d6c9b6a8ad15cfd"/>
+      <artifact name="fabric-api-0.100.5+1.21.pom" sha256="ba8b008fb3ca7ec9eee68014e883c8301a1a9ac93cb29e24e19fdc4d9d5ac54a"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-biome-api-v1" version="13.0.28+6fc22b99d1">
+      <artifact name="fabric-biome-api-v1-13.0.28+6fc22b99d1.jar" sha256="67da6d1b598ee5611403082438da751009896400658e11af4ee34b1df150a8cb"/>
+      <artifact name="fabric-biome-api-v1-13.0.28+6fc22b99d1.pom" sha256="b450a0cb52f94fd7839b5d00d9f3fe07b8168c61ac1b592c681dd1ff957f8fc5"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-block-api-v1" version="1.0.22+0af3f5a7d1">
+      <artifact name="fabric-block-api-v1-1.0.22+0af3f5a7d1.jar" sha256="15697b98fa977c7a970abfbd62e790fc5a059e934bba6654e3ead260b99e7c7a"/>
+      <artifact name="fabric-block-api-v1-1.0.22+0af3f5a7d1.pom" sha256="0ded5b036fa7b2f67ed9282e0b43eeebcc5e39ea2ea77a33c056e9fda32ecdd9"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-block-view-api-v2" version="1.0.10+6573ed8cd1">
+      <artifact name="fabric-block-view-api-v2-1.0.10+6573ed8cd1.jar" sha256="2c784a71290ce120f227151daeefa203a65ec0a0d441a06e62bc3616b119a5d3"/>
+      <artifact name="fabric-block-view-api-v2-1.0.10+6573ed8cd1.pom" sha256="b1403a1bb628bd1c3c283dc7faae667d0e7185882fd80307d18ef265b53f87d9"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-blockrenderlayer-v1" version="1.1.52+0af3f5a7d1">
+      <artifact name="fabric-blockrenderlayer-v1-1.1.52+0af3f5a7d1.jar" sha256="694280823da6c1237400224d18e9597a699f0164bf42df17e5339cdc7893c7d8"/>
+      <artifact name="fabric-blockrenderlayer-v1-1.1.52+0af3f5a7d1.pom" sha256="4400e38d5f7e4e07a7752ffa7a105456c5e40cb692a61f56102d93f4b6fb1a08"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-client-tags-api-v1" version="1.1.15+6573ed8cd1">
+      <artifact name="fabric-client-tags-api-v1-1.1.15+6573ed8cd1.jar" sha256="5e272ab1e5effce5098e697ace0127bd10d0589ba5040be79fd28bb8b1f653dd"/>
+      <artifact name="fabric-client-tags-api-v1-1.1.15+6573ed8cd1.pom" sha256="9ba02a28924ddd9012131d69ebada87169e340cd98dd94420feb2b2831908bb7"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-command-api-v1" version="1.2.49+f71b366fd1">
+      <artifact name="fabric-command-api-v1-1.2.49+f71b366fd1.jar" sha256="9677886e9dabfdfbe581ee7f56fd926ad4989fe00d4d719899fac9a4718dd1c9"/>
+      <artifact name="fabric-command-api-v1-1.2.49+f71b366fd1.pom" sha256="39689b74da05401a77d6eafdef551da4e23882f5fad7584242c50d36d24194c4"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-command-api-v2" version="2.2.28+6ced4dd9d1">
+      <artifact name="fabric-command-api-v2-2.2.28+6ced4dd9d1.jar" sha256="6e45532ea1e1b4759e20887592f3d2cea5b87de346321b31f958bb3f7073aef8"/>
+      <artifact name="fabric-command-api-v2-2.2.28+6ced4dd9d1.pom" sha256="201a8746a0100b02e559ff48025ce0101deee67b5eeab0e6d0da8141d4ba412d"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-commands-v0" version="0.2.66+df3654b3d1">
+      <artifact name="fabric-commands-v0-0.2.66+df3654b3d1.jar" sha256="bd40cab7c6b40c35caf94eb34ed5f1ce5e9a0f4f3114a302bcc25ec3226a1d6a"/>
+      <artifact name="fabric-commands-v0-0.2.66+df3654b3d1.pom" sha256="44a7f911b17f3d5af530fb1ee1d90523584ead00b19c24e641b1c0730c44d9c6"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-content-registries-v0" version="8.0.14+b5597344d1">
+      <artifact name="fabric-content-registries-v0-8.0.14+b5597344d1.jar" sha256="f040b063baa654e5863483cac21b8daacefef2e6dc7e95679d58a39e11896f75"/>
+      <artifact name="fabric-content-registries-v0-8.0.14+b5597344d1.pom" sha256="53e5d3c09273cbf232ae223bde131b9be9fe6bdd719b99501a92e7674c7f8885"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-convention-tags-v1" version="2.0.16+7f945d5bd1">
+      <artifact name="fabric-convention-tags-v1-2.0.16+7f945d5bd1.jar" sha256="1fd1e9e4387ef12c36e90f4336afc7949a450b51d490f24fdab7eee45590c686"/>
+      <artifact name="fabric-convention-tags-v1-2.0.16+7f945d5bd1.pom" sha256="57a3db516dff6b2806279a9997b38946435c86e6ece5d70613d3109c9730e675"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-convention-tags-v2" version="2.4.0+ee0ac325d1">
+      <artifact name="fabric-convention-tags-v2-2.4.0+ee0ac325d1.jar" sha256="71609b50b829d6f84c47de453b8360a83926bf13958a2b47b42f84c94c197512"/>
+      <artifact name="fabric-convention-tags-v2-2.4.0+ee0ac325d1.pom" sha256="7aa14c633c0d01f953a0ea00c5df487849a7d608acd2863d66195f2f22270608"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-crash-report-info-v1" version="0.2.29+0af3f5a7d1">
+      <artifact name="fabric-crash-report-info-v1-0.2.29+0af3f5a7d1.jar" sha256="4498c0b294b2837638468467d87398ab51c9297cd3a564418c316ca6c2c508fa"/>
+      <artifact name="fabric-crash-report-info-v1-0.2.29+0af3f5a7d1.pom" sha256="d96ffc1a451a514570916c5c73ab5843fe7d32fb735014bbd26a25dca44d92e2"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-data-attachment-api-v1" version="1.1.24+6a6dfa19d1">
+      <artifact name="fabric-data-attachment-api-v1-1.1.24+6a6dfa19d1.jar" sha256="93e694bb3bd61ad52d221b22cc9b742953fb6bf567c6f6822d0fad9c594d0fc3"/>
+      <artifact name="fabric-data-attachment-api-v1-1.1.24+6a6dfa19d1.pom" sha256="c41e06435aeca9955eb6bcc466567975acf849c53186a3d3e9060911e8ae1a80"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-data-generation-api-v1" version="20.2.10+16c4ae25d1">
+      <artifact name="fabric-data-generation-api-v1-20.2.10+16c4ae25d1.jar" sha256="90a4ca09626271142a80520b03142f4af77dd7140c4a54887b06c3c13943d9e1"/>
+      <artifact name="fabric-data-generation-api-v1-20.2.10+16c4ae25d1.pom" sha256="07f249d5d5fcd9df865bc77e3f01d0df272a068057d604868bac824e16969e1a"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-dimensions-v1" version="4.0.0+6fc22b99d1">
+      <artifact name="fabric-dimensions-v1-4.0.0+6fc22b99d1.jar" sha256="5b2ebb3c14054ffc576f1f435b1033fa6c8f6f9ef59a9e6f8fcf5bf81ffb4f0c"/>
+      <artifact name="fabric-dimensions-v1-4.0.0+6fc22b99d1.pom" sha256="da8a0d15c642899e32a5b82f5071e5556058f156445755628df49229bd5fd862"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-entity-events-v1" version="1.6.12+6fc22b99d1">
+      <artifact name="fabric-entity-events-v1-1.6.12+6fc22b99d1.jar" sha256="8f6790c803fbadbe4d4c2c03d147c32b929b23124115472ba2c484ae01077472"/>
+      <artifact name="fabric-entity-events-v1-1.6.12+6fc22b99d1.pom" sha256="d5626395f162c17674cb808e0ca3159982ca118eb55c1882eb668a3725a7e7df"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-events-interaction-v0" version="0.7.10+e633f883d1">
+      <artifact name="fabric-events-interaction-v0-0.7.10+e633f883d1.jar" sha256="ca56f3118347a4b248b66e4f9cefa1a03fd4349bdd458f1159325c43518f5e5d"/>
+      <artifact name="fabric-events-interaction-v0-0.7.10+e633f883d1.pom" sha256="906539bf804f08ffbee0f128ad40ef3ca40766eaecddc4c0cd21fd9918368ec9"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-game-rule-api-v1" version="1.0.53+6ced4dd9d1">
+      <artifact name="fabric-game-rule-api-v1-1.0.53+6ced4dd9d1.jar" sha256="18fe7313aa3439690352153a6a220ea5b40be15bdb891ddbf6f4e0bdc1e8787a"/>
+      <artifact name="fabric-game-rule-api-v1-1.0.53+6ced4dd9d1.pom" sha256="ddd8b3b4e9b876f3d54100a0c4ea34dc116aca4e634b9f48517de1ff5dfe7517"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-gametest-api-v1" version="2.0.2+6fc22b99d1">
+      <artifact name="fabric-gametest-api-v1-2.0.2+6fc22b99d1.jar" sha256="a5f934bda3948d0a83d92e28d1c16aaa3960aa301b5c1f2c228c577d0e5d3e39"/>
+      <artifact name="fabric-gametest-api-v1-2.0.2+6fc22b99d1.pom" sha256="2c9db3425fc1e462633f014f2d91088220964a01a029c408a156d370e322dbe3"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-item-api-v1" version="11.0.0+afdfc921d1">
+      <artifact name="fabric-item-api-v1-11.0.0+afdfc921d1.jar" sha256="bda11331b43709b594a6f7512b9dbaad65ef2be022be85d78f5dd4b7c583e3c8"/>
+      <artifact name="fabric-item-api-v1-11.0.0+afdfc921d1.pom" sha256="c9bd42501b7e8ec9de1080bdf1cb3905685c06a0a57728b677764588b5aae4e3"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-item-group-api-v1" version="4.1.2+78017270d1">
+      <artifact name="fabric-item-group-api-v1-4.1.2+78017270d1.jar" sha256="eca05a09fdf70ef1d2580738d1a94ea1b1efcac73b2ec94dba5a75a1221675cf"/>
+      <artifact name="fabric-item-group-api-v1-4.1.2+78017270d1.pom" sha256="98048e02a93b30e4a55bcef9cbe29ea72038f9da39bb9e60cf783cee2755fbf2"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-key-binding-api-v1" version="1.0.47+0af3f5a7d1">
+      <artifact name="fabric-key-binding-api-v1-1.0.47+0af3f5a7d1.jar" sha256="79c3547fb498b40773cdc13192a9600a12d371d4c6562387c3abb871dbc6ab10"/>
+      <artifact name="fabric-key-binding-api-v1-1.0.47+0af3f5a7d1.pom" sha256="da5155622e68bb53020194b193be432bf52f5aa95d501ff34f2f6650bdd9218a"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-keybindings-v0" version="0.2.45+df3654b3d1">
+      <artifact name="fabric-keybindings-v0-0.2.45+df3654b3d1.jar" sha256="72ca184eac4aaca99a3db75b289313e7746edddfdf31a5d2f47105aaa36291dd"/>
+      <artifact name="fabric-keybindings-v0-0.2.45+df3654b3d1.pom" sha256="7bdcefc11379a5d96d8383a53b81dae42a7d16f04059020a270ecc3c0128eef8"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-lifecycle-events-v1" version="2.3.11+8f3583aed1">
+      <artifact name="fabric-lifecycle-events-v1-2.3.11+8f3583aed1.jar" sha256="bbe38da3349053ff60fc98aaf66f52cc8dbccb584597fda53404bc4898d088fb"/>
+      <artifact name="fabric-lifecycle-events-v1-2.3.11+8f3583aed1.pom" sha256="3f78642c53795645a4e51b49196f5ccd79373844ea9bf91d93127eeadc90e8f9"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-loot-api-v2" version="3.0.12+3f89f5a5d1">
+      <artifact name="fabric-loot-api-v2-3.0.12+3f89f5a5d1.jar" sha256="f621cec205580dee14e693ed826ccaa57c7f8d474e98438b81fa82cb9812f017"/>
+      <artifact name="fabric-loot-api-v2-3.0.12+3f89f5a5d1.pom" sha256="fda7b96e64e5c61fe630e00aef1f967e3e1706cc93e586f6c3afbbdd3680cdc4"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-loot-api-v3" version="1.0.0+3f89f5a5d1">
+      <artifact name="fabric-loot-api-v3-1.0.0+3f89f5a5d1.jar" sha256="c9c49741431d7c787d520580027f54891853a082883359e1a564909f1668173b"/>
+      <artifact name="fabric-loot-api-v3-1.0.0+3f89f5a5d1.pom" sha256="6db6df3d51c9eae0a0c3b290696b396b8ed8d015fc51ceac865ca5a25c974a63"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-message-api-v1" version="6.0.13+6573ed8cd1">
+      <artifact name="fabric-message-api-v1-6.0.13+6573ed8cd1.jar" sha256="81f90f61d675804e2bca629d8a15c08489793378b8c2ee497c4fdea7c15e5697"/>
+      <artifact name="fabric-message-api-v1-6.0.13+6573ed8cd1.pom" sha256="98d00c5db8ae2a1c86d6057077650f3a8c2ea91b9f892cf93c389251ba440256"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-model-loading-api-v1" version="2.0.0+fe474d6bd1">
+      <artifact name="fabric-model-loading-api-v1-2.0.0+fe474d6bd1.jar" sha256="2796d13e0284fb2358ae3dab36bc9c992f645b137dde34c222ad15773b2bd6a9"/>
+      <artifact name="fabric-model-loading-api-v1-2.0.0+fe474d6bd1.pom" sha256="bf7f8bafa0df9699d5e0b787adf91f7285f107b0f19e821103e114226d26a360"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-networking-api-v1" version="4.2.0+ab7edbacd1">
+      <artifact name="fabric-networking-api-v1-4.2.0+ab7edbacd1.jar" sha256="9e58cc06c48f6ddcb5312ec88c427a79b2926e27228db490fc765a9e3e6217ed"/>
+      <artifact name="fabric-networking-api-v1-4.2.0+ab7edbacd1.pom" sha256="07eb7ae97c7e873d13569e3ef9ba540511d569472497161eddbb7f006c11fd94"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-object-builder-api-v1" version="15.1.12+d1321076d1">
+      <artifact name="fabric-object-builder-api-v1-15.1.12+d1321076d1.jar" sha256="d58dfd19af7066421386bfc58aed809250f4ffca56bd552aba027736f15fab55"/>
+      <artifact name="fabric-object-builder-api-v1-15.1.12+d1321076d1.pom" sha256="f8ef5f1f9fdbc7a0d56d13cf28a8aa87e4f2559092a5066078a9bbf46533d797"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-particles-v1" version="4.0.2+6573ed8cd1">
+      <artifact name="fabric-particles-v1-4.0.2+6573ed8cd1.jar" sha256="c4254948e2820cb02079c169c549ec9d4ed686119fc0498672397ef64e7aa0a1"/>
+      <artifact name="fabric-particles-v1-4.0.2+6573ed8cd1.pom" sha256="7c0f3abd6b821b675db7041dd982f3580db6050dafa0ff07ccb98d0660835491"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-recipe-api-v1" version="5.0.10+65089712d1">
+      <artifact name="fabric-recipe-api-v1-5.0.10+65089712d1.jar" sha256="8e8bfd3a35838c65f68dcee32b933871354255b6c825a3420bfc5646ebe1cd89"/>
+      <artifact name="fabric-recipe-api-v1-5.0.10+65089712d1.pom" sha256="fe31259ce6a316d882b7dd3877b789241468dc113f16520e643644c2967a152a"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-registry-sync-v0" version="5.0.24+6ced4dd9d1">
+      <artifact name="fabric-registry-sync-v0-5.0.24+6ced4dd9d1.jar" sha256="1227bb419e896b2b6ceac0917fdd6c0d2ce6c090772373e366a1878ca53ff5ed"/>
+      <artifact name="fabric-registry-sync-v0-5.0.24+6ced4dd9d1.pom" sha256="56814b906c8757d572ab8611cd8545ad40dcc34500e02eb518f61efe98a28a53"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-renderer-api-v1" version="3.3.0+0ae0b97dd1">
+      <artifact name="fabric-renderer-api-v1-3.3.0+0ae0b97dd1.jar" sha256="942a9f5bb1b6d14bd6f52ad91436054dd7492dc191e656f54197dfaffee1e4d7"/>
+      <artifact name="fabric-renderer-api-v1-3.3.0+0ae0b97dd1.pom" sha256="66e1115db591128af07191be0f891480bcc25143868bd85082f2737851637afc"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-renderer-indigo" version="1.6.5+48fb1586d1">
+      <artifact name="fabric-renderer-indigo-1.6.5+48fb1586d1.jar" sha256="d7b050df1029223f546f29fd1468bd4a9298d488c865afafb2ab785f9c47d0ef"/>
+      <artifact name="fabric-renderer-indigo-1.6.5+48fb1586d1.pom" sha256="d019b2b7ede1affc6f15aad5883cd0d67f5ffb6234b05dc75ef683204489e56c"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-renderer-registries-v1" version="3.2.67+df3654b3d1">
+      <artifact name="fabric-renderer-registries-v1-3.2.67+df3654b3d1.jar" sha256="bde8d970d439e37ec3ef0d9d1d8168878e0f20459512d3e0dab87991b132a9e8"/>
+      <artifact name="fabric-renderer-registries-v1-3.2.67+df3654b3d1.pom" sha256="5cdd75b9c4f4a48ad07585afcf54759d32cbda664fe108be454227db148b5aaa"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-rendering-data-attachment-v1" version="0.3.48+73761d2ed1">
+      <artifact name="fabric-rendering-data-attachment-v1-0.3.48+73761d2ed1.jar" sha256="b7571aeaa4b0e5e7e2bb63672f74fe48584fe060d66d9bf6d6e190c7cf1272f4"/>
+      <artifact name="fabric-rendering-data-attachment-v1-0.3.48+73761d2ed1.pom" sha256="64bf39822e4d9cfe802f07cac209a68038133a841a281346cc3b3b1fb605b059"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-rendering-fluids-v1" version="3.1.6+b5597344d1">
+      <artifact name="fabric-rendering-fluids-v1-3.1.6+b5597344d1.jar" sha256="1a9dd003b9ea3757e2f9bac05989ea4e557ba0f9392583319ca88a48b23358f8"/>
+      <artifact name="fabric-rendering-fluids-v1-3.1.6+b5597344d1.pom" sha256="80cc820ab60b4ee61bae62248523198544448166931d8e255441c75915787561"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-rendering-v0" version="1.1.70+df3654b3d1">
+      <artifact name="fabric-rendering-v0-1.1.70+df3654b3d1.jar" sha256="303d7ae66040c8112b007ead5d3c60d4b64d85115e006ebdd7e812a36a20106e"/>
+      <artifact name="fabric-rendering-v0-1.1.70+df3654b3d1.pom" sha256="69134c21763a7ccafa581a3502da10816f625a21f56954b7c2293d7c37cf29ad"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-rendering-v1" version="5.0.4+5a8c785ed1">
+      <artifact name="fabric-rendering-v1-5.0.4+5a8c785ed1.jar" sha256="f9405032649a1b32affb59cb174029d8f774134e24e6fd87c51f62b1fe8f057a"/>
+      <artifact name="fabric-rendering-v1-5.0.4+5a8c785ed1.pom" sha256="de0ff02edca19125277308e5f04543e689127afb40b07952e709515fa9c37c99"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-resource-conditions-api-v1" version="4.2.1+d153f344d1">
+      <artifact name="fabric-resource-conditions-api-v1-4.2.1+d153f344d1.jar" sha256="c80d32eb81a882e505639d2d5f74b9e6558d4814ab061233cd53dcdaae48a388"/>
+      <artifact name="fabric-resource-conditions-api-v1-4.2.1+d153f344d1.pom" sha256="7d213c4b67855591ff7de3f5982502d1a0f18d821178492259f962a002496c18"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-resource-loader-v0" version="1.1.5+78017270d1">
+      <artifact name="fabric-resource-loader-v0-1.1.5+78017270d1.jar" sha256="c4781bda36b7010613204e02f221c8a1be1a9c43c158cb55e4e429da55708105"/>
+      <artifact name="fabric-resource-loader-v0-1.1.5+78017270d1.pom" sha256="80a29fbf4121cab37990378a28b05ace22256e619b3c1fa8854f4dfd881b159d"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-screen-api-v1" version="2.0.24+b5597344d1">
+      <artifact name="fabric-screen-api-v1-2.0.24+b5597344d1.jar" sha256="3bf7ac74c65fac14093fb7c54c040272175406647c29e8bde62582315bd214da"/>
+      <artifact name="fabric-screen-api-v1-2.0.24+b5597344d1.pom" sha256="1f3967a5e960058f4072be77e53748d1bc841c1295e14ed32f9a8ef70d0f06a1"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-screen-handler-api-v1" version="1.3.81+b5597344d1">
+      <artifact name="fabric-screen-handler-api-v1-1.3.81+b5597344d1.jar" sha256="68a9089a452ea24e30fc1f6ac199f804dae76c1105806fbd5db99d5425366d45"/>
+      <artifact name="fabric-screen-handler-api-v1-1.3.81+b5597344d1.pom" sha256="41f826776c8ce17481985abba203a6f213c41333d85dfc809701f44f89939ced"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-sound-api-v1" version="1.0.23+6573ed8cd1">
+      <artifact name="fabric-sound-api-v1-1.0.23+6573ed8cd1.jar" sha256="7eea8d2eaa64b80321e8b59331d6ec4f370d579b3ab644176b355e0ca0f83c89"/>
+      <artifact name="fabric-sound-api-v1-1.0.23+6573ed8cd1.pom" sha256="0b77efbe36302569e5ebe7970506a72b69058547eff0550db5c8a6b5e7901bdc"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-transfer-api-v1" version="5.1.15+3dccd343d1">
+      <artifact name="fabric-transfer-api-v1-5.1.15+3dccd343d1.jar" sha256="fb269f90041dd993608844ad2c0a1a7017117ddef3e40a035ec8ba470b5d5e74"/>
+      <artifact name="fabric-transfer-api-v1-5.1.15+3dccd343d1.pom" sha256="a2d6d20f6fd2931be53cd8e2319ba416aed6413430906434687641da23eebede"/>
+    </component>
+    <component group="net_fabricmc_yarn_1_21_1_21_build_1_v2.net.fabricmc.fabric-api" module="fabric-transitive-access-wideners-v1" version="6.0.12+6573ed8cd1">
+      <artifact name="fabric-transitive-access-wideners-v1-6.0.12+6573ed8cd1.jar" sha256="ff53967f5ee0b6a35725d265b0eece92fd5fda1f24e1e898169caa5d00d50ad0"/>
+      <artifact name="fabric-transitive-access-wideners-v1-6.0.12+6573ed8cd1.pom" sha256="8cc89b2d4751cb95547f349f9ed5a9b6bdeadc3a78c5c9b5cd0da8a6424caadf"/>
+    </component>
+    <component group="org.apache.commons" module="commons-collections4" version="4.5.0">
+      <artifact name="commons-collections4-4.5.0.jar" sha256="199dbf0bd103de524c7b45328ea871fe3d047c2be461bb6627cd25ff1c664322"/>
+      <artifact name="commons-collections4-4.5.0.pom" sha256="bc09b6cb6cc3a89ffed1214f66b6d3f901d9600086de20973852939787977ffa"/>
+    </component>
+    <component group="org.apache.commons" module="commons-compress" version="1.26.0">
+      <artifact name="commons-compress-1.26.0.jar" sha256="feee0ca478c066c9fdd8da888fccc4dbdfc21d9d9e24224743149174a29e377b"/>
+      <artifact name="commons-compress-1.26.0.pom" sha256="e0e58ebb258a3927d21262f70a92a79e1d5ded1540dd78df3a9e912030c1c5ea"/>
+    </component>
+    <component group="org.apache.commons" module="commons-lang3" version="3.12.0">
+      <artifact name="commons-lang3-3.12.0.jar" sha256="75d06cb0f9b85ba1fad7f3da0f3c35306a102d6cbfce3f998d8315ccacfc3012"/>
+      <artifact name="commons-lang3-3.12.0.pom" sha256="5b52c4994df8cd5b311601b46ca6d70678e3eafd3fa29911ad98294e1ecea2d4"/>
+    </component>
+    <component group="org.apache.commons" module="commons-lang3" version="3.14.0">
+      <artifact name="commons-lang3-3.14.0.jar" sha256="b88744d3026c1ef83aaba7884098709737e0c6b5aeb529cc748f840186190023"/>
+      <artifact name="commons-lang3-3.14.0.pom" sha256="3c4daf7482865b01cc3efe061b50c7ae233b6727b07b4ae7478d082655153ff3"/>
+    </component>
+    <component group="org.apache.commons" module="commons-math3" version="3.6.1">
+      <artifact name="commons-math3-3.6.1.jar" sha256="c50c89d9fd7d962dbacd592a83a35d20cc3388780b6b9b44bbcaf9d3fba5bdec"/>
+      <artifact name="commons-math3-3.6.1.pom" sha256="0ccf9107e1b267d10e434e8dac2f42ecdea1bf537042a7e6e634aa8ce4de82d9"/>
+    </component>
+    <component group="org.apache.httpcomponents" module="httpclient" version="4.5.13">
+      <artifact name="httpclient-4.5.13.jar" sha256="aa8533703665c45b418af29b71d92f56ddba39a83daf856072c947685d37a780"/>
+      <artifact name="httpclient-4.5.13.pom" sha256="8fbadf2b4f1bf2c0b76c568c35290ec04bb6cc81a63d4906065f4939808f387f"/>
+    </component>
+    <component group="org.apache.httpcomponents" module="httpcore" version="4.4.16">
+      <artifact name="httpcore-4.4.16.jar" sha256="6e3736a65a5e83b672dacacd587750c19277612d8a6520cc7318d70e2c6029d6"/>
+      <artifact name="httpcore-4.4.16.pom" sha256="647faad827cdfea8405e548753f37d76424d3c40402e4331121c09fa594e357a"/>
+    </component>
+    <component group="org.apache.logging.log4j" module="log4j-api" version="2.17.1">
+      <artifact name="log4j-api-2.17.1.jar" sha256="585fd6a35eddaf162d7f809955e3818b5f5450baad3b6e7cb45c6d17f7e892b6"/>
+      <artifact name="log4j-api-2.17.1.pom" sha256="44f7ff729ea7754855071d3e90b6f2999e5d0cf23aae794a60ee56a3ea0f9ac0"/>
+    </component>
+    <component group="org.apache.logging.log4j" module="log4j-api" version="2.22.1">
+      <artifact name="log4j-api-2.22.1.jar" sha256="c389d040bf6ba7a375ad953df51c6e16fb245bdf86e776141b079015a67a036a"/>
+      <artifact name="log4j-api-2.22.1.pom" sha256="996657dbf74cae6ad7776d1a3b65c58d03ff3f3ab1c798e5e12fa1d097c0e339"/>
+    </component>
+    <component group="org.apache.logging.log4j" module="log4j-api" version="2.8.1">
+      <artifact name="log4j-api-2.8.1.jar" sha256="80ebcad6e8631641b293db35a8ec170d36f11bb1b514b8c669efd8e0a0c13ed6"/>
+      <artifact name="log4j-api-2.8.1.pom" sha256="573707f4be2c1b9f89289c8b3cb2ae1475cadf818e7784669ab04eeca452577d"/>
+    </component>
+    <component group="org.apache.logging.log4j" module="log4j-core" version="2.22.1">
+      <artifact name="log4j-core-2.22.1.jar" sha256="8a0bf9fbc5756ef5d68b8bbf75037d5d6e287bf2d893ae4d1597497c47bc3d08"/>
+      <artifact name="log4j-core-2.22.1.pom" sha256="38f84868eb6e371774671732dd7c99becc8d46394c6c23c8980c9743711a5a0a"/>
+    </component>
+    <component group="org.apache.logging.log4j" module="log4j-core" version="2.8.1">
+      <artifact name="log4j-core-2.8.1.jar" sha256="4c2e4a645ee5e8b64d850483cc24e8266a7582c4e95fb351b3d88f3bd28bb48a"/>
+      <artifact name="log4j-core-2.8.1.pom" sha256="ee76a3c5df5d15c6191a003ccfb33effc7f237a8f403a6ab83c5f42dffbe56ce"/>
+    </component>
+    <component group="org.apache.logging.log4j" module="log4j-slf4j2-impl" version="2.22.1">
+      <artifact name="log4j-slf4j2-impl-2.22.1.jar" sha256="c8594943f78506321aa97b6d91c8d2e22dca069a00f89a5b4f097545e2a0790d"/>
+      <artifact name="log4j-slf4j2-impl-2.22.1.pom" sha256="39cbb1b39d520154543596c01005c29199285a2112fdfb10cd9ee30bb07f09e5"/>
+    </component>
+    <component group="org.apache.maven.resolver" module="maven-resolver-api" version="1.9.18">
+      <artifact name="maven-resolver-api-1.9.18.jar" sha256="2eeabe8f8aa2e92882c33ab46c6d80d7ccdd4ae42f57c0b9d65a165e56ccfc73"/>
+      <artifact name="maven-resolver-api-1.9.18.pom" sha256="f2e7b8b72843744b466f38756d632fba49eb85a16d754ff56fe24b80e84f5a63"/>
+    </component>
+    <component group="org.apache.maven.resolver" module="maven-resolver-impl" version="1.9.18">
+      <artifact name="maven-resolver-impl-1.9.18.jar" sha256="0757891a4d7c6c5b5f25ed14bbfd5acdb4353d78a05a3fc1dbb3bc15694bf7e0"/>
+      <artifact name="maven-resolver-impl-1.9.18.pom" sha256="b0a6df4820f5075c05a7568a6dbcaca58dff07d21c08f0f03c066e483401ab51"/>
+    </component>
+    <component group="org.apache.maven.resolver" module="maven-resolver-named-locks" version="1.9.18">
+      <artifact name="maven-resolver-named-locks-1.9.18.jar" sha256="84a727a9923e827077d41a7f47bd3c321bbeebebff6748a046f45618707481d7"/>
+      <artifact name="maven-resolver-named-locks-1.9.18.pom" sha256="04e74ce3e92201b14307e10fd5483d6ea86ccac2af13469e3cb6528ba7527ecb"/>
+    </component>
+    <component group="org.apache.maven.resolver" module="maven-resolver-spi" version="1.9.18">
+      <artifact name="maven-resolver-spi-1.9.18.jar" sha256="35bb3c3fac9d9c5f8321ed25aff6f947356ac9fc164c0a457408dce5ea942f3f"/>
+      <artifact name="maven-resolver-spi-1.9.18.pom" sha256="fc68a72b3a4eac082228d65623f4faab73fc233923458ddeac7fd7231b218c52"/>
+    </component>
+    <component group="org.apache.maven.resolver" module="maven-resolver-util" version="1.9.18">
+      <artifact name="maven-resolver-util-1.9.18.jar" sha256="cb7f698794fb305d129a5ba507bd3cc07fd1d689fc22ce65188fe56047a90f7a"/>
+      <artifact name="maven-resolver-util-1.9.18.pom" sha256="75d8126aaad82ccbfc99cfeb13cec7cc8697979dc083116b62b07c56223769b1"/>
+    </component>
+    <component group="org.apache.maven" module="maven-artifact" version="3.9.6">
+      <artifact name="maven-artifact-3.9.6.jar" sha256="63e300ba9197b62b794b5c97c9aca30fb2e5d908509cfc7a7fda98f366499b22"/>
+      <artifact name="maven-artifact-3.9.6.pom" sha256="36ab72a67a0d80641b3d5756fc227ad78ad7ee1f4198214f983cdf8d47b7201c"/>
+    </component>
+    <component group="org.apache.maven" module="maven-builder-support" version="3.9.6">
+      <artifact name="maven-builder-support-3.9.6.jar" sha256="b1a1f741230cd1940bb544b9d972b95c2ab8857ef207737c49f346bcb13d6a7f"/>
+      <artifact name="maven-builder-support-3.9.6.pom" sha256="4b44c8c1a101244134eee961ae8b8362b23520726ca6d5e5d7978e57cbccdb9a"/>
+    </component>
+    <component group="org.apache.maven" module="maven-model-builder" version="3.9.6">
+      <artifact name="maven-model-builder-3.9.6.jar" sha256="4ca1ef80ff3abbe20c6a720377c6cff8d95580db6302fd267982184c4d9fea62"/>
+      <artifact name="maven-model-builder-3.9.6.pom" sha256="96daf6e1dcea07a7b99ec8e434a60f5efd6c3e50e390bddf8a8deb8858dcd556"/>
+    </component>
+    <component group="org.apache.maven" module="maven-model" version="3.9.6">
+      <artifact name="maven-model-3.9.6.jar" sha256="4191dd5685244d399cd52836ab6efa79b0f3ab94a9cfa774bab8ecb87dda1885"/>
+      <artifact name="maven-model-3.9.6.pom" sha256="6d3c901c069dbaa917af9e708a872d04acb3289f98a4931a8d3bc716cd83c3fc"/>
+    </component>
+    <component group="org.apache.maven" module="maven-repository-metadata" version="3.9.6">
+      <artifact name="maven-repository-metadata-3.9.6.jar" sha256="32174cedd7c16058e845c50329e95cef712d6aae30aed82289b6fcf6efad17dd"/>
+      <artifact name="maven-repository-metadata-3.9.6.pom" sha256="ee07ad9f77855e05ee558e9e42c03925117ea91b836925e89a9538eef1dbd5c3"/>
+    </component>
+    <component group="org.apache.maven" module="maven-resolver-provider" version="3.9.6">
+      <artifact name="maven-resolver-provider-3.9.6.jar" sha256="0396ff40bc2135c0ca71615c4bb8d11b730597c1480256ab2efc5528e9c39878"/>
+      <artifact name="maven-resolver-provider-3.9.6.pom" sha256="9093985a691d17f768a9be0827d6d17ffc6e8b349c3b9be975eb6a96f7cf3f9c"/>
+    </component>
+    <component group="org.apiguardian" module="apiguardian-api" version="1.1.2">
+      <artifact name="apiguardian-api-1.1.2.jar" sha256="b2cdd163ebe760cb92147e499ebf65be392a8824298e690f959b1d4306a2b54a"/>
+      <artifact name="apiguardian-api-1.1.2.pom" sha256="c7a05fca618f7d49b91f6de851aa230d1f280f77016c46a7023a1d81d0b153cc"/>
+    </component>
+    <component group="org.assertj" module="assertj-core" version="3.24.2">
+      <artifact name="assertj-core-3.24.2.jar" sha256="8b55f06b208f654a67c84f5637203bf6cc865da522752d91f547e89e7f3338fa"/>
+      <artifact name="assertj-core-3.24.2.pom" sha256="708383f1f008dae783a5093291fab1222c8468dcc0e29066f8f09940a784d21e"/>
+    </component>
+    <component group="org.bstats" module="bstats-base" version="3.0.1">
+      <artifact name="bstats-base-3.0.1.jar" sha256="bf4e1b8d6064b743e29906e24613f135130d7227df53749ffbadd4c29aaf03e0"/>
+      <artifact name="bstats-base-3.0.1.pom" sha256="f13951eabb114756a259981cb585e10fdc0245e815743e38d055a1aad19141ea"/>
+    </component>
+    <component group="org.bstats" module="bstats-bukkit" version="3.0.1">
+      <artifact name="bstats-bukkit-3.0.1.jar" sha256="64477599c0710641e673bb58a4454d08405f283d1a7d2c97e160a81cd2528f73"/>
+      <artifact name="bstats-bukkit-3.0.1.pom" sha256="fbd3cb5d10e576d0b1e56797d3daf7dc785337554b809d7d7fb78b6b2b2ecdb0"/>
+    </component>
+    <component group="org.checkerframework" module="checker-qual" version="3.37.0">
+      <artifact name="checker-qual-3.37.0.jar" sha256="90b6248186b75f48abce26dd381cb8c6a5847358acfbd941d9d6c05b2704099b"/>
+      <artifact name="checker-qual-3.37.0.pom" sha256="3a48522b21127274bd133c5c1da9aa505f136e8650c16be3939d0506e3db7fc3"/>
+    </component>
+    <component group="org.checkerframework" module="checker-qual" version="3.42.0">
+      <artifact name="checker-qual-3.42.0.jar" sha256="a31486bb153920e19c4b47bb2b9bc9087d783e93a4bc23962b98baa5fc2b33ff"/>
+      <artifact name="checker-qual-3.42.0.pom" sha256="856f16334816f5cde27f643de9cf47650d41173b24f70b80f4860bf2635bbb46"/>
+    </component>
+    <component group="org.checkerframework" module="checker-qual" version="3.43.0">
+      <artifact name="checker-qual-3.43.0.jar" sha256="f400879cef08c0610acade15ceecbaac4c9850d98b506f85c7ff963298ec2717"/>
+      <artifact name="checker-qual-3.43.0.pom" sha256="816fc99976e6e63228fba6254150e2ec542b1e505963cf1b56eff3d249245d90"/>
+    </component>
+    <component group="org.codehaus.plexus" module="plexus-interpolation" version="1.26">
+      <artifact name="plexus-interpolation-1.26.jar" sha256="37d76529cd49645e5190cb4b723f33e5478a493703666f53b316cc8f3e910552"/>
+      <artifact name="plexus-interpolation-1.26.pom" sha256="f7cd5b72cc522b9ada56fc19be19bf9ee6bb8accc657f9ff1bac2b136edd29be"/>
+    </component>
+    <component group="org.codehaus.plexus" module="plexus-utils" version="3.5.1">
+      <artifact name="plexus-utils-3.5.1.jar" sha256="f827ac02a4dc0f8d291558f370ba0cf18c85e564cfe23b852d69233db3cc51ba"/>
+      <artifact name="plexus-utils-3.5.1.pom" sha256="e0a6e76dc1d1db98f8e00e6a5964e3b169d80cf15e85a3769e186209d778f633"/>
+    </component>
+    <component group="org.eclipse.sisu" module="org.eclipse.sisu.inject" version="0.9.0.M2">
+      <artifact name="org.eclipse.sisu.inject-0.9.0.M2.jar" sha256="5872eb82ca92878896adc557bde593742ed8c579d5325c58a338d0706f9b5ef2"/>
+      <artifact name="org.eclipse.sisu.inject-0.9.0.M2.pom" sha256="d9aa6cf9a6bf45c4f41eb0574b7659e28dcd1d12824c87123d57828621309a14"/>
+    </component>
+    <component group="org.jacoco" module="org.jacoco.agent" version="0.8.12">
+      <artifact name="org.jacoco.agent-0.8.12.jar" sha256="1e7bbd828bd634c3bcca9ec1e3c89f7f363c77d5145c4bcfa6f14aaf8ce0fd80"/>
+      <artifact name="org.jacoco.agent-0.8.12.pom" sha256="8a2578f78ec3aaca370c75263dbffad3f4081c4adcd46e34592f0fd95882cf4d"/>
+    </component>
+    <component group="org.jacoco" module="org.jacoco.ant" version="0.8.12">
+      <artifact name="org.jacoco.ant-0.8.12.jar" sha256="711ca9ffbd99ba078c480a59418c6a2fe5bf2b29dce5cdeb4764f129bdf7a864"/>
+      <artifact name="org.jacoco.ant-0.8.12.pom" sha256="df1094824ed618a6a9f5e761bd30f860315e1bf12548f907e235ca754f8ad7bb"/>
+    </component>
+    <component group="org.jacoco" module="org.jacoco.core" version="0.8.12">
+      <artifact name="org.jacoco.core-0.8.12.jar" sha256="eac0f377bb2385a6409b6fdbb206e14c53812c74e3cb5f5a3fc16832bcdea159"/>
+      <artifact name="org.jacoco.core-0.8.12.pom" sha256="3e15e9c599794f9e8a29860cfa6adac17f7763f59cba5f7a6ea1fd36af40611d"/>
+    </component>
+    <component group="org.jacoco" module="org.jacoco.report" version="0.8.12">
+      <artifact name="org.jacoco.report-0.8.12.jar" sha256="091bb1a32ce98abbbf336f377464369ef452f32b08e662628c5abfb67e61a9ec"/>
+      <artifact name="org.jacoco.report-0.8.12.pom" sha256="788e9b6b8ce8ecc842de606bf9e55b48bbf81b628384d5e2b2d19f70a2218f5d"/>
+    </component>
+    <component group="org.java-websocket" module="Java-WebSocket" version="1.5.4">
+      <artifact name="Java-WebSocket-1.5.4.jar" sha256="732e2bbf82e4054c44d91e0341dd20e19c72708416fd614afb634f6a82b9cc72"/>
+      <artifact name="Java-WebSocket-1.5.4.pom" sha256="aef3fc0faa170adf5333cf55801933138de0dfa126e90bf523034f9261589518"/>
+    </component>
+    <component group="org.jcraft" module="jorbis" version="0.0.17">
+      <artifact name="jorbis-0.0.17.jar" sha256="7b3e426594744d6cc4e352a142bffe243797723408e4e22f7544e06deaa1bd4b"/>
+      <artifact name="jorbis-0.0.17.pom" sha256="38c6538c963a405d3709eccf8f124d8021b34fa7f1dfed0384358a02c8d4e785"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib-common" version="1.9.10">
+      <artifact name="kotlin-stdlib-common-1.9.10.jar" sha256="d1d119794d610d1147d51d48a52037acaa85d38ece49f0cfbb787075b0e43cb7"/>
+      <artifact name="kotlin-stdlib-common-1.9.10.pom" sha256="f5095538831b44c21e369f552ccabf5a91852097763805d021078d381069003a"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib-jdk7" version="1.8.21">
+      <artifact name="kotlin-stdlib-jdk7-1.8.21.jar" sha256="00e7142835c94bb5865e28678f13d2163ad5a306372568616f46858e9afad16b"/>
+      <artifact name="kotlin-stdlib-jdk7-1.8.21.pom" sha256="c09f32131c09b00e9675d422358540d68f98c9de0b683268a6a7ebc98220585f"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib-jdk7" version="1.9.10">
+      <artifact name="kotlin-stdlib-jdk7-1.9.10.jar" sha256="dc31267396eda9fac596466c7f5d326fb23703f55a42168f6211c38271cc667b"/>
+      <artifact name="kotlin-stdlib-jdk7-1.9.10.pom" sha256="2a1d9e652d5823dab44d5558d69fc9d1d583e2d5eea17041a4d938ec08a56ac8"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib-jdk8" version="1.8.21">
+      <artifact name="kotlin-stdlib-jdk8-1.8.21.jar" sha256="f4ba26930c1f3f690ab0929a67c33896b7e6db62c7c3f0e9441e766b8659a402"/>
+      <artifact name="kotlin-stdlib-jdk8-1.8.21.pom" sha256="9b45121f9b62e55dbb0bab35c157637e38f16080637a735c526c11aa24874dad"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib-jdk8" version="1.9.10">
+      <artifact name="kotlin-stdlib-jdk8-1.9.10.jar" sha256="ecf4281983c5e1c65c16c0f72ba9f145cc82b2e528d0b72614d0b75202a330ac"/>
+      <artifact name="kotlin-stdlib-jdk8-1.9.10.pom" sha256="b177238a1d005ee7b71310e0c7d5f1307f7097ba0e0b6d1f478ad22f7b24529d"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib" version="1.9.10">
+      <artifact name="kotlin-stdlib-1.9.10.jar" sha256="949d630603da1defa5986f586448d426bf22adc5b79c8a910a55ca4a2b14babb"/>
+      <artifact name="kotlin-stdlib-1.9.10.pom" sha256="828831fa09ad1ce0aa38456cea664206135ddad743381e6e3eb88b7013e6815f"/>
+    </component>
+    <component group="org.jetbrains.kotlin" module="kotlin-stdlib" version="2.2.21">
+      <artifact name="kotlin-stdlib-2.2.21.jar" sha256="2b59b99754726f345177a558f14b6c8a5857fa0e7dfd5d93745096501fb995c1"/>
+      <artifact name="kotlin-stdlib-2.2.21.pom" sha256="5fa909448fe7d44f0d7a5a826b6a82b7f42a0f635f46df075fe4e5a8097c4c06"/>
+    </component>
+    <component group="org.jetbrains" module="annotations" version="13.0">
+      <artifact name="annotations-13.0.jar" sha256="49415d978804383b423d161e77928bdfbac62dd81615b6a8e2a5301a602fccff"/>
+      <artifact name="annotations-13.0.pom" sha256="310ec32befa6f25b752061740700ca9c4de9af91718d87b6ca7b0ca54e3327a7"/>
+    </component>
+    <component group="org.jetbrains" module="annotations" version="20.1.0">
+      <artifact name="annotations-20.1.0.jar" sha256="4b648f82211c97803e643d9b40b553bb2d42015fb45fc258ef41df0136cb98ab"/>
+      <artifact name="annotations-20.1.0.pom" sha256="3874aa1efa79301aeea9bf72900076ff65fffe7055f6ce044159363ed42ef632"/>
+    </component>
+    <component group="org.jetbrains" module="annotations" version="24.1.0">
+      <artifact name="annotations-24.1.0.jar" sha256="0b916ef2643d28e3d461bc7b6d58ddfda95093a53e66420c01a07e4c431e5583"/>
+      <artifact name="annotations-24.1.0.pom" sha256="a0c97bc2978de88188a6a440c286de4ea54ff1995ed4a7b2b316178aa28a5816"/>
+    </component>
+    <component group="org.jetbrains" module="annotations" version="26.0.2">
+      <artifact name="annotations-26.0.2.jar" sha256="0bb744ff8a600340705000fc933e63a5bcf16bb8bf690509c893bbe8e1635d31"/>
+      <artifact name="annotations-26.0.2.pom" sha256="2b7c17faec58f1a45a72152ab6e82344d7b13998f4895f7fc98d4c7e8cf087cb"/>
+    </component>
+    <component group="org.jetbrains" module="annotations" version="26.0.2-1">
+      <artifact name="annotations-26.0.2-1.jar" sha256="3f584f87da2061c78b80ca3a12f473fe7e5c916cc002388106f9df5e9baea654"/>
+      <artifact name="annotations-26.0.2-1.pom" sha256="c3ac81ccf7e2de3abc5198d897ef52e5a28e4ace8c071e3c336c2d53f4ab2ef3"/>
+    </component>
+    <component group="org.jline" module="jline-reader" version="3.20.0">
+      <artifact name="jline-reader-3.20.0.jar" sha256="91a013ae9b07e60dcc6ec005ad1b8f1f243e206e5516d750e377a37442401b75"/>
+      <artifact name="jline-reader-3.20.0.pom" sha256="2a27a1788cab7e269e178eacba4dea127130da5f035ea12a8a3aa5b175a671ac"/>
+    </component>
+    <component group="org.jline" module="jline-terminal" version="3.20.0">
+      <artifact name="jline-terminal-3.20.0.jar" sha256="db1b3c8ca190ded383a06b3d2261a5b4895ac91ac7847a6e73c4738bc9bdedd9"/>
+      <artifact name="jline-terminal-3.20.0.pom" sha256="6457855943cab9f32679dc9898fd0ba370a8f429922f456c172d1a8855619f3d"/>
+    </component>
+    <component group="org.jodd" module="jodd-lagarto" version="6.0.6">
+      <artifact name="jodd-lagarto-6.0.6.jar" sha256="a162fb23612660610ee73dd2ca12c037a4e9801928bd4dd7b36fa293de52d57c"/>
+      <artifact name="jodd-lagarto-6.0.6.pom" sha256="6ba36ce821053a19df44615d5661311606c190c339a57e0cce6db39d277ef71e"/>
+    </component>
+    <component group="org.jodd" module="jodd-util" version="6.2.2">
+      <artifact name="jodd-util-6.2.2.jar" sha256="da1c6acdc383294823af40e2caeb917b5b49113306e29a250914c7632f77ed31"/>
+      <artifact name="jodd-util-6.2.2.pom" sha256="42ef44a20baeb97cb73b399fa5d3aed47afb23d74b0f815a6937c5d3ecb40525"/>
+    </component>
+    <component group="org.joml" module="joml" version="1.10.5">
+      <artifact name="joml-1.10.5.jar" sha256="adeb29cc68d0ae57e3fd3c3f7f9f77218c0435b27fccb02e1b40b9772ab356b0"/>
+      <artifact name="joml-1.10.5.pom" sha256="d0cad2079a7243935326a261d9e17d1856c46b6ec66e88b3e2a3ec25795108a4"/>
+    </component>
+    <component group="org.joml" module="joml" version="1.10.8">
+      <artifact name="joml-1.10.8.jar" sha256="8b02b9857e7297890403ab3ca07a52e68f676152f08909fd35f0dc19b573053c"/>
+      <artifact name="joml-1.10.8.pom" sha256="b3754e96670ec2936f7bc25db95bdd98a1ec956986a626452727cf7828079558"/>
+    </component>
+    <component group="org.json" module="json" version="20231013">
+      <artifact name="json-20231013.jar" sha256="df8ca8a527e1c97c3c7c577d3fedac0decb77acd2042f2a43a6826b36cd97f72"/>
+      <artifact name="json-20231013.pom" sha256="6e1825c1053d28b5b2a977e6b7c630773fa832a7b3273cf271ca8e1a71be1078"/>
+    </component>
+    <component group="org.json" module="json" version="20240303">
+      <artifact name="json-20240303.jar" sha256="457fd46046fa57ce42d8dd4dfe77cfcb216d26f0a7e10f095aa5efc0d78f4bea"/>
+      <artifact name="json-20240303.pom" sha256="f97aacc6571e6140696c115d1fb6400b4277a5a18fbc6517853cbe5b0bbd670e"/>
+    </component>
+    <component group="org.jspecify" module="jspecify" version="1.0.0">
+      <artifact name="jspecify-1.0.0.jar" sha256="611b14d8d0410063ecadcfb348bca2abe63fbe5cff2279c0b7e72adb1c34d0ee"/>
+      <artifact name="jspecify-1.0.0.pom" sha256="3d2b9fd67b61dea76782ebb77ec8b1728eb964511b168058d9dfe4e11d9a3f88"/>
+    </component>
+    <component group="org.junit.jupiter" module="junit-jupiter-api" version="5.10.2">
+      <artifact name="junit-jupiter-api-5.10.2.jar" sha256="14a05fd84f3852921d6a406671f581594cc48731ca1213bf540af3a037640cd9"/>
+      <artifact name="junit-jupiter-api-5.10.2.pom" sha256="3017902321a98a6de701046da6aace2ff106af7f1d2b4e9b75870cdfcb426ba2"/>
+    </component>
+    <component group="org.junit.jupiter" module="junit-jupiter-engine" version="5.10.2">
+      <artifact name="junit-jupiter-engine-5.10.2.jar" sha256="45fb14750335b8ab722a109639401815c1d2135c0cd31a58a296162dee4c8cc1"/>
+      <artifact name="junit-jupiter-engine-5.10.2.pom" sha256="c00667c189f6b3da2879eee0bd31e2ff80adc741229d2e2cdbd389eb02547328"/>
+    </component>
+    <component group="org.junit.jupiter" module="junit-jupiter-params" version="5.10.2">
+      <artifact name="junit-jupiter-params-5.10.2.jar" sha256="afae00660f4d9c1f57b75225994ffe9e7ad336bd2db6a5cea60c6294d4621757"/>
+      <artifact name="junit-jupiter-params-5.10.2.pom" sha256="20604cb6393fe9ef051b35523fa59703b0b653b76fe27c76015467744026f079"/>
+    </component>
+    <component group="org.junit.jupiter" module="junit-jupiter" version="5.10.2">
+      <artifact name="junit-jupiter-5.10.2.jar" sha256="b0f978b303684ee5007f2d140557780d95aabf440df708a6f57bf26f12eaabb3"/>
+      <artifact name="junit-jupiter-5.10.2.pom" sha256="c50815762b9c285ec902f84e3106b8b74a0c06f9100b82f332a60d40090deaed"/>
+    </component>
+    <component group="org.junit.platform" module="junit-platform-commons" version="1.10.2">
+      <artifact name="junit-platform-commons-1.10.2.jar" sha256="4cc0c9b3bd28bcbf58a3cda6cffefe21b543711aa7253ffa983292abcacbc878"/>
+      <artifact name="junit-platform-commons-1.10.2.pom" sha256="b2ddeba03e3d7a0d7a33bff3a0edbd54a08c56e15bda83a528ef599bffa2da91"/>
+    </component>
+    <component group="org.junit.platform" module="junit-platform-engine" version="1.10.2">
+      <artifact name="junit-platform-engine-1.10.2.jar" sha256="6f823503db9327b49185b0b6764545dd42ffa8a05202b71009d0f0d325976f5a"/>
+      <artifact name="junit-platform-engine-1.10.2.pom" sha256="3eeecc28ec0aaa059698b4017ada5ab032441509de46b7d330132943d30e3f72"/>
+    </component>
+    <component group="org.junit.platform" module="junit-platform-launcher" version="1.10.2">
+      <artifact name="junit-platform-launcher-1.10.2.jar" sha256="b5336a51073b55d533a59b58f2e55e3bbe22348b9114a4f1e4aa08d6c3691279"/>
+      <artifact name="junit-platform-launcher-1.10.2.pom" sha256="6f8233d148f6501d7cabdab06f951787ddb8b586c08917cb0546ae794e6d9cdd"/>
+    </component>
+    <component group="org.junit" module="junit-bom" version="5.10.2">
+      <artifact name="junit-bom-5.10.2.jar" sha256="9c361475ebbc7b72a842a90a1fe214e732c1b7320e2b4e03dc4f415d11017b8f"/>
+      <artifact name="junit-bom-5.10.2.pom" sha256="4a67f1cdf35db1401d8a3e6d2e1ffe46b97f777063b8f1d0373b285c9ac5a94f"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-freetype" version="3.3.3">
+      <artifact name="lwjgl-freetype-3.3.3.jar" sha256="d3a46f5af0e85ebdb8cb81114f1e82a1f8c8b27b1824e4119e9b898fd3a92fbb"/>
+      <artifact name="lwjgl-freetype-3.3.3.pom" sha256="eabef7ea71d248b5f6b202290d41f4ddaf9e0c156cb931d41891889bc99e7244"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-glfw" version="3.3.3">
+      <artifact name="lwjgl-glfw-3.3.3.jar" sha256="e909c1fe577d43b9b400fa74e8870ab4ee2a4ba1cbc7cc2c803fc8ff1565c520"/>
+      <artifact name="lwjgl-glfw-3.3.3.pom" sha256="8c65f1601434a33931cf6a7d7253089dec6113f983d017db4d2630d97627ed9c"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-jemalloc" version="3.3.3">
+      <artifact name="lwjgl-jemalloc-3.3.3.jar" sha256="a534bd04ce0583fda2ea8ca252a7b93b7bbf779500f675fe1116be2b07f71f21"/>
+      <artifact name="lwjgl-jemalloc-3.3.3.pom" sha256="c71878619809680fdcbd9724729ab1acebd8b0202b1627b0bb1f8607ade57ac6"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-openal" version="3.3.3">
+      <artifact name="lwjgl-openal-3.3.3.jar" sha256="1e28329f8409d95a46db816cabadc41eb3619351071fd35a2ab61f50161243fc"/>
+      <artifact name="lwjgl-openal-3.3.3.pom" sha256="1fb0e3de4c819fbfa5e5bf72b96e25ea092c13d57fa2e398dbcbad88213f3c6c"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-opengl" version="3.3.3">
+      <artifact name="lwjgl-opengl-3.3.3.jar" sha256="8f52d3ca529c3c9741e7b45471933dfc9fbf44d7b62ae6142f796a335d791d88"/>
+      <artifact name="lwjgl-opengl-3.3.3.pom" sha256="6dec1aefbaccdc3de9f4d4a4be8c5a33272de742783c3120b9d58f0bae22e5f4"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-stb" version="3.3.3">
+      <artifact name="lwjgl-stb-3.3.3.jar" sha256="3d568bd2f88a24900363ca0877ad3bcb2df913ba5c3ce652a53a321c9fb956ba"/>
+      <artifact name="lwjgl-stb-3.3.3.pom" sha256="17e7319d2848cc0eef8059ac982485ec30c81265f287ce9a595fe647bcda30fb"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl-tinyfd" version="3.3.3">
+      <artifact name="lwjgl-tinyfd-3.3.3.jar" sha256="45750707b3022c34053cc7875d5d13411ce63a077729db5038f993b57603c642"/>
+      <artifact name="lwjgl-tinyfd-3.3.3.pom" sha256="c58589f8303494e44184777750fe0e50e365cbaa4f8c84a228101c4d1dc22974"/>
+    </component>
+    <component group="org.lwjgl" module="lwjgl" version="3.3.3">
+      <artifact name="lwjgl-3.3.3.jar" sha256="fe61fb89369cad7862cd8aa7cec252d31e2d406acd0c17b3b6a40936dd0d8266"/>
+      <artifact name="lwjgl-3.3.3.pom" sha256="2c76dc3effdb7af068ab4faf4051160c38f45cf4486a52a962a4264b97167b52"/>
+    </component>
+    <component group="org.lz4" module="lz4-java" version="1.8.0">
+      <artifact name="lz4-java-1.8.0.jar" sha256="2b8a1911400ff7f9954d2627479ab2100bc3ae12c008d0bad4e6053c4102f173"/>
+      <artifact name="lz4-java-1.8.0.pom" sha256="2381b7b5372f0c3bebaebf69d27f1ce8a51eaa75cb93d907e2a49df0fa3702d8"/>
+    </component>
+    <component group="org.mockito" module="mockito-core" version="5.10.0">
+      <artifact name="mockito-core-5.10.0.jar" sha256="f888c659ae8073c3f6b7ed3c8c73e2d37f417b935ad12a16bfce589822713c2d"/>
+      <artifact name="mockito-core-5.10.0.pom" sha256="c67d5edefbbfacbfa4a87c48187fd59de38a0089c103eba534a59233e4f64efe"/>
+    </component>
+    <component group="org.mockito" module="mockito-core" version="5.11.0">
+      <artifact name="mockito-core-5.11.0.jar" sha256="1b93a3c839f37817617150167e97d634da46df1e15ebfb744cd03ddd791db5d5"/>
+      <artifact name="mockito-core-5.11.0.pom" sha256="65db0089f27d414f5525650b966225b56b94c6100a9d3031a15a5a5090325ab3"/>
+    </component>
+    <component group="org.mockito" module="mockito-junit-jupiter" version="5.10.0">
+      <artifact name="mockito-junit-jupiter-5.10.0.jar" sha256="4b335a6a72bb8d98707472aef008ef0ff1a3458df4def8119fa98f34dec73904"/>
+      <artifact name="mockito-junit-jupiter-5.10.0.pom" sha256="6a6dbc1e9f904628ab06fd2387759df7209efe3ce1213829aa5c4b8e1b06b209"/>
+    </component>
+    <component group="org.objenesis" module="objenesis" version="3.3">
+      <artifact name="objenesis-3.3.jar" sha256="f18edb0aa97817567e9b21337ddef5d2fd6fb15b00d1afd4bf63b266bbd524a5"/>
+      <artifact name="objenesis-3.3.pom" sha256="875575be951d8e6af1b8cf2d30bd792cc71d24318def82a9e0c23c13056d2c08"/>
+    </component>
+    <component group="org.openjdk.jmh" module="jmh-core" version="1.37">
+      <artifact name="jmh-core-1.37.jar" sha256="963d4d618cf2ec95b07a5b633afbe1d43c197c63431607faeb00f246ce5a474b"/>
+      <artifact name="jmh-core-1.37.pom" sha256="c3dbd9e7a06e2cf8046031bf8f90d92a1c58e215fc856db66a197aaa0380acb6"/>
+    </component>
+    <component group="org.openjdk.jmh" module="jmh-generator-annprocess" version="1.37">
+      <artifact name="jmh-generator-annprocess-1.37.jar" sha256="448492dd14975c411c2fc273f80df89177f5f46e76c022930f6c67dec3344fb1"/>
+      <artifact name="jmh-generator-annprocess-1.37.pom" sha256="cd2f73b53118669bdcca2e5c55434d0a1b014ff4430557baec4565cbd44eafdd"/>
+    </component>
+    <component group="org.opentest4j" module="opentest4j" version="1.3.0">
+      <artifact name="opentest4j-1.3.0.jar" sha256="7701c69bf433bf9fb132cb5e69b17f377ac3181e4c8979b5d3710a8864d947ba"/>
+      <artifact name="opentest4j-1.3.0.pom" sha256="c81fbb1f617cbe96f5034a82e4fdfc1f9ca19a4670fed4faea45f801b7abe5f6"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-analysis" version="9.6">
+      <artifact name="asm-analysis-9.6.jar" sha256="7f37bdc552c99e826ae14ea9d24eb5132a430fff179b07fae5fe0f4a0ce951a1"/>
+      <artifact name="asm-analysis-9.6.pom" sha256="e3cbdae63a9aa64294d8e45393640092fa5c8eb785e2671261a75ef4a898a631"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-analysis" version="9.7.1">
+      <artifact name="asm-analysis-9.7.1.jar" sha256="ea9d55a6466c7078b2a14af25714b0033a89f83209fc92d77ca4473a0c8b2e16"/>
+      <artifact name="asm-analysis-9.7.1.pom" sha256="6e7f39775a9bdbe59baeadfbcd891e3448dd540a0f6405e5f9b9fbfc5466ab92"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-commons" version="9.6">
+      <artifact name="asm-commons-9.6.jar" sha256="74d260fc03c8b6a15f1f2aa1b9d69d8d29e793de37444e2ed2251489c1baa78d"/>
+      <artifact name="asm-commons-9.6.pom" sha256="b3e0f76c8a5f5804f9274371c7989a7580df7760800cc91e6aff5313b0101db3"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-commons" version="9.7">
+      <artifact name="asm-commons-9.7.jar" sha256="c53bd3ebef7e58f7d8dfb8214b839ed3951827eace3899f9cb332cd149e1fb62"/>
+      <artifact name="asm-commons-9.7.pom" sha256="3302ba45f359bc7e9a70a97f247fa3916ba8580a36abfe4cc53afe1752db90c7"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-commons" version="9.7.1">
+      <artifact name="asm-commons-9.7.1.jar" sha256="4dd4d07ad7bed173e30849a9f14e108c1ecb29485616d2f1c25dcad246c337be"/>
+      <artifact name="asm-commons-9.7.1.pom" sha256="5141f41bae49c95caf9216de462e85a9df19414fc64b477ab24817ba0b6f53de"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-tree" version="9.6">
+      <artifact name="asm-tree-9.6.jar" sha256="b7199c7382f3671007585a02017cb8d69bf05d41fc5f7eb5bbbcae2e262296fe"/>
+      <artifact name="asm-tree-9.6.pom" sha256="35e168eef8dd174a63e37325ade10a120f8243f1e527694cf4891bda9881f174"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-tree" version="9.7">
+      <artifact name="asm-tree-9.7.jar" sha256="c199d3ec7f663c7fad5205929f21d985dcdee0c8081de091e477590a39ca4423"/>
+      <artifact name="asm-tree-9.7.pom" sha256="54f037fd7647b0d1ea645c5c7ccd91b17816816de88ffa7df320b01ab8d7e8f4"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-tree" version="9.7.1">
+      <artifact name="asm-tree-9.7.1.jar" sha256="4ef3e195de616f0eb88641627df6631725c6cc4d30af7dd978cb129f275f01b3"/>
+      <artifact name="asm-tree-9.7.1.pom" sha256="a5148c5f340ad502548e5df2dd7ac18402bcc707cd45342817710ca2aa253f8f"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-util" version="9.6">
+      <artifact name="asm-util-9.6.jar" sha256="a602cc22a853b7a37c8282cb23c88371cf940e35b97a25acd92ece8f17544737"/>
+      <artifact name="asm-util-9.6.pom" sha256="292dc700d205fbb8c89265ad4b3af6c544f5f74e521ba4f1cc0de673e23be1de"/>
+    </component>
+    <component group="org.ow2.asm" module="asm-util" version="9.7.1">
+      <artifact name="asm-util-9.7.1.jar" sha256="47649c253351fcaab64548d8169db3ed7c46b24c40df322518ddc1fc6fd229c1"/>
+      <artifact name="asm-util-9.7.1.pom" sha256="082fd89d4919637022ea019be8bfdf099b8b2dc69ac5cd2435382395a8e34dda"/>
+    </component>
+    <component group="org.ow2.asm" module="asm" version="9.6">
+      <artifact name="asm-9.6.jar" sha256="4b743fdcd93bcc02bc375765ca5c1368c3f46e35bf69beba0e044e423f1ffdeb"/>
+      <artifact name="asm-9.6.pom" sha256="1831b783768d3185a4bc160de15c4404c75a521f7e6207e783fec6be7771a125"/>
+    </component>
+    <component group="org.ow2.asm" module="asm" version="9.7">
+      <artifact name="asm-9.7.jar" sha256="5f82c5fd5293dbae089c75b9ff61233f0206ed77cdf3053cde85a34818580230"/>
+      <artifact name="asm-9.7.pom" sha256="bfc78ccc232b045ac2946805c6319812c824be9d34b91e6eb850555a21d3f68c"/>
+    </component>
+    <component group="org.ow2.asm" module="asm" version="9.7.1">
+      <artifact name="asm-9.7.1.jar" sha256="8a240d14d19267f8636fec307d7026854d56d20c8bfd7ffcec9c6e79a33d2d77"/>
+      <artifact name="asm-9.7.1.pom" sha256="20bb08d5fbff5529608203d803b69aceb3811da7cbef3b729e46ef98a2ddb9ca"/>
+    </component>
+    <component group="org.scala-lang.modules" module="scala-collection-compat_2.13" version="2.11.0">
+      <artifact name="scala-collection-compat_2.13-2.11.0.jar" sha256="e8f072892dad22a7c346965e1e0ac1ea21d029cc79386f8880656fd7246c8ea6"/>
+      <artifact name="scala-collection-compat_2.13-2.11.0.pom" sha256="485b49ba27570643cfc072744a02b3c011f31ce40c141aeaa2453c46fc118e74"/>
+    </component>
+    <component group="org.scala-lang.modules" module="scala-java8-compat_2.13" version="1.0.0">
+      <artifact name="scala-java8-compat_2.13-1.0.0.jar" sha256="d1e16774e3cba8cd22967a3a4b3e835e2029948f77ca5d1eaee220722dae57a4"/>
+      <artifact name="scala-java8-compat_2.13-1.0.0.pom" sha256="49b0ec0fbba2787f361df1e7c20a03831bb78a660528849a881e83e2f8088289"/>
+    </component>
+    <component group="org.scala-lang.modules" module="scala-parser-combinators_2.13" version="2.3.0">
+      <artifact name="scala-parser-combinators_2.13-2.3.0.jar" sha256="186fb33a958239e4b2e3b4b8d8c264f5e8ce025bea4b4bf3020cfe922d653564"/>
+      <artifact name="scala-parser-combinators_2.13-2.3.0.pom" sha256="c130acf8b7a2c7cd4133b341ecf3ea1a87a891055596b0290f79b287a76d2f09"/>
+    </component>
+    <component group="org.scala-lang" module="scala-library" version="2.13.12">
+      <artifact name="scala-library-2.13.12.jar" sha256="71c2aca29094eb13e106f6dbca948b946504a7c48041038e14a6ca55a8769466"/>
+      <artifact name="scala-library-2.13.12.pom" sha256="9dc25e705c9eae5f4d05ee1d4eeb56b76321cd38363644a58a251470761b2dd6"/>
+    </component>
+    <component group="org.scala-lang" module="scala-reflect" version="2.13.10">
+      <artifact name="scala-reflect-2.13.10.jar" sha256="fe1c8305b2192da387758aadf23d1c839efe1b552db0838bb38d6d83a6d30c5e"/>
+      <artifact name="scala-reflect-2.13.10.pom" sha256="13e167f4c8e3f9407f8e27b7da72a9ebfe931f2252a5dbd1415e96d62d8b2fc7"/>
+    </component>
+    <component group="org.simpleflatmapper" module="lightning-csv" version="8.2.3">
+      <artifact name="lightning-csv-8.2.3.jar" sha256="9db31cc13df5981ef4cf898c95f4088ceff401f28d082a4cf116b3acd4894226"/>
+      <artifact name="lightning-csv-8.2.3.pom" sha256="02c2ffd76103dff175d95cff1507e0917fb48417979611948645796db3456d07"/>
+    </component>
+    <component group="org.simpleflatmapper" module="sfm-util" version="8.2.3">
+      <artifact name="sfm-util-8.2.3.jar" sha256="c8405f064f2cc57f13535f97a4189c9d56166ca69d6239149c6814468a3c0178"/>
+      <artifact name="sfm-util-8.2.3.pom" sha256="4fefee42a94a00bc705b9bcc605bd1eb71fccd7ba461f97e1588d84b938c3521"/>
+    </component>
+    <component group="org.slf4j" module="slf4j-api" version="2.0.17">
+      <artifact name="slf4j-api-2.0.17.jar" sha256="156a204298f1630fef0901ab5d18c2ecbf451866e54896437de3df06d512a8c9"/>
+      <artifact name="slf4j-api-2.0.17.pom" sha256="a3bbe3872c0d98f630db74a7f7fb29f07388894fd5b23b6342130c4300b4e454"/>
+    </component>
+    <component group="org.slf4j" module="slf4j-api" version="2.0.18">
+      <artifact name="slf4j-api-2.0.18.jar" sha256="0ef4bb3d2fbbdd96f8dd373ffea4b3e4c3d9e91a813618fcccd6712a84e7161a"/>
+      <artifact name="slf4j-api-2.0.18.pom" sha256="676680babad4eb40db8083a0b397b008fd7b07dbd3a3cacb8c96d54a6cef7208"/>
+    </component>
+    <component group="org.slf4j" module="slf4j-api" version="2.0.6">
+      <artifact name="slf4j-api-2.0.6.jar" sha256="cf6edd69c6356ea38188cc6e1ae953ac206992755164021f5d2c2f70233b6ff7"/>
+      <artifact name="slf4j-api-2.0.6.pom" sha256="f265e3d12f62ed5c73e3ea4d1089d8680ff3c253a9b844f7d5db4fd01fcd5299"/>
+    </component>
+    <component group="org.slf4j" module="slf4j-api" version="2.0.9">
+      <artifact name="slf4j-api-2.0.9.jar" sha256="a4d71e56cdbc582f0bfb61ab9f16199998b393a8ba96fa47fb8671855f5fb22d"/>
+      <artifact name="slf4j-api-2.0.9.pom" sha256="164a4ff6541b1f610dc6b2785b572d40fa5e23ac3a5b129bdaed389984469b4a"/>
+    </component>
+    <component group="org.spongepowered" module="configurate-core" version="4.1.2">
+      <artifact name="configurate-core-4.1.2.jar" sha256="a8cfa8db87547824ba94485ee20bf7469d36afd09fdbc12c031000b292284d58"/>
+      <artifact name="configurate-core-4.1.2.pom" sha256="f5b97ff2df75ef3d837733c8d7c5ef01965cc9a3167704ca178df437edcb381b"/>
+    </component>
+    <component group="org.spongepowered" module="configurate-gson" version="4.1.2">
+      <artifact name="configurate-gson-4.1.2.jar" sha256="7abbe0a57e5844888735fea4ab8e409179eee5e8acf80fdf51b1327a97979cae"/>
+      <artifact name="configurate-gson-4.1.2.pom" sha256="eb6167aaa0d343dd2ceee914c7f8426f622e1423db603ef12fbead8aef42c133"/>
+    </component>
+    <component group="org.spongepowered" module="configurate-hocon" version="4.1.2">
+      <artifact name="configurate-hocon-4.1.2.jar" sha256="81a591ccfb92aac5e4a68d8e8ac5814903967717f8082834ed5092235f5b8986"/>
+      <artifact name="configurate-hocon-4.1.2.pom" sha256="c4a9d3b1723b8823bde57b2a67a831147a08a62b884ba860b59217b82750e3bc"/>
+    </component>
+    <component group="org.spongepowered" module="configurate-yaml" version="4.1.2">
+      <artifact name="configurate-yaml-4.1.2.jar" sha256="860c2c12538ccc3a4faf9b9d3e30853aa63e63d5d401c6e03633fad9dd042273"/>
+      <artifact name="configurate-yaml-4.1.2.pom" sha256="ac64b1b9b7b5449ea74fa4040cfc1a88444202c82fe9608a7628b933eb416218"/>
+    </component>
+    <component group="org.springframework" module="spring-beans" version="6.1.12">
+      <artifact name="spring-beans-6.1.12.jar" sha256="997579fee02d42d3d0688b45672967ace8b84e04f0f32061c9728afc7ab3d7b0"/>
+      <artifact name="spring-beans-6.1.12.pom" sha256="9990a6d2e4489bdc3091ff6a168ac0188b0c113393ef97be8925f369211a7018"/>
+    </component>
+    <component group="org.springframework" module="spring-core" version="6.1.12">
+      <artifact name="spring-core-6.1.12.jar" sha256="3487aacd940b3f982253dbe37a6fc420c3195993ce7a23c3757f99da6620f795"/>
+      <artifact name="spring-core-6.1.12.pom" sha256="3aad74b83f7728317892c10c3ec17e257b3c10367a4627f373e81c661ea711d2"/>
+    </component>
+    <component group="org.springframework" module="spring-expression" version="6.1.12">
+      <artifact name="spring-expression-6.1.12.jar" sha256="384c435a5d440c6a7ba7b9ee7323dae2a1b9beda268fa5f1153622a39c27b9c0"/>
+      <artifact name="spring-expression-6.1.12.pom" sha256="f80dc88ce883e2ad1ed9239831e3a43d9ffb7a630e7ef1686fa29a7a7e7fdc1b"/>
+    </component>
+    <component group="org.springframework" module="spring-jcl" version="6.1.12">
+      <artifact name="spring-jcl-6.1.12.jar" sha256="70dc6746de8dd0d8d91cd4612528a3b5503572c3e849701bf2131868c7212be7"/>
+      <artifact name="spring-jcl-6.1.12.pom" sha256="f0a8fcccc036582fc9f82ee772d0bd1029a71b1f9450bd91caadd39e1c1b6d9e"/>
+    </component>
+    <component group="org.unbescape" module="unbescape" version="1.1.6.RELEASE">
+      <artifact name="unbescape-1.1.6.RELEASE.jar" sha256="a8db89c75f8c8b28310b94540d223e9ad7c3448678071c2b8c7809b9596d6966"/>
+      <artifact name="unbescape-1.1.6.RELEASE.pom" sha256="607eb651495c288d6159f07792ec7ff7a5f62349ae900069a088f3ddb698fd4b"/>
+    </component>
+    <component group="org.vineflower" module="vineflower" version="1.9.3">
+      <artifact name="vineflower-1.9.3.jar" sha256="2f07fedb17245bd8fd1d54d065283708fe3a25fc50e85b752c0130c6c85903f3"/>
+      <artifact name="vineflower-1.9.3.pom" sha256="cb617ce839a5894d130184ca3a4dbb489da77f169b3b2dc079c5a512b496a26f"/>
+    </component>
+    <component group="org.yaml" module="snakeyaml" version="1.33">
+      <artifact name="snakeyaml-1.33.jar" sha256="40ac704f2d73784456841d37ad51cb90fbb3d3783078676b1e4b372cfa95e6c0"/>
+      <artifact name="snakeyaml-1.33.pom" sha256="acf7caf160fe44a0f3922b7790d37a432ffd430fbe6aac7fdd31569bc0eb6249"/>
+    </component>
+    <component group="org.yaml" module="snakeyaml" version="2.2">
+      <artifact name="snakeyaml-2.2.jar" sha256="f2c48e70365a503282d3bfb7b64335fc58e5bdd8faf63e039c1de4cd35ffc07d"/>
+      <artifact name="snakeyaml-2.2.pom" sha256="56c9e5c199d179b2f51b2ad4e7435d6f2d71c3b77a8f9f0de94495a322c22c3c"/>
+    </component>
+    <component group="org.yaml" module="snakeyaml" version="2.3">
+      <artifact name="snakeyaml-2.3.jar" sha256="1bbd0798e5bd1266909a609dbdd88e4f1fa17b2aef1daaf4d551019b632c1f40"/>
+      <artifact name="snakeyaml-2.3.pom" sha256="bffcf4d87cbc315c271d4eb94d6edfe95cb4c8330ab3be7e98efedf5056c1564"/>
+    </component>
+  </components>
+</verification-metadata>
