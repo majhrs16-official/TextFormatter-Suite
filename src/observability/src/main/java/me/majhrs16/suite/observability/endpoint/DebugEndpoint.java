@@ -33,10 +33,11 @@ import java.util.concurrent.TimeUnit;
  * - /debug/channels - channel information
  * - /debug/rules - iFlow rules (stub)
  * - /debug/sinks - sync sinks (stub)
+ * - /debug/simulate - simulates a message through the full pipeline (requires auth)
  *
  * <p>Security: binds to 127.0.0.1 only, requires X-Debug-Token header matching
- * the configured token. The /debug/simulate endpoint has been removed to prevent
- * remote message injection.</p>
+ * the configured token. The /debug/simulate endpoint processes messages through
+ * the actual dispatcher pipeline for load testing.</p>
  */
 public final class DebugEndpoint {
 
@@ -80,6 +81,9 @@ public final class DebugEndpoint {
         server.createContext("/debug/channels", new ChannelsHandler());
         server.createContext("/debug/rules", new RulesHandler());
         server.createContext("/debug/sinks", new SinksHandler());
+        
+        // Simulation endpoint - processes message through full pipeline
+        server.createContext("/debug/simulate", new SimulateHandler());
     }
 
     public synchronized void start() {
@@ -245,9 +249,123 @@ public final class DebugEndpoint {
         }
     }
 
+    /**
+     * Handler for /debug/simulate - processes a message through the full
+     * dispatcher pipeline (routing, formatting, translation, delivery).
+     * Used for load testing the complete message path.
+     */
+    private final class SimulateHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!checkAuth(exchange)) return;
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "Method not allowed", "text/plain");
+                return;
+            }
+
+            // Read JSON body
+            String requestBody;
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8))) {
+                requestBody = reader.lines().collect(java.util.stream.Collectors.joining("\n"));
+            }
+
+            // Parse JSON (simple parsing for load test)
+            Map<String, String> params = parseJsonBody(requestBody);
+            if (params.isEmpty()) {
+                sendResponse(exchange, 400, "Invalid JSON body", "text/plain");
+                return;
+            }
+
+            // Build message from parameters
+            String typeStr = params.getOrDefault("type", "CHAT");
+            String channelName = params.getOrDefault("channel", "chat.global");
+            String senderName = params.getOrDefault("sender", "LoadTestPlayer");
+            String content = params.getOrDefault("content", "Load test message");
+            String sourceLangStr = params.getOrDefault("sourceLang", "auto");
+            String targetLangStr = params.getOrDefault("targetLang", "en");
+            String directionStr = params.getOrDefault("direction", "OTHERS");
+
+            try {
+                // Resolve channel
+                var channel = channels.resolve(channelName);
+                
+                // Create sender actor
+                Actor sender = new Actor(
+                    UUID.randomUUID(),
+                    senderName,
+                    Actor.ActorKind.PLAYER,
+                    Language.fromCode(sourceLangStr).orElse(Language.AUTO),
+                    null
+                );
+
+                // Parse direction
+                Direction direction;
+                switch (directionStr.toUpperCase()) {
+                    case "INITIATOR" -> direction = Direction.initiator();
+                    case "OTHERS" -> direction = Direction.others();
+                    case "ALL" -> direction = Direction.all();
+                    case "CONSOLE" -> direction = Direction.console();
+                    default -> direction = Direction.others();
+                }
+
+                // Build message
+                Message message = Message.builder()
+                    .type(MessageType.valueOf(typeStr.toUpperCase()))
+                    .sender(sender)
+                    .direction(direction)
+                    .translate(true)
+                    .text(content)
+                    .channel(channelName)
+                    .build();
+
+                // Dispatch through full pipeline
+                var report = dispatcher.dispatch(message);
+
+                // Capture result
+                Map<String, Object> result = Map.of(
+                    "considered", report.considered(),
+                    "delivered", report.delivered(),
+                    "silenced", report.silenced(),
+                    "redirected", report.redirected(),
+                    "channelRedirected", getChannelRedirected(report),
+                    "message", content
+                );
+                lastSimulationResult.putAll(result);
+
+                String response = toJson(result);
+                sendResponse(exchange, 200, response, "application/json");
+
+            } catch (Exception e) {
+                logger.error("Simulation failed: " + e.getMessage(), e);
+                sendResponse(exchange, 500, "Simulation error: " + e.getMessage(), "text/plain");
+            }
+        }
+    }
+
     // ============================================================
     // Helpers
     // ============================================================
+
+    private Map<String, String> parseJsonBody(String body) {
+        Map<String, String> result = new java.util.HashMap<>();
+        if (body == null || body.isBlank()) return result;
+        
+        // Simple JSON parsing without Jackson
+        String cleaned = body.trim();
+        if (!cleaned.startsWith("{") || !cleaned.endsWith("}")) return result;
+        cleaned = cleaned.substring(1, cleaned.length() - 1);
+        
+        for (String pair : cleaned.split(",")) {
+            int colonIdx = pair.indexOf(':');
+            if (colonIdx > 0) {
+                String key = pair.substring(0, colonIdx).trim().replaceAll("^\"|\"$", "");
+                String value = pair.substring(colonIdx + 1).trim().replaceAll("^\"|\"$", "");
+                result.put(key, value);
+            }
+        }
+        return result;
+    }
 
     private Map<String, String> parseParams(HttpExchange exchange) throws IOException {
         Map<String, String> params = new java.util.HashMap<>();
