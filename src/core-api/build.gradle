@@ -33,6 +33,25 @@ test {
     }
 }
 
+// Reproducible JAR configuration
+tasks.withType(Jar).configureEach { jar ->
+    def buildTimestamp = project.version.endsWith('-SNAPSHOT') ? 0 : 1728000000000L
+    jar.manifest {
+        attributes(
+            'Implementation-Version': project.version,
+            'Implementation-Title': project.name,
+            'Implementation-Vendor': 'me.majhrs16',
+            'Build-Timestamp': buildTimestamp
+        )
+    }
+    jar.reproducibleFileOrder = true
+    // Use doLast on the task to set file timestamps after JAR creation
+    jar.doLast {
+        def jarFile = jar.archiveFile.get().asFile
+        jarFile.setLastModified(buildTimestamp)
+    }
+}
+
 publishing {
     publications {
         maven(MavenPublication) {

@@ -7,6 +7,32 @@ allprojects {
     apply plugin: 'java'
 }
 
+// Reproducible builds configuration
+tasks.withType(Jar).configureEach { jar ->
+    def buildTimestamp = project.version.endsWith('-SNAPSHOT') ? 0 : 1728000000000L // 2024-10-04T00:00:00Z
+    jar.manifest {
+        attributes(
+            'Implementation-Version': project.version,
+            'Implementation-Title': project.name,
+            'Implementation-Vendor': 'me.majhrs16',
+            'Build-Timestamp': buildTimestamp
+        )
+    }
+    jar.reproducibleFileOrder = true
+    jar.doLast {
+        def jarFile = jar.archiveFile.get().asFile
+        jarFile.setLastModified(buildTimestamp)
+    }
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
 // Dependency locking configuration
 dependencyLocking {
     lockAllConfigurations()
