@@ -8,8 +8,22 @@ allprojects {
 }
 
 // Reproducible builds configuration
+// For reproducible builds, timestamp must be deterministic:
+// - SNAPSHOT: epoch (0)
+// - Release: fixed timestamp from BUILD_TIMESTAMP env var (ms since epoch), or project property
 tasks.withType(Jar).configureEach { jar ->
-    def buildTimestamp = project.version.endsWith('-SNAPSHOT') ? 0 : 1728000000000L // 2024-10-04T00:00:00Z
+    def buildTimestamp
+    if (project.version.endsWith('-SNAPSHOT')) {
+        buildTimestamp = 0L
+    } else {
+        // Allow override via environment variable or project property for release builds
+        def envTs = System.getenv('BUILD_TIMESTAMP')
+        def propTs = project.hasProperty('buildTimestamp') ? project.property('buildTimestamp') : null
+        buildTimestamp = (envTs ?: propTs ?: '0') as long
+        if (buildTimestamp == 0) {
+            logger.warn("Release build without BUILD_TIMESTAMP env var or buildTimestamp property - using epoch (non-reproducible across builds)")
+        }
+    }
     jar.manifest {
         attributes(
             'Implementation-Version': project.version,
