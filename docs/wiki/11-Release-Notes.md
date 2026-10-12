@@ -11,7 +11,7 @@
 
 #### FASE 4: Platform Adapters
 - ✅ Spigot/Paper host (1.20.6+, compiles with Paper API 1.21.4)
-- ❌ Fabric host — **EXCLUDED** (42 compile errors: uses Spigot/Bukkit APIs instead of Fabric APIs; rewrite needed to `ServerCommandSource`, `FabricAudiences`, Fabric events, Brigadier)
+- ✅ Fabric host — **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerCommandSource, FabricAudiences, Fabric events, ServerMessageEvents, ServerPlayConnectionEvents, ServerTickEvents)
 - ✅ Module lifecycle management
 
 #### FASE 5: i18n & Localization
@@ -46,7 +46,7 @@
 
 #### FASE 10: Observability
 - ✅ Prometheus metrics endpoint (`/metrics`)
-- ✅ Debug endpoints (`/debug/dump`, `/debug/state`, `/debug/channels`, `/debug/rules`, `/debug/sinks`)
+- ✅ Debug endpoints (`/debug/dump`, `/debug/state`, `/debug/channels`, `/debug/rules`, `/debug/sinks`, `/debug/simulate`)
 - ✅ Health checks for sinks (JVM, threads)
 - ✅ Auth token, 127.0.0.1 binding, no CORS
 
@@ -142,7 +142,7 @@
 - ✅ 15 tests Translation cache/dedup en `TranslationServiceCacheTest.java`
 - ✅ 4 tests Module Manager HTTP repo en `LocalHttpRepositoryTest.java`
 - ✅ 19 tests extendidos GTranslate (edge cases, malformed, unicode, rate limit)
-- ✅ 15 tests extendidos LTranslate (error handling, unicode, rate limit)
+- ✅ 15 tests extendidos LTranslate (error handling, unicode, rate limit, missing fields)
 - ✅ Todos los módulos pasan tests (79 tasks successful)
 
 ### Web Editor — Rules Graph Editor (Nuevo en 2.1.0)
@@ -158,22 +158,43 @@
 - ✅ **Props panel dinámico**: renderizado específico por tipo de nodo
 
 ### Build & Dependency Management
-- ✅ **Gradle dependency locking**: 29 proyectos con `gradle.lockfile` (root + 28 subproyectos)
+- ✅ **Gradle dependency locking**: 30 proyectos con `gradle.lockfile` (root + 29 subproyectos)
 - ✅ **Task `checkLocks`**: auditoría de lockfiles faltantes
 - ✅ **Config schema centralization**: `ConfigSchemaGenerator` genera `paths.json` + `js/paths.js` + `js/model.js` desde `ConfigPath` enum
 - ✅ **generateSchema/verifySchema** tasks para validación
+- ✅ **Dependency Verification**: `verification-metadata.xml` con SHA256/SHA512 para 435 dependencias no-SNAPSHOT
 
 #### FASE 13 (2026-09-28): Clean Architecture + Release Pipeline + Dependency Verification
 - ✅ **Clean Architecture (Translator SPI)**: `host` sin dependencias compile-time a `gtranslate`/`ltranslate`; descubre proveedores via `ServiceLoader` (SPI `TranslatorProvider`) en runtime
 - ✅ **Release Pipeline**: GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`), `verification-metadata.xml` completo con SHA256/SHA512, semantic versioning config
-- ✅ **Dependency Verification**: 29 proyectos con `gradle.lockfile`, `verification-metadata.xml` con todos los checksums transitivos (incl. jackson-base-2.22.0, junit-bom-5.14.3, adventure-bom-4.13.1)
+- ✅ **Dependency Verification**: 30 proyectos con `gradle.lockfile`, `verification-metadata.xml` con todos los checksums transitivos
 - ✅ **fabric-host COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 
 #### FASE 16 (2026-10-05): AUDITORIA.md Hallazgos Resueltos — Production-Ready
 - ✅ **TXF-001..TXF-008**: In-flight translation leak, RejectedExecutionException fallback, DNS pinning TLS/SNI, SyncBus lifecycle, engine.parallel sequential, broadcast ACKs, VelocitySink AT_LEAST_ONCE
 - ✅ **B-01..B-06**: Double delivery, join/quit/death async, WebSocket bind/auth, TemplateRenderer İ, translation re-escape, WebSocket fixed-window rate limit
 - ✅ **M-01..M-11, V-01**: GTranslate all segments, in-flight dedup, MessageCodec validation, HttpTransport hardening, SSRF IPv6 ULA, InterruptedException, RateLimiter no RWLock, WebSocket port, MetricsEndpoint bind
-- ✅ **All CI checks pass**: build, test, checkLocks, javadoc, npm run check (29/29)
+
+#### FASE 17 (2026-10-12): TXF-AUD Auditoría Externa 2026-10-09 — 8 Hallazgos Resueltos
+- ✅ **TXF-AUD-001**: Orden topológico dependencias corregido (Kahn: dependencias antes que consumidores)
+- ✅ **TXF-AUD-002**: Fabric chat offload a executor async (evita bloqueo main thread 30s)
+- ✅ **TXF-AUD-003**: Spigot shadowJar fat-jar con módulos proyecto (auto-contenido)
+- ✅ **TXF-AUD-004**: TransactionLog recovery por último estado por operationId
+- ✅ **TXF-AUD-005**: ModuleLifecycleAdapter no-ops en lugar de UnsupportedOperationException
+- ✅ **TXF-AUD-006**: IPv6 SSRF binario (fc00::/7, fe80::/10, ::1/128, ff00::/8) + bracket URLs
+- ✅ **TXF-AUD-007**: Tests PackageInstaller con fixtures ZIP reales (SHA256, duplicados, force)
+- ✅ **TXF-AUD-008**: /debug/simulate endpoint para Gatling (procesa pipeline completo)
+
+#### S6 (2026-10-12): Dependency Verification Completa
+- ✅ 30 proyectos con `gradle.lockfile` (root + 29 subproyectos)
+- ✅ `verification-metadata.xml` con SHA256/SHA512 para 435 dependencias
+- ✅ Build pasa con `--dependency-verification=strict`
+
+### All CI Checks Pass
+```
+./gradlew build test checkLocks javadoc    ✅ BUILD SUCCESSFUL
+cd src/web-editor && npm run check        ✅ 29/29 passed
+```
 
 ---
 

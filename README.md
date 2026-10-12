@@ -359,4 +359,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-09 — Estado sincronizado con commit `26095c1` (docs sync post-auditoría externa). Todos los hallazgos de AUDITORIA.md (internos TXF-001..008, B/M/V; externos TXF-ZIP-001..006) resueltos. CI verde.*
+*Última actualización: 2026-10-12 — Estado sincronizado con commit `84bf9ee` (TXF-AUD + S6 completados). Todos los hallazgos de AUDITORIA.md (TXF-AUD-001..008, B/M/V; TXF-ZIP-001..006) resueltos. CI verde.*
