@@ -1,0 +1,45 @@
+/**
+ * iFlow VM Assembler - Two-pass assembler for .flowasm to .flow binary
+ */
+import { AssemblerOptions, AssemblerResult, ProgramImage } from './types';
+declare class Assembler {
+    private options;
+    private diagnostics;
+    private labels;
+    private instructions;
+    private symbols;
+    private capabilities;
+    private currentAddress;
+    private currentLine;
+    private currentFile;
+    private currentSection;
+    private constantPool;
+    constructor(options?: AssemblerOptions);
+    assemble(source: string, fileName?: string): AssemblerResult;
+    private reset;
+    private firstPass;
+    private secondPass;
+    private handleDirective;
+    private defineLabel;
+    private parseInstruction;
+    private tokenize;
+    private getOpcode;
+    private parseOperands;
+    private isNumber;
+    private parseNumber;
+    private calculateSize;
+    private emitOperands;
+    private getRegOperand;
+    private getImm8Operand;
+    private getImm16Operand;
+    private getVaddrOperand;
+    private getPackedRROperand;
+    private getBranchOffset;
+    private createResult;
+    private getEntryPointAddress;
+    private generateDebugInfo;
+    serializeProgramImage(image: ProgramImage): Uint8Array;
+    private addDiagnostic;
+}
+export { Assembler };
+//# sourceMappingURL=assembler.d.ts.map

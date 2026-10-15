@@ -2,9 +2,9 @@ package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.rule.Rule;
 
 import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Firewall contract of the iFlow module: routes a message for each recipient
@@ -30,11 +30,24 @@ public interface Router {
      */
     boolean hasPermission(Actor actor, String permission);
 
-    /** Replaces the active rule set (hot reload of {@code rules.yml}). */
-    void setRules(Collection<Rule> rules);
+    /**
+     * @throws UnsupportedOperationException always. iflow VM executes binary programs only.
+     * Use {@link me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine#setProgram(ProgramImage)} for hot-reload.
+     */
+    @Deprecated(forRemoval = true)
+    default void setRules(Collection<?> rules) {
+        throw new UnsupportedOperationException("iflow VM executes binary .flow programs only. " +
+            "Use VmPolicyEngine.setProgram(ProgramImage) for hot-reload.");
+    }
 
-    /** @return the active rule set in evaluation order. */
-    Collection<Rule> rules();
+    /**
+     * @return empty collection. iflow VM executes binary programs only.
+     * @throws UnsupportedOperationException always.
+     */
+    @Deprecated(forRemoval = true)
+    default Collection<?> rules() {
+        return Collections.emptyList();
+    }
 
     /**
      * Checks rate limit for a message emission (once per message, before fan-out).

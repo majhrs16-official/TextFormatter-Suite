@@ -1,0 +1,10 @@
+.origin 0x0000
+.entry main
+
+.section code
+
+main:
+    LI R0, 0x1234
+    HALT
+
+.end

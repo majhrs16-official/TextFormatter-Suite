@@ -4,112 +4,77 @@ Especificación técnica de referencia · Versión 1.0-draft · 13 de octubre de
 
 ## Dictamen técnico previo: viabilidad de la arquitectura
 
-La arquitectura es viable, pero no conviene implementarla literalmente como una computadora física reproducida en Java. La solución adecuada es una máquina virtual interpretada, con una ISA propia, memoria virtual protegida, servicios genéricos hacia el host y un modelo explícito de persistencia.
+La arquitectura es viable, pero no conviene implementarla literalmente como una computadora física reproducida en Java. La solución adecuada es una máquina virtual interpretada, con una ISA propia, memoria virtual protegida mediante paginación por software (SoftMMU), servicios genéricos hacia el host y un modelo explícito de persistencia.
 
 La principal dificultad no es ejecutar instrucciones aritméticas. Es conseguir que la VM sea simultáneamente expresiva, eficiente, segura, reutilizable y compatible con las semánticas actuales de iflow.
 
 El diseño debe resolver primero cinco problemas:
 
-1. Cómo representar direcciones y datos sin limitar innecesariamente la capacidad del procesador.
+1. Cómo representar direcciones y datos en un espacio plano de 64 KB sin limitar la expresividad.
 2. Cómo mantener el estado de una ejecución aislado sin perder la posibilidad de conservar estado deliberadamente entre mensajes.
 3. Cómo consultar objetos Java bajo demanda sin convertir cada consulta en una operación insegura ni cada acceso en una copia completa.
 4. Cómo ejecutar lógica arbitraria sin permitir que un bucle o una expresión regular bloquee el servidor.
-5. Cómo integrar los resultados de la VM con el router y el dispatcher sin duplicar responsabilidades.
+5. Cómo permitir persistencia cruzada entre mensajes sin crear canales de información no deseados.
 
-La propuesta siguiente resuelve estos problemas mediante decisiones concretas. Las decisiones que requieren mediciones o una definición más precisa de los contratos actuales de TextFormatter Suite se identifican expresamente como provisionales.
+La propuesta siguiente resuelve estos problemas mediante decisiones concretas.
 
 ## Auditoría inicial: contradicciones y correcciones necesarias
 
-1\. Una ISA de 16 bits no necesita limitar toda la memoria a 64 KiB.
+1\. Una ISA de 16 bits **sí puede** trabajar con 64 KiB de espacio plano lineal.
 
-Se propone conservar palabras y registros de 16 bits, pero utilizar regiones de memoria identificadas mediante handles y offsets de 16 bits. Esto permite trabajar con múltiples regiones sin reservar 4 GiB por instancia ni introducir un espacio de direcciones plano de 32 bits en todas las instrucciones.
+Se propone un espacio de direcciones plano de 16 bits ($0x0000$–$0xFFFF$, **64 KB totales**) con **paginación de 4 KB (16 páginas)** gestionada por un **SoftMMU** (Memory Management Unit por software). Esto elimina la complejidad de *handles*, regiones y offsets compuestos, mientras que la paginación proporciona aislamiento y protección por página (permisos R/W/X por página). No hay regiones, no hay handles, no hay búferes de entrada aislados.
 
 2\. Reutilizar la VM no debe equivaler a reutilizar accidentalmente un contexto.
 
-El programa compilado, el firmware y las bibliotecas pueden persistir. Los registros, la pila, el presupuesto y los buffers privados pertenecen a una ejecución. La persistencia de memoria o registros entre mensajes debe ser una capacidad explícita, aislada y desactivada por defecto.
+El programa compilado (`.flow`), el firmware y las bibliotecas pueden persistir. Los registros, la pila, el presupuesto y la tabla de páginas pertenecen a una ejecución. La persistencia de memoria o registros entre mensajes debe ser una capacidad explícita, aislada y desactivada por defecto.
 
 3\. Una instrucción genérica de acceso al host es preferible a una ISA específica del dominio.
 
-Se propone `HOST`, con un selector de operación y una convención de argumentos uniforme. Leer una propiedad nueva no requiere modificar la ISA, el decodificador ni el formato binario.
+La instrucción `HOST` es la única puerta al exterior. Todo lo que el programa necesita —leer/escribir propiedades, comprobar permisos, tomar decisiones de enrutamiento, leer/escribir estado persistente, resolver canales— se hace mediante `HOST` con un *service ID* de 16 bits. Las capacidades (strings) gating cada servicio.
 
-4\. El loopback no demuestra la integridad del procesador.
+4\. El presupuesto de *fuel* es obligatorio, no opcional.
 
-Conectar la salida a la entrada prueba, como máximo, una ruta de transferencia concreta. La decodificación, los límites de memoria, la semántica aritmética y el aislamiento necesitan pruebas independientes.
+Cada instrucción consume 1 unidad base + coste variable. Servicios `HOST` consumen coste base + coste por byte. Se lanza excepción `OUT_OF_FUEL` si se agota. Límite por defecto: 100 000 unidades/evaluación.
 
-5\. Los anillos de privilegio y las interrupciones físicas son abstracciones innecesarias.
+5\. La persistencia de memoria/registros entre ejecuciones es una *capability*, no un derecho.
 
-La VM necesita separación de autoridad, llamadas controladas al host y excepciones tipadas. No necesita replicar el hardware x86, un kernel completo ni un scheduler interno.
+El host puede conceder o denegar `memory.persist` y `registers.persist`. Sin ellas, cada ejecución empieza con memoria y registros a cero (salvo I/O buffers y página de código). Con ellas, se conserva el estado del *frame* o páginas marcadas.
 
-6\. La persistencia de registros entre mensajes tiene implicaciones de seguridad.
+6\. No hay bytecode SpEL ni compilación JIT en caliente. Los programas se entregan como binarios `.flow` pre-compilados.
 
-Puede habilitar lógica stateful avanzada, pero también crear canales de información entre jugadores y permitir que una ejecución altere el comportamiento de la siguiente. Debe tratarse como una capacidad autorizada, con ámbitos, límites, versionado y sincronización.
+La herramienta externa `iflow-compiler` (TypeScript/JS) ensambla `.flowasm` → `.flow` y calcula hashes. El runtime Java **solo carga y ejecuta**. No hay `VmProgramCompiler`, no hay `RuleExpressionEvaluator`, no hay `VmConfigLoader` de YAML.
+
+7\. **No hay búferes de entrada externos.** Al ser un modelo de memoria completamente plano, el host no "inyecta" datos en búferes especiales. El programa en la VM interactúa directamente con la memoria plana mediante llamadas `HOST`, pasando direcciones virtuales absolutas (ej.: "escribe la propiedad en `0x1000`"). El programa manipula los datos in-place usando punteros, bucles y condiciones estándar.
 
 ### Decisión central
 
-La arquitectura recomendada es una VM de 16 bits orientada a regiones, de un solo flujo de ejecución por contexto, interpretada y con servicios explícitos del host.
+La arquitectura recomendada es una **VM de 16 bits con espacio plano de 64 KB y paginación SoftMMU de 4 KB**, de un solo flujo de ejecución por contexto, interpretada y con servicios explícitos del host.
 
 No se recomienda empezar con un procesador multinúcleo virtual, un JIT, microcódigo, una tabla de interrupciones física ni una implementación de todo el mensaje como memoria precargada.
 
-El paralelismo entre mensajes será responsabilidad del runtime Java. El procesador será responsable de ejecutar una política de manera determinista, acotada y aislada.
-
-# 1. Resumen ejecutivo
-
-## 1.1. Arquitectura propuesta
+El paralelismo entre mensajes será responsabilidad del runtime Java. El procesador VM es secuencial; la concurrencia se logra instanciando múltiples contextos de ejecución (pools) y dejando que el scheduler Java los distribuya.
 
 ## Programas iflow
 
-Bytecode versionado · Bibliotecas · Políticas
+Bytecode versionado (`.flow`) · Bibliotecas · Políticas
 
-Validador y cargador
+Validador y cargador (solo binario, sin YAML/SpEL)
 
 Formato, opcodes, capacidades, límites y control de flujo
 
-### VM iflow
-
-CPU interpreter
+## CPU virtual (arquitectura hardware-style)
 
 Fetch · Decode · Execute
 
 Contexto
 
-Registros · Pila · Fuel
+Registros · Pila · Fuel · SoftMMU (PageTable)
 
-Memoria regional
+Memoria plana 64 KB
 
-Código · Datos · Buffers
+16 páginas · 4 KB c/u · Permisos R/W/X por página
 
 Supervisor
-
-Privilegios · Límites · Abortos
-
-ABI de servicios del host
-
-Propiedades genéricas · Permisos · Transformaciones · Estado · Routing
-
-Runtime de iflow y TextFormatter Suite
-
-Message · Router · RateLimiter · PermissionChecker · MessageDispatcher
-
-## 1.2. Decisiones principales
-
-| Área                 | Decisión inicial                                                        |
-| -------------------- | ----------------------------------------------------------------------- |
-| Ancho de registro    | 16 bits                                                                 |
-| Memoria              | Regiones protegidas, direccionadas mediante handle y offset             |
-| ISA                  | Pequeña, ortogonal y versionada                                         |
-| Ejecución            | Intérprete convencional                                                 |
-| Acceso al host       | Instrucción genérica `HOST`                                             |
-| Servicios            | Tabla versionada, validada por el runtime                               |
-| Privilegios          | Código de usuario y supervisor del host                                 |
-| Pila                 | Privada de cada ejecución                                               |
-| Estado persistente   | Explícito, por instancia lógica de programa                             |
-| Atomicidad           | Cambios diferidos y confirmación al finalizar                           |
-| Concurrencia         | Contextos independientes administrados por Java                         |
-| Presupuesto          | Fuel determinista más límites por recurso                               |
-| Routing              | Resultado intermedio validado por iflow                                 |
-| Optimización inicial | Validación previa, reutilización de buffers y reducción de asignaciones |
-
-Conclusión de viabilidad: no existe una barrera arquitectónica que impida construir esta VM en Java. La incertidumbre principal es económica: si la VM ofrece suficiente expresividad y control para justificar su coste frente al motor de reglas existente. Esto debe demostrarse mediante pruebas de conformidad y benchmarks, no asumirse a partir de la arquitectura.
 
 # 2. Requisitos funcionales y no funcionales
 
@@ -268,13 +233,13 @@ La actualización persistente y la confirmación de las modificaciones del mensa
 | 16 bits con segmentación convencional       | Amplía direcciones                               | Segmentos y registros especiales aumentan la complejidad |
 | 16 bits con registros auxiliares de 32 bits | Amplía los valores y las direcciones             | Semántica desigual entre registros                       |
 | 32 bits con memoria dinámica                | Direcciones y longitudes cómodas                 | Instrucciones y estado algo mayores                      |
-| 16 bits con regiones y handles              | Compacto, aislamiento natural y memoria dinámica | La dirección debe identificar región y offset            |
+| 16 bits con paginación SoftMMU 4 KB         | Espacio plano 64 KB, aislamiento por página R/W/X | Requiere tabla de páginas, ligera overhead               |
 
-Recomendación: 16 bits con direccionamiento por regiones.
+Recomendación: **16 bits con espacio plano de 64 KB y paginación SoftMMU de 4 KB**.
 
-Es una decisión de diseño, no una afirmación de que un procesador de 16 bits sea necesariamente más rápido en Java. La ventaja esperada es la simplicidad del modelo y el tamaño de los operandos, mientras que las regiones permiten evitar el límite global de 64 KiB.
+El espacio de direcciones plano de 16 bits ($0x0000$–$0xFFFF$, **64 KB totales**) con **paginación de 4 KB (16 páginas)** gestionada por un **SoftMMU** elimina la complejidad de *handles*, regiones y offsets compuestos, mientras que la paginación proporciona aislamiento y protección por página (permisos R/W/X por página). No hay regiones, no hay handles, no hay búferes de entrada aislados.
 
-El diseño deberá revisarse si los benchmarks demuestran que las instrucciones adicionales necesarias para gestionar regiones cuestan más que la flexibilidad de una ISA de 32 bits.
+El diseño deberá revisarse si los benchmarks demuestran que la paginación por software introduce overhead significativo.
 
 ## 6.2. Semántica numérica
 
@@ -284,26 +249,10 @@ El diseño deberá revisarse si los benchmarks demuestran que las instrucciones 
 - Desbordamiento: módulo \\(2^{16}\\) en las operaciones ordinarias.
 - División por cero: excepción aritmética.
 - Desplazamientos: se valida que el conteo esté entre 0 y 15.
-- Dirección: handle de región más offset de 16 bits.
+- Dirección: dirección virtual absoluta de 16 bits (traducida por SoftMMU).
 - Longitudes mayores de 65535 bytes: no se expresan en una única operación ordinaria; se procesan por fragmentos o mediante una extensión explícita.
 
-Una dirección no es un número arbitrario que pueda convertirse en una referencia Java. Es un identificador lógico validado por el gestor de memoria.
-
-## 6.3. Modelo de regiones
-
-Cada región contiene:
-
-- Un identificador o handle.
-- Un tamaño máximo de 65536 bytes.
-- Un tipo de región.
-- Permisos de lectura, escritura y ejecución.
-- Un propietario.
-- Una duración.
-- Un respaldo de memoria administrado por el runtime.
-
-La memoria total puede superar 64 KiB mediante varias regiones. Los buffers grandes se dividen en regiones o fragmentos, evitando que las operaciones básicas dependan de longitudes superiores a 16 bits.
-
-No se propone un mapa de 4 GiB ni una reserva masiva de memoria por VM.
+Una dirección no es un número arbitrario que pueda convertirse en una referencia Java. Es una dirección virtual validada por el SoftMMU.
 
 # 7. Banco de registros completo
 
@@ -580,33 +529,38 @@ La cabecera y las secciones se validan antes de publicar el programa en el runti
 
 # 10. Modelo de memoria y representación de datos
 
-## 10.1. Tipos de región
+## 10.1. Modelo de memoria plana con SoftMMU
 
-| Región              | Propietario           | Permisos                                  | Duración          |
-| ------------------- | --------------------- | ----------------------------------------- | ----------------- |
-| Código              | Cargador del programa | Lectura y ejecución                       | Vida del programa |
-| Constantes          | Cargador              | Solo lectura                              | Vida del programa |
-| Datos privados      | Contexto              | Lectura y escritura                       | Ejecución         |
-| Pila                | Contexto              | Lectura y escritura                       | Ejecución         |
-| Buffers de entrada  | Contexto/runtime      | Según operación                           | Ejecución         |
-| Buffers de salida   | Contexto/runtime      | Según operación                           | Ejecución         |
-| Journal             | Runtime               | No directamente accesible fuera de la ABI | Evaluación        |
-| Estado persistente  | Gestor de estado      | Según capacidad concedida                 | Configurable      |
-| Firmware            | Runtime               | Protegido                                 | Vida del runtime  |
-| Tablas de servicios | Runtime               | Protegidas                                | Vida del runtime  |
+El espacio de direcciones es plano de 16 bits (64 KB totales: $0x0000$–$0xFFFF$) con **paginación de 4 KB (16 páginas)** gestionada por un **SoftMMU** (Memory Management Unit por software).
 
-Los datos del mensaje, emisor, destinatario, canal y servidor no necesitan tener regiones permanentes. La interfaz del host puede materializar únicamente el valor solicitado en un buffer temporal.
+| Página | Rango        | Uso típico                           | Permisos base          |
+| ------ | ------------ | ------------------------------------ | ---------------------- |
+| 0      | 0x0000–0x0FFF | Código del programa                  | R / X                  |
+| 1      | 0x1000–0x1FFF | Constantes / datos de solo lectura   | R                      |
+| 2–3    | 0x2000–0x3FFF | Datos privados / heap                | R / W                  |
+| 4–5    | 0x4000–0x5FFF | Pila (crece hacia abajo desde 0x6000)| R / W                  |
+| 6      | 0x6000–0x6FFF | Buffer de entrada (I/O)              | R / W                  |
+| 7      | 0x7000–0x7FFF | Buffer de salida (I/O)               | R / W                  |
+| 8–15   | 0x8000–0xFFFF | Datos privados / estado persistente  | Según capacidad        |
+
+- **PageTable**: 16 entradas, cada una = `frame_base` (16-bit) + `perms` (3-bit R/W/X) + `valid` + `user`
+- **Traducción**: `virt_page = vaddr >> 12`, `offset = vaddr & 0xFFF`, `phys = frame_base + offset`
+- **Permisos por página**: `READ` (0x1), `WRITE` (0x2), `EXECUTE` (0x4)
+- **Métodos SoftMMU**: `readByte/Word`, `writeByte/Word`, `fetchByte/Word`, `mapPage`, `unmapPage`, `copy` (validación + copia)
+
+No hay regiones, no hay handles, no hay búferes de entrada aislados. El programa interactúa directamente con la memoria plana mediante direcciones virtuales absolutas.
+
+Los datos del mensaje, emisor, destinatario, canal y servidor no necesitan tener regiones permanentes. La interfaz del host materializa el valor solicitado en la dirección virtual indicada por el programa (ej.: "escribe la propiedad en `0x1000`").
 
 ## 10.2. Tamaños y límites
 
 Los tamaños máximos deben configurarse por política y por runtime. Como valores iniciales de referencia para pruebas, no como límites universales:
 
-- Datos privados: 64 KiB por ejecución.
-- Pila: 16 KiB por ejecución.
-- Buffer individual de propiedad: 16 KiB.
-- Estado persistente: 64 KiB por instancia lógica.
-- Código: límite configurable por artefacto, con un perfil inicial de 256 KiB.
-- Número de regiones: límite explícito por contexto.
+- Espacio plano total: 64 KiB (16 páginas × 4 KB)
+- Pila: 8 KiB (páginas 4–5, crece hacia abajo desde 0x6000)
+- Buffer I/O individual: 4 KiB (1 página c/u: entrada en 0x6000, salida en 0x7000)
+- Código: límite configurable por artefacto, con un perfil inicial de 256 KiB (requiere carga por fragmentos si supera 64 KB)
+- Estado persistente: 64 KiB por instancia lógica (páginas 8–15, según capacidad `memory.persist`)
 
 Estos valores son hipótesis operativas que deben validarse con programas representativos. Un mensaje más grande puede procesarse por fragmentos si el contrato del servicio lo permite.
 
@@ -656,18 +610,33 @@ La caché se invalida cuando cambia una propiedad afectada. Se descarta al final
 
 La ISA no contiene instrucciones para leer nombres, cambiar canales o consultar permisos. Contiene una instrucción que solicita servicios mediante una ABI genérica.
 
-Se adopta la convención de registros:
+**Convención de registros `HOST`:**
+- `R0` = service ID (16-bit)
+- `R1` = arg vaddr (dirección virtual del buffer de argumentos)
+- `R2` = arg offset
+- `R3` = options / arg length / decision code
+- Retorno: `R0` = status/resultado primario, `R1` = bytes transferidos, `R3` = resultado auxiliar
 
-| Registro | Entrada                       | Salida                             |
-| -------- | ----------------------------- | ---------------------------------- |
-| `R0`     | Identificador del servicio    | Código de estado                   |
-| `R1`     | Handle de argumentos o buffer | Resultado primario                 |
-| `R2`     | Offset o longitud de entrada  | Cantidad procesada, según servicio |
-| `R3`     | Opciones o argumento auxiliar | Resultado auxiliar                 |
+El opcode `HOST` (0x60) es de 2 bytes (opcode + padding). El service ID se pasa en R0, no en el bytecode.
 
 El contrato concreto de cada servicio determina el significado de los campos. El opcode no cambia cuando se incorporan nuevos servicios.
 
-La operación puede invocar un servicio sin buffer, uno con un buffer de entrada, uno con buffer de salida o uno con varios argumentos descritos en una estructura binaria validada.
+### Servicios estándar implementados
+
+| Service ID | Nombre | Capability requerida | Descripción |
+|------------|--------|----------------------|-------------|
+| 0x0100 | PROPERTY_READ | `property.read` | Leer propiedad (scope + propId en R1/R2, destino en R1) |
+| 0x0101 | PROPERTY_WRITE | `property.write` | Escribir propiedad (scope + propId en R1/R2, origen en R1) |
+| 0x0102 | PROPERTY_EXISTS | `property.read` | Verificar existencia de propiedad |
+| 0x0200 | PERMISSION_CHECK | `permission.check` | Verificar permiso (bitmask en R1, target en R2) |
+| 0x0201 | PERMISSION_QUERY | `permission.check` | Consultar permisos disponibles |
+| 0x0300 | ROUTE_DECISION | `routing.decide` | Emitir decisión de routing (código en R3) |
+| 0x0301 | ROUTE_REDIRECT | `routing.decide` | Redirección con canal destino |
+| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | Aplicar rate limiting |
+| 0x0500 | STATE_READ | `state.read` | Leer estado persistente (key en R1, default en R2) |
+| 0x0501 | STATE_WRITE | `state.write` | Escribir estado persistente (key en R1, valor en R2) |
+| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | Resolver canal (nombre en R1) |
+| 0x0601 | CHANNEL_POLICY | `channel.resolve` | Consultar política de canal |
 
 ## 11.2. Estados de servicio
 

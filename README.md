@@ -28,7 +28,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 |---------------|--------|-----------|
 | **Arquitectura hexagonal (core-api + SPI)** | ✅ Implementada y probada | `core-api` compila sin dependencias; 29 módulos usan ServiceLoader; tests de kernel/module loading pasan |
 | **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 32 tests |
-| **Motor de reglas iFlow** | ✅ Implementada y probada | `DefaultRouter`, `Rule`, `RateLimiter` per-key, `PermissionChecker` (base + send/receive); 19 tests |
+| **Motor de reglas iFlow (VM)** | ✅ Implementada y probada | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K; 250 tests (VmInterpreter, VmDmaController, HostServiceRegistry, VmPolicyEngine, FirmwareIntegrationTest) |
 | **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 17+19 tests extendidos |
 | **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 17+15 tests extendidos |
 | **Sync Discord** | ✅ Implementada y probada | Gateway v10 (WebSocket JDK + REST), intents, embeds; tokens `char[]`; 6 tests |
@@ -91,7 +91,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
-| `iflow` | `DefaultRouter`, `Rule`, `RateLimiter` (token bucket per-key), `PermissionChecker`, transforms F7+ | ✅ Probado (19 tests) |
+| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `VmDmaController`, `SoftMMU` | ✅ Probado (250 tests) |
 | `presets` | Presets predefinidos (standard, rpg, staff, minimal), `TransformEngine` (SpEL sandboxed), import/export YAML | ✅ Probado |
 
 ### Traducción

@@ -10,25 +10,24 @@ import me.majhrs16.suite.api.spi.ExpressionEvaluator;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
-import me.majhrs16.suite.host.config.RuleConfigLoader;
-import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.RouteDecision;
 import me.majhrs16.suite.iflow.RouteOutcome;
 import me.majhrs16.suite.iflow.Router;
-import me.majhrs16.suite.iflow.RuleExpressionEvaluator;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.rule.Rule;
+import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.scripting.SpelExpressionEvaluator;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
+import me.majhrs16.suite.iflow.config.RuleConfigLoader;
+import me.majhrs16.suite.iflow.vm.VmConfigLoader;
+import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 
 import net.kyori.adventure.text.Component;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.ServiceLoader;
 
 /**
@@ -113,16 +112,15 @@ public final class SuiteHost {
         HostConfig config = configResult.config();
         ChannelRegistry channels = channelsResult.config();
 
-        // Load iFlow rules
-        List<Rule> rules = RuleConfigLoader.loadRules(configDir, logger);
+        // Load VM policy program (compiles rules.yml to bytecode or loads native .flow)
+        me.majhrs16.suite.iflow.vm.isa.ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
 
-        // Create ExpressionEvaluator for SpEL conditions/actions in rules
-        // Using RuleExpressionEvaluator which allows getter methods on domain objects
-        ExpressionEvaluator ruleEvaluator = new RuleExpressionEvaluator(
-            placeholders, translation, logger);
+        // Create rate limiter (shared with VM engine)
+        RateLimiter rateLimit = new RateLimiter();
 
-        Router router = new DefaultRouter(channels, permissions, ruleEvaluator);
-        router.setRules(rules);
+        // Create VM policy engine
+        VmPolicyEngine router = new VmPolicyEngine(channels, permissions, rateLimit);
+        router.setProgram(program);
 
         // Create separate evaluator for template rendering (sandboxed)
         ExpressionEvaluator templateEvaluator = new SpelExpressionEvaluator(

@@ -1,0 +1,336 @@
+; iFlow VM Firmware Test Program
+; Tests all instructions and HOST services
+; Origin: 0x0000
+.origin 0x0000
+.entry main
+
+.section code
+
+; ============================================================
+; CONSTANTS
+; ============================================================
+.const SERVICE_PROPERTY_READ  0x0100
+.const SERVICE_PROPERTY_WRITE 0x0101
+.const SERVICE_PERM_CHECK    0x0200
+.const SERVICE_ROUTE_DECISION 0x0300
+.const SERVICE_STATE_READ    0x0500
+.const SERVICE_STATE_WRITE   0x0501
+.const SERVICE_CHANNEL_RESOLVE 0x0600
+
+.const SCOPE_MESSAGE         0x01
+.const SCOPE_EMITTER         0x02
+.const PROP_CONTENT          0x0010
+.const PROP_CHANNEL          0x0011
+.const PROP_CANCELLED        0x001A
+
+.const DECISION_LOG          0x00
+.const DECISION_DROP         0x01
+.const DECISION_REJECT       0x02
+.const DECISION_REDIRECT     0x03
+
+; Memory addresses for test data
+.const TEST_BUFFER       0x1000
+.const RESULT_BUFFER     0x1100
+.const STACK_TOP         0x7FF0
+
+; ============================================================
+; MAIN ENTRY POINT
+; ============================================================
+main:
+    ; Stack pointer and frame pointer are initialized by VM (SP=0x6000, FP=0x6000)
+    
+    ; Test 1: Basic arithmetic and logic
+    CALL test_arithmetic
+    
+    ; Test 2: Memory operations
+    CALL test_memory
+    
+    ; Test 3: Control flow (jumps, calls, returns)
+    CALL test_control_flow
+    
+    ; Test 4: HOST services
+    CALL test_host_services
+    
+    ; Test 5: Block operations (COPY, MOVE)
+    CALL test_block_ops
+    
+    ; Test 6: Comparison and conditional jumps
+    CALL test_comparison
+    
+    ; Test 7: Shift operations
+    CALL test_shifts
+    
+    ; All tests passed - halt with success
+    LI R0, 0x0000
+    HALT
+
+; ============================================================
+; TEST 1: Arithmetic and Logic Instructions
+; ============================================================
+test_arithmetic:
+    ; ADD: R1 = 10 + 20 = 30
+    LI R1, 10
+    LI R2, 20
+    ADD R1, R2
+    ; R1 should be 30
+    
+    ; SUB: R1 = 30 - 5 = 25
+    LI R2, 5
+    SUB R1, R2
+    
+    ; MUL: R1 = 25 * 2 = 50
+    LI R2, 2
+    MUL R1, R2
+    
+    ; DIV: R1 = 50 / 5 = 10
+    LI R2, 5
+    DIV R1, R2
+    
+    ; MOD: R1 = 10 % 3 = 1
+    LI R2, 3
+    MOD R1, R2
+    
+    ; AND: R1 = 1 & 0xFF = 1
+    LI R2, 0xFF
+    AND R1, R2
+    
+    ; OR: R1 = 1 | 0xF0 = 0xF1
+    LI R2, 0xF0
+    OR R1, R2
+    
+    ; XOR: R1 = 0xF1 ^ 0xFF = 0x0E
+    LI R2, 0xFF
+    XOR R1, R2
+    
+    ; NOT: R1 = ~0x0E = 0xFFF1 (16-bit)
+    NOT R1
+    
+    RET
+
+; ============================================================
+; TEST 2: Memory Operations (LDB, LDW, STB, STW)
+; ============================================================
+test_memory:
+    ; Store word at TEST_BUFFER
+    LI R1, 0x1234
+    STW R1, TEST_BUFFER
+    
+    ; Load word from TEST_BUFFER
+    LDW R2, TEST_BUFFER
+    ; R2 should be 0x1234
+    
+    ; Store byte at TEST_BUFFER+2
+    LI R1, 0xAB
+    STB R1, TEST_BUFFER + 2
+    
+    ; Load byte from TEST_BUFFER+2
+    LDB R2, TEST_BUFFER + 2
+    ; R2 should be 0xAB
+    
+    ; Test with different addresses
+    LI R1, 0x5678
+    STW R1, TEST_BUFFER + 4
+    LDW R2, TEST_BUFFER + 4
+    
+    RET
+
+; ============================================================
+; TEST 3: Control Flow (JMP, JZ, JNZ, JC, JV, CALL, RET)
+; ============================================================
+test_control_flow:
+    ; Test JMP
+    LI R1, 0
+    JMP test_jmp_target
+    LI R1, 1  ; Should be skipped
+test_jmp_target:
+    
+    ; Test JZ (Jump if Zero)
+    LI R1, 0
+    CMP R1, R0  ; Compare with 0 (R0=0)
+    JZ test_jz_taken
+    LI R1, 1  ; Should be skipped
+test_jz_taken:
+    
+    ; Test JNZ (Jump if Not Zero)
+    LI R1, 5
+    CMP R1, R0
+    JNZ test_jnz_taken
+    LI R1, 1  ; Should be skipped
+test_jnz_taken:
+    
+    ; Test JC (Jump if Carry) - using ADD that overflows
+    LI R1, 0xFFFF
+    LI R2, 1
+    ADD R1, R2  ; Should set carry flag
+    JC test_jc_taken
+    LI R1, 1  ; Should be skipped
+test_jc_taken:
+    
+    ; Test JV (Jump if Overflow) - using ADD that overflows signed
+    LI R1, 0x7FFF
+    LI R2, 1
+    ADD R1, R2  ; Should set overflow flag
+    JV test_jv_taken
+    LI R1, 1  ; Should be skipped
+test_jv_taken:
+    
+    ; Test CALL/RET with nested calls
+    CALL nested_call_1
+    RET
+
+nested_call_1:
+    CALL nested_call_2
+    RET
+
+nested_call_2:
+    RET
+
+; ============================================================
+; TEST 4: HOST Services
+; ============================================================
+test_host_services:
+    ; Test PROPERTY_READ
+    ; R0 = service ID, R1 = scope (MESSAGE), R2 = property ID (CONTENT)
+    LI R0, SERVICE_PROPERTY_READ
+    LI R1, SCOPE_MESSAGE
+    LI R2, PROP_CONTENT
+    HOST
+    ; Result in R0
+    
+    ; Test PROPERTY_WRITE
+    ; R0 = service ID, R1 = scope, R2 = property ID, R3 = value (vaddr)
+    LI R0, SERVICE_PROPERTY_WRITE
+    LI R1, SCOPE_EMITTER
+    LI R2, PROP_CHANNEL
+    LI R3, TEST_BUFFER
+    HOST
+    
+    ; Test PERMISSION_CHECK
+    ; R0 = service ID, R1 = permission bitmask, R2 = target (vaddr)
+    LI R0, SERVICE_PERM_CHECK
+    LI R1, 0x0001
+    LI R2, TEST_BUFFER
+    HOST
+    ; Result in R0 (0=denied, 1=granted)
+    
+    ; Test ROUTE_DECISION
+    ; R0 = service ID, R3 = decision code
+    LI R0, SERVICE_ROUTE_DECISION
+    LI R3, DECISION_LOG
+    HOST
+    
+    ; Test STATE_READ
+    ; R0 = service ID, R1 = state key (vaddr), R2 = default value
+    LI R0, SERVICE_STATE_READ
+    LI R1, TEST_BUFFER
+    LI R2, 0
+    HOST
+    ; Result in R0
+    
+    ; Test STATE_WRITE
+    ; R0 = service ID, R1 = state key (vaddr), R2 = value
+    LI R0, SERVICE_STATE_WRITE
+    LI R1, TEST_BUFFER
+    LI R2, 0xDEAD
+    HOST
+    
+    ; Test CHANNEL_RESOLVE
+    ; R0 = service ID, R1 = channel name (vaddr)
+    LI R0, SERVICE_CHANNEL_RESOLVE
+    LI R1, TEST_BUFFER
+    HOST
+    ; Result in R0 (channel ID or 0)
+    
+    RET
+
+; ============================================================
+; TEST 5: Block Operations (COPY, MOVE)
+; ============================================================
+test_block_ops:
+    ; Prepare source data
+    LI R1, 0x1111
+    STW R1, TEST_BUFFER
+    LI R1, 0x2222
+    STW R1, TEST_BUFFER + 2
+    LI R1, 0x3333
+    STW R1, TEST_BUFFER + 4
+    
+    ; COPY: src=TEST_BUFFER, dst=RESULT_BUFFER, len=6 bytes
+    COPY TEST_BUFFER, RESULT_BUFFER, 6
+    
+    ; Verify copy
+    LDW R1, RESULT_BUFFER
+    ; R1 should be 0x1111
+    LDW R2, RESULT_BUFFER + 2
+    ; R2 should be 0x2222
+    
+    ; MOVE: overlapping regions
+    MOVE TEST_BUFFER, TEST_BUFFER + 2, 4
+    
+    RET
+
+; ============================================================
+; TEST 6: Comparison and Conditional Logic
+; ============================================================
+test_comparison:
+    ; CMP (signed): R1 = 100, R2 = 50
+    LI R1, 100
+    LI R2, 50
+    CMP R1, R2  ; Sets flags: R1 > R2
+    
+    ; CMPU (unsigned): R1 = 0xFFFF, R2 = 1
+    LI R1, 0xFFFF
+    LI R2, 1
+    CMPU R1, R2  ; Unsigned: R1 > R2
+    
+    ; Test loop with counter
+    LI R1, 10       ; Counter
+    LI R2, 0        ; Accumulator
+    LI R3, 1        ; Decrement value
+loop_start:
+    ADD R2, R1      ; Accumulate
+    SUB R1, R3      ; Decrement
+    CMP R1, R0      ; Compare with 0
+    JNZ loop_start  ; Loop until zero
+    ; R2 should be 55 (10+9+...+1)
+    
+    RET
+
+; ============================================================
+; TEST 7: Shift Operations
+; ============================================================
+test_shifts:
+    ; SHL: 1 << 4 = 16
+    LI R1, 1
+    LI R2, 4
+    SHL R1, R2
+    
+    ; SHR: 16 >> 2 = 4
+    LI R1, 16
+    LI R2, 2
+    SHR R1, R2
+    
+    ; SAR: arithmetic shift right (preserves sign)
+    LI R1, -16      ; 0xFFF0
+    LI R2, 2
+    SAR R1, R2      ; Should be -4 (0xFFFC)
+    
+    RET
+
+; ============================================================
+; DATA SECTION
+; ============================================================
+.section data
+
+; String constants for CHANNEL_RESOLVE
+channel_name:
+    .const "global"  ; Channel name string
+    
+; Test message content
+test_message:
+    .const "Hello, iFlow VM!"
+
+; ============================================================
+; END
+; ============================================================
+.end

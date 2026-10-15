@@ -1,0 +1,199 @@
+package me.majhrs16.suite.iflow.vm.memory;
+
+import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
+import me.majhrs16.suite.iflow.vm.isa.VmException;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
+/**
+ * Software Memory Management Unit (SoftMMU) for 16-bit flat address space with 4KB paging.
+ * <p>
+ * Provides checked memory access through a PageTable. All memory accesses
+ * (read/write/execute) go through this unit which validates permissions and
+ * translates virtual to physical addresses.
+ * </p>
+ */
+public final class SoftMMU {
+
+    public static final int PAGE_SIZE = PageTable.PAGE_SIZE;      // 4KB
+    public static final int PAGE_SHIFT = PageTable.PAGE_SHIFT;    // 12
+    public static final int ADDRESS_SPACE_SIZE = PageTable.ADDRESS_SPACE_SIZE; // 64KB
+
+    private final PageTable pageTable;
+    private final byte[] physicalMemory;  // Flat physical memory backing store
+
+    public SoftMMU() {
+        this.physicalMemory = new byte[PageTable.ADDRESS_SPACE_SIZE];
+        this.pageTable = new PageTable();
+    }
+
+    /** Creates an MMU with a copy of another MMU's state (for context cloning). */
+    public SoftMMU(SoftMMU other) {
+        this.physicalMemory = other.physicalMemory.clone();
+        this.pageTable = other.pageTable.copy();
+    }
+
+    // ===== Page Table Management =====
+
+    public PageTable getPageTable() {
+        return pageTable;
+    }
+
+    /** Maps a virtual page to a physical frame. */
+    public void mapPage(int virtualPage, int frameBase, int permissions) {
+        pageTable.mapPage(virtualPage, frameBase, permissions);
+    }
+
+    /** Maps a page for kernel-only access. */
+    public void mapPageKernel(int virtualPage, int frameBase, int permissions) {
+        pageTable.mapPageKernel(virtualPage, frameBase, permissions);
+    }
+
+    /** Removes a page mapping. */
+    public void unmapPage(int virtualPage) {
+        pageTable.unmapPage(virtualPage);
+    }
+
+    /** Gets the page table for inspection. */
+    public PageTable getPageTableDirect() {
+        return pageTable;
+    }
+
+    // ===== Memory Access (with translation + permission checks) =====
+
+    /** Reads a byte from virtual address. */
+    public int readByte(int virtualAddr) {
+        int physAddr = pageTable.translateRead(virtualAddr);
+        return physicalMemory[physAddr] & 0xFF;
+    }
+
+    /** Reads a 16-bit word (little-endian) from virtual address. */
+    public int readWord(int virtualAddr) {
+        int physAddr = pageTable.translateRead(virtualAddr);
+        // Check if word crosses page boundary
+        if ((virtualAddr & PageTable.OFFSET_MASK) == PageTable.OFFSET_MASK) {
+            // Crosses page boundary - read byte by byte
+            int low = readByte(virtualAddr);
+            int high = readByte(virtualAddr + 1);
+            return low | (high << 8);
+        } else {
+            return (physicalMemory[physAddr] & 0xFF) |
+                   ((physicalMemory[physAddr + 1] & 0xFF) << 8);
+        }
+    }
+
+    /** Reads a block of bytes from virtual address. */
+    public void readBlock(int virtualAddr, byte[] dest, int destOffset, int length) {
+        // Check full range first
+        int endAddr = virtualAddr + length;
+        if (endAddr > PageTable.ADDRESS_SPACE_SIZE) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Read beyond address space: 0x" + Integer.toHexString(virtualAddr) + "+" + length);
+        }
+        // Fast path: if contiguous in physical memory, single copy
+        int physAddr = pageTable.translateRead(virtualAddr);
+        if (isContiguous(virtualAddr, length)) {
+            System.arraycopy(physicalMemory, physAddr, physicalMemory, destOffset, length);
+            // Actually need to copy TO dest array
+            System.arraycopy(physicalMemory, physAddr, dest, destOffset, length);
+        } else {
+            // Non-contiguous: byte-by-byte (slow path)
+            for (int i = 0; i < length; i++) {
+                dest[destOffset + i] = (byte) readByte(virtualAddr + i);
+            }
+        }
+    }
+
+    /** Writes a byte to virtual address. */
+    public void writeByte(int virtualAddr, int value) {
+        int physAddr = pageTable.translateWrite(virtualAddr);
+        physicalMemory[physAddr] = (byte) (value & 0xFF);
+    }
+
+    /** Writes a 16-bit word (little-endian) to virtual address. */
+    public void writeWord(int virtualAddr, int value) {
+        int physAddr = pageTable.translateWrite(virtualAddr);
+        // Check if word crosses page boundary
+        if ((virtualAddr & PageTable.OFFSET_MASK) == PageTable.OFFSET_MASK) {
+            // Crosses page boundary - write byte by byte
+            writeByte(virtualAddr, value & 0xFF);
+            writeByte(virtualAddr + 1, (value >> 8) & 0xFF);
+        } else {
+            physicalMemory[physAddr] = (byte) (value & 0xFF);
+            physicalMemory[physAddr + 1] = (byte) ((value >> 8) & 0xFF);
+        }
+    }
+
+    /** Writes a block of bytes to virtual address. */
+    public void writeBlock(int virtualAddr, byte[] src, int srcOffset, int length) {
+        int endAddr = virtualAddr + length;
+        if (endAddr > PageTable.ADDRESS_SPACE_SIZE) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Write beyond address space: 0x" + Integer.toHexString(virtualAddr) + "+" + length);
+        }
+        int physAddr = pageTable.translateWrite(virtualAddr);
+        if (isContiguous(virtualAddr, length)) {
+            System.arraycopy(src, srcOffset, physicalMemory, physAddr, length);
+        } else {
+            for (int i = 0; i < length; i++) {
+                writeByte(virtualAddr + i, src[srcOffset + i] & 0xFF);
+            }
+        }
+    }
+
+    /** Checks if a virtual address range maps to contiguous physical memory. */
+    private boolean isContiguous(int virtualAddr, int length) {
+        if (length <= 1) return true;
+        int startPage = virtualAddr >> PageTable.PAGE_SHIFT;
+        int endPage = (virtualAddr + length - 1) >> PageTable.PAGE_SHIFT;
+        if (startPage != endPage) return false; // Crosses page boundary
+        return true;
+    }
+
+    // ===== Execution Support =====
+
+    /** Fetches an instruction byte at IP. */
+    public int fetchByte(int ip) {
+        return readByte(pageTable.translateExecute(ip));
+    }
+
+    /** Fetches an instruction word (2 bytes) at IP. */
+    public int fetchWord(int ip) {
+        return readWord(pageTable.translateExecute(ip));
+    }
+
+    // ===== Memory Inspection =====
+
+    /** Gets a copy of the entire physical memory. */
+    public byte[] getMemorySnapshot() {
+        return physicalMemory.clone();
+    }
+
+    /** Gets a copy of a memory region. */
+    public byte[] getRegion(int virtualAddr, int length) {
+        byte[] result = new byte[length];
+        readBlock(virtualAddr, result, 0, length);
+        return result;
+    }
+
+    /** Gets the PageTable for inspection. */
+    public PageTable getPageTableForInspection() {
+        return pageTable;
+    }
+
+    /** Gets the underlying physical memory array (for direct access by interpreter). */
+    public byte[] getPhysicalMemory() {
+        return physicalMemory;
+    }
+
+    /** Gets the PageTable for direct manipulation. */
+    public PageTable getPageTableForMutation() {
+        return pageTable;
+    }
+
+    @Override
+    public String toString() {
+        return "SoftMMU[memory=" + physicalMemory.length + "B, pages=" + pageTable.validCount() + "/16]";
+    }
+}

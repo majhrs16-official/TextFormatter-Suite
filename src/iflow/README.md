@@ -1,152 +1,210 @@
-# iflow — Message Routing, Rules & Rate Limiting
+# iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Purpose**: Message routing engine. Evaluates rules to transform, redirect, block, or rate-limit messages before they reach the formatting pipeline.
-
----
-
-## 1. Responsibilities
-
-- **Rule evaluation** — scriptable rules (`Rule`) with conditions and transform operations
-- **Message routing** — `Router` interface decides `RouteDecision` (allow, deny, redirect, transform)
-- **Rate limiting** — per-actor/channel rate limiting via `RateLimiter`
-- **Permission checks** — `PermissionChecker` for platform-agnostic permission verification
-- **Module registration** — `IflowModule` registers `Router` implementation
+> **Estado**: ✅ Implementada y probada (250 tests)  
+> **Tipo**: Módulo funcional (VM interpreted)  
+> **Contrato**: Implementa `Router` SPI (`core-api`)
 
 ---
 
-## 2. Non-Responsibilities
+## Arquitectura
 
-- **No formatting** — delegates to `textformatter` (`TextFormatter`)
-- **No translation** — delegates to `TranslationService` (via `host`)
-- **No sync/transport** — delegates to `SyncSink` (via `host`)
-- **No platform-specific logic** — `PermissionChecker` is SPI implemented by platform adapters
+iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina virtual interpretada de 16 bits** con espacio de direcciones plano de 64 KB y paginación por software (SoftMMU) de 4 KB.
 
----
+### Componentes principales
 
-## 3. Dependencies
+| Componente | Responsabilidad |
+|------------|-----------------|
+| `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
+| `VmInterpreter` | Fetch/decode/execute loop, ISA v1, fuel budget, SoftMMU integration |
+| `VmDmaController` | Transferencias de memoria validadas (read/write/copy/move con permisos) |
+| `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
+| `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
+| `VmInterpreter` | Fetch/decode/execute loop, fuel budget enforcement |
+| `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
+| `VmException` | Excepciones tipadas con IP capture (INVALID_OPCODE, MEMORY_FAULT, OUT_OF_FUEL, etc.) |
 
-| Dependency | Type | Reason |
-|------------|------|--------|
-| `core-api` | Compile | `Message`, `Actor`, `Channel`, `PermissionChecker` SPI |
-| `textformatter` | Compile | `TextFormatter` for transform operations |
-| `spring-expression` | Compile | SpEL for rule conditions |
-| `jackson-databind` | Compile | Rule serialization (YAML/JSON) |
-| `kernel` | Test | Test fixtures |
+### Memoria
 
----
+- **Espacio plano**: 64 KB (0x0000–0xFFFF)
+- **Paginación**: 16 páginas × 4 KB = 64 KB
+- **Permisos por página**: READ (0x1), WRITE (0x2), EXECUTE (0x4)
+- **Mapeo típico**:
+  - Página 0: Código (R/X)
+  - Páginas 1: Constantes (R)
+  - Páginas 2-3: Datos/Heap (R/W)
+  - Páginas 4-5: Pila (R/W, crece hacia abajo)
+  - Página 6: Buffer entrada I/O (0x6000)
+  - Página 7: Buffer salida I/O (0x7000)
+  - Páginas 8-15: Estado persistente / datos privados
 
-## 4. Consumers
+### ISA v1 (resumen)
 
-| Consumer | Usage |
-|----------|-------|
-| `host` | Uses `Router` via `IflowModule` in `MessageDispatcher` |
-| `spigot-host` | Uses routing via `host` |
-| `fabric-host` | Uses routing via `host` |
+| Grupo | Instrucciones |
+|-------|---------------|
+| Data transfer | `LI`, `MOV`, `LDB`, `LDW`, `STB`, `STW`, `COPY`, `MOVE` |
+| Aritmética | `ADD`, `SUB`, `MUL`, `DIV`, `MOD` |
+| Lógica | `AND`, `OR`, `XOR`, `NOT` |
+| Shifts | `SHL`, `SHR`, `SAR` |
+| Comparación | `CMP`, `CMPU` |
+| Control | `JMP`, `JZ`, `JNZ`, `JC`, `JV`, `CALL`, `RET` |
+| Servicios | `HOST` |
+| Control | `HALT`, `TRAP` |
 
----
+**Formato instrucción**: little-endian, opcode 8-bit determina longitud (1-8 bytes)
 
-## 5. Main Components
+### Instrucción `HOST` (servicios genéricos)
 
-| Component | Role |
-|-----------|------|
-| `Router` | Interface: `route(message, actor, channel) → RouteDecision` |
-| `DefaultRouter` | Default implementation: evaluates rules in order, applies first match |
-| `RouteDecision` | Outcome: `ALLOW`, `DENY`, `REDIRECT(channel)`, `TRANSFORM(newMessage)` |
-| `RouteOutcome` | Result wrapper with decision + modified message + metadata |
-| `Rule` | Single rule: `condition` (SpEL) + `operations` (TransformOp[]) |
-| `TransformOp` | Transform operation: `SET_FORMAT`, `SET_CHANNEL`, `TRANSLATE`, `BLOCK`, `REDIRECT`, `SCRIPT` |
-| `ScriptSurface` | Exposes variables to SpEL conditions (`message`, `actor`, `channel`, `config`, etc.) |
-| `RateLimiter` | Token bucket rate limiter per actor/channel |
-| `PermissionChecker` | SPI: `hasPermission(actor, permission) → boolean` |
-| `PolicyTarget` | Target for rate limiting/permissions (actor, channel, global) |
-| `IflowModule` | `Module` implementation; registers `DefaultRouter` |
+Convención de registros:
+- `R0` = service ID (16-bit)
+- `R1` = arg vaddr (dirección virtual buffer)
+- `R2` = arg offset
+- `R3` = options / arg length / decision code
+- Retorno: `R0`=status, `R1`=bytes, `R3`=aux
 
----
+Servicios estándar (13):
+| ID | Servicio | Capability |
+|----|----------|------------|
+| 0x0100 | PROPERTY_READ | `property.read` |
+| 0x0101 | PROPERTY_WRITE | `property.write` |
+| 0x0102 | PROPERTY_EXISTS | `property.read` |
+| 0x0200 | PERMISSION_CHECK | `permission.check` |
+| 0x0201 | PERMISSION_QUERY | `permission.check` |
+| 0x0300 | ROUTE_DECISION | `routing.decide` |
+| 0x0301 | ROUTE_REDIRECT | `routing.decide` |
+| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` |
+| 0x0500 | STATE_READ | `state.read` |
+| 0x0501 | STATE_WRITE | `state.write` |
+| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` |
+| 0x0601 | CHANNEL_POLICY | `channel.resolve` |
 
-## 6. Data Flow
+### Fuel Budget
 
-```text
-MessageDispatcher.dispatch(message)
-         ↓
-Router.route(message, actor, channel)
-         ↓
-DefaultRouter: for each Rule in order
-         ↓
-ScriptSurface builds SpEL context {message, actor, channel, ...}
-         ↓
-Rule.condition.evaluate(context) → boolean
-         ↓ (if true)
-Rule.operations[] applied sequentially:
-  - SET_FORMAT → changes format template
-  - SET_CHANNEL → redirects to different channel
-  - TRANSLATE → marks for translation
-  - BLOCK → RouteDecision.DENY
-  - REDIRECT → RouteDecision.REDIRECT
-  - SCRIPT → custom SpEL script
-         ↓
-RateLimiter.checkLimit(actor, channel) → allow/deny
-         ↓
-PermissionChecker.hasPermission(actor, perm) → allow/deny
-         ↓
-RouteDecision returned
-         ↓
-MessageDispatcher applies decision:
-  - ALLOW → continue to formatting
-  - DENY → drop message
-  - REDIRECT → re-route to new channel
-  - TRANSFORM → use modified message
+- Base: 1 unidad/instrucción
+- Servicios: coste base + coste variable × bytes
+- Límite default: 100,000 unidades/evaluación
+- Excepción: `OUT_OF_FUEL` con IP actual
+
+### Formato binario `.flow`
+
+```
+Header (16 bytes):
+  u8  formatVersion     = 1
+  u8  isaVersion        = 1
+  u8  minAbiVersion     = 1
+  u8  minFirmwareVersion= 1
+  u16 entryPoint        (little-endian)
+  u16 codeLength
+  u16 constantsLength
+  u8  capabilitiesCount
+  u8[5] padding
+
+Code section: codeLength bytes
+Constants: constantsLength × u16
+Capabilities: null-terminated strings
+Hash: 32 bytes (SHA-256 placeholder)
+```
+
+### Compilación
+
+Los programas se escriben en `.flowasm` y se compilan a `.flow` binario usando **iflow-compiler** (TypeScript):
+
+```bash
+cd tools/iflow-compiler
+npm run build
+node dist/cli.js programa.flowasm -o programa.flow -d
+```
+
+Ver [`tools/iflow-compiler/README.md`](../../tools/iflow-compiler/README.md) para detalles del ensamblador.
+
+### Integración con iflow (runtime Java)
+
+```java
+// VmPolicyEngine implementa Router (core-api SPI)
+VmPolicyEngine engine = new VmPolicyEngine(channelRegistry, permissionChecker, rateLimiter);
+
+// Hot-reload de programa
+engine.setProgram(programImage);
+
+// Routing
+RouteOutcome outcome = engine.route(message, recipient);
+```
+
+### Testing
+
+| Test | Cobertura |
+|------|-----------|
+| `VmInterpreterTest` | Todas las instrucciones ISA (19 tests) |
+| `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
+| `SoftMMUTest` | Traducción, permisos, fetch, bloqueos |
+| `VmInterpreterTest` | Aritmética, memoria, saltos, CALL/RET |
+| `VmPolicyEngineTest` | Integración Router + VM (11 tests) |
+| `VmIntegrationTest` | Programas multi-instrucción |
+| `VmConfigLoaderTest` | Carga binario, fallback pass-through |
+| `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
+
+**Total: 250 tests passing**
+
+### Migración desde v1 (SpEL/regiones)
+
+| v1 (legacy) | v2 (actual) |
+|-------------|-------------|
+| SpEL expressions | Bytecode `.flow` binario |
+| Regiones + handles | Flat 64KB + SoftMMU 4KB pages |
+| `Rule`/`TransformOp` | Bytecode compilado externamente |
+| `VmProgramCompiler` (JIT) | `iflow-compiler` (TypeScript, offline) |
+| YAML config | Solo binario `.flow` |
+| `setRules()` | `setProgram()` + `UnsupportedOperationException` |
+
+### Entry Points
+
+| Clase | Responsabilidad |
+|-------|-----------------|
+| `IflowModule` | Registra `VmPolicyEngine` como `Router` SPI |
+| `VmPolicyEngine` | Implementa `Router`, ejecuta VM, valida resultado |
+| `VmPolicyEngine.setProgram()` | Hot-reload de `ProgramImage` |
+| `VmConfigLoader.loadProgram()` | Carga `policy.flow` o fallback pass-through |
+
+### Files
+
+```
+src/iflow/
+├── src/main/java/me/majhrs16/suite/iflow/
+│   ├── Router.java                    # SPI interface
+│   ├── RouteDecision.java
+│   ├── RouteOutcome.java
+│   ├── channel/                       # ChannelRegistry, RateLimiter, PermissionChecker
+│   ├── target/                        # PolicyTarget
+│   └── vm/
+│       ├── VmPolicyEngine.java        # Router impl + VM execution
+│       ├── VmConfigLoader.java        # Binary .flow loader
+│       ├── isa/
+│       │   ├── Opcode.java
+│       │   ├── ProgramImage.java
+│       │   ├── RegisterFile.java
+│       │   └── VmException.java
+│       ├── execution/
+│       │   ├── ExecutionContext.java
+│       │   ├── ExecutionContextPool.java
+│       │   ├── VmInterpreter.java
+│       │   └── ModificationJournal.java
+│       ├── memory/
+│       │   ├── SoftMMU.java
+│       │   ├── PageTable.java
+│       │   ├── PageEntry.java
+│       │   └── VmDmaController.java
+│       ├── service/
+│       │   ├── HostServiceRegistry.java
+│       │   └── ServiceResult.java
+│       └── loader/                    # (vacío - legacy)
+│
+├── src/test/java/...                  # 250 tests
+└── build.gradle
 ```
 
 ---
 
-## 7. Entry Points
+## Referencias
 
-| Entry Point | Location | Called By |
-|-------------|----------|-----------|
-| `IflowModule` | `IflowModule.java` | `ModuleLoader` → `SuiteBootstrap` |
-| `DefaultRouter` | `DefaultRouter.java` | `MessageDispatcher.dispatch()` |
-
----
-
-## 8. Extension Points
-
-| Extension Point | How to Extend |
-|-----------------|---------------|
-| Custom `Router` | Implement `Router` interface, register via custom `Module` |
-| Custom `TransformOp` | Add enum value to `TransformOp`, handle in `DefaultRouter` |
-| Custom `PermissionChecker` | Implement `PermissionChecker` SPI (core-api), platform adapter provides |
-| Custom rate limiting | Extend `RateLimiter` or replace with custom implementation |
-| Rule scripts | Write SpEL expressions in rule config (YAML) |
-
----
-
-## 9. Exploration Path
-
-```
-1. Router.java / DefaultRouter.java     → Routing interface & default impl
-2. RouteDecision.java / RouteOutcome.java → Decision types
-3. Rule.java / TransformOp.java         → Rule model & operations
-4. ScriptSurface.java                   → SpEL context variables
-5. RateLimiter.java                     → Rate limiting algorithm
-6. PermissionChecker.java               → Permission SPI (core-api)
-7. PolicyTarget.java                    → Rate limit/permission targets
-8. IflowModule.java                     → Module registration
-```
-
----
-
-## 10. Related Modules
-
-- [core-api](../core-api/README.md) — Defines `PermissionChecker`, `Message`, `Actor`, `Channel`
-- [textformatter](../textformatter/README.md) — Used for `SET_FORMAT` transforms
-- [host](../host/README.md) — Wires `Router`, provides `PermissionChecker` impl
-- [kernel](../kernel/README.md) — Loads `IflowModule`
-
----
-
-## 11. Security Fixes (Audit 2026-09-28)
-
-| Fix | Issue | Location |
-|-----|-------|----------|
-| **M-08** | InterruptedException swallowed in `MessageDispatcher` | `MessageDispatcher.dispatch()` — explicit catch + `Thread.currentThread().interrupt()` |
-| **M-09** | `RateLimiter` redundant RWLock over ConcurrentHashMap | Removed `ReentrantReadWriteLock`; uses `computeIfAbsent` + `ConcurrentHashMap` + `synchronized(bucket)` |
+- [`docs/prompts/iflow/implement.md`](../../docs/prompts/iflow/implement.md) — Especificación técnica completa
+- [`tools/iflow-compiler/`](../../tools/iflow-compiler/) — Ensamblador TypeScript (.flowasm → .flow)
+- [`docs/prompts/iflow/`](../../docs/prompts/iflow/) — Prompts y decisiones de diseño

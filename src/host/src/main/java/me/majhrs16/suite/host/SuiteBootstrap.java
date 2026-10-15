@@ -6,9 +6,11 @@ import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.port.ChatDelivery;
-import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.Router;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.iflow.config.RuleConfigLoader;
+import me.majhrs16.suite.iflow.vm.VmConfigLoader;
+import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ModuleLoader;
@@ -94,8 +96,20 @@ public final class SuiteBootstrap {
         }
 
         // 4. Wire core components (these are the actual services, not Module descriptors)
-        me.majhrs16.suite.iflow.Router router = new me.majhrs16.suite.iflow.DefaultRouter(channels, permissions);
-        me.majhrs16.suite.textformatter.TextFormatter formatter = me.majhrs16.suite.textformatter.TextFormatters.create(channels, translation, placeholders, logger);
+        // Load VM policy program (compiles rules.yml to bytecode or loads native .flow)
+        me.majhrs16.suite.iflow.vm.isa.ProgramImage program = me.majhrs16.suite.iflow.vm.VmConfigLoader.loadProgram(configDir, logger);
+
+        // Create rate limiter (shared with VM engine)
+        me.majhrs16.suite.iflow.channel.RateLimiter rateLimit = new me.majhrs16.suite.iflow.channel.RateLimiter();
+
+        // Create VM policy engine
+        me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine router = new me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine(channels, permissions, rateLimit);
+        router.setProgram(program);
+
+        // Create separate evaluator for template rendering (sandboxed)
+        me.majhrs16.suite.api.spi.ExpressionEvaluator templateEvaluator = new me.majhrs16.suite.textformatter.scripting.SpelExpressionEvaluator(
+            placeholders, translation, logger);
+        me.majhrs16.suite.textformatter.TextFormatter formatter = me.majhrs16.suite.textformatter.TextFormatters.create(channels, translation, placeholders, logger, templateEvaluator);
 
         // 5. Create SuiteHost with core components
         ChatDelivery chatDelivery = ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null);

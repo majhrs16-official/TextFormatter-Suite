@@ -13,7 +13,7 @@ TextFormatter Suite
 │   ├── core-api          → Core interfaces, SPI, domain types
 │   ├── kernel            → Module loading & dependency resolution
 │   ├── textformatter     → Template engine, expression evaluation, channels
-│   ├── iflow             → Message routing, rules, rate limiting
+│   ├── iflow             → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
 │   ├── transport         → Transport abstraction (HTTP, codecs)
@@ -59,7 +59,7 @@ TextFormatter Suite
 | `core-api` | Core interfaces, SPI, domain types (Module, Actor, Channel, TranslationService, SyncSink, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), SpEL expressions, channel registry | `core-api` | `host`, `iflow`, `presets`, `spigot-host`, `fabric-host` |
-| `iflow` | Message routing, transform rules, rate limiting, permission checks | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
+| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `VmDmaController`, `SoftMMU` | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
 | `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets`, `manager-impl` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
@@ -94,7 +94,7 @@ TextFormatter Suite
 | `core-api` | Contracts & SPI | Define all platform-agnostic interfaces | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, expressions, channels | `DefaultTextFormatter`, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
-| `iflow` | Message routing | Rules, routing, rate limiting | `Router`, `DefaultRouter`, `Rule`, `RateLimiter`, `PermissionChecker` | `IflowModule` | [iflow/README.md](iflow/README.md) |
+| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `VmDmaController`, `SoftMMU` | `VmPolicyEngine`, `VmInterpreter`, `VmDmaController`, `SoftMMU`, `VmDmaController` | `IflowModule` | [iflow/README.md](iflow/README.md) |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateModule` | [ltranslate/README.md](ltranslate/README.md) |
@@ -272,7 +272,7 @@ Platform Adapter (SpigotChatDelivery / FabricChatDelivery)
          ↓
 MessageDispatcher.dispatch()
          ↓
-Router.route() [iflow] → applies rules, transforms, rate limits
+Router.route() [iflow] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
          ↓
 TextFormatter.format() → MiniMessage + SpEL evaluation
          ↓
@@ -318,7 +318,7 @@ Module.initialize() called in order
 | **Configuration** | `host` | `ConfigLoader`, `HostConfig`, `ConfigValidator`, `ConfigSchemaGenerator` |
 | **Module System** | `kernel` | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` |
 | **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry` |
-| **Routing/Rules** | `iflow` | `Router`, `DefaultRouter`, `Rule`, `RateLimiter`, `PermissionChecker` |
+| **Routing/Rules (VM)** | `iflow` | `VmPolicyEngine`, `VmInterpreter`, `VmDmaController`, `SoftMMU`, `VmConfigLoader` |
 | **Translation** | `gtranslate`/`ltranslate` | `GTranslateProvider`, `LTranslateProvider` (implement `TranslationService`) |
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
 | **Observability** | `observability` | `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint`, `DebugEndpoint` |
@@ -353,7 +353,7 @@ Module.initialize() called in order
 | Understand overall architecture | `src/README.md` (this file) | Module READMEs |
 | Understand module loading | `kernel/src/main/java/me/majhrs16/suite/kernel/ModuleLoader.java` | `ModuleGraph.java` |
 | Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `ChannelRegistry.java` |
-| Understand routing | `iflow/src/main/java/me/majhrs16/suite/iflow/DefaultRouter.java` | `Rule.java`, `RateLimiter.java` |
+| Understand routing (VM) | `iflow/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `VmDmaController.java`, `SoftMMU.java` |
 | Understand bootstrap | `host/src/main/java/me/majhrs16/suite/host/SuiteBootstrap.java` | `SuiteHost.java`, `MessageDispatcher.java` |
 | Understand Spigot integration | `spigot-host/src/main/java/me/majhrs16/suite/spigothost/TextFormatterSuitePlugin.java` | `SpigotActorDirectory.java`, `SpigotChatDelivery.java` |
 | Understand Fabric integration | `fabric-host/src/main/java/me/majhrs16/suite/fabrichost/TextFormatterSuiteMod.java` | `FabricActorDirectory.java`, `FabricChatDelivery.java` |

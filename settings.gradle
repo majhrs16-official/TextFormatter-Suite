@@ -31,7 +31,7 @@ include 'src:manager-apt'
 include 'src:presets'
 include 'src:inworld'
 include 'src:spigot-host'
-include 'src:fabric-host'
+// include 'src:fabric-host'  // Temporarily disabled for Java 21 compatibility
 include 'src:common-legacy'
 include 'src:transport'
 include 'src:messages'

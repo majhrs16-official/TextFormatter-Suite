@@ -1,0 +1,16 @@
+.origin 0x0000
+.entry main
+
+.section code
+
+main:
+    CALL test_arithmetic
+    HALT
+
+test_arithmetic:
+    LI R1, 10
+    LI R2, 20
+    ADD R1, R2
+    RET
+
+.end
