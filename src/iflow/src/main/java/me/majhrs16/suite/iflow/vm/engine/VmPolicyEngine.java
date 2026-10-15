@@ -165,10 +165,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                .messageId(message.id().toString())
                .actorId(recipient.name())
                .softMMU(new SoftMMU(loaded.softMMU()))  // Copy program's MMU (page tables + physical memory)
-               .serviceRegistry(serviceRegistry);
-
-            // Set program-specific capabilities for this evaluation
-            serviceRegistry.setAllowedCapabilities(loaded.program().capabilities());
+               .serviceRegistry(serviceRegistry)
+               .allowedCapabilities(loaded.program().capabilities());
 
             // Initialize context (resets registers, fuel, clears I/O buffers)
             ctx.initialize();

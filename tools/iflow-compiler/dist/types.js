@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.REGISTER_NAMES = exports.Decision = exports.PropertyId = exports.Scope = exports.ServiceId = exports.Register = exports.INSTRUCTION_SIZES = exports.Opcode = void 0;
+exports.isGPR = isGPR;
 /**
  * iFlow VM Opcode Definitions
  * Matches the Java ISA specification exactly
@@ -103,6 +104,10 @@ var Register;
     Register[Register["FP"] = 10] = "FP";
     Register[Register["FL"] = 11] = "FL";
 })(Register || (exports.Register = Register = {}));
+/** Returns true if register is a general-purpose register (R0-R7). */
+function isGPR(reg) {
+    return reg >= Register.R0 && reg <= Register.R7;
+}
 /**
  * Service IDs (matching Java HostServiceRegistry)
  */

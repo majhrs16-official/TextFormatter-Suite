@@ -14,14 +14,24 @@ declare class Assembler {
     private currentFile;
     private currentSection;
     private constantPool;
+    private firmwareEnabled;
     constructor(options?: AssemblerOptions);
     assemble(source: string, fileName?: string): Promise<AssemblerResult>;
     private reset;
     private firstPass;
     private secondPass;
+    /**
+     * Generates the firmware ROM (4KB at 0x0000-0x0FFF).
+     * Contains: vector table, service constants, string/memory utils, host wrappers.
+     */
+    private generateFirmware;
+    private emitConst;
+    private emitInstr;
     private handleDirective;
     private defineLabel;
     private parseInstruction;
+    private validateOperands;
+    private getExpectedOperands;
     private tokenize;
     private getOpcode;
     private parseOperands;

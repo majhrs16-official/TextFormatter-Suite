@@ -99,6 +99,11 @@ export enum Register {
   IP = 8, SP = 9, FP = 10, FL = 11,
 }
 
+/** Returns true if register is a general-purpose register (R0-R7). */
+export function isGPR(reg: number): boolean {
+  return reg >= Register.R0 && reg <= Register.R7;
+}
+
 /**
  * Service IDs (matching Java HostServiceRegistry)
  */
@@ -199,8 +204,8 @@ export interface ParsedInstruction {
  */
 export type Operand =
   | { type: 'reg'; value: number }
-  | { type: 'imm8'; value: number }
-  | { type: 'imm16'; value: number }
+  | { type: 'imm8'; value: number; rawValue?: number }
+  | { type: 'imm16'; value: number; rawValue?: number }
   | { type: 'vaddr'; value: number }
   | { type: 'label'; name: string }
   | { type: 'packed_rr'; rd: number; rs: number };
@@ -223,6 +228,7 @@ export interface AssemblerOptions {
   entryPoint?: string;      // Entry label name
   debug?: boolean;          // Include debug info
   optimize?: boolean;       // Enable peephole optimizations
+  firmware?: boolean;       // Prepend firmware ROM (default: true)
 }
 
 /**

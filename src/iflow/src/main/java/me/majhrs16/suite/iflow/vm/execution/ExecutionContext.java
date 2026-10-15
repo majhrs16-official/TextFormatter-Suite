@@ -29,6 +29,7 @@ public final class ExecutionContext {
     private long fuelBudget;
     private int maxCallDepth = 64;
     private int maxStackSize = 16 * 1024; // 16 KiB
+    private String[] allowedCapabilities = new String[0]; // Per-execution capabilities
 
     // ===== Runtime-injected services =====
     private SoftMMU softMMU;
@@ -68,6 +69,7 @@ public final class ExecutionContext {
     public ExecutionContext softMMU(SoftMMU mmu) { this.softMMU = mmu; return this; }
     public ExecutionContext serviceRegistry(HostServiceRegistry r) { this.serviceRegistry = r; return this; }
     public ExecutionContext nanoTimeSupplier(Supplier<Long> s) { this.nanoTimeSupplier = s; return this; }
+    public ExecutionContext allowedCapabilities(String[] caps) { this.allowedCapabilities = caps != null ? caps.clone() : new String[0]; return this; }
 
     // ===== Initialization (called when acquiring from pool) =====
 
@@ -231,6 +233,13 @@ public final class ExecutionContext {
     public String actorId() { return actorId; }
     public int maxCallDepth() { return maxCallDepth; }
     public int maxStackSize() { return maxStackSize; }
+    public String[] allowedCapabilities() { return allowedCapabilities.clone(); }
+    public boolean hasCapability(String capability) {
+        for (String cap : allowedCapabilities) {
+            if (cap.equals(capability)) return true;
+        }
+        return false;
+    }
 
     @Override
     public String toString() {

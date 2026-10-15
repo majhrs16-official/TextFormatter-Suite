@@ -57,6 +57,8 @@ export declare enum Register {
     FP = 10,
     FL = 11
 }
+/** Returns true if register is a general-purpose register (R0-R7). */
+export declare function isGPR(reg: number): boolean;
 /**
  * Service IDs (matching Java HostServiceRegistry)
  */
@@ -140,9 +142,11 @@ export type Operand = {
 } | {
     type: 'imm8';
     value: number;
+    rawValue?: number;
 } | {
     type: 'imm16';
     value: number;
+    rawValue?: number;
 } | {
     type: 'vaddr';
     value: number;
@@ -171,6 +175,7 @@ export interface AssemblerOptions {
     entryPoint?: string;
     debug?: boolean;
     optimize?: boolean;
+    firmware?: boolean;
 }
 /**
  * Assembler result

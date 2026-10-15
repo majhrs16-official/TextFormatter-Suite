@@ -109,9 +109,6 @@ public final class HostServiceRegistry {
     private final Map<Integer, HostService> services = new HashMap<>();
     private final Map<String, Integer> capabilityMap = new HashMap<>();
 
-    // Current program's allowed capabilities (set per evaluation)
-    private String[] allowedCapabilities = new String[0];
-
     // Host-injected dependencies
     private BiFunction<String, String, Boolean> permissionChecker;
     private java.util.function.Function<String, String> placeholderResolver;
@@ -219,19 +216,6 @@ public final class HostServiceRegistry {
         capabilityMap.put(capability, 1);
     }
 
-    /** Sets the capabilities allowed for the current program/evaluation. */
-    public void setAllowedCapabilities(String[] capabilities) {
-        this.allowedCapabilities = capabilities != null ? capabilities.clone() : new String[0];
-    }
-
-    /** Checks if a capability is granted for the current program. */
-    public boolean hasCapability(String capability) {
-        for (String cap : allowedCapabilities) {
-            if (cap.equals(capability)) return true;
-        }
-        return false;
-    }
-
     /** Invokes a service, checking capabilities and charging fuel. */
     public ServiceResult invoke(ExecutionContext ctx, int serviceId, int argVAddr, int argOffset, int argLength, int options) {
         HostService service = services.get(serviceId);
@@ -239,9 +223,9 @@ public final class HostServiceRegistry {
             throw VmException.hostServiceNotFound(serviceId, ctx.registers().get(RegisterFile.IP));
         }
 
-        // Check declared capabilities
+        // Check declared capabilities against this execution's allowed capabilities
         for (String cap : service.requiredCapabilities()) {
-            if (!hasCapability(cap)) {
+            if (!ctx.hasCapability(cap)) {
                 throw VmException.hostServiceDenied(serviceId, ctx.registers().get(RegisterFile.IP));
             }
         }

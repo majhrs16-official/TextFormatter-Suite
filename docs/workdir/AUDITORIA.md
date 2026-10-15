@@ -1,637 +1,332 @@
-# Auditoría técnica de iFlow — TextFormatter Suite
+# Auditoría técnica forense de iFlow VM + Compiler
 
-Repositorio analizado: [majhrs16-official/TextFormatter-Suite](https://github.com/majhrs16-official/TextFormatter-Suite) · Rama `main` · 15 de octubre de 2026
+El objeto de auditoría es el repositorio [majhrs16-official/TextFormatter-Suite](https://github.com/majhrs16-official/TextFormatter-Suite), con alcance sobre `src/iflow/`, `tools/iflow-compiler/` y las integraciones necesarias para comprobar el recorrido completo del programa.
 
-La cuestión central de esta auditoría no es si iFlow tiene una arquitectura interesante o si su intérprete ejecuta instrucciones. Es si la ISA, el ensamblador, el formato binario, el runtime Java, el modelo de memoria y la integración con el router forman un sistema coherente, seguro y funcional.
+He confirmado que el repositorio público existe, que su rama predeterminada es `main` y que contiene tanto el módulo Java de iFlow como el compilador TypeScript, programas de ejemplo y una suite de pruebas Java. Esto confirma que hay componentes concretos que inspeccionar, pero todavía no demuestra que el compilador y la VM sean compatibles ni que las políticas funcionen de extremo a extremo.
 
-Voy a distinguir tres niveles de evidencia:
+La auditoría distinguirá los defectos demostrados de las hipótesis pendientes y no presentará pruebas estáticas como si fueran ejecuciones reales.
 
--
+## 1. Identificación de la versión examinada
 
-  HECHO
+Commit auditado
 
-  &#x20;Comprobable directamente en los archivos, las declaraciones del proyecto o los resultados de pruebas que se hayan aportado.
+`0c776da0006c7fcbd72dea4b2c5629c8a40097a`
 
+15 de octubre de 2026 · rama `main`
 
--
+Componentes identificados
 
-  SUPOSICIÓN
+- Runtime Java: `src/iflow/src/main/java/`
+- Pruebas Java: `src/iflow/src/test/java/`
+- Compiler TypeScript: `tools/iflow-compiler/src/`
+- Ejemplos y verificación auxiliar: `tools/iflow-compiler/test/`
 
-  &#x20;Interpretación técnica plausible que necesita una prueba, una ejecución o más código para confirmarse.
+Un dato importante para interpretar los resultados: el commit examinado incluye una corrección que declara abordar doce hallazgos previos, `IF-001` a `IF-012`. Entre los cambios anunciados figuran la corrección de una copia de memoria, la longitud de argumentos HOST, la validación del hash, la generación de listados y la publicación atómica del programa. Esas descripciones son metadatos del commit; he contrastado parte de ellas con el código, pero no las considero prueba automática de que las correcciones sean completas.
 
+## 2. Primeros hallazgos técnicos
 
--
+La inspección estática ya permite identificar varios puntos que requieren atención:
 
-  ALUCINACIÓN
+- Concurrencia: el registro HOST mantiene las capacidades autorizadas en un campo mutable compartido por las ejecuciones. El motor modifica ese campo al comenzar cada evaluación. Esto crea una carrera potencial entre programas que tengan capacidades diferentes.
+- Pool de contextos: utiliza una `ArrayDeque` sin sincronización. Si el motor recibe evaluaciones concurrentes, la estructura compartida no ofrece por sí misma seguridad para esos accesos.
+- Directivas del compilador: `.align` ejecuta un bucle cuyo avance depende del módulo de la alineación solicitada. No hay una validación visible del valor cero antes del bucle.
+- Cobertura de pruebas: algunos tests siguen comprobando el comportamiento anterior de las capacidades. Es necesario contrastarlos con el nuevo contrato y ejecutar la suite para determinar cuáles fallan realmente.
 
-  &#x20;Afirmación que se presenta como cierta sin evidencia suficiente, o que contradice la evidencia disponible. Esto incluye tanto afirmaciones exageradas sobre las capacidades como críticas que inventan fallos.
+Estos puntos no tienen todos el mismo grado de certeza: los patrones de código están presentes, mientras que sus consecuencias bajo una carga concreta deben distinguirse de los resultados experimentales.
 
+## 3. Registro de hallazgos
 
+Las referencias siguientes corresponden al commit indicado en la sección anterior. Los números de línea se han contrastado con los archivos recuperados de esa revisión.
 
-Una precisión importante: que un README diga que existen 250 tests y que pasan no demuestra que todas las propiedades arquitectónicas estén verificadas. Del mismo modo, que una clase tenga un nombre como `SoftMMU` o `VmDmaController` no demuestra por sí solo que sus garantías de seguridad sean correctas.
+### IFLOW-001 — Las capacidades HOST no están aisladas por ejecución concurrente
 
-## 1. Primer hallazgo: la documentación no es una fuente de verdad suficiente
+Alta · Seguridad
 
-## Discrepancia verificable entre documentación y configuración de build
+Estado epistemológico: INFERENCIA JUSTIFICADA, basada en un patrón de concurrencia verificable.
 
-El README raíz describe una arquitectura con 29 módulos Gradle y presenta iFlow como una VM de 16 bits con memoria virtual de 64 KiB, paginación de 4 KiB, servicios `HOST` y un presupuesto de ejecución de 100.000 unidades.
+Ubicaciones:
 
-Sin embargo, `settings.gradle` contiene esta declaración:
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistry.java:113-113`
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistry.java:222-232`
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistry.java:235-247`
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java:153-181`
+
+Evidencia y razonamiento:
+
+1. El registro HOST mantiene `allowedCapabilities` en un campo mutable de instancia.
+2. `VmPolicyEngine.route()` comparte el mismo `HostServiceRegistry` entre las evaluaciones.
+3. Cada evaluación cambia las capacidades permitidas mediante `setAllowedCapabilities()`.
+4. La autorización de cada servicio consulta ese campo compartido.
+5. No hay sincronización que vincule la comprobación de capacidades a la identidad del programa que originó la llamada.
+
+Si una ejecución del programa anterior continúa activa mientras se publica y ejecuta otro programa con capacidades distintas, las comprobaciones pueden observar el conjunto de capacidades equivocado.
+
+Impacto: un programa podría recibir una autorización que no le corresponde, o perder una autorización válida. Es un riesgo de aislamiento que debe resolverse antes de considerar segura la ejecución concurrente durante una sustitución de programa.
+
+Corrección recomendada: pasar las capacidades autorizadas como parte del contexto de ejecución o de un objeto de invocación HOST inmutable. La autorización debe derivarse del programa concreto asociado a esa ejecución, no de un estado global que pueda cambiar.
+
+Regresión necesaria: ejecutar dos programas con conjuntos de capacidades disjuntos, intercalar sus llamadas HOST y sustituir el programa activo durante la prueba. Ninguna llamada debe heredar permisos del otro programa.
+
+Limitación: el patrón de carrera es real en el código; no he ejecutado un test que reproduzca la intercalación ni he demostrado una explotación en producción.
+
+### IFLOW-002 — El pool de contextos no es seguro para acceso concurrente
+
+Alta · Estabilidad
+
+Estado epistemológico: HECHO VERIFICADO sobre la implementación; impacto concurrente derivado de ella.
+
+Ubicación: `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/execution/ExecutionContextPool.java:21-21`, `44-63` y `67-88`.
+
+El pool utiliza una `ArrayDeque` compartida y ejecuta operaciones como `poll()`, `offer()` y `size()` sin sincronización. Los contadores atómicos no hacen thread-safe a la cola.
+
+Si varias llamadas a `route()` se ejecutan concurrentemente, pueden adquirir y liberar contextos al mismo tiempo. La estructura no garantiza que estas operaciones se comporten correctamente bajo esa concurrencia.
+
+Impacto: corrupción del estado interno de la cola, pérdida de contextos disponibles o comportamiento inconsistente del pool. Esto no demuestra por sí solo que dos ejecuciones reciban el mismo contexto, pero impide confiar en la implementación actual como pool concurrente.
+
+Corrección recomendada: sustituir la cola por una estructura concurrente apropiada o sincronizar las operaciones de adquisición y liberación. Revisar también el cierre del pool y el acceso a sus métricas.
+
+Regresión necesaria: prueba multihilo de adquisición y liberación, comprobando que ningún contexto se entrega simultáneamente a dos ejecuciones y que los contadores y la cola mantienen sus invariantes.
+
+### IFLOW-003 — La escritura de bloques puede dejar modificaciones parciales
+
+Alta · Integridad de memoria
+
+Estado epistemológico: HECHO VERIFICADO sobre el flujo de escritura.
+
+Ubicaciones:
+
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/memory/SoftMMU.java:127-141`
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/memory/VmDmaController.java:85-150` (la ruta de escritura delega en `SoftMMU` y la validación de rangos está implementada por separado).
+
+Evidencia y razonamiento:
+
+En el caso de un bloque que cruza páginas no contiguas, `SoftMMU.writeBlock()` escribe byte a byte. Antes del bucle traduce la dirección inicial, pero no valida previamente los permisos de escritura de todas las páginas que recibirá el bloque.
+
+Si la primera página permite escritura y la segunda no, los primeros bytes pueden haberse escrito cuando el acceso a la segunda página falla.
+
+El controlador DMA documenta validación de rangos y transferencias atómicas, pero su método público `writeBlock()` delega directamente en `SoftMMU.writeBlock()` en lugar de validar previamente el rango completo.
+
+Impacto: una operación que falla puede modificar parcialmente el estado de la VM. Esto importa especialmente si una instrucción, un servicio HOST o una preparación de datos espera que la transferencia sea íntegra.
+
+Corrección recomendada: validar el rango completo, todas las páginas y todos los permisos antes de modificar memoria. Si se requiere atomicidad real, garantizar que ninguna escritura pueda fallar después de comenzar la fase de modificación.
+
+Regresión necesaria: escribir un bloque que cruce desde una página escribible a otra de solo lectura y verificar que, tras el error, todos los bytes originales permanecen intactos.
+
+### IFLOW-004 — La directiva `.align` puede bloquear el compilador
+
+Alta · Disponibilidad del compilador
+
+Estado epistemológico: HECHO VERIFICADO por inspección estática.
+
+Ubicación: `tools/iflow-compiler/src/assembler.ts:163-168`.
+
+El compilador calcula la alineación y ejecuta:
 
 ```
-// include 'src:fabric-host'  // Temporarily disabled for Java 21 compatibility
-```
-
-HECHO: `fabric-host` está comentado en la configuración de Gradle inspeccionada, aunque la documentación también describe ese adaptador como parte del sistema. Esto no demuestra que el código Fabric no funcione; sí significa que no puede tratarse como un subproyecto activo de esa configuración sin verificar cómo se compila por otra vía.
-
-Fuentes: [README raíz](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/README.md) · [settings.gradle](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/settings.gradle)
-
-Esta discrepancia importa porque el proyecto afirma que la arquitectura está probada, pero hay que distinguir entre:
-
-1. Código presente en el repositorio.
-2. Código incluido en el build actual.
-3. Código que compila.
-4. Pruebas automatizadas que pasan.
-5. Funcionalidad integrada en un servidor real.
-6. Garantías de comportamiento bajo condiciones adversas.
-
-Son niveles diferentes. No se puede ascender de uno a otro por inferencia.
-
-También hay que tener cuidado con el estado temporal del repositorio: esta auditoría toma como referencia `main`, no una versión publicada e inmutable. El resultado debería asociarse a un commit concreto antes de convertirse en un informe de aceptación formal.
-
-## 2. Hallazgos críticos en el runtime Java
-
-He inspeccionado código de `VmPolicyEngine`, `VmInterpreter`, `ExecutionContextPool`, `ProgramImageParser`, `SoftMMU`, `HostServiceRegistry` y `PolicyResultValidator`. Los siguientes hallazgos ya no son simples dudas sobre el diseño: varios se desprenden directamente de las implementaciones.
-
-IF-001 — Corrupción de memoria en `SoftMMU.readBlock()`
-
-Crítico
-
-HECHO. En la ruta rápida, `readBlock()` contiene esta operación:
-
-```
-System.arraycopy(
-    physicalMemory, physAddr,
-    physicalMemory, destOffset, length
-);
-```
-
-La operación copia datos dentro de la propia memoria física de la VM, cuando el destino debería ser el array `dest` suministrado por el llamador. Inmediatamente después aparece la copia correcta hacia `dest`.
-
-Esto puede sobrescribir memoria de la VM, incluido código u otros datos, y puede alterar las lecturas cuando origen y destino se solapan. El problema afecta a las operaciones que pasan por esta ruta rápida.
-
-Archivo: [SoftMMU.java](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/memory/SoftMMU.java).
-
-IF-002 — ABI de `HOST` incompatible con los servicios que necesitan longitud
-
-Crítico
-
-HECHO. `VmInterpreter.executeHost()` establece `argLength = 0` de forma fija y pasa `R3` simultáneamente como `options`:
-
-```
-int argLength = 0;
-int options = regs.get(RegisterFile.R3);
-
-ServiceResult result = serviceRegistry.invoke(
-    ctx, serviceId, argHandle, argOffset,
-    argLength, options
-);
-```
-
-Sin embargo, `HostServiceRegistry` usa `argLength` para leer y escribir buffers. Por ejemplo, `doPropertyWrite()` intenta leer una región de longitud `argLength`; `doPropertyRead()` comprueba si el resultado cabe en esa longitud.
-
-En esta ruta, la longitud es cero. Por tanto, los servicios que dependen de ella no pueden realizar las operaciones documentadas de transferencia de datos.
-
-La causa es más profunda que un parámetro mal asignado: el ABI actual intenta representar en un mismo registro tanto la longitud como las opciones o la decisión de routing. Hay que rediseñar esa convención, no limitarse a cambiar un valor.
-
-IF-003 — Las capabilities no están aisladas por programa
-
-Seguridad
-
-HECHO. `HostServiceRegistry` mantiene un único `capabilityMap`. El método `register()` declara automáticamente las capabilities exigidas por cada servicio, y `invoke()` consulta ese mapa global. En `VmPolicyEngine.createServiceRegistry()` también se declaran explícitamente varias capabilities.
-
-El registro no recibe la lista de capabilities de la `ProgramImage` al decidir si autoriza cada llamada. Por ello, el mecanismo inspeccionado no aplica la autorización por programa que describe el README.
-
-Esto no demuestra que cualquier servicio tenga acceso arbitrario a Java: cada servicio conserva su propia implementación. Pero sí demuestra que el control de capabilities documentado no está aplicado en el punto de autorización como un permiso individual de cada programa.
-
-IF-004 — La carga de constantes puede fallar por permisos de página
-
-Alta
-
-HECHO. En `VmPolicyEngine.setupProgramMappings()`, la página de constantes se mapea primero con permiso de solo lectura:
-
-```
-pageTable.mapPage(
-    CONSTANTS_PAGE,
-    CONSTANTS_PAGE * SoftMMU.PAGE_SIZE,
-    PageEntry.PERM_READ
-);
-```
-
-Después se intenta escribir en esa página mediante `mmu.writeBlock()`. Si `translateWrite()` aplica los permisos de escritura de la tabla —como exige el modelo descrito—, la operación falla.
-
-El código también admite que el código ocupe varias páginas, pero las asigna desde la página cero. Un programa grande puede solaparse con las regiones reservadas para constantes, datos, pila y buffers.
-
-La primera parte es un defecto de orden de inicialización si se confirma el comportamiento de `PageTable.translateWrite()`; la segunda es un riesgo de diseño que exige probar programas de diferentes tamaños y configuraciones de memoria.
-
-IF-005 — Coste excesivo por copia del bytecode
-
-Rendimiento
-
-HECHO. `ProgramImage.code()` devuelve una copia defensiva del array de código. El bucle de `VmInterpreter.execute()` invoca `program.code()` para obtener el opcode en cada iteración, y `executeInstruction()` vuelve a solicitarlo.
-
-Por tanto, una instrucción puede provocar una copia del programa completo, no solo una lectura del byte correspondiente. En un programa de \\(N\\) bytes ejecutado durante \\(I\\) instrucciones, esto puede elevar el trabajo de copia hasta el orden de \\(O(NI)\\), además del trabajo de interpretación.
-
-La solución es conservar una representación interna inmutable o proporcionar acceso de lectura seguro sin clonar todo el bytecode en cada instrucción. La protección frente a modificaciones externas debe mantenerse, pero no necesita pagarse repetidamente dentro del bucle.
-
-IF-006 — El parser binario no valida la integridad completa del archivo
-
-Alta
-
-HECHO. `ProgramImageParser.parse()` comprueba la longitud mínima de la cabecera y que las secciones de código y constantes no estén truncadas. Sin embargo, no valida de forma suficiente el conjunto de invariantes del formato:
-
-- No verifica que las versiones del formato, ISA, ABI y firmware sean compatibles.
-- No comprueba el hash SHA-256 como una condición de aceptación.
-- No exige que las cadenas de capabilities terminen correctamente dentro de la sección esperada.
-- No rechaza de forma explícita todos los bytes sobrantes o secciones malformadas.
-
-El compilador también genera un array de 32 bytes de hash relleno con ceros, descrito como placeholder. Por tanto, el hash no constituye una garantía de integridad del artefacto compilado.
-
-Esto no significa que cada archivo malformado consiga ejecutarse. Significa que el cargador todavía no establece una frontera de validación estricta y completa.
-
-### 2.1. Un problema adicional: servicios anunciados que el motor no configura
-
-`VmPolicyEngine.createServiceRegistry()` inyecta un comprobador de permisos, pero no configura allí los lectores y escritores de propiedades, el acceso al estado ni el resolver de canales.
-
-HECHO: `HostServiceRegistry` devuelve errores como `Property reader not configured`, `State reader not configured` o `Channel resolver not configured` cuando faltan esas dependencias.
-
-Esto significa que los servicios no están todos operativos por el mero hecho de estar registrados en la ISA o de existir sus implementaciones. Para considerar funcional una capacidad hay que verificar toda la cadena:
-
-\\[ \text{Programa} \rightarrow \text{HOST} \rightarrow \text{ABI} \rightarrow \text{Servicio} \rightarrow \text{Dependencia configurada} \\]
-
-Si cualquiera de esos eslabones falla, el servicio no ofrece la funcionalidad esperada.
-
-Fuente: [HostServiceRegistry.java](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistry.java).
-
-## 3. Auditoría del compilador TypeScript
-
-El compilador no es una herramienta auxiliar sin importancia. Es la otra mitad de la máquina: si genera instrucciones que el intérprete no entiende, un formato que el cargador interpreta de otra manera o un binario inválido que parece correcto, el diseño de la VM pierde valor independientemente de lo bien que esté escrito el intérprete.
-
-He revisado `tools/iflow-compiler/README.md`, `src/assembler.ts`, `src/types.ts`, `src/cli.ts` y el programa `test/firmware.flowasm`.
-
-Fuente principal: [tools/iflow-compiler](https://github.com/majhrs16-official/TextFormatter-Suite/tree/main/tools/iflow-compiler).
-
-## IF-007 — El ensamblador no implementa correctamente el modelo de direcciones que anuncia
-
-Alta
-
-HECHO. La primera pasada calcula direcciones usando `.origin` y las directivas de alineación. La segunda pasada, sin embargo, genera el array de código concatenando las instrucciones:
-
-```
-const code: number[] = [];
-
-for (const instr of this.instructions) {
-  this.currentAddress = instr.address;
-  code.push(instr.opcode);
+while (this.currentAddress % align !== 0) {
   this.currentAddress++;
-  this.emitOperands(instr, code);
-  this.currentAddress += instr.size - 1;
 }
 ```
 
-No se insertan bytes de relleno para reproducir las direcciones calculadas.
+No se observa una comprobación previa que rechace una alineación igual a cero. Con `.align 0`, el resto es `NaN`, que nunca es igual a cero. El bucle continúa incrementando `currentAddress` indefinidamente.
 
-Además, `getEntryPointAddress()` devuelve la dirección absoluta de la etiqueta de entrada, mientras que el intérprete valida que esa dirección sea menor que `program.codeSize()` y la usa como índice directo en el array de código.
+Impacto: un archivo fuente malformado puede dejar el proceso del compilador bloqueado. También debe investigarse el tratamiento de literales numéricos inválidos, ya que `parseNumber()` puede devolver `NaN` sin lanzar una excepción.
 
-Por tanto, un programa con origen distinto de cero puede tener etiquetas y punto de entrada que no correspondan con la posición real de las instrucciones en el bytecode. La opción `-O` y las directivas `.origin` no deben considerarse funcionales para programas con direcciones absolutas sin una solución explícita de reubicación.
+Corrección recomendada: exigir una alineación positiva y válida, definir si se admiten únicamente potencias de dos y rechazar valores que no cumplan el contrato. Añadir límites de tamaño y tiempo para la compilación cuando procese fuentes no confiables.
 
-## IF-008 — Las secciones y constantes no tienen una representación coherente
+Regresión necesaria: ejecutar `.align 0`, `.align -1` y `.align invalid` en procesos con timeout; cada caso debe finalizar con un diagnóstico claro, no bloquearse.
 
-Alta
+### IFLOW-005 — El mapa fijo de memoria entra en conflicto con programas grandes
 
-HECHO. `.section` cambia `currentSection`, pero la generación de código no utiliza esa información para separar segmentos. Las directivas `.const` añaden valores a `constantPool`, pero también crean etiquetas, con tratamiento diferente en el mapa de etiquetas y en el mapa de símbolos.
+Alta · Coherencia de memoria
 
-El propio ejemplo de firmware contiene declaraciones como:
+Estado epistemológico: INFERENCIA JUSTIFICADA a partir de la configuración y del orden de los mapeos.
 
-```
-.section data
-.const "global"
-```
+Ubicación: `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java:199-249`, junto con `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/isa/ProgramImageParser.java:56-79`.
 
-La implementación inspeccionada de `.const` espera un nombre y un valor numérico, y llama a `parseNumber()` sobre el tercer elemento. No hay en esa ruta una implementación de literales de cadena como los del ejemplo.
+El motor mapea las páginas necesarias para el código y copia el programa a memoria. Después asigna páginas fijas para constantes, datos, pila y buffers. En particular, la página 1 se reserva para constantes y las páginas 2 y 3 para datos.
 
-Consecuencia: la sintaxis documentada y la sintaxis realmente aceptada por el ensamblador no coinciden por completo. No se puede dar por implementada la compilación de datos y cadenas únicamente porque aparezcan en el ejemplo.
+Sin embargo, el parser permite imágenes con código de hasta 65.535 bytes, y el cálculo de páginas del motor contempla más de una página de código.
 
-## IF-009 — El hash no proporciona integridad criptográfica
+Para código que exceda la primera página, las asignaciones posteriores pueden reemplazar los mapeos que correspondían al código. Además, las constantes se escriben en la misma memoria física subyacente.
 
-Alta
+El intérprete utiliza una copia de los bytes del código para ejecutar las instrucciones, por lo que el problema no implica necesariamente que toda ejecución de código grande falle. Sí significa que la representación del código en memoria y su acceso a través de la MMU pueden dejar de corresponder con el diseño esperado.
 
-HECHO. `createResult()` crea el hash así:
+Impacto: incompatibilidad entre el tamaño aceptado por el formato binario y el mapa de memoria real; posibles solapamientos entre código, constantes y datos.
 
-```
-hash: new Uint8Array(32) // Placeholder for SHA-256
-```
+Corrección recomendada: definir y validar explícitamente el tamaño máximo del código compatible con el mapa actual, o construir un mapa dinámico que reserve regiones sin solapamientos. No basta con limitar el número de páginas mapeadas.
 
-Y `serializeProgramImage()` escribe esos bytes en el archivo sin calcular un digest criptográfico.
+Regresión necesaria: cargar programas con código de 4.095, 4.096, 4.097 y más bytes, con constantes presentes y ausentes. Comprobar el contenido de memoria, los permisos y la ejecución efectiva.
 
-El README describe una sección de hash SHA-256, pero el artefacto producido por esta ruta no tiene un SHA-256 calculado sobre su contenido.
+### IFLOW-006 — Los tests de capacidades no corresponden al nuevo contrato
 
-Un campo de 32 bytes no equivale a una verificación de integridad. Antes de aceptar programas externos, hay que definir qué bytes se firman o hashean, cuándo se verifica el hash y qué ocurre cuando la verificación falla.
+Media · Regresión de tests
 
-## IF-010 — La opción `-l` no genera el listado anunciado
+Estado epistemológico: CONTRADICCIÓN entre la implementación y las expectativas de los tests; el resultado de ejecución está pendiente.
 
-Media
+Ubicaciones:
 
-HECHO. `cli.ts` ofrece `-l` como opción para generar un listing. Sin embargo, `generateListing()` termina con un comentario `TODO` y un mensaje por consola. No escribe el archivo `.lst`.
+- `src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistry.java:218-232`
+- `src/iflow/src/test/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistryTest.java:58-75`
+- `src/iflow/src/test/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistryTest.java:78-100`
 
-El ejemplo del README afirma que la combinación `-d -l` compila el firmware, pero eso no demuestra que el listado se haya generado. La compilación y la generación de artefactos auxiliares deben verificarse por separado.
+La implementación actual autoriza capacidades consultando exclusivamente `allowedCapabilities`. Por defecto, ese conjunto está vacío. `declareCapability()` actualiza `capabilityMap`, pero `hasCapability()` no consulta ese mapa.
 
-### Otras inconsistencias del compilador
+Sin embargo, los tests esperan que las capacidades declaradas por el constructor y las añadidas mediante `declareCapability()` sean inmediatamente reconocidas por `hasCapability()`. Otros tests invocan servicios sin establecer primero las capacidades permitidas para la ejecución.
 
-| Área               | Hecho verificable                                                                                                                         | Impacto                                                                                                                                                                |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Codificación       | Los inmediatos de 16 bits y los desplazamientos de salto se serializan en orden de bytes alto primero.                                    | El README describe la codificación de instrucciones como little-endian, lo que no coincide con el código. La endianness debe definirse por campo, no de forma ambigua. |
-| Caracteres         | Las capabilities se serializan mediante `charCodeAt(0)`, un carácter por byte.                                                            | Los nombres no ASCII no tienen una codificación UTF-8 correcta garantizada.                                                                                            |
-| Tamaño             | La longitud de código se escribe en 16 bits sin que la ruta de serialización mostrada imponga un límite semántico completo al ensamblado. | Hay riesgo de que el binario generado no represente fielmente un programa demasiado grande.                                                                            |
-| Diagnósticos       | El CLI solo aborta cuando encuentra diagnósticos con severidad `error`.                                                                   | Hay que verificar que todos los operandos inválidos, registros fuera de rango y expresiones malformadas se conviertan en errores, no en valores predeterminados.       |
-| Firmware de prueba | El ejemplo contiene comentarios del tipo “R1 should be 30” y “All tests passed”.                                                          | Son expectativas escritas en el código fuente, no aserciones ejecutables. El nombre `firmware.flowasm` no demuestra por sí mismo que sea una prueba automatizada.      |
+Por tanto, el código y las expectativas de esos tests son incompatibles. No he ejecutado JUnit para afirmar cuántos tests fallan realmente.
 
-### ¿El ensamblador y el intérprete comparten la misma ISA?
+Corrección recomendada: decidir cuál es el contrato correcto. Si la autorización debe ser específica del programa, actualizar los tests para configurar explícitamente las capacidades permitidas y comprobar las denegaciones. No se debe restaurar accidentalmente una autorización global para hacer pasar los tests.
 
-Parcialmente, en cuanto a los opcodes y varios formatos de instrucción. Por ejemplo, ambos definen `LI` como opcode `0x00` y codifican sus inmediatos de 16 bits con el byte alto primero. Los saltos relativos también se codifican en dos bytes, y el intérprete los interpreta como desplazamientos relativos con signo.
+### IFLOW-007 — El compilador acepta operandos inválidos y puede sustituirlos por cero
 
-Eso es un acierto: existe una base común para el contrato de instrucciones.
+Estado epistemológico: HECHO VERIFICADO sobre el comportamiento de los métodos auxiliares.
 
-Pero el contrato todavía tiene huecos importantes. La existencia de códigos de opcode coincidentes no garantiza que las directivas, las direcciones, los operandos, las capabilities y el formato de archivo sean compatibles en todos los casos.
+Severidad: Alta para la corrección funcional.
 
-## 4. La integración de routing: donde la VM debe demostrar su utilidad real
+Ubicaciones:
 
-El objetivo de iFlow no es ejecutar operaciones aritméticas por el mero hecho de poder ejecutarlas. Es tomar decisiones de política sobre mensajes y producir resultados que el resto de TextFormatter Suite pueda aplicar correctamente.
+- `tools/iflow-compiler/src/assembler.ts:258-343`
+- `tools/iflow-compiler/src/assembler.ts:473-477`
+- `tools/iflow-compiler/src/assembler.ts:485-507`
 
-La cadena que hay que verificar es:
+`getRegOperand()` devuelve el registro `R0` cuando el operando no es un registro válido. Otros métodos devuelven cero si no encuentran un operando del tipo esperado. El parser reconoce tokens, pero no se observa una validación completa de cantidad, tipo y rango de los operandos antes de emitir los bytes.
 
-Mensaje + emisor + destinatario
+Esto permite que una instrucción sintácticamente incorrecta se convierta en bytecode con una semántica diferente de la pretendida, en lugar de producir necesariamente un error de compilación.
 
-`VmPolicyEngine`
+Corrección recomendada: validar cada instrucción contra una especificación única de la ISA: cantidad de operandos, tipos admitidos, registros permitidos y rangos numéricos. Un operando inválido debe generar un diagnóstico de error y evitar la generación del binario.
 
-Preparación de contexto y ejecución
+Regresión necesaria: probar instrucciones con registros inexistentes, operandos ausentes, operandos adicionales, literales fuera de rango y etiquetas utilizadas en posiciones que exigen registros.
 
-ISA + memoria + `HOST`
+### IFLOW-008 — `.origin` puede producir direcciones incoherentes al retroceder
 
-Cálculo y solicitudes al entorno Java
+Estado epistemológico: INFERENCIA JUSTIFICADA por el algoritmo de ensamblado.
 
-`ModificationJournal`
+Ubicación: `tools/iflow-compiler/src/assembler.ts:119-134` y `151-154`.
 
-Cambios y decisión diferida
+La primera pasada permite cambiar `currentAddress` mediante `.origin`. La segunda pasada solo agrega relleno cuando `code.length` es inferior a la dirección de la siguiente instrucción; no retrocede ni reescribe bytes cuando la dirección disminuye.
 
-`PolicyResultValidator` → `RouteOutcome`
+Por tanto, un programa que establezca un origen inferior a la posición actual puede tener etiquetas y direcciones declaradas que no coincidan con las posiciones donde finalmente se emiten las instrucciones.
 
-Validación y resultado para el dispatcher
+Corrección recomendada: rechazar solapamientos y retrocesos no permitidos, o implementar una representación de secciones y direcciones que permita resolverlos correctamente.
 
-### IF-011 — Las decisiones de routing no tienen todas una semántica completa
+Regresión necesaria: ensamblar un programa mínimo con dos directivas `.origin`, la segunda inferior a la primera, y comprobar las direcciones de las etiquetas y los bytes resultantes.
 
-HECHO. En `HostServiceRegistry.doRouteDecision()`, las decisiones `REDIRECT` y `RATE_LIMIT` se convierten en entradas `SET_PROCESSED`. En `PolicyResultValidator`, el resultado de routing se extrae de esas entradas, pero `backoffMillis` comienza en cero y no se asigna a un valor distinto en el fragmento inspeccionado.
+### IFLOW-009 — `.entry` no definido puede convertirse silenciosamente en el origen
 
-La decisión `CHANNEL_REDIRECT` sí tiene una ruta específica que registra el canal de destino y que posteriormente se valida contra el registro de canales.
+Estado epistemológico: HECHO VERIFICADO sobre la lógica de resolución.
 
-Esto produce una diferencia importante:
+Ubicación: `tools/iflow-compiler/src/assembler.ts:650-656`.
 
-- `CHANNEL_REDIRECT` cuenta con un dato de destino explícito.
-- `REDIRECT` no proporciona en esa implementación un destinatario alternativo concreto.
-- `RATE_LIMIT` no calcula por esa vía un periodo de espera.
+`getEntryPointAddress()` busca la etiqueta indicada, pero si no la encuentra devuelve el origen del programa. No se observa que esa función emita un diagnóstico por la etiqueta inexistente.
 
-No afirmo que todas las formas de redirección o rate limiting de la suite sean imposibles: pueden existir mecanismos en el dispatcher o en otros módulos. Lo que sí se puede afirmar es que las decisiones anunciadas no están implementadas de forma equivalente dentro del servicio de routing inspeccionado.
+Esto puede ocultar errores de configuración del punto de entrada y generar una imagen con un entry point distinto del solicitado.
 
-Fuentes: [HostServiceRegistry.java](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/service/HostServiceRegistry.java) · [PolicyResultValidator.java](https://github.com/majhrs16-official/TextFormatter-Suite/blob/main/src/iflow/src/main/java/me/majhrs16/suite/iflow/vm/engine/PolicyResultValidator.java).
+Corrección recomendada: si se especifica `.entry` o `--entry`, exigir que la etiqueta exista. De lo contrario, abortar el ensamblado con el nombre de la etiqueta y su ubicación en el fuente.
 
-### IF-012 — La publicación de un programa nuevo no es atómica respecto a su memoria
+### IFLOW-010 — El flujo de CI está desincronizado de la configuración de módulos
 
-HECHO. `VmPolicyEngine.setProgram()` publica primero la `ProgramImage` mediante `programRef.set(program)` y después actualiza las asignaciones y el contenido de `sharedSoftMMU`.
+Estado epistemológico: CONTRADICCIÓN verificable entre archivos; la causa exacta del fallo de CI no está establecida.
 
-Una evaluación concurrente puede observar el nuevo programa antes de que termine la actualización de la memoria compartida. Además, la ejecución obtiene la imagen de programa por separado de la copia de la MMU.
+Ubicaciones:
 
-Por tanto, el cambio de programa y el cambio de su imagen de memoria no forman una única publicación atómica.
+- `settings.gradle:28-38`
+- `.github/workflows/ci.yml:33-68`
 
-SUPOSICIÓN de impacto: durante una recarga concurrente, una evaluación podría ejecutar un programa con una imagen de memoria correspondiente a otro estado. La gravedad y la reproducibilidad exactas dependen de las intercalaciones entre hilos y de cómo se usen las páginas, pero la carrera es visible en la estructura de publicación.
+La configuración de Gradle incluye `manager-spi`, `manager-core` y `manager-apt`, mientras que el workflow intenta construir `manager-api` y `manager-impl`. Además, `fabric-host` está excluido en `settings.gradle`, pero el workflow intenta construirlo.
 
-La solución no es simplemente sincronizar una línea. Es crear un objeto de programa cargado que agrupe bytecode validado, tabla de páginas, memoria inicial y metadatos, y publicar una referencia inmutable a ese conjunto completo.
+He consultado la ejecución real de GitHub Actions correspondiente al commit auditado:
 
-## 5. Modelo de memoria y ejecución: aciertos y límites
+\- [CI, ejecución 51](https://github.com/majhrs16-official/TextFormatter-Suite/actions/runs/38811982063)
 
-La VM contiene ideas técnicamente valiosas, pero hay que distinguirlas de las garantías que todavía necesitan demostración.
+La ejecución terminó en fallo. Fallaron los pasos de construcción de módulos, generación de Javadoc y pruebas de integración del editor web.
 
-Acierto: memoria virtual con permisos explícitos
+Importante: no he obtenido los registros detallados de esos pasos, por lo que no atribuyo todos los fallos a las discrepancias de nombres de módulos. Sí queda demostrado que la ejecución de CI no fue satisfactoria y que existen referencias incoherentes en el workflow.
 
-`PageTable` representa 16 páginas de 4 KiB y valida permisos de lectura, escritura y ejecución al traducir direcciones. `SoftMMU` canaliza el acceso ordinario a memoria mediante esa traducción.
+Corrección recomendada: sincronizar el workflow con los proyectos incluidos en `settings.gradle` y verificar que las tareas invocadas existen antes de considerar válida la canalización.
 
-Es una base razonable para evitar que los programas accedan libremente a cualquier región del proceso Java. No obstante, la protección solo funciona si todas las rutas de acceso la respetan, las páginas se asignan sin solapamientos y las operaciones por bloques validan el rango completo.
+## 4. Evaluación del diseño y de las garantías
 
-Acierto: registro de modificaciones diferido
+No todos los mecanismos presentan defectos. También hay decisiones razonables que conviene conservar.
 
-`ModificationJournal` permite acumular cambios y descartarlos cuando falla la evaluación. `PolicyResultValidator` valida determinadas decisiones antes de confirmar el journal.
+| Componente                  | Evaluación estática                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ProgramImage`              | Las matrices recibidas y devueltas se copian defensivamente, lo que reduce la mutabilidad accidental.                                                   |
+| Parser binario              | Comprueba las versiones mínimas, el entry point, los datos truncados, los bytes sobrantes y el SHA-256.                                                 |
+| Publicación del programa    | `LoadedProgram` agrupa programa y MMU, y `AtomicReference` publica el conjunto en una sola operación.                                                   |
+| Presupuesto de ejecución    | El intérprete consume fuel por instrucción y los servicios HOST tienen costes adicionales.                                                              |
+| Journal                     | Las modificaciones se registran de forma diferida y existe una distinción entre commit y descarte.                                                      |
+| Aislamiento por capacidades | La intención de autorizar según el programa es adecuada, pero el estado mutable compartido introduce el problema de concurrencia descrito en IFLOW-001. |
+| Pool                        | La reutilización de contextos puede reducir asignaciones, pero la implementación de la cola no garantiza seguridad concurrente.                         |
+| Compiler                    | Hay una separación reconocible entre primera pasada, segunda pasada y serialización, aunque la validación semántica de operandos es insuficiente.       |
 
-Este patrón es apropiado para un motor de políticas: evita aplicar directamente cada cambio al objeto original durante la ejecución del bytecode.
+Estas observaciones son estáticas. No equivalen a una certificación de corrección, seguridad o rendimiento.
 
-La limitación es que no todas las operaciones externas son necesariamente reversibles. El diseño debe especificar cuáles se registran, cuáles se ejecutan inmediatamente y qué significa realmente confirmar una transacción.
+## 5. Pruebas y limitaciones de esta ejecución
 
-Acierto: presupuesto de ejecución
+Hay una diferencia importante entre el trabajo realizado y una auditoría completamente ejecutada en un entorno local.
 
-`ExecutionContext` tiene un contador de fuel, y el intérprete consume unidades por instrucción. `HostServiceRegistry` también asigna costes base y costes variables a los servicios.
+Comprobado
 
-Esto permite controlar mejor los bucles y el uso de servicios que un motor de expresiones sin presupuesto explícito.
+Identidad del commit, estructura del repositorio, código fuente de los componentes principales, configuración de Gradle, tests seleccionados y estado de la última ejecución de CI.
 
-Sin embargo, el presupuesto solo es útil si todos los caminos costosos están contabilizados. Hay que revisar también tamaños de buffers, asignaciones, llamadas externas, cancelación, profundidad de llamadas y el coste real de las operaciones de memoria.
+Pendiente de ejecución
 
-Riesgo: reutilización de contextos y estado residual
+Suite completa de JUnit, ensamblado real de los ejemplos, pruebas de regresión nuevas, reproducción multihilo, fuzzing, verificación byte a byte de imágenes compiladas y benchmarks.
 
-`ExecutionContext.initialize()` limpia los registros, las flags, la caché de propiedades, el journal y los buffers de E/S. `ExecutionContextPool.release()` reinicia el contexto antes de devolverlo al pool.
+No certificado
 
-Es un buen punto de partida para la reutilización, pero la memoria completa no se borra por defecto: se limpian los buffers de E/S, mientras que otras regiones de la MMU pueden conservar datos de una evaluación anterior.
+Aislamiento entre ejecuciones, atomicidad de todas las modificaciones, ausencia de corrupción de memoria, robustez frente a entradas hostiles y funcionamiento completo de las políticas en el servidor anfitrión.
 
-En el código actual, `VmPolicyEngine.route()` asigna una copia de `sharedSoftMMU` al contexto antes de ejecutar. Eso cambia el análisis del estado residual: parte de la memoria puede heredarse de la imagen compartida y parte puede sobrevivir a través del ciclo de vida de esa imagen.
+No he clonado ni compilado el repositorio en un entorno local durante esta ejecución. En consecuencia, no afirmo que los tests pasen o fallen por ejecución propia, ni que el compilador y el runtime hayan superado pruebas de interoperabilidad.
 
-No es correcto afirmar que todos los datos de un mensaje anterior se filtran al siguiente, ni que se borran todos. Hay que definir la política de persistencia por región y demostrarla con pruebas de aislamiento.
+## 6. Plan de corrección priorizado
 
-### ¿Es correcta la arquitectura de 16 bits?
+1. P0 — Integridad y aislamiento
+   - Corregir IFLOW-001: vincular las capacidades a cada ejecución.
+   - Corregir IFLOW-003: validar los rangos de memoria antes de modificar datos.
+   - Corregir IFLOW-005: resolver los solapamientos del mapa de memoria y establecer límites coherentes con el formato binario.
+   Criterio de aceptación: pruebas que demuestren que una ejecución no obtiene permisos ajenos y que las escrituras fallidas no dejan modificaciones parciales.
+2. P1 — Corrección funcional
+   - Corregir IFLOW-007: validar los operandos.
+   - Corregir IFLOW-009: rechazar entry points inexistentes.
+   - Corregir IFLOW-008: definir el comportamiento permitido de `.origin`.
+   - Revisar la coherencia entre las directivas del compiler y el formato aceptado por la VM.
+   Criterio de aceptación: fuentes inválidas rechazadas y programas válidos con direcciones y bytes comprobables.
+3. P2 — Robustez y concurrencia
+   - Corregir IFLOW-002.
+   - Corregir IFLOW-004.
+   - Actualizar los tests de capacidades de IFLOW-006.
+   - Añadir pruebas para datos malformados, límites de memoria y fallos durante la ejecución.
+   Criterio de aceptación: ninguna prueba de regresión debe depender de permisos globales ni de comportamiento indefinido del compilador.
+4. P3 — Build y observabilidad
+   - Corregir IFLOW-010.
+   - Ejecutar la suite completa del módulo iFlow.
+   - Generar una imagen binaria con el compiler y cargarla con el parser Java.
+   - Añadir una prueba de extremo a extremo que invoque un servicio HOST y valide el resultado producido por el motor.
+   Criterio de aceptación: CI satisfactoria y resultados reproducibles asociados al mismo commit.
 
-No la descartaría por ser de 16 bits. Para un router de mensajes, una ISA de 16 bits con 64 KiB de memoria virtual puede ser suficiente si los programas operan sobre buffers pequeños y acceden a los objetos del host bajo demanda.
+## 7. Puntuación técnica provisional
 
-Pero tampoco la daría por óptima solo porque sea sencilla.
+No asigno notas numéricas a dimensiones cuya corrección depende de pruebas que no he ejecutado. Hacerlo ahora introduciría una precisión aparente que la evidencia disponible no justifica.
 
-| Perspectiva                | Evaluación                                                                                                                                                                    |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Complejidad del intérprete | Favorable: registros y direcciones pequeños simplifican varias operaciones.                                                                                                   |
-| Memoria por instancia      | El espacio de direcciones es pequeño, pero la copia de 64 KiB de memoria física por contexto tiene un coste que se multiplica con la concurrencia.                            |
-| Mensajes y cadenas         | 64 KiB pueden bastar para muchos casos de chat, pero no garantizan espacio suficiente para todas las combinaciones de buffers, datos persistentes, código y transformaciones. |
-| Extensibilidad             | La ISA puede seguir siendo compacta si las operaciones genéricas y los servicios del host están bien diseñados.                                                               |
-| Rendimiento                | Las copias de memoria, la interpretación por instrucción y la materialización de datos pueden dominar sobre el coste de usar 16 bits.                                         |
-| Evolución                  | El límite de direccionamiento es una restricción arquitectónica real. Aumentarlo posteriormente afecta al bytecode, a la ISA y al ABI.                                        |
+| Dimensión            | Resultado                                                     |
+| -------------------- | ------------------------------------------------------------- |
+| Arquitectura general | Prometedora, con defectos de integración identificados        |
+| ISA y semántica      | No evaluable de forma exhaustiva                              |
+| Compiler             | Defectos estáticos identificados                              |
+| Formato binario      | Validación estática parcial; interoperabilidad no certificada |
+| Memoria y MMU        | Riesgos de integridad y coherencia identificados              |
+| Capacidades HOST     | Riesgo de concurrencia identificado                           |
+| Cobertura de tests   | Tests presentes; ejecución completa no verificada             |
+| Rendimiento          | No evaluable sin benchmarks                                   |
+| Seguridad global     | No certificada                                                |
+| Madurez global       | No evaluable con rigor mediante esta ejecución parcial        |
 
-Mi criterio es conservar provisionalmente los 16 bits, pero no congelar la ISA hasta resolver las incompatibilidades de carga, el ABI de `HOST`, el aislamiento y el coste del intérprete.
+## Conclusión
 
-La decisión de pasar a 32 bits debería basarse en mediciones y en requisitos concretos de memoria, no en la idea de que una VM más grande es automáticamente más potente.
+La inspección demuestra que iFlow cuenta con una arquitectura concreta de VM, memoria paginada, servicios HOST, compilador independiente y un mecanismo de publicación atómica del programa. También identifica defectos específicos en la gestión de capacidades concurrentes, el pool de contextos, las escrituras de memoria, el ensamblado y la configuración de CI.
 
-## 6. Hechos, suposiciones y alucinaciones: dictamen separado
+La prioridad inmediata es resolver los riesgos de aislamiento y memoria, después endurecer el compilador y finalmente ejecutar las pruebas de interoperabilidad y regresión. No hay evidencia suficiente para declarar segura la VM ni para afirmar que la cadena completa compiler-runtime-host funcione correctamente.
 
-Esta sección resume qué conclusiones considero defendibles y cuáles no deben convertirse todavía en afirmaciones definitivas.
-
-### Hechos comprobados en el código inspeccionado
-
-| ID   | Conclusión                                                                                                                      | Confianza |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| F-01 | `SoftMMU.readBlock()` realiza una copia adicional hacia `physicalMemory` cuando debería copiar únicamente hacia `dest`.         | Muy alta  |
-| F-02 | El intérprete pasa una longitud fija de cero a los servicios `HOST`, aunque estos dependen de longitudes para transferir datos. | Muy alta  |
-| F-03 | La autorización de capabilities usa un registro global, no una autorización específica de cada `ProgramImage`.                  | Muy alta  |
-| F-04 | El compilador utiliza un hash SHA-256 de relleno en lugar de calcularlo.                                                        | Muy alta  |
-| F-05 | El parser no aplica validaciones completas de versiones, hash y estructura de las secciones.                                    | Muy alta  |
-| F-06 | La generación de código del ensamblador no materializa los huecos de dirección de `.origin` y `.align`.                         | Muy alta  |
-| F-07 | `generateListing()` no escribe el listado que anuncia la opción `-l`.                                                           | Muy alta  |
-| F-08 | El intérprete solicita copias defensivas del bytecode repetidamente durante la ejecución.                                       | Muy alta  |
-| F-09 | La publicación del programa y la actualización de su memoria compartida son operaciones separadas.                              | Muy alta  |
-| F-10 | Los servicios de propiedades, estado y canales pueden fallar por dependencias no configuradas.                                  | Muy alta  |
-| F-11 | `settings.gradle` mantiene comentado el adaptador Fabric.                                                                       | Muy alta  |
-
-Las referencias principales están enlazadas en las secciones anteriores. Los hallazgos corresponden al código de `main` que he inspeccionado, no a una versión histórica supuesta.
-
-### Suposiciones que requieren experimentos
-
-S-01 — La corrupción de memoria puede provocar fallos de routing.
-
-Es una consecuencia plausible de F-01. La demostración debe ejecutar lecturas de bloques con distintas direcciones de origen y destino, verificar el contenido de la memoria antes y después y observar si el programa continúa ejecutándose correctamente.
-
-S-02 — Las carreras de recarga pueden producir resultados inconsistentes.
-
-La publicación separada de programa y memoria permite la intercalación problemática. Falta demostrar un caso reproducible con dos hilos y una recarga concurrente.
-
-S-03 — El coste de las copias del bytecode puede ser un cuello de botella importante.
-
-La complejidad de las copias está sustentada por el código. El impacto concreto en mensajes por segundo, latencia p95 y consumo de CPU requiere un benchmark.
-
-S-04 — El modelo de 16 bits podría convertirse en una limitación para políticas avanzadas.
-
-Es una posibilidad dependiente de los tamaños de código, datos, estado persistente y buffers reales. No existe evidencia suficiente para afirmar que 64 KiB sean insuficientes para los casos de uso actuales.
-
-S-05 — El número de tests podría sobreestimar la cobertura semántica.
-
-Es una hipótesis de auditoría, no una conclusión sobre los 250 tests. Para comprobarla hay que examinar las aserciones y ejecutar pruebas de integración de extremo a extremo.
-
-### Afirmaciones que serían alucinaciones
-
-Estas conclusiones serían injustificadas con la evidencia disponible:
-
-- «La VM es insegura en todos los aspectos». Hay defectos concretos, pero eso no demuestra que todas sus barreras de seguridad sean ineficaces.
-- «iFlow es una VM inútil». Los defectos del runtime no eliminan el valor potencial de la arquitectura ni de su separación entre ISA y host.
-- «La memoria virtual de 64 KiB es necesariamente insuficiente». No se ha demostrado para los casos de uso reales.
-- «Las 250 pruebas son falsas». El código inspeccionado permite cuestionar qué propiedades prueban, pero no permite declarar falsos los resultados de pruebas que no se han ejecutado aquí.
-- «El sistema ya permite modificar cualquier propiedad del mensaje». Los servicios genéricos están planteados, pero su disponibilidad efectiva depende del ABI, la configuración y la implementación de cada operación.
-- «El hash protege los binarios frente a manipulaciones». El compilador utiliza un placeholder; no hay una garantía criptográfica derivada de ese campo.
-
-Esta separación es esencial: un defecto demostrado es un defecto; un riesgo arquitectónico es un riesgo; y una funcionalidad descrita en un README es una afirmación que todavía debe contrastarse con su implementación.
-
-## 7. Evaluación arquitectónica desde distintos ángulos
-
-### A. Diseño de la ISA
-
-### Valoración: 7/10
-
-Potencial del diseño, no calidad del runtime actual.
-
-### Principal ventaja
-
-Instrucciones generales y servicios de host.
-
-La decisión de no crear una instrucción distinta para cada propiedad de mensaje es acertada. Una ISA pequeña, con operaciones de memoria, aritmética, control de flujo y llamadas a servicios, puede ser mucho más extensible que un motor compuesto exclusivamente por acciones predefinidas.
-
-La contrapartida es que una instrucción genérica como `HOST` necesita un ABI excepcionalmente preciso. Si cada servicio interpreta los registros de una manera diferente o no se pueden expresar simultáneamente los argumentos, el tamaño del buffer y las opciones, la generalidad de la ISA queda neutralizada.
-
-Mejora recomendada: especificar formalmente la codificación, los registros de entrada y salida, los errores, el coste de fuel y las capabilities de cada servicio. Mantener esa especificación como fuente única para Java, TypeScript, el firmware y las pruebas.
-
-### B. Memoria y aislamiento
-
-### Valoración: 5/10
-
-Modelo interesante, garantías insuficientemente consolidadas.
-
-### Principal riesgo
-
-Integridad de las operaciones de memoria y de las regiones.
-
-La combinación de una tabla de páginas, permisos R/W/X y una interfaz controlada hacia Java es una base razonable. No hace falta emular una CPU física completa para obtener esas ventajas.
-
-Sin embargo, el diseño actual mezcla una memoria compartida utilizada como plantilla con copias por contexto y regiones que pueden conservar estado. También admite tamaños de código que pueden solaparse con regiones reservadas.
-
-Mejora recomendada: definir una imagen de memoria validada e inmutable por programa; separar físicamente o mediante asignaciones no solapadas código, constantes, datos temporales, pila, buffers y estado persistente; y verificar los rangos completos antes de cada operación de bloque.
-
-La política de persistencia debe ser explícita. El aislamiento no debería depender de que una llamada a `reset()` limpie accidentalmente suficiente memoria.
-
-### C. Compilador y formato binario
-
-### Valoración: 4/10
-
-Existe un ensamblador funcional en estructura, pero con defectos de contrato.
-
-### Principal riesgo
-
-Que el artefacto generado no represente el programa previsto.
-
-El uso de TypeScript para implementar un ensamblador de dos pasadas es una elección razonable. Permite mantener una herramienta independiente del servidor Minecraft y facilita generar programas reproducibles.
-
-Pero antes de considerarlo un compilador fiable, hay que corregir las direcciones, las secciones, el tratamiento de constantes, el hash y el listado. También hay que comprobar que cada programa compilado se pueda cargar y ejecutar con la implementación Java de referencia.
-
-Mejora recomendada: definir una especificación formal del formato `.flow`, un parser estricto y un conjunto de vectores de prueba compartidos. Cada instrucción debería tener un ejemplo binario esperado que ambos lenguajes interpreten exactamente igual.
-
-### D. Routing y semántica de las políticas
-
-### Valoración: 5/10
-
-Integración planteada, cobertura funcional incompleta en lo inspeccionado.
-
-### Principal riesgo
-
-Confundir una decisión registrada con una acción efectivamente aplicada.
-
-El `ModificationJournal` es uno de los mejores elementos del diseño. La capacidad de calcular una política y aplicar los cambios después de validarlos permite separar la ejecución de la decisión y la modificación del mensaje.
-
-Pero una entrada en el journal no demuestra que una redirección, una cancelación, una limitación de frecuencia o una transformación se ejecute con la semántica correcta en todo el pipeline.
-
-Mejora recomendada: crear pruebas contractuales para cada resultado de routing, desde el programa ensamblado hasta el `RouteOutcome` y su efecto final en el dispatcher. Incluir las combinaciones de transformaciones, permisos, redirecciones, rate limiting y errores de ejecución.
-
-### E. Rendimiento y concurrencia
-
-### Valoración: 5/10
-
-Hay mecanismos de control, pero falta demostrar eficiencia y comportamiento concurrente.
-
-### Principal riesgo
-
-Copias de memoria y publicación no atómica.
-
-El pool de contextos y el presupuesto de fuel son buenos mecanismos para contener costes. No obstante, el pool no impone estrictamente el máximo de contextos: si se agota, el código permite crear otro y solo comenta que podría ser conveniente bloquear o lanzar una excepción.
-
-Además, copiar 64 KiB por contexto y copiar repetidamente el bytecode dentro del bucle de interpretación puede introducir costes evitables.
-
-Mejora recomendada: benchmark con carga representativa, límites reales de concurrencia y métricas de asignaciones, latencia y fuel. La primera optimización debería ser eliminar las copias redundantes, no rediseñar toda la ISA prematuramente.
-
-## 8. Qué cambiaría de la arquitectura y qué conservaría
-
-No recomiendo desechar la VM ni volver automáticamente a un motor de expresiones. Recomiendo conservar sus ideas centrales y corregir primero los contratos que conectan sus componentes.
-
-## Conservar
-
-- ISA pequeña y genérica, independiente de las APIs de Bukkit o Fabric.
-- Acceso al host mediante servicios explícitos en lugar de exponer objetos Java directamente.
-- Presupuesto de ejecución y control de profundidad de llamadas.
-- Journal de modificaciones y validación posterior del resultado.
-- Ensamblador independiente, programa binario y runtime Java separados.
-
-## Rediseñar o corregir antes de ampliar funciones
-
-- ABI de `HOST`: argumentos, longitud, opciones, resultados y errores.
-- Autorización de capabilities por programa y por servicio.
-- Formato binario, integridad, validación de versiones y compatibilidad ISA/ABI.
-- Mapa de memoria, inicialización de constantes y aislamiento de regiones.
-- Publicación atómica de programa, memoria y metadatos durante hot reload.
-- Semántica de todas las decisiones de routing y sus efectos finales.
-
-### ¿Cambiaría la ISA a 32 bits?
-
-No todavía. Una ISA de 32 bits no resolvería los defectos actuales del ABI, el parser, la memoria compartida o las capabilities. Incluso podría aumentar la complejidad de la implementación sin aportar un beneficio inmediato.
-
-Sí reconsideraría la decisión si las pruebas muestran que los límites de memoria, la necesidad de buffers más grandes o el crecimiento de los programas hacen que 64 KiB sea una restricción real. Esa decisión debe tomarse después de corregir la semántica del sistema, no como sustituto de esas correcciones.
-
-## 9. Plan de validación prioritario
-
-Antes de añadir nuevas instrucciones, firmware más complejo o más servicios, ejecutaría este plan en orden.
-
-## Fase 1 — Corregir los defectos que invalidan las pruebas
-
-Progreso de revisión
-
-0/6
-
-Corregir \`SoftMMU.readBlock()\` y añadir pruebas de no corrupción de memoria.
-
-Rediseñar el ABI de \`HOST\` y probar transferencias de longitud variable.
-
-Implementar autorización de capabilities por \`ProgramImage\`.
-
-Corregir la inicialización de constantes y los solapamientos de páginas.
-
-Eliminar copias del bytecode dentro del bucle de interpretación.
-
-Validar versiones, secciones, tamaños y hash del formato binario.
-
-## Fase 2 — Verificar el compilador
-
-- Probar `.origin`, `.align`, etiquetas hacia delante y hacia atrás, constantes numéricas y cadenas.
-- Comprobar el round-trip: ensamblar, serializar, parsear y ejecutar.
-- Rechazar registros inválidos, instrucciones truncadas, saltos fuera de rango y archivos malformados.
-- Añadir tests que comprueben resultados mediante aserciones, no solo comentarios.
-  ## Fase 3 — Verificar la semántica funcional
-- Probar cada servicio `HOST` desde un programa real, incluidos los errores y las capabilities denegadas.
-- Verificar combinaciones de transformaciones, routing, permisos y rate limiting.
-- Confirmar que una ejecución fallida descarta las modificaciones y que una exitosa las aplica exactamente una vez.
-- Probar hot reload concurrente y aislamiento entre contextos.
-  ## Fase 4 — Medir
-- Medir latencia por evaluación y throughput bajo carga.
-- Comparar coste de ejecución con programas pequeños y grandes.
-- Medir asignaciones y copias de memoria por mensaje.
-- Probar concurrencia, agotamiento de fuel, buffers máximos y carga de programas malformados.
-
-La condición de aceptación no debe ser «todas las clases existen» ni «el firmware parece completo». Debe ser que las combinaciones funcionales relevantes producen resultados correctos, reproducibles y seguros.&#x20;
-
-## 10. Calificación final de iFlow
-
-Estas notas son una evaluación técnica del estado observado, no una puntuación basada en el número de líneas, de clases o de tests anunciados.
-
-NOTA GLOBAL DEL ESTADO ACTUAL
-
-# 5,5/10
-
-Potencial arquitectónico superior al estado de implementación verificado
-
-Idea y arquitectura conceptual
-
-#### 8.0/10
-
-Diseño de ISA
-
-#### 7.0/10
-
-Separación entre VM y host
-
-#### 7.0/10
-
-Memoria y aislamiento
-
-#### 5.0/10
-
-Compilador y formato binario
-
-#### 4.0/10
-
-Integración funcional de servicios
-
-#### 4.0/10
-
-Robustez y seguridad
-
-#### 4.0/10
-
-Rendimiento demostrado
-
-#### 4.5/10
-
-### Mi veredicto
-
-iFlow tiene una idea arquitectónica valiosa, pero su implementación actual necesita una corrección de contratos y de runtime antes de que pueda considerarse una base fiable para políticas programables.
-
-Lo más prometedor es la separación entre ISA, memoria virtual, servicios del host y decisiones de routing. Esa separación puede permitir que el sistema crezca sin convertir el procesador en una colección de instrucciones específicas para cada propiedad del mensaje.
-
-Lo más preocupante es que varias piezas fundamentales no coinciden todavía: el ABI de `HOST` no permite expresar correctamente las longitudes que necesitan los servicios; el control de capabilities no está aislado por programa; hay una corrupción de memoria en una operación básica; y el ensamblador no representa correctamente determinadas direcciones y secciones. Son defectos de fundamentos, no simples mejoras estéticas.
-
-La prioridad no debería ser añadir más instrucciones ni ampliar la complejidad del firmware. Debería ser conseguir que un programa compilado por iFlow Compiler, cargado por Java y ejecutado contra un mensaje real tenga una semántica inequívoca, un aislamiento demostrable y un resultado de routing verificable.
-
-Una vez que ese recorrido esté cubierto por pruebas de integración y por pruebas adversariales, la arquitectura tendrá una base mucho más sólida para justificar su complejidad y sus ventajas frente a un motor convencional de reglas.
-
-Límite de esta auditoría: he inspeccionado documentación y código fuente relevante del repositorio, pero no he ejecutado el build ni los 250 tests anunciados en un entorno local. Por ello, las notas evalúan el diseño y los defectos encontrados en el código inspeccionado; no constituyen una certificación de todos los resultados de ejecución ni una auditoría completa de cada clase de iFlow.
+Este informe es un resultado de auditoría estática con comprobaciones puntuales del repositorio y del estado de CI; no es todavía el informe forense completo de 25 secciones solicitado en el prompt. Para completarlo con el mismo nivel de rigor faltan, sobre todo, ejecutar las pruebas reproducibles y verificar la ISA y el flujo de políticas de extremo a extremo.
