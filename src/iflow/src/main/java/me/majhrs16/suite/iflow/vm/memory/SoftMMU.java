@@ -94,8 +94,6 @@ public final class SoftMMU {
         // Fast path: if contiguous in physical memory, single copy
         int physAddr = pageTable.translateRead(virtualAddr);
         if (isContiguous(virtualAddr, length)) {
-            System.arraycopy(physicalMemory, physAddr, physicalMemory, destOffset, length);
-            // Actually need to copy TO dest array
             System.arraycopy(physicalMemory, physAddr, dest, destOffset, length);
         } else {
             // Non-contiguous: byte-by-byte (slow path)

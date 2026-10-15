@@ -40,8 +40,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private final ChannelRegistry channels;
     private final PermissionChecker permissions;
     private final RateLimiter rateLimit;
-    private final AtomicReference<ProgramImage> programRef = new AtomicReference<>();
-    private final SoftMMU sharedSoftMMU;  // Template MMU with program mappings
+    private final AtomicReference<LoadedProgram> loadedProgramRef = new AtomicReference<>();
     private final HostServiceRegistry serviceRegistry;
     private final ExecutionContextPool contextPool;
     private final PolicyResultValidator validator;
@@ -65,6 +64,20 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private static final int INPUT_BUFFER_PAGE = 6;
     private static final int OUTPUT_BUFFER_PAGE = 7;
 
+    /**
+     * Immutable container for a loaded program: bytecode + initialized SoftMMU.
+     * Published atomically to ensure program and memory are always in sync.
+     */
+    public static final class LoadedProgram {
+        public final ProgramImage program;
+        public final SoftMMU softMMU;
+
+        public LoadedProgram(ProgramImage program, SoftMMU softMMU) {
+            this.program = program;
+            this.softMMU = softMMU;
+        }
+    }
+
     public VmPolicyEngine(ChannelRegistry channels,
                           PermissionChecker permissions,
                           RateLimiter rateLimit) {
@@ -72,9 +85,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         this.permissions = permissions;
         this.rateLimit = rateLimit;
 
-        this.sharedSoftMMU = new SoftMMU();
         this.serviceRegistry = createServiceRegistry();
-        this.contextPool = new ExecutionContextPool(sharedSoftMMU, serviceRegistry, this::configureContext);
+        this.contextPool = new ExecutionContextPool(serviceRegistry, this::configureContext);
         this.validator = new PolicyResultValidator(channels);
 
         // Initialize with empty program (pass-through)
@@ -95,6 +107,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // Inject host dependencies
         registry.permissionChecker((actorName, perm) -> permissions.has(
             Actor.unknown(actorName), perm));
+        registry.rateLimiter(rateLimit);
 
         return registry;
     }
@@ -140,13 +153,22 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // Acquire execution context from pool
         ExecutionContext ctx = contextPool.acquire();
         try {
+            // Get current loaded program (program + memory mappings)
+            LoadedProgram loaded = loadedProgramRef.get();
+            if (loaded == null) {
+                throw new IllegalStateException("No program loaded");
+            }
+
             // Configure context for this evaluation
             ctx.executionId(java.util.UUID.randomUUID().toString())
-               .programId(programRef.get().hashCode() + "")
+               .programId(loaded.program().hashCode() + "")
                .messageId(message.id().toString())
                .actorId(recipient.name())
-               .softMMU(new SoftMMU(sharedSoftMMU))  // Copy shared MMU (page tables + physical memory)
+               .softMMU(new SoftMMU(loaded.softMMU()))  // Copy program's MMU (page tables + physical memory)
                .serviceRegistry(serviceRegistry);
+
+            // Set program-specific capabilities for this evaluation
+            serviceRegistry.setAllowedCapabilities(loaded.program().capabilities());
 
             // Initialize context (resets registers, fuel, clears I/O buffers)
             ctx.initialize();
@@ -155,8 +177,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             prepareInput(ctx, message, emitter, recipient, path);
 
             // Execute VM
-            ProgramImage program = programRef.get();
-            VmInterpreter interpreter = new VmInterpreter(program, ctx.softMMU(), serviceRegistry);
+            VmInterpreter interpreter = new VmInterpreter(loaded.program(), ctx.softMMU(), serviceRegistry);
             interpreter.execute(ctx);
 
             // Validate and produce outcome
@@ -172,11 +193,10 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     }
 
     /**
-     * Prepares the shared SoftMMU with program mappings (code, constants).
+     * Prepares a SoftMMU with program mappings (code, constants).
      * Called when program is loaded/changed.
      */
-    private void setupProgramMappings(ProgramImage program) {
-        SoftMMU mmu = sharedSoftMMU;
+    private void setupProgramMappings(ProgramImage program, SoftMMU mmu) {
         PageTable pageTable = mmu.getPageTable();
 
         // Map code page (page 0: 0x0000) - R/W/X initially for writing code, then R/X
@@ -198,7 +218,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             pageTable.mapPage(CODE_PAGE + p, frameBase, perms);
         }
 
-        // Map constants page (page 1: 0x1000) - R
+        // Map constants page (page 1: 0x1000) - R/W initially for writing constants, then R
         if (program.constants().length > 0) {
             byte[] constBytes = new byte[program.constants().length * 2];
             for (int i = 0; i < program.constants().length; i++) {
@@ -206,8 +226,10 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 constBytes[i * 2] = (byte) (val & 0xFF);
                 constBytes[i * 2 + 1] = (byte) ((val >> 8) & 0xFF);
             }
-            pageTable.mapPage(CONSTANTS_PAGE, CONSTANTS_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ);
+            pageTable.mapPage(CONSTANTS_PAGE, CONSTANTS_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
             mmu.writeBlock(0x1000, constBytes, 0, constBytes.length);
+            // Change to read-only after writing
+            pageTable.mapPage(CONSTANTS_PAGE, CONSTANTS_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ);
         }
 
         // Map data pages (pages 2-3: 0x2000-0x3FFF) - R/W
@@ -297,16 +319,20 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     /**
      * Sets the VM program (hot-reload).
      * This replaces setRules for VM-based policies.
+     * Program and memory mappings are published atomically.
      */
     public void setProgram(ProgramImage program) {
         Objects.requireNonNull(program, "program");
-        programRef.set(program);
-        // Update shared MMU with new program mappings
-        setupProgramMappings(program);
+        // Create new SoftMMU with program mappings
+        SoftMMU newMMU = new SoftMMU();
+        setupProgramMappings(program, newMMU);
+        // Atomically publish program + memory together
+        loadedProgramRef.set(new LoadedProgram(program, newMMU));
     }
 
     public ProgramImage program() {
-        return programRef.get();
+        LoadedProgram loaded = loadedProgramRef.get();
+        return loaded != null ? loaded.program() : null;
     }
 
     @Override

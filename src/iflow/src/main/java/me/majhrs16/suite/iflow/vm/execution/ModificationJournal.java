@@ -28,7 +28,9 @@ public final class ModificationJournal {
         REMOVE_SOUNDS,
         CANCEL_MESSAGE,
         SET_PROCESSED,
-        REDIRECT_CHANNEL
+        REDIRECT_CHANNEL,
+        REDIRECT_TARGET,    // Redirect to specific actor (value = actor name/UUID)
+        RATE_LIMIT_BACKOFF  // Rate limit with backoff (value = millis)
     }
 
     public static final class Entry {
@@ -105,6 +107,14 @@ public final class ModificationJournal {
 
     public void redirectChannel(String channel) {
         record(new Entry(OpType.REDIRECT_CHANNEL, channel, "redirect"));
+    }
+
+    public void redirectTarget(String targetActor) {
+        record(new Entry(OpType.REDIRECT_TARGET, targetActor, "redirect-target"));
+    }
+
+    public void rateLimitBackoff(long millis) {
+        record(new Entry(OpType.RATE_LIMIT_BACKOFF, millis, "rate-limit"));
     }
 
     public List<Entry> entries() {

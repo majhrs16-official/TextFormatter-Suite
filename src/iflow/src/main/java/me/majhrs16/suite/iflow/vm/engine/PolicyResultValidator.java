@@ -82,6 +82,19 @@ public final class PolicyResultValidator {
                     redirectChannel = (String) entry.value;
                     reason = "redirect to " + redirectChannel;
                 }
+                case REDIRECT_TARGET -> {
+                    target = PolicyTarget.REDIRECT;
+                    // Value is the target actor name/UUID
+                    // The RouteDecision will need to be constructed with this
+                    reason = "redirect to " + entry.value;
+                    // Store redirect target for RouteDecision construction
+                    redirectChannel = (String) entry.value; // Reuse field for redirect target
+                }
+                case RATE_LIMIT_BACKOFF -> {
+                    target = PolicyTarget.RATE_LIMIT;
+                    backoffMillis = entry.value instanceof Number ? ((Number) entry.value).longValue() : 0;
+                    reason = "rate limited";
+                }
                 case CANCEL_MESSAGE -> {
                     target = PolicyTarget.DROP;
                     reason = "cancelled";

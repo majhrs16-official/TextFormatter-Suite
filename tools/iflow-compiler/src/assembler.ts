@@ -42,7 +42,7 @@ class Assembler {
     this.options = options;
   }
 
-  assemble(source: string, fileName = '<input>'): AssemblerResult {
+  async assemble(source: string, fileName = '<input>'): Promise<AssemblerResult> {
     this.reset();
     this.currentFile = fileName;
     this.currentAddress = this.options.origin || 0;
@@ -53,7 +53,7 @@ class Assembler {
     // Check for errors from first pass
     const firstPassErrors = this.diagnostics.filter(d => d.severity === 'error');
     if (firstPassErrors.length > 0) {
-      return this.createResult(new Uint8Array(0));
+      return this.createResultSync(new Uint8Array(0));
     }
 
     // Second pass: resolve labels and generate bytecode
@@ -62,7 +62,7 @@ class Assembler {
     // Check for errors from second pass
     const secondPassErrors = this.diagnostics.filter(d => d.severity === 'error');
     if (secondPassErrors.length > 0) {
-      return this.createResult(new Uint8Array(0));
+      return this.createResultSync(new Uint8Array(0));
     }
 
     return this.createResult(new Uint8Array(code));
@@ -120,18 +120,16 @@ class Assembler {
     const code: number[] = [];
 
     for (const instr of this.instructions) {
-      // Sync currentAddress to instruction's stored address (handles directives that changed address in first pass)
-      this.currentAddress = instr.address;
+      // Insert padding bytes to reach instruction's address (materialize .origin/.align gaps)
+      while (code.length < instr.address) {
+        code.push(0x00); // NOP/padding
+      }
 
       // Emit opcode
       code.push(instr.opcode);
-      this.currentAddress++;
-
+      
       // Emit operands
       this.emitOperands(instr, code);
-      
-      // Advance currentAddress by remaining instruction bytes (size - 1 for opcode)
-      this.currentAddress += instr.size - 1;
     }
     return code;
   }
@@ -541,7 +539,8 @@ class Assembler {
     return 0;
   }
 
-  private createResult(program: Uint8Array): AssemblerResult {
+  private createResultSync(program: Uint8Array): AssemblerResult {
+    // For error cases, just return without computing hash
     const programImage: ProgramImage = {
       formatVersion: 1,
       isaVersion: 1,
@@ -551,7 +550,7 @@ class Assembler {
       code: program,
       constants: this.constantPool,
       capabilities: Array.from(this.capabilities),
-      hash: new Uint8Array(32), // Placeholder for SHA-256
+      hash: new Uint8Array(32),
       debugInfo: this.options.debug ? this.generateDebugInfo() : undefined,
     };
 
@@ -565,6 +564,87 @@ class Assembler {
       symbols: symbolArray,
       diagnostics: this.diagnostics,
     };
+  }
+
+  private async createResult(program: Uint8Array): Promise<AssemblerResult> {
+    // Serialize program image without hash first
+    const programImageNoHash: ProgramImage = {
+      formatVersion: 1,
+      isaVersion: 1,
+      minAbiVersion: 1,
+      minFirmwareVersion: 1,
+      entryPoint: this.getEntryPointAddress(),
+      code: program,
+      constants: this.constantPool,
+      capabilities: Array.from(this.capabilities),
+      hash: new Uint8Array(32), // Placeholder
+      debugInfo: this.options.debug ? this.generateDebugInfo() : undefined,
+    };
+
+    // Serialize to compute hash (excluding the hash field itself)
+    const serializedNoHash = this.serializeProgramImageNoHash(programImageNoHash);
+    const hash = await this.computeSHA256(serializedNoHash);
+
+    // Now create final program image with correct hash
+    const programImage: ProgramImage = {
+      ...programImageNoHash,
+      hash,
+    };
+
+    const symbolArray: SymbolType[] = [];
+    for (const [name, address] of this.symbols) {
+      symbolArray.push({ name, address, type: 'code' });
+    }
+
+    return {
+      program: programImage,
+      symbols: symbolArray,
+      diagnostics: this.diagnostics,
+    };
+  }
+
+  private serializeProgramImageNoHash(image: ProgramImage): Uint8Array {
+    const parts: number[] = [];
+
+    // Header (16 bytes)
+    parts.push(image.formatVersion & 0xFF);
+    parts.push(image.isaVersion & 0xFF);
+    parts.push(image.minAbiVersion & 0xFF);
+    parts.push(image.minFirmwareVersion & 0xFF);
+    parts.push((image.entryPoint >> 8) & 0xFF);
+    parts.push(image.entryPoint & 0xFF);
+    parts.push((image.code.length >> 8) & 0xFF);
+    parts.push(image.code.length & 0xFF);
+    parts.push((image.constants.length >> 8) & 0xFF);
+    parts.push(image.constants.length & 0xFF);
+    parts.push(image.capabilities.length & 0xFF);
+    parts.push(0, 0, 0, 0, 0);
+
+    // Code
+    parts.push(...Array.from(image.code));
+
+    // Constants
+    for (const c of image.constants) {
+      parts.push((c >> 8) & 0xFF, c & 0xFF);
+    }
+
+    // Capabilities (null-terminated strings)
+    for (const cap of image.capabilities) {
+      for (const ch of cap) {
+        parts.push(ch.charCodeAt(0));
+      }
+      parts.push(0);
+    }
+
+    return new Uint8Array(parts);
+  }
+
+  private async computeSHA256(data: Uint8Array): Promise<Uint8Array> {
+    // Use Web Crypto API (available in Node.js 15+ and browsers)
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256');
+    hash.update(Buffer.from(data));
+    return new Uint8Array(hash.digest());
   }
 
   private getEntryPointAddress(): number {

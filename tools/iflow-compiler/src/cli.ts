@@ -3,6 +3,7 @@
  * iFlow VM Assembler CLI
  */
 import { Assembler } from './assembler';
+import type { Symbol } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { program } from 'commander';
@@ -36,54 +37,78 @@ if (!fs.existsSync(inputPath)) {
   process.exit(1);
 }
 
-const outputFile = options.output 
+const outputFile = options.output
   ? path.resolve(options.output)
   : path.join(path.dirname(inputPath), path.basename(inputPath, path.extname(inputPath)) + '.flow');
 
-try {
-  const source = fs.readFileSync(inputPath, 'utf-8');
-  
-  const assembler = require('./assembler').Assembler;
-  const asm = new Assembler({
-    origin: parseInt(options.origin, 0),
-    entryPoint: options.entry,
-    debug: options.debug,
-  });
+async function main() {
+  try {
+    const source = fs.readFileSync(inputPath, 'utf-8');
 
-  const { program, symbols, diagnostics } = asm.assemble(source, inputPath);
+    const asm = new Assembler({
+      origin: parseInt(options.origin, 0),
+      entryPoint: options.entry,
+      debug: options.debug,
+    });
 
-  // Output diagnostics
-  for (const diag of diagnostics) {
-    const prefix = diag.severity === 'error' ? 'Error' : diag.severity === 'warning' ? 'Warning' : 'Info';
-    console.error(`${prefix} [${diag.file}:${diag.line}:${diag.column}]: ${diag.message}`);
-  }
+    const result = await asm.assemble(source, inputPath);
+    const { program, symbols, diagnostics } = result;
 
-  const errors = diagnostics.filter(d => d.severity === 'error');
-  if (errors.length > 0) {
-    console.error(`\nAssembly failed with ${errors.length} error(s)`);
+    // Output diagnostics
+    for (const diag of diagnostics) {
+      const prefix = diag.severity === 'error' ? 'Error' : diag.severity === 'warning' ? 'Warning' : 'Info';
+      console.error(`${prefix} [${diag.file}:${diag.line}:${diag.column}]: ${diag.message}`);
+    }
+
+    const errors = diagnostics.filter(d => d.severity === 'error');
+    if (errors.length > 0) {
+      console.error(`\nAssembly failed with ${errors.length} error(s)`);
+      process.exit(1);
+    }
+
+    // Write output
+    const programBytes = asm.serializeProgramImage(program);
+    fs.writeFileSync(outputFile, Buffer.from(programBytes));
+    console.log(`✓ Assembled ${inputFile} → ${outputFile} (${programBytes.length} bytes)`);
+
+    if (options.list) {
+      const listFile = outputFile.replace('.flow', '.lst');
+      generateListing(source, symbols, listFile, asm);
+    }
+
+  } catch (error: any) {
+    console.error(`Error: ${error.message}`);
+    if (options.verbose && error.stack) {
+      console.error(error.stack);
+    }
     process.exit(1);
   }
-
-  // Write output
-  const programBytes = asm.serializeProgramImage(program);
-  fs.writeFileSync(outputFile, Buffer.from(programBytes));
-  console.log(`✓ Assembled ${inputFile} → ${outputFile} (${programBytes.length} bytes)`);
-
-  if (options.list) {
-    const listFile = outputFile.replace('.flow', '.lst');
-    const symbolMap = new Map(symbols.map(s => [s.name, s.address]));
-    generateListing(source, symbolMap, outputFile.replace('.flow', '.lst'));
-  }
-
-} catch (error: any) {
-  console.error(`Error: ${error.message}`);
-  if (options.verbose && error.stack) {
-    console.error(error.stack);
-  }
-  process.exit(1);
 }
 
-function generateListing(source: string, symbols: Map<string, number>, outputFile: string) {
-  // TODO: Generate assembly listing
-  console.log(`Listing would be written to ${outputFile}`);
+main();
+
+function generateListing(source: string, symbols: Symbol[], listFile: string, asm: Assembler) {
+  const lines = source.split('\n');
+  let output = '';
+  
+  // Header
+  output += '; iFlow Assembly Listing\n';
+  output += `; Source: ${inputPath}\n`;
+  output += `; Generated: ${new Date().toISOString()}\n\n`;
+  
+  // Symbol table
+  output += '; Symbol Table:\n';
+  for (const sym of symbols) {
+    output += `; ${sym.name.padEnd(32)} = 0x${sym.address.toString(16).padStart(4, '0')} (${sym.type})\n`;
+  }
+  output += '\n';
+  
+  // Source with addresses (simplified - just show source with line numbers)
+  output += '; Source:\n';
+  for (let i = 0; i < lines.length; i++) {
+    output += `${String(i + 1).padStart(4, ' ')}: ${lines[i]}\n`;
+  }
+  
+  fs.writeFileSync(listFile, output);
+  console.log(`✓ Listing written to ${listFile}`);
 }

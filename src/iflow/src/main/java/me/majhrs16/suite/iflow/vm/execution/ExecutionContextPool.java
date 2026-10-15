@@ -11,15 +11,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Pool of reusable ExecutionContext instances.
  * <p>
- * Contexts are expensive to create (allocate SoftMMU, etc.) so we pool them.
+ * Contexts are expensive to create (allocate registers, etc.) so we pool them.
  * Each context is fully reset before reuse to prevent state leakage.
+ * The SoftMMU is set by the caller (VmPolicyEngine) from the current loaded program.
  * </p>
  */
 public final class ExecutionContextPool implements AutoCloseable {
 
     private final Queue<ExecutionContext> available = new ArrayDeque<>();
     private final int maxSize;
-    private final SoftMMU templateSoftMMU;
     private final HostServiceRegistry serviceRegistry;
     private final java.util.function.Consumer<ExecutionContext> configurator;
     private final AtomicInteger created = new AtomicInteger(0);
@@ -27,17 +27,14 @@ public final class ExecutionContextPool implements AutoCloseable {
     private final AtomicInteger released = new AtomicInteger(0);
     private volatile boolean closed = false;
 
-    public ExecutionContextPool(SoftMMU templateSoftMMU,
-                                 HostServiceRegistry serviceRegistry,
+    public ExecutionContextPool(HostServiceRegistry serviceRegistry,
                                  java.util.function.Consumer<ExecutionContext> configurator) {
-        this(templateSoftMMU, serviceRegistry, configurator, 32);
+        this(serviceRegistry, configurator, 32);
     }
 
-    public ExecutionContextPool(SoftMMU templateSoftMMU,
-                                 HostServiceRegistry serviceRegistry,
+    public ExecutionContextPool(HostServiceRegistry serviceRegistry,
                                  java.util.function.Consumer<ExecutionContext> configurator,
                                  int maxSize) {
-        this.templateSoftMMU = templateSoftMMU;
         this.serviceRegistry = serviceRegistry;
         this.configurator = configurator;
         this.maxSize = maxSize;
@@ -56,8 +53,6 @@ public final class ExecutionContextPool implements AutoCloseable {
                 // In production, might want to block or throw
             }
             ctx = new ExecutionContext();
-            // Create a copy of the template SoftMMU for this context
-            ctx.softMMU(new SoftMMU(templateSoftMMU));
             created.incrementAndGet();
         }
 

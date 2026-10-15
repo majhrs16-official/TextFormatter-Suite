@@ -15,7 +15,7 @@ declare class Assembler {
     private currentSection;
     private constantPool;
     constructor(options?: AssemblerOptions);
-    assemble(source: string, fileName?: string): AssemblerResult;
+    assemble(source: string, fileName?: string): Promise<AssemblerResult>;
     private reset;
     private firstPass;
     private secondPass;
@@ -35,7 +35,10 @@ declare class Assembler {
     private getVaddrOperand;
     private getPackedRROperand;
     private getBranchOffset;
+    private createResultSync;
     private createResult;
+    private serializeProgramImageNoHash;
+    private computeSHA256;
     private getEntryPointAddress;
     private generateDebugInfo;
     serializeProgramImage(image: ProgramImage): Uint8Array;

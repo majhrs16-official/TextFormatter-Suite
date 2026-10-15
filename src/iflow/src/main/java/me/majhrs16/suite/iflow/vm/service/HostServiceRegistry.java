@@ -18,12 +18,12 @@ import java.util.function.BiFunction;
  * checks capabilities, and executes the service implementation.
  * </p>
  * <p>
- * ABI Convention for HOST instruction:
+* ABI Convention for HOST instruction:
  *   R0 = service ID
  *   R1 = virtual address (vaddr) of argument buffer
  *   R2 = offset within buffer
- *   R3 = length / options
- * </p>
+ *   R3 = options
+ *   R4 = length
  */
 public final class HostServiceRegistry {
 
@@ -109,6 +109,9 @@ public final class HostServiceRegistry {
     private final Map<Integer, HostService> services = new HashMap<>();
     private final Map<String, Integer> capabilityMap = new HashMap<>();
 
+    // Current program's allowed capabilities (set per evaluation)
+    private String[] allowedCapabilities = new String[0];
+
     // Host-injected dependencies
     private BiFunction<String, String, Boolean> permissionChecker;
     private java.util.function.Function<String, String> placeholderResolver;
@@ -118,6 +121,7 @@ public final class HostServiceRegistry {
     private java.util.function.Function<Integer, String> channelResolver;
     private java.util.function.Supplier<java.util.Map<Integer, Object>> stateReader;
     private java.util.function.BiConsumer<Integer, Object> stateWriter;
+    private me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter;
 
     public HostServiceRegistry() {
         registerBuiltinServices();
@@ -215,9 +219,17 @@ public final class HostServiceRegistry {
         capabilityMap.put(capability, 1);
     }
 
-    /** Checks if a capability is declared (not necessarily granted). */
+    /** Sets the capabilities allowed for the current program/evaluation. */
+    public void setAllowedCapabilities(String[] capabilities) {
+        this.allowedCapabilities = capabilities != null ? capabilities.clone() : new String[0];
+    }
+
+    /** Checks if a capability is granted for the current program. */
     public boolean hasCapability(String capability) {
-        return capabilityMap.containsKey(capability);
+        for (String cap : allowedCapabilities) {
+            if (cap.equals(capability)) return true;
+        }
+        return false;
     }
 
     /** Invokes a service, checking capabilities and charging fuel. */
@@ -337,6 +349,7 @@ public final class HostServiceRegistry {
     private ServiceResult doRouteDecision(ExecutionContext ctx, int argVAddr, int argOffset, int argLength, int options) {
         int decision = options & 0xFFFF; // Low 16 bits = decision code
         String redirectChannel = null;
+        String redirectTarget = null;
 
         if (decision == DECISION_CHAN_REDIR && argLength > 0) {
             int sourceVAddr = argVAddr + argOffset;
@@ -348,6 +361,16 @@ public final class HostServiceRegistry {
             }
 
             redirectChannel = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        } else if (decision == DECISION_REDIRECT && argLength > 0) {
+            // REDIRECT: read target actor from argument buffer
+            int sourceVAddr = argVAddr + argOffset;
+            byte[] bytes;
+            try {
+                bytes = ctx.softMMU().getRegion(sourceVAddr, argLength);
+            } catch (VmException e) {
+                return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+            }
+            redirectTarget = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
         }
 
         // Record in journal
@@ -355,9 +378,27 @@ public final class HostServiceRegistry {
             case DECISION_LOG -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:LOG");
             case DECISION_DROP -> new ModificationJournal.Entry(ModificationJournal.OpType.CANCEL_MESSAGE, true, "route:DROP");
             case DECISION_REJECT -> new ModificationJournal.Entry(ModificationJournal.OpType.CANCEL_MESSAGE, true, "route:REJECT");
-            case DECISION_REDIRECT -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:REDIRECT");
+            case DECISION_REDIRECT -> redirectTarget != null
+                ? new ModificationJournal.Entry(ModificationJournal.OpType.REDIRECT_TARGET, redirectTarget, "route:REDIRECT")
+                : new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:REDIRECT");
             case DECISION_CHAN_REDIR -> new ModificationJournal.Entry(ModificationJournal.OpType.REDIRECT_CHANNEL, redirectChannel, "route:CHANNEL_REDIRECT");
-            case DECISION_RATE_LIMIT -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:RATE_LIMIT");
+            case DECISION_RATE_LIMIT -> {
+                // Calculate backoff from rate limiter if available
+                long backoff = 0;
+                if (rateLimiter != null && argLength > 0) {
+                    int sourceVAddr = argVAddr + argOffset;
+                    byte[] bytes;
+                    try {
+                        bytes = ctx.softMMU().getRegion(sourceVAddr, argLength);
+                    } catch (VmException e) {
+                        return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+                    }
+                    String rateLimitKey = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                    backoff = rateLimiter.nanosUntilNextWindow(rateLimitKey) / 1_000_000; // Convert to millis
+                    if (backoff < 0) backoff = 0;
+                }
+                yield new ModificationJournal.Entry(ModificationJournal.OpType.RATE_LIMIT_BACKOFF, backoff, "route:RATE_LIMIT");
+            }
             case DECISION_CONTINUE -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:CONTINUE");
             default -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:UNKNOWN");
         };
@@ -474,6 +515,11 @@ public final class HostServiceRegistry {
 
     public HostServiceRegistry stateWriter(java.util.function.BiConsumer<Integer, Object> writer) {
         this.stateWriter = writer;
+        return this;
+    }
+
+    public HostServiceRegistry rateLimiter(me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter) {
+        this.rateLimiter = rateLimiter;
         return this;
     }
 
