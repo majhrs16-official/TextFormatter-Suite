@@ -14,6 +14,7 @@ import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.RouteDecision;
+import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -231,14 +232,8 @@ class E2EPipelineTest {
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, fakeTranslation(), quietLogger());
-        // Add a rule that redirects staff messages
-        host.router().setRules(List.of(
-            me.majhrs16.suite.iflow.rule.Rule.builder(
-                me.majhrs16.suite.iflow.target.PolicyTarget.REDIRECT)
-                .channelPath("chat")
-                .condition("#sender.name() == 'Steve'")
-                .reason("staff audit")
-                .build()));
+        // Route staff messages to the console via a VM policy program
+        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
 
         MessageDispatcher dispatcher = new MessageDispatcher(
             host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
@@ -452,14 +447,8 @@ class E2EPipelineTest {
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", null);
 
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, fakeTranslation(), quietLogger());
-host.router().setRules(List.of(
-            me.majhrs16.suite.iflow.rule.Rule.builder(
-                me.majhrs16.suite.iflow.target.PolicyTarget.CHANNEL_REDIRECT)
-                .channelPath("chat")
-                .condition("#sender.name() == 'Steve'")
-                .reason("staff audit")
-                .redirectChannel("staff")
-                .build()));
+        // Redirect chat to the "staff" channel via a VM policy program
+        PolicyPrograms.setChannelRedirect(host, "staff");
 
         MessageDispatcher dispatcher = new MessageDispatcher(
             host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),

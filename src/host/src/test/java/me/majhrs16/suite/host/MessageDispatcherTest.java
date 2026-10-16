@@ -12,8 +12,8 @@ import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -213,8 +213,7 @@ class MessageDispatcherTest {
         writeLayout(false);
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             fakeTranslation(), quietLogger());
-        host.router().setRules(List.of(
-            Rule.builder(PolicyTarget.REDIRECT).reason("audit").build()));
+        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
         RecordingDelivery delivery = new RecordingDelivery();
         MessageDispatcher subject = new MessageDispatcher(host,
             new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
@@ -233,8 +232,7 @@ class MessageDispatcherTest {
         writeLayout(false);
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             fakeTranslation(), quietLogger());
-        host.router().setRules(List.of(
-            Rule.builder(PolicyTarget.DROP).reason("muted").build()));
+        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_DROP);
         RecordingDelivery delivery = new RecordingDelivery();
         MessageDispatcher subject = new MessageDispatcher(host,
             new TestDirectory(List.of(STEVE, ALEX), CONSOLE),

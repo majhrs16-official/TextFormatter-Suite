@@ -10,8 +10,8 @@ import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.iflow.RouteDecision;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -102,8 +102,7 @@ class SuiteHostTest {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             fakeTranslation(), quietLogger());
-        host.router().setRules(java.util.List.of(
-            Rule.builder(PolicyTarget.DROP).reason("muted").build()));
+        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_DROP);
 
         RoutingResult result = host.deliver(
             Message.builder().sender(STEVE).direction(Direction.others())
@@ -120,8 +119,7 @@ class SuiteHostTest {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             fakeTranslation(), quietLogger());
-        host.router().setRules(java.util.List.of(
-            Rule.builder(PolicyTarget.REJECT).reason("temp-ban").build()));
+        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REJECT);
 
         RoutingResult result = host.deliver(
             Message.builder().sender(STEVE).direction(Direction.others())
@@ -138,8 +136,7 @@ class SuiteHostTest {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             fakeTranslation(), quietLogger());
-        host.router().setRules(java.util.List.of(
-            Rule.builder(PolicyTarget.REDIRECT).reason("audit").build()));
+        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
 
         RoutingResult result = host.deliver(
             Message.builder().sender(STEVE).direction(Direction.others())
