@@ -95,10 +95,40 @@ Verificado con `SUB` no conmutativo: `SUB R1,R2` produce `R1 = R1 - R2`, coheren
   (fijan `Z`/`N`); lógica y `DIV`/`MOD` limpian `C`/`V`. §7.2 dice que *"las instrucciones
   aritméticas y las comparaciones"* actualizan flags, sin declarar el resto como "no debe tocar".
   No es necesariamente un fallo, pero conviene fijarlo por escrito.
-- **El log no incluye el detalle de memoria.** No se registra la dirección/valor afectado por
-  `STW/LDW/STB/LDB/COPY/MOVE` ni el coste variable real del `HOST`. Es un extra que permitiría
-  validar las operaciones de memoria directamente desde el log (hoy sólo se infieren por lecturas
-  posteriores a registros). No es un requisito del diseño actual de `logger`.
+- **El log ahora sí incluye el detalle de memoria** (implementado, ver §5). Sigue sin registrarse
+  el coste variable real del `HOST` (sólo el remanente antes de invocarlo), pero el coste es
+  deducible de la diferencia de `FUEL` entre el `HOST` y el ciclo siguiente.
+
+---
+
+## 5. Traza de memoria sparse (implementada)
+
+Tras ejecutar cada instrucción de memoria/bloque, la VM emite **una sola línea compacta** con
+sólo el rango tocado (nunca un volcado completo). Coste: 13 líneas en el firmware (158 ciclos) y
+19 en la suite (10 339 ciclos), ~0.2% del total.
+
+Verificaciones de datos que habilita (del firmware, todas correctas):
+
+```
+MEM WR16 [0x1000]<-0x1234 (R1)      ; y su lectura devuelve lo mismo
+MEM RD16 [0x1000]=0x1234 -> R2
+MEM WR8  [0x1002]<-0xAB (R1)
+MEM RD8  [0x1002]=0xAB -> R2
+MEM COPY [0x1000..0x1005] -> [0x1100..0x1105] len=6 sumSrc=0x00CC sumDst=0x00CC
+MEM MOVE [0x1000..0x1003] -> [0x1002..0x1005] len=4 sumSrc=0x0044 sumDst=0x0066
+```
+
+- `COPY` no solapado: `sumSrc == sumDst` (copia íntegra verificada con checksum aditivo de 16 bits).
+- `MOVE` solapado: los bytes resultantes son los esperados por la semántica `memmove`
+  (`11 11 22 22` en `0x1002..0x1005`).
+
+Reglas de formato (una línea `MEM` sólo aparece para `LDB/LDW/STB/STW/COPY/MOVE`):
+
+| Operación | Formato |
+| --- | --- |
+| `LDB`/`LDW` | `MEM RD8|RD16 [0xADDR]=0xVAL -> Rd` |
+| `STB`/`STW` | `MEM WR8|WR16 [0xADDR]<-0xVAL (Rs)` |
+| `COPY`/`MOVE` | `MEM COPY|MOVE [src0..src1] -> [dst0..dst1] len=N sumSrc=0xS sumDst=0xD` |
 
 ---
 

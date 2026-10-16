@@ -3,6 +3,8 @@ package me.majhrs16.suite.iflow.vm.execution;
 import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 
+import java.util.Locale;
+
 /**
  * Module formatter for iFlow VM debug logging.
  * Provides structured output for VM cycle debug messages.
@@ -10,16 +12,23 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 public final class IfLowVmFormatter implements Logger.ModuleFormatter {
 
     /**
-     * Formats a VM cycle debug message with full register state.
+     * Formats a VM debug message.
+     * <ul>
+     *   <li>{@code VM_CYCLE} messages get the full per-cycle register/flag dump.</li>
+     *   <li>Any other message (e.g. the sparse {@code MEM ...} trace) passes
+     *       through as-is, so memory lines stay compact.</li>
+     * </ul>
      * @param context the ExecutionContext (VM state)
-     * @param format the format string (ignored, uses custom format)
-     * @param args format arguments: [ip, opcode, mnemonic, fuel]
+     * @param format the format string; bears the message kind as its first token
+     * @param args format arguments: for {@code VM_CYCLE} [ip, opcode, mnemonic, fuel]
      * @return formatted debug message
      */
     @Override
     public String formatDebug(Object context, String format, Object... args) {
-        if (!(context instanceof ExecutionContext)) {
-            return String.format(format, args);
+        if (!(context instanceof ExecutionContext)
+                || format == null
+                || !format.startsWith("VM_CYCLE")) {
+            return format == null ? "" : String.format(Locale.ROOT, format, args);
         }
 
         ExecutionContext ctx = (ExecutionContext) context;

@@ -96,6 +96,13 @@ public final class VmInterpreter {
                 throw new VmException(VmException.Code.HOST_ERROR, "Execution error: " + e.getMessage(), ip, e);
             }
 
+            // Debug: sparse memory trace. Only memory/block instructions emit an
+            // extra line, recording just the touched address(es) and value(s) —
+            // never a full memory dump. Guarded so it is absent when DEBUG is off.
+            if (DebugConfig.DEBUG) {
+                logMemoryTrace(context, opcode, ip);
+            }
+
             // Advance IP (unless instruction modified it)
             int newIp = context.registers().get(RegisterFile.IP);
             if (!ipModifiedByInstruction && newIp == ip) {
@@ -469,5 +476,73 @@ public final class VmInterpreter {
             // Don't throw, let program handle via status code
         }
         return false;
+    }
+
+    private static int u16(byte[] code, int offset) {
+        return ((code[offset] & 0xFF) << 8) | (code[offset + 1] & 0xFF);
+    }
+
+    /**
+     * Emits a compact, sparse trace line for memory/block instructions only.
+     * <p>
+     * Instead of dumping memory (which would be unaffordable per cycle), it records
+     * just the affected address(es) and value(s). Called after execution so that
+     * loads report the value actually read into the destination register, and
+     * stores report the value written. Block operations additionally emit a
+     * 16-bit additive checksum of the source and destination ranges, which exposes
+     * copy/move corruption directly (for a non-overlapping COPY, {@code sumSrc}
+     * must equal {@code sumDst}).
+     * </p>
+     */
+    private void logMemoryTrace(ExecutionContext ctx, int opcode, int ip) {
+        RegisterFile regs = ctx.registers();
+        switch (opcode) {
+            case Opcode.LDB -> {
+                int rd = codeCache[ip + 1] & 0xFF;
+                int addr = u16(codeCache, ip + 2);
+                Logger.debug("iflow", ctx, "MEM RD8  [0x%04X]=0x%02X -> R%d", addr, regs.get(rd) & 0xFF, rd);
+            }
+            case Opcode.LDW -> {
+                int rd = codeCache[ip + 1] & 0xFF;
+                int addr = u16(codeCache, ip + 2);
+                Logger.debug("iflow", ctx, "MEM RD16 [0x%04X]=0x%04X -> R%d", addr, regs.get(rd) & 0xFFFF, rd);
+            }
+            case Opcode.STB -> {
+                int rs = codeCache[ip + 1] & 0xFF;
+                int addr = u16(codeCache, ip + 2);
+                Logger.debug("iflow", ctx, "MEM WR8  [0x%04X]<-0x%02X (R%d)", addr, regs.get(rs) & 0xFF, rs);
+            }
+            case Opcode.STW -> {
+                int rs = codeCache[ip + 1] & 0xFF;
+                int addr = u16(codeCache, ip + 2);
+                Logger.debug("iflow", ctx, "MEM WR16 [0x%04X]<-0x%04X (R%d)", addr, regs.get(rs) & 0xFFFF, rs);
+            }
+            case Opcode.COPY, Opcode.MOVE -> {
+                String name = (opcode == Opcode.COPY) ? "COPY" : "MOVE";
+                int src = u16(codeCache, ip + 1);
+                int dst = u16(codeCache, ip + 3);
+                int len = u16(codeCache, ip + 5);
+                if (len == 0) {
+                    Logger.debug("iflow", ctx, "MEM %s len=0 (no-op) src=0x%04X dst=0x%04X", name, src, dst);
+                    return;
+                }
+                int sumSrc = blockChecksum(ctx, src, len);
+                int sumDst = blockChecksum(ctx, dst, len);
+                Logger.debug("iflow", ctx,
+                    "MEM %s [0x%04X..0x%04X] -> [0x%04X..0x%04X] len=%d sumSrc=0x%04X sumDst=0x%04X",
+                    name, src, src + len - 1, dst, dst + len - 1, len, sumSrc, sumDst);
+            }
+            default -> { /* not a memory instruction: nothing to trace */ }
+        }
+    }
+
+    /** 16-bit additive checksum over {@code len} bytes at {@code addr}. */
+    private static int blockChecksum(ExecutionContext ctx, int addr, int len) {
+        SoftMMU mmu = ctx.softMMU();
+        int sum = 0;
+        for (int i = 0; i < len; i++) {
+            sum = (sum + (mmu.readByte(addr + i) & 0xFF)) & 0xFFFF;
+        }
+        return sum;
     }
 }
