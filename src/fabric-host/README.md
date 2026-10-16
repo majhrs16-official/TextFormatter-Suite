@@ -1,6 +1,6 @@
-# fabric-host — Fabric Mod Platform Adapter (EXCLUDED FROM BUILD)
+# fabric-host — Fabric Mod Platform Adapter
 
-> **Purpose**: Fabric mod implementation. **CURRENTLY EXCLUDED FROM BUILD** — 42 compilation errors due to using Spigot/Bukkit APIs (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`) instead of Fabric APIs. Requires complete rewrite to Fabric APIs: `ServerCommandSource`, `FabricAudiences`, Fabric events, Brigadier native.
+> **Purpose**: Fabric mod implementation. Targets Fabric Loader 0.16+, Fabric API 0.100.5, Minecraft 1.21 and Yarn mappings, and requires a **Java 21** toolchain (the Fabric 1.21 baseline). Built with the `fabric-loom` plugin.
 
 ---
 
@@ -27,7 +27,7 @@
 
 ---
 
-## 3. Dependencies (NOT APPLICABLE — EXCLUDED FROM BUILD)
+## 3. Dependencies
 
 | Dependency | Type | Reason |
 |------------|------|--------|
@@ -59,7 +59,7 @@
 | `minecraft` | Minecraft | Minecraft 1.21 |
 | `yarn mappings` | Mappings | Yarn 1.21+build.1 |
 
-> **⚠️ EXCLUDED**: This module is excluded from the Gradle build (`settings.gradle`). It contains 42 compilation errors because it uses Spigot/Bukkit APIs instead of Fabric APIs. Requires full rewrite using Fabric APIs: `ServerCommandSource`, `FabricAudiences`, Fabric event system, Brigadier native commands. See `TextFormatterSuiteMod.java` for specific error locations.
+> **Build note**: uses `fabric-loom` (`minecraft`, `mappings` and `modImplementation` configurations). The first build downloads and remaps Minecraft 1.21, so it is heavier and requires network access.
 
 ---
 
@@ -175,11 +175,10 @@ Adventure component → Fabric component → player.sendMessage()
 
 ## 10. Build Notes
 
-- **EXCLUDED FROM BUILD** — `fabric-host` is excluded in `settings.gradle` due to 42 compilation errors
-- **Rewrite Required** — Current code uses Spigot/Bukkit APIs (`CommandContext`, `hasPermissionLevel`, `sendFeedback`, `getEntity`, `AUTO`, `Server`, `WebSocketSyncSink`, `InWorldHandler`)
-- **Target APIs** — Fabric rewrite needs: `ServerCommandSource`, `FabricAudiences`, Fabric event system, Brigadier native commands
-- **Fabric Loom** — would use `fabric-loom` Gradle plugin (when rewritten)
-- **Java 21** — requires Java 21 toolchain
+- **Included in build** — `fabric-host` is included in `settings.gradle`.
+- **Fabric APIs** — uses `ServerCommandSource`, `FabricAudiences`, Fabric events and Brigadier native commands.
+- **Fabric Loom** — `fabric-loom` resolves and remaps Minecraft 1.21 (network + first-build cost).
+- **Java 21** — requires a Java 21 toolchain (Fabric 1.21 baseline); this matches the CI JDK (21).
 
 ---
 

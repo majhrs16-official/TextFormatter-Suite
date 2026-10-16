@@ -3,8 +3,6 @@ package me.majhrs16.suite.presets;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.host.config.HostConfig;
-import me.majhrs16.suite.iflow.rule.Rule;
-import me.majhrs16.suite.host.config.HostConfig;
 
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -402,11 +400,11 @@ public final class PresetManager {
      * Applies a preset by ID.
      */
     public boolean apply(String presetId, ChannelRegistry registry, HostConfig hostConfig,
-                         List<Rule> ruleList, List<Channel> channelList) {
+                         List<Channel> channelList) {
         Preset preset = presets.get(presetId);
         if (preset == null) return false;
 
-        preset.apply(registry, hostConfig, new ArrayList<>(), new ArrayList<>());
+        preset.apply(registry, hostConfig, new ArrayList<>());
         return true;
     }
 

@@ -63,10 +63,9 @@ jobs:
         run: |
           ./gradlew :src:spigot-host:build --no-daemon
 
-      # Fabric plugin disabled (requires Java 17, see settings.gradle)
-      # - name: Build Fabric plugin
-      #   run: |
-      #     ./gradlew :src:fabric-host:build --no-daemon
+      - name: Build Fabric plugin
+        run: |
+          ./gradlew :src:fabric-host:build --no-daemon
 
       - name: Upload Spigot artifact
         uses: actions/upload-artifact@v4

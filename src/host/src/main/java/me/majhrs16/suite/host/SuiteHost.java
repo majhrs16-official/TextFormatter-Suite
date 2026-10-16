@@ -21,7 +21,6 @@ import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.scripting.SpelExpressionEvaluator;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
-import me.majhrs16.suite.iflow.config.RuleConfigLoader;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 

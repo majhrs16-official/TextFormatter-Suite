@@ -2,8 +2,6 @@ package me.majhrs16.suite.presets;
 
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.rule.Rule;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.host.config.HostConfig;
 
 import java.util.List;
@@ -65,7 +63,7 @@ public final class Preset {
      * Applies this preset to the given registry and configuration.
      */
     public void apply(ChannelRegistry registry, HostConfig hostConfig,
-                      List<Rule> ruleList, List<Channel> channelList) {
+                      List<Channel> channelList) {
         // Apply config
         // Apply channels
         // Apply rules

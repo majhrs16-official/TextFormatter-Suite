@@ -8,9 +8,6 @@ import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.rule.Rule;
-import me.majhrs16.suite.iflow.rule.TransformOp;
-import me.majhrs16.suite.iflow.rule.ScriptSurface;
 
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
@@ -20,7 +17,6 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.SimpleEvaluationContext;
 import org.springframework.expression.AccessException;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,22 +66,6 @@ public final class TransformEngine {
             }
         } catch (Exception e) {
             // Log error but don't crash - transform failures shouldn't break delivery
-        }
-        return message;
-    }
-
-    /**
-     * Applies a list of transform operations to a message.
-     */
-    public Message applyTransforms(List<TransformOp> transforms, Message message,
-                                   Actor sender, Actor recipient) {
-        ScriptSurface surface = new ScriptSurface(
-            message, sender, recipient, channels, placeholders, translation, permissionChecker
-        );
-
-        for (TransformOp op : transforms) {
-            op.apply(surface);
-            message = surface.msg();
         }
         return message;
     }
