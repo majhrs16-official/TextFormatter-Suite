@@ -411,6 +411,11 @@ class Assembler {
                     this.addDiagnostic('error', `Operand ${i + 1}: immediate out of 16-bit range: ${val}`, this.currentLine, 0);
                 }
             }
+            else if (exp === 'imm16' && op.type === 'label') {
+                // Symbols/labels resolve to their address in getImm16Operand (masked to
+                // 16 bits there), so there is no static value to range-check here.
+                // Mirrors the 'vaddr' branch, which already accepts labels.
+            }
             else if (exp === 'vaddr' && (op.type === 'imm16' || op.type === 'label' || op.type === 'vaddr')) {
                 // Valid
             }

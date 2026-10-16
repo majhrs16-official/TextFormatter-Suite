@@ -1,0 +1,8 @@
+; Regression: .const symbols (and LABEL+OFFSET expressions) must be accepted
+; as LI immediates. The validator used to reject 'label' for imm16 even though
+; getImm16Operand already resolved them, so the documented
+; "LI R0, SERVICE_*" style failed to assemble.
+.const BASE 0x1000
+LI R0, BASE
+LI R1, BASE+4
+HALT
