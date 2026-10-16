@@ -8,9 +8,13 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.RoutingResult;
 import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.iflow.channel.RateLimiter;
+import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
+import me.majhrs16.suite.iflow.vm.isa.Opcode;
+import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
@@ -400,66 +404,91 @@ class EndToEndIntegrationTest {
     }
 
     // ============================================================
-    // iFlow Rules Tests
+    // iFlow VM policy tests
     // ============================================================
 
-    @Test
-    void testAntiSpamRule() {
-        var router = new DefaultRouter(channels);
-        router.setRules(List.of(
-            me.majhrs16.suite.iflow.rule.Rule.builder(me.majhrs16.suite.iflow.target.PolicyTarget.DROP)
-                .condition("'spam' in #msg.texts[0]")
-                .reason("spam detected")
-                .build()
-        ));
+    /** A program that drops the message when its first content byte equals {@code ch}. */
+    private static ProgramImage dropIfFirstByteIs(char ch) {
+        return ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LDB, 1, 0x60, 0x00,              // LDB R1, [0x6000] (first content byte)
+                Opcode.LI, 2, 0x00, (byte) (ch & 0xFF), // LI R2, ch
+                Opcode.CMP, 0x12,                       // CMP R1, R2
+                Opcode.JZ, 0x00, 0x0B,                  // JZ drop
+                Opcode.LI, 0, 0x03, 0x00,               // LI R0, ROUTE_DECISION
+                Opcode.LI, 3, 0x00, 0x06,               // LI R3, DECISION_CONTINUE
+                Opcode.HOST, 0x00,
+                Opcode.HALT,
+                Opcode.LI, 0, 0x03, 0x00,               // LI R0, ROUTE_DECISION
+                Opcode.LI, 3, 0x00, 0x01,               // LI R3, DECISION_DROP
+                Opcode.HOST, 0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"routing.decide"})
+            .build();
+    }
 
-        var msg = Message.builder()
+    @Test
+    void testContentBasedDropProgram() {
+        var router = new VmPolicyEngine(channels, (actor, perm) -> true, new RateLimiter());
+        router.setProgram(dropIfFirstByteIs('s'));
+
+        var spam = Message.builder()
             .sender(createTestPlayer("Spammer", Language.EN))
             .direction(Direction.others())
-            .text("This is spam")
+            .text("spam raid incoming")
+            .channel("chat.global")
+            .build();
+        var ham = Message.builder()
+            .sender(createTestPlayer("Player", Language.EN))
+            .direction(Direction.others())
+            .text("hello everyone")
             .channel("chat.global")
             .build();
 
         var recipient = createRecipient("Victim", Language.EN);
 
-        var outcome = router.route(msg, recipient);
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.DROP, outcome.decision().target());
+        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.DROP,
+            router.route(spam, recipient).decision().target());
+        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.LOG,
+            router.route(ham, recipient).decision().target());
     }
 
     @Test
-    @Disabled("channels registry lacks staff.chat config - needs full channel setup")
     void testPermissionBasedRouting() {
-        var router = new DefaultRouter(channels);
-        router.setRules(List.of(
-            me.majhrs16.suite.iflow.rule.Rule.builder(me.majhrs16.suite.iflow.target.PolicyTarget.REJECT)
-                .channelPath("staff.chat")
-                .condition("!#msg.sender.hasPermission('staff.chat')")
-                .reason("no permission")
-                .build()
-        ));
+        // The VM enforces channel send/receive policy natively via the permission checker.
+        var registry = ChannelRegistry.builder()
+            .register(Channel.builder("staff.chat")
+                .sendPermission("staff.chat")
+                .build())
+            .build();
+        var permChecker = new PermissionChecker() {
+            @Override public boolean has(Actor actor, String perm) {
+                return actor.name().equals("Staff");
+            }
+        };
+        var router = new VmPolicyEngine(registry, permChecker, new RateLimiter());
 
-        var msg = Message.builder()
+        var fromStaff = Message.builder()
+            .sender(createTestPlayer("Staff", Language.EN))
+            .direction(Direction.others())
+            .text("staff only")
+            .channel("staff.chat")
+            .build();
+        var fromRegular = Message.builder()
             .sender(createTestPlayer("RegularPlayer", Language.EN))
             .direction(Direction.others())
             .text("staff only")
             .channel("staff.chat")
             .build();
 
-        var permitted = createTestPlayer("Staff", Language.EN);
-        var unpermitted = createTestPlayer("Regular", Language.EN);
+        var recipient = createRecipient("Audience", Language.EN);
 
-        var permChecker = new PermissionChecker() {
-            @Override public boolean has(Actor actor, String perm) {
-                return actor.name().equals("Staff");
-            }
-        };
-        var routerWithPerm = new DefaultRouter(channels, permChecker);
-
-        var outcomePermitted = routerWithPerm.route(msg, permitted);
-        var outcomeDenied = routerWithPerm.route(msg, unpermitted);
-
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.LOG, outcomePermitted.decision().target());
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.REJECT, outcomeDenied.decision().target());
+        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.LOG,
+            router.route(fromStaff, recipient).decision().target());
+        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.REJECT,
+            router.route(fromRegular, recipient).decision().target());
     }
 
     @Test

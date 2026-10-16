@@ -10,9 +10,9 @@ import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.textformatter.template.Template;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.channel.RateLimiter;
+import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.config.HostConfig;
@@ -60,7 +60,7 @@ public class MessageProcessingBenchmark {
     private TemplateRenderer renderer;
     private Actor testSender;
     private Actor testRecipient;
-    private DefaultRouter router;
+    private VmPolicyEngine router;
     private PermissionChecker permissions;
     private RateLimiter rateLimiter;
     private TranslationService translation;
@@ -141,11 +141,11 @@ public class MessageProcessingBenchmark {
         // Initialize template renderer with mocks
         renderer = new TemplateRenderer(translation, mockPlaceholders, mockLogger);
 
-        // Initialize router
-        router = new DefaultRouter(channels, permissions);
-
         // Initialize rate limiter
         rateLimiter = new RateLimiter();
+
+        // Initialize router (VM policy engine; pass-through program by default)
+        router = new VmPolicyEngine(channels, permissions, rateLimiter);
 
         // Create a minimal SuiteHost for dispatcher using bootstrap
         Path tempDir = Files.createTempDirectory("benchmark-config");

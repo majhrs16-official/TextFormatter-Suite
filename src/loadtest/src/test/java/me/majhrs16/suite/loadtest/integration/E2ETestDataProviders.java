@@ -8,7 +8,6 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;

@@ -9,7 +9,6 @@ import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.SuiteBootstrap;
 import me.majhrs16.suite.host.RoutingResult;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.DefaultRouter;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
