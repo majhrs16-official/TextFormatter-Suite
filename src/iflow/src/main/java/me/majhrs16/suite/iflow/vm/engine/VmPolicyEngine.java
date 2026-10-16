@@ -9,9 +9,11 @@ import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.engine.PolicyResultValidator;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContextPool;
+import me.majhrs16.suite.iflow.vm.execution.IfLowVmFormatter;
 import me.majhrs16.suite.iflow.vm.execution.VmInterpreter;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -84,6 +86,9 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         this.channels = channels;
         this.permissions = permissions;
         this.rateLimit = rateLimit;
+
+        // Register iflow VM formatter for debug logging
+        IfLowVmFormatter.register();
 
         this.serviceRegistry = createServiceRegistry();
         this.contextPool = new ExecutionContextPool(serviceRegistry, this::configureContext);

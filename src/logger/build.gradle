@@ -1,0 +1,76 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+version = '2.1.0-SNAPSHOT'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+// Read debug flag from Gradle property (default: false)
+ext.loggerDebug = project.hasProperty('logger.debug') ? project.property('logger.debug').toString().toLowerCase() : 'false'
+
+// Task to replace DEBUG placeholder in source before compilation
+tasks.register('replaceDebugFlag') {
+    doLast {
+        def debugValue = loggerDebug == 'true' ? 'true' : 'false'
+        def sourceFile = file("src/main/java/me/majhrs16/suite/logger/DebugConfig.java")
+        if (sourceFile.exists()) {
+            def content = sourceFile.getText('UTF-8')
+            def replaced = content.replaceAll('/\\*\\]\\[DEBUG_FLAG\\]\\*\\/ false', debugValue)
+            if (content != replaced) {
+                sourceFile.write(replaced, 'UTF-8')
+                println "Logger: Set DEBUG = $debugValue"
+            }
+        }
+    }
+}
+
+// Ensure replacement happens before compilation
+tasks.named('compileJava') { compileTask ->
+    compileTask.dependsOn 'replaceDebugFlag'
+    compileTask.doLast {
+        // Restore original placeholder after compilation for clean repo state
+        def sourceFile = file("src/main/java/me/majhrs16/suite/logger/DebugConfig.java")
+        if (sourceFile.exists()) {
+            def content = sourceFile.getText('UTF-8')
+            def restored = content.replaceAll('public static final boolean DEBUG = (true|false);', 
+                'public static final boolean DEBUG = /*[[DEBUG_FLAG]]*/ false;')
+            if (content != restored) {
+                sourceFile.write(restored, 'UTF-8')
+            }
+        }
+    }
+}
+
+dependencies {
+    // No external dependencies - zero-overhead logger
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'suite-logger'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}

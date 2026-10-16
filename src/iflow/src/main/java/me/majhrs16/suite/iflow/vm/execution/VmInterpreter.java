@@ -1,5 +1,7 @@
 package me.majhrs16.suite.iflow.vm.execution;
 
+import me.majhrs16.suite.logger.DebugConfig;
+import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
@@ -73,6 +75,10 @@ public final class VmInterpreter {
             if (ip + instrSize > program.codeSize()) {
                 throw VmException.invalidOperand("Truncated instruction at IP=0x" + Integer.toHexString(ip), ip);
             }
+
+            // Debug: Log VM cycle state before execution
+            Logger.debug("iflow", context, "VM_CYCLE IP=0x%04X OP=0x%02X(%s) FUEL=%d",
+                ip, opcode, Opcode.name(opcode), context.fuelRemaining());
 
             // Execute
             boolean ipModifiedByInstruction;

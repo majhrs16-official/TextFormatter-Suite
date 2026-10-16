@@ -20,6 +20,7 @@ java {
 dependencies {
     implementation project(':src:core-api')
     implementation project(':src:textformatter')
+    implementation project(':src:logger')
 
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
