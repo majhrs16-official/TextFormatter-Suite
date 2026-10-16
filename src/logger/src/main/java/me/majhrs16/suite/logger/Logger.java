@@ -12,8 +12,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
 /**
@@ -26,7 +24,6 @@ import java.util.function.Supplier;
  *   <li><b>Runtime levels:</b> {@code info}, {@code warn}, {@code error} always active</li>
  *   <li><b>Multi-destination output:</b> Console, plugin directory ({@code <server>/plugins/<manager>/suite.log}),
  *       fallback temp file ({@code /tmp/TextFormatter-Suite.log})</li>
- *   <li><b>Per-module formatters:</b> Each module can register a custom formatter for structured logging</li>
  * </ul>
  * </p>
  * <p>
@@ -39,6 +36,9 @@ import java.util.function.Supplier;
  * Logger.info("Plugin loaded: %s", pluginName);
  * Logger.warn("Rate limit approached: %d/%d", current, limit);
  * Logger.error("Connection failed: %s", e.getMessage(), e);
+ *
+ * // Module-tagged output (see LoggerUtils.Module)
+ * LoggerUtils.Module.info("iflow", "Loaded %d programs", count);
  * }</pre>
  * </p>
  */
@@ -57,27 +57,7 @@ public final class Logger {
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS", Locale.ROOT)
                          .withZone(ZoneId.systemDefault());
 
-    // Per-module formatters for custom structured logging
-    private static final ConcurrentMap<String, ModuleFormatter> formatters = new ConcurrentHashMap<>();
-
     private Logger() {}
-
-    /**
-     * Registers a custom formatter for a module.
-     * @param moduleName the module identifier (e.g., "iflow", "gtranslate")
-     * @param formatter the formatter instance
-     */
-    public static void registerFormatter(String moduleName, ModuleFormatter formatter) {
-        formatters.put(moduleName, formatter);
-    }
-
-    /**
-     * Unregisters a module formatter.
-     * @param moduleName the module identifier
-     */
-    public static void unregisterFormatter(String moduleName) {
-        formatters.remove(moduleName);
-    }
 
     /**
      * Logs a debug message with formatted parameters.
@@ -93,26 +73,6 @@ public final class Logger {
         init();
         String message = String.format(Locale.ROOT, format, args);
         writer.println(formatLog("DEBUG", null, message));
-    }
-
-    /**
-     * Logs a debug message with a module-specific formatter.
-     * <p>
-     * <b>Zero overhead when {@link DebugConfig#DEBUG} is false.</b>
-     * </p>
-     * @param moduleName the module identifier (must have registered formatter)
-     * @param context arbitrary context object passed to formatter
-     * @param format the format string
-     * @param args format arguments
-     */
-    public static void debug(String moduleName, Object context, String format, Object... args) {
-        if (!DebugConfig.DEBUG) return;
-        init();
-        ModuleFormatter formatter = formatters.get(moduleName);
-        String message = formatter != null
-            ? formatter.formatDebug(context, format, args)
-            : String.format(Locale.ROOT, format, args);
-        writer.println(formatLog("DEBUG", moduleName, message));
     }
 
     /**
@@ -141,18 +101,6 @@ public final class Logger {
     }
 
     /**
-     * Logs an info message with module context.
-     * @param moduleName the module identifier
-     * @param format the format string
-     * @param args format arguments
-     */
-    public static void info(String moduleName, String format, Object... args) {
-        init();
-        String message = String.format(Locale.ROOT, format, args);
-        writer.println(formatLog("INFO", moduleName, message));
-    }
-
-    /**
      * Logs a warning message (always active).
      * @param format the format string
      * @param args format arguments
@@ -161,18 +109,6 @@ public final class Logger {
         init();
         String message = String.format(Locale.ROOT, format, args);
         writer.println(formatLog("WARN", null, message));
-    }
-
-    /**
-     * Logs a warning message with module context.
-     * @param moduleName the module identifier
-     * @param format the format string
-     * @param args format arguments
-     */
-    public static void warn(String moduleName, String format, Object... args) {
-        init();
-        String message = String.format(Locale.ROOT, format, args);
-        writer.println(formatLog("WARN", moduleName, message));
     }
 
     /**
@@ -187,18 +123,6 @@ public final class Logger {
     }
 
     /**
-     * Logs an error message with module context.
-     * @param moduleName the module identifier
-     * @param format the format string
-     * @param args format arguments
-     */
-    public static void error(String moduleName, String format, Object... args) {
-        init();
-        String message = String.format(Locale.ROOT, format, args);
-        writer.println(formatLog("ERROR", moduleName, message));
-    }
-
-    /**
      * Logs an error message with exception (always active).
      * @param format the format string
      * @param throwable the exception
@@ -210,21 +134,6 @@ public final class Logger {
         StringWriter sw = new StringWriter();
         throwable.printStackTrace(new PrintWriter(sw));
         writer.println(formatLog("ERROR", null, message + "\n" + sw));
-    }
-
-    /**
-     * Logs an error message with exception and module context.
-     * @param moduleName the module identifier
-     * @param throwable the exception
-     * @param format the format string
-     * @param args format arguments
-     */
-    public static void error(String moduleName, Throwable throwable, String format, Object... args) {
-        init();
-        String message = String.format(Locale.ROOT, format, args);
-        StringWriter sw = new StringWriter();
-        throwable.printStackTrace(new PrintWriter(sw));
-        writer.println(formatLog("ERROR", moduleName, message + "\n" + sw));
     }
 
     /**
@@ -293,21 +202,5 @@ public final class Logger {
 
     private static void logInternal(String message) {
         writer.println(formatLog("INFO", null, message));
-    }
-
-    /**
-     * Functional interface for module-specific debug formatting.
-     * Allows modules like iflow to provide custom structured output for debug logs.
-     */
-    @FunctionalInterface
-    public interface ModuleFormatter {
-        /**
-         * Formats a debug message for the module.
-         * @param context module-specific context (e.g., VM state snapshot)
-         * @param format the format string
-         * @param args format arguments
-         * @return formatted message
-         */
-        String formatDebug(Object context, String format, Object... args);
     }
 }

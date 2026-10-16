@@ -1,7 +1,7 @@
 package me.majhrs16.suite.iflow.vm.execution;
 
 import me.majhrs16.suite.logger.DebugConfig;
-import me.majhrs16.suite.logger.Logger;
+import me.majhrs16.suite.logger.LoggerUtils;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
@@ -24,12 +24,6 @@ import java.util.function.IntBinaryOperator;
 public final class VmInterpreter {
 
     private static final int MAX_INSTRUCTION_COST = 1000; // Safety limit
-
-    static {
-        // Register the iflow VM debug formatter once, so every VmInterpreter usage
-        // (tests, policy engine, standalone) emits structured VM-cycle dumps.
-        IfLowVmFormatter.register();
-    }
 
     private final ProgramImage program;
     private final SoftMMU softMMU;
@@ -82,9 +76,13 @@ public final class VmInterpreter {
                 throw VmException.invalidOperand("Truncated instruction at IP=0x" + Integer.toHexString(ip), ip);
             }
 
-            // Debug: Log VM cycle state before execution
-            Logger.debug("iflow", context, "VM_CYCLE IP=0x%04X OP=0x%02X(%s) FUEL=%d",
-                ip, opcode, Opcode.name(opcode), context.fuelRemaining());
+            // Debug: log the full VM cycle state before execution. Lazy on purpose:
+            // the register dump is only built if the DEBUG guard *inside*
+            // LoggerUtils.Module.debug passes, so nothing is computed when debug
+            // is compiled out — no external `if (DebugConfig.DEBUG)` needed here.
+            LoggerUtils.Module.debug("iflow", () -> String.format(
+                "VM_CYCLE IP=0x%04X OP=0x%02X(%s) REGS=%s FUEL=%d",
+                ip, opcode, Opcode.name(opcode), formatRegisters(context.registers()), context.fuelRemaining()));
 
             // Execute
             boolean ipModifiedByInstruction;
@@ -98,7 +96,10 @@ public final class VmInterpreter {
 
             // Debug: sparse memory trace. Only memory/block instructions emit an
             // extra line, recording just the touched address(es) and value(s) —
-            // never a full memory dump. Guarded so it is absent when DEBUG is off.
+            // never a full memory dump. Unlike the VM-cycle line, this one keeps an
+            // external DEBUG guard: it is NOT redundant with the guard inside
+            // LoggerUtils.Module.debug, because it also skips the per-cycle dispatch
+            // and the O(len) block checksums when debug is off.
             if (DebugConfig.DEBUG) {
                 logMemoryTrace(context, opcode, ip);
             }
@@ -506,22 +507,22 @@ public final class VmInterpreter {
             case Opcode.LDB -> {
                 int rd = codeCache[ip + 1] & 0xFF;
                 int addr = u16(codeCache, ip + 2);
-                Logger.debug("iflow", ctx, "MEM RD8  [0x%04X]=0x%02X -> R%d", addr, regs.get(rd) & 0xFF, rd);
+                LoggerUtils.Module.debug("iflow", "MEM RD8  [0x%04X]=0x%02X -> R%d", addr, regs.get(rd) & 0xFF, rd);
             }
             case Opcode.LDW -> {
                 int rd = codeCache[ip + 1] & 0xFF;
                 int addr = u16(codeCache, ip + 2);
-                Logger.debug("iflow", ctx, "MEM RD16 [0x%04X]=0x%04X -> R%d", addr, regs.get(rd) & 0xFFFF, rd);
+                LoggerUtils.Module.debug("iflow", "MEM RD16 [0x%04X]=0x%04X -> R%d", addr, regs.get(rd) & 0xFFFF, rd);
             }
             case Opcode.STB -> {
                 int rs = codeCache[ip + 1] & 0xFF;
                 int addr = u16(codeCache, ip + 2);
-                Logger.debug("iflow", ctx, "MEM WR8  [0x%04X]<-0x%02X (R%d)", addr, regs.get(rs) & 0xFF, rs);
+                LoggerUtils.Module.debug("iflow", "MEM WR8  [0x%04X]<-0x%02X (R%d)", addr, regs.get(rs) & 0xFF, rs);
             }
             case Opcode.STW -> {
                 int rs = codeCache[ip + 1] & 0xFF;
                 int addr = u16(codeCache, ip + 2);
-                Logger.debug("iflow", ctx, "MEM WR16 [0x%04X]<-0x%04X (R%d)", addr, regs.get(rs) & 0xFFFF, rs);
+                LoggerUtils.Module.debug("iflow", "MEM WR16 [0x%04X]<-0x%04X (R%d)", addr, regs.get(rs) & 0xFFFF, rs);
             }
             case Opcode.COPY, Opcode.MOVE -> {
                 String name = (opcode == Opcode.COPY) ? "COPY" : "MOVE";
@@ -529,17 +530,37 @@ public final class VmInterpreter {
                 int dst = u16(codeCache, ip + 3);
                 int len = u16(codeCache, ip + 5);
                 if (len == 0) {
-                    Logger.debug("iflow", ctx, "MEM %s len=0 (no-op) src=0x%04X dst=0x%04X", name, src, dst);
+                    LoggerUtils.Module.debug("iflow", "MEM %s len=0 (no-op) src=0x%04X dst=0x%04X", name, src, dst);
                     return;
                 }
                 int sumSrc = blockChecksum(ctx, src, len);
                 int sumDst = blockChecksum(ctx, dst, len);
-                Logger.debug("iflow", ctx,
+                LoggerUtils.Module.debug("iflow",
                     "MEM %s [0x%04X..0x%04X] -> [0x%04X..0x%04X] len=%d sumSrc=0x%04X sumDst=0x%04X",
                     name, src, src + len - 1, dst, dst + len - 1, len, sumSrc, sumDst);
             }
             default -> { /* not a memory instruction: nothing to trace */ }
         }
+    }
+
+    /** Compact register + flag dump for the {@code VM_CYCLE} debug line. */
+    static String formatRegisters(RegisterFile regs) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("R0=0x").append(String.format("%04X", regs.get(0))).append(" ");
+        sb.append("R1=0x").append(String.format("%04X", regs.get(1))).append(" ");
+        sb.append("R2=0x").append(String.format("%04X", regs.get(2))).append(" ");
+        sb.append("R3=0x").append(String.format("%04X", regs.get(3))).append(" ");
+        sb.append("R4=0x").append(String.format("%04X", regs.get(4))).append(" ");
+        sb.append("R5=0x").append(String.format("%04X", regs.get(5))).append(" ");
+        sb.append("R6=0x").append(String.format("%04X", regs.get(6))).append(" ");
+        sb.append("R7=0x").append(String.format("%04X", regs.get(7))).append(" ");
+        sb.append("IP=0x").append(String.format("%04X", regs.get(8))).append(" ");
+        sb.append("SP=0x").append(String.format("%04X", regs.get(9))).append(" ");
+        sb.append("FP=0x").append(String.format("%04X", regs.get(10))).append(" ");
+        sb.append("FL=0x").append(String.format("%04X", regs.get(11)));
+        sb.append(String.format("(Z=%b N=%b C=%b V=%b)",
+            regs.getZ(), regs.getN(), regs.getC(), regs.getV()));
+        return sb.toString();
     }
 
     /** 16-bit additive checksum over {@code len} bytes at {@code addr}. */
