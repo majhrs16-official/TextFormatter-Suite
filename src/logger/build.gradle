@@ -43,8 +43,15 @@ tasks.named('compileJava') { compileTask ->
     compileTask.dependsOn 'replaceDebugFlag'
     // Make the flag a compile input so toggling it always recompiles.
     compileTask.inputs.property('loggerDebug', loggerDebug)
-    compileTask.doLast {
-        // Restore original placeholder after compilation for clean repo state
+    // Restore the placeholder after compilation, even when compileJava is UP-TO-DATE.
+    // A finalizer runs whenever compileJava is in the task graph, unlike doLast which is
+    // skipped for up-to-date tasks (that is how the placeholder could be lost before).
+    compileTask.finalizedBy 'restoreDebugFlag'
+}
+
+// Restores the /*[[DEBUG_FLAG]]*/ placeholder in the tracked source so the repo stays clean.
+tasks.register('restoreDebugFlag') {
+    doLast {
         def sourceFile = file("src/main/java/me/majhrs16/suite/logger/DebugConfig.java")
         if (sourceFile.exists()) {
             def content = sourceFile.getText('UTF-8')
