@@ -1,0 +1,3 @@
+# Large raw captures are kept locally but not committed.
+*.log
+*-cycles.txt
