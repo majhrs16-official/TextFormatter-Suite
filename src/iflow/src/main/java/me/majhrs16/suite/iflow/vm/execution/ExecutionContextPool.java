@@ -4,8 +4,8 @@ import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
-import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -14,11 +14,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Contexts are expensive to create (allocate registers, etc.) so we pool them.
  * Each context is fully reset before reuse to prevent state leakage.
  * The SoftMMU is set by the caller (VmPolicyEngine) from the current loaded program.
+ * Thread-safe for concurrent access.
  * </p>
  */
 public final class ExecutionContextPool implements AutoCloseable {
 
-    private final Queue<ExecutionContext> available = new ArrayDeque<>();
+    private final Queue<ExecutionContext> available = new ConcurrentLinkedQueue<>();
     private final int maxSize;
     private final HostServiceRegistry serviceRegistry;
     private final java.util.function.Consumer<ExecutionContext> configurator;

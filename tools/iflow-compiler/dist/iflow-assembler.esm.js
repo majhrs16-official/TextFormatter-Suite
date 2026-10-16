@@ -175,6 +175,17 @@ var Assembler = class {
       code.push(instr.opcode);
       this.emitOperands(instr, code);
     }
+    const userCodeStart = this.firmwareEnabled ? 4096 : 0;
+    const userCodeSize = code.length - userCodeStart;
+    const MAX_USER_CODE_SIZE = 4096;
+    if (userCodeSize > MAX_USER_CODE_SIZE) {
+      this.addDiagnostic(
+        "error",
+        `User code too large: ${userCodeSize} bytes (max ${MAX_USER_CODE_SIZE} bytes / 1 page). Code must fit in a single 4KB page.`,
+        0,
+        0
+      );
+    }
     return code;
   }
   /**

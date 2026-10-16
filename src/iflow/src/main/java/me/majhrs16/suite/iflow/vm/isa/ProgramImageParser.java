@@ -57,6 +57,12 @@ public final class ProgramImageParser {
         if (codeLength < 0 || codeLength > 0xFFFF) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Invalid code length: " + codeLength);
         }
+        // Enforce 4KB code limit (1 page) to avoid overlapping with reserved regions
+        final int MAX_CODE_SIZE = SoftMMU.PAGE_SIZE; // 4096 bytes
+        if (codeLength > MAX_CODE_SIZE) {
+            throw new VmException(VmException.Code.INVALID_PROGRAM,
+                "Code section too large: " + codeLength + " bytes, maximum is " + MAX_CODE_SIZE + " bytes (1 page)");
+        }
 
         // Read code
         if (offset + codeLength > data.length) {

@@ -130,6 +130,10 @@ public final class SoftMMU {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Write beyond address space: 0x" + Integer.toHexString(virtualAddr) + "+" + length);
         }
+        
+        // Pre-validate all pages for write permission before any modification
+        validateWriteRange(virtualAddr, length);
+        
         int physAddr = pageTable.translateWrite(virtualAddr);
         if (isContiguous(virtualAddr, length)) {
             System.arraycopy(src, srcOffset, physicalMemory, physAddr, length);
@@ -137,6 +141,23 @@ public final class SoftMMU {
             for (int i = 0; i < length; i++) {
                 writeByte(virtualAddr + i, src[srcOffset + i] & 0xFF);
             }
+        }
+    }
+
+    /** Validates that the entire virtual address range is mapped and writable. */
+    private void validateWriteRange(int virtualAddr, int length) {
+        int endAddr = virtualAddr + length;
+        int startPage = virtualAddr >> PageTable.PAGE_SHIFT;
+        int endPage = (endAddr - 1) >> PageTable.PAGE_SHIFT;
+        
+        for (int page = startPage; page <= endPage; page++) {
+            int pageStart = Math.max(virtualAddr, page << PageTable.PAGE_SHIFT);
+            int pageEnd = Math.min(endAddr, (page + 1) << PageTable.PAGE_SHIFT);
+            int pageOffset = pageStart - (page << PageTable.PAGE_SHIFT);
+            int pageLength = pageEnd - pageStart;
+            
+            // translateWrite will throw if page not mapped or not writable
+            pageTable.translateWrite(pageStart);
         }
     }
 

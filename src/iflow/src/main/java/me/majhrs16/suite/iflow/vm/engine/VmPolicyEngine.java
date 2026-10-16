@@ -198,8 +198,19 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         PageTable pageTable = mmu.getPageTable();
 
         // Map code page (page 0: 0x0000) - R/W/X initially for writing code, then R/X
+        // LIMIT: Code must fit in page 0 only (4KB) to avoid overlapping with
+        // constants (page 1), data (pages 2-3), stack (pages 4-5), I/O (pages 6-7).
+        // Pages 8-15 are reserved for firmware/persistent use.
         byte[] code = program.code();
         int codePages = (code.length + SoftMMU.PAGE_SIZE - 1) / SoftMMU.PAGE_SIZE;
+        final int MAX_CODE_PAGES = 1; // Only page 0 available for code
+        if (codePages > MAX_CODE_PAGES) {
+            throw new IllegalArgumentException(
+                "Program code too large: " + code.length + " bytes (" + codePages + " pages), " +
+                "maximum is " + (MAX_CODE_PAGES * SoftMMU.PAGE_SIZE) + " bytes (1 page). " +
+                "Reduce code size or use firmware for shared functions."
+            );
+        }
         for (int p = 0; p < codePages && p < 16; p++) {
             int frameBase = p * SoftMMU.PAGE_SIZE; // Identity mapping for now
             int perms = PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE;

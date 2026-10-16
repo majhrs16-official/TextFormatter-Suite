@@ -102,6 +102,14 @@ class Assembler {
             // Emit operands
             this.emitOperands(instr, code);
         }
+        // Validate user code size (excluding firmware)
+        const userCodeStart = this.firmwareEnabled ? 0x1000 : 0;
+        const userCodeSize = code.length - userCodeStart;
+        const MAX_USER_CODE_SIZE = 4096; // 4KB = 1 page
+        if (userCodeSize > MAX_USER_CODE_SIZE) {
+            this.addDiagnostic('error', `User code too large: ${userCodeSize} bytes (max ${MAX_USER_CODE_SIZE} bytes / 1 page). ` +
+                `Code must fit in a single 4KB page.`, 0, 0);
+        }
         return code;
     }
     /**
