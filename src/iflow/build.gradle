@@ -41,6 +41,10 @@ test {
     useJUnitPlatform()
     testLogging {
         events 'passed', 'skipped', 'failed'
+        // Show VM debug dumps on screen when built with debug enabled.
+        if (project.hasProperty('logger.debug') && project.property('logger.debug').toString() == 'true') {
+            showStandardStreams = true
+        }
     }
 }
 

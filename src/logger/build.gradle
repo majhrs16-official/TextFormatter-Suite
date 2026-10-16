@@ -26,10 +26,13 @@ tasks.register('replaceDebugFlag') {
         def sourceFile = file("src/main/java/me/majhrs16/suite/logger/DebugConfig.java")
         if (sourceFile.exists()) {
             def content = sourceFile.getText('UTF-8')
-            def replaced = content.replaceAll('/\\*\\]\\[DEBUG_FLAG\\]\\*\\/ false', debugValue)
+            // Literal replacement of the marker so escaping is never an issue.
+            def replaced = content.replace('/*[[DEBUG_FLAG]]*/ false', debugValue)
             if (content != replaced) {
                 sourceFile.write(replaced, 'UTF-8')
                 println "Logger: Set DEBUG = $debugValue"
+            } else {
+                println "Logger: DEBUG placeholder not found (already set?)"
             }
         }
     }
@@ -38,13 +41,18 @@ tasks.register('replaceDebugFlag') {
 // Ensure replacement happens before compilation
 tasks.named('compileJava') { compileTask ->
     compileTask.dependsOn 'replaceDebugFlag'
+    // Make the flag a compile input so toggling it always recompiles.
+    compileTask.inputs.property('loggerDebug', loggerDebug)
     compileTask.doLast {
         // Restore original placeholder after compilation for clean repo state
         def sourceFile = file("src/main/java/me/majhrs16/suite/logger/DebugConfig.java")
         if (sourceFile.exists()) {
             def content = sourceFile.getText('UTF-8')
-            def restored = content.replaceAll('public static final boolean DEBUG = (true|false);', 
-                'public static final boolean DEBUG = /*[[DEBUG_FLAG]]*/ false;')
+            def restored = content
+                .replace('public static final boolean DEBUG = true;',
+                         'public static final boolean DEBUG = /*[[DEBUG_FLAG]]*/ false;')
+                .replace('public static final boolean DEBUG = false;',
+                         'public static final boolean DEBUG = /*[[DEBUG_FLAG]]*/ false;')
             if (content != restored) {
                 sourceFile.write(restored, 'UTF-8')
             }
