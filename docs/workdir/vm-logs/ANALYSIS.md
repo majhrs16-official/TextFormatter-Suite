@@ -102,6 +102,44 @@ convención, pero el intérprete ignora ese operando).
 
 ---
 
+### F-4 · El intérprete no detecta el fin de código (usa un `IP` obsoleto)
+
+Al reactivar los tests de `host` (que no compilaban desde la reescritura del VM) apareció este
+fallo. En el bucle principal, el chequeo de fin de programa comparaba el `IP` **anterior** al avance:
+
+```java
+int newIp = context.registers().get(RegisterFile.IP);          // IP antiguo
+if (!ipModifiedByInstruction && newIp == ip) {
+    context.registers().set(RegisterFile.IP, ip + instrSize);  // IP nuevo…
+}
+if (newIp >= program.codeSize()) { break; }                     // …pero se compara el antiguo
+```
+
+Un programa cuya última instrucción avanza `IP` exactamente hasta `codeSize` no rompía el bucle: en
+la iteración siguiente se lanzaba `invalidJump` (`ip >= codeSize`). **Resuelto**: se reutiliza el
+`IP` ya actualizado para el chequeo.
+
+### F-5 · Programa pass-through con `HOST` mal codificado
+
+`VmConfigLoader.createPassThroughProgram()` emitía `Opcode.HOST` como **un solo byte**, pero `HOST`
+es una instrucción de 2 bytes (`Opcode.instructionSize`). El `HALT` final quedaba absorbido como
+operando de `HOST`, el programa se salía del código y, por F-4, toda evaluación con la política por
+defecto terminaba en `REJECT`. **Resuelto**: se emite el byte de operando reservado (`0x00`); el
+programa por defecto produce ahora `LOG`. `VmConfigLoaderTest` fija el layout corregido (11 bytes).
+
+### F-6 · `DECISION_REJECT` colapsaba a `DROP`
+
+`PolicyResultValidator` devolvía `DROP` ante **cualquier** entrada `CANCEL_MESSAGE`, de modo que un
+programa que invocaba `ROUTE_DECISION` con `DECISION_REJECT` nunca producía `PolicyTarget.REJECT`
+(la única forma de obtener `REJECT` era una excepción del VM). **Resuelto**: se distingue
+`"route:REJECT"` del resto de cancelaciones. Nuevo test
+`VmPolicyEngineTest.rejectDecisionFromProgram`.
+
+> F-4, F-5 y F-6 se descubrieron al hacer compilar los tests de `host`/`loadtest`, que seguían
+> usando la API de reglas eliminada y nunca se habían ejecutado desde `933bdd3`.
+
+---
+
 ## 3. Observaciones (ambiguas, decidir/documentar)
 
 - **Flags en instrucciones no aritméticas.** `LI`, `MOV`, `LDB`, `LDW` llaman a `updateZN`
