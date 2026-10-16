@@ -68,7 +68,21 @@ public final class ExecutionContext {
     public ExecutionContext programId(String id) { this.programId = id; return this; }
     public ExecutionContext messageId(String id) { this.messageId = id; return this; }
     public ExecutionContext actorId(String id) { this.actorId = id; return this; }
-    public ExecutionContext fuelBudget(long fuel) { this.fuelBudget = fuel; return this; }
+
+    /**
+     * Sets the fuel budget and re-arms the remaining fuel to match.
+     * <p>
+     * Re-arming here — and not only in {@link #initialize()} — makes the setter
+     * order-independent: a budget applied after {@code initialize()} is no
+     * longer silently ignored (it used to leave {@code fuelRemaining} at the
+     * previously armed value).
+     * </p>
+     */
+    public ExecutionContext fuelBudget(long fuel) {
+        this.fuelBudget = fuel;
+        this.fuelRemaining = fuel;
+        return this;
+    }
     public ExecutionContext maxCallDepth(int d) { this.maxCallDepth = d; return this; }
     public ExecutionContext maxStackSize(int bytes) { this.maxStackSize = bytes; return this; }
     public ExecutionContext softMMU(SoftMMU mmu) { this.softMMU = mmu; return this; }

@@ -125,6 +125,21 @@ class ExecutionContextTest {
     }
 
     @Test
+    void fuelBudgetReArmsRemainingAfterInitialize() {
+        SoftMMU mmu = createMappedMMU();
+        ExecutionContext ctx = createContext(mmu);
+        ctx.initialize();       // arms the configured budget (10000)
+        ctx.consumeFuel(5000);  // remaining = 5000
+        // Setting the budget after initialize() must take effect immediately:
+        // it used to leave fuelRemaining untouched (regression that made
+        // VmInterpreterTest.outOfFuelThrows run 10000 cycles instead of 100).
+        ctx.fuelBudget(100);
+        assertEquals(100, ctx.fuelBudget());
+        assertEquals(100, ctx.fuelRemaining());
+        assertThrows(VmException.class, () -> ctx.consumeFuel(101));
+    }
+
+    @Test
     void consumeHostFuelSumsBaseAndVariable() {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu);
