@@ -1,0 +1,3 @@
+; LI accepts at most 2 operands, 3 given — must fail.
+LI R1, 10, 20
+HALT

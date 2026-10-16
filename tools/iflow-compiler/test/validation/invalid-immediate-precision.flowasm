@@ -1,0 +1,3 @@
+; Literal exceeds 16-bit range (and JS safe-integer precision) — must fail.
+LI R1, 999999999999999999
+HALT

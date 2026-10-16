@@ -1,0 +1,3 @@
+; R7 is the highest general-purpose register (R0-R7) — must assemble.
+LI R7, 10
+HALT

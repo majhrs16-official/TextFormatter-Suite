@@ -1,0 +1,3 @@
+; IP is a control register, not a general-purpose register — must fail.
+LI IP, 10
+HALT

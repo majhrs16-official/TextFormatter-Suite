@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
+    "test:validation": "node test/validation/run.js",
     "dev": "ts-node src/cli.ts"
   },
   "bin": {

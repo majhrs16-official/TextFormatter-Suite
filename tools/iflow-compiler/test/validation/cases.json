@@ -1,0 +1,12 @@
+[
+  { "file": "valid-edge-immediates.flowasm",        "expect": "ok" },
+  { "file": "valid-register-r7.flowasm",            "expect": "ok" },
+  { "file": "invalid-align-zero.flowasm",           "expect": "error", "match": ".align requires positive integer" },
+  { "file": "invalid-register-r8.flowasm",          "expect": "error", "match": "LI expects gpr" },
+  { "file": "invalid-missing-operand.flowasm",      "expect": "error", "match": "LI requires at least 2 operand" },
+  { "file": "invalid-extra-operand.flowasm",        "expect": "error", "match": "LI accepts at most 2 operand" },
+  { "file": "invalid-immediate-overflow.flowasm",   "expect": "error", "match": "immediate out of 16-bit range: 70000" },
+  { "file": "invalid-immediate-underflow.flowasm",  "expect": "error", "match": "immediate out of 16-bit range: -40000" },
+  { "file": "invalid-immediate-precision.flowasm",  "expect": "error", "match": "immediate out of 16-bit range" },
+  { "file": "invalid-control-register.flowasm",     "expect": "error", "match": "requires general-purpose register (R0-R7)" }
+]

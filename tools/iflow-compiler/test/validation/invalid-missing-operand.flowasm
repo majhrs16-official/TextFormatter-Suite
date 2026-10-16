@@ -1,0 +1,3 @@
+; LI needs 2 operands, only 1 given — must fail.
+LI R1
+HALT

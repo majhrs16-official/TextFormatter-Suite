@@ -1,0 +1,3 @@
+; -40000 < -32768 (min i16) — must fail.
+LI R1, -40000
+HALT

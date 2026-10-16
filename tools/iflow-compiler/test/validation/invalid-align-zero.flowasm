@@ -1,0 +1,3 @@
+; .align 0 is not a positive integer — must fail.
+.align 0
+HALT
