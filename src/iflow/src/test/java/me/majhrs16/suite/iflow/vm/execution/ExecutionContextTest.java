@@ -139,9 +139,9 @@ class ExecutionContextTest {
         ExecutionContext ctx = createContext(mmu);
         ctx.initialize();
         assertEquals(0, ctx.callDepth());
-        ctx.enterCall();
+        ctx.enterCall(0x6000);
         assertEquals(1, ctx.callDepth());
-        ctx.enterCall();
+        ctx.enterCall(0x6000);
         assertEquals(2, ctx.callDepth());
         ctx.exitCall();
         assertEquals(1, ctx.callDepth());
@@ -154,9 +154,9 @@ class ExecutionContextTest {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu).maxCallDepth(2);
         ctx.initialize();
-        ctx.enterCall();
-        ctx.enterCall();
-        assertThrows(VmException.class, () -> ctx.enterCall());
+        ctx.enterCall(0x6000);
+        ctx.enterCall(0x6000);
+        assertThrows(VmException.class, () -> ctx.enterCall(0x6000));
     }
 
     @Test
@@ -294,9 +294,29 @@ class ExecutionContextTest {
         ctx.initialize();
         // Stack starts at 0x6000, max 2 bytes means 1 word
         ctx.registers().set(RegisterFile.SP, 0x6000);
-        ctx.enterCall(); // First call: SP=0x6000, check passes
+        ctx.enterCall(0x6000); // First call: SP=0x6000, check passes
         // Simulate interpreter decrementing SP after first call
         ctx.registers().set(RegisterFile.SP, 0x5FFE);
-        assertThrows(VmException.class, () -> ctx.enterCall()); // Second call: SP=0x5FFE, would exceed 2 bytes
+        assertThrows(VmException.class, () -> ctx.enterCall(0x6000)); // Second call: SP=0x5FFE, would exceed 2 bytes
+    }
+
+    @Test
+    void exitCallRestoresFramePointer() {
+        SoftMMU mmu = createMappedMMU();
+        ExecutionContext ctx = createContext(mmu);
+        ctx.initialize();
+        ctx.enterCall(0x6000);
+        ctx.enterCall(0x5FFE);
+        assertEquals(0x5FFE, ctx.exitCall());
+        assertEquals(0x6000, ctx.exitCall());
+        assertEquals(0, ctx.callDepth());
+    }
+
+    @Test
+    void exitCallWithoutEnterThrows() {
+        SoftMMU mmu = createMappedMMU();
+        ExecutionContext ctx = createContext(mmu);
+        ctx.initialize();
+        assertThrows(VmException.class, () -> ctx.exitCall());
     }
 }

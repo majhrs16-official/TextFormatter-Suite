@@ -69,10 +69,17 @@ En el caso del firmware, 8 de los 9 `RET` dejan `FP` apuntando a un marco muerto
 `FP` como base de variables locales se romperá tras el primer retorno. Es, además, una
 contradicción directa con la especificación.
 
+**Resuelto.** Se añadió una **pila sombra de `FP`** en `ExecutionContext`
+(`enterCall(int callerFramePointer)` / `exitCall()` que devuelve el `FP` restaurado). `CALL`
+guarda el `FP` del llamador; `RET` lo restaura. La dirección de retorno sigue en la pila de
+memoria, así que la ABI de 2 bytes **no cambia** y `SP` conserva su comportamiento. Tras el
+arreglo, en toda la suite (10 345 ciclos) **ningún `RET` deja `SP != FP`** del marco del llamador.
+
 ### F-2 · Variable muerta `fp` en `executeReturn`
 
 En `VmInterpreter.java:435` se lee `fp` y no se usa en ningún sitio. Es el resto de la
-restauración de `FP` que se pretendía implementar (relacionado con F-1).
+restauración de `FP` que se pretendía implementar (relacionado con F-1). **Resuelto:** la variable
+se eliminó y en su lugar `ctx.exitCall()` devuelve el `FP` del llamador para restaurarlo.
 
 ### F-3 · Comentario incorrecto sobre el empaquetado de registros
 

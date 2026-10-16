@@ -42,6 +42,11 @@ public final class ExecutionContext {
     private final ModificationJournal journal = new ModificationJournal();
     private long fuelRemaining;
     private int callDepth = 0;
+    // Shadow stack of frame pointers: CALL saves the caller's FP, RET restores it
+    // (spec §7.4/§8.7: "RET restaura la dirección y el frame"). It lives outside the
+    // VM memory stack on purpose, so the 2-byte return-address ABI stays unchanged.
+    private int[] framePointerStack;
+    private int framePointerDepth = 0;
     private boolean cancelled = false;
     private VmException fatalError;
     private long startNanos;
@@ -83,6 +88,10 @@ public final class ExecutionContext {
         journal.clear();
         fuelRemaining = fuelBudget;
         callDepth = 0;
+        framePointerDepth = 0;
+        if (framePointerStack == null || framePointerStack.length <= maxCallDepth) {
+            framePointerStack = new int[maxCallDepth + 1];
+        }
         cancelled = false;
         fatalError = null;
         startNanos = nanoTimeSupplier == null ? System.nanoTime() : nanoTimeSupplier.get();
@@ -130,10 +139,17 @@ public final class ExecutionContext {
 
     // ===== Call stack management =====
 
-    public void enterCall() {
-        if (++callDepth > maxCallDepth) {
+    /**
+     * Enters a call frame: validates the call depth and stack limits, and saves the
+     * caller's frame pointer so that {@link #exitCall()} can restore it.
+     *
+     * @param callerFramePointer the FP of the calling frame (saved for restoration)
+     * @throws VmException STACK_LIMIT if the call depth or stack would be exceeded
+     */
+    public void enterCall(int callerFramePointer) {
+        if (callDepth + 1 > maxCallDepth) {
             throw new VmException(VmException.Code.STACK_LIMIT,
-                "Call depth exceeded: " + callDepth, registers.get(RegisterFile.IP));
+                "Call depth exceeded: " + (callDepth + 1), registers.get(RegisterFile.IP));
         }
         // Check stack pointer against stack limit
         int sp = registers.get(RegisterFile.SP);
@@ -143,10 +159,23 @@ public final class ExecutionContext {
                 "Stack overflow: SP=0x" + Integer.toHexString(sp) + " limit=0x" + Integer.toHexString(stackLimit),
                 registers.get(RegisterFile.IP));
         }
+        callDepth++;
+        framePointerStack[framePointerDepth++] = callerFramePointer;
     }
 
-    public void exitCall() {
+    /**
+     * Leaves the current call frame and restores the caller's frame pointer.
+     *
+     * @return the frame pointer of the calling frame
+     * @throws VmException STACK_LIMIT if there is no active call frame (RET without CALL)
+     */
+    public int exitCall() {
+        if (framePointerDepth == 0) {
+            throw new VmException(VmException.Code.STACK_LIMIT,
+                "Stack underflow on RET", registers.get(RegisterFile.IP));
+        }
         if (callDepth > 0) callDepth--;
+        return framePointerStack[--framePointerDepth];
     }
 
     public int callDepth() { return callDepth; }

@@ -416,7 +416,9 @@ public final class VmInterpreter {
             throw VmException.invalidJump(target, ip);
         }
 
-        ctx.enterCall();
+        // Save the caller's frame pointer, then push the return address.
+        int callerFramePointer = regs.get(RegisterFile.FP);
+        ctx.enterCall(callerFramePointer);
 
         // Push return address (IP after CALL) onto stack via SoftMMU
         int sp = regs.get(RegisterFile.SP);
@@ -427,7 +429,7 @@ public final class VmInterpreter {
         softMMU.writeWord(sp, ip + 3); // Return address
         regs.set(RegisterFile.SP, sp);
 
-        // Update frame pointer
+        // Establish the new frame: FP is the base of the callee's frame.
         regs.set(RegisterFile.FP, sp);
 
         // Jump to target
@@ -435,11 +437,12 @@ public final class VmInterpreter {
     }
 
     private boolean executeReturn(ExecutionContext ctx, RegisterFile regs, int ip) {
-        ctx.exitCall();
+        // Leave the frame: this also restores the caller's frame pointer,
+        // as required by spec §7.4/§8.7 ("RET restaura la dirección y el frame").
+        int restoredFramePointer = ctx.exitCall();
 
         // Pop return address from stack via SoftMMU
         int sp = regs.get(RegisterFile.SP);
-        int fp = regs.get(RegisterFile.FP);
 
         if (sp + 2 > SoftMMU.ADDRESS_SPACE_SIZE) {
             throw new VmException(VmException.Code.STACK_LIMIT, "Stack underflow on RET", ip);
@@ -447,6 +450,7 @@ public final class VmInterpreter {
         int retAddr = softMMU.readWord(sp);
         sp += 2;
         regs.set(RegisterFile.SP, sp);
+        regs.set(RegisterFile.FP, restoredFramePointer);
         regs.set(RegisterFile.IP, retAddr);
         return true;
     }
