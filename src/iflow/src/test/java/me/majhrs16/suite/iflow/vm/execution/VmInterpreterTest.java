@@ -72,7 +72,7 @@ class VmInterpreterTest {
     @Test
     void movInstruction() {
         // LI R1, 0xABCD; MOV R0, R1
-        // MOV packed byte: high nibble=rs (source), low nibble=rd (dest)
+        // MOV packed byte: high nibble=rd (dest), low nibble=rs (source)
         // R0 = R1 means rd=0, rs=1 -> packed = 0x01
         byte[] code = {
             Opcode.LI, 1, b(0xAB), b(0xCD),

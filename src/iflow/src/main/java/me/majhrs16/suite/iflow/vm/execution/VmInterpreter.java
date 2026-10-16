@@ -132,7 +132,7 @@ public final class VmInterpreter {
                 return false;
             }
             case Opcode.MOV -> {
-                // RR: MOV Rd, Rs (packed in one byte: high nibble Rs, low nibble Rd)
+                // RR: MOV Rd, Rs (packed in one byte: high nibble Rd, low nibble Rs)
                 int packed = codeCache[ip + 1] & 0xFF;
                 int rd = (packed >> 4) & 0x0F;
                 int rs = packed & 0x0F;

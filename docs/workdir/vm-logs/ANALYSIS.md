@@ -94,6 +94,12 @@ Pero el código (`int rd = (packed >> 4) & 0x0F;`) y el ensamblador
 El comentario está invertido. (Los demás opcodes RR no llevan comentario, así que sólo `MOV` es incorrecto.
 Verificado con `SUB` no conmutativo: `SUB R1,R2` produce `R1 = R1 - R2`, coherente con nibble alto = Rd.)
 
+**Resuelto.** Corregidos los dos comentarios invertidos: `VmInterpreter.java` (caso `MOV`) y
+`VmInterpreterTest.movInstruction`, que decía `high nibble=rs`. El código y los bytes de los tests
+ya eran correctos; sólo la documentación en línea estaba mal. Se revisó el resto del ensamblador y
+no quedan más comentarios con esa inversión (`RET rs` codifica el registro en el nibble alto por
+convención, pero el intérprete ignora ese operando).
+
 ---
 
 ## 3. Observaciones (ambiguas, decidir/documentar)
