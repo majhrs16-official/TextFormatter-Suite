@@ -18,7 +18,7 @@ class VmConfigLoaderTest {
         ProgramImage program = VmConfigLoader.loadProgram(nonExistentDir, null);
         assertNotNull(program);
         assertEquals(0, program.entryPoint());
-        assertEquals(10, program.code().length);
+        assertEquals(11, program.code().length);
         assertTrue(program.hasCapability("routing.decide"));
     }
 
@@ -57,9 +57,10 @@ class VmConfigLoaderTest {
         assertEquals(3, code[5] & 0xFF);
         assertEquals((HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, code[6] & 0xFF);
         assertEquals(HostServiceRegistry.DECISION_CONTINUE & 0xFF, code[7] & 0xFF);
-        // HOST
+        // HOST (opcode + reserved operand byte)
         assertEquals(Opcode.HOST, code[8] & 0xFF);
+        assertEquals(0, code[9] & 0xFF);
         // HALT
-        assertEquals(Opcode.HALT, code[9] & 0xFF);
+        assertEquals(Opcode.HALT, code[10] & 0xFF);
     }
 }

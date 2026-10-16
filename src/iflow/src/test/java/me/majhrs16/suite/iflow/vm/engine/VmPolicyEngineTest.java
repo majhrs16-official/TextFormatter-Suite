@@ -10,6 +10,7 @@ import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
@@ -119,6 +120,29 @@ class VmPolicyEngineTest {
         Message msg = createMessage("spam message", "chat", sender);
         RouteOutcome outcome = engine.route(msg, recipient);
         assertEquals(PolicyTarget.DROP, outcome.decision().target());
+    }
+
+    @Test
+    void rejectDecisionFromProgram() {
+        VmPolicyEngine engine = createEngine();
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_REJECT >> 8), (byte)(HostServiceRegistry.DECISION_REJECT & 0xFF),
+                Opcode.HOST, (byte)0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"routing.decide"})
+            .build();
+        engine.setProgram(program);
+
+        Actor sender = createActor("Alice");
+        Actor recipient = createActor("Bob");
+        Message msg = createMessage("hello world", "chat", sender);
+        RouteOutcome outcome = engine.route(msg, recipient);
+        assertEquals(PolicyTarget.REJECT, outcome.decision().target());
+        assertTrue(outcome.decision().rejected());
     }
 
     @Test
@@ -250,5 +274,20 @@ class VmPolicyEngineTest {
         Message msg = createMessage("test", "chat", sender);
         RouteOutcome outcome = engine.route(msg, recipient);
         assertEquals(PolicyTarget.REJECT, outcome.decision().target());
+    }
+
+    @Test
+    void passThroughProgramDelivers() {
+        // The default program (no policy.flow) must reach HALT and yield LOG,
+        // not throw when it runs off the end of the code.
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(VmConfigLoader.loadProgram(java.nio.file.Paths.get("/nonexistent"), null));
+
+        Actor sender = createActor("Alice");
+        Actor recipient = createActor("Bob");
+        Message msg = createMessage("hello", "chat", sender);
+        RouteOutcome outcome = engine.route(msg, recipient);
+        assertEquals(PolicyTarget.LOG, outcome.decision().target());
+        assertTrue(outcome.decision().delivered());
     }
 }

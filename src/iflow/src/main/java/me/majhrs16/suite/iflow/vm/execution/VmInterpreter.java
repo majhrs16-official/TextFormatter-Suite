@@ -106,10 +106,12 @@ public final class VmInterpreter {
             // Advance IP (unless instruction modified it)
             int newIp = context.registers().get(RegisterFile.IP);
             if (!ipModifiedByInstruction && newIp == ip) {
-                context.registers().set(RegisterFile.IP, ip + instrSize);
+                newIp = ip + instrSize;
+                context.registers().set(RegisterFile.IP, newIp);
             }
 
-            // Check for HALT (IP not advanced past end)
+            // Reached the end of the code (explicit HALT sets IP=codeSize, or the
+            // last instruction simply runs off the end): stop normally.
             if (newIp >= program.codeSize()) {
                 break;
             }

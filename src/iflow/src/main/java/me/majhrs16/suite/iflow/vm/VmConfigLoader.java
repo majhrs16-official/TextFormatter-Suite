@@ -59,7 +59,7 @@ public final class VmConfigLoader {
             .code(new byte[]{
                 Opcode.LI, 0, (HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF, HostServiceRegistry.ROUTE_DECISION & 0xFF, // LI R0, ROUTE_DECISION
                 Opcode.LI, 3, (HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, HostServiceRegistry.DECISION_CONTINUE & 0xFF, // LI R3, DECISION_CONTINUE
-                Opcode.HOST,                                                    // HOST
+                Opcode.HOST, 0x00,                                              // HOST (opcode + reserved operand byte)
                 Opcode.HALT                                                     // HALT
             })
             .capabilities(new String[]{"routing.decide"})

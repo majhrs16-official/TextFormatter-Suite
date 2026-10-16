@@ -51,11 +51,18 @@ public final class PolicyResultValidator {
             );
         }
 
-        // Check if cancelled via journal
-        if (journal.entries().stream().anyMatch(e -> e.type == ModificationJournal.OpType.CANCEL_MESSAGE)) {
+        // Check if cancelled via journal. A REJECT decision records CANCEL_MESSAGE with
+        // detail "route:REJECT"; any other cancellation is a silent DROP.
+        ModificationJournal.Entry cancel = journal.entries().stream()
+            .filter(e -> e.type == ModificationJournal.OpType.CANCEL_MESSAGE)
+            .findFirst()
+            .orElse(null);
+        if (cancel != null) {
             journal.discard();
+            boolean reject = "route:REJECT".equals(cancel.detail);
             return RouteOutcome.of(
-                new RouteDecision(PolicyTarget.DROP, "Cancelled by policy", 0, recipient, emitter),
+                new RouteDecision(reject ? PolicyTarget.REJECT : PolicyTarget.DROP,
+                    reject ? "Rejected by policy" : "Cancelled by policy", 0, recipient, emitter),
                 originalMessage
             );
         }
