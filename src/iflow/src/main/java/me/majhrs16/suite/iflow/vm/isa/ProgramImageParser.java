@@ -1,6 +1,7 @@
 package me.majhrs16.suite.iflow.vm.isa;
 
 import me.majhrs16.suite.iflow.vm.isa.VmException;
+import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

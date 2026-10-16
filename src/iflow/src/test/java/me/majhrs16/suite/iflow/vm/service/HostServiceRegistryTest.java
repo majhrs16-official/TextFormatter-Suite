@@ -12,6 +12,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class HostServiceRegistryTest {
 
     private ExecutionContext createContext(HostServiceRegistry hsr) {
+        return createContext(hsr,
+            "property.read", "property.write", "permission.check",
+            "routing.decide", "state.read", "state.write", "channel.resolve");
+    }
+
+    private ExecutionContext createContext(HostServiceRegistry hsr, String... caps) {
         SoftMMU mmu = new SoftMMU();
         // Map I/O pages (page 6 and 7)
         mmu.getPageTable().mapPage(6, 6 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
@@ -21,7 +27,8 @@ class HostServiceRegistryTest {
             .executionId("test")
             .fuelBudget(10000)
             .softMMU(mmu)
-            .serviceRegistry(hsr);
+            .serviceRegistry(hsr)
+            .allowedCapabilities(caps);
         ctx.initialize();
         return ctx;
     }
@@ -56,22 +63,36 @@ class HostServiceRegistryTest {
 
     @Test
     void capabilityCheck() {
-        HostServiceRegistry hsr = new HostServiceRegistry();
-        // The constructor declares these capabilities
-        assertTrue(hsr.hasCapability("property.read"));
-        assertTrue(hsr.hasCapability("property.write"));
-        assertTrue(hsr.hasCapability("permission.check"));
-        assertTrue(hsr.hasCapability("routing.decide"));
-        assertTrue(hsr.hasCapability("state.read"));
-        assertTrue(hsr.hasCapability("state.write"));
-        assertFalse(hsr.hasCapability("unknown.cap"));
+        // Capabilities are now per-execution (IFLOW-001), enforced via ExecutionContext.
+        ExecutionContext ctx = createContext(new HostServiceRegistry());
+        assertTrue(ctx.hasCapability("property.read"));
+        assertTrue(ctx.hasCapability("property.write"));
+        assertTrue(ctx.hasCapability("permission.check"));
+        assertTrue(ctx.hasCapability("routing.decide"));
+        assertTrue(ctx.hasCapability("state.read"));
+        assertTrue(ctx.hasCapability("state.write"));
+        assertFalse(ctx.hasCapability("unknown.cap"));
     }
 
     @Test
-    void declareCapability() {
-        HostServiceRegistry hsr = new HostServiceRegistry();
-        hsr.declareCapability("custom.cap");
-        assertTrue(hsr.hasCapability("custom.cap"));
+    void serviceDeniedWithoutCapability() {
+        HostServiceRegistry hsr = new HostServiceRegistry()
+            .propertyReader((scope, propId) -> "test-value");
+        // Context only allowed routing.decide -> property.read must be denied.
+        ExecutionContext ctx = createContext(hsr, "routing.decide");
+
+        assertThrows(VmException.class, () ->
+            hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0, 0));
+    }
+
+    @Test
+    void serviceAllowedWithCapability() {
+        HostServiceRegistry hsr = new HostServiceRegistry()
+            .propertyReader((scope, propId) -> "test-value");
+        ExecutionContext ctx = createContext(hsr, "property.read");
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0, 0);
+        assertNotNull(result);
     }
 
     @Test

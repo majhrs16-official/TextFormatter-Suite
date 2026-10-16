@@ -48,11 +48,16 @@ class FirmwareIntegrationTest {
             softMMU.writeByte(0x6000 + i, (byte)testMsg.charAt(i));
         }
         
-        ExecutionContextPool pool = new ExecutionContextPool(softMMU, registry, ctx -> {
+        ExecutionContextPool pool = new ExecutionContextPool(registry, ctx -> {
             ctx.fuelBudget(100000);
         });
         
         ExecutionContext ctx = pool.acquire();
+        ctx.softMMU(softMMU);
+        ctx.allowedCapabilities(new String[]{
+            "property.read", "property.write", "permission.check",
+            "routing.decide", "state.read", "state.write", "channel.resolve"
+        });
         ctx.initialize();
         ctx.setPageTable(softMMU.getPageTable());
         

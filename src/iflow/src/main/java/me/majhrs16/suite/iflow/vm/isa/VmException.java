@@ -29,6 +29,7 @@ public final class VmException extends RuntimeException {
         HOST_FAILURE,
         PROGRAM_NOT_FOUND,
         PROGRAM_VERSION_MISMATCH,
+        INVALID_PROGRAM,
         CAPABILITY_DENIED
     }
 

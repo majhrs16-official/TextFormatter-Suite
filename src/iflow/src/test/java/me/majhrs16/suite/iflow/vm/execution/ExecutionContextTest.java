@@ -236,7 +236,8 @@ class ExecutionContextTest {
             .executionId("test")
             .fuelBudget(10000)
             .softMMU(mmu)
-            .serviceRegistry(hsr);
+            .serviceRegistry(hsr)
+            .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
         ServiceResult result = ctx.callHost(HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 10, 0);
         assertNotNull(result);

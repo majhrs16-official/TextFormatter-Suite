@@ -235,38 +235,49 @@ public final class Logger {
         if (initialized) return;
         initialized = true;
 
-        // Try plugin directory
         String pluginDir = System.getProperty(PLUGIN_DIR_PROP);
         String managerName = System.getProperty(MANAGER_NAME_PROP, "manager");
 
+        // Production mode: a plugin directory is configured.
+        // Priority: plugin log file -> temp fallback -> stdout.
         if (pluginDir != null && !pluginDir.isBlank()) {
             File logFile = new File(pluginDir, "plugins/" + managerName + "/" + LOG_FILE_NAME);
-            try {
-                logFile.getParentFile().mkdirs();
-                writer = new PrintWriter(new BufferedWriter(new FileWriter(logFile, true)), true);
+            if (tryOpenFile(logFile)) {
                 useStdout = false;
                 logInternal("[Logger] Initialized plugin file logging: " + logFile.getAbsolutePath());
                 return;
-            } catch (IOException e) {
-                // Fall through
             }
-        }
-
-        // Try temp file
-        try {
-            File tempFile = new File(TEMP_LOG_PATH);
-            writer = new PrintWriter(new BufferedWriter(new FileWriter(tempFile, true)), true);
-            useStdout = false;
-            logInternal("[Logger] Initialized temp file logging: " + TEMP_LOG_PATH);
+            // Plugin file failed: fall back to temp file (server-side backup).
+            if (tryOpenFile(new File(TEMP_LOG_PATH))) {
+                useStdout = false;
+                logInternal("[Logger] Initialized temp file logging (plugin dir unavailable): " + TEMP_LOG_PATH);
+                return;
+            }
+            // Last resort: stdout
+            openStdout();
+            logInternal("[Logger] Initialized stdout logging (all file destinations failed)");
             return;
-        } catch (IOException e) {
-            // Fall through
         }
 
-        // Default to stdout
+        // Development / test mode: no plugin dir configured -> console output.
+        openStdout();
+        logInternal("[Logger] Initialized stdout logging (dev/test mode)");
+    }
+
+    private static boolean tryOpenFile(File file) {
+        try {
+            File parent = file.getParentFile();
+            if (parent != null) parent.mkdirs();
+            writer = new PrintWriter(new BufferedWriter(new FileWriter(file, true)), true);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static void openStdout() {
         writer = new PrintWriter(System.out, true);
         useStdout = true;
-        logInternal("[Logger] Initialized stdout logging");
     }
 
     private static String formatLog(String level, String module, String message) {

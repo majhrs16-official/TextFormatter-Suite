@@ -166,12 +166,12 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
             // Configure context for this evaluation
             ctx.executionId(java.util.UUID.randomUUID().toString())
-               .programId(loaded.program().hashCode() + "")
+               .programId(loaded.program.hashCode() + "")
                .messageId(message.id().toString())
                .actorId(recipient.name())
-               .softMMU(new SoftMMU(loaded.softMMU()))  // Copy program's MMU (page tables + physical memory)
+               .softMMU(new SoftMMU(loaded.softMMU))  // Copy program's MMU (page tables + physical memory)
                .serviceRegistry(serviceRegistry)
-               .allowedCapabilities(loaded.program().capabilities());
+               .allowedCapabilities(loaded.program.capabilities());
 
             // Initialize context (resets registers, fuel, clears I/O buffers)
             ctx.initialize();
@@ -180,7 +180,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             prepareInput(ctx, message, emitter, recipient, path);
 
             // Execute VM
-            VmInterpreter interpreter = new VmInterpreter(loaded.program(), ctx.softMMU(), serviceRegistry);
+            VmInterpreter interpreter = new VmInterpreter(loaded.program, ctx.softMMU(), serviceRegistry);
             interpreter.execute(ctx);
 
             // Validate and produce outcome
@@ -346,7 +346,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
     public ProgramImage program() {
         LoadedProgram loaded = loadedProgramRef.get();
-        return loaded != null ? loaded.program() : null;
+        return loaded != null ? loaded.program : null;
     }
 
     @Override

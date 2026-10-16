@@ -25,6 +25,12 @@ public final class VmInterpreter {
 
     private static final int MAX_INSTRUCTION_COST = 1000; // Safety limit
 
+    static {
+        // Register the iflow VM debug formatter once, so every VmInterpreter usage
+        // (tests, policy engine, standalone) emits structured VM-cycle dumps.
+        IfLowVmFormatter.register();
+    }
+
     private final ProgramImage program;
     private final SoftMMU softMMU;
     private final HostServiceRegistry serviceRegistry;

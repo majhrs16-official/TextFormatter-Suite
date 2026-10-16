@@ -357,6 +357,21 @@ public final class HostServiceRegistry {
             redirectTarget = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
         }
 
+        // Calculate rate-limit backoff before the switch so memory faults can early-return.
+        long rateLimitBackoff = 0;
+        if (decision == DECISION_RATE_LIMIT && rateLimiter != null && argLength > 0) {
+            int sourceVAddr = argVAddr + argOffset;
+            byte[] bytes;
+            try {
+                bytes = ctx.softMMU().getRegion(sourceVAddr, argLength);
+            } catch (VmException e) {
+                return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+            }
+            String rateLimitKey = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            rateLimitBackoff = rateLimiter.nanosUntilNextWindow(rateLimitKey) / 1_000_000; // Convert to millis
+            if (rateLimitBackoff < 0) rateLimitBackoff = 0;
+        }
+
         // Record in journal
         ModificationJournal.Entry entry = switch (decision) {
             case DECISION_LOG -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:LOG");
@@ -366,23 +381,7 @@ public final class HostServiceRegistry {
                 ? new ModificationJournal.Entry(ModificationJournal.OpType.REDIRECT_TARGET, redirectTarget, "route:REDIRECT")
                 : new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:REDIRECT");
             case DECISION_CHAN_REDIR -> new ModificationJournal.Entry(ModificationJournal.OpType.REDIRECT_CHANNEL, redirectChannel, "route:CHANNEL_REDIRECT");
-            case DECISION_RATE_LIMIT -> {
-                // Calculate backoff from rate limiter if available
-                long backoff = 0;
-                if (rateLimiter != null && argLength > 0) {
-                    int sourceVAddr = argVAddr + argOffset;
-                    byte[] bytes;
-                    try {
-                        bytes = ctx.softMMU().getRegion(sourceVAddr, argLength);
-                    } catch (VmException e) {
-                        return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
-                    }
-                    String rateLimitKey = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-                    backoff = rateLimiter.nanosUntilNextWindow(rateLimitKey) / 1_000_000; // Convert to millis
-                    if (backoff < 0) backoff = 0;
-                }
-                yield new ModificationJournal.Entry(ModificationJournal.OpType.RATE_LIMIT_BACKOFF, backoff, "route:RATE_LIMIT");
-            }
+            case DECISION_RATE_LIMIT -> new ModificationJournal.Entry(ModificationJournal.OpType.RATE_LIMIT_BACKOFF, rateLimitBackoff, "route:RATE_LIMIT");
             case DECISION_CONTINUE -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:CONTINUE");
             default -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:UNKNOWN");
         };

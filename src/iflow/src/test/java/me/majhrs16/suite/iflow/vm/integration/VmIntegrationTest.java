@@ -121,7 +121,8 @@ private RateLimiter createRateLimiter() {
                 .executionId("test")
                 .fuelBudget(10000)
                 .softMMU(mmu)
-                .serviceRegistry(hsr);
+                .serviceRegistry(hsr)
+                .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
         
         ServiceResult result = hsr.invoke(
@@ -155,7 +156,8 @@ private RateLimiter createRateLimiter() {
                 .executionId("test")
                 .fuelBudget(10000)
                 .softMMU(mmu)
-                .serviceRegistry(hsr);
+                .serviceRegistry(hsr)
+                .allowedCapabilities(new String[]{"permission.check"});
         ctx.initialize();
         
         // Write test data AFTER initialize() (which clears I/O buffers at 0x6000)
@@ -180,7 +182,8 @@ private RateLimiter createRateLimiter() {
                 .executionId("test")
                 .fuelBudget(10000)
                 .softMMU(mmu)
-                .serviceRegistry(hsr);
+                .serviceRegistry(hsr)
+                .allowedCapabilities(new String[]{"routing.decide"});
         ctx.initialize();
         
         ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, 0, HostServiceRegistry.DECISION_DROP);
