@@ -1042,6 +1042,7 @@ Todas resueltas:
 | 2026-10-16 | `65af8ce` | Gradle: tarea `iflowAsm` + `-Piflow.baremetal`; ejemplo `policy.flowasm` |
 | 2026-10-16 | `280f790` | compilador: `.const` ya no contamina los símbolos con el índice del pool (solo afectaba a listing/debug) |
 | 2026-10-16 | — | ✅ **ABI v2 completa (D1–D11)**. `Sentinel-1` (programa del usuario) ensambla: solo quedaba `RET R7` + ABI viejo, ya portado a v2 |
+| 2026-10-17 | `7e4cae5` | **mapa de memoria preventivo** (`VmMemoryMap`): código 0-1, constantes 2, datos 3-4, pila 5-6, I/O 7-8; equates del ROM a `0x00–0x03`; artefactos regenerados |
 
 ---
 
@@ -1139,6 +1140,6 @@ mapa (`CONSTANTS_MAX_SIZE` evita que las constantes invadan datos).
   `FirmwareIntegration`, `VmPolicyEngine`, `HostServiceRegistry`, `PolicyPrograms`,
   `EndToEndIntegration`; nuevos `VmMemoryMapTest` y `ProgramImageParserTest`.
 
-**Verificación:** `:src:iflow:test` (257 tests), `:src:host:test`, `:src:loadtest:test`
+**Verificación:** `:src:iflow:test` (261 tests), `:src:host:test`, `:src:loadtest:test`
 → BUILD SUCCESSFUL; suite de validación del compilador 11/11; `firmware.flow` sigue en
 4615 bytes (mismo tamaño; cambian bytes de equates y símbolos).
