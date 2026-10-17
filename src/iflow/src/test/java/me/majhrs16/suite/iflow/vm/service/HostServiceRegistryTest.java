@@ -5,6 +5,7 @@ import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import org.junit.jupiter.api.Test;
 
@@ -286,5 +287,39 @@ class HostServiceRegistryTest {
         ServiceResult miss = hsr.invoke(ctx, HostServiceRegistry.CHANNEL_RESOLVE,
             ctx.outputBufferVAddr(), unknown.length, 0);
         assertEquals(ServiceResult.Status.NOT_FOUND, miss.status());
+    }
+
+    @Test
+    void hostTransfersGoThroughTheDmaNotSoftMMU() {
+        // Regression guard (D17): a HOST service must move bytes through the
+        // execution's DMA. We wire a DMA over a *second* MMU; if the code bypassed
+        // it and wrote ctx.softMMU() directly, the value would land in contextMmu.
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        SoftMMU contextMmu = new SoftMMU();
+        SoftMMU dmaMmu = new SoftMMU();
+        for (SoftMMU mmu : new SoftMMU[]{contextMmu, dmaMmu}) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+                VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+                VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        ExecutionContext ctx = new ExecutionContext()
+            .executionId("dma")
+            .fuelBudget(10000)
+            .softMMU(contextMmu)
+            .dmaController(new VmDmaController(dmaMmu))
+            .serviceRegistry(hsr)
+            .allowedCapabilities(new String[]{"property.read"});
+        ctx.initialize();
+        ctx.hostContext(propertyContext("via-dma"));
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ,
+            ctx.outputBufferVAddr(), 64, 0);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        byte[] viaDma = dmaMmu.getRegion(ctx.outputBufferVAddr(), 7);
+        assertEquals("via-dma", new String(viaDma, StandardCharsets.UTF_8));
+        assertEquals(0, contextMmu.readByte(ctx.outputBufferVAddr()),
+            "the transfer must not touch the context MMU directly");
     }
 }

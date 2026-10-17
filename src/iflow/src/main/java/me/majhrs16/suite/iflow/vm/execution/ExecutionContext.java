@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
@@ -38,6 +39,12 @@ public final class ExecutionContext {
 
     // ===== Runtime-injected services =====
     private SoftMMU softMMU;
+    /**
+     * DMA controller for host&harr;VM transfers (D17). It is derived from
+     * {@link #softMMU} so it always follows the execution's cloned MMU; set it
+     * explicitly only from tests via {@link #dmaController(VmDmaController)}.
+     */
+    private VmDmaController dmaController;
     private HostServiceRegistry serviceRegistry;
     private HostContext hostContext = HostContext.NONE;
     private Supplier<Long> nanoTimeSupplier = System::nanoTime;
@@ -65,6 +72,8 @@ public final class ExecutionContext {
     private static final int INPUT_BUFFER_VADDR = VmMemoryMap.INPUT_BASE;
     private static final int OUTPUT_BUFFER_VADDR = VmMemoryMap.OUTPUT_BASE;
     private static final int IO_BUFFER_SIZE = VmMemoryMap.IO_BUFFER_SIZE; // 4KB (one page)
+    /** Shared read-only zero page used to clear the I/O buffers through the DMA. */
+    private static final byte[] ZERO_IO_BUFFER = new byte[IO_BUFFER_SIZE];
 
     public ExecutionContext() {}
 
@@ -91,7 +100,20 @@ public final class ExecutionContext {
     }
     public ExecutionContext maxCallDepth(int d) { this.maxCallDepth = d; return this; }
     public ExecutionContext maxStackSize(int bytes) { this.maxStackSize = bytes; return this; }
-    public ExecutionContext softMMU(SoftMMU mmu) { this.softMMU = mmu; return this; }
+    public ExecutionContext softMMU(SoftMMU mmu) {
+        this.softMMU = mmu;
+        this.dmaController = null; // re-derived from the new MMU
+        return this;
+    }
+
+    /**
+     * Overrides the DMA controller (D17). Intended for tests that need to observe
+     * host&harr;VM transfers; production always derives it from {@link #softMMU}.
+     */
+    public ExecutionContext dmaController(VmDmaController dma) {
+        this.dmaController = dma;
+        return this;
+    }
     public ExecutionContext serviceRegistry(HostServiceRegistry r) { this.serviceRegistry = r; return this; }
     public ExecutionContext nanoTimeSupplier(Supplier<Long> s) { this.nanoTimeSupplier = s; return this; }
     public ExecutionContext allowedCapabilities(String[] caps) { this.allowedCapabilities = caps != null ? caps.clone() : new String[0]; return this; }
@@ -125,13 +147,12 @@ public final class ExecutionContext {
         registers.set(RegisterFile.SP, VmMemoryMap.STACK_TOP);
         registers.set(RegisterFile.FP, VmMemoryMap.STACK_TOP);
 
-        // Clear I/O buffer pages in physical memory
+        // Clear the I/O buffers through the DMA (D17): two block writes of the
+        // shared zero page instead of 8192 individual byte writes per message.
         if (softMMU != null) {
-            // Input buffer (0x7000) and output buffer (0x8000)
-            for (int i = 0; i < IO_BUFFER_SIZE; i++) {
-                softMMU.writeByte(INPUT_BUFFER_VADDR + i, 0);
-                softMMU.writeByte(OUTPUT_BUFFER_VADDR + i, 0);
-            }
+            VmDmaController dma = dma();
+            dma.writeBlock(INPUT_BUFFER_VADDR, ZERO_IO_BUFFER, 0, IO_BUFFER_SIZE);
+            dma.writeBlock(OUTPUT_BUFFER_VADDR, ZERO_IO_BUFFER, 0, IO_BUFFER_SIZE);
         }
     }
 
@@ -256,6 +277,23 @@ public final class ExecutionContext {
     // ===== Memory access (via SoftMMU) =====
 
     public SoftMMU softMMU() { return softMMU; }
+
+    /**
+     * The DMA controller for this execution (D17). Lazily derived from
+     * {@link #softMMU()} so host&harr;VM transfers always target this execution's
+     * memory; {@link #softMMU(SoftMMU)} resets it.
+     *
+     * @throws IllegalStateException if no SoftMMU has been configured yet
+     */
+    public VmDmaController dma() {
+        if (dmaController == null) {
+            if (softMMU == null) {
+                throw new IllegalStateException("SoftMMU not configured");
+            }
+            dmaController = new VmDmaController(softMMU);
+        }
+        return dmaController;
+    }
 
     public PageTable pageTable() { return pageTable; }
 

@@ -314,11 +314,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         int room = Math.max(0, size - offset - keep);
         int len = Math.min(bytes.length, room);
         if (len > 0) {
-            ctx.softMMU().writeBlock(base + offset, bytes, 0, len);
+            ctx.dma().writeBlock(base + offset, bytes, 0, len);
             offset += len;
         }
         if (offset < size) {
-            ctx.softMMU().writeByte(base + offset, 0);
+            ctx.dma().writeByte(base + offset, 0);
             offset++;
         }
         return offset;

@@ -224,24 +224,20 @@ public final class VmInterpreter {
                 return false;
             }
             case Opcode.COPY -> {
-                // BLOCK: COPY srcAddr, dstAddr, len
+                // BLOCK: COPY srcAddr, dstAddr, len — a block transfer, delegated to
+                // the DMA controller (D17) so the CPU never bypasses it.
                 int srcAddr = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
                 int dstAddr = ((codeCache[ip + 3] & 0xFF) << 8) | (codeCache[ip + 4] & 0xFF);
                 int len = ((codeCache[ip + 5] & 0xFF) << 8) | (codeCache[ip + 6] & 0xFF);
-                // Use MMU block copy
-                byte[] buffer = new byte[len];
-                ctx.softMMU().readBlock(srcAddr, buffer, 0, len);
-                ctx.softMMU().writeBlock(dstAddr, buffer, 0, len);
+                ctx.dma().copyBlock(srcAddr, dstAddr, len);
                 return false;
             }
             case Opcode.MOVE -> {
                 int srcAddr = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
                 int dstAddr = ((codeCache[ip + 3] & 0xFF) << 8) | (codeCache[ip + 4] & 0xFF);
                 int len = ((codeCache[ip + 5] & 0xFF) << 8) | (codeCache[ip + 6] & 0xFF);
-                // MOVE allows overlap - use temporary buffer
-                byte[] buffer = new byte[len];
-                ctx.softMMU().readBlock(srcAddr, buffer, 0, len);
-                ctx.softMMU().writeBlock(dstAddr, buffer, 0, len);
+                // MOVE allows overlap — the DMA's move has memmove semantics.
+                ctx.dma().moveBlock(srcAddr, dstAddr, len);
                 return false;
             }
 

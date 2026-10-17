@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (288 tests)  
+> **Estado**: ✅ Implementada y probada (293 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -17,7 +17,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
 | `VmInterpreter` | Fetch/decode/execute loop, ISA v2, fuel budget, SoftMMU integration |
 | `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
-| `VmDmaController` | Transferencias de memoria validadas (read/write/copy/move con permisos) |
+| `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre `SoftMMU`) |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
 | `VmInterpreter` | Fetch/decode/execute loop, fuel budget enforcement |
 | `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
@@ -170,7 +170,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 288 tests passing**
+**Total: 293 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -227,7 +227,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 288 tests
+├── src/test/java/...                  # 293 tests
 └── build.gradle
 ```
 

@@ -4,7 +4,6 @@ import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
-import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.logger.Logger;
 
 import java.util.HashMap;
@@ -40,6 +39,12 @@ import java.util.function.BiFunction;
  * There is no {@code offset} operand: the base address is the full address, and
  * callers add/subtract to it directly. {@code options} for property services packs
  * {@code (scope << 8) | propId} with {@code propId} in the low 8 bits.
+ * </p>
+ * <p>
+ * Argument and result buffers are moved between host and VM memory through the
+ * execution's {@link me.majhrs16.suite.iflow.vm.memory.VmDmaController} (D17),
+ * never by touching {@code SoftMMU} directly: {@code R2}/{@code R3} describe the
+ * transfer (base/length), so the DMA is the canonical host&harr;VM transfer path.
  * </p>
  */
 public final class HostServiceRegistry {
@@ -304,7 +309,7 @@ public final class HostServiceRegistry {
         }
 
         try {
-            ctx.softMMU().writeBlock(argVAddr, bytes, 0, bytes.length);
+            ctx.dma().writeBlock(argVAddr, bytes, 0, bytes.length);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
         }
@@ -318,7 +323,7 @@ public final class HostServiceRegistry {
 
         byte[] bytes;
         try {
-            bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
@@ -340,7 +345,7 @@ public final class HostServiceRegistry {
 
         byte[] bytes;
         try {
-            bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
@@ -365,7 +370,7 @@ public final class HostServiceRegistry {
         if (decision == DECISION_CHAN_REDIR && argLength > 0) {
             byte[] bytes;
             try {
-                bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+                bytes = ctx.dma().getRegion(argVAddr, argLength);
             } catch (VmException e) {
                 return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
             }
@@ -375,7 +380,7 @@ public final class HostServiceRegistry {
             // REDIRECT: read target actor from argument buffer
             byte[] bytes;
             try {
-                bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+                bytes = ctx.dma().getRegion(argVAddr, argLength);
             } catch (VmException e) {
                 return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
             }
@@ -388,7 +393,7 @@ public final class HostServiceRegistry {
         if (decision == DECISION_RATE_LIMIT && rateLimiter != null && argLength > 0) {
             byte[] bytes;
             try {
-                bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+                bytes = ctx.dma().getRegion(argVAddr, argLength);
             } catch (VmException e) {
                 return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
             }
@@ -428,7 +433,7 @@ public final class HostServiceRegistry {
             return ServiceResult.bufferTooSmall(bytes.length);
         }
         try {
-            ctx.softMMU().writeBlock(argVAddr, bytes, 0, bytes.length);
+            ctx.dma().writeBlock(argVAddr, bytes, 0, bytes.length);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
         }
@@ -439,7 +444,7 @@ public final class HostServiceRegistry {
         Integer key = options & 0xFFFF;
         byte[] bytes;
         try {
-            bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
@@ -451,7 +456,7 @@ public final class HostServiceRegistry {
     private ServiceResult doChannelResolve(ExecutionContext ctx, int argVAddr, int argLength, int options) {
         byte[] bytes;
         try {
-            bytes = ctx.softMMU().getRegion(argVAddr, argLength);
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
@@ -465,7 +470,7 @@ public final class HostServiceRegistry {
             return ServiceResult.bufferTooSmall(resultBytes.length);
         }
         try {
-            ctx.softMMU().writeBlock(argVAddr, resultBytes, 0, resultBytes.length);
+            ctx.dma().writeBlock(argVAddr, resultBytes, 0, resultBytes.length);
         } catch (VmException e) {
             return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
         }

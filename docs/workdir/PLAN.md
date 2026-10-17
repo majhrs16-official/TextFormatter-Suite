@@ -1223,18 +1223,18 @@ aplican directamente. Decisiones:
   router nunca debe bloquearse. `acquire()` reutiliza o crea (nunca bloquea);
   `release()` decide bajo lock si retiene o descarta (`available.size()` deja de ser un
   check-then-act). `created` refleja contextos vivos y no se desincroniza.
-- **AUD-018 subsistema "muerto" — ⚠️ decisión revisada: `VmDmaController` restaurado.**
+- **AUD-018 subsistema "muerto" — ⚠️ decisión revisada: `VmDmaController` restaurado e integrado.**
   La remediación (`82668e9`) borró `MemoryManager`, `MemoryRegion`, `RegionPerm`,
   `RegionType` y `VmDmaController` por considerarlos «solo usados por tests».
-  **Corrección:** la inferencia era errónea para `VmDmaController`; **sí se usa** por el
-  emulador para mapear/transferir memoria según la configuración del host y como fachada
-  de transferencia sobre `SoftMMU`. Se restaura la clase + `VmDmaControllerTest`
-  (`writeBlock`/`readBlock`/`copyBlock`/`moveBlock`/`validateRange` vuelven a estar
-  disponibles). `SoftMMU`/`PageTable` sigue siendo el modelo de paginación vivo. La
-  eliminación del resto de clases de regiones (`MemoryManager`/`MemoryRegion`/
-  `RegionPerm`/`RegionType`) **se confirma como obsoleta**: el modelo de memoria por
-  *handles* quedó superado al adoptarse la memoria plana de 64 KB, así que no se
-  restauran.
+  **Corrección (en dos pasos):** (1) la inferencia «solo usado por tests» era cierta *en el
+  código* (no había uso de producción) pero **errónea como decisión de diseño**: el usuario
+  quiere que el DMA sea el componente de mapeo/transferencia, así que se restaura la clase
+  + `VmDmaControllerTest` (`f9f96ad`). (2) La segunda auditoría (`AUDITORIA.md`, IFLOW-AUD-019)
+  confirmó que seguía **sin cablear**; en **D17** se integra de verdad en la E/S.
+  `SoftMMU`/`PageTable` sigue siendo el modelo de paginación vivo. La eliminación del resto
+  de clases de regiones (`MemoryManager`/`MemoryRegion`/`RegionPerm`/`RegionType`) **se
+  confirma como obsoleta**: el modelo de memoria por *handles* quedó superado al adoptarse
+  la memoria plana de 64 KB, así que no se restauran.
 - **AUD-012 READMEs — ✅ decisión: corregir a la realidad.** Recuento de tests
   (264), quitar `VmDmaController`/regiones, `minAbiVersion=2`, hash real (no
   «placeholder») y el `-d` no-op. La afirmación «el resto responde `status=5`» sí
@@ -1284,6 +1284,46 @@ empaquetado como `MOV`):
 integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
 `firmware.flow` (4648 B) y validación del compilador.
 
+### D17 — DMA integrado en la E/S (IFLOW-AUD-019)
+
+**Motivo:** la segunda auditoría (commit `dacf6c7`, `AUDITORIA.md`) probó que
+`VmDmaController` existía como clase pero **no lo usaba nadie en producción**: el host
+inyectaba el buffer de entrada y leía/escribía los argumentos de los servicios HOST
+**directamente por `SoftMMU`** (`ctx.softMMU().writeBlock/getRegion`), saltándose el DMA.
+El usuario confirmó el principio de diseño: *si existe un DMA, el emulador no debe
+inyectar memoria virtual sin pasar por sus comandos*; y quiere que iflow sea mapeable 1:1
+a un HDL.
+
+**Decisión:** el `VmDmaController` es el **único** componente de transferencia host↔VM.
+La CPU (intérprete) sigue accediendo a memoria por `SoftMMU` (su bus), y el DMA gestiona
+las transferencias en bloque que en un chip haría un controlador DMA:
+
+- `ExecutionContext` posee el DMA, derivado de su `SoftMMU`: `softMMU(...)` reinicia el
+  DMA (cambio de programa), `dmaController(VmDmaController)` es la costura para tests y
+  `dma()` lo crea perezosamente. Así el DMA acompaña al MMU clonado por ejecución.
+- `HostServiceRegistry`: **todas** las lecturas de argumentos y escrituras de resultados
+  (`R2` = base, `R3` = longitud) pasan por `ctx.dma()` (`getRegion`/`readBlock`/
+  `writeBlock`). El DMA materializa la transferencia descrita por `R2`/`R3`.
+- `VmPolicyEngine.prepareInput`/`writeField`: la inyección del mensaje en `0x7000` usa
+  `ctx.dma().writeBlock`.
+- `ExecutionContext.initialize()`: la limpieza de los buffers de E/S usa
+  `ctx.dma().writeBlock` con una página cero compartida (antes: 8192 `writeByte` por
+  mensaje; ahora 2 `writeBlock`).
+- `VmInterpreter` `COPY`/`MOVE`: delegados a `ctx.dma().copyBlock/moveBlock` (elimina la
+  duplicación de `readBlock`+`writeBlock` y añade la validación de rango R/W del DMA).
+
+**No cambia** ni el ABI ni el mapa de memoria: `R2`/`R3` siguen siendo base/longitud; el
+DMA es ahora quien ejecuta la transferencia.
+
+**Verificación:** test de regresión que **inyecta un DMA sobre una segunda `SoftMMU`** y
+comprueba que la transferencia del servicio aterriza en la MMU del DMA y no en la del
+contexto (guarda contra el bypass); test de que `dma()` envuelve la MMU del contexto y de
+que `softMMU(...)` la reinicia.
+
+**Pendiente (fuera de este cambio, para el mapeo a HDL):** `IFLOW-AUD-020` (buffer de
+salida `0x8000` mapeado pero sin consumir), bus de datos explícito, IRQ y modelo de
+privilegios/rings.
+
 ### Bitácora de remediación
 
 | Fecha | Commit | Qué |
@@ -1301,10 +1341,12 @@ integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
 | 2026-10-17 | `82668e9` | AUD-018: elimina el subsistema de regiones/DMA muerto |
 | 2026-10-17 | `e9dabba` | AUD-012: READMEs alineados con el código |
 | 2026-10-17 | `afc9a77` | AUD-013: `dist/` ignorado, entry point real (`src/index.ts`) y `npm test` = validación |
+| 2026-10-17 | `f9f96ad` | AUD-018 ⚠️: restaura `VmDmaController` (+ su test) y repara la doc; regiones quedan fuera |
+| 2026-10-17 | `dacf6c7` | AUD-018: confirma obsoleto el modelo de memoria por *handles* |
+| 2026-10-17 | `e0ee7eb` | 2ª auditoría en `AUDITORIA.md` (IFLOW-AUD-019…030: memoria/DMA/hardware) |
+| 2026-10-17 | `80023cb` | D17: integra el DMA en la E/S (IFLOW-AUD-019) |
 
-**Cierre:** todos los `IFLOW-AUD-001…018` del informe quedan resueltos (lote 1 + lote 2
-+ lote 3), **salvo la rectificación de AUD-018**: `VmDmaController` se restaura porque
-está en uso real (ver arriba). `AUDITORIA.md` es el informe histórico del commit auditado
-`5ade855` y no se reescribe; el seguimiento vive en este PLAN.
-
-| 2026-10-17 | `82668e9` | AUD-018 — ⚠️ **revisado en un commit posterior**: `VmDmaController` restaurado desde `82668e9^` |
+**Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
+rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
+segunda auditoría (`AUDITORIA.md` en `e0ee7eb`, IFLOW-AUD-019…030) es el informe vigente y
+su seguimiento vive en este PLAN.

@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
@@ -355,5 +356,52 @@ class ExecutionContextTest {
         ExecutionContext ctx = createContext(mmu);
         ctx.initialize();
         assertThrows(VmException.class, () -> ctx.exitCall());
+    }
+
+    // ===== DMA (D17) =====
+
+    @Test
+    void dmaWrapsTheExecutionSoftMMU() {
+        SoftMMU mmu = createMappedMMU();
+        ExecutionContext ctx = createContext(mmu);
+        assertSame(mmu, ctx.dma().getSoftMMU());
+        assertSame(ctx.dma(), ctx.dma(), "the DMA must be cached per execution");
+    }
+
+    @Test
+    void changingSoftMMUReDerivesTheDma() {
+        ExecutionContext ctx = createContext(createMappedMMU());
+        VmDmaController before = ctx.dma();
+        SoftMMU other = createMappedMMU();
+        ctx.softMMU(other);
+        assertNotSame(before, ctx.dma());
+        assertSame(other, ctx.dma().getSoftMMU());
+    }
+
+    @Test
+    void dmaWithoutSoftMMUThrows() {
+        ExecutionContext ctx = new ExecutionContext();
+        assertThrows(IllegalStateException.class, ctx::dma);
+    }
+
+    @Test
+    void initializeClearsBuffersThroughTheDma() {
+        // Regression guard (D17): clearing the I/O buffers must go through the
+        // injected DMA, not through the context's SoftMMU directly.
+        SoftMMU contextMmu = createMappedMMU();
+        SoftMMU dmaMmu = createMappedMMU();
+        ExecutionContext ctx = createContext(contextMmu);
+        // Dirty the DMA-side buffer, then wire a DMA over the second MMU.
+        dmaMmu.writeBlock(ctx.inputBufferVAddr(), new byte[]{1, 2, 3}, 0, 3);
+        ctx.dmaController(new VmDmaController(dmaMmu));
+        // Dirty the context-side buffer too: it must be left untouched.
+        contextMmu.writeByte(ctx.inputBufferVAddr(), 0x55);
+
+        ctx.initialize();
+
+        assertEquals(0, dmaMmu.readByte(ctx.inputBufferVAddr()),
+            "the DMA-targeted buffer must be cleared");
+        assertEquals(0x55, contextMmu.readByte(ctx.inputBufferVAddr()),
+            "clearing must not bypass the DMA by touching the context MMU");
     }
 }
