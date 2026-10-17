@@ -412,11 +412,10 @@ class Assembler {
         if (parts.length >= 3) {
           const name = parts[1];
           const value = this.parseNumber(parts[2]);
-          // Define as a label/equate for use in instructions
+          // Define as an equate for use in instructions (labels) and diagnostics.
           this.defineLabel(name, value, this.currentLine);
-          // Also add to constant pool
+          // Also add to the constant pool for the binary's constants section.
           this.constantPool.push(value);
-          this.symbols.set(name, this.constantPool.length - 1);
         }
         break;
 
