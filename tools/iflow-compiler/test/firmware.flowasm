@@ -31,6 +31,7 @@
 ; Memory addresses for test data (data region: 0x3000-0x4FFF)
 .const TEST_BUFFER       0x3000
 .const RESULT_BUFFER     0x3100
+.const FW_STR            0x3200
 .const STACK_TOP         0x6FF0
 
 ; ============================================================
@@ -59,6 +60,9 @@ main:
     
     ; Test 7: Shift operations
     CALL test_shifts
+    
+    ; Test 8: Firmware ROM utilities (CALL into the ROM)
+    CALL test_firmware_rom
     
     ; All tests passed - halt with success
     LI R0, 0x0000
@@ -314,6 +318,25 @@ test_shifts:
     LI R2, 2
     SAR R1, R2      ; Should be -4 (0xFFFC)
     
+    RET
+
+; ============================================================
+; TEST 8: Firmware ROM utilities (calls into the ROM)
+; ============================================================
+test_firmware_rom:
+    ; Write "Hi\0" into FW_STR (STW is little-endian: low byte first).
+    LI R1, 0x6948      ; 0x48 = 'H' (low), 0x69 = 'i' (high)
+    STW R1, FW_STR
+    LI R1, 0x0000
+    STW R1, FW_STR + 2 ; NUL terminator
+
+    ; fw_strlen(R1 = src) -> R0 = length
+    LI R1, FW_STR
+    CALL fw_strlen
+
+    ; Store the result so the host-side test can assert it (expect 2).
+    STW R0, RESULT_BUFFER
+
     RET
 
 ; ============================================================

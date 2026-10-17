@@ -352,6 +352,7 @@ La ISA v1 se divide en las siguientes familias. La tabla es normativa en cuanto 
 | ---------------------- | --------------------------------- | ----------------------------------------------- |
 | Constantes y registros | `LI`, `MOV`                       | Cargar constante y copiar registro              |
 | Memoria                | `LDB`, `LDW`, `STB`, `STW`        | Cargar y almacenar bytes y palabras             |
+| Memoria indirecta      | `LDBI`, `LDWI`, `STBI`, `STWI`    | Acceso a memoria usando la dirección de un registro (ISA v2) |
 | Bloques                | `COPY`, `MOVE`                    | Copia no solapada y movimiento con solapamiento |
 | Aritmética             | `ADD`, `SUB`, `MUL`, `DIV`, `MOD` | Operaciones enteras                             |
 | Lógica                 | `AND`, `OR`, `XOR`, `NOT`         | Operaciones bit a bit                           |
@@ -404,6 +405,13 @@ Para `SHL`, `SHR` y `SAR`, los desplazamientos de 0 a 15 son válidos. Un valor 
 `LDW` carga una palabra de 16 bits en orden de bytes little-endian, independientemente del host.
 
 `STB` escribe los ocho bits inferiores de un registro. `STW` escribe los 16 bits completos.
+
+Las formas indirectas `LDBI`, `LDWI`, `STBI` y `STWI` (incorporadas en la ISA v2) toman
+la dirección de memoria del valor de un registro general de 16 bits en lugar de un
+offset constante: `LDBI Rd, [Rs]` carga desde la dirección contenida en `Rs` y
+`STBI Rv, [Ra]` almacena en la dirección contenida en `Ra`. La carga de un byte o
+palabra actualiza `Z` y `N`. Estas operaciones pasan por las mismas verificaciones de
+permisos y límites que las formas directas.
 
 Toda operación valida:
 

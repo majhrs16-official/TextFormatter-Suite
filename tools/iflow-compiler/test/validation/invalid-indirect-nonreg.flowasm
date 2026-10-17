@@ -1,0 +1,3 @@
+; ISA v2: the indirect address operand must be a register, not an immediate.
+    LDBI R3, 0x3000
+    HALT

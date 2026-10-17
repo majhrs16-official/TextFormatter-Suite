@@ -440,4 +440,69 @@ class VmInterpreterTest {
         VmException e = assertThrows(VmException.class, () -> p.first().execute(p.second()));
         assertEquals(VmException.Code.ARITHMETIC_FAULT, e.code());
     }
+
+    // ===== Indirect memory access (ISA v2: LDBI/LDWI/STBI/STWI) =====
+
+    @Test
+    void indirectByteStoreThenLoad() {
+        // STBI R2, [R1] then LDBI R3, [R1]; the address comes from a register.
+        byte[] code = {
+            Opcode.LI, 1, 0x30, 0x00,        // R1 = 0x3000 (data region)
+            Opcode.LI, 2, 0x00, 0x41,        // R2 = 0x41 ('A')
+            Opcode.STBI, (2 << 4) | 1,       // byte[R1] = R2
+            Opcode.LDBI, (3 << 4) | 1,       // R3 = byte[R1]
+            Opcode.HALT
+        };
+        var p = createInterpreterAndContext(code);
+        p.first().execute(p.second());
+
+        assertEquals(0x41, p.second().registers().get(RegisterFile.R3));
+    }
+
+    @Test
+    void indirectWordIsLittleEndian() {
+        byte[] code = {
+            Opcode.LI, 1, 0x30, 0x00,        // R1 = 0x3000
+            Opcode.LI, 2, 0x12, 0x34,        // R2 = 0x1234
+            Opcode.STWI, (2 << 4) | 1,       // word[R1] = R2 (little-endian)
+            Opcode.LDWI, (3 << 4) | 1,       // R3 = word[R1]
+            Opcode.HALT
+        };
+        var p = createInterpreterAndContext(code);
+        p.first().execute(p.second());
+
+        assertEquals(0x1234, p.second().registers().get(RegisterFile.R3));
+    }
+
+    @Test
+    void indirectLoadUpdatesZeroFlag() {
+        // LDBI must update Z/N so conditional jumps work on the loaded value.
+        // R2 is 0, so byte[R1] = 0 and the following JZ must be taken.
+        byte[] code = {
+            Opcode.LI, 1, 0x30, 0x00,        // R1 = 0x3000
+            Opcode.STBI, (2 << 4) | 1,       // byte[R1] = R2 (= 0)
+            Opcode.LDBI, (3 << 4) | 1,       // R3 = byte[R1] = 0 -> sets Z
+            Opcode.JZ, 0x00, 0x04,           // if Z, skip the LI R4 below
+            Opcode.LI, 4, b(0xFF), b(0xFF),  // R4 = 0xFFFF (must be skipped)
+            Opcode.HALT
+        };
+        var p = createInterpreterAndContext(code);
+        p.first().execute(p.second());
+
+        assertEquals(0, p.second().registers().get(RegisterFile.R3));
+        assertEquals(0, p.second().registers().get(RegisterFile.R4),
+            "JZ after a zero LDBI must skip the next instruction");
+    }
+
+    @Test
+    void indirectAccessToUnmappedAddressFaults() {
+        // The address still passes through the SoftMMU, so protection applies.
+        byte[] code = {
+            Opcode.LI, 1, b(0xF0), 0x00,     // R1 = 0xF000 (unmapped)
+            Opcode.LDBI, (3 << 4) | 1,       // R3 = byte[R1]
+            Opcode.HALT
+        };
+        var p = createInterpreterAndContext(code);
+        assertThrows(VmException.class, () -> p.first().execute(p.second()));
+    }
 }

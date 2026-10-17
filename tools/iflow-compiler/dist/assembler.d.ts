@@ -45,7 +45,6 @@ declare class Assembler {
      * so they stay consistent with where the code is actually placed.
      */
     private userOrigin;
-    private emitInstr;
     private handleDirective;
     private defineLabel;
     private parseInstruction;

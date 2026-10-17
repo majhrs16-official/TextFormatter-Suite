@@ -181,6 +181,48 @@ public final class VmInterpreter {
                 mmu.writeWord(virtualAddr, regs.get(rs));
                 return false;
             }
+
+            // ===== Indirect memory (ISA v2): address is the value of a register =====
+            case Opcode.LDBI -> {
+                int packed = codeCache[ip + 1] & 0xFF;
+                int rd = (packed >> 4) & 0x0F;
+                int rs = packed & 0x0F;
+                checkGPR(rd, ip);
+                checkGPR(rs, ip);
+                int val = mmu.readByte(regs.get(rs));
+                regs.set(rd, val);
+                regs.updateZN(val);
+                return false;
+            }
+            case Opcode.LDWI -> {
+                int packed = codeCache[ip + 1] & 0xFF;
+                int rd = (packed >> 4) & 0x0F;
+                int rs = packed & 0x0F;
+                checkGPR(rd, ip);
+                checkGPR(rs, ip);
+                int val = mmu.readWord(regs.get(rs));
+                regs.set(rd, val);
+                regs.updateZN(val);
+                return false;
+            }
+            case Opcode.STBI -> {
+                int packed = codeCache[ip + 1] & 0xFF;
+                int rv = (packed >> 4) & 0x0F;
+                int ra = packed & 0x0F;
+                checkGPR(rv, ip);
+                checkGPR(ra, ip);
+                mmu.writeByte(regs.get(ra), regs.get(rv));
+                return false;
+            }
+            case Opcode.STWI -> {
+                int packed = codeCache[ip + 1] & 0xFF;
+                int rv = (packed >> 4) & 0x0F;
+                int ra = packed & 0x0F;
+                checkGPR(rv, ip);
+                checkGPR(ra, ip);
+                mmu.writeWord(regs.get(ra), regs.get(rv));
+                return false;
+            }
             case Opcode.COPY -> {
                 // BLOCK: COPY srcAddr, dstAddr, len
                 int srcAddr = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
@@ -520,6 +562,19 @@ public final class VmInterpreter {
                 int rs = codeCache[ip + 1] & 0xFF;
                 int addr = u16(codeCache, ip + 2);
                 LoggerUtils.Module.debug("iflow", "MEM WR16 [0x%04X]<-0x%04X (R%d)", addr, regs.get(rs) & 0xFFFF, rs);
+            }
+            case Opcode.LDBI, Opcode.LDWI, Opcode.STBI, Opcode.STWI -> {
+                int packed = codeCache[ip + 1] & 0xFF;
+                int r0 = (packed >> 4) & 0x0F;
+                int r1 = packed & 0x0F;
+                int addr = regs.get(r1) & 0xFFFF;
+                String mnemonic = switch (opcode) {
+                    case Opcode.LDBI -> "MEM RD8 ";
+                    case Opcode.LDWI -> "MEM RD16";
+                    case Opcode.STBI -> "MEM WR8 ";
+                    default -> "MEM WR16";
+                };
+                LoggerUtils.Module.debug("iflow", "%s [0x%04X] (indirect R%d) R%d", mnemonic, addr, r1, r0);
             }
             case Opcode.COPY, Opcode.MOVE -> {
                 String name = (opcode == Opcode.COPY) ? "COPY" : "MOVE";

@@ -1,0 +1,10 @@
+; ISA v2: indirect memory access (address taken from a register).
+; No firmware, so the code starts at 0x0000 and the bytes are easy to assert.
+    LI R1, 0x3000
+    LI R2, 0x0041
+    STBI R2, [R1]
+    LDBI R3, [R1]
+    LI R2, 0x1234
+    STWI R2, [R1]
+    LDWI R4, [R1]
+    HALT

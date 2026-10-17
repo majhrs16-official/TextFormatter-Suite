@@ -1178,18 +1178,15 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
   ya no puede ampliar sus privilegios. Una allowlist explícita y configurable por
   despliegue puede estrechar el conjunto más adelante, pero la frontera ya es del host.
   (`VmPolicyEngine.grantedCapabilities`.)
-- **AUD-008 firmware stub ON.** Opciones: (a) apagar por defecto (revierte la decisión
-  reciente de firmware ON), (b) implementar el emisor con `INSTRUCTION_SIZES` + fixups
-  de salto, (c) marcar `fw_*` como `UNSUPPORTED`. Requiere elección.
-- **AUD-016 servicios sin cablear.** `propertyReader/Writer`, `stateReader/Writer`,
-  `channelResolver` necesitan el `Message`/estado del host. Opciones:
-  (a) **puerto formal** `HostContext` en el paquete VM (leer/escribir propiedad, resolver
-  canal, leer/escribir estado), implementado por el host con un adaptador sobre
-  `Message`/`Actor`/`ChannelRegistry`; `ExecutionContext` guarda el `HostContext` de la
-  ejecución (hexagonal, elimina las lambdas sueltas);
-  (b) **mínimo**: cambiar las firmas de los inyectores para recibir `ExecutionContext`
-  y meter el `Message` en el contexto por ejecución.
-  Requiere elección. (a) es el camino del informe («puertos formales»).
+- **AUD-008 firmware stub ON — ✅ decisión: ROM real + extender la ISA (D12).**
+  Descubrimiento: la ISA v1 no tiene direccionamiento indirecto (`LDB/LDW/STB/STW` y
+  `COPY/MOVE` usan vaddr absoluta; las páginas de código son R/X, sin self-modifying
+  code), así que las utilidades de cadena del ROM (`fw_strlen`/`strcpy`/`strcmp`/
+  `memcpy`/`memset`) eran **imposibles**. El usuario aprobó ampliar la ISA.
+- **AUD-016 servicios sin cablear — ✅ decisión: puerto formal `HostContext`.**
+  Interfaz en el paquete VM; el host la implementa sobre `Message`/`Actor`/
+  `ChannelRegistry`; `ExecutionContext` lleva el `HostContext` de la ejecución y los
+  servicios leen de ahí (retira las lambdas sueltas).
 - **AUD-002/004 red de seguridad.** El `catch (RuntimeException)` es defensivo; no
   sustituye la corrección de raíz.
 
@@ -1209,6 +1206,42 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
   ABI v2), AUD-012 (README), AUD-013 (`dist` versionado / `npm test`), AUD-017 (detalle
   de error descartado), AUD-018 (subsistema de regiones muerto).
 
+### D12 — ISA v2 (direccionamiento indirecto) + ROM de firmware real
+
+**Motivo:** AUD-008 no se puede cumplir sin acceso indirecto (ver arriba).
+
+**ISA v2 — nuevos opcodes** (espacio reservado 0x08–0x0B, 2 bytes, par de registros
+empaquetado como `MOV`):
+
+| Opcode | Mnemónico | Semántica |
+|---|---|---|
+| `0x08` | `LDBI Rd, [Rs]` | `Rd = byte[vaddr(Rs)]` (actualiza Z/N) |
+| `0x09` | `LDWI Rd, [Rs]` | `Rd = word[vaddr(Rs)]` little-endian (Z/N) |
+| `0x0A` | `STBI Rv, [Ra]` | `byte[vaddr(Ra)] = Rv` |
+| `0x0B` | `STWI Rv, [Ra]` | `word[vaddr(Ra)] = Rv` little-endian |
+
+- Empaquetado: nibble alto = primer registro, nibble bajo = segundo (igual que `MOV`).
+- Todo el acceso pasa por `SoftMMU` (permisos/bounds); `[Rs]` es un vaddr de 16 bits.
+- `CURRENT_ISA_VERSION` pasa a **2** (Java) y el compilador emite `isaVersion: 2`.
+  Un programa v2 no carga en una VM v1 (el parser ya rechaza ISA más nueva).
+
+**ROM de firmware** (`generateFirmware` reescrito):
+- Emisor que respeta `INSTRUCTION_SIZES` (ya no se corrompe el flujo) con **etiquetas
+  y fixups** de salto relativo (BR16: `offset = target - (at + 2)`).
+- Vectores (0x00–0x1B) + constantes/equates (0x40–0xFF) + `fw_version` (dato, 0x100).
+- Funciones reales (registradas también como equates para poder `CALL fw_strlen`):
+  - `fw_strlen R1=src → R0=len`; `fw_strcpy R1=dst,R2=src → R0=n`;
+    `fw_strcmp R1=a,R2=b → R0=0/±`; `fw_memcpy R1=dst,R2=src,R3=len → R0=len`;
+    `fw_memset R1=dst,R2=byte,R3=len → R0=len`.
+  - `fw_call_host` (passthrough `HOST;RET`), `fw_prop_read/write` (construyen
+    `options=(scope<<8)|propId`), `fw_perm_check`, `fw_route_decide`,
+    `fw_state_read/write`, `fw_channel_resolve`.
+- Pad a 0x1000 y relleno de la tabla de vectores.
+
+**Verificación:** tests Java de los 4 opcodes indirectos (acceso + Z/N) + test de
+integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
+`firmware.flow` (4615 B) y validación del compilador.
+
 ### Bitácora de remediación
 
 | Fecha | Commit | Qué |
@@ -1217,4 +1250,5 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
 | 2026-10-17 | `af72e9f` | lote 1: AUD-001/002/003/004/006 (compilador + VM) + tests |
 | 2026-10-17 | `7802970` | AUD-015: capabilities solicitadas ∩ concedidas por el host |
 | 2026-10-17 | `d6b7fb9` | AUD-009 (guard de pila) + AUD-014 (test de firmware portable/real) |
-| 2026-10-17 | — | AUD-007: `fetch*` lee memoria física tras `translateExecute` |
+| 2026-10-17 | `e446db2` | AUD-007: `fetch*` lee memoria física tras `translateExecute` |
+| 2026-10-17 | `52cc767` | AUD-008/D12: ISA v2 (LDBI/LDWI/STBI/STWI) + ROM de firmware real (utilidades + wrappers de host) |

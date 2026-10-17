@@ -15,7 +15,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | Componente | Responsabilidad |
 |------------|-----------------|
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
-| `VmInterpreter` | Fetch/decode/execute loop, ISA v1, fuel budget, SoftMMU integration |
+| `VmInterpreter` | Fetch/decode/execute loop, ISA v2, fuel budget, SoftMMU integration |
 | `VmDmaController` | Transferencias de memoria validadas (read/write/copy/move con permisos) |
 | `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
@@ -37,11 +37,12 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Página 8: Buffer salida I/O (0x8000)
   - Páginas 9-15: Estado persistente / datos privados
 
-### ISA v1 (resumen)
+### ISA v2 (resumen)
 
 | Grupo | Instrucciones |
 |-------|---------------|
 | Data transfer | `LI`, `MOV`, `LDB`, `LDW`, `STB`, `STW`, `COPY`, `MOVE` |
+| Memoria indirecta | `LDBI`, `LDWI`, `STBI`, `STWI` (ISA v2; dirección tomada de un registro) |
 | Aritmética | `ADD`, `SUB`, `MUL`, `DIV`, `MOD` |
 | Lógica | `AND`, `OR`, `XOR`, `NOT` |
 | Shifts | `SHL`, `SHR`, `SAR` |
@@ -113,7 +114,7 @@ Servicios estándar (13 IDs; sólo los 7 marcados ✅ están registrados hoy —
 ```
 Header (16 bytes):
   u8  formatVersion     = 1
-  u8  isaVersion        = 1
+  u8  isaVersion        = 2
   u8  minAbiVersion     = 1
   u8  minFirmwareVersion= 1
   u16 entryPoint        (little-endian)

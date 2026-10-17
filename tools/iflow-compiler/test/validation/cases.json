@@ -1,5 +1,6 @@
 [
   { "file": "valid-edge-immediates.flowasm",        "expect": "ok", "flags": ["--no-firmware"], "codeHex": "0001ffff00027fff00038000000400000005ffff68" },
+  { "file": "valid-indirect.flowasm",               "expect": "ok", "flags": ["--no-firmware"], "codeHex": "00013000000200410a210831000212340b21094168" },
   { "file": "valid-register-r7.flowasm",            "expect": "ok" },
   { "file": "valid-symbolic-immediate.flowasm",     "expect": "ok" },
   { "file": "invalid-align-zero.flowasm",           "expect": "error", "match": ".align requires positive integer" },
@@ -9,5 +10,6 @@
   { "file": "invalid-immediate-overflow.flowasm",   "expect": "error", "match": "immediate out of 16-bit range: 70000" },
   { "file": "invalid-immediate-underflow.flowasm",  "expect": "error", "match": "immediate out of 16-bit range: -40000" },
   { "file": "invalid-immediate-precision.flowasm",  "expect": "error", "match": "immediate out of 16-bit range" },
-  { "file": "invalid-control-register.flowasm",     "expect": "error", "match": "requires general-purpose register (R0-R7)" }
+  { "file": "invalid-control-register.flowasm",     "expect": "error", "match": "requires general-purpose register (R0-R7)" },
+  { "file": "invalid-indirect-nonreg.flowasm",      "expect": "error", "match": "LDBI expects gpr" }
 ]

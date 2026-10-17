@@ -61,6 +61,12 @@ class OpcodeTest {
         assertEquals(8, Opcode.instructionSize(Opcode.COPY));
         assertEquals(8, Opcode.instructionSize(Opcode.MOVE));
 
+        // Indirect memory (ISA v2) = 2 bytes (RR, packed registers)
+        assertEquals(2, Opcode.instructionSize(Opcode.LDBI));
+        assertEquals(2, Opcode.instructionSize(Opcode.LDWI));
+        assertEquals(2, Opcode.instructionSize(Opcode.STBI));
+        assertEquals(2, Opcode.instructionSize(Opcode.STWI));
+
         // Arithmetic/Logic/Shifts = 2 bytes (RR)
         assertEquals(2, Opcode.instructionSize(Opcode.ADD));
         assertEquals(2, Opcode.instructionSize(Opcode.SUB));

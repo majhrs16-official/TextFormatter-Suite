@@ -11,6 +11,10 @@ export declare enum Opcode {
     STW = 5,// MEM: Store Word
     COPY = 6,// BLOCK: Copy non-overlapping
     MOVE = 7,// BLOCK: Move (allows overlap)
+    LDBI = 8,// RR: Load Byte indirect  Rd, [Rs]
+    LDWI = 9,// RR: Load Word indirect  Rd, [Rs]
+    STBI = 10,// RR: Store Byte indirect Rv, [Ra]
+    STWI = 11,// RR: Store Word indirect Rv, [Ra]
     ADD = 32,// RR: Add
     SUB = 33,// RR: Subtract
     MUL = 34,// RR: Multiply

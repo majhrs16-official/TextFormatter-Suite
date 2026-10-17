@@ -13,6 +13,12 @@ export enum Opcode {
   COPY = 0x06, // BLOCK: Copy non-overlapping
   MOVE = 0x07, // BLOCK: Move (allows overlap)
 
+  // Indirect memory access (ISA v2, 0x08-0x0B)
+  LDBI = 0x08, // RR: Load Byte indirect  Rd, [Rs]
+  LDWI = 0x09, // RR: Load Word indirect  Rd, [Rs]
+  STBI = 0x0A, // RR: Store Byte indirect Rv, [Ra]
+  STWI = 0x0B, // RR: Store Word indirect Rv, [Ra]
+
   // Arithmetic (0x20-0x27)
   ADD  = 0x20, // RR: Add
   SUB  = 0x21, // RR: Subtract
@@ -64,6 +70,10 @@ export const INSTRUCTION_SIZES: Record<Opcode, number> = {
   [Opcode.STW]: 4,
   [Opcode.COPY]: 8,     // BLOCK: srcVaddr16 + dstVaddr16 + len16
   [Opcode.MOVE]: 8,
+  [Opcode.LDBI]: 2,     // RR (packed, indirect addressing)
+  [Opcode.LDWI]: 2,
+  [Opcode.STBI]: 2,
+  [Opcode.STWI]: 2,
   [Opcode.ADD]: 2,
   [Opcode.SUB]: 2,
   [Opcode.MUL]: 2,

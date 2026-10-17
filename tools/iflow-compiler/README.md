@@ -54,14 +54,14 @@ node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 ```bash
 # Compilar el programa de prueba
 node dist/cli.js test/firmware.flowasm -o test/firmware.flow -d -l
-# ✓ Assembled test/firmware.flowasm → test/firmware.flow (4615 bytes)
+# ✓ Assembled test/firmware.flowasm → test/firmware.flow (4648 bytes)
 ```
 
 ---
 
 ## Sintaxis `.flowasm`
 
-### Instrucciones (mnemónicos ISA v1)
+### Instrucciones (mnemónicos ISA v2)
 
 ```asm
 ; Data transfer
@@ -71,6 +71,11 @@ LDB  R0, 0x3000       ; Load byte from virtual address (data region)
 LDW  R1, 0x3002       ; Load word (little-endian)
 STB  R2, 0x8000       ; Store byte (output buffer)
 STW  R3, 0x8002       ; Store word
+; Indirect memory (ISA v2): the address is the value of a register
+LDBI R3, [R1]         ; Load byte from the address in R1
+LDWI R4, [R1]         ; Load word from the address in R1
+STBI R2, [R1]         ; Store byte to the address in R1
+STWI R2, [R1]         ; Store word to the address in R1
 COPY 0x3000, 0x3200, 64  ; Copy block (no overlap)
 MOVE 0x3000, 0x3002, 64  ; Move block (allows overlap)
 
@@ -160,6 +165,38 @@ Instrucciones de 2 registros usan un solo byte: `RR = (rd << 4) | rs`
 ADD R0, R1     ; byte = 0x01
 MOV R3, R7     ; byte = 0x37
 ```
+
+---
+
+## ROM de firmware (0x0000–0x0FFF)
+
+Con firmware activado (por defecto) se antepone una ROM de 4 KiB con la tabla de
+vectores, las constantes de servicio y utilidades reutilizables. Sus puntos de entrada
+se exponen como símbolos, así que el código de usuario puede invocarlos con `CALL`:
+
+```asm
+LI R1, 0x3000
+CALL fw_strlen        ; R1 = dirección de la cadena → R0 = longitud
+```
+
+| Función | Entrada | Salida |
+|---|---|---|
+| `fw_strlen` | `R1` = cadena | `R0` = longitud |
+| `fw_strcpy` | `R1` = destino, `R2` = origen | `R0` = bytes copiados |
+| `fw_strcmp` | `R1` = a, `R2` = b | `R0` = 0 si iguales, si no signo(a−b) |
+| `fw_memcpy` | `R1` = destino, `R2` = origen, `R3` = len | `R0` = len |
+| `fw_memset` | `R1` = destino, `R2` = byte, `R3` = len | `R0` = len |
+| `fw_call_host` | `R0`=svc, `R1`=options, `R2`=base, `R3`=len | passthrough a `HOST` |
+| `fw_prop_read` | `R1`=scope, `R2`=propId, `R3`=buf, `R4`=len | `HOST PROPERTY_READ` |
+| `fw_prop_write` | `R1`=scope, `R2`=propId, `R3`=buf, `R4`=len | `HOST PROPERTY_WRITE` |
+| `fw_perm_check` | `R1`=buf, `R2`=len | `HOST PERMISSION_CHECK` |
+| `fw_route_decide` | `R1`=decision, `R2`=buf, `R3`=len | `HOST ROUTE_DECISION` |
+| `fw_state_read` | `R1`=key, `R2`=buf, `R3`=len | `HOST STATE_READ` |
+| `fw_state_write` | `R1`=key, `R2`=buf, `R3`=len | `HOST STATE_WRITE` |
+| `fw_channel_resolve` | `R1`=buf, `R2`=len | `HOST CHANNEL_RESOLVE` |
+
+Las utilidades de cadena/memoria usan el direccionamiento indirecto de la ISA v2
+(`LDBI`/`STBI`) para recorrer los buffers.
 
 ---
 

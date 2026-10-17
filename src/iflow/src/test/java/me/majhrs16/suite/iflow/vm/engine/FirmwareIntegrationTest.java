@@ -100,6 +100,13 @@ class FirmwareIntegrationTest {
                 System.out.println("R" + i + ": " + ctx.registers().get(i));
             }
             assertTrue(ctx.fuelRemaining() > 0, "Should have fuel remaining");
+
+            // Test 8 in the fixture writes "Hi\0" at FW_STR and calls the ROM's
+            // fw_strlen (R1 = src -> R0 = length), storing the result at
+            // RESULT_BUFFER (0x3100). This exercises the real firmware ROM code
+            // over actual bytes (the ISA-v2 indirect loads).
+            int strlenResult = softMMU.readWord(0x3100);
+            assertEquals(2, strlenResult, "CALL fw_strlen over \"Hi\" must return 2");
         } catch (Exception e) {
             System.out.println("Execution failed: " + e.getMessage());
             e.printStackTrace();

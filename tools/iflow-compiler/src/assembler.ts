@@ -165,6 +165,27 @@ class Assembler {
   private generateFirmware(): number[] {
     const fw: number[] = [];
 
+    // ===== Size-correct emitter with label/fixup support =====
+    const u8 = (b: number) => { fw.push(b & 0xFF); };
+    const u16be = (v: number) => { fw.push((v >> 8) & 0xFF, v & 0xFF); };
+    const pack = (a: number, b: number) => u8(((a & 0x0F) << 4) | (b & 0x0F));
+    const li = (rd: number, imm: number) => { u8(Opcode.LI); u8(rd); u16be(imm & 0xFFFF); };
+    const mov = (rd: number, rs: number) => { u8(Opcode.MOV); pack(rd, rs); };
+    const rr = (op: Opcode, rd: number, rs: number) => { u8(op); pack(rd, rs); };
+    const ldbi = (rd: number, rs: number) => { u8(Opcode.LDBI); pack(rd, rs); };
+    const stbi = (rv: number, ra: number) => { u8(Opcode.STBI); pack(rv, ra); };
+    const ret = () => u8(Opcode.RET);
+    const host = () => { u8(Opcode.HOST); u8(0); };
+    const labelAddr = new Map<string, number>();
+    const mark = (name: string) => { labelAddr.set(name, fw.length); };
+    const fixups: { at: number; label: string }[] = [];
+    // BR16: the offset is relative to the end of the 3-byte instruction (at + 2).
+    const br = (op: Opcode, target: string) => {
+      u8(op);
+      fixups.push({ at: fw.length, label: target });
+      u8(0); u8(0);
+    };
+
     // ===== Vector Table (0x0000-0x003F) - Fixed addresses for firmware functions =====
     // Each entry is a 16-bit address (little-endian)
     const vectors: [string, number][] = [
@@ -177,24 +198,20 @@ class Assembler {
       ['fw_call_host',      0x0000],  // Generic HOST caller: R0=svc, R1=arg, R2=opt, R3=len
       ['fw_prop_read',      0x0000],  // R1=scope, R2=prop_id, R3=out_buf, R4=len
       ['fw_prop_write',     0x0000],  // R1=scope, R2=prop_id, R3=src_buf, R4=len
-      ['fw_route_decide',   0x0000],  // R1=decision, R2=target_buf, R3=target_len
-      ['fw_perm_check',     0x0000],  // R1=actor_buf, R2=perm_buf, R3=len
+      ['fw_route_decide',   0x0000],  // R1=decision, R2=buf, R3=len
+      ['fw_perm_check',     0x0000],  // R1=buf, R2=len
       ['fw_state_read',     0x0000],  // R1=key, R2=out_buf, R3=len
       ['fw_state_write',    0x0000],  // R1=key, R2=src_buf, R3=len
-      ['fw_channel_resolve',0x0000],  // R1=name_buf, R2=len, R3=out_buf, R4=len
+      ['fw_channel_resolve',0x0000],  // R1=name_buf, R2=len
     ];
 
-    // Placeholder for vector addresses (will be filled after code gen)
-    const vectorAddrs = new Map<string, number>();
-    let vectorBase = fw.length;
-    for (const [name] of vectors) {
-      vectorAddrs.set(name, vectorBase);
-      fw.push(0x00, 0x00); // placeholder
-      vectorBase += 2;
+    // Placeholder vector entries (filled in with real addresses once the
+    // functions below have been laid out).
+    for (let i = 0; i < vectors.length; i++) {
+      fw.push(0x00, 0x00);
     }
 
     // ===== Constants / Service IDs (0x0040-0x00FF) =====
-    const constantsBase = fw.length;
     while (fw.length < 0x0040) fw.push(0x00); // pad to 0x0040
 
     // Service IDs
@@ -264,48 +281,182 @@ class Assembler {
     // Align to 0x0100
     while (fw.length < 0x0100) fw.push(0x00);
 
-    // fw_version at 0x0100
-    vectorAddrs.set('fw_version', 0x0100);
-    fw[0x0100] = 0x01; fw[0x0101] = 0x00; // version 1.0
+    // fw_version at 0x0100 (data word: major.minor)
+    fw.push(0x01, 0x00);
 
     // ---- fw_strlen: R1 = src addr, returns R0 = length ----
-    // strlen: count bytes until null
-    vectorAddrs.set('fw_strlen', fw.length);
-    this.emitInstr(fw, Opcode.LI, 0, 0);           // LI R0, 0 (length)
-    this.emitInstr(fw, Opcode.MOV, 2, 1);          // MOV R2, R1 (save src)
-    this.emitInstr(fw, Opcode.LDB, 3, 0);          // LDB R3, [R2] - but need indirect... use loop
-    // Simplified: use loop with LDB
-    this.emitInstr(fw, Opcode.LI, 4, 0);           // LI R4, 0 (counter)
-    // Loop label
-    const strlen_loop = fw.length;
-    this.emitInstr(fw, Opcode.LDB, 3, 0);          // LDB R3, [R2] - pseudo, will fix
-    this.emitInstr(fw, Opcode.CMP, 3, 0);          // CMP R3, R0
-    this.emitInstr(fw, Opcode.JZ, 0, 0);           // JZ done (placeholder)
-    this.emitInstr(fw, Opcode.ADD, 4, 0);          // ADD R4, R0 (inc counter - need reg with 1)
-    this.emitInstr(fw, Opcode.ADD, 2, 0);          // ADD R2, R0 (inc pointer)
-    this.emitInstr(fw, Opcode.JMP, 0, 0);          // JMP loop (placeholder)
-    // Done
-    const strlen_done = fw.length;
-    this.emitInstr(fw, Opcode.MOV, 0, 4);          // MOV R0, R4 (return length)
-    this.emitInstr(fw, Opcode.RET);                // RET
+    mark('fw_strlen');
+    li(0, 0);                    // R0 = 0 (length)
+    li(2, 1);                    // R2 = 1 (increment)
+    mark('fw_strlen_loop');
+    ldbi(3, 1);                  // R3 = *src  (sets Z when NUL)
+    br(Opcode.JZ, 'fw_strlen_done');
+    rr(Opcode.ADD, 0, 2);        // R0++
+    rr(Opcode.ADD, 1, 2);        // src++
+    br(Opcode.JMP, 'fw_strlen_loop');
+    mark('fw_strlen_done');
+    ret();
 
-    // Fixup JZ/JMP offsets (simplified - real impl would compute properly)
-    // For now, just emit placeholder firmware that demonstrates the structure
-    
-    // Since full firmware is complex, emit a minimal working stub
-    // Real implementation would have complete functions
-    
+    // ---- fw_strcpy: R1 = dst, R2 = src, returns R0 = bytes copied ----
+    mark('fw_strcpy');
+    li(0, 0);                    // R0 = count
+    li(4, 1);                    // R4 = 1 (increment)
+    mark('fw_strcpy_loop');
+    ldbi(3, 2);                  // R3 = *src (sets Z at NUL)
+    stbi(3, 1);                  // *dst = R3
+    br(Opcode.JZ, 'fw_strcpy_done');
+    rr(Opcode.ADD, 0, 4);
+    rr(Opcode.ADD, 1, 4);
+    rr(Opcode.ADD, 2, 4);
+    br(Opcode.JMP, 'fw_strcpy_loop');
+    mark('fw_strcpy_done');
+    ret();
+
+    // ---- fw_strcmp: R1 = a, R2 = b, returns R0 = 0 if equal else sign(a-b) ----
+    mark('fw_strcmp');
+    mark('fw_strcmp_loop');
+    ldbi(3, 1);                  // R3 = *a
+    ldbi(4, 2);                  // R4 = *b
+    rr(Opcode.CMP, 3, 4);
+    br(Opcode.JNZ, 'fw_strcmp_diff');
+    li(5, 0);
+    rr(Opcode.CMP, 3, 5);        // *a == 0 ?  (equal strings)
+    br(Opcode.JZ, 'fw_strcmp_eq');
+    li(6, 1);
+    rr(Opcode.ADD, 1, 6);
+    rr(Opcode.ADD, 2, 6);
+    br(Opcode.JMP, 'fw_strcmp_loop');
+    mark('fw_strcmp_diff');
+    mov(0, 3);
+    rr(Opcode.SUB, 0, 4);        // R0 = *a - *b
+    ret();
+    mark('fw_strcmp_eq');
+    li(0, 0);
+    ret();
+
+    // ---- fw_memcpy: R1 = dst, R2 = src, R3 = len, returns R0 = len ----
+    mark('fw_memcpy');
+    mov(0, 3);                   // R0 = len
+    li(7, 0);
+    rr(Opcode.CMP, 3, 7);
+    br(Opcode.JZ, 'fw_memcpy_done');
+    li(5, 1);
+    mark('fw_memcpy_loop');
+    ldbi(4, 2);
+    stbi(4, 1);
+    rr(Opcode.ADD, 1, 5);
+    rr(Opcode.ADD, 2, 5);
+    rr(Opcode.SUB, 3, 5);        // len-- (sets Z at 0)
+    br(Opcode.JNZ, 'fw_memcpy_loop');
+    mark('fw_memcpy_done');
+    ret();
+
+    // ---- fw_memset: R1 = dst, R2 = byte, R3 = len, returns R0 = len ----
+    mark('fw_memset');
+    mov(0, 3);
+    li(7, 0);
+    rr(Opcode.CMP, 3, 7);
+    br(Opcode.JZ, 'fw_memset_done');
+    li(5, 1);
+    mark('fw_memset_loop');
+    stbi(2, 1);                  // *dst = byte (R2)
+    rr(Opcode.ADD, 1, 5);
+    rr(Opcode.SUB, 3, 5);
+    br(Opcode.JNZ, 'fw_memset_loop');
+    mark('fw_memset_done');
+    ret();
+
+    // ---- HOST wrappers ----
+    // fw_call_host: R0=svc, R1=options, R2=base, R3=len (pure passthrough)
+    mark('fw_call_host');
+    host();
+    ret();
+
+    // fw_prop_read: R1=scope, R2=propId, R3=outBuf, R4=len
+    mark('fw_prop_read');
+    mov(5, 1);
+    li(6, 8);
+    rr(Opcode.SHL, 5, 6);        // R5 = scope << 8
+    rr(Opcode.OR, 5, 2);         // R5 |= propId
+    mov(2, 3);                   // base = outBuf
+    mov(3, 4);                   // length = len
+    mov(1, 5);                   // options
+    li(0, 0x0100);
+    host();
+    ret();
+
+    // fw_prop_write: R1=scope, R2=propId, R3=srcBuf, R4=len
+    mark('fw_prop_write');
+    mov(5, 1);
+    li(6, 8);
+    rr(Opcode.SHL, 5, 6);
+    rr(Opcode.OR, 5, 2);
+    mov(2, 3);
+    mov(3, 4);
+    mov(1, 5);
+    li(0, 0x0101);
+    host();
+    ret();
+
+    // fw_perm_check: R1=buf ("actor\0perm"), R2=len
+    mark('fw_perm_check');
+    mov(5, 1);
+    mov(3, 2);                   // length = len
+    mov(2, 5);                   // base = buf
+    li(1, 0);                    // options = 0
+    li(0, 0x0200);
+    host();
+    ret();
+
+    // fw_route_decide: R1=decision, R2=buf, R3=len
+    mark('fw_route_decide');
+    li(0, 0x0300);
+    host();
+    ret();
+
+    // fw_state_read: R1=key, R2=outBuf, R3=len
+    mark('fw_state_read');
+    li(0, 0x0500);
+    host();
+    ret();
+
+    // fw_state_write: R1=key, R2=srcBuf, R3=len
+    mark('fw_state_write');
+    li(0, 0x0501);
+    host();
+    ret();
+
+    // fw_channel_resolve: R1=buf, R2=len (service writes the id back to buf)
+    mark('fw_channel_resolve');
+    mov(5, 1);
+    mov(3, 2);
+    mov(2, 5);
+    li(1, 0);
+    li(0, 0x0600);
+    host();
+    ret();
+
+    // ===== Resolve relative branches =====
+    for (const fx of fixups) {
+      const target = labelAddr.get(fx.label);
+      if (target === undefined) continue; // unreachable: all labels are defined above
+      const offset = (target - (fx.at + 2)) & 0xFFFF;
+      fw[fx.at] = (offset >> 8) & 0xFF;
+      fw[fx.at + 1] = offset & 0xFF;
+    }
+
     // Pad to 4KB (0x1000)
     while (fw.length < 0x1000) fw.push(0x00);
 
-    // Fix vector table with actual addresses
-    for (const [name, addr] of vectorAddrs) {
-      const idx = vectors.findIndex(v => v[0] === name);
-      if (idx >= 0) {
-        const offset = 2 * idx;
-        fw[offset] = addr & 0xFF;
-        fw[offset + 1] = (addr >> 8) & 0xFF;
-      }
+    // ===== Fill the vector table and register the equates =====
+    for (let i = 0; i < vectors.length; i++) {
+      const name = vectors[i][0];
+      const addr = name === 'fw_version' ? 0x0100 : (labelAddr.get(name) ?? 0);
+      const off = 2 * i;
+      fw[off] = addr & 0xFF;            // little-endian data word
+      fw[off + 1] = (addr >> 8) & 0xFF;
+      // Expose the entry point as an equate so user code can `CALL fw_strlen`.
+      this.defineEquate(name, addr);
     }
 
     return fw;
@@ -342,13 +493,6 @@ class Assembler {
   private userOrigin(): number {
     const origin = this.options.origin || 0;
     return this.firmwareEnabled ? Math.max(origin, 0x1000) : origin;
-  }
-
-  private emitInstr(fw: number[], opcode: Opcode, ...operands: number[]) {
-    fw.push(opcode);
-    for (const op of operands) {
-      fw.push(op & 0xFF);
-    }
   }
 
   private handleDirective(line: string) {
@@ -540,6 +684,8 @@ class Assembler {
       case Opcode.MOV: return { min: 2, max: 2, types: ['gpr', 'gpr'] };
       case Opcode.LDB: case Opcode.LDW: case Opcode.STB: case Opcode.STW:
         return { min: 2, max: 2, types: ['gpr', 'vaddr'] };
+      case Opcode.LDBI: case Opcode.LDWI: case Opcode.STBI: case Opcode.STWI:
+        return { min: 2, max: 2, types: ['gpr', 'gpr'] };
       case Opcode.COPY: case Opcode.MOVE:
         return { min: 3, max: 3, types: ['vaddr', 'vaddr', 'imm16'] };
       case Opcode.ADD: case Opcode.SUB: case Opcode.MUL: case Opcode.DIV: case Opcode.MOD:
@@ -627,7 +773,12 @@ class Assembler {
   private parseOperands(tokens: string[], opcode: Opcode): Operand[] {
     const operands: Operand[] = [];
 
-    for (const token of tokens) {
+    for (const rawToken of tokens) {
+      // Indirect operands may be written as [Rs]; brackets are not part of the
+      // register name.
+      const token = rawToken.replace(/[[\]]/g, '').trim();
+      if (!token) continue;
+
       // Register
       if (REGISTER_NAMES[token.toUpperCase()] !== undefined) {
         operands.push({ type: 'reg', value: REGISTER_NAMES[token.toUpperCase()] });
@@ -710,6 +861,21 @@ class Assembler {
         code.push(reg);
         code.push((vaddr >> 8) & 0xFF);
         code.push(vaddr & 0xFF);
+        break;
+      }
+
+      case Opcode.LDBI:
+      case Opcode.LDWI:
+      case Opcode.STBI:
+      case Opcode.STWI: { // RR (packed): Rd/Rv, Rs/Ra
+        const packed = this.getPackedRROperand(operands);
+        if (packed) {
+          code.push((packed.rd << 4) | packed.rs);
+        } else {
+          const first = this.getRegOperand(operands, 0);
+          const second = this.getRegOperand(operands, 1);
+          code.push((first << 4) | second);
+        }
         break;
       }
 
@@ -873,7 +1039,7 @@ class Assembler {
     // For error cases, just return without computing hash
     const programImage: ProgramImage = {
       formatVersion: 1,
-      isaVersion: 1,
+      isaVersion: 2,
       minAbiVersion: 1,
       minFirmwareVersion: 1,
       entryPoint: this.getEntryPointAddress(),
@@ -900,7 +1066,7 @@ class Assembler {
     // Serialize program image without hash first
     const programImageNoHash: ProgramImage = {
       formatVersion: 1,
-      isaVersion: 1,
+      isaVersion: 2,
       minAbiVersion: 1,
       minFirmwareVersion: 1,
       entryPoint: this.getEntryPointAddress(),

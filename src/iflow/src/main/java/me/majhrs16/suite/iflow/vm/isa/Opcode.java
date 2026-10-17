@@ -19,6 +19,12 @@ public final class Opcode {
     public static final int COPY    = 0x06; // BLOCK: Copy non-overlapping
     public static final int MOVE    = 0x07; // BLOCK: Move (allows overlap)
 
+    // Indirect memory access (ISA v2, 0x08–0x0B) — address comes from a register
+    public static final int LDBI    = 0x08; // RR:   Load byte  Rd, [Rs]
+    public static final int LDWI    = 0x09; // RR:   Load word  Rd, [Rs]
+    public static final int STBI    = 0x0A; // RR:   Store byte Rv, [Ra]
+    public static final int STWI    = 0x0B; // RR:   Store word Rv, [Ra]
+
     // Arithmetic (0x20–0x2F)
     public static final int ADD     = 0x20; // RR:   Add
     public static final int SUB     = 0x21; // RR:   Subtract
@@ -76,6 +82,10 @@ public final class Opcode {
             case STW -> "STW";
             case COPY -> "COPY";
             case MOVE -> "MOVE";
+            case LDBI -> "LDBI";
+            case LDWI -> "LDWI";
+            case STBI -> "STBI";
+            case STWI -> "STWI";
             case ADD -> "ADD";
             case SUB -> "SUB";
             case MUL -> "MUL";
@@ -108,6 +118,7 @@ public final class Opcode {
         return switch (opcode) {
             case LI -> 4;       // RI16: opcode + reg + imm16
             case MOV, NOT -> 2; // RR (packed registers)
+            case LDBI, LDWI, STBI, STWI -> 2; // RR (packed registers, indirect addressing)
             case RET, HALT -> 1; // R (single byte, no operand)
             case LDB, LDW, STB, STW -> 4;  // MEM: opcode + reg + vaddr16
             case COPY, MOVE -> 8;          // BLOCK: opcode + srcVaddr16 + dstVaddr16 + len16

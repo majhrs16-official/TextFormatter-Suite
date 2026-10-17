@@ -17,6 +17,11 @@ var Opcode;
     Opcode[Opcode["STW"] = 5] = "STW";
     Opcode[Opcode["COPY"] = 6] = "COPY";
     Opcode[Opcode["MOVE"] = 7] = "MOVE";
+    // Indirect memory access (ISA v2, 0x08-0x0B)
+    Opcode[Opcode["LDBI"] = 8] = "LDBI";
+    Opcode[Opcode["LDWI"] = 9] = "LDWI";
+    Opcode[Opcode["STBI"] = 10] = "STBI";
+    Opcode[Opcode["STWI"] = 11] = "STWI";
     // Arithmetic (0x20-0x27)
     Opcode[Opcode["ADD"] = 32] = "ADD";
     Opcode[Opcode["SUB"] = 33] = "SUB";
@@ -61,6 +66,10 @@ exports.INSTRUCTION_SIZES = {
     [Opcode.STW]: 4,
     [Opcode.COPY]: 8, // BLOCK: srcVaddr16 + dstVaddr16 + len16
     [Opcode.MOVE]: 8,
+    [Opcode.LDBI]: 2, // RR (packed, indirect addressing)
+    [Opcode.LDWI]: 2,
+    [Opcode.STBI]: 2,
+    [Opcode.STWI]: 2,
     [Opcode.ADD]: 2,
     [Opcode.SUB]: 2,
     [Opcode.MUL]: 2,

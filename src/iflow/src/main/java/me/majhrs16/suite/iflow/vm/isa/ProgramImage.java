@@ -16,7 +16,7 @@ import java.util.Objects;
 public final class ProgramImage {
 
     public static final int CURRENT_FORMAT_VERSION = 1;
-    public static final int CURRENT_ISA_VERSION = 1;
+    public static final int CURRENT_ISA_VERSION = 2;
     public static final int CURRENT_ABI_VERSION = 1;
     public static final int CURRENT_FIRMWARE_VERSION = 1;
 
