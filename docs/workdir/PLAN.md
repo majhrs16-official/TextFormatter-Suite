@@ -1,7 +1,7 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-04 (fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, SpEL allowlist, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
+> Última actualización: 2026-10-16 (**rediseño del ABI de `HOST` (iflow) + toolchain `.flowasm` EN CURSO — ver sección final**; antes: fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, SpEL allowlist, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
 
 ---
 
@@ -875,3 +875,140 @@ Todos los items P1 resueltos:
 1. **Tests E2E**: Pipeline completo en Spigot real (chat → iFlow → format → delivery)
 2. **GitHub Releases**: Para Module Manager (F12-2) + sync-velocity
 3. **M-07**: ModuleLifecycle firma JAR separada (cosign/gpg); `getCurrentEnvironment()` dinámico
+
+---
+
+## REDISEÑO DEL ABI DE `HOST` (iflow) + TOOLCHAIN `.flowasm` — 2026-10-16 (EN CURSO)
+
+> **Documento de trabajo vivo.** Releer antes de tocar `iflow` (VM) o el compilador.
+> Nace de la revisión del firmware `Sentinel-1` y del compilador `.flowasm`.
+
+### Contexto — qué destapó la revisión
+
+| # | Hallazgo | Evidencia |
+|---|---|---|
+| H1 | El ABI de `HOST` tiene **4 descripciones distintas** (impl, README, stub del firmware, y programas de usuario) | ver tabla "Doc a unificar" |
+| H2 | `argOffset` (R2) es **redundante**: siempre es `base + offset` | `HostServiceRegistry.java:263,287,311,339,350,363,403,421,437,449` |
+| H3 | El `status` **no llega al programa**: `notFound/denied/hostFailure/...` todos dan `R0=0,R1=0,R3=0`, indistinguible de OK de 0 bytes | `ServiceResult.java` + `VmInterpreter.executeHost:478-480` |
+| H4 | `scope\|propId` **roto**: `propId = options & 0xFFFF` arrastra el byte de scope | `HostServiceRegistry.java:251,280` |
+| H5 | Constantes del firmware = **direcciones de almacenamiento**, no valores → `LI R0, SERVICE_*` carga `0x0040` (no `0x0100`) | `assembler.ts emitConst` (`defineLabel(name, fw.length)`) — verificado con dump |
+| H6 | `.origin 0x0000` + firmware ON → código en `0x1000` pero labels/entry en base 0 → **entryPoint = 0x0000** (tabla de vectores) | `assembler.ts secondPass:126-132` + `getEntryPointAddress:943` |
+| H7 | `RET` exige operando de **relleno** (la VM lo ignora) | `executeReturn:442` vs spec `min:1` + `instructionSize(RET)=2` |
+| H8 | Los ejemplos del compilador **no ensamblan** (9 `RET` pelados + default de firmware) | `test/firmware.flowasm`, `test/main_only.flowasm` |
+| H9 | `LI Rx, <símbolo>` fallaba en validación | ✅ **ARREGLADO** (`ae9f635`) |
+
+### Decisiones bloqueadas (acordadas con el usuario)
+
+| # | Decisión | Estado |
+|---|---|---|
+| D1 | `status` en **R0 al retorno** (estilo `rax`); el `op` de entrada se consume | ✅ decidido |
+| D2 | `propId = options & 0x00FF` (scope en bits 8–15: `scope = (options>>8)&0xFF`) | ✅ decidido |
+| D3 | **Quitar `argOffset`**: `base` (R2) pasa a ser la dirección completa | ✅ decidido |
+| D4 | `length` **bidireccional**: in = pedido, out = transferido (lectura: bytes escritos; escritura: bytes leídos) | ✅ decidido |
+| D5 | `RET` de **1 byte**, sin operando | ✅ decidido |
+| D6 | Firmware **ON por defecto** + switch **bare-metal** vía parámetro Gradle | ✅ decidido |
+| D7 | Default **origin = 0x1000** cuando el firmware está ON | ✅ decidido |
+| D8 | Constantes del firmware = **valores** (equates), no direcciones | ✅ decidido |
+| D9 | `status` con **códigos numéricos** (ver tabla) | ✅ decidido |
+| D10 | Unificar la **doc del ABI** en una sola fuente de verdad | ✅ decidido |
+| D11 | `R4` = resultado escalar del servicio (hoy sólo `PERMISSION_CHECK` 0/1); reservado para extras si un servicio necesita un 5º argumento | ⏳ **por confirmar** |
+
+### ABI `HOST` v2 (propuesto — auditar)
+
+**Instrucción**
+
+| Campo | Valor |
+|---|---|
+| Opcode | `0x60` (HOST) |
+| Tamaño | 2 bytes (opcode + 1 reservado) |
+| ASM | `HOST` (syscall-style, sin operandos) |
+
+**Entrada**
+
+| Reg | Nombre | Rol |
+|---|---|---|
+| R0 | `op` | tipo de operación (ID de servicio) |
+| R1 | `options` | parámetro del servicio (scope/propId, decision, key…) |
+| R2 | `base` | dirección base del buffer (vaddr completa) |
+| R3 | `length` | bytes (in: pedido · out: transferido) |
+| R4+ | `extra` | operandos que no quepan arriba (hoy ninguno) |
+
+**Retorno**
+
+| Reg | Nombre | Rol |
+|---|---|---|
+| R0 | `status` | código de estado (§status) — **registro dedicado** |
+| R1 | `options` | sin cambios |
+| R2 | `base` | sin cambios |
+| R3 | `length` | bytes transferidos (in→out) |
+| R4 | `result` | escalar del servicio (hoy sólo `PERMISSION_CHECK`); si no aplica, libre |
+
+**`status` (códigos numéricos)**
+
+| Valor | Status | | Valor | Status |
+|---|---|---|---|---|
+| `0` | OK | | `5` | UNSUPPORTED |
+| `1` | NOT_FOUND | | `6` | CONFLICT |
+| `2` | DENIED | | `7` | HOST_FAILURE |
+| `3` | INVALID_ARGUMENT | | `8` | PARTIAL |
+| `4` | BUFFER_TOO_SMALL (R3 = bytes requeridos) | | | |
+
+**Servicios** (`R2`=base, `R3`=length)
+
+| R0 `op` | Nombre | Capability | R1 `options` | Buffer | `R3` out | `R4` result |
+|---|---|---|---|---|---|---|
+| `0x0100` | PROPERTY_READ | `property.read` | `(scope<<8)\|propId` | **escribe** valor | bytes escritos | — |
+| `0x0101` | PROPERTY_WRITE | `property.write` | `(scope<<8)\|propId` | **lee** `R3` bytes | bytes leídos | — |
+| `0x0200` | PERMISSION_CHECK | `permission.check` | — | **lee** `R3` bytes (`"actor\0perm"`) | bytes leídos | `0\|1` |
+| `0x0300` | ROUTE_DECISION | `routing.decide` | `decision` | lee `R3` sólo si REDIRECT/CHAN_REDIR/RATE_LIMIT | bytes leídos | `decision` |
+| `0x0500` | STATE_READ | `state.read` | `key` | **escribe** valor | bytes escritos | — |
+| `0x0501` | STATE_WRITE | `state.write` | `key` | **lee** `R3` bytes | bytes leídos | — |
+| `0x0600` | CHANNEL_RESOLVE | `channel.resolve` | — | **lee** nombre y **escribe** id | bytes | — |
+
+IDs declarados pero **no registrados** (`0x0102/0x0201/0x0301/0x0302/0x0400/0x0601/0x0700/0x0701`) → `status=5 (UNSUPPORTED)`.
+
+**Valores de `options`:** `scope`: `0x01` MESSAGE, `0x02` EMITTER, `0x03` RECIPIENT, `0x04` CHANNEL, `0x05` SERVER · `propId` (8 bits bajos): message `0x10` CONTENT, `0x11` CHANNEL, `0x12` DIRECTION, `0x13` TYPE, `0x14` LANG_SOURCE, `0x15` LANG_TARGET, `0x16` COLOR_MODE, `0x17` FORMAT_PAPI, `0x18` SLEEP_MILLIS, `0x19` SOUNDS, `0x1A` CANCELLED, `0x1B` PROCESSED, `0x1C` TRANSLATE · actor `0x00–0x03` · channel `0x00–0x03` · `decision`: `0` LOG, `1` DROP, `2` REJECT, `3` REDIRECT, `4` CHAN_REDIR, `5` RATE_LIMIT, `6` CONTINUE.
+
+> ⚠️ **Ojo con D2**: al pasar `propId` a 8 bits bajos, los IDs de scope actor (`0x0100–0x0103`) y channel (`0x0200–0x0203`) **ya no caben** en 8 bits. Hay que reasignarlos (p. ej. `0x00–0x03` dentro de su scope) o usar `extra`. **PENDIENTE.**
+
+**Doc a unificar (H1)** — estado actual, 4 versiones:
+
+| Fuente | R1 | R2 | R3 | R4 |
+|---|---|---|---|---|
+| Real (impl) | vaddr | offset | options | length |
+| `README.md` (ejemplo) | scope | propId | buffer | — |
+| `generateFirmware` (comentario) | scope | prop_id | out_buf | len |
+| Programas de usuario | buffer | length | — | — |
+
+### Preguntas abiertas
+
+1. **D11 — `R4`**: ¿se queda como "resultado escalar" (hoy sólo `PERMISSION_CHECK`) o se elimina del spec base y cada servicio define el suyo?
+2. **Prop IDs** tras D2: reasignar actor/channel a 8 bits, o mover el scope a `extra`.
+3. **Switch bare-metal (D6)**: el compilador es Node/TS, **no está wireado a Gradle**. Hay que (a) crear la tarea Gradle que invoque el CLI y (b) exponer `--firmware`/`--origin`. Definir el nombre del property (propuesta: `-Piflow.baremetal=true`).
+
+### Lista de cambios (archivos a tocar)
+
+| Archivo | Cambio | Estado |
+|---|---|---|
+| `tools/iflow-compiler/src/assembler.ts` | validador `imm16`/`label` | ✅ hecho (`ae9f635`) |
+| `tools/iflow-compiler/test/validation/*` | fixture `valid-symbolic-immediate` | ✅ hecho (`ae9f635`) |
+| `src/iflow/.../execution/VmInterpreter.java` | `executeHost`: mapeo a `R0=op,R1=options,R2=base,R3=length,R4=result`; `RET` 1 byte | ⏳ |
+| `src/iflow/.../isa/Opcode.java` | `instructionSize(RET)` 2→1 | ⏳ |
+| `src/iflow/.../isa/OpcodeTest.java` | assert de tamaño `RET` | ⏳ |
+| `src/iflow/.../service/HostServiceRegistry.java` | quitar `argOffset`; `propId = options & 0x00FF`; exponer `status`; `length` in/out | ⏳ |
+| `src/iflow/.../service/ServiceResult.java` | plegar `bytesTransferred` en `length`; exponer `status` numérico | ⏳ |
+| `src/iflow/.../service/HostServiceRegistryTest.java` | reescribir a la v2 | ⏳ |
+| `src/iflow/.../execution/VmInterpreterTest.java` | `outOfFuelThrows` (ya arreglado el fuel) + HOST | ⏳ |
+| `tools/iflow-compiler/src/types.ts` | `INSTRUCTION_SIZES[RET]` 2→1; constantes como valores | ⏳ |
+| `tools/iflow-compiler/src/assembler.ts` | `RET` spec `min:0`; `emitConst` → valor; default origin 0x1000 si firmware ON | ⏳ |
+| `tools/iflow-compiler/test/firmware.flowasm` | `RET` pelado + ABI v2 + `.entry` | ⏳ |
+| `tools/iflow-compiler/README.md` | ABI v2 (fuente única) | ⏳ |
+| `build.gradle` / `settings.gradle` | tarea que invoca el CLI + `-Piflow.baremetal` | ⏳ |
+
+### Bitácora de progreso
+
+| Fecha | Commit | Qué |
+|---|---|---|
+| 2026-10-16 | `47e0864` | `ExecutionContext.fuelBudget()` re-arma `fuelRemaining` (+ test) |
+| 2026-10-16 | `ae9f635` | compilador: acepta `label` como inmediato de `LI` (+ fixture) |
+| 2026-10-16 | — | PLAN v2 del ABI `HOST` documentado (esta sección). Sin código aplicado aún |
