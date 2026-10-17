@@ -1223,13 +1223,16 @@ aplican directamente. Decisiones:
   router nunca debe bloquearse. `acquire()` reutiliza o crea (nunca bloquea);
   `release()` decide bajo lock si retiene o descarta (`available.size()` deja de ser un
   check-then-act). `created` refleja contextos vivos y no se desincroniza.
-- **AUD-018 subsistema muerto — ✅ decisión: eliminar.** `MemoryManager`,
-  `MemoryRegion`, `RegionPerm`, `RegionType` y `VmDmaController` no tienen uso en
-  producción (solo `VmDmaControllerTest`); el modelo vivo es `SoftMMU`/`PageTable`. Se
-  borran junto con su test y el import muerto en `ModificationJournal`. `copyBlock`/
-  `moveBlock`/`validateRange` (únicos sin equivalente en `SoftMMU`) desaparecen con él;
-  la cobertura única que aportaba (`readBlock`/`writeBlock` ya está en `SoftMMUTest`)
-  no se pierde.
+- **AUD-018 subsistema "muerto" — ⚠️ decisión revisada: `VmDmaController` restaurado.**
+  La remediación (`82668e9`) borró `MemoryManager`, `MemoryRegion`, `RegionPerm`,
+  `RegionType` y `VmDmaController` por considerarlos «solo usados por tests».
+  **Corrección:** la inferencia era errónea para `VmDmaController`; **sí se usa** por el
+  emulador para mapear/transferir memoria según la configuración del host y como fachada
+  de transferencia sobre `SoftMMU`. Se restaura la clase + `VmDmaControllerTest`
+  (`writeBlock`/`readBlock`/`copyBlock`/`moveBlock`/`validateRange` vuelven a estar
+  disponibles). `SoftMMU`/`PageTable` sigue siendo el modelo de paginación vivo. La
+  eliminación del resto de clases de regiones (`MemoryManager`/`MemoryRegion`/
+  `RegionPerm`/`RegionType`) queda **pendiente de revisión**.
 - **AUD-012 READMEs — ✅ decisión: corregir a la realidad.** Recuento de tests
   (264), quitar `VmDmaController`/regiones, `minAbiVersion=2`, hash real (no
   «placeholder») y el `-d` no-op. La afirmación «el resto responde `status=5`» sí
@@ -1298,5 +1301,8 @@ integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
 | 2026-10-17 | `afc9a77` | AUD-013: `dist/` ignorado, entry point real (`src/index.ts`) y `npm test` = validación |
 
 **Cierre:** todos los `IFLOW-AUD-001…018` del informe quedan resueltos (lote 1 + lote 2
-+ lote 3). `AUDITORIA.md` es el informe histórico del commit auditado `5ade855` y no se
-reescribe; el seguimiento vive en este PLAN.
++ lote 3), **salvo la rectificación de AUD-018**: `VmDmaController` se restaura porque
+está en uso real (ver arriba). `AUDITORIA.md` es el informe histórico del commit auditado
+`5ade855` y no se reescribe; el seguimiento vive en este PLAN.
+
+| 2026-10-17 | `82668e9` | AUD-018 — ⚠️ **revisado en un commit posterior**: `VmDmaController` restaurado desde `82668e9^` |
