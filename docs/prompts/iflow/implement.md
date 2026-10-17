@@ -152,7 +152,7 @@ La JVM y las APIs del host permanecen fuera de la memoria de la VM. El límite d
 | -------------------- | --------------------------------------------- | --------------------------------------------------------- |
 | Decoder/interpreter  | Ejecutar instrucciones                        | Sí, componente central                                    |
 | RegisterFile         | Estado visible de CPU                         | Sí, puede ser una estructura de datos                     |
-| MemoryManager        | Regiones, permisos y límites                  | Sí                                                        |
+| SoftMMU / PageTable | Memoria paginada, permisos y límites         | Sí (`SoftMMU` sobre `PageTable`)                          |
 | ExecutionContext     | Registros, pila, fuel, estado de la ejecución | Sí                                                        |
 | ProgramImage         | Bytecode y constantes inmutables              | Sí                                                        |
 | HostServiceRegistry  | Resolver servicios y validar argumentos       | Sí                                                        |

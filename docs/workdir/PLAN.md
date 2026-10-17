@@ -1230,9 +1230,11 @@ aplican directamente. Decisiones:
   `moveBlock`/`validateRange` (únicos sin equivalente en `SoftMMU`) desaparecen con él;
   la cobertura única que aportaba (`readBlock`/`writeBlock` ya está en `SoftMMUTest`)
   no se pierde.
-- **AUD-012 READMEs — ✅ decisión: corregir a la realidad.** Recuento de tests, quitar
-  `VmDmaController`/regiones, corregir «status=5 UNSUPPORTED» (es excepción→REJECT, ver
-  AUD-006) y el `-d` no-op.
+- **AUD-012 READMEs — ✅ decisión: corregir a la realidad.** Recuento de tests
+  (264), quitar `VmDmaController`/regiones, `minAbiVersion=2`, hash real (no
+  «placeholder») y el `-d` no-op. La afirmación «el resto responde `status=5`» sí
+  es cierta tras AUD-006 (servicio desconocido → `unsupported()`, no excepción),
+  así que se conserva.
 - **AUD-013 artefactos `dist` — ✅ decisión: `dist` ignorado + entrypoint real.**
   `.gitignore` ignora `dist/`; se retira del índice (`git rm --cached`); se borra el ESM
   huérfano. `src/index.ts` (barrel) hace que `tsc` emita `dist/index.js`/`.d.ts` que

@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (250 tests)  
+> **Estado**: ✅ Implementada y probada (264 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -16,7 +16,6 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 |------------|-----------------|
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
 | `VmInterpreter` | Fetch/decode/execute loop, ISA v2, fuel budget, SoftMMU integration |
-| `VmDmaController` | Transferencias de memoria validadas (read/write/copy/move con permisos) |
 | `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
 | `VmInterpreter` | Fetch/decode/execute loop, fuel budget enforcement |
@@ -82,7 +81,7 @@ Convención de registros (estilo syscall):
 | `3` | INVALID_ARGUMENT | | `8` | PARTIAL |
 | `4` | BUFFER_TOO_SMALL (`R3` = bytes requeridos) | | | |
 
-Servicios estándar (13 IDs; sólo los 7 marcados ✅ están registrados hoy — el resto responde `status=5` UNSUPPORTED):
+Servicios estándar (12 IDs; sólo los 7 marcados ✅ están registrados hoy — el resto responde `status=5` UNSUPPORTED):
 
 | ID | Servicio | Capability | |
 |----|----------|------------|---|
@@ -115,7 +114,7 @@ Servicios estándar (13 IDs; sólo los 7 marcados ✅ están registrados hoy —
 Header (16 bytes):
   u8  formatVersion     = 1
   u8  isaVersion        = 2
-  u8  minAbiVersion     = 1
+  u8  minAbiVersion     = 2
   u8  minFirmwareVersion= 1
   u16 entryPoint        (little-endian)
   u16 codeLength
@@ -126,8 +125,11 @@ Header (16 bytes):
 Code section: codeLength bytes
 Constants: constantsLength × u16
 Capabilities: null-terminated strings
-Hash: 32 bytes (SHA-256 placeholder)
+Hash: 32 bytes (SHA-256 of everything before the hash field)
 ```
+
+El parser exige que `minAbiVersion` **coincida exactamente** con el ABI del runtime
+(hoy v2): un `.flow` construido para otra convención de llamada se rechaza al cargar.
 
 ### Compilación
 
@@ -136,7 +138,7 @@ Los programas se escriben en `.flowasm` y se compilan a `.flow` binario usando *
 ```bash
 cd tools/iflow-compiler
 npm run build
-node dist/cli.js programa.flowasm -o programa.flow -d
+node dist/cli.js programa.flowasm -o programa.flow
 ```
 
 Ver [`tools/iflow-compiler/README.md`](../../tools/iflow-compiler/README.md) para detalles del ensamblador.
@@ -158,16 +160,15 @@ RouteOutcome outcome = engine.route(message, recipient);
 
 | Test | Cobertura |
 |------|-----------|
-| `VmInterpreterTest` | Todas las instrucciones ISA (19 tests) |
-| `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
-| `SoftMMUTest` | Traducción, permisos, fetch, bloqueos |
-| `VmInterpreterTest` | Aritmética, memoria, saltos, CALL/RET |
-| `VmPolicyEngineTest` | Integración Router + VM (11 tests) |
+| `VmInterpreterTest` | Todas las instrucciones ISA (data transfer, aritmética, lógica, shifts, saltos, CALL/RET, memoria indirecta) |
+| `SoftMMUTest` | Traducción, permisos, fetch, bloques, aislamiento de copias |
+| `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
+| `VmPolicyEngineTest` | Integración Router + VM |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 250 tests passing**
+**Total: 264 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -216,13 +217,14 @@ src/iflow/
 │       │   ├── SoftMMU.java
 │       │   ├── PageTable.java
 │       │   ├── PageEntry.java
-│       │   └── VmDmaController.java
+│       │   └── VmMemoryMap.java
 │       ├── service/
+│       │   ├── HostContext.java
 │       │   ├── HostServiceRegistry.java
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 250 tests
+├── src/test/java/...                  # 264 tests
 └── build.gradle
 ```
 

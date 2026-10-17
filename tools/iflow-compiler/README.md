@@ -38,8 +38,8 @@ node dist/cli.js programa.flowasm \
   -o programa.flow \
   -O 0x0000 \        # origen (con firmware, sube a 0x1000)
   -e main \          # entry point label
-  -d \               # debug info en binario
-  -l \               # genera .lst listing
+  -l \               # genera .lst (tabla de símbolos + listado)
+  -d \               # activa debugInfo en el objeto; el .flow no lleva sección de debug
   -v                 # verbose
 
 # Programa bare-metal (sin ROM de firmware)
@@ -52,8 +52,8 @@ node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 **Ejemplo**:
 
 ```bash
-# Compilar el programa de prueba
-node dist/cli.js test/firmware.flowasm -o test/firmware.flow -d -l
+# Compilar el programa de prueba (con listado de símbolos)
+node dist/cli.js test/firmware.flowasm -o test/firmware.flow -l
 # ✓ Assembled test/firmware.flowasm → test/firmware.flow (4648 bytes)
 ```
 
@@ -295,7 +295,9 @@ tools/iflow-compiler/
 │   ├── cli.ts            # CLI entry point (commander)
 │   └── types.ts          # ISA definitions, types
 ├── test/
-│   └── firmware.flowasm  # Comprehensive firmware test
+│   ├── *.flowasm         # Fixtures (firmware, simple, main_only)
+│   ├── *.flow            # Assembled binaries
+│   └── validation/       # run.js + cases.json (CLI golden tests)
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -334,7 +336,7 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow -d
 | 0x10   | N      | code (codeLength bytes) |
 | ...    | 2×N    | constants (u16 LE each) |
 | ...    | var    | capabilities (null-terminated strings) |
-| ...    | 32     | hash (SHA-256 placeholder) |
+| ...    | 32     | hash (SHA-256 of all preceding bytes) |
 
 ---
 
