@@ -610,12 +610,22 @@ La caché se invalida cuando cambia una propiedad afectada. Se descarta al final
 
 La ISA no contiene instrucciones para leer nombres, cambiar canales o consultar permisos. Contiene una instrucción que solicita servicios mediante una ABI genérica.
 
-**Convención de registros `HOST`:**
-- `R0` = service ID (16-bit)
-- `R1` = arg vaddr (dirección virtual del buffer de argumentos)
-- `R2` = arg offset
-- `R3` = options / arg length / decision code
-- Retorno: `R0` = status/resultado primario, `R1` = bytes transferidos, `R3` = resultado auxiliar
+**Convención de registros `HOST` (ABI v2, estilo syscall):**
+
+Entrada:
+- `R0` = `op` (service ID, 16-bit)
+- `R1` = `options` (parámetro del servicio: `(scope << 8) | propId`, decisión, key…)
+- `R2` = `base` (vaddr del buffer de argumentos — dirección **completa**)
+- `R3` = `length` (bytes; entrada: pedidos · salida: transferidos)
+- `R4` reservado para el resultado escalar (extras, si los hubiera, desde `R5`)
+
+Retorno:
+- `R0` = `status` (código numérico, ver §11.2)
+- `R1`, `R2` sin cambios
+- `R3` = bytes transferidos (lecturas: bytes escritos por el emulador; escrituras: bytes consumidos)
+- `R4` = resultado escalar del servicio (p. ej. `0|1` en PERMISSION_CHECK, la decisión en ROUTE_DECISION)
+
+`length` es **bidireccional**. No existe operando `offset`: la base es la dirección completa. Para servicios de propiedad, `options` empaqueta `(scope << 8) | propId`, con `propId` en los 8 bits bajos (namespaceado por `scope`).
 
 El opcode `HOST` (0x60) es de 2 bytes (opcode + padding). El service ID se pasa en R0, no en el bytecode.
 
@@ -623,36 +633,40 @@ El contrato concreto de cada servicio determina el significado de los campos. El
 
 ### Servicios estándar implementados
 
-| Service ID | Nombre | Capability requerida | Descripción |
-|------------|--------|----------------------|-------------|
-| 0x0100 | PROPERTY_READ | `property.read` | Leer propiedad (scope + propId en R1/R2, destino en R1) |
-| 0x0101 | PROPERTY_WRITE | `property.write` | Escribir propiedad (scope + propId en R1/R2, origen en R1) |
-| 0x0102 | PROPERTY_EXISTS | `property.read` | Verificar existencia de propiedad |
-| 0x0200 | PERMISSION_CHECK | `permission.check` | Verificar permiso (bitmask en R1, target en R2) |
-| 0x0201 | PERMISSION_QUERY | `permission.check` | Consultar permisos disponibles |
-| 0x0300 | ROUTE_DECISION | `routing.decide` | Emitir decisión de routing (código en R3) |
-| 0x0301 | ROUTE_REDIRECT | `routing.decide` | Redirección con canal destino |
-| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | Aplicar rate limiting |
-| 0x0500 | STATE_READ | `state.read` | Leer estado persistente (key en R1, default en R2) |
-| 0x0501 | STATE_WRITE | `state.write` | Escribir estado persistente (key en R1, valor en R2) |
-| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | Resolver canal (nombre en R1) |
-| 0x0601 | CHANNEL_POLICY | `channel.resolve` | Consultar política de canal |
+| Service ID | Nombre | Capability requerida | Estado |
+|------------|--------|----------------------|--------|
+| 0x0100 | PROPERTY_READ | `property.read` | registrado |
+| 0x0101 | PROPERTY_WRITE | `property.write` | registrado |
+| 0x0102 | PROPERTY_EXISTS | `property.read` | declarado, no registrado |
+| 0x0200 | PERMISSION_CHECK | `permission.check` | registrado |
+| 0x0201 | PERMISSION_QUERY | `permission.check` | declarado, no registrado |
+| 0x0300 | ROUTE_DECISION | `routing.decide` | registrado |
+| 0x0301 | ROUTE_REDIRECT | `routing.decide` | declarado, no registrado |
+| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | declarado, no registrado |
+| 0x0500 | STATE_READ | `state.read` | registrado |
+| 0x0501 | STATE_WRITE | `state.write` | registrado |
+| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | registrado |
+| 0x0601 | CHANNEL_POLICY | `channel.resolve` | declarado, no registrado |
+
+Un service ID no registrado produce `status = UNSUPPORTED`.
 
 ## 11.2. Estados de servicio
 
 Los códigos de estado son parte de la ABI:
 
-| Estado             | Significado                                 |
-| ------------------ | ------------------------------------------- |
-| `OK`               | Operación completada                        |
-| `NOT_FOUND`        | Propiedad o recurso inexistente             |
-| `DENIED`           | Operación no autorizada                     |
-| `INVALID_ARGUMENT` | Argumentos inválidos                        |
-| `BUFFER_TOO_SMALL` | Capacidad insuficiente                      |
-| `UNSUPPORTED`      | Operación no disponible                     |
-| `CONFLICT`         | Conflicto de versión o de estado            |
-| `HOST_FAILURE`     | Error controlado del host                   |
-| `PARTIAL`          | Resultado parcial permitido por el contrato |
+Los códigos se escriben en `R0` al retornar de `HOST`.
+
+| Código | Estado             | Significado                                 |
+| ------ | ------------------ | ------------------------------------------- |
+| `0`    | `OK`               | Operación completada                        |
+| `1`    | `NOT_FOUND`        | Propiedad o recurso inexistente             |
+| `2`    | `DENIED`           | Operación no autorizada                     |
+| `3`    | `INVALID_ARGUMENT` | Argumentos inválidos                        |
+| `4`    | `BUFFER_TOO_SMALL` | Capacidad insuficiente (`R3` = bytes requeridos) |
+| `5`    | `UNSUPPORTED`      | Operación no disponible                     |
+| `6`    | `CONFLICT`         | Conflicto de versión o de estado            |
+| `7`    | `HOST_FAILURE`     | Error controlado del host                   |
+| `8`    | `PARTIAL`          | Resultado parcial permitido por el contrato |
 
 La distinción entre un estado de error y una excepción de la VM es importante. Una propiedad inexistente puede ser un resultado normal que el programa evalúe. Una dirección inválida es un fallo de ejecución.
 
@@ -663,7 +677,7 @@ El servicio genérico `PROPERTY_READ` recibe:
 - El ámbito del objeto: mensaje, emisor, destinatario, canal u otro objeto autorizado.
 - El identificador de propiedad.
 - El formato solicitado.
-- La región y el offset del buffer de destino.
+- La región y la dirección del buffer de destino.
 - La capacidad disponible.
 
 El runtime devuelve:

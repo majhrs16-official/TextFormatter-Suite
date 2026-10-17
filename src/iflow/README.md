@@ -52,30 +52,54 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 
 **Formato instrucción**: little-endian, opcode 8-bit determina longitud (1-8 bytes)
 
-### Instrucción `HOST` (servicios genéricos)
+### Instrucción `HOST` (servicios genéricos) — ABI v2
 
-Convención de registros:
-- `R0` = service ID (16-bit)
-- `R1` = arg vaddr (dirección virtual buffer)
-- `R2` = arg offset
-- `R3` = options / arg length / decision code
-- Retorno: `R0`=status, `R1`=bytes, `R3`=aux
+Convención de registros (estilo syscall):
 
-Servicios estándar (13):
-| ID | Servicio | Capability |
-|----|----------|------------|
-| 0x0100 | PROPERTY_READ | `property.read` |
-| 0x0101 | PROPERTY_WRITE | `property.write` |
-| 0x0102 | PROPERTY_EXISTS | `property.read` |
-| 0x0200 | PERMISSION_CHECK | `permission.check` |
-| 0x0201 | PERMISSION_QUERY | `permission.check` |
-| 0x0300 | ROUTE_DECISION | `routing.decide` |
-| 0x0301 | ROUTE_REDIRECT | `routing.decide` |
-| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` |
-| 0x0500 | STATE_READ | `state.read` |
-| 0x0501 | STATE_WRITE | `state.write` |
-| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` |
-| 0x0601 | CHANNEL_POLICY | `channel.resolve` |
+**Entrada**
+- `R0` = `op` — service ID (16-bit)
+- `R1` = `options` — parámetro del servicio (`(scope<<8)|propId`, decisión, key…)
+- `R2` = `base` — vaddr del buffer de argumentos (dirección **completa**)
+- `R3` = `length` — bytes (entrada: pedidos · salida: transferidos)
+- `R4` — reservado para el resultado escalar (extras, si los hubiera, desde `R5`)
+
+**Retorno**
+- `R0` = `status` — código numérico (tabla abajo)
+- `R1`, `R2` — sin cambios
+- `R3` = bytes transferidos (lecturas: bytes escritos por el emulador; escrituras: bytes consumidos)
+- `R4` = resultado escalar del servicio (p. ej. `0|1` en PERMISSION_CHECK, la decisión en ROUTE_DECISION)
+
+`length` es **bidireccional** y no existe operando `offset`: la base es la dirección completa.
+
+**Códigos de `status`**
+
+| Valor | Status | | Valor | Status |
+|---|---|---|---|---|
+| `0` | OK | | `5` | UNSUPPORTED |
+| `1` | NOT_FOUND | | `6` | CONFLICT |
+| `2` | DENIED | | `7` | HOST_FAILURE |
+| `3` | INVALID_ARGUMENT | | `8` | PARTIAL |
+| `4` | BUFFER_TOO_SMALL (`R3` = bytes requeridos) | | | |
+
+Servicios estándar (13 IDs; sólo los 7 marcados ✅ están registrados hoy — el resto responde `status=5` UNSUPPORTED):
+
+| ID | Servicio | Capability | |
+|----|----------|------------|---|
+| 0x0100 | PROPERTY_READ | `property.read` | ✅ |
+| 0x0101 | PROPERTY_WRITE | `property.write` | ✅ |
+| 0x0102 | PROPERTY_EXISTS | `property.read` | |
+| 0x0200 | PERMISSION_CHECK | `permission.check` | ✅ |
+| 0x0201 | PERMISSION_QUERY | `permission.check` | |
+| 0x0300 | ROUTE_DECISION | `routing.decide` | ✅ |
+| 0x0301 | ROUTE_REDIRECT | `routing.decide` | |
+| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | |
+| 0x0500 | STATE_READ | `state.read` | ✅ |
+| 0x0501 | STATE_WRITE | `state.write` | ✅ |
+| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | ✅ |
+| 0x0601 | CHANNEL_POLICY | `channel.resolve` | |
+
+`options` para servicios de propiedad: `(scope << 8) | propId`, con `propId` en los **8 bits bajos** (namespaceado por `scope`).
+`scope`: `0x01` MESSAGE · `0x02` EMITTER · `0x03` RECIPIENT · `0x04` CHANNEL · `0x05` SERVER.
 
 ### Fuel Budget
 

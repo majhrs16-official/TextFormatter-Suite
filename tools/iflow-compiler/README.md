@@ -36,19 +36,25 @@ node dist/cli.js programa.flowasm -o programa.flow
 # Con opciones
 node dist/cli.js programa.flowasm \
   -o programa.flow \
-  -O 0x0000 \        # origen (default 0x0000)
+  -O 0x0000 \        # origen (con firmware, sube a 0x1000)
   -e main \          # entry point label
   -d \               # debug info en binario
   -l \               # genera .lst listing
   -v                 # verbose
+
+# Programa bare-metal (sin ROM de firmware)
+node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 ```
+
+> Por defecto se antepone la **ROM de firmware** (0x0000–0x0FFF) y el código de
+> usuario se coloca en 0x1000. `--no-firmware` compila bare-metal (origen 0x0000).
 
 **Ejemplo**:
 
 ```bash
-# Compilar firmware de prueba
+# Compilar el programa de prueba
 node dist/cli.js test/firmware.flowasm -o test/firmware.flow -d -l
-# ✓ Assembled test/firmware.flowasm → test/firmware.flow (512 bytes)
+# ✓ Assembled test/firmware.flowasm → test/firmware.flow (4615 bytes)
 ```
 
 ---
@@ -100,7 +106,7 @@ CALL label
 RET
 
 ; Services
-HOST              ; service ID in R0, args in R1-R3
+HOST              ; ABI v2: R0=op, R1=options, R2=base, R3=length
 
 ; Control
 HALT
@@ -161,24 +167,25 @@ MOV R3, R7     ; byte = 0x37
 
 ```asm
 ; firmware.flowasm
-.origin 0x0000
 .entry main
 
 .const SERVICE_PROPERTY_READ  0x0100
 .const SERVICE_ROUTE_DECISION 0x0300
 .const DECISION_LOG          0x00
+.const DECISION_DROP         0x01
 .const SCOPE_MESSAGE         0x01
 .const PROP_CONTENT          0x0010
 
 .section code
 
 main:
-    ; Read message.content into buffer at 0x6000
+    ; Read message.content into buffer at 0x6000.
+    ; HOST ABI v2: R0=op, R1=options=(scope<<8)|propId, R2=base, R3=length.
     LI R0, SERVICE_PROPERTY_READ
-    LI R1, SCOPE_MESSAGE
-    LI R2, PROP_CONTENT
-    LI R3, 0x6000          ; vaddr for buffer
-    HOST
+    LI R1, 0x0110          ; (SCOPE_MESSAGE << 8) | PROP_CONTENT
+    LI R2, 0x6000          ; base vaddr of the buffer
+    LI R3, 0x0100          ; max bytes to write
+    HOST                   ; R0=status, R3=bytes written
 
     ; Check first byte == 's' (0x73)
     LDB R0, 0x6000
@@ -187,14 +194,14 @@ main:
     JZ drop
 
     ; Continue (LOG)
-    LI R0, 0x0300
-    LI R3, 0x0000
+    LI R0, SERVICE_ROUTE_DECISION
+    LI R1, DECISION_LOG
     HOST
     HALT
 
 drop:
-    LI R0, 0x0300
-    LI R3, 0x0001        ; DECISION_DROP
+    LI R0, SERVICE_ROUTE_DECISION
+    LI R1, DECISION_DROP
     HOST
     HALT
 
