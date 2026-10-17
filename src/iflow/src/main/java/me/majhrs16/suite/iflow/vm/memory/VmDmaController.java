@@ -23,10 +23,18 @@ import java.util.Objects;
  */
 public final class VmDmaController {
 
-    private final SoftMMU softMMU;
+    /** Bus master view: every transfer is a transaction on the data bus (D18). */
+    private final VmBus bus;
 
+    public VmDmaController(VmBus bus) {
+        this.bus = Objects.requireNonNull(bus, "VmBus cannot be null");
+    }
+
+    /**
+     * Compatibility constructor: wires the DMA over a bus wrapping the given MMU.
+     */
     public VmDmaController(SoftMMU softMMU) {
-        this.softMMU = Objects.requireNonNull(softMMU, "SoftMMU cannot be null");
+        this(new VmBus(softMMU));
     }
 
     // ===== Read Operations =====
@@ -38,7 +46,7 @@ public final class VmDmaController {
      * @throws VmException if address unmapped, no read permission, or out of bounds
      */
     public int readByte(int vaddr) {
-        return softMMU.readByte(vaddr);
+        return bus.readByte(vaddr);
     }
 
     /**
@@ -48,7 +56,7 @@ public final class VmDmaController {
      * @throws VmException if address unmapped, no read permission, or out of bounds
      */
     public int readWord(int vaddr) {
-        return softMMU.readWord(vaddr);
+        return bus.readWord(vaddr);
     }
 
     /**
@@ -61,7 +69,7 @@ public final class VmDmaController {
      * @throws VmException if range unmapped, no read permission, or out of bounds
      */
     public void readBlock(int vaddr, byte[] dest, int destOffset, int length) {
-        softMMU.readBlock(vaddr, dest, destOffset, length);
+        bus.readBlock(vaddr, dest, destOffset, length);
     }
 
     /**
@@ -72,7 +80,7 @@ public final class VmDmaController {
      * @throws VmException if range unmapped, no read permission, or out of bounds
      */
     public byte[] getRegion(int vaddr, int length) {
-        return softMMU.getRegion(vaddr, length);
+        return bus.getRegion(vaddr, length);
     }
 
     // ===== Write Operations =====
@@ -84,7 +92,7 @@ public final class VmDmaController {
      * @throws VmException if address unmapped, no write permission, or out of bounds
      */
     public void writeByte(int vaddr, int value) {
-        softMMU.writeByte(vaddr, value);
+        bus.writeByte(vaddr, value);
     }
 
     /**
@@ -95,7 +103,7 @@ public final class VmDmaController {
      * @throws VmException if address unmapped, no write permission, or out of bounds
      */
     public void writeWord(int vaddr, int value) {
-        softMMU.writeWord(vaddr, value);
+        bus.writeWord(vaddr, value);
     }
 
     /**
@@ -108,7 +116,7 @@ public final class VmDmaController {
      * @throws VmException if range unmapped, no write permission, or out of bounds
      */
     public void writeBlock(int vaddr, byte[] src, int srcOffset, int length) {
-        softMMU.writeBlock(vaddr, src, srcOffset, length);
+        bus.writeBlock(vaddr, src, srcOffset, length);
     }
 
     // ===== Block Transfer Operations =====
@@ -133,10 +141,10 @@ public final class VmDmaController {
         // Validate destination range (write permission)
         validateRange(dstVaddr, length, PageEntry.PERM_WRITE, "destination");
 
-        // Use SoftMMU block copy (handles cross-page)
+        // Use bus block copy (handles cross-page)
         byte[] buffer = new byte[length];
-        softMMU.readBlock(srcVaddr, buffer, 0, length);
-        softMMU.writeBlock(dstVaddr, buffer, 0, length);
+        bus.readBlock(srcVaddr, buffer, 0, length);
+        bus.writeBlock(dstVaddr, buffer, 0, length);
     }
 
     /**
@@ -161,8 +169,8 @@ public final class VmDmaController {
 
         // Use temporary buffer for overlapping moves (memmove semantics)
         byte[] buffer = new byte[length];
-        softMMU.readBlock(srcVaddr, buffer, 0, length);
-        softMMU.writeBlock(dstVaddr, buffer, 0, length);
+        bus.readBlock(srcVaddr, buffer, 0, length);
+        bus.writeBlock(dstVaddr, buffer, 0, length);
     }
 
     // ===== Validation Helpers =====
@@ -195,7 +203,7 @@ public final class VmDmaController {
         int endPage = (endAddr - 1) >> PageTable.PAGE_SHIFT;
         
         for (int page = startPage; page <= endPage; page++) {
-            PageEntry entry = softMMU.getPageTable().getEntryByIndex(page);
+            PageEntry entry = bus.pageTable().getEntryByIndex(page);
             if (!entry.isValid()) {
                 throw new VmException(VmException.Code.MEMORY_FAULT,
                     rangeName + " page not mapped: page " + page, 0);
@@ -218,14 +226,14 @@ public final class VmDmaController {
     // ===== Utility =====
 
     /**
-     * Gets the underlying SoftMMU for advanced operations.
+     * Gets the data bus this DMA is a master of.
      */
-    public SoftMMU getSoftMMU() {
-        return softMMU;
+    public VmBus getBus() {
+        return bus;
     }
 
     @Override
     public String toString() {
-        return "VmDmaController[softMMU=" + softMMU + "]";
+        return "VmDmaController[bus=" + bus + "]";
     }
 }

@@ -7,6 +7,7 @@ import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 
@@ -17,8 +18,9 @@ import java.util.function.IntBinaryOperator;
  * VM Interpreter: fetch / decode / execute loop.
  * <p>
  * Executes a {@link ProgramImage} within an {@link ExecutionContext}.
- * Implements the ISA v1 instruction set.
- * Uses flat 64KB address space with SoftMMU (4KB paging).
+ * Implements the ISA v2 instruction set.
+ * The CPU is a bus master: every data transaction (load/store, CALL/RET
+ * stack traffic) travels on the {@link VmBus} over the flat 64KB SoftMMU.
  * </p>
  */
 public final class VmInterpreter {
@@ -26,15 +28,23 @@ public final class VmInterpreter {
     private static final int MAX_INSTRUCTION_COST = 1000; // Safety limit
 
     private final ProgramImage program;
-    private final SoftMMU softMMU;
+    /** Bus master view: the CPU issues every data transaction on the bus (D18). */
+    private final VmBus bus;
     private final HostServiceRegistry serviceRegistry;
     private final byte[] codeCache;
 
-    public VmInterpreter(ProgramImage program, SoftMMU softMMU, HostServiceRegistry serviceRegistry) {
+    public VmInterpreter(ProgramImage program, VmBus bus, HostServiceRegistry serviceRegistry) {
         this.program = Objects.requireNonNull(program);
-        this.softMMU = Objects.requireNonNull(softMMU);
+        this.bus = Objects.requireNonNull(bus);
         this.serviceRegistry = Objects.requireNonNull(serviceRegistry);
         this.codeCache = program.code(); // Cache defensive copy once
+    }
+
+    /**
+     * Compatibility constructor: wires the CPU over a bus wrapping the given MMU.
+     */
+    public VmInterpreter(ProgramImage program, SoftMMU softMMU, HostServiceRegistry serviceRegistry) {
+        this(program, new VmBus(softMMU), serviceRegistry);
     }
 
     /**
@@ -121,7 +131,6 @@ public final class VmInterpreter {
 
     private boolean executeInstruction(ExecutionContext ctx, int opcode, int ip) {
         RegisterFile regs = ctx.registers();
-        SoftMMU mmu = ctx.softMMU();
 
         switch (opcode) {
             // ===== Data transfer =====
@@ -153,7 +162,7 @@ public final class VmInterpreter {
                 int rd = codeCache[ip + 1] & 0xFF;
                 int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
                 checkGPR(rd, ip);
-                int val = mmu.readByte(virtualAddr);
+                int val = bus.readByte(virtualAddr);
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
@@ -162,7 +171,7 @@ public final class VmInterpreter {
                 int rd = codeCache[ip + 1] & 0xFF;
                 int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
                 checkGPR(rd, ip);
-                int val = mmu.readWord(virtualAddr);
+                int val = bus.readWord(virtualAddr);
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
@@ -171,14 +180,14 @@ public final class VmInterpreter {
                 int rs = codeCache[ip + 1] & 0xFF;
                 int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
                 checkGPR(rs, ip);
-                mmu.writeByte(virtualAddr, regs.get(rs));
+                bus.writeByte(virtualAddr, regs.get(rs));
                 return false;
             }
             case Opcode.STW -> {
                 int rs = codeCache[ip + 1] & 0xFF;
                 int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
                 checkGPR(rs, ip);
-                mmu.writeWord(virtualAddr, regs.get(rs));
+                bus.writeWord(virtualAddr, regs.get(rs));
                 return false;
             }
 
@@ -189,7 +198,7 @@ public final class VmInterpreter {
                 int rs = packed & 0x0F;
                 checkGPR(rd, ip);
                 checkGPR(rs, ip);
-                int val = mmu.readByte(regs.get(rs));
+                int val = bus.readByte(regs.get(rs));
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
@@ -200,7 +209,7 @@ public final class VmInterpreter {
                 int rs = packed & 0x0F;
                 checkGPR(rd, ip);
                 checkGPR(rs, ip);
-                int val = mmu.readWord(regs.get(rs));
+                int val = bus.readWord(regs.get(rs));
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
@@ -211,7 +220,7 @@ public final class VmInterpreter {
                 int ra = packed & 0x0F;
                 checkGPR(rv, ip);
                 checkGPR(ra, ip);
-                mmu.writeByte(regs.get(ra), regs.get(rv));
+                bus.writeByte(regs.get(ra), regs.get(rv));
                 return false;
             }
             case Opcode.STWI -> {
@@ -220,7 +229,7 @@ public final class VmInterpreter {
                 int ra = packed & 0x0F;
                 checkGPR(rv, ip);
                 checkGPR(ra, ip);
-                mmu.writeWord(regs.get(ra), regs.get(rv));
+                bus.writeWord(regs.get(ra), regs.get(rv));
                 return false;
             }
             case Opcode.COPY -> {
@@ -467,7 +476,7 @@ public final class VmInterpreter {
             throw new VmException(VmException.Code.STACK_LIMIT, "Stack overflow on CALL", ip);
         }
         sp -= 2;
-        softMMU.writeWord(sp, ip + 3); // Return address
+        bus.writeWord(sp, ip + 3); // Return address
         regs.set(RegisterFile.SP, sp);
 
         // Establish the new frame: FP is the base of the callee's frame.
@@ -488,7 +497,7 @@ public final class VmInterpreter {
         if (sp + 2 > SoftMMU.ADDRESS_SPACE_SIZE) {
             throw new VmException(VmException.Code.STACK_LIMIT, "Stack underflow on RET", ip);
         }
-        int retAddr = softMMU.readWord(sp);
+        int retAddr = bus.readWord(sp);
         sp += 2;
         regs.set(RegisterFile.SP, sp);
         regs.set(RegisterFile.FP, restoredFramePointer);
@@ -581,8 +590,8 @@ public final class VmInterpreter {
                     LoggerUtils.Module.debug("iflow", "MEM %s len=0 (no-op) src=0x%04X dst=0x%04X", name, src, dst);
                     return;
                 }
-                int sumSrc = blockChecksum(ctx, src, len);
-                int sumDst = blockChecksum(ctx, dst, len);
+                int sumSrc = blockChecksum(src, len);
+                int sumDst = blockChecksum(dst, len);
                 LoggerUtils.Module.debug("iflow",
                     "MEM %s [0x%04X..0x%04X] -> [0x%04X..0x%04X] len=%d sumSrc=0x%04X sumDst=0x%04X",
                     name, src, src + len - 1, dst, dst + len - 1, len, sumSrc, sumDst);
@@ -612,11 +621,10 @@ public final class VmInterpreter {
     }
 
     /** 16-bit additive checksum over {@code len} bytes at {@code addr}. */
-    private static int blockChecksum(ExecutionContext ctx, int addr, int len) {
-        SoftMMU mmu = ctx.softMMU();
+    private int blockChecksum(int addr, int len) {
         int sum = 0;
         for (int i = 0; i < len; i++) {
-            sum = (sum + (mmu.readByte(addr + i) & 0xFF)) & 0xFFFF;
+            sum = (sum + (bus.readByte(addr + i) & 0xFF)) & 0xFFFF;
         }
         return sum;
     }

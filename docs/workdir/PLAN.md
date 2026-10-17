@@ -1320,9 +1320,54 @@ comprueba que la transferencia del servicio aterriza en la MMU del DMA y no en l
 contexto (guarda contra el bypass); test de que `dma()` envuelve la MMU del contexto y de
 que `softMMU(...)` la reinicia.
 
-**Pendiente (fuera de este cambio, para el mapeo a HDL):** `IFLOW-AUD-020` (buffer de
-salida `0x8000` mapeado pero sin consumir), bus de datos explícito, IRQ y modelo de
-privilegios/rings.
+**Pendiente (fuera de este cambio, para el mapeo a HDL):** bus de datos explícito (D18, abajo),
+IRQ y modelo de privilegios/rings.
+
+### D18 — Bus de datos explícito (`VmBus`)
+
+**Motivo:** la auditoría señaló que iflow no tiene una interconexión explícita: la CPU y el
+DMA hablan con `SoftMMU` directamente, sin modelar el «cable» entre componentes, lo que
+impide el mapeo 1:1 a HDL. La spec (design.md §4) advierte contra abstracciones
+innecesarias, así que el bus es deliberadamente delgado y con utilidad real (punto único
+de transacción, observabilidad y costura de test).
+
+**Decisión:** `VmBus` (clase, `vm.memory`) es el bus de datos del SoC y la **única** vía de
+transacción de memoria para los maestros:
+- **Maestros:** CPU (`VmInterpreter`) y `VmDmaController`; ambos reciben un `VmBus`.
+- **Esclavo:** `SoftMMU` (traducción + permisos + RAM) es el almacenamiento; `VmBus` lo
+  envuelve y expone las transacciones (`fetch*`, `read*`, `write*`, `getRegion`).
+- `ExecutionContext` deriva `bus()` del `softMMU` y `dma()` del `bus()`; `softMMU(...)`
+  reinicia ambos.
+- `VmPolicyEngine` carga código/constantes por el bus y construye el intérprete sobre
+  `ctx.bus()`.
+- Compatibilidad: constructores secundarios `VmDmaController(SoftMMU)` y
+  `VmInterpreter(..., SoftMMU, ...)` para no romper los call sites existentes.
+
+**No cambia** el ABI, el mapa de memoria ni la semántica.
+
+**Verificación:** tests de que `bus()`/`dma()` envuelven el MMU de la ejecución, que
+`softMMU(...)` los reinicia, y que CPU/DMA transaccionan por el bus inyectado.
+
+### D19 — Buffer de salida (IFLOW-AUD-020): aclarado, sin auto-lectura
+
+**Hallazgo del informe:** proponía leer `0x8000` en HALT y volcarlo a `SET_TEXT` (opción a)
+o dejar de mapearlo (opción b).
+
+**Evidencia (HECHO):** implement.md §10.1/§10.3 define la E/S **por servicios con la
+dirección indicada por el programa** (`R2`=base, `R3`=longitud); `0x7000`/`0x8000` son
+regiones de E/S genéricas, **no puertos con lectura automática**. Además el propio host
+materializa resultados en `R2` (`doPropertyRead`/`doStateRead`/`doChannelResolve`), a
+menudo `0x8000`: auto-leer la página en HALT convertiría un resultado intermedio (p. ej.
+un `PROPERTY_READ` en `0x8000`) en el texto del mensaje → **regresión ambigua**.
+
+**Decisión:** **no** auto-consumir `0x8000`. La salida canónica sigue siendo el journal; el
+buffer de salida es la región donde el programa materializa/publica E/S apuntando `R2`/`R3`
+a ella (p. ej. `PROPERTY_WRITE` sobre `CONTENT`), y ahora esas transferencias pasan por el
+**DMA** (D17) y el **bus** (D18).
+
+**Verificación:** test de servicio que escribe texto en `0x8000` y lo publica vía
+`PROPERTY_WRITE` a través del DMA: el valor llega al host (y, en el engine, al
+`SET_TEXT` del journal).
 
 ### Bitácora de remediación
 

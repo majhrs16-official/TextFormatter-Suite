@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
@@ -364,7 +365,7 @@ class ExecutionContextTest {
     void dmaWrapsTheExecutionSoftMMU() {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu);
-        assertSame(mmu, ctx.dma().getSoftMMU());
+        assertSame(mmu, ctx.dma().getBus().memory());
         assertSame(ctx.dma(), ctx.dma(), "the DMA must be cached per execution");
     }
 
@@ -375,13 +376,53 @@ class ExecutionContextTest {
         SoftMMU other = createMappedMMU();
         ctx.softMMU(other);
         assertNotSame(before, ctx.dma());
-        assertSame(other, ctx.dma().getSoftMMU());
+        assertSame(other, ctx.dma().getBus().memory());
     }
 
     @Test
     void dmaWithoutSoftMMUThrows() {
         ExecutionContext ctx = new ExecutionContext();
         assertThrows(IllegalStateException.class, ctx::dma);
+    }
+
+    // ===== Bus (D18) =====
+
+    @Test
+    void busWrapsTheExecutionSoftMMU() {
+        SoftMMU mmu = createMappedMMU();
+        ExecutionContext ctx = createContext(mmu);
+        assertSame(mmu, ctx.bus().memory());
+        assertSame(ctx.bus(), ctx.bus(), "the bus must be cached per execution");
+        assertSame(ctx.bus(), ctx.dma().getBus(), "the DMA must master the execution bus");
+    }
+
+    @Test
+    void changingSoftMMUReDerivesTheBus() {
+        ExecutionContext ctx = createContext(createMappedMMU());
+        VmBus before = ctx.bus();
+        SoftMMU other = createMappedMMU();
+        ctx.softMMU(other);
+        assertNotSame(before, ctx.bus());
+        assertSame(other, ctx.bus().memory());
+        assertSame(ctx.bus(), ctx.dma().getBus());
+    }
+
+    @Test
+    void busWithoutSoftMMUThrows() {
+        ExecutionContext ctx = new ExecutionContext();
+        assertThrows(IllegalStateException.class, ctx::bus);
+    }
+
+    @Test
+    void injectedBusIsTheDmaMaster() {
+        // D18 seam: an explicitly wired bus must be the one the DMA transacts on.
+        SoftMMU contextMmu = createMappedMMU();
+        SoftMMU busMmu = createMappedMMU();
+        ExecutionContext ctx = createContext(contextMmu);
+        VmBus bus = new VmBus(busMmu);
+        ctx.bus(bus);
+        assertSame(bus, ctx.bus());
+        assertSame(bus, ctx.dma().getBus());
     }
 
     @Test

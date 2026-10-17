@@ -6,6 +6,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import org.junit.jupiter.api.Test;
@@ -532,5 +533,30 @@ class VmInterpreterTest {
             .execute(ctx);
 
         assertEquals(0x78, ctx.registers().get(RegisterFile.R0)); // 'x'
+    }
+
+    @Test
+    void cpuTransactionsGoThroughItsBus() {
+        // D18: the CPU is a bus master. Wire the interpreter to a bus over one MMU
+        // while the context uses another; the store must land on the wired bus.
+        SoftMMU cpuMmu = createSoftMMU();
+        SoftMMU ctxMmu = createSoftMMU();
+        HostServiceRegistry hsr = new HostServiceRegistry();
+
+        byte[] code = {
+            Opcode.LI, 0, 0x00, 0x2A,   // R0 = 42
+            Opcode.STB, 0, 0x30, 0x00,  // byte[0x3000] = R0
+            Opcode.HALT
+        };
+        ProgramImage prog = ProgramImage.builder().entryPoint(0).code(code).build();
+        VmInterpreter cpu = new VmInterpreter(prog, new VmBus(cpuMmu), hsr);
+        ExecutionContext ctx = createContext(ctxMmu, hsr);
+
+        cpu.execute(ctx);
+
+        assertEquals(42, cpuMmu.readByte(VmMemoryMap.DATA_BASE),
+            "the CPU store must travel on its wired bus");
+        assertEquals(0, ctxMmu.readByte(VmMemoryMap.DATA_BASE),
+            "the store must not reach the context MMU directly");
     }
 }

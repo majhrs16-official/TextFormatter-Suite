@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (293 tests)  
+> **Estado**: ✅ Implementada y probada (299 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -15,11 +15,11 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | Componente | Responsabilidad |
 |------------|-----------------|
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
-| `VmInterpreter` | Fetch/decode/execute loop, ISA v2, fuel budget, SoftMMU integration |
+| `VmInterpreter` | CPU: fetch/decode/execute loop, ISA v2, fuel budget; maestro del bus |
 | `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
-| `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre `SoftMMU`) |
+| `VmBus` | Bus de datos explícito: única vía de transacción de CPU y DMA hacia `SoftMMU` |
+| `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus) |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
-| `VmInterpreter` | Fetch/decode/execute loop, fuel budget enforcement |
 | `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
 | `VmException` | Excepciones tipadas con IP capture (INVALID_OPCODE, MEMORY_FAULT, OUT_OF_FUEL, etc.) |
 
@@ -164,13 +164,14 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmInterpreterTest` | Todas las instrucciones ISA (data transfer, aritmética, lógica, shifts, saltos, CALL/RET, memoria indirecta) |
 | `SoftMMUTest` | Traducción, permisos, fetch, bloques, aislamiento de copias |
 | `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
+| `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
 | `VmPolicyEngineTest` | Integración Router + VM |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 293 tests passing**
+**Total: 299 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -220,6 +221,7 @@ src/iflow/
 │       │   ├── PageTable.java
 │       │   ├── PageEntry.java
 │       │   ├── VmMemoryMap.java
+│       │   ├── VmBus.java
 │       │   └── VmDmaController.java
 │       ├── service/
 │       │   ├── HostContext.java
@@ -227,7 +229,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 293 tests
+├── src/test/java/...                  # 299 tests
 └── build.gradle
 ```
 

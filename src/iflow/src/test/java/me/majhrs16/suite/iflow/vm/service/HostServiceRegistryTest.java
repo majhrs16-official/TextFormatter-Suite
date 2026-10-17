@@ -322,4 +322,51 @@ class HostServiceRegistryTest {
         assertEquals(0, contextMmu.readByte(ctx.outputBufferVAddr()),
             "the transfer must not touch the context MMU directly");
     }
+
+    @Test
+    void propertyWriteConsumesTheOutputBufferThroughTheDma() {
+        // AUD-020 (D19): 0x8000 is a real output region. The guest writes its
+        // transformed text there and publishes it by pointing R2/R3 at it; the
+        // host consumes it through the DMA (never through ctx.softMMU() directly),
+        // which is why the buffer must not be auto-read on HALT.
+        java.util.List<String> written = new java.util.ArrayList<>();
+        HostContext hc = new HostContext() {
+            @Override public void writeProperty(int scope, int propId, String value) {
+                written.add(scope + ":" + propId + "=" + value);
+            }
+        };
+
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        SoftMMU contextMmu = new SoftMMU();
+        SoftMMU dmaMmu = new SoftMMU();
+        for (SoftMMU mmu : new SoftMMU[]{contextMmu, dmaMmu}) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+                VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+                VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        ExecutionContext ctx = new ExecutionContext()
+            .executionId("output")
+            .fuelBudget(10000)
+            .softMMU(contextMmu)
+            .dmaController(new VmDmaController(dmaMmu))
+            .serviceRegistry(hsr)
+            .allowedCapabilities(new String[]{"property.write"});
+        ctx.initialize();
+        ctx.hostContext(hc);
+
+        // Simulate the guest writing the transformed text into the output buffer.
+        byte[] text = "transformado".getBytes(StandardCharsets.UTF_8);
+        dmaMmu.writeBlock(ctx.outputBufferVAddr(), text, 0, text.length);
+
+        int options = (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_CONTENT;
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_WRITE,
+            ctx.outputBufferVAddr(), text.length, options);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        assertEquals(text.length, result.bytesTransferred());
+        assertEquals(java.util.List.of(HostServiceRegistry.SCOPE_MESSAGE + ":" +
+                HostServiceRegistry.PROP_CONTENT + "=transformado"), written,
+            "the output buffer must be consumed through the DMA bus path");
+    }
 }

@@ -21,6 +21,7 @@ import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
@@ -186,7 +187,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             prepareInput(ctx, message, emitter, recipient, path);
 
             // Execute VM
-            VmInterpreter interpreter = new VmInterpreter(loaded.program, ctx.softMMU(), serviceRegistry);
+            VmInterpreter interpreter = new VmInterpreter(loaded.program, ctx.bus(), serviceRegistry);
             interpreter.execute(ctx);
 
             // Validate and produce outcome
@@ -213,6 +214,9 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      */
     private void setupProgramMappings(ProgramImage program, SoftMMU mmu) {
         PageTable pageTable = mmu.getPageTable();
+        // Boot-time loads are bus transactions too (D18): the host writes the
+        // image through the same interconnection the CPU and DMA use.
+        VmBus bus = new VmBus(mmu);
 
         // Code region: up to CODE_PAGES pages (firmware ROM page 0 + user code
         // page 1). The region is reserved in full so code never aliases the
@@ -235,7 +239,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         }
 
         // Copy code into physical memory
-        mmu.writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
+        bus.writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
 
         // Demote code pages to R/X (remove write permission after writing)
         for (int p = 0; p < codePages; p++) {
@@ -255,7 +259,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             int constPage = VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE);
             pageTable.mapPage(constPage, VmMemoryMap.CONSTANTS_BASE,
                 PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-            mmu.writeBlock(VmMemoryMap.CONSTANTS_BASE, constBytes, 0, constBytes.length);
+            bus.writeBlock(VmMemoryMap.CONSTANTS_BASE, constBytes, 0, constBytes.length);
             // Change to read-only after writing
             pageTable.mapPage(constPage, VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
         }

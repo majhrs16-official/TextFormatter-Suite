@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostContext;
@@ -40,8 +41,13 @@ public final class ExecutionContext {
     // ===== Runtime-injected services =====
     private SoftMMU softMMU;
     /**
+     * Data bus interconnecting CPU, DMA and memory (D18). Derived from
+     * {@link #softMMU}; set it explicitly only from tests via {@link #bus(VmBus)}.
+     */
+    private VmBus bus;
+    /**
      * DMA controller for host&harr;VM transfers (D17). It is derived from
-     * {@link #softMMU} so it always follows the execution's cloned MMU; set it
+     * {@link #bus()} so it always follows the execution's cloned MMU; set it
      * explicitly only from tests via {@link #dmaController(VmDmaController)}.
      */
     private VmDmaController dmaController;
@@ -102,13 +108,24 @@ public final class ExecutionContext {
     public ExecutionContext maxStackSize(int bytes) { this.maxStackSize = bytes; return this; }
     public ExecutionContext softMMU(SoftMMU mmu) {
         this.softMMU = mmu;
-        this.dmaController = null; // re-derived from the new MMU
+        this.bus = null;           // re-derived from the new MMU
+        this.dmaController = null; // re-derived from the new bus
+        return this;
+    }
+
+    /**
+     * Overrides the data bus (D18). Intended for tests that need to observe bus
+     * traffic; production always derives it from {@link #softMMU}.
+     */
+    public ExecutionContext bus(VmBus bus) {
+        this.bus = bus;
+        this.dmaController = null;
         return this;
     }
 
     /**
      * Overrides the DMA controller (D17). Intended for tests that need to observe
-     * host&harr;VM transfers; production always derives it from {@link #softMMU}.
+     * host&harr;VM transfers; production always derives it from {@link #bus()}.
      */
     public ExecutionContext dmaController(VmDmaController dma) {
         this.dmaController = dma;
@@ -279,18 +296,30 @@ public final class ExecutionContext {
     public SoftMMU softMMU() { return softMMU; }
 
     /**
-     * The DMA controller for this execution (D17). Lazily derived from
-     * {@link #softMMU()} so host&harr;VM transfers always target this execution's
-     * memory; {@link #softMMU(SoftMMU)} resets it.
+     * The data bus for this execution (D18). Lazily derived from {@link #softMMU()}
+     * so the CPU and the DMA always transact through the execution's own memory;
+     * {@link #softMMU(SoftMMU)} resets it.
      *
      * @throws IllegalStateException if no SoftMMU has been configured yet
      */
-    public VmDmaController dma() {
-        if (dmaController == null) {
+    public VmBus bus() {
+        if (bus == null) {
             if (softMMU == null) {
                 throw new IllegalStateException("SoftMMU not configured");
             }
-            dmaController = new VmDmaController(softMMU);
+            bus = new VmBus(softMMU);
+        }
+        return bus;
+    }
+
+    /**
+     * The DMA controller for this execution (D17). Lazily derived from
+     * {@link #bus()} so host&harr;VM transfers always target this execution's
+     * memory; {@link #softMMU(SoftMMU)} resets it.
+     */
+    public VmDmaController dma() {
+        if (dmaController == null) {
+            dmaController = new VmDmaController(bus());
         }
         return dmaController;
     }
