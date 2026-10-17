@@ -714,6 +714,23 @@ npm run test:integration             # harnesses func/interact/click/chain/undo/
 
 Git: commits convencionales por tema; push SOLO con autorización explícita.
 
+**Toolchain iflow (Node/TS):**
+
+```bash
+cd tools/iflow-compiler && npm run build && npm run test:validation
+
+# Ensamblar un programa policy (firmware ON por defecto; ROM 0x0000-0x0FFF, código en 0x1000)
+./gradlew :src:iflow:iflowAsm
+./gradlew :src:iflow:iflowAsm -Piflow.baremetal=true            # bare-metal (sin ROM, origin 0x0000)
+./gradlew :src:iflow:iflowAsm -Piflow.source=ruta/prog.flowasm -Piflow.output=policy.flow
+```
+
+> ⚠️ **Memoria del entorno**: hay ~2.4 GB libres. Los procesos Node pueden fallar
+> al reservar el *CodeRange* de V8 (`Failed to reserve virtual memory for
+> CodeRange`, exit 133, o `exit null` en el runner de validación). Workaround:
+> `NODE_OPTIONS=--jitless`. Afecta a `npm run test:validation` y a
+> `iflowCompilerBuild` cuando recompila de verdad.
+
 ---
 
 ## DECISIONES VINCULANTES (índice)
@@ -878,7 +895,7 @@ Todos los items P1 resueltos:
 
 ---
 
-## REDISEÑO DEL ABI DE `HOST` (iflow) + TOOLCHAIN `.flowasm` — 2026-10-16 (ABI v2 ✅ CERRADA; queda D6)
+## REDISEÑO DEL ABI DE `HOST` (iflow) + TOOLCHAIN `.flowasm` — 2026-10-16 (✅ COMPLETO: D1–D11)
 
 > **Documento de trabajo vivo.** Releer antes de tocar `iflow` (VM) o el compilador.
 > Nace de la revisión del firmware `Sentinel-1` y del compilador `.flowasm`.
@@ -906,7 +923,7 @@ Todos los items P1 resueltos:
 | D3 | **Quitar `argOffset`**: `base` (R2) pasa a ser la dirección completa | ✅ decidido |
 | D4 | `length` **bidireccional**: in = pedido, out = transferido (lectura: bytes escritos; escritura: bytes leídos) | ✅ decidido |
 | D5 | `RET` de **1 byte**, sin operando | ✅ decidido |
-| D6 | Firmware **ON por defecto** + switch **bare-metal** vía parámetro Gradle | ✅ decidido |
+| D6 | Firmware **ON por defecto** + switch **bare-metal** vía parámetro Gradle (`-Piflow.baremetal=true`) | ✅ hecho (`65af8ce`) |
 | D7 | Default **origin = 0x1000** cuando el firmware está ON | ✅ decidido |
 | D8 | Constantes del firmware = **valores** (equates), no direcciones | ✅ decidido |
 | D9 | `status` con **códigos numéricos** (ver tabla) | ✅ decidido |
@@ -986,7 +1003,7 @@ Todas resueltas:
 
 1. **D11 — `R4`**: ✅ **resultado escalar de salida** (extras desde `R5`).
 2. **Prop IDs** tras D2: ✅ reasignados a `0x00–0x03` dentro de su scope.
-3. **Switch bare-metal (D6)**: el compilador es Node/TS, **no está wireado a Gradle**. El flag `--no-firmware` ya existe en el CLI; queda (a) la tarea Gradle que invoque el CLI y (b) el property (propuesta: `-Piflow.baremetal=true`). **PENDIENTE (D6).**
+3. **Switch bare-metal (D6)**: ✅ tarea Gradle `:src:iflow:iflowAsm` + `-Piflow.baremetal=true`; el CLI expone `--no-firmware`. (`65af8ce`)
 
 ### Lista de cambios (archivos a tocar)
 
@@ -1007,7 +1024,8 @@ Todas resueltas:
 | `tools/iflow-compiler/src/cli.ts` | `--no-firmware` | ✅ hecho (`9743754`) |
 | `tools/iflow-compiler/test/*.flowasm` + `.flow`/`.lst` | quitar `.origin 0x0000`; HOST v2; regenerar artefactos | ✅ hecho (`9743754`) |
 | `src/iflow/README.md`, `tools/iflow-compiler/README.md`, `docs/prompts/iflow/implement.md` | ABI v2 (fuente única) | ✅ hecho (`da2a0cb`) |
-| `build.gradle` / `settings.gradle` | tarea que invoca el CLI + `-Piflow.baremetal` | ⏳ **pendiente (D6)** |
+| `src/iflow/build.gradle` | tarea `iflowAsm`/`iflowCompilerBuild` + `-Piflow.baremetal` | ✅ hecho (`65af8ce`) |
+| `tools/iflow-compiler/examples/policy.flowasm` | ejemplo de policy v2 (default de `iflowAsm`) | ✅ hecho (`65af8ce`) |
 
 ### Bitácora de progreso
 
@@ -1020,4 +1038,5 @@ Todas resueltas:
 | 2026-10-16 | `9743754` | compilador: constantes del firmware como **valores**, origin 0x1000 con firmware, `--no-firmware` |
 | 2026-10-16 | `1c33e5b` | migrar consumidores restantes de bytecode a v2; límite de code a **2 páginas** |
 | 2026-10-16 | `da2a0cb` | docs del ABI **unificadas** en v2 (READMEs + `implement.md`) |
-| 2026-10-16 | — | ABI v2 **cerrada** (D1–D11). Pendiente único de esta sección: **D6** (tarea Gradle + `-Piflow.baremetal`) |
+| 2026-10-16 | `65af8ce` | Gradle: tarea `iflowAsm` + `-Piflow.baremetal`; ejemplo `policy.flowasm` |
+| 2026-10-16 | — | ✅ **ABI v2 completa (D1–D11)**. Nada pendiente en esta sección |
