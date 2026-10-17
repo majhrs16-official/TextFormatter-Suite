@@ -5,6 +5,7 @@ import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.logger.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -253,7 +254,7 @@ public final class HostServiceRegistry {
             // the program can negotiate capabilities. It must not be a hard error:
             // throwing here was turned into a REJECT by VmPolicyEngine, contradicting
             // the documented contract.
-            return ServiceResult.unsupported();
+            return ServiceResult.unsupported(String.format("unknown service 0x%04X", serviceId));
         }
 
         // Check declared capabilities against this execution's allowed capabilities
@@ -274,6 +275,14 @@ public final class HostServiceRegistry {
             ctx.consumeFuel(service.varCostPerByte() * result.bytesTransferred());
         }
 
+        // The status travels to the VM in R0, but the reason stays host-side.
+        // Log it (lazy: the supplier is not called unless debug is enabled) so
+        // failures are diagnosable without changing the ABI.
+        if (result.isError() && result.hasDetail()) {
+            Logger.debug(() -> String.format("HOST 0x%04X -> %s: %s",
+                serviceId, result.status(), result.detail()));
+        }
+
         return result;
     }
 
@@ -285,7 +294,8 @@ public final class HostServiceRegistry {
 
         String value = ctx.hostContext().readProperty(scope, propId);
         if (value == null) {
-            return ServiceResult.notFound();
+            return ServiceResult.notFound(
+                String.format("no property scope=%d id=0x%02X", scope, propId));
         }
 
         byte[] bytes = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -410,7 +420,7 @@ public final class HostServiceRegistry {
         Integer key = options & 0xFFFF;
         Object value = ctx.hostContext().readState(key);
         if (value == null) {
-            return ServiceResult.notFound();
+            return ServiceResult.notFound("state key=" + key);
         }
         String str = value.toString();
         byte[] bytes = str.getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -448,7 +458,7 @@ public final class HostServiceRegistry {
         String channelName = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
         String channelId = ctx.hostContext().resolveChannel(channelName);
         if (channelId == null) {
-            return ServiceResult.notFound();
+            return ServiceResult.notFound("unknown channel: " + channelName);
         }
         byte[] resultBytes = channelId.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         if (resultBytes.length > argLength) {

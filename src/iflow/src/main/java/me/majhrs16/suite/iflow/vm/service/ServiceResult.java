@@ -53,11 +53,17 @@ public final class ServiceResult {
     private final Status status;
     private final int bytesTransferred; // R3 on return
     private final int result;           // R4 on return
+    private final String detail;        // diagnostic only; never crosses the ABI
 
     private ServiceResult(Status status, int bytesTransferred, int result) {
+        this(status, bytesTransferred, result, null);
+    }
+
+    private ServiceResult(Status status, int bytesTransferred, int result, String detail) {
         this.status = status;
         this.bytesTransferred = bytesTransferred;
         this.result = result;
+        this.detail = detail;
     }
 
     /** Success with {@code bytesTransferred} bytes and no scalar result. */
@@ -74,29 +80,50 @@ public final class ServiceResult {
         return new ServiceResult(Status.NOT_FOUND, 0, 0);
     }
 
+    /** {@link #notFound()} with a diagnostic reason. */
+    public static ServiceResult notFound(String detail) {
+        return new ServiceResult(Status.NOT_FOUND, 0, 0, detail);
+    }
+
     public static ServiceResult denied() {
         return new ServiceResult(Status.DENIED, 0, 0);
     }
 
+    /** {@link #denied()} with a diagnostic reason. */
+    public static ServiceResult denied(String detail) {
+        return new ServiceResult(Status.DENIED, 0, 0, detail);
+    }
+
     public static ServiceResult invalidArgument(String msg) {
-        return new ServiceResult(Status.INVALID_ARGUMENT, 0, 0);
+        return new ServiceResult(Status.INVALID_ARGUMENT, 0, 0, msg);
     }
 
     /** {@code R3} carries the required buffer size so the caller can retry. */
     public static ServiceResult bufferTooSmall(int required) {
-        return new ServiceResult(Status.BUFFER_TOO_SMALL, required, 0);
+        return new ServiceResult(Status.BUFFER_TOO_SMALL, required, 0,
+            "required " + required + " bytes");
     }
 
     public static ServiceResult unsupported() {
         return new ServiceResult(Status.UNSUPPORTED, 0, 0);
     }
 
+    /** {@link #unsupported()} with a diagnostic reason. */
+    public static ServiceResult unsupported(String detail) {
+        return new ServiceResult(Status.UNSUPPORTED, 0, 0, detail);
+    }
+
     public static ServiceResult conflict() {
         return new ServiceResult(Status.CONFLICT, 0, 0);
     }
 
+    /** {@link #conflict()} with a diagnostic reason. */
+    public static ServiceResult conflict(String detail) {
+        return new ServiceResult(Status.CONFLICT, 0, 0, detail);
+    }
+
     public static ServiceResult hostFailure(String msg) {
-        return new ServiceResult(Status.HOST_FAILURE, 0, 0);
+        return new ServiceResult(Status.HOST_FAILURE, 0, 0, msg);
     }
 
     public static ServiceResult partial(int bytesTransferred, int result) {
@@ -107,11 +134,22 @@ public final class ServiceResult {
     public int bytesTransferred() { return bytesTransferred; }
     public int result() { return result; }
 
+    /**
+     * Human-readable reason for a non-OK status, or {@code null}. Diagnostic
+     * only: it never crosses the HOST ABI, which still exposes just
+     * {@code R0/R3/R4}. Callers log it; the program cannot read it.
+     */
+    public String detail() { return detail; }
+
+    public boolean hasDetail() { return detail != null && !detail.isEmpty(); }
+
     public boolean isSuccess() { return status == Status.OK || status == Status.PARTIAL; }
     public boolean isError() { return !isSuccess(); }
 
     @Override
     public String toString() {
-        return "ServiceResult{" + status + "(R0=" + status.code() + "), R3=" + bytesTransferred + ", R4=" + result + "}";
+        String base = "ServiceResult{" + status + "(R0=" + status.code() + "), R3=" + bytesTransferred
+            + ", R4=" + result;
+        return detail == null ? base + "}" : base + ", detail=" + detail + "}";
     }
 }
