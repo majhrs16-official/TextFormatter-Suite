@@ -13,6 +13,7 @@ import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.engine.PolicyResultValidator;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContextPool;
+import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.execution.VmInterpreter;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -21,14 +22,17 @@ import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
+import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.charset.StandardCharsets;
 
@@ -49,6 +53,13 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private final HostServiceRegistry serviceRegistry;
     private final ExecutionContextPool contextPool;
     private final PolicyResultValidator validator;
+
+    /**
+     * Persistent state exposed to policies through {@code STATE_READ}/{@code STATE_WRITE}
+     * (the host side of {@link HostContext}). It survives across evaluations and is
+     * keyed by the 16-bit key the program passes in {@code options}.
+     */
+    private final Map<Integer, Object> hostState = new ConcurrentHashMap<>();
 
     // Configuration
     private final long defaultFuelBudget = 100_000; // 100K fuel units per evaluation
@@ -95,8 +106,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         registry.declareCapability("routing.decide");
         registry.declareCapability("state.read");
         registry.declareCapability("state.write");
+        registry.declareCapability("channel.resolve");
 
-        // Inject host dependencies
+        // Inject host dependencies. The message/property/state/channel views are
+        // supplied per execution through the HostContext port (see route()),
+        // not as engine-level lambdas.
         registry.permissionChecker((actorName, perm) -> permissions.has(
             Actor.unknown(actorName), perm));
         registry.rateLimiter(rateLimit);
@@ -163,6 +177,10 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
             // Initialize context (resets registers, fuel, clears I/O buffers)
             ctx.initialize();
+
+            // Install the host view for this message: property reads, channel
+            // resolution and persistent state now go through the HostContext port.
+            ctx.hostContext(new MessageHostContext(ctx, message, emitter, recipient, path));
 
             // Prepare input: serialize message to the input buffer (see VmMemoryMap)
             prepareInput(ctx, message, emitter, recipient, path);
@@ -308,6 +326,112 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
     private boolean allowed(Actor actor, String permission) {
         return permission == null || permissions.has(actor, permission);
+    }
+
+    // ===== Host port implementation (IFLOW-AUD-016) =====
+
+    /**
+     * Read/write view of the current message, its actors, the channel and the
+     * engine's persistent state. Installed on the execution context for the
+     * duration of one evaluation, so the HOST services no longer depend on
+     * engine-level lambdas.
+     */
+    private final class MessageHostContext implements HostContext {
+        private final ExecutionContext ctx;
+        private final Message message;
+        private final Actor emitter;
+        private final Actor recipient;
+        private final String path;
+
+        MessageHostContext(ExecutionContext ctx, Message message, Actor emitter,
+                           Actor recipient, String path) {
+            this.ctx = ctx;
+            this.message = message;
+            this.emitter = emitter;
+            this.recipient = recipient;
+            this.path = path;
+        }
+
+        @Override
+        public String readProperty(int scope, int propId) {
+            return switch (scope) {
+                case HostServiceRegistry.SCOPE_MESSAGE -> messageProperty(propId);
+                case HostServiceRegistry.SCOPE_EMITTER -> actorProperty(emitter, propId);
+                case HostServiceRegistry.SCOPE_RECIPIENT -> actorProperty(recipient, propId);
+                case HostServiceRegistry.SCOPE_CHANNEL -> channelProperty(propId);
+                default -> null;
+            };
+        }
+
+        @Override
+        public void writeProperty(int scope, int propId, String value) {
+            if (value == null) {
+                return;
+            }
+            // Message mutation is deferred: journal a text edit that the engine
+            // validates and commits after execution.
+            ctx.journal().record(new ModificationJournal.Entry(
+                ModificationJournal.OpType.SET_TEXT, value, "propWrite:" + propId));
+        }
+
+        @Override
+        public String resolveChannel(String name) {
+            if (name == null) {
+                return null;
+            }
+            return channels.get(name).map(ch -> ch.name()).orElse(null);
+        }
+
+        @Override
+        public Object readState(int key) {
+            return hostState.get(key);
+        }
+
+        @Override
+        public void writeState(int key, Object value) {
+            if (value != null) {
+                hostState.put(key, value);
+            }
+        }
+
+        private String messageProperty(int propId) {
+            return switch (propId) {
+                case HostServiceRegistry.PROP_CONTENT -> message.text();
+                case HostServiceRegistry.PROP_CHANNEL -> path;
+                case HostServiceRegistry.PROP_DIRECTION -> message.direction().toString();
+                case HostServiceRegistry.PROP_TYPE -> message.type().toString();
+                case HostServiceRegistry.PROP_LANG_SOURCE -> String.valueOf(message.langSource());
+                case HostServiceRegistry.PROP_LANG_TARGET -> String.valueOf(message.langTarget());
+                case HostServiceRegistry.PROP_COLOR_MODE -> String.valueOf(message.colorMode());
+                case HostServiceRegistry.PROP_FORMAT_PAPI -> String.valueOf(message.formatPapi());
+                case HostServiceRegistry.PROP_SLEEP_MILLIS -> String.valueOf(message.sleepMillis());
+                case HostServiceRegistry.PROP_CANCELLED -> String.valueOf(message.isCancelled());
+                default -> null;
+            };
+        }
+
+        private String actorProperty(Actor actor, int propId) {
+            if (actor == null) {
+                return null;
+            }
+            return switch (propId) {
+                case HostServiceRegistry.PROP_ACTOR_NAME -> actor.name();
+                case HostServiceRegistry.PROP_ACTOR_UUID -> String.valueOf(actor.uuid());
+                case HostServiceRegistry.PROP_ACTOR_LANG -> String.valueOf(actor.language());
+                default -> null;
+            };
+        }
+
+        private String channelProperty(int propId) {
+            return switch (propId) {
+                case HostServiceRegistry.PROP_CHAN_NAME -> path;
+                case HostServiceRegistry.PROP_CHAN_RATE ->
+                    String.valueOf(channels.resolve(path).rateLimitPerSecond());
+                case HostServiceRegistry.PROP_CHAN_SEND_POL -> channels.resolve(path).sendPolicy();
+                case HostServiceRegistry.PROP_CHAN_RECV_POL -> channels.resolve(path).receivePolicy();
+                default -> null;
+            };
+        }
     }
 
     /**

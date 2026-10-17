@@ -505,4 +505,32 @@ class VmInterpreterTest {
         var p = createInterpreterAndContext(code);
         assertThrows(VmException.class, () -> p.first().execute(p.second()));
     }
+
+    // ===== HOST service dispatch through the HostContext port (IFLOW-AUD-016) =====
+
+    @Test
+    void hostPropertyReadUsesHostContext() {
+        SoftMMU mm = createSoftMMU();
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        hsr.declareCapability("property.read");
+        ExecutionContext ctx = createContext(mm, hsr)
+            .allowedCapabilities(new String[]{"property.read"});
+        ctx.hostContext(new me.majhrs16.suite.iflow.vm.service.HostContext() {
+            @Override public String readProperty(int scope, int propId) { return "xyz"; }
+        });
+
+        byte[] code = {
+            Opcode.LI, 0, 0x01, 0x00,          // R0 = PROPERTY_READ
+            Opcode.LI, 1, 0x01, 0x10,          // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+            Opcode.LI, 2, b(0x80), 0x00,       // base = output buffer
+            Opcode.LI, 3, 0x00, b(0xFF),       // length
+            Opcode.HOST, 0x00,
+            Opcode.LDB, 0, b(0x80), 0x00,      // R0 = first byte the host wrote
+            Opcode.HALT
+        };
+        new VmInterpreter(ProgramImage.builder().entryPoint(0).code(code).build(), mm, hsr)
+            .execute(ctx);
+
+        assertEquals(0x78, ctx.registers().get(RegisterFile.R0)); // 'x'
+    }
 }

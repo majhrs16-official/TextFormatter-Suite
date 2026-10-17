@@ -322,4 +322,46 @@ class VmPolicyEngineTest {
         assertEquals(PolicyTarget.LOG, outcome.decision().target());
         assertTrue(outcome.decision().delivered());
     }
+
+    @Test
+    void propertyReadServesMessageContentThroughHostContext() {
+        // The program reads PROP_CONTENT through the host port and branches on the
+        // first byte: 'p' -> LOG, anything else -> DROP. This proves the message
+        // view is actually wired into HOST service calls (IFLOW-AUD-016).
+        VmPolicyEngine engine = createEngine();
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
+                Opcode.LI, 1, (byte)0x01, (byte)HostServiceRegistry.PROP_CONTENT, // options = SCOPE_MESSAGE|PROP_CONTENT
+                Opcode.LI, 2, (byte)0x80, (byte)0x00,  // base = output buffer
+                Opcode.LI, 3, (byte)0x00, (byte)0xFF,
+                Opcode.HOST, (byte)0x00,
+                Opcode.LDB, 0, (byte)0x80, (byte)0x00, // R0 = first content byte
+                Opcode.LI, 1, (byte)0x00, (byte)0x70,  // 'p'
+                Opcode.CMP, (0 << 4) | 1,
+                Opcode.JNZ, (byte)0x00, (byte)0x0B,    // no match -> drop
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, (byte)0x00, (byte)HostServiceRegistry.DECISION_LOG,
+                Opcode.HOST, (byte)0x00,
+                Opcode.HALT,
+                // drop:
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, (byte)0x00, (byte)HostServiceRegistry.DECISION_DROP,
+                Opcode.HOST, (byte)0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"property.read", "routing.decide"})
+            .build();
+        engine.setProgram(program);
+
+        Actor sender = createActor("Alice");
+        Actor recipient = createActor("Bob");
+
+        Message ping = createMessage("ping", "chat", sender);
+        assertEquals(PolicyTarget.LOG, engine.route(ping, recipient).decision().target());
+
+        Message other = createMessage("xyz", "chat", sender);
+        assertEquals(PolicyTarget.DROP, engine.route(other, recipient).decision().target());
+    }
 }

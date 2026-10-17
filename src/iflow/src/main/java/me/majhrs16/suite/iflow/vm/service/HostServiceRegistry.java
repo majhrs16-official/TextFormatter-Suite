@@ -132,11 +132,6 @@ public final class HostServiceRegistry {
     private BiFunction<String, String, Boolean> permissionChecker;
     private java.util.function.Function<String, String> placeholderResolver;
     private java.util.function.Function<String, String> translationDetector;
-    private java.util.function.BiFunction<Integer, String, String> propertyReader;
-    private java.util.function.BiConsumer<Integer, String> propertyWriter;
-    private java.util.function.Function<Integer, String> channelResolver;
-    private java.util.function.Supplier<java.util.Map<Integer, Object>> stateReader;
-    private java.util.function.BiConsumer<Integer, Object> stateWriter;
     private me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter;
 
     public HostServiceRegistry() {
@@ -288,11 +283,7 @@ public final class HostServiceRegistry {
         int scope = (options >> 8) & 0xFF;
         int propId = options & 0x00FF;
 
-        if (propertyReader == null) {
-            return ServiceResult.hostFailure("Property reader not configured");
-        }
-
-        String value = propertyReader.apply(scope, String.valueOf(propId));
+        String value = ctx.hostContext().readProperty(scope, propId);
         if (value == null) {
             return ServiceResult.notFound();
         }
@@ -315,10 +306,6 @@ public final class HostServiceRegistry {
         int scope = (options >> 8) & 0xFF;
         int propId = options & 0x00FF;
 
-        if (propertyWriter == null) {
-            return ServiceResult.hostFailure("Property writer not configured");
-        }
-
         byte[] bytes;
         try {
             bytes = ctx.softMMU().getRegion(argVAddr, argLength);
@@ -328,10 +315,10 @@ public final class HostServiceRegistry {
 
         String value = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
 
-        // Record in journal for deferred commit
-        ctx.journal().record(new ModificationJournal.Entry(
-            ModificationJournal.OpType.SET_TEXT, value, "propWrite:" + propId
-        ));
+        // The host decides how to apply the write (the reference engine defers it
+        // through the modification journal, which is validated and committed after
+        // execution).
+        ctx.hostContext().writeProperty(scope, propId, value);
 
         return ServiceResult.ok(argLength);
     }
@@ -420,11 +407,8 @@ public final class HostServiceRegistry {
     }
 
     private ServiceResult doStateRead(ExecutionContext ctx, int argVAddr, int argLength, int options) {
-        if (stateReader == null) {
-            return ServiceResult.hostFailure("State reader not configured");
-        }
         Integer key = options & 0xFFFF;
-        Object value = stateReader.get().get(key);
+        Object value = ctx.hostContext().readState(key);
         if (value == null) {
             return ServiceResult.notFound();
         }
@@ -442,9 +426,6 @@ public final class HostServiceRegistry {
     }
 
     private ServiceResult doStateWrite(ExecutionContext ctx, int argVAddr, int argLength, int options) {
-        if (stateWriter == null) {
-            return ServiceResult.hostFailure("State writer not configured");
-        }
         Integer key = options & 0xFFFF;
         byte[] bytes;
         try {
@@ -453,14 +434,11 @@ public final class HostServiceRegistry {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
         String value = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-        stateWriter.accept(key, value);
+        ctx.hostContext().writeState(key, value);
         return ServiceResult.ok(argLength);
     }
 
     private ServiceResult doChannelResolve(ExecutionContext ctx, int argVAddr, int argLength, int options) {
-        if (channelResolver == null) {
-            return ServiceResult.hostFailure("Channel resolver not configured");
-        }
         byte[] bytes;
         try {
             bytes = ctx.softMMU().getRegion(argVAddr, argLength);
@@ -468,7 +446,7 @@ public final class HostServiceRegistry {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
         String channelName = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-        String channelId = channelResolver.apply(channelName.hashCode());
+        String channelId = ctx.hostContext().resolveChannel(channelName);
         if (channelId == null) {
             return ServiceResult.notFound();
         }
@@ -498,31 +476,6 @@ public final class HostServiceRegistry {
 
     public HostServiceRegistry translationDetector(java.util.function.Function<String, String> detector) {
         this.translationDetector = detector;
-        return this;
-    }
-
-    public HostServiceRegistry propertyReader(java.util.function.BiFunction<Integer, String, String> reader) {
-        this.propertyReader = reader;
-        return this;
-    }
-
-    public HostServiceRegistry propertyWriter(java.util.function.BiConsumer<Integer, String> writer) {
-        this.propertyWriter = writer;
-        return this;
-    }
-
-    public HostServiceRegistry channelResolver(java.util.function.Function<Integer, String> resolver) {
-        this.channelResolver = resolver;
-        return this;
-    }
-
-    public HostServiceRegistry stateReader(java.util.function.Supplier<java.util.Map<Integer, Object>> reader) {
-        this.stateReader = reader;
-        return this;
-    }
-
-    public HostServiceRegistry stateWriter(java.util.function.BiConsumer<Integer, Object> writer) {
-        this.stateWriter = writer;
         return this;
     }
 

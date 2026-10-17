@@ -125,10 +125,8 @@ private RateLimiter createRateLimiter() {
     @Test
     void hostServiceRegistryWithVirtualAddresses() {
         SoftMMU mmu = createFullMMU();
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "test-value")
-            .propertyWriter((scope, value) -> {});
-        
+        HostServiceRegistry hsr = new HostServiceRegistry();
+
         // Test property read writes to the input buffer virtual address
         int vaddr = VmMemoryMap.INPUT_BASE;
         me.majhrs16.suite.iflow.vm.execution.ExecutionContext ctx = 
@@ -139,6 +137,9 @@ private RateLimiter createRateLimiter() {
                 .serviceRegistry(hsr)
                 .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
+        ctx.hostContext(new me.majhrs16.suite.iflow.vm.service.HostContext() {
+            @Override public String readProperty(int scope, int propId) { return "test-value"; }
+        });
         
         ServiceResult result = hsr.invoke(
             ctx,

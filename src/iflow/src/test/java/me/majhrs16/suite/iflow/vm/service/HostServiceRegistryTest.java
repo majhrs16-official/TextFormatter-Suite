@@ -8,6 +8,8 @@ import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class HostServiceRegistryTest {
@@ -37,11 +39,16 @@ class HostServiceRegistryTest {
     }
 
     private HostServiceRegistry createConfiguredHsr() {
-        return new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "test-value")
-            .propertyWriter((scope, value) -> {})
-            .stateReader(() -> java.util.Map.of())
-            .stateWriter((key, value) -> {});
+        return new HostServiceRegistry();
+    }
+
+    /** Host context that serves a single value for every property read. */
+    private static HostContext propertyContext(String value) {
+        return new HostContext() {
+            @Override public String readProperty(int scope, int propId) {
+                return value;
+            }
+        };
     }
 
     @Test
@@ -81,8 +88,7 @@ class HostServiceRegistryTest {
 
     @Test
     void serviceDeniedWithoutCapability() {
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "test-value");
+        HostServiceRegistry hsr = new HostServiceRegistry();
         // Context only allowed routing.decide -> property.read must be denied.
         ExecutionContext ctx = createContext(hsr, "routing.decide");
 
@@ -92,9 +98,9 @@ class HostServiceRegistryTest {
 
     @Test
     void serviceAllowedWithCapability() {
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "test-value");
+        HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr, "property.read");
+        ctx.hostContext(propertyContext("test-value"));
 
         ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0);
         assertNotNull(result);
@@ -102,13 +108,13 @@ class HostServiceRegistryTest {
 
     @Test
     void propertyReadServiceRequiresCapability() {
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "test-value");
+        HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr);
 
         // Should work since property.read is declared
         ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0);
-        // Will return NOT_FOUND since propertyReader returns null for unknown props
+        // No host value for the property -> NOT_FOUND
+        assertEquals(ServiceResult.Status.NOT_FOUND, result.status());
         assertNotNull(result);
     }
 
@@ -177,13 +183,16 @@ class HostServiceRegistryTest {
     @Test
     void propertyReadDecodesScopeAndPropIdFromOptions() {
         int[] captured = new int[2];
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> {
+        HostContext hc = new HostContext() {
+            @Override public String readProperty(int scope, int propId) {
                 captured[0] = scope;
-                captured[1] = Integer.parseInt(propId);
+                captured[1] = propId;
                 return "test-value";
-            });
+            }
+        };
+        HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr, "property.read");
+        ctx.hostContext(hc);
 
         // options = (scope << 8) | propId ; propId must be only the low 8 bits.
         int options = (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_CONTENT;
@@ -215,14 +224,67 @@ class HostServiceRegistryTest {
 
     @Test
     void bufferTooSmallReportsRequiredSizeInLength() {
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "0123456789");
+        HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr, "property.read");
+        ctx.hostContext(propertyContext("0123456789"));
 
         ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ,
             ctx.outputBufferVAddr(), 4, 0);
 
         assertEquals(ServiceResult.Status.BUFFER_TOO_SMALL, result.status());
         assertEquals(10, result.bytesTransferred()); // required size -> R3
+    }
+
+    @Test
+    void stateReadAndWriteUseHostContext() {
+        java.util.Map<Integer, Object> state = new java.util.HashMap<>();
+        HostContext hc = new HostContext() {
+            @Override public Object readState(int key) { return state.get(key); }
+            @Override public void writeState(int key, Object value) { state.put(key, value); }
+        };
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "state.read", "state.write");
+        ctx.hostContext(hc);
+
+        // STATE_WRITE: key in options, value read from the buffer.
+        byte[] value = "hello".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), value, 0, value.length);
+        ServiceResult w = hsr.invoke(ctx, HostServiceRegistry.STATE_WRITE,
+            ctx.outputBufferVAddr(), value.length, 7);
+        assertEquals(ServiceResult.Status.OK, w.status());
+        assertEquals("hello", state.get(7));
+
+        // STATE_READ: writes the stored value back into the buffer.
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.STATE_READ,
+            ctx.outputBufferVAddr(), 64, 7);
+        assertEquals(ServiceResult.Status.OK, r.status());
+        byte[] out = new byte[5];
+        ctx.softMMU().readBlock(ctx.outputBufferVAddr(), out, 0, out.length);
+        assertEquals("hello", new String(out, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void channelResolveUsesHostContext() {
+        HostContext hc = new HostContext() {
+            @Override public String resolveChannel(String name) {
+                return "chat".equals(name) ? "chat" : null;
+            }
+        };
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "channel.resolve");
+        ctx.hostContext(hc);
+
+        byte[] name = "chat".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), name, 0, name.length);
+        ServiceResult ok = hsr.invoke(ctx, HostServiceRegistry.CHANNEL_RESOLVE,
+            ctx.outputBufferVAddr(), name.length, 0);
+        assertEquals(ServiceResult.Status.OK, ok.status());
+
+        // Unknown channel -> NOT_FOUND (the host returns null).
+        byte[] unknown = "nope".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), unknown, 0, unknown.length);
+        ServiceResult miss = hsr.invoke(ctx, HostServiceRegistry.CHANNEL_RESOLVE,
+            ctx.outputBufferVAddr(), unknown.length, 0);
+        assertEquals(ServiceResult.Status.NOT_FOUND, miss.status());
     }
 }

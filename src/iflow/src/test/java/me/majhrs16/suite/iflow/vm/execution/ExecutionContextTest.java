@@ -259,8 +259,7 @@ class ExecutionContextTest {
     @Test
     void callHostInvokesService() {
         SoftMMU mmu = createMappedMMU();
-        HostServiceRegistry hsr = new HostServiceRegistry()
-            .propertyReader((scope, propId) -> "test-value");
+        HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = new ExecutionContext()
             .executionId("test")
             .fuelBudget(10000)
@@ -268,6 +267,9 @@ class ExecutionContextTest {
             .serviceRegistry(hsr)
             .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
+        ctx.hostContext(new me.majhrs16.suite.iflow.vm.service.HostContext() {
+            @Override public String readProperty(int scope, int propId) { return "test-value"; }
+        });
         ServiceResult result = ctx.callHost(HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 10, 0);
         assertNotNull(result);
     }

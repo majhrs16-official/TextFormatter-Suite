@@ -5,6 +5,7 @@ import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
+import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 
@@ -38,6 +39,7 @@ public final class ExecutionContext {
     // ===== Runtime-injected services =====
     private SoftMMU softMMU;
     private HostServiceRegistry serviceRegistry;
+    private HostContext hostContext = HostContext.NONE;
     private Supplier<Long> nanoTimeSupplier = System::nanoTime;
 
     // ===== Mutable execution state =====
@@ -103,6 +105,9 @@ public final class ExecutionContext {
             registers.set(i, 0);
         }
         propertyCache.clear();
+        // Reset the host port: a pooled context must not leak the previous
+        // execution's host view. Callers re-install it after initialize().
+        hostContext = HostContext.NONE;
         // reset() (not clear()): the journal may already be committed/discarded
         // from the previous execution, and clear() would throw, breaking pooling.
         journal.reset();
@@ -219,6 +224,20 @@ public final class ExecutionContext {
     // ===== Journal =====
 
     public ModificationJournal journal() { return journal; }
+
+    // ===== Host port (IFLOW-AUD-016) =====
+
+    /**
+     * The host context for this execution. Services read/write host-owned state
+     * (properties, channels, persistent state) through it instead of calling
+     * loose injected lambdas. Defaults to {@link HostContext#NONE}.
+     */
+    public ExecutionContext hostContext(HostContext hostContext) {
+        this.hostContext = hostContext != null ? hostContext : HostContext.NONE;
+        return this;
+    }
+
+    public HostContext hostContext() { return hostContext; }
 
     // ===== Cancellation =====
 
