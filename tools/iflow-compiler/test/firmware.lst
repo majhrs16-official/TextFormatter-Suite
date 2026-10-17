@@ -1,6 +1,6 @@
 ; iFlow Assembly Listing
 ; Source: /home/majhrs16/Documentos/textformatter-suite/tools/iflow-compiler/test/firmware.flowasm
-; Generated: 2026-10-15T21:41:53.727Z
+; Generated: 2026-10-17T03:12:59.128Z
 
 ; Symbol Table:
 ; SERVICE_PROPERTY_READ            = 0x0000 (code)
@@ -22,31 +22,63 @@
 ; TEST_BUFFER                      = 0x0010 (code)
 ; RESULT_BUFFER                    = 0x0011 (code)
 ; STACK_TOP                        = 0x0012 (code)
-; main                             = 0x0000 (code)
-; test_arithmetic                  = 0x001a (code)
-; test_memory                      = 0x0052 (code)
-; test_control_flow                = 0x0078 (code)
-; test_jmp_target                  = 0x0083 (code)
-; test_jz_taken                    = 0x0090 (code)
-; test_jnz_taken                   = 0x009d (code)
-; test_jc_taken                    = 0x00ae (code)
-; test_jv_taken                    = 0x00bf (code)
-; nested_call_1                    = 0x00c4 (code)
-; nested_call_2                    = 0x00c9 (code)
-; test_host_services               = 0x00cb (code)
-; test_block_ops                   = 0x012b (code)
-; test_comparison                  = 0x015d (code)
-; loop_start                       = 0x017d (code)
-; test_shifts                      = 0x0188 (code)
-; channel_name                     = 0x01a8 (code)
-; test_message                     = 0x01a8 (code)
+; main                             = 0x1000 (code)
+; test_arithmetic                  = 0x101a (code)
+; test_memory                      = 0x1051 (code)
+; test_control_flow                = 0x1076 (code)
+; test_jmp_target                  = 0x1081 (code)
+; test_jz_taken                    = 0x108e (code)
+; test_jnz_taken                   = 0x109b (code)
+; test_jc_taken                    = 0x10ac (code)
+; test_jv_taken                    = 0x10bd (code)
+; nested_call_1                    = 0x10c1 (code)
+; nested_call_2                    = 0x10c5 (code)
+; test_host_services               = 0x10c6 (code)
+; test_block_ops                   = 0x1135 (code)
+; test_comparison                  = 0x1166 (code)
+; loop_start                       = 0x1186 (code)
+; test_shifts                      = 0x1190 (code)
+; channel_name                     = 0x11af (code)
+; test_message                     = 0x11af (code)
 ; "Hello,                          = 0x0013 (code)
+; SERVICE_PROPERTY_EXISTS          = 0x0102 (code)
+; SERVICE_PERM_QUERY               = 0x0201 (code)
+; SERVICE_ROUTE_REDIRECT           = 0x0301 (code)
+; SERVICE_ROUTE_RATE_LIMIT         = 0x0302 (code)
+; SERVICE_TRANSFORM_APPLY          = 0x0400 (code)
+; SERVICE_CHANNEL_POLICY           = 0x0601 (code)
+; SERVICE_MESSAGE_CLONE            = 0x0700 (code)
+; SERVICE_MESSAGE_ID               = 0x0701 (code)
+; SCOPE_RECIPIENT                  = 0x0003 (code)
+; SCOPE_CHANNEL                    = 0x0004 (code)
+; SCOPE_SERVER                     = 0x0005 (code)
+; PROP_DIRECTION                   = 0x0012 (code)
+; PROP_TYPE                        = 0x0013 (code)
+; PROP_LANG_SOURCE                 = 0x0014 (code)
+; PROP_LANG_TARGET                 = 0x0015 (code)
+; PROP_COLOR_MODE                  = 0x0016 (code)
+; PROP_FORMAT_PAPI                 = 0x0017 (code)
+; PROP_SLEEP_MILLIS                = 0x0018 (code)
+; PROP_SOUNDS                      = 0x0019 (code)
+; PROP_PROCESSED                   = 0x001b (code)
+; PROP_TRANSLATE                   = 0x001c (code)
+; PROP_ACTOR_NAME                  = 0x0100 (code)
+; PROP_ACTOR_UUID                  = 0x0101 (code)
+; PROP_ACTOR_LANG                  = 0x0102 (code)
+; PROP_ACTOR_WORLD                 = 0x0103 (code)
+; PROP_CHAN_NAME                   = 0x0200 (code)
+; PROP_CHAN_RATE                   = 0x0201 (code)
+; PROP_CHAN_SEND_POL               = 0x0202 (code)
+; PROP_CHAN_RECV_POL               = 0x0203 (code)
+; DECISION_CHAN_REDIR              = 0x0004 (code)
+; DECISION_RATE_LIMIT              = 0x0005 (code)
+; DECISION_CONTINUE                = 0x0006 (code)
 
 ; Source:
    1: ; iFlow VM Firmware Test Program
    2: ; Tests all instructions and HOST services
-   3: ; Origin: 0x0000
-   4: .origin 0x0000
+   3: ; Assembled with the firmware ROM enabled (default): the ROM occupies
+   4: ; 0x0000-0x0FFF, so this program is placed at 0x1000 (page 1).
    5: .entry main
    6: 
    7: .section code
@@ -234,148 +266,147 @@
  189: ; TEST 4: HOST Services
  190: ; ============================================================
  191: test_host_services:
- 192:     ; Test PROPERTY_READ
- 193:     ; R0 = service ID, R1 = scope (MESSAGE), R2 = property ID (CONTENT)
- 194:     LI R0, SERVICE_PROPERTY_READ
- 195:     LI R1, SCOPE_MESSAGE
- 196:     LI R2, PROP_CONTENT
- 197:     HOST
- 198:     ; Result in R0
- 199:     
- 200:     ; Test PROPERTY_WRITE
- 201:     ; R0 = service ID, R1 = scope, R2 = property ID, R3 = value (vaddr)
- 202:     LI R0, SERVICE_PROPERTY_WRITE
- 203:     LI R1, SCOPE_EMITTER
- 204:     LI R2, PROP_CHANNEL
- 205:     LI R3, TEST_BUFFER
- 206:     HOST
- 207:     
- 208:     ; Test PERMISSION_CHECK
- 209:     ; R0 = service ID, R1 = permission bitmask, R2 = target (vaddr)
- 210:     LI R0, SERVICE_PERM_CHECK
- 211:     LI R1, 0x0001
- 212:     LI R2, TEST_BUFFER
- 213:     HOST
- 214:     ; Result in R0 (0=denied, 1=granted)
- 215:     
- 216:     ; Test ROUTE_DECISION
- 217:     ; R0 = service ID, R3 = decision code
- 218:     LI R0, SERVICE_ROUTE_DECISION
- 219:     LI R3, DECISION_LOG
- 220:     HOST
- 221:     
- 222:     ; Test STATE_READ
- 223:     ; R0 = service ID, R1 = state key (vaddr), R2 = default value
+ 192:     ; HOST ABI v2: R0=service, R1=options, R2=base (vaddr), R3=length
+ 193:     ; Returns: R0=status, R3=bytes transferred, R4=scalar result
+ 194:     ; (R1/R2 are preserved.)
+ 195: 
+ 196:     ; PROPERTY_READ: options = (scope<<8) | propId  ->  0x0110 = MESSAGE/content
+ 197:     LI R0, SERVICE_PROPERTY_READ
+ 198:     LI R1, 0x0110
+ 199:     LI R2, RESULT_BUFFER
+ 200:     LI R3, 0x0100
+ 201:     HOST
+ 202:     ; R0 = status, R3 = bytes written
+ 203: 
+ 204:     ; PROPERTY_WRITE: options = 0x0111 = MESSAGE/channel
+ 205:     LI R0, SERVICE_PROPERTY_WRITE
+ 206:     LI R1, 0x0111
+ 207:     LI R2, TEST_BUFFER
+ 208:     LI R3, 0x0008
+ 209:     HOST
+ 210: 
+ 211:     ; PERMISSION_CHECK: buffer = "actor\0perm"
+ 212:     LI R0, SERVICE_PERM_CHECK
+ 213:     LI R2, TEST_BUFFER
+ 214:     LI R3, 0x0010
+ 215:     HOST
+ 216:     ; R4 = 0 (denied) | 1 (granted)
+ 217: 
+ 218:     ; ROUTE_DECISION: options = decision code
+ 219:     LI R0, SERVICE_ROUTE_DECISION
+ 220:     LI R1, DECISION_LOG
+ 221:     HOST
+ 222: 
+ 223:     ; STATE_READ: options = key
  224:     LI R0, SERVICE_STATE_READ
- 225:     LI R1, TEST_BUFFER
- 226:     LI R2, 0
- 227:     HOST
- 228:     ; Result in R0
- 229:     
- 230:     ; Test STATE_WRITE
- 231:     ; R0 = service ID, R1 = state key (vaddr), R2 = value
- 232:     LI R0, SERVICE_STATE_WRITE
- 233:     LI R1, TEST_BUFFER
- 234:     LI R2, 0xDEAD
+ 225:     LI R1, 0x0001
+ 226:     LI R2, RESULT_BUFFER
+ 227:     LI R3, 0x0100
+ 228:     HOST
+ 229: 
+ 230:     ; STATE_WRITE: options = key
+ 231:     LI R0, SERVICE_STATE_WRITE
+ 232:     LI R1, 0x0001
+ 233:     LI R2, TEST_BUFFER
+ 234:     LI R3, 0x0008
  235:     HOST
- 236:     
- 237:     ; Test CHANNEL_RESOLVE
- 238:     ; R0 = service ID, R1 = channel name (vaddr)
- 239:     LI R0, SERVICE_CHANNEL_RESOLVE
- 240:     LI R1, TEST_BUFFER
+ 236: 
+ 237:     ; CHANNEL_RESOLVE: reads the name, writes the id back to the same buffer
+ 238:     LI R0, SERVICE_CHANNEL_RESOLVE
+ 239:     LI R2, TEST_BUFFER
+ 240:     LI R3, 0x0008
  241:     HOST
- 242:     ; Result in R0 (channel ID or 0)
- 243:     
- 244:     RET
- 245: 
- 246: ; ============================================================
- 247: ; TEST 5: Block Operations (COPY, MOVE)
- 248: ; ============================================================
- 249: test_block_ops:
- 250:     ; Prepare source data
- 251:     LI R1, 0x1111
- 252:     STW R1, TEST_BUFFER
- 253:     LI R1, 0x2222
- 254:     STW R1, TEST_BUFFER + 2
- 255:     LI R1, 0x3333
- 256:     STW R1, TEST_BUFFER + 4
- 257:     
- 258:     ; COPY: src=TEST_BUFFER, dst=RESULT_BUFFER, len=6 bytes
- 259:     COPY TEST_BUFFER, RESULT_BUFFER, 6
- 260:     
- 261:     ; Verify copy
- 262:     LDW R1, RESULT_BUFFER
- 263:     ; R1 should be 0x1111
- 264:     LDW R2, RESULT_BUFFER + 2
- 265:     ; R2 should be 0x2222
- 266:     
- 267:     ; MOVE: overlapping regions
- 268:     MOVE TEST_BUFFER, TEST_BUFFER + 2, 4
- 269:     
- 270:     RET
- 271: 
- 272: ; ============================================================
- 273: ; TEST 6: Comparison and Conditional Logic
- 274: ; ============================================================
- 275: test_comparison:
- 276:     ; CMP (signed): R1 = 100, R2 = 50
- 277:     LI R1, 100
- 278:     LI R2, 50
- 279:     CMP R1, R2  ; Sets flags: R1 > R2
- 280:     
- 281:     ; CMPU (unsigned): R1 = 0xFFFF, R2 = 1
- 282:     LI R1, 0xFFFF
- 283:     LI R2, 1
- 284:     CMPU R1, R2  ; Unsigned: R1 > R2
- 285:     
- 286:     ; Test loop with counter
- 287:     LI R1, 10       ; Counter
- 288:     LI R2, 0        ; Accumulator
- 289:     LI R3, 1        ; Decrement value
- 290: loop_start:
- 291:     ADD R2, R1      ; Accumulate
- 292:     SUB R1, R3      ; Decrement
- 293:     CMP R1, R0      ; Compare with 0
- 294:     JNZ loop_start  ; Loop until zero
- 295:     ; R2 should be 55 (10+9+...+1)
- 296:     
- 297:     RET
- 298: 
- 299: ; ============================================================
- 300: ; TEST 7: Shift Operations
- 301: ; ============================================================
- 302: test_shifts:
- 303:     ; SHL: 1 << 4 = 16
- 304:     LI R1, 1
- 305:     LI R2, 4
- 306:     SHL R1, R2
- 307:     
- 308:     ; SHR: 16 >> 2 = 4
- 309:     LI R1, 16
- 310:     LI R2, 2
- 311:     SHR R1, R2
- 312:     
- 313:     ; SAR: arithmetic shift right (preserves sign)
- 314:     LI R1, -16      ; 0xFFF0
- 315:     LI R2, 2
- 316:     SAR R1, R2      ; Should be -4 (0xFFFC)
- 317:     
- 318:     RET
- 319: 
- 320: ; ============================================================
- 321: ; DATA SECTION
- 322: ; ============================================================
- 323: .section data
- 324: 
- 325: ; String constants for CHANNEL_RESOLVE
- 326: channel_name:
- 327:     .const "global"  ; Channel name string
- 328:     
- 329: ; Test message content
- 330: test_message:
- 331:     .const "Hello, iFlow VM!"
- 332: 
- 333: ; ============================================================
- 334: ; END
- 335: ; ============================================================
- 336: .end
+ 242: 
+ 243:     RET
+ 244: 
+ 245: ; ============================================================
+ 246: ; TEST 5: Block Operations (COPY, MOVE)
+ 247: ; ============================================================
+ 248: test_block_ops:
+ 249:     ; Prepare source data
+ 250:     LI R1, 0x1111
+ 251:     STW R1, TEST_BUFFER
+ 252:     LI R1, 0x2222
+ 253:     STW R1, TEST_BUFFER + 2
+ 254:     LI R1, 0x3333
+ 255:     STW R1, TEST_BUFFER + 4
+ 256:     
+ 257:     ; COPY: src=TEST_BUFFER, dst=RESULT_BUFFER, len=6 bytes
+ 258:     COPY TEST_BUFFER, RESULT_BUFFER, 6
+ 259:     
+ 260:     ; Verify copy
+ 261:     LDW R1, RESULT_BUFFER
+ 262:     ; R1 should be 0x1111
+ 263:     LDW R2, RESULT_BUFFER + 2
+ 264:     ; R2 should be 0x2222
+ 265:     
+ 266:     ; MOVE: overlapping regions
+ 267:     MOVE TEST_BUFFER, TEST_BUFFER + 2, 4
+ 268:     
+ 269:     RET
+ 270: 
+ 271: ; ============================================================
+ 272: ; TEST 6: Comparison and Conditional Logic
+ 273: ; ============================================================
+ 274: test_comparison:
+ 275:     ; CMP (signed): R1 = 100, R2 = 50
+ 276:     LI R1, 100
+ 277:     LI R2, 50
+ 278:     CMP R1, R2  ; Sets flags: R1 > R2
+ 279:     
+ 280:     ; CMPU (unsigned): R1 = 0xFFFF, R2 = 1
+ 281:     LI R1, 0xFFFF
+ 282:     LI R2, 1
+ 283:     CMPU R1, R2  ; Unsigned: R1 > R2
+ 284:     
+ 285:     ; Test loop with counter
+ 286:     LI R1, 10       ; Counter
+ 287:     LI R2, 0        ; Accumulator
+ 288:     LI R3, 1        ; Decrement value
+ 289: loop_start:
+ 290:     ADD R2, R1      ; Accumulate
+ 291:     SUB R1, R3      ; Decrement
+ 292:     CMP R1, R0      ; Compare with 0
+ 293:     JNZ loop_start  ; Loop until zero
+ 294:     ; R2 should be 55 (10+9+...+1)
+ 295:     
+ 296:     RET
+ 297: 
+ 298: ; ============================================================
+ 299: ; TEST 7: Shift Operations
+ 300: ; ============================================================
+ 301: test_shifts:
+ 302:     ; SHL: 1 << 4 = 16
+ 303:     LI R1, 1
+ 304:     LI R2, 4
+ 305:     SHL R1, R2
+ 306:     
+ 307:     ; SHR: 16 >> 2 = 4
+ 308:     LI R1, 16
+ 309:     LI R2, 2
+ 310:     SHR R1, R2
+ 311:     
+ 312:     ; SAR: arithmetic shift right (preserves sign)
+ 313:     LI R1, -16      ; 0xFFF0
+ 314:     LI R2, 2
+ 315:     SAR R1, R2      ; Should be -4 (0xFFFC)
+ 316:     
+ 317:     RET
+ 318: 
+ 319: ; ============================================================
+ 320: ; DATA SECTION
+ 321: ; ============================================================
+ 322: .section data
+ 323: 
+ 324: ; String constants for CHANNEL_RESOLVE
+ 325: channel_name:
+ 326:     .const "global"  ; Channel name string
+ 327:     
+ 328: ; Test message content
+ 329: test_message:
+ 330:     .const "Hello, iFlow VM!"
+ 331: 
+ 332: ; ============================================================
+ 333: ; END
+ 334: ; ============================================================
+ 335: .end

@@ -23,7 +23,7 @@ class Assembler {
     async assemble(source, fileName = '<input>') {
         this.reset();
         this.currentFile = fileName;
-        this.currentAddress = this.options.origin || 0;
+        this.currentAddress = this.userOrigin();
         // First pass: parse instructions and collect labels
         this.firstPass(source);
         // Check for errors from first pass
@@ -48,14 +48,14 @@ class Assembler {
         this.capabilities.clear();
         this.constantPool = [];
         this.firmwareEnabled = this.options.firmware ?? true;
-        this.currentAddress = this.options.origin || 0;
+        this.currentAddress = this.userOrigin();
         this.currentLine = 0;
         this.currentSection = 'code';
         this.constantPool = [];
     }
     firstPass(source) {
         const lines = source.split('\n');
-        this.currentAddress = this.options.origin || 0;
+        this.currentAddress = this.userOrigin();
         for (let i = 0; i < lines.length; i++) {
             this.currentLine = i + 1;
             const line = lines[i];
@@ -85,12 +85,12 @@ class Assembler {
     }
     secondPass() {
         const code = [];
-        // Prepend firmware ROM if enabled (occupies 0x0000-0x0FFF)
+        // Prepend firmware ROM if enabled (occupies 0x0000-0x0FFF). User code was
+        // already laid out from userOrigin() (>= 0x1000), so instruction addresses
+        // match the labels/entry point and the gap is filled with padding below.
         if (this.firmwareEnabled) {
             const firmware = this.generateFirmware();
             code.push(...firmware);
-            // User code starts at 0x1000 (page 1)
-            this.currentAddress = Math.max(this.currentAddress, 0x1000);
         }
         for (const instr of this.instructions) {
             // Insert padding bytes to reach instruction's address (materialize .origin/.align gaps)
@@ -103,7 +103,7 @@ class Assembler {
             this.emitOperands(instr, code);
         }
         // Validate user code size (excluding firmware)
-        const userCodeStart = this.firmwareEnabled ? 0x1000 : 0;
+        const userCodeStart = this.userOrigin();
         const userCodeSize = code.length - userCodeStart;
         const MAX_USER_CODE_SIZE = 4096; // 4KB = 1 page
         if (userCodeSize > MAX_USER_CODE_SIZE) {
@@ -248,9 +248,36 @@ class Assembler {
         }
         return fw;
     }
+    /**
+     * Emits a firmware ROM constant.
+     * <p>
+     * The constant is registered as an <em>equate</em> (name &rarr; value), not as a
+     * storage address: {@code LI R0, SERVICE_PROPERTY_READ} must load {@code 0x0100},
+     * not the ROM offset where the value happens to live. A program that declares the
+     * same name wins, so ROM constants never collide with user {@code .const}/{@code .equ}
+     * definitions.
+     * </p>
+     */
     emitConst(fw, name, value) {
-        this.defineLabel(name, fw.length, 0);
+        this.defineEquate(name, value);
         fw.push(value & 0xFF, (value >> 8) & 0xFF);
+    }
+    /** Registers a ROM-provided equate; an existing (user) definition is kept. */
+    defineEquate(name, value) {
+        if (this.labels.has(name))
+            return; // user definition wins
+        this.labels.set(name, { name, address: value, line: 0 });
+        this.symbols.set(name, value);
+    }
+    /**
+     * Effective origin for user code. When the firmware ROM is prepended it occupies
+     * 0x0000-0x0FFF, so user code starts at page 1 (0x1000) unless the caller asked
+     * for a higher origin. Labels, entry point and emitted addresses all use this base
+     * so they stay consistent with where the code is actually placed.
+     */
+    userOrigin() {
+        const origin = this.options.origin || 0;
+        return this.firmwareEnabled ? Math.max(origin, 0x1000) : origin;
     }
     emitInstr(fw, opcode, ...operands) {
         fw.push(opcode);
@@ -292,6 +319,10 @@ class Assembler {
             case '.firmware':
                 if (parts[1]) {
                     this.firmwareEnabled = parts[1].toLowerCase() !== 'off' && parts[1] !== '0';
+                    // Only safe to re-base while no instruction has been laid out yet.
+                    if (this.instructions.length === 0) {
+                        this.currentAddress = this.userOrigin();
+                    }
                 }
                 break;
             case '.align':
@@ -862,7 +893,7 @@ class Assembler {
                 return label.address;
             this.addDiagnostic('error', `Entry point label not found: ${this.options.entryPoint}`, 0, 0);
         }
-        return this.options.origin || 0;
+        return this.userOrigin();
     }
     generateDebugInfo() {
         let info = '';

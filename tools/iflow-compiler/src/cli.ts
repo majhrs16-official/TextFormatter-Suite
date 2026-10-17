@@ -18,6 +18,7 @@ program
   .option('-e, --entry <label>', 'entry point label')
   .option('-d, --debug', 'include debug info')
   .option('-l, --list', 'output assembly listing')
+  .option('--no-firmware', 'do not prepend the firmware ROM (bare-metal program)')
   .option('-v, --verbose', 'verbose output');
 
 program.parse(process.argv);
@@ -49,6 +50,7 @@ async function main() {
       origin: parseInt(options.origin, 0),
       entryPoint: options.entry,
       debug: options.debug,
+      firmware: options.firmware,
     });
 
     const result = await asm.assemble(source, inputPath);

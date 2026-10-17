@@ -51,6 +51,7 @@ commander_1.program
     .option('-e, --entry <label>', 'entry point label')
     .option('-d, --debug', 'include debug info')
     .option('-l, --list', 'output assembly listing')
+    .option('--no-firmware', 'do not prepend the firmware ROM (bare-metal program)')
     .option('-v, --verbose', 'verbose output');
 commander_1.program.parse(process.argv);
 const options = commander_1.program.opts();
@@ -75,6 +76,7 @@ async function main() {
             origin: parseInt(options.origin, 0),
             entryPoint: options.entry,
             debug: options.debug,
+            firmware: options.firmware,
         });
         const result = await asm.assemble(source, inputPath);
         const { program, symbols, diagnostics } = result;

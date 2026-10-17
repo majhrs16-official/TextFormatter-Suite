@@ -1,7 +1,7 @@
 ; iFlow VM Firmware Test Program
 ; Tests all instructions and HOST services
-; Origin: 0x0000
-.origin 0x0000
+; Assembled with the firmware ROM enabled (default): the ROM occupies
+; 0x0000-0x0FFF, so this program is placed at 0x1000 (page 1).
 .entry main
 
 .section code
@@ -189,58 +189,57 @@ nested_call_2:
 ; TEST 4: HOST Services
 ; ============================================================
 test_host_services:
-    ; Test PROPERTY_READ
-    ; R0 = service ID, R1 = scope (MESSAGE), R2 = property ID (CONTENT)
+    ; HOST ABI v2: R0=service, R1=options, R2=base (vaddr), R3=length
+    ; Returns: R0=status, R3=bytes transferred, R4=scalar result
+    ; (R1/R2 are preserved.)
+
+    ; PROPERTY_READ: options = (scope<<8) | propId  ->  0x0110 = MESSAGE/content
     LI R0, SERVICE_PROPERTY_READ
-    LI R1, SCOPE_MESSAGE
-    LI R2, PROP_CONTENT
+    LI R1, 0x0110
+    LI R2, RESULT_BUFFER
+    LI R3, 0x0100
     HOST
-    ; Result in R0
-    
-    ; Test PROPERTY_WRITE
-    ; R0 = service ID, R1 = scope, R2 = property ID, R3 = value (vaddr)
+    ; R0 = status, R3 = bytes written
+
+    ; PROPERTY_WRITE: options = 0x0111 = MESSAGE/channel
     LI R0, SERVICE_PROPERTY_WRITE
-    LI R1, SCOPE_EMITTER
-    LI R2, PROP_CHANNEL
-    LI R3, TEST_BUFFER
+    LI R1, 0x0111
+    LI R2, TEST_BUFFER
+    LI R3, 0x0008
     HOST
-    
-    ; Test PERMISSION_CHECK
-    ; R0 = service ID, R1 = permission bitmask, R2 = target (vaddr)
+
+    ; PERMISSION_CHECK: buffer = "actor\0perm"
     LI R0, SERVICE_PERM_CHECK
+    LI R2, TEST_BUFFER
+    LI R3, 0x0010
+    HOST
+    ; R4 = 0 (denied) | 1 (granted)
+
+    ; ROUTE_DECISION: options = decision code
+    LI R0, SERVICE_ROUTE_DECISION
+    LI R1, DECISION_LOG
+    HOST
+
+    ; STATE_READ: options = key
+    LI R0, SERVICE_STATE_READ
+    LI R1, 0x0001
+    LI R2, RESULT_BUFFER
+    LI R3, 0x0100
+    HOST
+
+    ; STATE_WRITE: options = key
+    LI R0, SERVICE_STATE_WRITE
     LI R1, 0x0001
     LI R2, TEST_BUFFER
+    LI R3, 0x0008
     HOST
-    ; Result in R0 (0=denied, 1=granted)
-    
-    ; Test ROUTE_DECISION
-    ; R0 = service ID, R3 = decision code
-    LI R0, SERVICE_ROUTE_DECISION
-    LI R3, DECISION_LOG
-    HOST
-    
-    ; Test STATE_READ
-    ; R0 = service ID, R1 = state key (vaddr), R2 = default value
-    LI R0, SERVICE_STATE_READ
-    LI R1, TEST_BUFFER
-    LI R2, 0
-    HOST
-    ; Result in R0
-    
-    ; Test STATE_WRITE
-    ; R0 = service ID, R1 = state key (vaddr), R2 = value
-    LI R0, SERVICE_STATE_WRITE
-    LI R1, TEST_BUFFER
-    LI R2, 0xDEAD
-    HOST
-    
-    ; Test CHANNEL_RESOLVE
-    ; R0 = service ID, R1 = channel name (vaddr)
+
+    ; CHANNEL_RESOLVE: reads the name, writes the id back to the same buffer
     LI R0, SERVICE_CHANNEL_RESOLVE
-    LI R1, TEST_BUFFER
+    LI R2, TEST_BUFFER
+    LI R3, 0x0008
     HOST
-    ; Result in R0 (channel ID or 0)
-    
+
     RET
 
 ; ============================================================
