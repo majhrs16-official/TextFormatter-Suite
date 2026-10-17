@@ -5,10 +5,16 @@ import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
 
 class VmConfigLoaderTest {
 
@@ -62,5 +68,62 @@ class VmConfigLoaderTest {
         assertEquals(0, code[9] & 0xFF);
         // HALT
         assertEquals(Opcode.HALT, code[10] & 0xFF);
+    }
+
+    @Test
+    void loadProgramParsesAValidPolicyFlow(@TempDir Path dir) throws IOException {
+        byte[] code = { Opcode.HALT };
+        Files.write(dir.resolve("policy.flow"), buildFlow(code, 0, "routing.decide"));
+
+        ProgramImage program = VmConfigLoader.loadProgram(dir, null);
+
+        // The real .flow is used, not the 11-byte pass-through fallback.
+        assertArrayEquals(code, program.code());
+        assertEquals(0, program.entryPoint());
+        assertTrue(program.hasCapability("routing.decide"));
+    }
+
+    @Test
+    void loadProgramFallsBackWhenPolicyFlowIsCorrupt(@TempDir Path dir) throws IOException {
+        byte[] corrupt = buildFlow(new byte[]{ Opcode.HALT }, 0);
+        corrupt[corrupt.length - 1] ^= 0xFF; // break the SHA-256 trailer
+        Files.write(dir.resolve("policy.flow"), corrupt);
+
+        ProgramImage program = VmConfigLoader.loadProgram(dir, null);
+
+        // Malformed binaries must not abort startup: pass-through is used.
+        assertEquals(11, program.code().length);
+    }
+
+    /**
+     * Serializes a minimal valid .flow image: 16-byte header + code (no constants)
+     * + capabilities + SHA-256 trailer, matching {@code ProgramImageParser.parse}.
+     */
+    private static byte[] buildFlow(byte[] code, int entryPoint, String... capabilities) {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            out.write(1); // format version
+            out.write(1); // ISA version
+            out.write(1); // minimum ABI version
+            out.write(1); // minimum firmware version
+            out.write((entryPoint >> 8) & 0xFF);
+            out.write(entryPoint & 0xFF);
+            out.write((code.length >> 8) & 0xFF);
+            out.write(code.length & 0xFF);
+            out.write(0); // constants length (high)
+            out.write(0); // constants length (low)
+            out.write(capabilities.length);
+            for (int i = 0; i < 5; i++) out.write(0); // padding
+            out.write(code);
+            for (String cap : capabilities) {
+                out.write(cap.getBytes(StandardCharsets.US_ASCII));
+                out.write(0);
+            }
+            byte[] body = out.toByteArray();
+            out.write(MessageDigest.getInstance("SHA-256").digest(body));
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new AssertionError("failed to build test fixture", e);
+        }
     }
 }

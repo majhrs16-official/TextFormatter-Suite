@@ -2,6 +2,7 @@ package me.majhrs16.suite.iflow.vm;
 
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
+import me.majhrs16.suite.iflow.vm.isa.ProgramImageParser;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -42,13 +43,15 @@ public final class VmConfigLoader {
 
     private static ProgramImage loadNativeProgram(Path path, PluginLogger logger) throws IOException {
         byte[] data = Files.readAllBytes(path);
-        // Parse binary format - simplified for now
-        // In production, use proper deserialization (e.g., Jackson CBOR/MessagePack or custom binary format)
-        // For now, return pass-through
+        // Parse the real .flow binary: the parser validates the format/ISA/ABI
+        // versions, the section bounds against the memory map, and the SHA-256
+        // trailer. A malformed file throws VmException, which loadProgram()
+        // catches to fall back to the pass-through program.
+        ProgramImage image = ProgramImageParser.parse(data);
         if (logger != null) {
             logger.info("Loaded native VM program: " + path + " (" + data.length + " bytes)");
         }
-        return createPassThroughProgram();
+        return image;
     }
 
     private static ProgramImage createPassThroughProgram() {

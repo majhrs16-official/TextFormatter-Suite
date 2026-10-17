@@ -1,5 +1,5 @@
 [
-  { "file": "valid-edge-immediates.flowasm",        "expect": "ok" },
+  { "file": "valid-edge-immediates.flowasm",        "expect": "ok", "flags": ["--no-firmware"], "codeHex": "0001ffff00027fff00038000000400000005ffff68" },
   { "file": "valid-register-r7.flowasm",            "expect": "ok" },
   { "file": "valid-symbolic-immediate.flowasm",     "expect": "ok" },
   { "file": "invalid-align-zero.flowasm",           "expect": "error", "match": ".align requires positive integer" },

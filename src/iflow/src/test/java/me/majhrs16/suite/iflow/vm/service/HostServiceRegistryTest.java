@@ -57,11 +57,13 @@ class HostServiceRegistryTest {
     }
 
     @Test
-    void serviceNotFoundThrows() {
+    void serviceNotFoundReturnsUnsupported() {
         HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr);
 
-        assertThrows(VmException.class, () -> hsr.invoke(ctx, 0xFFFF, 0, 0, 0));
+        // Unknown service ids are recoverable: R0 = 5 (UNSUPPORTED), no exception.
+        ServiceResult result = hsr.invoke(ctx, 0xFFFF, 0, 0, 0);
+        assertEquals(ServiceResult.Status.UNSUPPORTED, result.status());
     }
 
     @Test

@@ -726,14 +726,21 @@ class Assembler {
     }
     getImm8Operand(operands, index) {
         const op = operands[index];
-        if (op && (op.type === 'imm8' || op.type === 'imm16'))
-            return op.value & 0xFF;
+        if (op && (op.type === 'imm8' || op.type === 'imm16')) {
+            const raw = op.rawValue !== undefined ? op.rawValue : op.value;
+            return raw & 0xFF;
+        }
         return 0;
     }
     getImm16Operand(operands, index) {
         const op = operands[index];
-        if (op && (op.type === 'imm16' || op.type === 'imm8'))
-            return op.value & 0xFFFF;
+        if (op && (op.type === 'imm16' || op.type === 'imm8')) {
+            // Use the raw (unmasked) value: `value` is truncated to 8 bits for imm8
+            // operands, so masking it again to 16 bits would zero-extend negatives
+            // (e.g. `LI R1, -1` must emit 0xFFFF, not 0x00FF).
+            const raw = op.rawValue !== undefined ? op.rawValue : op.value;
+            return raw & 0xFFFF;
+        }
         if (op && op.type === 'label') {
             // Handle LABEL+OFFSET or LABEL-OFFSET format
             const match = op.name.match(/^([a-zA-Z_][a-zA-Z0-9_]*)([+-]\d+)?$/);

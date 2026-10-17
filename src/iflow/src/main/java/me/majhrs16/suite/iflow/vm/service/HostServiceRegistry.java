@@ -245,7 +245,11 @@ public final class HostServiceRegistry {
     public ServiceResult invoke(ExecutionContext ctx, int serviceId, int argVAddr, int argLength, int options) {
         HostService service = services.get(serviceId);
         if (service == null) {
-            throw VmException.hostServiceNotFound(serviceId, ctx.registers().get(RegisterFile.IP));
+            // Unknown/optional service: report UNSUPPORTED in R0 (ABI status 5) so
+            // the program can negotiate capabilities. It must not be a hard error:
+            // throwing here was turned into a REJECT by VmPolicyEngine, contradicting
+            // the documented contract.
+            return ServiceResult.unsupported();
         }
 
         // Check declared capabilities against this execution's allowed capabilities

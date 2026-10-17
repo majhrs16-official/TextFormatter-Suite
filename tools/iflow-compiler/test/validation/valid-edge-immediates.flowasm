@@ -1,4 +1,11 @@
-; LI with edge-case immediate values — all must assemble.
+; LI with edge-case immediate values — all must assemble, and the emitted
+; bytes are asserted by cases.json (`codeHex`, firmware off):
+;   LI R1, 65535   -> 00 01 ff ff   (max u16)
+;   LI R2, 32767   -> 00 02 7f ff   (max i16)
+;   LI R3, -32768  -> 00 03 80 00   (min i16)
+;   LI R4, 0       -> 00 04 00 00
+;   LI R5, -1      -> 00 05 ff ff   (negative -> sign-extended, NOT 00 ff)
+;   HALT           -> 68
 ; Origin defaults to 0x0000.
 LI R1, 65535      ; max u16
 LI R2, 32767      ; max i16

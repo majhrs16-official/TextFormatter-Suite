@@ -100,7 +100,9 @@ public final class ExecutionContext {
             registers.set(i, 0);
         }
         propertyCache.clear();
-        journal.clear();
+        // reset() (not clear()): the journal may already be committed/discarded
+        // from the previous execution, and clear() would throw, breaking pooling.
+        journal.reset();
         fuelRemaining = fuelBudget;
         callDepth = 0;
         framePointerDepth = 0;

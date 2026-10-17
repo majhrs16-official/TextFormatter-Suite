@@ -91,6 +91,33 @@ class ModificationJournalTest {
     }
 
     @Test
+    void resetAfterCommitAllowsReuse() {
+        ModificationJournal journal = new ModificationJournal();
+        journal.setText("test");
+        journal.commit();
+
+        journal.reset();
+
+        assertFalse(journal.isCommitted());
+        assertFalse(journal.isDiscarded());
+        assertTrue(journal.isEmpty());
+        journal.setText("next"); // must accept new entries again
+        assertEquals(1, journal.size());
+    }
+
+    @Test
+    void resetAfterDiscardAllowsReuse() {
+        ModificationJournal journal = new ModificationJournal();
+        journal.setText("test");
+        journal.discard();
+
+        journal.reset();
+
+        assertFalse(journal.isDiscarded());
+        assertTrue(journal.isEmpty());
+    }
+
+    @Test
     void entriesAreImmutableCopy() {
         ModificationJournal journal = new ModificationJournal();
         journal.setText("test");

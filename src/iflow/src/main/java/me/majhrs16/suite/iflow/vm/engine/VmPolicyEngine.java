@@ -174,6 +174,12 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             // VM execution error - reject
             return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
                 "VM error: " + e.getMessage(), 0, recipient, emitter), message);
+        } catch (RuntimeException e) {
+            // Safety net for the message path: an unexpected runtime failure must
+            // never escape the router (it would propagate to the server's chat
+            // pipeline). Reject the message instead.
+            return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
+                "VM internal error: " + e.getMessage(), 0, recipient, emitter), message);
         } finally {
             contextPool.release(ctx);
         }
@@ -255,49 +261,45 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
     private void prepareInput(ExecutionContext ctx, Message message, Actor emitter,
                               Actor recipient, String channelPath) {
-        // Write message properties to the input buffer (see VmMemoryMap)
+        // Write message properties to the input buffer (see VmMemoryMap). Every
+        // field is clamped to the space that is actually left, so a message whose
+        // UTF-8 size exceeds the input page degrades gracefully instead of
+        // producing a negative System.arraycopy length (IndexOutOfBoundsException).
         int inputVAddr = ctx.inputBufferVAddr();
+        int size = ctx.ioBufferSize();
         int offset = 0;
 
-        // Write message text
-        byte[] textBytes = message.text().getBytes(StandardCharsets.UTF_8);
-        int textLen = Math.min(textBytes.length, ctx.ioBufferSize() - offset - 256); // Leave space for other fields
-        ctx.softMMU().writeBlock(inputVAddr + offset, textBytes, 0, textLen);
-        offset += textLen;
-        // Null terminator
-        ctx.softMMU().writeByte(inputVAddr + offset, 0);
-        offset++;
+        offset = writeField(ctx, inputVAddr, offset, size,
+            message.text().getBytes(StandardCharsets.UTF_8), 256); // keep room for the rest
+        offset = writeField(ctx, inputVAddr, offset, size,
+            channelPath.getBytes(StandardCharsets.UTF_8), 1);
+        offset = writeField(ctx, inputVAddr, offset, size,
+            message.direction().toString().getBytes(StandardCharsets.UTF_8), 1);
+        offset = writeField(ctx, inputVAddr, offset, size,
+            emitter.name().getBytes(StandardCharsets.UTF_8), 1);
+        writeField(ctx, inputVAddr, offset, size,
+            recipient.name().getBytes(StandardCharsets.UTF_8), 1);
+    }
 
-        // Write channel
-        byte[] channelBytes = channelPath.getBytes(StandardCharsets.UTF_8);
-        int channelLen = Math.min(channelBytes.length, ctx.ioBufferSize() - offset - 1);
-        ctx.softMMU().writeBlock(inputVAddr + offset, channelBytes, 0, channelLen);
-        offset += channelLen;
-        ctx.softMMU().writeByte(inputVAddr + offset, 0);
-        offset++;
-
-        // Write direction
-        String dirStr = message.direction().toString();
-        byte[] dirBytes = dirStr.getBytes(StandardCharsets.UTF_8);
-        int dirLen = Math.min(dirBytes.length, ctx.ioBufferSize() - offset - 1);
-        ctx.softMMU().writeBlock(inputVAddr + offset, dirBytes, 0, dirLen);
-        offset += dirLen;
-        ctx.softMMU().writeByte(inputVAddr + offset, 0);
-        offset++;
-
-        // Write emitter name
-        byte[] emitterBytes = emitter.name().getBytes(StandardCharsets.UTF_8);
-        int emitterLen = Math.min(emitterBytes.length, ctx.ioBufferSize() - offset - 1);
-        ctx.softMMU().writeBlock(inputVAddr + offset, emitterBytes, 0, emitterLen);
-        offset += emitterLen;
-        ctx.softMMU().writeByte(inputVAddr + offset, 0);
-        offset++;
-
-        // Write recipient name
-        byte[] recipBytes = recipient.name().getBytes(StandardCharsets.UTF_8);
-        int recipLen = Math.min(recipBytes.length, ctx.ioBufferSize() - offset - 1);
-        ctx.softMMU().writeBlock(inputVAddr + offset, recipBytes, 0, recipLen);
-        // offset += recipLen; // Last field, no need for trailing null
+    /**
+     * Writes one NUL-terminated field into the input buffer, reserving {@code keep}
+     * bytes for the fields that follow.
+     *
+     * @return the offset after the field (and its terminator, when it fits)
+     */
+    private static int writeField(ExecutionContext ctx, int base, int offset, int size,
+                                  byte[] bytes, int keep) {
+        int room = Math.max(0, size - offset - keep);
+        int len = Math.min(bytes.length, room);
+        if (len > 0) {
+            ctx.softMMU().writeBlock(base + offset, bytes, 0, len);
+            offset += len;
+        }
+        if (offset < size) {
+            ctx.softMMU().writeByte(base + offset, 0);
+            offset++;
+        }
+        return offset;
     }
 
     private boolean allowed(Actor actor, String permission) {

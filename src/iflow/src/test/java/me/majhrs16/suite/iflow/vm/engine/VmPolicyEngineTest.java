@@ -282,6 +282,22 @@ class VmPolicyEngineTest {
     }
 
     @Test
+    void oversizedMessageDegradesInsteadOfThrowing() {
+        VmPolicyEngine engine = createEngine();
+        Actor sender = createActor("Alice");
+        Actor recipient = createActor("Bob");
+        // The text alone fills the 4 KiB input page and the channel name pushes
+        // the write offset to the very end. Before the clamp this produced a
+        // negative length and an uncaught IndexOutOfBoundsException.
+        Message msg = createMessage("x".repeat(5000), "c".repeat(300), sender);
+
+        RouteOutcome outcome = engine.route(msg, recipient);
+
+        assertNotNull(outcome);
+        assertEquals(PolicyTarget.LOG, outcome.decision().target());
+    }
+
+    @Test
     void passThroughProgramDelivers() {
         // The default program (no policy.flow) must reach HALT and yield LOG,
         // not throw when it runs off the end of the code.

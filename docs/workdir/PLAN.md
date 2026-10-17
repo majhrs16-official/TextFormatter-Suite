@@ -1143,3 +1143,48 @@ mapa (`CONSTANTS_MAX_SIZE` evita que las constantes invadan datos).
 **Verificación:** `:src:iflow:test` (261 tests), `:src:host:test`, `:src:loadtest:test`
 → BUILD SUCCESSFUL; suite de validación del compilador 11/11; `firmware.flow` sigue en
 4615 bytes (mismo tamaño; cambian bytes de equates y símbolos).
+
+---
+
+## REMEDIACIÓN 2026-10-17 — Hallazgos de `AUDITORIA.md`
+
+> Plan de acción sobre la auditoría (`docs/workdir/AUDITORIA.md`, commit auditado
+> `5ade855`). Los IDs `IFLOW-AUD-*` son los del informe. **Releer antes de tocar el
+> toolchain o el motor.**
+
+### Estrategia
+
+Dos lotes. El **lote 1** son bugs confirmados, de bajo riesgo y sin decisiones de
+diseño pendientes (los que el propio informe marca «hacer primero»). El **lote 2**
+son features/arquitectura y requieren decisiones explícitas del usuario (allowlist de
+capabilities, cableado de servicios con APIs del host, ROM de firmware).
+
+### Lote 1 — bugs (en curso)
+
+| Fix | Decisión | Test |
+|---|---|---|
+| AUD-001 inmediatos negativos | Emitir desde `rawValue` (`& 0xFFFF`) en `getImm16Operand`; `imm8` (`& 0xFF`) sin cambios. `run.js` gana `codeHex`/`flags` para asertar bytes. | `valid-edge-immediates` con bytes esperados |
+| AUD-002 loader stub | `loadNativeProgram` usa `ProgramImageParser.parse` (valida hash/versiones/límites); el fallback a pass-through se mantiene solo ante error de carga. | `VmConfigLoaderTest` con un `.flow` válido |
+| AUD-003 pool inoperante | Nuevo `ModificationJournal.reset()` (limpia entradas **y** flags); `ExecutionContext.initialize()` usa `reset()` en vez de `clear()`. `clear()` conserva su guardia. | `ModificationJournalTest` + `ExecutionContextPoolTest` |
+| AUD-004 longitud negativa | Acotar cada longitud con `max(0, …)` y no escribir terminador fuera del buffer; red de seguridad `catch (RuntimeException)` → REJECT en `route`. | `VmPolicyEngineTest` con mensaje sobredimensionado |
+| AUD-006 servicio desconocido | `HostServiceRegistry.invoke` devuelve `ServiceResult.unsupported()` (R0=5) en vez de lanzar; `hostServiceNotFound` queda para errores internos. | `HostServiceRegistryTest` (UNSUPPORTED, no excepción) |
+
+### Lote 2 — pendiente de decisión
+
+- **AUD-008 firmware stub ON.** Opciones: (a) apagar por defecto (revierte la decisión
+  reciente de firmware ON), (b) implementar el emisor con `INSTRUCTION_SIZES` + fixups
+  de salto, (c) marcar `fw_*` como `UNSUPPORTED`. Requiere elección.
+- **AUD-015 capabilities auto-declaradas.** La lista debe venir del host (allowlist),
+  no del programa. Requiere API de allowlist en `VmPolicyEngine`/host.
+- **AUD-016 servicios sin cablear.** `propertyReader/Writer`, `stateReader/Writer`,
+  `channelResolver` necesitan el `Message`/estado del host. Decisión de diseño: pasar
+  el `Message` por el `ExecutionContext` (contexto por ejecución) o cambiar las firmas
+  de los inyectores para recibir el `ExecutionContext`.
+- **AUD-002/004 red de seguridad.** El `catch (RuntimeException)` es defensivo; no
+  sustituye la corrección de raíz.
+
+### Bitácora de remediación
+
+| Fecha | Commit | Qué |
+|---|---|---|
+| 2026-10-17 | — | plan de remediación registrado (este apartado) |

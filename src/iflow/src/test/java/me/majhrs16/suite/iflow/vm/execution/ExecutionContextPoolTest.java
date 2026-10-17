@@ -44,7 +44,6 @@ class ExecutionContextPoolTest {
 
     @Test
     void releasedContextIsReset() {
-
         ExecutionContextPool pool = new ExecutionContextPool(new HostServiceRegistry(), ctx -> ctx.fuelBudget(10000));
         ExecutionContext ctx1 = pool.acquire();
         ctx1.initialize();
@@ -56,6 +55,27 @@ class ExecutionContextPoolTest {
         assertEquals(0, ctx2.registers().get(0));
         assertEquals(ctx2.fuelBudget(), ctx2.fuelRemaining());
         assertNull(ctx2.getCachedProperty("key"));
+    }
+
+    @Test
+    void committedJournalDoesNotBreakPooling() {
+        // Production path: the validator commits the journal after a successful
+        // route, then release() resets the context. clear() used to throw here,
+        // silently discarding the context so the pool never reused anything.
+        ExecutionContextPool pool = new ExecutionContextPool(new HostServiceRegistry(), ctx -> ctx.fuelBudget(1000));
+        ExecutionContext ctx1 = pool.acquire();
+        ctx1.initialize();
+        ctx1.journal().setText("edited");
+        ctx1.journal().commit();
+        pool.release(ctx1);
+
+        assertEquals(1, pool.available());
+        assertEquals(1, pool.created());
+
+        ExecutionContext ctx2 = pool.acquire();
+        assertSame(ctx1, ctx2);
+        assertTrue(ctx2.journal().isEmpty());
+        assertFalse(ctx2.journal().isCommitted());
     }
 
     @Test

@@ -24,17 +24,38 @@ const outFile = path.join(os.tmpdir(), 'iflow-validation.flow');
 let failed = 0;
 
 for (const c of cases) {
-  const res = spawnSync(process.execPath, [cli, path.join(dir, c.file), '-o', outFile], { encoding: 'utf8' });
+  const args = [cli, path.join(dir, c.file), '-o', outFile];
+  if (c.flags) args.push(...c.flags);
+  const res = spawnSync(process.execPath, args, { encoding: 'utf8' });
   const output = `${res.stdout || ''}${res.stderr || ''}`;
   const outcomeOk = c.expect === 'ok' ? res.status === 0 : res.status !== 0;
   const matchOk = !c.match || output.includes(c.match);
 
-  if (outcomeOk && matchOk) {
+  // Optional byte-level assertion over the code section of the produced .flow.
+  // Header: [6..7] = codeLength, code starts at offset 16.
+  let bytesOk = true;
+  let actualCodeHex = '';
+  if (c.codeHex) {
+    if (res.status === 0) {
+      const buf = fs.readFileSync(outFile);
+      const codeLength = (buf[6] << 8) | buf[7];
+      actualCodeHex = buf.subarray(16, 16 + codeLength).toString('hex');
+      bytesOk = actualCodeHex === c.codeHex;
+    } else {
+      bytesOk = false;
+    }
+  }
+
+  if (outcomeOk && matchOk && bytesOk) {
     console.log(`ok   ${c.file}`);
   } else {
     failed++;
     const expected = `${c.expect}${c.match ? ` matching "${c.match}"` : ''}`;
     console.error(`FAIL ${c.file} (expected ${expected}, exit ${res.status})`);
+    if (!bytesOk) {
+      console.error(`       expected code ${c.codeHex}`);
+      console.error(`       actual   code ${actualCodeHex || '<unavailable>'}`);
+    }
     console.error(output.trim().split('\n').map(l => `       ${l}`).join('\n'));
   }
 }

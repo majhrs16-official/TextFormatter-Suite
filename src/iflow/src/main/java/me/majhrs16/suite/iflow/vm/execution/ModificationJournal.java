@@ -142,6 +142,26 @@ public final class ModificationJournal {
     public boolean isCommitted() { return committed; }
     public boolean isDiscarded() { return discarded; }
 
+    /**
+     * Resets the journal so its owning context can be reused.
+     * <p>
+     * Unlike {@link #clear()}, this also lifts the committed/discarded flags: a
+     * pooled {@link ExecutionContext} is reset <em>after</em> the validator has
+     * committed or discarded the journal, and {@code clear()} would throw
+     * {@link IllegalStateException}, silently discarding the context (the pool
+     * then never reuses anything).
+     * </p>
+     */
+    public void reset() {
+        entries.clear();
+        committed = false;
+        discarded = false;
+    }
+
+    /**
+     * Clears the entries of a pristine (not yet committed/discarded) journal.
+     * Keeps the guard on purpose; use {@link #reset()} to recycle a journal.
+     */
     public void clear() {
         if (committed || discarded) {
             throw new IllegalStateException("Journal already " + (committed ? "committed" : "discarded"));
