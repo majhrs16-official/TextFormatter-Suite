@@ -293,6 +293,7 @@ tools/iflow-compiler/
 ├── src/
 │   ├── assembler.ts      # Two-pass assembler (core)
 │   ├── cli.ts            # CLI entry point (commander)
+│   ├── index.ts          # Public API barrel (library entry point)
 │   └── types.ts          # ISA definitions, types
 ├── test/
 │   ├── *.flowasm         # Fixtures (firmware, simple, main_only)
@@ -308,15 +309,18 @@ tools/iflow-compiler/
 ## Desarrollo
 
 ```bash
-# Compilar TypeScript
+# Compilar TypeScript a dist/
 npm run build
 
-# Tests (Jest)
-npm run test
+# Validación del ensamblador (golden CLI: test/validation/*)
+npm test            # alias de npm run test:validation
 
-# Compilar y testear firmware
-npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow -d
+# Recompilar el fixture de firmware
+npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 ```
+
+`dist/` es un artefacto generado y **no se versiona**: se produce con `npm run build`
+(y también vía la tarea Gradle `:src:iflow:iflowCompilerBuild`).
 
 ---
 

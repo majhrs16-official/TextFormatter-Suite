@@ -6,8 +6,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "npm run test:validation",
     "test:validation": "node test/validation/run.js",
+    "test:jest": "jest",
     "dev": "ts-node src/cli.ts"
   },
   "bin": {
