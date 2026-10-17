@@ -1240,7 +1240,7 @@ empaquetado como `MOV`):
 
 **Verificación:** tests Java de los 4 opcodes indirectos (acceso + Z/N) + test de
 integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
-`firmware.flow` (4615 B) y validación del compilador.
+`firmware.flow` (4648 B) y validación del compilador.
 
 ### Bitácora de remediación
 
@@ -1252,3 +1252,4 @@ integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
 | 2026-10-17 | `d6b7fb9` | AUD-009 (guard de pila) + AUD-014 (test de firmware portable/real) |
 | 2026-10-17 | `e446db2` | AUD-007: `fetch*` lee memoria física tras `translateExecute` |
 | 2026-10-17 | `a410a31` | AUD-008/D12: ISA v2 (LDBI/LDWI/STBI/STWI) + ROM de firmware real (utilidades + wrappers de host) |
+| 2026-10-17 | `26a5985` | AUD-016/D16: puerto formal `HostContext` (servicios sin lambdas sueltas; estado del host en el engine) |
