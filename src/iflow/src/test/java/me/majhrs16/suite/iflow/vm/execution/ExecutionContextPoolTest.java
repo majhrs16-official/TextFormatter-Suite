@@ -184,4 +184,35 @@ class ExecutionContextPoolTest {
         assertEquals(0, ctx2.registers().get(0));
         assertEquals(1000, ctx2.fuelRemaining());
     }
+
+    @Test
+    void retainedContextsNeverExceedMaxSizeUnderConcurrency() throws Exception {
+        int maxSize = 4;
+        ExecutionContextPool pool = new ExecutionContextPool(new HostServiceRegistry(), ctx -> {}, maxSize);
+
+        int threads = 8;
+        int iterations = 2000;
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+        for (int t = 0; t < threads; t++) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                for (int i = 0; i < iterations; i++) {
+                    pool.release(pool.acquire());
+                }
+                return null;
+            }));
+        }
+        start.countDown();
+        for (var f : futures) f.get();
+        executor.shutdown();
+
+        // At rest every created context is either retained (<= maxSize) or discarded,
+        // so neither the idle queue nor the live count may exceed the bound.
+        assertTrue(pool.available() <= maxSize, "available=" + pool.available());
+        assertTrue(pool.created() <= maxSize, "created=" + pool.created());
+        assertEquals(pool.available(), pool.created(),
+            "created must count exactly the retained contexts once quiescent");
+    }
 }

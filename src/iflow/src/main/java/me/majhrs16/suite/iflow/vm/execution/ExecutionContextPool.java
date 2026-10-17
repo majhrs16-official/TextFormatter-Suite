@@ -14,6 +14,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Contexts are expensive to create (allocate registers, etc.) so we pool them.
  * Each context is fully reset before reuse to prevent state leakage.
  * The SoftMMU is set by the caller (VmPolicyEngine) from the current loaded program.
+ * {@code maxSize} bounds the number of <em>retained</em> (idle) contexts so the
+ * pool cannot grow without bound; {@link #acquire()} never blocks the message
+ * path, so it may transiently create more contexts than {@code maxSize} under a
+ * burst, and {@link #release(ExecutionContext)} discards the surplus.
  * Thread-safe for concurrent access.
  * </p>
  */
@@ -49,10 +53,9 @@ public final class ExecutionContextPool implements AutoCloseable {
 
         ExecutionContext ctx = available.poll();
         if (ctx == null) {
-            if (created.get() >= maxSize) {
-                // Pool exhausted - create anyway but log warning
-                // In production, might want to block or throw
-            }
+            // No idle context: create one. The pool must never block the message
+            // path, so maxSize bounds the contexts we *retain* (see release()),
+            // not the number that can exist concurrently.
             ctx = new ExecutionContext();
             created.incrementAndGet();
         }
@@ -75,17 +78,20 @@ public final class ExecutionContextPool implements AutoCloseable {
             configurator.accept(ctx);
         } catch (Exception e) {
             // If reset fails, discard this context (don't return to pool)
-            // Could log warning here
             created.decrementAndGet();
             return;
         }
 
-        if (available.size() < maxSize) {
-            available.offer(ctx);
-            released.incrementAndGet();
-        } else {
-            // Pool full, let it be GC'd
-            created.decrementAndGet();
+        // Retain-or-discard must be atomic with the size check, otherwise two
+        // concurrent releases can both see room and push available() above maxSize.
+        synchronized (this) {
+            if (!closed && available.size() < maxSize) {
+                available.offer(ctx);
+                released.incrementAndGet();
+            } else {
+                // Pool full (or closed), let it be GC'd
+                created.decrementAndGet();
+            }
         }
     }
 
@@ -97,7 +103,12 @@ public final class ExecutionContextPool implements AutoCloseable {
 
     @Override
     public void close() {
-        closed = true;
-        available.clear();
+        synchronized (this) {
+            closed = true;
+            int dropped = available.size();
+            available.clear();
+            // Contexts we drop are no longer owned, so they must stop counting.
+            if (dropped > 0) created.addAndGet(-dropped);
+        }
     }
 }
