@@ -1251,4 +1251,4 @@ integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
 | 2026-10-17 | `7802970` | AUD-015: capabilities solicitadas ∩ concedidas por el host |
 | 2026-10-17 | `d6b7fb9` | AUD-009 (guard de pila) + AUD-014 (test de firmware portable/real) |
 | 2026-10-17 | `e446db2` | AUD-007: `fetch*` lee memoria física tras `translateExecute` |
-| 2026-10-17 | `52cc767` | AUD-008/D12: ISA v2 (LDBI/LDWI/STBI/STWI) + ROM de firmware real (utilidades + wrappers de host) |
+| 2026-10-17 | `a410a31` | AUD-008/D12: ISA v2 (LDBI/LDWI/STBI/STWI) + ROM de firmware real (utilidades + wrappers de host) |
