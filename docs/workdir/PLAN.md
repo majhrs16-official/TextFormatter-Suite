@@ -1171,15 +1171,25 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
 
 ### Lote 2 — pendiente de decisión
 
+- **AUD-015 capabilities auto-declaradas — ✅ hecho.** El motor intersecta las
+  capacidades *solicitadas* por el programa con las *concedidas* por el host
+  (`serviceRegistry.declaredCapabilities()`, que es la unión de lo declarado en
+  `createServiceRegistry` y los `requiredCapabilities()` de cada servicio). El programa
+  ya no puede ampliar sus privilegios. Una allowlist explícita y configurable por
+  despliegue puede estrechar el conjunto más adelante, pero la frontera ya es del host.
+  (`VmPolicyEngine.grantedCapabilities`.)
 - **AUD-008 firmware stub ON.** Opciones: (a) apagar por defecto (revierte la decisión
   reciente de firmware ON), (b) implementar el emisor con `INSTRUCTION_SIZES` + fixups
   de salto, (c) marcar `fw_*` como `UNSUPPORTED`. Requiere elección.
-- **AUD-015 capabilities auto-declaradas.** La lista debe venir del host (allowlist),
-  no del programa. Requiere API de allowlist en `VmPolicyEngine`/host.
 - **AUD-016 servicios sin cablear.** `propertyReader/Writer`, `stateReader/Writer`,
-  `channelResolver` necesitan el `Message`/estado del host. Decisión de diseño: pasar
-  el `Message` por el `ExecutionContext` (contexto por ejecución) o cambiar las firmas
-  de los inyectores para recibir el `ExecutionContext`.
+  `channelResolver` necesitan el `Message`/estado del host. Opciones:
+  (a) **puerto formal** `HostContext` en el paquete VM (leer/escribir propiedad, resolver
+  canal, leer/escribir estado), implementado por el host con un adaptador sobre
+  `Message`/`Actor`/`ChannelRegistry`; `ExecutionContext` guarda el `HostContext` de la
+  ejecución (hexagonal, elimina las lambdas sueltas);
+  (b) **mínimo**: cambiar las firmas de los inyectores para recibir `ExecutionContext`
+  y meter el `Message` en el contexto por ejecución.
+  Requiere elección. (a) es el camino del informe («puertos formales»).
 - **AUD-002/004 red de seguridad.** El `catch (RuntimeException)` es defensivo; no
   sustituye la corrección de raíz.
 
@@ -1188,3 +1198,5 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
 | Fecha | Commit | Qué |
 |---|---|---|
 | 2026-10-17 | — | plan de remediación registrado (este apartado) |
+| 2026-10-17 | `af72e9f` | lote 1: AUD-001/002/003/004/006 (compilador + VM) + tests |
+| 2026-10-17 | — | AUD-015: capabilities solicitadas ∩ concedidas por el host |

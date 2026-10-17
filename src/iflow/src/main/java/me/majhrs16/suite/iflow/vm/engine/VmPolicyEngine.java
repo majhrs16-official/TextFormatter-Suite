@@ -23,9 +23,12 @@ import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.charset.StandardCharsets;
 
@@ -155,7 +158,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                .actorId(recipient.name())
                .softMMU(new SoftMMU(loaded.softMMU))  // Copy program's MMU (page tables + physical memory)
                .serviceRegistry(serviceRegistry)
-               .allowedCapabilities(loaded.program.capabilities());
+               .allowedCapabilities(grantedCapabilities(
+                   loaded.program.capabilities(), serviceRegistry.declaredCapabilities()));
 
             // Initialize context (resets registers, fuel, clears I/O buffers)
             ctx.initialize();
@@ -304,6 +308,22 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
     private boolean allowed(Actor actor, String permission) {
         return permission == null || permissions.has(actor, permission);
+    }
+
+    /**
+     * Intersects the capabilities a program <em>requests</em> (its
+     * {@code .capability} directives) with the capabilities the host
+     * <em>grants</em>. The program can never widen its own privileges: a
+     * capability the host has not declared is dropped.
+     */
+    static String[] grantedCapabilities(String[] requested, Set<String> granted) {
+        List<String> effective = new ArrayList<>(requested.length);
+        for (String cap : requested) {
+            if (granted.contains(cap)) {
+                effective.add(cap);
+            }
+        }
+        return effective.toArray(new String[0]);
     }
 
     @Override

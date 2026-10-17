@@ -236,6 +236,15 @@ public final class HostServiceRegistry {
     }
 
     /**
+     * Capabilities the host grants (its allowlist): the union of everything
+     * declared via {@link #declareCapability} and every registered service's
+     * {@link HostService#requiredCapabilities()}. A program can never widen this.
+     */
+    public java.util.Set<String> declaredCapabilities() {
+        return java.util.Set.copyOf(capabilityMap.keySet());
+    }
+
+    /**
      * Invokes a service, checking capabilities and charging fuel.
      *
      * @param argVAddr base address of the argument buffer (R2)

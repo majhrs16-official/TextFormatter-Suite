@@ -298,6 +298,17 @@ class VmPolicyEngineTest {
     }
 
     @Test
+    void programCapabilitiesAreFilteredByTheHostGrant() {
+        // A program may request whatever it wants, but only what the host grants
+        // survives: capabilities are an allowlist, not a self-declaration.
+        String[] effective = VmPolicyEngine.grantedCapabilities(
+            new String[]{"routing.decide", "root.everything", "property.read"},
+            java.util.Set.of("routing.decide", "property.read"));
+
+        assertArrayEquals(new String[]{"routing.decide", "property.read"}, effective);
+    }
+
+    @Test
     void passThroughProgramDelivers() {
         // The default program (no policy.flow) must reach HALT and yield LOG,
         // not throw when it runs off the end of the code.
