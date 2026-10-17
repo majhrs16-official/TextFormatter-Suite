@@ -73,10 +73,12 @@ class SoftMMUTest {
 
     @Test
     void fetchByteUsesExecutePermission() {
-        SoftMMU mmu = createMappedMMU();
-        // Map page 0 with EXECUTE + WRITE for this test
+        SoftMMU mmu = new SoftMMU();
+        // Write the byte while the page is writable, then demote to EXECUTE-only:
+        // a fetch must need EXECUTE, not READ.
         mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
         mmu.writeByte(0x0000, 0x60); // Opcode
+        mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_EXECUTE);
         assertEquals(0x60, mmu.fetchByte(0x0000));
     }
 
@@ -204,7 +206,18 @@ class SoftMMUTest {
         SoftMMU mmu = createMappedMMU();
         // Map only page 0
         mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_EXECUTE);
-        // Try to fetch word at end of page (would cross into page 1 which is not mapped)
-        assertThrows(VmException.class, () -> mmu.fetchWord(0x0FFE));
+        // A word at 0x0FFF spans pages 0 and 1; page 1 is not mapped, so the
+        // second byte's translation must fault.
+        assertThrows(VmException.class, () -> mmu.fetchWord(0x0FFF));
+    }
+
+    @Test
+    void fetchWordAtEndOfPageStaysWithinIt() {
+        SoftMMU mmu = createMappedMMU();
+        mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
+        mmu.writeWord(0x0FFE, 0xBEEF);
+        mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_EXECUTE);
+        // 0x0FFE..0x0FFF is the last word fully inside page 0 (no crossing).
+        assertEquals(0xBEEF, mmu.fetchWord(0x0FFE));
     }
 }

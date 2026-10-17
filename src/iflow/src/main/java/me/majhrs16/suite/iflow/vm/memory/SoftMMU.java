@@ -172,14 +172,23 @@ public final class SoftMMU {
 
     // ===== Execution Support =====
 
-    /** Fetches an instruction byte at IP. */
+    /**
+     * Fetches an instruction byte at IP. Requires EXECUTE on the page only
+     * (not READ): the previous implementation passed the physical address back
+     * through {@code readByte}, which re-translated it as a read.
+     */
     public int fetchByte(int ip) {
-        return readByte(pageTable.translateExecute(ip));
+        return physicalMemory[pageTable.translateExecute(ip)] & 0xFF;
     }
 
-    /** Fetches an instruction word (2 bytes) at IP. */
+    /**
+     * Fetches an instruction word (little-endian) at IP. Each byte is translated
+     * with EXECUTE, so a word spanning two pages validates both of them.
+     */
     public int fetchWord(int ip) {
-        return readWord(pageTable.translateExecute(ip));
+        int low = physicalMemory[pageTable.translateExecute(ip)] & 0xFF;
+        int high = physicalMemory[pageTable.translateExecute(ip + 1)] & 0xFF;
+        return low | (high << 8);
     }
 
     // ===== Memory Inspection =====
