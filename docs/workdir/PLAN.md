@@ -1039,4 +1039,5 @@ Todas resueltas:
 | 2026-10-16 | `1c33e5b` | migrar consumidores restantes de bytecode a v2; límite de code a **2 páginas** |
 | 2026-10-16 | `da2a0cb` | docs del ABI **unificadas** en v2 (READMEs + `implement.md`) |
 | 2026-10-16 | `65af8ce` | Gradle: tarea `iflowAsm` + `-Piflow.baremetal`; ejemplo `policy.flowasm` |
-| 2026-10-16 | — | ✅ **ABI v2 completa (D1–D11)**. Nada pendiente en esta sección |
+| 2026-10-16 | `280f790` | compilador: `.const` ya no contamina los símbolos con el índice del pool (solo afectaba a listing/debug) |
+| 2026-10-16 | — | ✅ **ABI v2 completa (D1–D11)**. `Sentinel-1` (programa del usuario) ensambla: solo quedaba `RET R7` + ABI viejo, ya portado a v2 |
