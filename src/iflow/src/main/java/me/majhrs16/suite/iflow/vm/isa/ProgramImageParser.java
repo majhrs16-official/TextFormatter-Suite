@@ -58,11 +58,14 @@ public final class ProgramImageParser {
         if (codeLength < 0 || codeLength > 0xFFFF) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Invalid code length: " + codeLength);
         }
-        // Enforce 4KB code limit (1 page) to avoid overlapping with reserved regions
-        final int MAX_CODE_SIZE = SoftMMU.PAGE_SIZE; // 4096 bytes
+        // Code may span up to two pages: the firmware ROM occupies 0x0000-0x0FFF
+        // and user code follows at 0x1000 (page 1). The interpreter fetches from a
+        // flat code array (not through the MMU), so this is a policy bound rather
+        // than a page-mapping constraint.
+        final int MAX_CODE_SIZE = SoftMMU.PAGE_SIZE * 2; // 8192 bytes (2 pages)
         if (codeLength > MAX_CODE_SIZE) {
             throw new VmException(VmException.Code.INVALID_PROGRAM,
-                "Code section too large: " + codeLength + " bytes, maximum is " + MAX_CODE_SIZE + " bytes (1 page)");
+                "Code section too large: " + codeLength + " bytes, maximum is " + MAX_CODE_SIZE + " bytes (2 pages)");
         }
 
         // Read code

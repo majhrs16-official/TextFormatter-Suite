@@ -40,7 +40,7 @@ final class PolicyPrograms {
     static ProgramImage decision(int decision) {
         ByteArrayOutputStream code = new ByteArrayOutputStream();
         emitLi(code, 0, HostServiceRegistry.ROUTE_DECISION);
-        emitLi(code, 3, decision);
+        emitLi(code, 1, decision); // HOST ABI v2: R1 = options (decision code)
         emitHost(code);
         code.write(Opcode.HALT);
         return build(code);
@@ -55,12 +55,11 @@ final class PolicyPrograms {
         byte[] name = channel.getBytes(StandardCharsets.UTF_8);
         ByteArrayOutputStream code = new ByteArrayOutputStream();
 
-        // R1 = arg vaddr, R2 = offset, R4 = length, R3 = decision.
+        // HOST ABI v2: R1 = options (decision), R2 = base (arg buffer vaddr), R3 = length.
         emitLi(code, 0, HostServiceRegistry.ROUTE_DECISION);
-        emitLi(code, 1, SCRATCH);
-        emitLi(code, 2, 0);
-        emitLi(code, 4, name.length);
-        emitLi(code, 3, HostServiceRegistry.DECISION_CHAN_REDIR);
+        emitLi(code, 1, HostServiceRegistry.DECISION_CHAN_REDIR);
+        emitLi(code, 2, SCRATCH);
+        emitLi(code, 3, name.length);
 
         // Write the channel name into the scratch buffer.
         for (int i = 0; i < name.length; i++) {

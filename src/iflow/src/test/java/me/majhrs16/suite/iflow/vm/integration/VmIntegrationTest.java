@@ -297,15 +297,17 @@ private RateLimiter createRateLimiter() {
         ProgramImage program = ProgramImage.builder()
             .entryPoint(0)
             .code(new byte[]{
-                // Read message.content into output buffer
+                // Read message.content into the output buffer.
+                // HOST ABI v2: R0=op, R1=options, R2=base, R3=length.
                 Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
-                Opcode.LI, 1, (byte)0x60, (byte)0x00,
-                Opcode.LI, 2, (byte)0x00, (byte)0xFF,
-                Opcode.HOST,
+                Opcode.LI, 1, (byte)0x01, (byte)0x10,   // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+                Opcode.LI, 2, (byte)0x60, (byte)0x00,   // base = 0x6000
+                Opcode.LI, 3, (byte)0x00, (byte)0xFF,   // length = 255
+                Opcode.HOST, (byte)0x00,
                 // Continue
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
-                Opcode.HOST,
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
+                Opcode.HOST, (byte)0x00,
                 Opcode.HALT
             })
             .capabilities(new String[]{"property.read", "routing.decide"})

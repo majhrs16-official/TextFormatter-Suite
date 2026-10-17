@@ -417,11 +417,11 @@ class EndToEndIntegrationTest {
                 Opcode.CMP, 0x12,                       // CMP R1, R2
                 Opcode.JZ, 0x00, 0x0B,                  // JZ drop
                 Opcode.LI, 0, 0x03, 0x00,               // LI R0, ROUTE_DECISION
-                Opcode.LI, 3, 0x00, 0x06,               // LI R3, DECISION_CONTINUE
+                Opcode.LI, 1, 0x00, 0x06,               // LI R1, DECISION_CONTINUE (options)
                 Opcode.HOST, 0x00,
                 Opcode.HALT,
                 Opcode.LI, 0, 0x03, 0x00,               // LI R0, ROUTE_DECISION
-                Opcode.LI, 3, 0x00, 0x01,               // LI R3, DECISION_DROP
+                Opcode.LI, 1, 0x00, 0x01,               // LI R1, DECISION_DROP (options)
                 Opcode.HOST, 0x00,
                 Opcode.HALT
             })

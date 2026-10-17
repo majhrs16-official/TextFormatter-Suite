@@ -52,9 +52,9 @@ class VmConfigLoaderTest {
         assertEquals(0, code[1] & 0xFF);
         assertEquals((HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF, code[2] & 0xFF);
         assertEquals(HostServiceRegistry.ROUTE_DECISION & 0xFF, code[3] & 0xFF);
-        // LI R3, DECISION_CONTINUE
+        // LI R1, DECISION_CONTINUE (HOST ABI v2: R1 = options)
         assertEquals(Opcode.LI, code[4] & 0xFF);
-        assertEquals(3, code[5] & 0xFF);
+        assertEquals(1, code[5] & 0xFF);
         assertEquals((HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, code[6] & 0xFF);
         assertEquals(HostServiceRegistry.DECISION_CONTINUE & 0xFF, code[7] & 0xFF);
         // HOST (opcode + reserved operand byte)
