@@ -878,7 +878,7 @@ Todos los items P1 resueltos:
 
 ---
 
-## REDISEÑO DEL ABI DE `HOST` (iflow) + TOOLCHAIN `.flowasm` — 2026-10-16 (EN CURSO)
+## REDISEÑO DEL ABI DE `HOST` (iflow) + TOOLCHAIN `.flowasm` — 2026-10-16 (ABI v2 ✅ CERRADA; queda D6)
 
 > **Documento de trabajo vivo.** Releer antes de tocar `iflow` (VM) o el compilador.
 > Nace de la revisión del firmware `Sentinel-1` y del compilador `.flowasm`.
@@ -911,7 +911,7 @@ Todos los items P1 resueltos:
 | D8 | Constantes del firmware = **valores** (equates), no direcciones | ✅ decidido |
 | D9 | `status` con **códigos numéricos** (ver tabla) | ✅ decidido |
 | D10 | Unificar la **doc del ABI** en una sola fuente de verdad | ✅ decidido |
-| D11 | `R4` = resultado escalar del servicio (hoy sólo `PERMISSION_CHECK` 0/1); reservado para extras si un servicio necesita un 5º argumento | ⏳ **por confirmar** |
+| D11 | `R4` = **resultado escalar de salida** del servicio (`PERMISSION_CHECK` `0\|1`, `ROUTE_DECISION` = decisión). Reservado en la entrada; los extras, si algún día hacen falta, empiezan en `R5` | ✅ decidido |
 
 ### ABI `HOST` v2 (propuesto — auditar)
 
@@ -931,7 +931,7 @@ Todos los items P1 resueltos:
 | R1 | `options` | parámetro del servicio (scope/propId, decision, key…) |
 | R2 | `base` | dirección base del buffer (vaddr completa) |
 | R3 | `length` | bytes (in: pedido · out: transferido) |
-| R4+ | `extra` | operandos que no quepan arriba (hoy ninguno) |
+| R4 | *(reservado)* | reservado para el resultado escalar; los extras, si los hubiera, empiezan en `R5` |
 
 **Retorno**
 
@@ -969,22 +969,24 @@ IDs declarados pero **no registrados** (`0x0102/0x0201/0x0301/0x0302/0x0400/0x06
 
 **Valores de `options`:** `scope`: `0x01` MESSAGE, `0x02` EMITTER, `0x03` RECIPIENT, `0x04` CHANNEL, `0x05` SERVER · `propId` (8 bits bajos): message `0x10` CONTENT, `0x11` CHANNEL, `0x12` DIRECTION, `0x13` TYPE, `0x14` LANG_SOURCE, `0x15` LANG_TARGET, `0x16` COLOR_MODE, `0x17` FORMAT_PAPI, `0x18` SLEEP_MILLIS, `0x19` SOUNDS, `0x1A` CANCELLED, `0x1B` PROCESSED, `0x1C` TRANSLATE · actor `0x00–0x03` · channel `0x00–0x03` · `decision`: `0` LOG, `1` DROP, `2` REJECT, `3` REDIRECT, `4` CHAN_REDIR, `5` RATE_LIMIT, `6` CONTINUE.
 
-> ⚠️ **Ojo con D2**: al pasar `propId` a 8 bits bajos, los IDs de scope actor (`0x0100–0x0103`) y channel (`0x0200–0x0203`) **ya no caben** en 8 bits. Hay que reasignarlos (p. ej. `0x00–0x03` dentro de su scope) o usar `extra`. **PENDIENTE.**
+> ✅ **Resuelto (D2)**: `propId` pasa a 8 bits bajos y queda **namespaceado por `scope`**; los IDs de actor y channel se reasignaron a `0x00–0x03` dentro de su scope (antes `0x0100–0x0103` y `0x0200–0x0203`, que no caben en 8 bits). Implementado en `HostServiceRegistry`.
 
-**Doc a unificar (H1)** — estado actual, 4 versiones:
+**Doc unificado (H1)** — las 4 versiones divergentes se consolidaron en la v2:
 
-| Fuente | R1 | R2 | R3 | R4 |
-|---|---|---|---|---|
-| Real (impl) | vaddr | offset | options | length |
-| `README.md` (ejemplo) | scope | propId | buffer | — |
-| `generateFirmware` (comentario) | scope | prop_id | out_buf | len |
-| Programas de usuario | buffer | length | — | — |
+| Fuente | Estado |
+|---|---|
+| `src/iflow/README.md` | ✅ v2 |
+| `tools/iflow-compiler/README.md` | ✅ v2 |
+| `docs/prompts/iflow/implement.md` §11 | ✅ v2 |
+| `HostServiceRegistry` (impl) | ✅ v2 |
 
 ### Preguntas abiertas
 
-1. **D11 — `R4`**: ¿se queda como "resultado escalar" (hoy sólo `PERMISSION_CHECK`) o se elimina del spec base y cada servicio define el suyo?
-2. **Prop IDs** tras D2: reasignar actor/channel a 8 bits, o mover el scope a `extra`.
-3. **Switch bare-metal (D6)**: el compilador es Node/TS, **no está wireado a Gradle**. Hay que (a) crear la tarea Gradle que invoque el CLI y (b) exponer `--firmware`/`--origin`. Definir el nombre del property (propuesta: `-Piflow.baremetal=true`).
+Todas resueltas:
+
+1. **D11 — `R4`**: ✅ **resultado escalar de salida** (extras desde `R5`).
+2. **Prop IDs** tras D2: ✅ reasignados a `0x00–0x03` dentro de su scope.
+3. **Switch bare-metal (D6)**: el compilador es Node/TS, **no está wireado a Gradle**. El flag `--no-firmware` ya existe en el CLI; queda (a) la tarea Gradle que invoque el CLI y (b) el property (propuesta: `-Piflow.baremetal=true`). **PENDIENTE (D6).**
 
 ### Lista de cambios (archivos a tocar)
 
@@ -992,18 +994,20 @@ IDs declarados pero **no registrados** (`0x0102/0x0201/0x0301/0x0302/0x0400/0x06
 |---|---|---|
 | `tools/iflow-compiler/src/assembler.ts` | validador `imm16`/`label` | ✅ hecho (`ae9f635`) |
 | `tools/iflow-compiler/test/validation/*` | fixture `valid-symbolic-immediate` | ✅ hecho (`ae9f635`) |
-| `src/iflow/.../execution/VmInterpreter.java` | `executeHost`: mapeo a `R0=op,R1=options,R2=base,R3=length,R4=result`; `RET` 1 byte | ⏳ |
-| `src/iflow/.../isa/Opcode.java` | `instructionSize(RET)` 2→1 | ⏳ |
-| `src/iflow/.../isa/OpcodeTest.java` | assert de tamaño `RET` | ⏳ |
-| `src/iflow/.../service/HostServiceRegistry.java` | quitar `argOffset`; `propId = options & 0x00FF`; exponer `status`; `length` in/out | ⏳ |
-| `src/iflow/.../service/ServiceResult.java` | plegar `bytesTransferred` en `length`; exponer `status` numérico | ⏳ |
-| `src/iflow/.../service/HostServiceRegistryTest.java` | reescribir a la v2 | ⏳ |
-| `src/iflow/.../execution/VmInterpreterTest.java` | `outOfFuelThrows` (ya arreglado el fuel) + HOST | ⏳ |
-| `tools/iflow-compiler/src/types.ts` | `INSTRUCTION_SIZES[RET]` 2→1; constantes como valores | ⏳ |
-| `tools/iflow-compiler/src/assembler.ts` | `RET` spec `min:0`; `emitConst` → valor; default origin 0x1000 si firmware ON | ⏳ |
-| `tools/iflow-compiler/test/firmware.flowasm` | `RET` pelado + ABI v2 + `.entry` | ⏳ |
-| `tools/iflow-compiler/README.md` | ABI v2 (fuente única) | ⏳ |
-| `build.gradle` / `settings.gradle` | tarea que invoca el CLI + `-Piflow.baremetal` | ⏳ |
+| `src/iflow/.../isa/Opcode.java` | `instructionSize(RET)` 2→1 | ✅ hecho (`252be08`) |
+| `src/iflow/.../isa/OpcodeTest.java` | assert de tamaño `RET` | ✅ hecho (`252be08`) |
+| `src/iflow/.../execution/VmInterpreter.java` | `executeHost`: mapeo `R0=op,R1=options,R2=base,R3=length,R4=result` | ✅ hecho (`a946d57`) |
+| `src/iflow/.../service/ServiceResult.java` | plegar `bytesTransferred` en `length`; exponer `status` numérico | ✅ hecho (`a946d57`) |
+| `src/iflow/.../service/HostServiceRegistry.java` | quitar `argOffset`; `propId = options & 0x00FF`; exponer `status`; `length` in/out | ✅ hecho (`a946d57`) |
+| `src/iflow/.../service/HostServiceRegistryTest.java` | reescribir a la v2 (+ tests de status/options/BUFFER_TOO_SMALL) | ✅ hecho (`a946d57`) |
+| consumidores de bytecode (`VmConfigLoader`, `VmPolicyEngine`, `PolicyPrograms`, `loadtest`, `VmIntegrationTest`) | migrar a v2 | ✅ hecho (`a946d57`, `1c33e5b`) |
+| `src/iflow/.../isa/ProgramImageParser.java` | límite de code 1→2 páginas (ROM + usuario) | ✅ hecho (`1c33e5b`) |
+| `tools/iflow-compiler/src/types.ts` | `INSTRUCTION_SIZES[RET]` 2→1 | ✅ hecho (`252be08`) |
+| `tools/iflow-compiler/src/assembler.ts` | `RET` spec `min:0`; `emitConst` → valor; origin 0x1000 si firmware ON; `.firmware` re-base | ✅ hecho (`9743754`) |
+| `tools/iflow-compiler/src/cli.ts` | `--no-firmware` | ✅ hecho (`9743754`) |
+| `tools/iflow-compiler/test/*.flowasm` + `.flow`/`.lst` | quitar `.origin 0x0000`; HOST v2; regenerar artefactos | ✅ hecho (`9743754`) |
+| `src/iflow/README.md`, `tools/iflow-compiler/README.md`, `docs/prompts/iflow/implement.md` | ABI v2 (fuente única) | ✅ hecho (`da2a0cb`) |
+| `build.gradle` / `settings.gradle` | tarea que invoca el CLI + `-Piflow.baremetal` | ⏳ **pendiente (D6)** |
 
 ### Bitácora de progreso
 
@@ -1011,4 +1015,9 @@ IDs declarados pero **no registrados** (`0x0102/0x0201/0x0301/0x0302/0x0400/0x06
 |---|---|---|
 | 2026-10-16 | `47e0864` | `ExecutionContext.fuelBudget()` re-arma `fuelRemaining` (+ test) |
 | 2026-10-16 | `ae9f635` | compilador: acepta `label` como inmediato de `LI` (+ fixture) |
-| 2026-10-16 | — | PLAN v2 del ABI `HOST` documentado (esta sección). Sin código aplicado aún |
+| 2026-10-16 | `252be08` | ISA: `RET` pasa a **1 byte** sin operando (Java + compilador + `verify.py`) |
+| 2026-10-16 | `a946d57` | VM: **HOST ABI v2** — layout de registros, `status` en `R0`, `length` in/out, `propId` 8 bits |
+| 2026-10-16 | `9743754` | compilador: constantes del firmware como **valores**, origin 0x1000 con firmware, `--no-firmware` |
+| 2026-10-16 | `1c33e5b` | migrar consumidores restantes de bytecode a v2; límite de code a **2 páginas** |
+| 2026-10-16 | `da2a0cb` | docs del ABI **unificadas** en v2 (READMEs + `implement.md`) |
+| 2026-10-16 | — | ABI v2 **cerrada** (D1–D11). Pendiente único de esta sección: **D6** (tarea Gradle + `-Piflow.baremetal`) |
