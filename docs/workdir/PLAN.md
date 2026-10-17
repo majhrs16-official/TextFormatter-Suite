@@ -1232,7 +1232,9 @@ aplican directamente. Decisiones:
   (`writeBlock`/`readBlock`/`copyBlock`/`moveBlock`/`validateRange` vuelven a estar
   disponibles). `SoftMMU`/`PageTable` sigue siendo el modelo de paginación vivo. La
   eliminación del resto de clases de regiones (`MemoryManager`/`MemoryRegion`/
-  `RegionPerm`/`RegionType`) queda **pendiente de revisión**.
+  `RegionPerm`/`RegionType`) **se confirma como obsoleta**: el modelo de memoria por
+  *handles* quedó superado al adoptarse la memoria plana de 64 KB, así que no se
+  restauran.
 - **AUD-012 READMEs — ✅ decisión: corregir a la realidad.** Recuento de tests
   (264), quitar `VmDmaController`/regiones, `minAbiVersion=2`, hash real (no
   «placeholder») y el `-d` no-op. La afirmación «el resto responde `status=5`» sí
