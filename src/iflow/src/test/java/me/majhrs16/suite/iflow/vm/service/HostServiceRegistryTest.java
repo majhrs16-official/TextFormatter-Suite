@@ -58,7 +58,7 @@ class HostServiceRegistryTest {
         HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr);
 
-        assertThrows(VmException.class, () -> hsr.invoke(ctx, 0xFFFF, 0, 0, 0, 0));
+        assertThrows(VmException.class, () -> hsr.invoke(ctx, 0xFFFF, 0, 0, 0));
     }
 
     @Test
@@ -82,7 +82,7 @@ class HostServiceRegistryTest {
         ExecutionContext ctx = createContext(hsr, "routing.decide");
 
         assertThrows(VmException.class, () ->
-            hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0, 0));
+            hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0));
     }
 
     @Test
@@ -91,7 +91,7 @@ class HostServiceRegistryTest {
             .propertyReader((scope, propId) -> "test-value");
         ExecutionContext ctx = createContext(hsr, "property.read");
 
-        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0, 0);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0);
         assertNotNull(result);
     }
 
@@ -102,7 +102,7 @@ class HostServiceRegistryTest {
         ExecutionContext ctx = createContext(hsr);
 
         // Should work since property.read is declared
-        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0, 0);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 0);
         // Will return NOT_FOUND since propertyReader returns null for unknown props
         assertNotNull(result);
     }
@@ -113,7 +113,7 @@ class HostServiceRegistryTest {
         ExecutionContext ctx = createContext(hsr);
 
         // options = decision code
-        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, 0, HostServiceRegistry.DECISION_DROP);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, HostServiceRegistry.DECISION_DROP);
 
         assertEquals(ServiceResult.Status.OK, result.status());
         ModificationJournal journal = ctx.journal();
@@ -126,7 +126,7 @@ class HostServiceRegistryTest {
         HostServiceRegistry hsr = createConfiguredHsr();
         ExecutionContext ctx = createContext(hsr);
 
-        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, 0, HostServiceRegistry.DECISION_CHAN_REDIR);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, HostServiceRegistry.DECISION_CHAN_REDIR);
 
         assertEquals(ServiceResult.Status.OK, result.status());
         ModificationJournal journal = ctx.journal();
@@ -149,9 +149,75 @@ class HostServiceRegistryTest {
 
     @Test
     void serviceResultFields() {
-        ServiceResult r = ServiceResult.ok(1, 2, 3);
-        assertEquals(1, r.primaryResult());
-        assertEquals(2, r.bytesTransferred());
-        assertEquals(3, r.auxResult());
+        ServiceResult r = ServiceResult.ok(2, 3);
+        assertEquals(ServiceResult.Status.OK, r.status());
+        assertEquals(2, r.bytesTransferred()); // R3
+        assertEquals(3, r.result());           // R4
+    }
+
+    @Test
+    void statusCodesMatchAbi() {
+        // Numeric status codes are part of the ABI (written to R0) and must be stable.
+        assertEquals(0, ServiceResult.Status.OK.code());
+        assertEquals(1, ServiceResult.Status.NOT_FOUND.code());
+        assertEquals(2, ServiceResult.Status.DENIED.code());
+        assertEquals(3, ServiceResult.Status.INVALID_ARGUMENT.code());
+        assertEquals(4, ServiceResult.Status.BUFFER_TOO_SMALL.code());
+        assertEquals(5, ServiceResult.Status.UNSUPPORTED.code());
+        assertEquals(6, ServiceResult.Status.CONFLICT.code());
+        assertEquals(7, ServiceResult.Status.HOST_FAILURE.code());
+        assertEquals(8, ServiceResult.Status.PARTIAL.code());
+    }
+
+    @Test
+    void propertyReadDecodesScopeAndPropIdFromOptions() {
+        int[] captured = new int[2];
+        HostServiceRegistry hsr = new HostServiceRegistry()
+            .propertyReader((scope, propId) -> {
+                captured[0] = scope;
+                captured[1] = Integer.parseInt(propId);
+                return "test-value";
+            });
+        ExecutionContext ctx = createContext(hsr, "property.read");
+
+        // options = (scope << 8) | propId ; propId must be only the low 8 bits.
+        int options = (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_CONTENT;
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ,
+            ctx.outputBufferVAddr(), 64, options);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        assertEquals(HostServiceRegistry.SCOPE_MESSAGE, captured[0]);
+        assertEquals(HostServiceRegistry.PROP_CONTENT, captured[1]);
+        assertEquals("test-value".length(), result.bytesTransferred());
+    }
+
+    @Test
+    void permissionCheckReturnsScalarResultInR4() {
+        HostServiceRegistry hsr = new HostServiceRegistry()
+            .permissionChecker((actor, perm) -> "allowed".equals(perm));
+        ExecutionContext ctx = createContext(hsr, "permission.check");
+
+        byte[] args = "Alice\0allowed".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.inputBufferVAddr(), args, 0, args.length);
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PERMISSION_CHECK,
+            ctx.inputBufferVAddr(), args.length, 0);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        assertEquals(1, result.result());                     // allowed -> R4
+        assertEquals(args.length, result.bytesTransferred()); // bytes read -> R3
+    }
+
+    @Test
+    void bufferTooSmallReportsRequiredSizeInLength() {
+        HostServiceRegistry hsr = new HostServiceRegistry()
+            .propertyReader((scope, propId) -> "0123456789");
+        ExecutionContext ctx = createContext(hsr, "property.read");
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ,
+            ctx.outputBufferVAddr(), 4, 0);
+
+        assertEquals(ServiceResult.Status.BUFFER_TOO_SMALL, result.status());
+        assertEquals(10, result.bytesTransferred()); // required size -> R3
     }
 }

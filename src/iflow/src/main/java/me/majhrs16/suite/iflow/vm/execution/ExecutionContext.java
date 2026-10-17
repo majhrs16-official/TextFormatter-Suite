@@ -255,11 +255,11 @@ public final class ExecutionContext {
 
     // ===== Host services =====
 
-    public ServiceResult callHost(int serviceId, int argVAddr, int argOffset, int argLength, int options) {
+    public ServiceResult callHost(int serviceId, int argVAddr, int argLength, int options) {
         if (serviceRegistry == null) {
             throw new IllegalStateException("Service registry not configured");
         }
-        return serviceRegistry.invoke(this, serviceId, argVAddr, argOffset, argLength, options);
+        return serviceRegistry.invoke(this, serviceId, argVAddr, argLength, options);
     }
 
     // ===== Timing =====

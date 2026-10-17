@@ -254,7 +254,7 @@ class ExecutionContextTest {
             .serviceRegistry(hsr)
             .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
-        ServiceResult result = ctx.callHost(HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 0, 10, 0);
+        ServiceResult result = ctx.callHost(HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 10, 0);
         assertNotNull(result);
     }
 

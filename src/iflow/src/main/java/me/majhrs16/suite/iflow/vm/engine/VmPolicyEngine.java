@@ -120,13 +120,13 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
     private ProgramImage createPassThroughProgram() {
         // Minimal program: call ROUTE_DECISION service with DECISION_CONTINUE
-        // HOST convention: R0 = service ID, R3 = options (decision code)
+        // HOST ABI v2: R0 = service ID, R1 = options (decision code)
         // HOST instruction is 2 bytes: opcode + padding
         return ProgramImage.builder()
             .entryPoint(0)
             .code(new byte[]{
                 Opcode.LI, 0, (HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF, HostServiceRegistry.ROUTE_DECISION & 0xFF, // LI R0, ROUTE_DECISION
-                Opcode.LI, 3, (HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, HostServiceRegistry.DECISION_CONTINUE & 0xFF, // LI R3, DECISION_CONTINUE
+                Opcode.LI, 1, (HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, HostServiceRegistry.DECISION_CONTINUE & 0xFF, // LI R1, DECISION_CONTINUE
                 Opcode.HOST, 0x00,                                                    // HOST (2 bytes: opcode + padding)
                 Opcode.HALT                                                     // HALT
             })

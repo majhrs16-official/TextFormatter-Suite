@@ -1,87 +1,117 @@
 package me.majhrs16.suite.iflow.vm.service;
 
-import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
-import me.majhrs16.suite.iflow.vm.isa.VmException;
-
 /**
- * Result of a host service invocation.
+ * Result of a host service invocation (HOST ABI v2).
+ * <p>
+ * The {@code HOST} instruction reports its outcome through registers:
+ * </p>
+ * <ul>
+ *   <li>{@code R0} = {@link Status} code (see {@link Status#code()}) — a dedicated
+ *       status register, so failures are distinguishable from an OK of 0 bytes.</li>
+ *   <li>{@code R3} = bytes transferred. {@code length} is bidirectional: on input it
+ *       is the requested size; on output, for reads, it is the number of bytes the
+ *       emulator wrote to VM memory, and for writes, the number of bytes consumed.</li>
+ *   <li>{@code R4} = service-specific scalar result (e.g. {@code 0/1} for permission
+ *       checks, the decision code for routing).</li>
+ * </ul>
+ * <p>
+ * {@code R1} (options) and {@code R2} (base) are left untouched by the call.
+ * </p>
  */
 public final class ServiceResult {
 
+    /**
+     * Status codes exposed to the program in {@code R0}.
+     * <p>
+     * The numeric values are part of the ABI: they are what the program compares
+     * against, so they must never be reordered.
+     * </p>
+     */
     public enum Status {
-        OK,
-        NOT_FOUND,
-        DENIED,
-        INVALID_ARGUMENT,
-        BUFFER_TOO_SMALL,
-        UNSUPPORTED,
-        CONFLICT,
-        HOST_FAILURE,
-        PARTIAL
+        OK(0),
+        NOT_FOUND(1),
+        DENIED(2),
+        INVALID_ARGUMENT(3),
+        BUFFER_TOO_SMALL(4),
+        UNSUPPORTED(5),
+        CONFLICT(6),
+        HOST_FAILURE(7),
+        PARTIAL(8);
+
+        private final int code;
+
+        Status(int code) {
+            this.code = code;
+        }
+
+        /** Numeric code written to {@code R0}. */
+        public int code() {
+            return code;
+        }
     }
 
     private final Status status;
-    private final int primaryResult;      // R0 on return
-    private final int bytesTransferred;   // R1 on return (for reads)
-    private final int auxResult;          // R3 on return
+    private final int bytesTransferred; // R3 on return
+    private final int result;           // R4 on return
 
-    private ServiceResult(Status status, int primaryResult, int bytesTransferred, int auxResult) {
+    private ServiceResult(Status status, int bytesTransferred, int result) {
         this.status = status;
-        this.primaryResult = primaryResult;
         this.bytesTransferred = bytesTransferred;
-        this.auxResult = auxResult;
+        this.result = result;
     }
 
-    public static ServiceResult ok(int primaryResult, int bytesTransferred, int auxResult) {
-        return new ServiceResult(Status.OK, primaryResult, bytesTransferred, auxResult);
+    /** Success with {@code bytesTransferred} bytes and no scalar result. */
+    public static ServiceResult ok(int bytesTransferred) {
+        return new ServiceResult(Status.OK, bytesTransferred, 0);
     }
 
-    public static ServiceResult ok(int primaryResult) {
-        return new ServiceResult(Status.OK, primaryResult, 0, 0);
+    /** Success with {@code bytesTransferred} bytes and a scalar result in {@code R4}. */
+    public static ServiceResult ok(int bytesTransferred, int result) {
+        return new ServiceResult(Status.OK, bytesTransferred, result);
     }
 
     public static ServiceResult notFound() {
-        return new ServiceResult(Status.NOT_FOUND, 0, 0, 0);
+        return new ServiceResult(Status.NOT_FOUND, 0, 0);
     }
 
     public static ServiceResult denied() {
-        return new ServiceResult(Status.DENIED, 0, 0, 0);
+        return new ServiceResult(Status.DENIED, 0, 0);
     }
 
     public static ServiceResult invalidArgument(String msg) {
-        return new ServiceResult(Status.INVALID_ARGUMENT, 0, 0, 0);
+        return new ServiceResult(Status.INVALID_ARGUMENT, 0, 0);
     }
 
+    /** {@code R3} carries the required buffer size so the caller can retry. */
     public static ServiceResult bufferTooSmall(int required) {
-        return new ServiceResult(Status.BUFFER_TOO_SMALL, required, 0, 0);
+        return new ServiceResult(Status.BUFFER_TOO_SMALL, required, 0);
     }
 
     public static ServiceResult unsupported() {
-        return new ServiceResult(Status.UNSUPPORTED, 0, 0, 0);
+        return new ServiceResult(Status.UNSUPPORTED, 0, 0);
     }
 
     public static ServiceResult conflict() {
-        return new ServiceResult(Status.CONFLICT, 0, 0, 0);
+        return new ServiceResult(Status.CONFLICT, 0, 0);
     }
 
     public static ServiceResult hostFailure(String msg) {
-        return new ServiceResult(Status.HOST_FAILURE, 0, 0, 0);
+        return new ServiceResult(Status.HOST_FAILURE, 0, 0);
     }
 
-    public static ServiceResult partial(int primaryResult, int bytesTransferred) {
-        return new ServiceResult(Status.PARTIAL, primaryResult, bytesTransferred, 0);
+    public static ServiceResult partial(int bytesTransferred, int result) {
+        return new ServiceResult(Status.PARTIAL, bytesTransferred, result);
     }
 
     public Status status() { return status; }
-    public int primaryResult() { return primaryResult; }
     public int bytesTransferred() { return bytesTransferred; }
-    public int auxResult() { return auxResult; }
+    public int result() { return result; }
 
     public boolean isSuccess() { return status == Status.OK || status == Status.PARTIAL; }
     public boolean isError() { return !isSuccess(); }
 
     @Override
     public String toString() {
-        return "ServiceResult{" + status + ", R0=" + primaryResult + ", R1=" + bytesTransferred + ", R3=" + auxResult + "}";
+        return "ServiceResult{" + status + "(R0=" + status.code() + "), R3=" + bytesTransferred + ", R4=" + result + "}";
     }
 }

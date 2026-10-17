@@ -459,29 +459,26 @@ public final class VmInterpreter {
     }
 
     private boolean executeHost(ExecutionContext ctx, RegisterFile regs, int ip) {
-        // HOST instruction uses register convention:
-        // R0 = service ID
-        // R1 = arg handle (virtual address)
-        // R2 = arg offset
-        // R3 = options
-        // R4 = arg length
-        // Returns: R0 = status/primary result, R1 = bytes transferred, R3 = aux result
+        // HOST ABI v2 (syscall-style register convention):
+        //   R0 = op       service ID
+        //   R1 = options  service-specific parameter
+        //   R2 = base     vaddr of the argument buffer (full address)
+        //   R3 = length   bytes (in: requested · out: transferred)
+        //   R4            reserved for the scalar result (extras start at R5)
+        // Returns:
+        //   R0 = status code, R3 = bytes transferred, R4 = scalar result.
+        // R1 (options) and R2 (base) are left untouched.
 
         int serviceId = regs.get(RegisterFile.R0);
-        int argHandle = regs.get(RegisterFile.R1);
-        int argOffset = regs.get(RegisterFile.R2);
-        int options = regs.get(RegisterFile.R3);
-        int argLength = regs.get(RegisterFile.R4);
+        int options = regs.get(RegisterFile.R1);
+        int base = regs.get(RegisterFile.R2);
+        int length = regs.get(RegisterFile.R3);
 
-        ServiceResult result = serviceRegistry.invoke(ctx, serviceId, argHandle, argOffset, argLength, options);
+        ServiceResult result = serviceRegistry.invoke(ctx, serviceId, base, length, options);
 
-        regs.set(RegisterFile.R0, result.primaryResult());
-        regs.set(RegisterFile.R1, result.bytesTransferred());
-        regs.set(RegisterFile.R3, result.auxResult());
-
-        if (result.isError()) {
-            // Don't throw, let program handle via status code
-        }
+        regs.set(RegisterFile.R0, result.status().code());
+        regs.set(RegisterFile.R3, result.bytesTransferred());
+        regs.set(RegisterFile.R4, result.result());
         return false;
     }
 

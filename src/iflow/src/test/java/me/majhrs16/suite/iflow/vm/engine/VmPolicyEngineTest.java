@@ -91,9 +91,11 @@ class VmPolicyEngineTest {
             .entryPoint(0)
             .code(new byte[]{
                 // Read message.content into output buffer (0x6000)
+                // HOST ABI v2: R0=service, R1=options, R2=base, R3=length
                 Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
-                Opcode.LI, 1, (byte)0x60, (byte)0x00,  // R1 = 0x6000 (vaddr)
-                Opcode.LI, 2, (byte)0x00, (byte)0xFF,  // R2 = 255 (max len)
+                Opcode.LI, 1, (byte)0x01, (byte)0x10,  // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+                Opcode.LI, 2, (byte)0x60, (byte)0x00,  // R2 = 0x6000 (base vaddr)
+                Opcode.LI, 3, (byte)0x00, (byte)0xFF,  // R3 = 255 (max len)
                 Opcode.HOST, (byte)0x00,               // HOST (2 bytes)
                 // Check if first byte == 's' (0x73) → discard
                 Opcode.LDB, 0, (byte)0x60, (byte)0x00,
@@ -102,12 +104,12 @@ class VmPolicyEngineTest {
                 Opcode.JZ, (byte)0x00, (byte)0x0B,    // jump to drop if equal (Z=1), offset=11
                 // Continue
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT,
                 // Drop
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_DROP >> 8), (byte)(HostServiceRegistry.DECISION_DROP & 0xFF),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_DROP >> 8), (byte)(HostServiceRegistry.DECISION_DROP & 0xFF),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT
             })
@@ -129,7 +131,7 @@ class VmPolicyEngineTest {
             .entryPoint(0)
             .code(new byte[]{
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_REJECT >> 8), (byte)(HostServiceRegistry.DECISION_REJECT & 0xFF),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_REJECT >> 8), (byte)(HostServiceRegistry.DECISION_REJECT & 0xFF),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT
             })
@@ -152,19 +154,20 @@ class VmPolicyEngineTest {
             .entryPoint(0)
             .code(new byte[]{
                 Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
-                Opcode.LI, 1, (byte)0x60, (byte)0x00,
-                Opcode.LI, 2, (byte)0x00, (byte)0xFF,
+                Opcode.LI, 1, (byte)0x01, (byte)0x10,  // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+                Opcode.LI, 2, (byte)0x60, (byte)0x00,  // base
+                Opcode.LI, 3, (byte)0x00, (byte)0xFF,  // length
                 Opcode.HOST, (byte)0x00,
                 Opcode.LDB, 0, (byte)0x60, (byte)0x00,
                 Opcode.LI, 1, (byte)0x00, (byte)0x73,
                 Opcode.CMP, (0 << 4) | 1,
                 Opcode.JZ, (byte)0x00, (byte)0x0B,    // jump to drop if equal (Z=1), offset=11
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT,
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_DROP >> 8), (byte)(HostServiceRegistry.DECISION_DROP & 0xFF),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_DROP >> 8), (byte)(HostServiceRegistry.DECISION_DROP & 0xFF),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT
             })
@@ -232,15 +235,17 @@ class VmPolicyEngineTest {
             .entryPoint(0)
             .code(new byte[]{
                 Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
-                Opcode.LI, 1, (byte)0x60, (byte)0x00,
-                Opcode.LI, 2, (byte)0x00, (byte)0xFF,
+                Opcode.LI, 1, (byte)0x01, (byte)0x10,  // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+                Opcode.LI, 2, (byte)0x60, (byte)0x00,  // base
+                Opcode.LI, 3, (byte)0x00, (byte)0xFF,  // length
                 Opcode.HOST, (byte)0x00,
                 Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_WRITE >> 8), (byte)(HostServiceRegistry.PROPERTY_WRITE & 0xFF),
-                Opcode.LI, 1, (byte)0x60, (byte)0x00,
-                Opcode.LI, 2, (byte)0x00, (byte)0xFF,
+                Opcode.LI, 1, (byte)0x01, (byte)0x11,  // options = (SCOPE_MESSAGE<<8)|PROP_CHANNEL
+                Opcode.LI, 2, (byte)0x60, (byte)0x00,  // base
+                Opcode.LI, 3, (byte)0x00, (byte)0xFF,  // length
                 Opcode.HOST, (byte)0x00,
                 Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 3, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT
             })

@@ -128,9 +128,9 @@ private RateLimiter createRateLimiter() {
         ServiceResult result = hsr.invoke(
             ctx,
             HostServiceRegistry.PROPERTY_READ,
-            vaddr, 0, 100, 0
+            vaddr, 100, 0
         );
-        
+
         assertEquals(ServiceResult.Status.OK, result.status());
         assertEquals("test-value".length(), result.bytesTransferred());
         
@@ -166,11 +166,11 @@ private RateLimiter createRateLimiter() {
         ServiceResult result = hsr.invoke(
             ctx,
             HostServiceRegistry.PERMISSION_CHECK,
-            vaddr, 0, argsBytes.length, 0
+            vaddr, argsBytes.length, 0
         );
-        
+
         assertEquals(ServiceResult.Status.OK, result.status());
-        assertEquals(1, result.primaryResult()); // allowed
+        assertEquals(1, result.result()); // allowed -> R4
     }
 
     @Test
@@ -186,7 +186,7 @@ private RateLimiter createRateLimiter() {
                 .allowedCapabilities(new String[]{"routing.decide"});
         ctx.initialize();
         
-        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, 0, HostServiceRegistry.DECISION_DROP);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, HostServiceRegistry.DECISION_DROP);
         
         assertEquals(ServiceResult.Status.OK, result.status());
         assertEquals(1, ctx.journal().size());
