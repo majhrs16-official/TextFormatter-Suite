@@ -200,6 +200,17 @@ export interface Diagnostic {
     file: string;
 }
 /**
+ * Program-image versions written into the .flow header. Single source of truth
+ * so the two assembler result paths cannot drift. These MUST match the Java
+ * runtime's {@code ProgramImage} constants (format/ISA/ABI/firmware).
+ */
+export declare const PROGRAM_VERSIONS: {
+    readonly format: 1;
+    readonly isa: 2;
+    readonly minAbi: 2;
+    readonly minFirmware: 1;
+};
+/**
  * Program Image (matches Java ProgramImage structure)
  */
 export interface ProgramImage {

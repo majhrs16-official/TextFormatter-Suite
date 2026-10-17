@@ -954,10 +954,10 @@ class Assembler {
     createResultSync(program) {
         // For error cases, just return without computing hash
         const programImage = {
-            formatVersion: 1,
-            isaVersion: 2,
-            minAbiVersion: 1,
-            minFirmwareVersion: 1,
+            formatVersion: types_1.PROGRAM_VERSIONS.format,
+            isaVersion: types_1.PROGRAM_VERSIONS.isa,
+            minAbiVersion: types_1.PROGRAM_VERSIONS.minAbi,
+            minFirmwareVersion: types_1.PROGRAM_VERSIONS.minFirmware,
             entryPoint: this.getEntryPointAddress(),
             code: program,
             constants: this.constantPool,
@@ -978,10 +978,10 @@ class Assembler {
     async createResult(program) {
         // Serialize program image without hash first
         const programImageNoHash = {
-            formatVersion: 1,
-            isaVersion: 2,
-            minAbiVersion: 1,
-            minFirmwareVersion: 1,
+            formatVersion: types_1.PROGRAM_VERSIONS.format,
+            isaVersion: types_1.PROGRAM_VERSIONS.isa,
+            minAbiVersion: types_1.PROGRAM_VERSIONS.minAbi,
+            minFirmwareVersion: types_1.PROGRAM_VERSIONS.minFirmware,
             entryPoint: this.getEntryPointAddress(),
             code: program,
             constants: this.constantPool,

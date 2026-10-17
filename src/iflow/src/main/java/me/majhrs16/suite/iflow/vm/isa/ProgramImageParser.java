@@ -39,9 +39,10 @@ public final class ProgramImageParser {
             throw new VmException(VmException.Code.INVALID_PROGRAM,
                 "ISA version too new: " + isaVersion + " (max " + CURRENT_ISA_VERSION + ")");
         }
-        if (minAbiVersion > CURRENT_ABI_VERSION) {
+        if (minAbiVersion != CURRENT_ABI_VERSION) {
             throw new VmException(VmException.Code.INVALID_PROGRAM,
-                "Minimum ABI version too new: " + minAbiVersion + " (max " + CURRENT_ABI_VERSION + ")");
+                "Incompatible ABI version: program requires ABI " + minAbiVersion
+                    + ", runtime implements " + CURRENT_ABI_VERSION);
         }
         if (minFirmwareVersion > CURRENT_FIRMWARE_VERSION) {
             throw new VmException(VmException.Code.INVALID_PROGRAM,

@@ -1202,9 +1202,44 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
   dirección física: leen `physicalMemory` tras `translateExecute` (solo EXECUTE), y el
   word valida ambas páginas al cruzar. Test de cruce corregido (`0x0FFE` no cruza;
   `0x0FFF` sí) + nuevo caso EXECUTE-only.
-- Pendientes P2/P3: AUD-010 (`maxSize` del pool), AUD-011 (`CURRENT_ABI_VERSION` vs
-  ABI v2), AUD-012 (README), AUD-013 (`dist` versionado / `npm test`), AUD-017 (detalle
-  de error descartado), AUD-018 (subsistema de regiones muerto).
+### Lote 3 — P2/P3 (decisiones antes de aplicar)
+
+Todos los P2/P3 restantes son autocontenidos (sin API nueva para el host), así que se
+aplican directamente. Decisiones:
+
+- **AUD-011 versión de ABI — ✅ decisión: versión exacta.**
+  `ProgramImage.CURRENT_ABI_VERSION` pasa a **2**. El parser exige coincidencia exacta:
+  rechaza `minAbiVersion != CURRENT_ABI_VERSION` (ni más nueva ni **más antigua**, porque
+  el runtime solo implementa una convención de llamada). El compilador emite
+  `minAbiVersion: 2` desde una **fuente única** (`PROGRAM_VERSIONS` en `types.ts`), no
+  literales dispersos. Se regeneran los `.flow` versionados y se añade test de rechazo
+  del binario v1.
+- **AUD-017 detalle de error — ✅ decisión: campo `detail` (ABI intacta).**
+  `ServiceResult` gana `detail` (String, nullable) que `invalidArgument`/`hostFailure`/
+  `bufferTooSmall` conservan; `R0/R3/R4` no cambian. `HostServiceRegistry` registra el
+  detalle con `Logger` antes de devolver el fallo. Test en `ServiceResultTest`.
+- **AUD-010 cota del pool — ✅ decisión: retención acotada + contadores atómicos.**
+  `maxSize` cota los contextos **retenidos** (idle) del pool, no los concurrentes: el
+  router nunca debe bloquearse. `acquire()` reutiliza o crea (nunca bloquea);
+  `release()` decide bajo lock si retiene o descarta (`available.size()` deja de ser un
+  check-then-act). `created` refleja contextos vivos y no se desincroniza.
+- **AUD-018 subsistema muerto — ✅ decisión: eliminar.** `MemoryManager`,
+  `MemoryRegion`, `RegionPerm`, `RegionType` y `VmDmaController` no tienen uso en
+  producción (solo `VmDmaControllerTest`); el modelo vivo es `SoftMMU`/`PageTable`. Se
+  borran junto con su test y el import muerto en `ModificationJournal`. `copyBlock`/
+  `moveBlock`/`validateRange` (únicos sin equivalente en `SoftMMU`) desaparecen con él;
+  la cobertura única que aportaba (`readBlock`/`writeBlock` ya está en `SoftMMUTest`)
+  no se pierde.
+- **AUD-012 READMEs — ✅ decisión: corregir a la realidad.** Recuento de tests, quitar
+  `VmDmaController`/regiones, corregir «status=5 UNSUPPORTED» (es excepción→REJECT, ver
+  AUD-006) y el `-d` no-op.
+- **AUD-013 artefactos `dist` — ✅ decisión: `dist` ignorado + entrypoint real.**
+  `.gitignore` ignora `dist/`; se retira del índice (`git rm --cached`); se borra el ESM
+  huérfano. `src/index.ts` (barrel) hace que `tsc` emita `dist/index.js`/`.d.ts` que
+  `package.json` ya declara. `npm test` apunta a `test:validation` (jest se queda como
+  `test:jest` opcional).
+
+Los P2/P3 quedan aplicados así; ver bitácora de remediación para los commits.
 
 ### D12 — ISA v2 (direccionamiento indirecto) + ROM de firmware real
 

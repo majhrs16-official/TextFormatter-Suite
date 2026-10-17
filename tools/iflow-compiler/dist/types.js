@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.REGISTER_NAMES = exports.Decision = exports.PropertyId = exports.Scope = exports.ServiceId = exports.Register = exports.INSTRUCTION_SIZES = exports.Opcode = void 0;
+exports.PROGRAM_VERSIONS = exports.REGISTER_NAMES = exports.Decision = exports.PropertyId = exports.Scope = exports.ServiceId = exports.Register = exports.INSTRUCTION_SIZES = exports.Opcode = void 0;
 exports.isGPR = isGPR;
 /**
  * iFlow VM Opcode Definitions
@@ -193,5 +193,16 @@ exports.REGISTER_NAMES = {
     'R0': 0, 'R1': 1, 'R2': 2, 'R3': 3,
     'R4': 4, 'R5': 5, 'R6': 6, 'R7': 7,
     'IP': 8, 'SP': 9, 'FP': 10, 'FL': 11,
+};
+/**
+ * Program-image versions written into the .flow header. Single source of truth
+ * so the two assembler result paths cannot drift. These MUST match the Java
+ * runtime's {@code ProgramImage} constants (format/ISA/ABI/firmware).
+ */
+exports.PROGRAM_VERSIONS = {
+    format: 1,
+    isa: 2,
+    minAbi: 2,
+    minFirmware: 1,
 };
 //# sourceMappingURL=types.js.map

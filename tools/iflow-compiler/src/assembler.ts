@@ -16,6 +16,7 @@ import {
   AssemblerResult,
   Diagnostic,
   ProgramImage,
+  PROGRAM_VERSIONS,
   Symbol as SymbolType,
   isGPR,
 } from './types';
@@ -1038,10 +1039,10 @@ class Assembler {
   private createResultSync(program: Uint8Array): AssemblerResult {
     // For error cases, just return without computing hash
     const programImage: ProgramImage = {
-      formatVersion: 1,
-      isaVersion: 2,
-      minAbiVersion: 1,
-      minFirmwareVersion: 1,
+      formatVersion: PROGRAM_VERSIONS.format,
+      isaVersion: PROGRAM_VERSIONS.isa,
+      minAbiVersion: PROGRAM_VERSIONS.minAbi,
+      minFirmwareVersion: PROGRAM_VERSIONS.minFirmware,
       entryPoint: this.getEntryPointAddress(),
       code: program,
       constants: this.constantPool,
@@ -1065,10 +1066,10 @@ class Assembler {
   private async createResult(program: Uint8Array): Promise<AssemblerResult> {
     // Serialize program image without hash first
     const programImageNoHash: ProgramImage = {
-      formatVersion: 1,
-      isaVersion: 2,
-      minAbiVersion: 1,
-      minFirmwareVersion: 1,
+      formatVersion: PROGRAM_VERSIONS.format,
+      isaVersion: PROGRAM_VERSIONS.isa,
+      minAbiVersion: PROGRAM_VERSIONS.minAbi,
+      minFirmwareVersion: PROGRAM_VERSIONS.minFirmware,
       entryPoint: this.getEntryPointAddress(),
       code: program,
       constants: this.constantPool,

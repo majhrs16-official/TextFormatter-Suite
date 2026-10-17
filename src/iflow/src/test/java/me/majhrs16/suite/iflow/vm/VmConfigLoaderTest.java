@@ -103,8 +103,8 @@ class VmConfigLoaderTest {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             out.write(1); // format version
-            out.write(1); // ISA version
-            out.write(1); // minimum ABI version
+            out.write(2); // ISA version
+            out.write(2); // minimum ABI version
             out.write(1); // minimum firmware version
             out.write((entryPoint >> 8) & 0xFF);
             out.write(entryPoint & 0xFF);
