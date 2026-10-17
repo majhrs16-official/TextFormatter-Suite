@@ -1290,3 +1290,13 @@ integración que `CALL fw_strlen` sobre una cadena y comprueba `R0`; regenerados
 | 2026-10-17 | `e446db2` | AUD-007: `fetch*` lee memoria física tras `translateExecute` |
 | 2026-10-17 | `a410a31` | AUD-008/D12: ISA v2 (LDBI/LDWI/STBI/STWI) + ROM de firmware real (utilidades + wrappers de host) |
 | 2026-10-17 | `26a5985` | AUD-016/D16: puerto formal `HostContext` (servicios sin lambdas sueltas; estado del host en el engine) |
+| 2026-10-17 | `f60b99c` | AUD-011: ABI v2 y el parser exige coincidencia exacta; compilador emite la versión desde fuente única |
+| 2026-10-17 | `e30a6a9` | AUD-017: `ServiceResult.detail` conserva el motivo del fallo (ABI intacta) + log lazy |
+| 2026-10-17 | `1fbdb64` | AUD-010: cota real del pool (retención atómica) + contadores consistentes |
+| 2026-10-17 | `82668e9` | AUD-018: elimina el subsistema de regiones/DMA muerto |
+| 2026-10-17 | `e9dabba` | AUD-012: READMEs alineados con el código |
+| 2026-10-17 | `afc9a77` | AUD-013: `dist/` ignorado, entry point real (`src/index.ts`) y `npm test` = validación |
+
+**Cierre:** todos los `IFLOW-AUD-001…018` del informe quedan resueltos (lote 1 + lote 2
++ lote 3). `AUDITORIA.md` es el informe histórico del commit auditado `5ade855` y no se
+reescribe; el seguimiento vive en este PLAN.
