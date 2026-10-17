@@ -29,7 +29,10 @@ public final class ExecutionContext {
     private String actorId;        // The actor (sender/recipient) this execution is for
     private long fuelBudget;
     private int maxCallDepth = 64;
-    private int maxStackSize = 16 * 1024; // 16 KiB
+    // Defaults to the real size of the stack region (see VmMemoryMap). It used to
+    // be 16 KiB while the region is 8 KiB, so `stackLimit` fell inside the data
+    // region and the overflow guard never fired before a page fault.
+    private int maxStackSize = VmMemoryMap.STACK_TOP - VmMemoryMap.STACK_BASE; // 8 KiB
     private String[] allowedCapabilities = new String[0]; // Per-execution capabilities
 
     // ===== Runtime-injected services =====

@@ -317,6 +317,12 @@ class ExecutionContextTest {
     }
 
     @Test
+    void defaultStackLimitMatchesTheStackRegion() {
+        ExecutionContext ctx = createContext(createMappedMMU());
+        assertEquals(VmMemoryMap.STACK_TOP - VmMemoryMap.STACK_BASE, ctx.maxStackSize());
+    }
+
+    @Test
     void stackOverflowOnCallDetected() {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu).maxStackSize(2);

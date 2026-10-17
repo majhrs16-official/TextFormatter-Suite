@@ -1193,10 +1193,24 @@ capabilities, cableado de servicios con APIs del host, ROM de firmware).
 - **AUD-002/004 red de seguridad.** El `catch (RuntimeException)` es defensivo; no
   sustituye la corrección de raíz.
 
+### Otros hallazgos (P2/P3) — autocontenidos
+
+- **AUD-009 ✅** `maxStackSize` por defecto pasa a ser el tamaño real de la región de
+  pila (`STACK_TOP - STACK_BASE` = 8 KiB) en vez de 16 KiB; el guard ya dispara antes
+  de salir de la página. Test en `ExecutionContextTest`.
+- **AUD-014 ✅** `FirmwareIntegrationTest` ya no usa una ruta absoluta: localiza la raíz
+  por `settings.gradle` y resuelve el fixture. Además asierta la estructura real
+  (`entryPoint == 0x1000`, la sección de código abarca ROM + usuario).
+- Pendientes P2/P3: AUD-007 (`fetch*` muerto/doble traducción), AUD-010 (`maxSize` del
+  pool), AUD-011 (`CURRENT_ABI_VERSION` vs ABI v2), AUD-012 (README), AUD-013 (`dist`
+  versionado / `npm test`), AUD-017 (detalle de error descartado), AUD-018 (subsistema
+  de regiones muerto).
+
 ### Bitácora de remediación
 
 | Fecha | Commit | Qué |
 |---|---|---|
 | 2026-10-17 | — | plan de remediación registrado (este apartado) |
 | 2026-10-17 | `af72e9f` | lote 1: AUD-001/002/003/004/006 (compilador + VM) + tests |
-| 2026-10-17 | — | AUD-015: capabilities solicitadas ∩ concedidas por el host |
+| 2026-10-17 | `7802970` | AUD-015: capabilities solicitadas ∩ concedidas por el host |
+| 2026-10-17 | — | AUD-009 (guard de pila) + AUD-014 (test de firmware portable/real) |

@@ -13,17 +13,21 @@ class FirmwareIntegrationTest {
 
     @Test
     void runFirmwareBinary() throws Exception {
-        byte[] bytes = Files.readAllBytes(Paths.get("/home/majhrs16/Documentos/textformatter-suite/tools/iflow-compiler/test/firmware.flow"));
+        byte[] bytes = Files.readAllBytes(fixture("tools/iflow-compiler/test/firmware.flow"));
         System.out.println("Loaded " + bytes.length + " bytes");
         
         ProgramImage program = ProgramImage.parse(bytes);
         System.out.println("Entry point: 0x" + Integer.toHexString(program.entryPoint()));
         System.out.println("Code length: " + program.code().length);
         System.out.println("Capabilities: " + String.join(", ", program.capabilities()));
-        System.out.println("First 16 code bytes:");
-        for (int i = 0; i < Math.min(16, program.code().length); i++) {
-            System.out.printf("  code[%d] = 0x%02X%n", i, program.code()[i] & 0xFF);
-        }
+
+        // Structural expectations of a firmware-on image: the ROM occupies page 0
+        // and the user code starts at 0x1000 (page 1), so the code section spans
+        // both pages.
+        assertEquals(VmMemoryMap.PAGE, program.entryPoint(),
+            "user code must start at 0x1000 when the firmware ROM is present");
+        assertTrue(program.code().length > VmMemoryMap.PAGE,
+            "firmware-on code section must span ROM + user code");
         
         HostServiceRegistry registry = new HostServiceRegistry();
         registry.declareCapability("property.read");
@@ -104,5 +108,22 @@ class FirmwareIntegrationTest {
             pool.release(ctx);
             pool.close();
         }
+    }
+
+    /**
+     * Resolves a repository-relative fixture without hardcoding an absolute path:
+     * walks up from the working directory until it finds {@code settings.gradle}
+     * (the repo root) and resolves {@code relative} from there.
+     */
+    private static Path fixture(String relative) {
+        Path dir = Paths.get("").toAbsolutePath();
+        while (dir != null && !Files.exists(dir.resolve("settings.gradle"))) {
+            dir = dir.getParent();
+        }
+        if (dir == null) {
+            throw new IllegalStateException(
+                "Repository root (settings.gradle) not found from " + Paths.get("").toAbsolutePath());
+        }
+        return dir.resolve(relative);
     }
 }
