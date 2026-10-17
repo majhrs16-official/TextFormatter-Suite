@@ -38,7 +38,7 @@ def disassemble(buf, start=0, length=None):
         0x43: ("JC", 3),
         0x44: ("JV", 3),
         0x48: ("CALL", 3),
-        0x49: ("RET", 2),
+        0x49: ("RET", 1),
         0x60: ("HOST", 2),
         0x68: ("HALT", 1),
         0x69: ("TRAP", 2),
@@ -82,8 +82,7 @@ def disassemble(buf, start=0, length=None):
             target = ip + 3 + offset
             print(f" 0x{target:04x} (offset={offset})")
         elif name == "RET":
-            rs = buf[ip+1] >> 4
-            print(f" R{rs}")
+            print()
         elif name == "HOST":
             print(f" (service in R0)")
         elif name == "HALT":

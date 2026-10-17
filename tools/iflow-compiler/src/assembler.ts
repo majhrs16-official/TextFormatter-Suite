@@ -284,7 +284,7 @@ class Assembler {
     // Done
     const strlen_done = fw.length;
     this.emitInstr(fw, Opcode.MOV, 0, 4);          // MOV R0, R4 (return length)
-    this.emitInstr(fw, Opcode.RET, 0);             // RET
+    this.emitInstr(fw, Opcode.RET);                // RET
 
     // Fixup JZ/JMP offsets (simplified - real impl would compute properly)
     // For now, just emit placeholder firmware that demonstrates the structure
@@ -516,7 +516,7 @@ class Assembler {
       case Opcode.NOT: return { min: 1, max: 1, types: ['gpr'] };
       case Opcode.JMP: case Opcode.JZ: case Opcode.JNZ: case Opcode.JC: case Opcode.JV: case Opcode.CALL:
         return { min: 1, max: 1, types: ['label'] };
-      case Opcode.RET: return { min: 1, max: 1, types: ['gpr'] };
+      case Opcode.RET: return { min: 0, max: 0, types: [] };
       case Opcode.HOST: return { min: 0, max: 0, types: [] };
       case Opcode.HALT: return { min: 0, max: 0, types: [] };
       case Opcode.TRAP: return { min: 1, max: 1, types: ['imm8'] };
@@ -733,9 +733,7 @@ class Assembler {
         break;
       }
 
-      case Opcode.RET: { // R rs (2 bytes: opcode + rs<<4)
-        const rs = this.getRegOperand(operands, 0);
-        code.push((rs & 0x0F) << 4);
+      case Opcode.RET: { // R (1 byte: opcode only, no operand)
         break;
       }
 

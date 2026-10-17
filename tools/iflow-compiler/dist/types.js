@@ -81,7 +81,7 @@ exports.INSTRUCTION_SIZES = {
     [Opcode.JC]: 3,
     [Opcode.JV]: 3,
     [Opcode.CALL]: 3,
-    [Opcode.RET]: 2,
+    [Opcode.RET]: 1, // R (no operand)
     [Opcode.HOST]: 2,
     [Opcode.HALT]: 1,
     [Opcode.TRAP]: 2,

@@ -42,7 +42,7 @@ export enum Opcode {
   JC   = 0x43, // BR16: Jump if Carry
   JV   = 0x44, // BR16: Jump if Overflow
   CALL = 0x48, // BR16: Call subroutine
-  RET  = 0x49, // R: Return
+  RET  = 0x49, // R: Return (1 byte, no operand)
 
   // Services (0x60-0x6F)
   HOST = 0x60, // HOST: Generic host service call
@@ -84,7 +84,7 @@ export const INSTRUCTION_SIZES: Record<Opcode, number> = {
   [Opcode.JC]: 3,
   [Opcode.JV]: 3,
   [Opcode.CALL]: 3,
-  [Opcode.RET]: 2,
+  [Opcode.RET]: 1,      // R (no operand)
   [Opcode.HOST]: 2,
   [Opcode.HALT]: 1,
   [Opcode.TRAP]: 2,

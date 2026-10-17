@@ -333,22 +333,22 @@ class VmInterpreterTest {
     @Test
     void nestedCallRetRestoresFramePointerChain() {
         // main -> sub1 -> sub2, each returning; FP must unwind back to 0x6000.
-        // Layout (byte offsets):
+        // Layout (byte offsets), with RET as a 1-byte opcode:
         //  0: CALL sub1   (target 4)
         //  3: HALT
-        //  4: CALL sub2   (target 9)
+        //  4: CALL sub2   (target 8)
         //  7: RET
-        //  9: LI R0, 0xABCD
-        // 13: RET
-        // 15: HALT
+        //  8: LI R0, 0xABCD
+        // 12: RET
+        // 13: HALT
         byte[] code = {
             Opcode.CALL, 0x00, 0x01,                 // 0: call -> 4
             Opcode.HALT,                             // 3
-            Opcode.CALL, 0x00, 0x02,                 // 4: call -> 9
-            Opcode.RET, 0x00,                        // 7
-            Opcode.LI, 0, (byte) 0xAB, (byte) 0xCD,  // 9: LI R0, 0xABCD
-            Opcode.RET, 0x00,                        // 13
-            Opcode.HALT                              // 15
+            Opcode.CALL, 0x00, 0x01,                 // 4: call -> 8
+            Opcode.RET,                              // 7
+            Opcode.LI, 0, (byte) 0xAB, (byte) 0xCD,  // 8: LI R0, 0xABCD
+            Opcode.RET,                              // 12
+            Opcode.HALT                              // 13
         };
         var p = createInterpreterAndContext(code);
         p.first().execute(p.second());

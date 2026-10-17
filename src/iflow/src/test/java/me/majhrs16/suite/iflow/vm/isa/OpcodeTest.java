@@ -46,9 +46,9 @@ class OpcodeTest {
         // MOV = 2 bytes (RR)
         assertEquals(2, Opcode.instructionSize(Opcode.MOV));
 
-        // NOT, RET = 2 bytes (RR), HALT = 1 byte (R)
+        // NOT = 2 bytes (RR); RET, HALT = 1 byte (R, no operand)
         assertEquals(2, Opcode.instructionSize(Opcode.NOT));
-        assertEquals(2, Opcode.instructionSize(Opcode.RET));
+        assertEquals(1, Opcode.instructionSize(Opcode.RET));
         assertEquals(1, Opcode.instructionSize(Opcode.HALT));
 
         // Memory = 4 bytes (MEM format: opcode + reg + vaddr16)

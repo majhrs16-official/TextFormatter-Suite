@@ -31,7 +31,7 @@ export declare enum Opcode {
     JC = 67,// BR16: Jump if Carry
     JV = 68,// BR16: Jump if Overflow
     CALL = 72,// BR16: Call subroutine
-    RET = 73,// R: Return
+    RET = 73,// R: Return (1 byte, no operand)
     HOST = 96,// HOST: Generic host service call
     HALT = 104,// R: Halt execution (normal)
     TRAP = 105

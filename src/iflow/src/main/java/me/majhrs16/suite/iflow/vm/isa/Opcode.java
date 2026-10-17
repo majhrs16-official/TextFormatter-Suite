@@ -48,7 +48,7 @@ public final class Opcode {
     public static final int JC      = 0x43; // BR16: Jump if Carry
     public static final int JV      = 0x44; // BR16: Jump if Overflow
     public static final int CALL    = 0x48; // BR16: Call subroutine
-    public static final int RET     = 0x49; // R:    Return
+    public static final int RET     = 0x49; // R:    Return (1 byte, no operand)
 
     // Services (0x60–0x6F)
     public static final int HOST    = 0x60; // HOST: Generic host service call
@@ -107,8 +107,8 @@ public final class Opcode {
     public static int instructionSize(int opcode) {
         return switch (opcode) {
             case LI -> 4;       // RI16: opcode + reg + imm16
-            case MOV, NOT, RET -> 2; // RR (packed registers)
-            case HALT -> 1; // R (single byte)
+            case MOV, NOT -> 2; // RR (packed registers)
+            case RET, HALT -> 1; // R (single byte, no operand)
             case LDB, LDW, STB, STW -> 4;  // MEM: opcode + reg + vaddr16
             case COPY, MOVE -> 8;          // BLOCK: opcode + srcVaddr16 + dstVaddr16 + len16
             case ADD, SUB, MUL, DIV, MOD,
