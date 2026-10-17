@@ -1344,7 +1344,7 @@ privilegios/rings.
 | 2026-10-17 | `f9f96ad` | AUD-018 ⚠️: restaura `VmDmaController` (+ su test) y repara la doc; regiones quedan fuera |
 | 2026-10-17 | `dacf6c7` | AUD-018: confirma obsoleto el modelo de memoria por *handles* |
 | 2026-10-17 | `e0ee7eb` | 2ª auditoría en `AUDITORIA.md` (IFLOW-AUD-019…030: memoria/DMA/hardware) |
-| 2026-10-17 | `80023cb` | D17: integra el DMA en la E/S (IFLOW-AUD-019) |
+| 2026-10-17 | `31fcf89` | D17: integra el DMA en la E/S (IFLOW-AUD-019) |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
