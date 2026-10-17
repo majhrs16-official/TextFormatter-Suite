@@ -83,3 +83,49 @@ tasks.register('printSourceDirs') {
         sourceSets.test.java.srcDirs.each { println "  TEST: " + it }
     }
 }
+
+// ============================================================
+// iflowAsm: assemble a .flowasm policy program with the Node CLI
+// ============================================================
+// The firmware ROM is ON by default: it occupies 0x0000-0x0FFF and the user
+// program is placed at 0x1000. Pass -Piflow.baremetal=true to assemble a
+// bare-metal program (no ROM, default origin 0x0000).
+//
+//   ./gradlew :src:iflow:iflowAsm
+//   ./gradlew :src:iflow:iflowAsm -Piflow.source=path/to/prog.flowasm -Piflow.output=policy.flow
+//   ./gradlew :src:iflow:iflowAsm -Piflow.baremetal=true -Piflow.origin=0x0000
+//
+// Requires Node.js 18+ and tools/iflow-compiler/node_modules (run: npm ci).
+
+def iflowCompilerDir = rootProject.file('tools/iflow-compiler')
+
+tasks.register('iflowCompilerBuild', Exec) {
+    group = 'iflow'
+    description = 'Build the TypeScript iflow assembler (npm run build).'
+    workingDir iflowCompilerDir
+    commandLine 'npm', 'run', 'build'
+    inputs.dir(new File(iflowCompilerDir, 'src'))
+    outputs.file(new File(iflowCompilerDir, 'dist/cli.js'))
+}
+
+tasks.register('iflowAsm', Exec) {
+    group = 'iflow'
+    description = 'Assemble a .flowasm program into a .flow binary (firmware on by default; -Piflow.baremetal=true for bare-metal).'
+    dependsOn 'iflowCompilerBuild'
+    workingDir iflowCompilerDir
+
+    def source = rootProject.file(project.findProperty('iflow.source') ?: 'tools/iflow-compiler/examples/policy.flowasm')
+    def output = rootProject.file(project.findProperty('iflow.output') ?: "${layout.buildDirectory.get().asFile}/iflow/policy.flow")
+    def origin = project.findProperty('iflow.origin')
+    def baremetal = (project.findProperty('iflow.baremetal') ?: 'false').toString().toBoolean()
+
+    inputs.file(source)
+    outputs.file(output)
+
+    def cliArgs = ['node', 'dist/cli.js', source.path, '-o', output.path]
+    if (origin) { cliArgs.addAll(['-O', origin.toString()]) }
+    if (baremetal) { cliArgs.add('--no-firmware') }
+    commandLine cliArgs
+
+    doFirst { output.parentFile.mkdirs() }
+}

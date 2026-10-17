@@ -1,0 +1,58 @@
+; ============================================================
+; Example iFlow policy program (HOST ABI v2)
+; ============================================================
+; Reads message.content into the input buffer (0x6000) and drops the message
+; when it starts with 's' ("spam"), otherwise logs it.
+;
+; Assemble directly:
+;   node dist/cli.js examples/policy.flowasm -o policy.flow          ; firmware ROM
+;   node dist/cli.js examples/policy.flowasm -o policy.flow --no-firmware ; bare-metal
+;
+; Or through Gradle (firmware on by default):
+;   ./gradlew :src:iflow:iflowAsm
+;   ./gradlew :src:iflow:iflowAsm -Piflow.baremetal=true
+;
+; The .const block below duplicates the firmware ROM equates so the program
+; assembles in both modes; a user definition wins over the ROM's.
+
+.entry main
+
+; HOST ABI v2 constants (also provided by the firmware ROM when it is enabled).
+.const SERVICE_PROPERTY_READ  0x0100
+.const SERVICE_ROUTE_DECISION 0x0300
+.const DECISION_LOG           0x00
+.const DECISION_DROP          0x01
+.const SCOPE_MESSAGE          0x01
+.const PROP_CONTENT           0x0010
+
+.section code
+
+main:
+    ; PROPERTY_READ message.content -> 0x6000
+    ; HOST ABI v2: R0=op, R1=options, R2=base, R3=length.
+    ; options = (SCOPE_MESSAGE << 8) | PROP_CONTENT = 0x0110
+    LI R0, SERVICE_PROPERTY_READ
+    LI R1, 0x0110
+    LI R2, 0x6000
+    LI R3, 0x0100
+    HOST                   ; R0=status, R3=bytes written
+
+    ; Drop if the first byte is 's' (0x73).
+    LDB R0, 0x6000
+    LI R1, 0x73
+    CMP R0, R1
+    JZ drop
+
+    ; Otherwise: LOG.
+    LI R0, SERVICE_ROUTE_DECISION
+    LI R1, DECISION_LOG
+    HOST
+    HALT
+
+drop:
+    LI R0, SERVICE_ROUTE_DECISION
+    LI R1, DECISION_DROP
+    HOST
+    HALT
+
+.end
