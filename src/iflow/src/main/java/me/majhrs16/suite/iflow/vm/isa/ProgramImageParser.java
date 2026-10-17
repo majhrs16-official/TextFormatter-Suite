@@ -1,7 +1,7 @@
 package me.majhrs16.suite.iflow.vm.isa;
 
 import me.majhrs16.suite.iflow.vm.isa.VmException;
-import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -58,14 +58,13 @@ public final class ProgramImageParser {
         if (codeLength < 0 || codeLength > 0xFFFF) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Invalid code length: " + codeLength);
         }
-        // Code may span up to two pages: the firmware ROM occupies 0x0000-0x0FFF
-        // and user code follows at 0x1000 (page 1). The interpreter fetches from a
-        // flat code array (not through the MMU), so this is a policy bound rather
-        // than a page-mapping constraint.
-        final int MAX_CODE_SIZE = SoftMMU.PAGE_SIZE * 2; // 8192 bytes (2 pages)
-        if (codeLength > MAX_CODE_SIZE) {
+        // Code may span the whole code region (firmware ROM at 0x0000 + user code
+        // at 0x1000). The bound comes from the single-source memory map so it can
+        // never drift from the engine's mapping.
+        if (codeLength > VmMemoryMap.CODE_MAX_SIZE) {
             throw new VmException(VmException.Code.INVALID_PROGRAM,
-                "Code section too large: " + codeLength + " bytes, maximum is " + MAX_CODE_SIZE + " bytes (2 pages)");
+                "Code section too large: " + codeLength + " bytes, maximum is "
+                    + VmMemoryMap.CODE_MAX_SIZE + " bytes (" + VmMemoryMap.CODE_PAGES + " pages)");
         }
 
         // Read code
@@ -79,6 +78,13 @@ public final class ProgramImageParser {
         // Read constants
         if (constantsLength < 0 || constantsLength > 0xFFFF) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Invalid constants length: " + constantsLength);
+        }
+        // The constants section maps into a single read-only page; keep it there
+        // so it can never spill into the data region (see VmMemoryMap).
+        if (constantsLength * 2 > VmMemoryMap.CONSTANTS_MAX_SIZE) {
+            throw new VmException(VmException.Code.INVALID_PROGRAM,
+                "Constants section too large: " + (constantsLength * 2) + " bytes, maximum is "
+                    + VmMemoryMap.CONSTANTS_MAX_SIZE + " bytes (" + VmMemoryMap.CONSTANTS_PAGES + " page)");
         }
         if (offset + constantsLength * 2 > data.length) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Constants section truncated");

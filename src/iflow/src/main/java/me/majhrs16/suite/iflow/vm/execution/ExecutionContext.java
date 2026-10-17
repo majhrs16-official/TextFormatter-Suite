@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 
@@ -54,11 +55,11 @@ public final class ExecutionContext {
     // Page table for this execution (cloned from program's page table at init)
     private PageTable pageTable;
 
-    // Pre-allocated I/O buffer virtual addresses (page-aligned, in flat memory)
-    // Input buffer at page 6 (0x6000), Output buffer at page 7 (0x7000)
-    private static final int INPUT_BUFFER_VADDR = 0x6000;
-    private static final int OUTPUT_BUFFER_VADDR = 0x7000;
-    private static final int IO_BUFFER_SIZE = 4096; // 4KB (one page)
+    // Pre-allocated I/O buffer virtual addresses, taken from the single-source
+    // memory map (input at 0x7000, output at 0x8000).
+    private static final int INPUT_BUFFER_VADDR = VmMemoryMap.INPUT_BASE;
+    private static final int OUTPUT_BUFFER_VADDR = VmMemoryMap.OUTPUT_BASE;
+    private static final int IO_BUFFER_SIZE = VmMemoryMap.IO_BUFFER_SIZE; // 4KB (one page)
 
     public ExecutionContext() {}
 
@@ -110,15 +111,13 @@ public final class ExecutionContext {
         fatalError = null;
         startNanos = nanoTimeSupplier == null ? System.nanoTime() : nanoTimeSupplier.get();
 
-        // Initialize stack pointer (stack grows down from top of address space - page 4/5)
-        // Stack starts at 0x6000 (top of page 5) and grows down
-        registers.set(RegisterFile.SP, 0x6000);
-        registers.set(RegisterFile.FP, 0x6000);
+        // Initialize stack pointer (stack grows down from the top of the stack region)
+        registers.set(RegisterFile.SP, VmMemoryMap.STACK_TOP);
+        registers.set(RegisterFile.FP, VmMemoryMap.STACK_TOP);
 
         // Clear I/O buffer pages in physical memory
         if (softMMU != null) {
-            // Page 6 (0x6000) - input buffer
-            // Page 7 (0x7000) - output buffer
+            // Input buffer (0x7000) and output buffer (0x8000)
             for (int i = 0; i < IO_BUFFER_SIZE; i++) {
                 softMMU.writeByte(INPUT_BUFFER_VADDR + i, 0);
                 softMMU.writeByte(OUTPUT_BUFFER_VADDR + i, 0);
@@ -167,7 +166,7 @@ public final class ExecutionContext {
         }
         // Check stack pointer against stack limit
         int sp = registers.get(RegisterFile.SP);
-        int stackLimit = 0x6000 - maxStackSize; // Stack grows down from 0x6000
+        int stackLimit = VmMemoryMap.STACK_TOP - maxStackSize; // Stack grows down from STACK_TOP
         if (sp - 2 < stackLimit) { // Need 2 bytes for return address
             throw new VmException(VmException.Code.STACK_LIMIT,
                 "Stack overflow: SP=0x" + Integer.toHexString(sp) + " limit=0x" + Integer.toHexString(stackLimit),
@@ -240,10 +239,10 @@ public final class ExecutionContext {
         this.pageTable = pageTable;
     }
 
-    /** Gets the virtual address of the input buffer (page 6: 0x6000). */
+    /** Gets the virtual address of the input buffer (see {@link VmMemoryMap#INPUT_BASE}). */
     public int inputBufferVAddr() { return INPUT_BUFFER_VADDR; }
 
-    /** Gets the virtual address of the output buffer (page 7: 0x7000). */
+    /** Gets the virtual address of the output buffer (see {@link VmMemoryMap#OUTPUT_BASE}). */
     public int outputBufferVAddr() { return OUTPUT_BUFFER_VADDR; }
 
     /** Gets the size of I/O buffers (4096 bytes = 4KB = 1 page). */

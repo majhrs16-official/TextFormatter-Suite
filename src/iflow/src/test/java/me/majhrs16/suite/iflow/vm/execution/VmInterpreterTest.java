@@ -6,6 +6,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -15,17 +16,28 @@ class VmInterpreterTest {
 
     private static SoftMMU createSoftMMU() {
         SoftMMU mmu = new SoftMMU();
-        // Map code page (page 0: 0x0000)
-        mmu.getPageTable().mapPage(0, 0, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
-        // Map data pages (pages 2-3: 0x2000-0x3FFF)
-        mmu.getPageTable().mapPage(2, 2 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(3, 3 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        // Map stack pages (pages 4-5: 0x4000-0x5FFF)
-        mmu.getPageTable().mapPage(4, 4 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(5, 5 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        // Map I/O pages (pages 6-7: 0x6000-0x7FFF)
-        mmu.getPageTable().mapPage(6, 6 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(7, 7 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Standard layout, derived from the single-source memory map (VmMemoryMap).
+        for (int p = 0; p < VmMemoryMap.CODE_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
+                VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE),
+            VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
+        for (int p = 0; p < VmMemoryMap.DATA_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.DATA_BASE) + p,
+                VmMemoryMap.DATA_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        for (int p = 0; p < VmMemoryMap.STACK_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.STACK_BASE) + p,
+                VmMemoryMap.STACK_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+            VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+            VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         return mmu;
     }
 
@@ -326,13 +338,13 @@ class VmInterpreterTest {
         // After HALT, R0 should be 0x1234
         assertEquals(0x1234, p.second().registers().get(RegisterFile.R0));
         // RET must restore the caller's frame pointer and stack pointer
-        assertEquals(0x6000, p.second().registers().get(RegisterFile.FP));
-        assertEquals(0x6000, p.second().registers().get(RegisterFile.SP));
+        assertEquals(0x7000, p.second().registers().get(RegisterFile.FP));
+        assertEquals(0x7000, p.second().registers().get(RegisterFile.SP));
     }
 
     @Test
     void nestedCallRetRestoresFramePointerChain() {
-        // main -> sub1 -> sub2, each returning; FP must unwind back to 0x6000.
+        // main -> sub1 -> sub2, each returning; FP must unwind back to 0x7000.
         // Layout (byte offsets), with RET as a 1-byte opcode:
         //  0: CALL sub1   (target 4)
         //  3: HALT
@@ -353,9 +365,9 @@ class VmInterpreterTest {
         var p = createInterpreterAndContext(code);
         p.first().execute(p.second());
         assertEquals(0xABCD, p.second().registers().get(RegisterFile.R0));
-        assertEquals(0x6000, p.second().registers().get(RegisterFile.FP),
+        assertEquals(0x7000, p.second().registers().get(RegisterFile.FP),
             "FP must unwind through both frames back to the main frame");
-        assertEquals(0x6000, p.second().registers().get(RegisterFile.SP));
+        assertEquals(0x7000, p.second().registers().get(RegisterFile.SP));
     }
 
     @Test
@@ -404,12 +416,12 @@ class VmInterpreterTest {
     @Test
     void memoryReadWrite() {
         SoftMMU mm = createSoftMMU();
-        // Write to data page (page 2: 0x2000)
-        int vaddr = 0x2000;
+        // Write to the data region (0x3000)
+        int vaddr = 0x3000;
         mm.writeWord(vaddr, 0x0A);
 
         byte[] code = {
-            Opcode.LDW, 0, 0x20, 0x00, // LDW R0, [0x2000]
+            Opcode.LDW, 0, 0x30, 0x00, // LDW R0, [0x3000]
             Opcode.HALT
         };
         // Use the same SoftMMU for both write and interpreter

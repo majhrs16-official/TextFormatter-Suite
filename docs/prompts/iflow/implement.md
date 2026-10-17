@@ -44,7 +44,7 @@ El host puede conceder o denegar `memory.persist` y `registers.persist`. Sin ell
 
 La herramienta externa `iflow-compiler` (TypeScript/JS) ensambla `.flowasm` → `.flow` y calcula hashes. El runtime Java **solo carga y ejecuta**. No hay `VmProgramCompiler`, no hay `RuleExpressionEvaluator`, no hay `VmConfigLoader` de YAML.
 
-7\. **No hay búferes de entrada externos.** Al ser un modelo de memoria completamente plano, el host no "inyecta" datos en búferes especiales. El programa en la VM interactúa directamente con la memoria plana mediante llamadas `HOST`, pasando direcciones virtuales absolutas (ej.: "escribe la propiedad en `0x1000`"). El programa manipula los datos in-place usando punteros, bucles y condiciones estándar.
+7\. **No hay búferes de entrada externos.** Al ser un modelo de memoria completamente plano, el host no "inyecta" datos en búferes especiales. El programa en la VM interactúa directamente con la memoria plana mediante llamadas `HOST`, pasando direcciones virtuales absolutas (ej.: "escribe la propiedad en el buffer de entrada `0x7000`"). El programa manipula los datos in-place usando punteros, bucles y condiciones estándar.
 
 ### Decisión central
 
@@ -535,13 +535,18 @@ El espacio de direcciones es plano de 16 bits (64 KB totales: $0x0000$–$0xFFFF
 
 | Página | Rango        | Uso típico                           | Permisos base          |
 | ------ | ------------ | ------------------------------------ | ---------------------- |
-| 0      | 0x0000–0x0FFF | Código del programa                  | R / X                  |
-| 1      | 0x1000–0x1FFF | Constantes / datos de solo lectura   | R                      |
-| 2–3    | 0x2000–0x3FFF | Datos privados / heap                | R / W                  |
-| 4–5    | 0x4000–0x5FFF | Pila (crece hacia abajo desde 0x6000)| R / W                  |
-| 6      | 0x6000–0x6FFF | Buffer de entrada (I/O)              | R / W                  |
-| 7      | 0x7000–0x7FFF | Buffer de salida (I/O)               | R / W                  |
-| 8–15   | 0x8000–0xFFFF | Datos privados / estado persistente  | Según capacidad        |
+| 0      | 0x0000–0x0FFF | Código: ROM de firmware (o código de usuario en bare-metal) | R / X |
+| 1      | 0x1000–0x1FFF | Código: usuario (con firmware activado) | R / X               |
+| 2      | 0x2000–0x2FFF | Constantes / datos de solo lectura   | R                      |
+| 3–4    | 0x3000–0x4FFF | Datos privados / heap                | R / W                  |
+| 5–6    | 0x5000–0x6FFF | Pila (crece hacia abajo desde 0x7000)| R / W                  |
+| 7      | 0x7000–0x7FFF | Buffer de entrada (I/O)              | R / W                  |
+| 8      | 0x8000–0x8FFF | Buffer de salida (I/O)               | R / W                  |
+| 9–15   | 0x9000–0xFFFF | Datos privados / estado persistente  | Según capacidad        |
+
+> El mapa es independiente del modo: la región de código reserva siempre dos
+> páginas (ROM + usuario), y en bare-metal la página 1 queda sin usar. Así el
+> código nunca solapa la página de constantes. Fuente única: `VmMemoryMap`.
 
 - **PageTable**: 16 entradas, cada una = `frame_base` (16-bit) + `perms` (3-bit R/W/X) + `valid` + `user`
 - **Traducción**: `virt_page = vaddr >> 12`, `offset = vaddr & 0xFFF`, `phys = frame_base + offset`
@@ -550,15 +555,15 @@ El espacio de direcciones es plano de 16 bits (64 KB totales: $0x0000$–$0xFFFF
 
 No hay regiones, no hay handles, no hay búferes de entrada aislados. El programa interactúa directamente con la memoria plana mediante direcciones virtuales absolutas.
 
-Los datos del mensaje, emisor, destinatario, canal y servidor no necesitan tener regiones permanentes. La interfaz del host materializa el valor solicitado en la dirección virtual indicada por el programa (ej.: "escribe la propiedad en `0x1000`").
+Los datos del mensaje, emisor, destinatario, canal y servidor no necesitan tener regiones permanentes. La interfaz del host materializa el valor solicitado en la dirección virtual indicada por el programa (ej.: "escribe la propiedad en el buffer de entrada `0x7000`").
 
 ## 10.2. Tamaños y límites
 
 Los tamaños máximos deben configurarse por política y por runtime. Como valores iniciales de referencia para pruebas, no como límites universales:
 
 - Espacio plano total: 64 KiB (16 páginas × 4 KB)
-- Pila: 8 KiB (páginas 4–5, crece hacia abajo desde 0x6000)
-- Buffer I/O individual: 4 KiB (1 página c/u: entrada en 0x6000, salida en 0x7000)
+- Pila: 8 KiB (páginas 5–6, crece hacia abajo desde 0x7000)
+- Buffer I/O individual: 4 KiB (1 página c/u: entrada en 0x7000, salida en 0x8000)
 - Código: límite configurable por artefacto, con un perfil inicial de 256 KiB (requiere carga por fragmentos si supera 64 KB)
 - Estado persistente: 64 KiB por instancia lógica (páginas 8–15, según capacidad `memory.persist`)
 

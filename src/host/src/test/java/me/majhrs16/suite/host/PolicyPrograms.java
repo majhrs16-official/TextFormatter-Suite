@@ -3,6 +3,7 @@ package me.majhrs16.suite.host;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import java.io.ByteArrayOutputStream;
@@ -19,8 +20,8 @@ import java.nio.charset.StandardCharsets;
  */
 final class PolicyPrograms {
 
-    /** Data page base (0x2000), mapped read/write by {@code VmPolicyEngine}. */
-    private static final int SCRATCH = 0x2000;
+    /** Data-region base, mapped read/write by {@code VmPolicyEngine} (see {@link VmMemoryMap}). */
+    private static final int SCRATCH = VmMemoryMap.DATA_BASE;
 
     private PolicyPrograms() {}
 

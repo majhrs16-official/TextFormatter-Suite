@@ -28,14 +28,14 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 - **Espacio plano**: 64 KB (0x0000–0xFFFF)
 - **Paginación**: 16 páginas × 4 KB = 64 KB
 - **Permisos por página**: READ (0x1), WRITE (0x2), EXECUTE (0x4)
-- **Mapeo típico**:
-  - Página 0: Código (R/X)
-  - Páginas 1: Constantes (R)
-  - Páginas 2-3: Datos/Heap (R/W)
-  - Páginas 4-5: Pila (R/W, crece hacia abajo)
-  - Página 6: Buffer entrada I/O (0x6000)
-  - Página 7: Buffer salida I/O (0x7000)
-  - Páginas 8-15: Estado persistente / datos privados
+- **Mapeo típico** (fuente única: `VmMemoryMap`):
+  - Páginas 0-1: Código (R/X) — ROM de firmware (0x0000) + código de usuario (0x1000); en bare-metal sólo se usa la página 0
+  - Página 2: Constantes (R) (0x2000)
+  - Páginas 3-4: Datos/Heap (R/W) (0x3000–0x4FFF)
+  - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
+  - Página 7: Buffer entrada I/O (0x7000)
+  - Página 8: Buffer salida I/O (0x8000)
+  - Páginas 9-15: Estado persistente / datos privados
 
 ### ISA v1 (resumen)
 

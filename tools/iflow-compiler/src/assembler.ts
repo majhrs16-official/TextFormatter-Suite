@@ -236,17 +236,20 @@ class Assembler {
     this.emitConst(fw, 'PROP_PROCESSED',     0x001B);
     this.emitConst(fw, 'PROP_TRANSLATE',     0x001C);
 
-    // Actor properties
-    this.emitConst(fw, 'PROP_ACTOR_NAME',    0x0100);
-    this.emitConst(fw, 'PROP_ACTOR_UUID',    0x0101);
-    this.emitConst(fw, 'PROP_ACTOR_LANG',    0x0102);
-    this.emitConst(fw, 'PROP_ACTOR_WORLD',   0x0103);
+    // Actor properties. propId is 8-bit and namespaced by scope (HOST ABI v2,
+    // D2): the numeric id only makes sense together with the scope byte. Actor
+    // and channel share ids 0x00-0x03; the scope (EMITTER/RECIPIENT vs CHANNEL)
+    // disambiguates them.
+    this.emitConst(fw, 'PROP_ACTOR_NAME',    0x00);
+    this.emitConst(fw, 'PROP_ACTOR_UUID',    0x01);
+    this.emitConst(fw, 'PROP_ACTOR_LANG',    0x02);
+    this.emitConst(fw, 'PROP_ACTOR_WORLD',   0x03);
 
     // Channel properties
-    this.emitConst(fw, 'PROP_CHAN_NAME',     0x0200);
-    this.emitConst(fw, 'PROP_CHAN_RATE',     0x0201);
-    this.emitConst(fw, 'PROP_CHAN_SEND_POL', 0x0202);
-    this.emitConst(fw, 'PROP_CHAN_RECV_POL', 0x0203);
+    this.emitConst(fw, 'PROP_CHAN_NAME',     0x00);
+    this.emitConst(fw, 'PROP_CHAN_RATE',     0x01);
+    this.emitConst(fw, 'PROP_CHAN_SEND_POL', 0x02);
+    this.emitConst(fw, 'PROP_CHAN_RECV_POL', 0x03);
 
     // Decisions
     this.emitConst(fw, 'DECISION_LOG',         0);

@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 import org.junit.jupiter.api.Test;
@@ -13,15 +14,28 @@ class ExecutionContextTest {
 
     private SoftMMU createMappedMMU() {
         SoftMMU mmu = new SoftMMU();
-        // Map all standard pages
-        mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
-        mmu.getPageTable().mapPage(1, 0x1000, PageEntry.PERM_READ);
-        mmu.getPageTable().mapPage(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(3, 0x3000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(4, 0x4000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(5, 0x5000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(6, 0x6000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(7, 0x7000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Standard layout, derived from the single-source memory map (VmMemoryMap).
+        for (int p = 0; p < VmMemoryMap.CODE_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
+                VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE),
+            VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
+        for (int p = 0; p < VmMemoryMap.DATA_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.DATA_BASE) + p,
+                VmMemoryMap.DATA_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        for (int p = 0; p < VmMemoryMap.STACK_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.STACK_BASE) + p,
+                VmMemoryMap.STACK_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+            VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+            VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         return mmu;
     }
 
@@ -52,8 +66,8 @@ class ExecutionContextTest {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu);
         ctx.initialize();
-        assertEquals(0x6000, ctx.registers().get(RegisterFile.SP));
-        assertEquals(0x6000, ctx.registers().get(RegisterFile.FP));
+        assertEquals(0x7000, ctx.registers().get(RegisterFile.SP));
+        assertEquals(0x7000, ctx.registers().get(RegisterFile.FP));
     }
 
     @Test
@@ -228,8 +242,8 @@ class ExecutionContextTest {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu);
         ctx.initialize();
-        assertEquals(0x6000, ctx.inputBufferVAddr());
-        assertEquals(0x7000, ctx.outputBufferVAddr());
+        assertEquals(0x7000, ctx.inputBufferVAddr());
+        assertEquals(0x8000, ctx.outputBufferVAddr());
         assertEquals(4096, ctx.ioBufferSize());
     }
 
@@ -307,12 +321,12 @@ class ExecutionContextTest {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu).maxStackSize(2);
         ctx.initialize();
-        // Stack starts at 0x6000, max 2 bytes means 1 word
-        ctx.registers().set(RegisterFile.SP, 0x6000);
-        ctx.enterCall(0x6000); // First call: SP=0x6000, check passes
+        // Stack starts at 0x7000, max 2 bytes means 1 word
+        ctx.registers().set(RegisterFile.SP, 0x7000);
+        ctx.enterCall(0x7000); // First call: SP=0x7000, check passes
         // Simulate interpreter decrementing SP after first call
-        ctx.registers().set(RegisterFile.SP, 0x5FFE);
-        assertThrows(VmException.class, () -> ctx.enterCall(0x6000)); // Second call: SP=0x5FFE, would exceed 2 bytes
+        ctx.registers().set(RegisterFile.SP, 0x6FFE);
+        assertThrows(VmException.class, () -> ctx.enterCall(0x7000)); // Second call: SP=0x6FFE, would exceed 2 bytes
     }
 
     @Test

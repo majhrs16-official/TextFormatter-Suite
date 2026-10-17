@@ -1,7 +1,7 @@
 ; ============================================================
 ; Example iFlow policy program (HOST ABI v2)
 ; ============================================================
-; Reads message.content into the input buffer (0x6000) and drops the message
+; Reads message.content into the input buffer (0x7000) and drops the message
 ; when it starts with 's' ("spam"), otherwise logs it.
 ;
 ; Assemble directly:
@@ -28,17 +28,17 @@
 .section code
 
 main:
-    ; PROPERTY_READ message.content -> 0x6000
+    ; PROPERTY_READ message.content -> 0x7000
     ; HOST ABI v2: R0=op, R1=options, R2=base, R3=length.
     ; options = (SCOPE_MESSAGE << 8) | PROP_CONTENT = 0x0110
     LI R0, SERVICE_PROPERTY_READ
     LI R1, 0x0110
-    LI R2, 0x6000
+    LI R2, 0x7000
     LI R3, 0x0100
     HOST                   ; R0=status, R3=bytes written
 
     ; Drop if the first byte is 's' (0x73).
-    LDB R0, 0x6000
+    LDB R0, 0x7000
     LI R1, 0x73
     CMP R0, R1
     JZ drop

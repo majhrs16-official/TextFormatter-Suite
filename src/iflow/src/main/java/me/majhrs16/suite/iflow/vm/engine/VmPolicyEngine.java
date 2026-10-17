@@ -20,6 +20,7 @@ import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import java.util.Collection;
@@ -49,21 +50,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     // Configuration
     private final long defaultFuelBudget = 100_000; // 100K fuel units per evaluation
 
-    // Standard page layout:
-    // Page 0 (0x0000): Code (R/X)
-    // Page 1 (0x1000): Constants (R)
-    // Page 2-3 (0x2000-0x3FFF): Data (R/W)
-    // Page 4-5 (0x4000-0x5FFF): Stack (R/W) - grows down from 0x6000
-    // Page 6 (0x6000): Input buffer (R/W)
-    // Page 7 (0x7000): Output buffer (R/W)
-    // Page 8-15 (0x8000-0xFFFF): Persistent/Firmware (configurable)
-
-    private static final int CODE_PAGE = 0;
-    private static final int CONSTANTS_PAGE = 1;
-    private static final int DATA_PAGE_START = 2;
-    private static final int STACK_PAGE_START = 4;
-    private static final int INPUT_BUFFER_PAGE = 6;
-    private static final int OUTPUT_BUFFER_PAGE = 7;
+    // Standard memory layout is defined once in VmMemoryMap; the engine only
+    // consumes it. See that class for the page map.
 
     /**
      * Immutable container for a loaded program: bytecode + initialized SoftMMU.
@@ -172,7 +160,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             // Initialize context (resets registers, fuel, clears I/O buffers)
             ctx.initialize();
 
-            // Prepare input: serialize message to input buffer (page 6: 0x6000)
+            // Prepare input: serialize message to the input buffer (see VmMemoryMap)
             prepareInput(ctx, message, emitter, recipient, path);
 
             // Execute VM
@@ -198,37 +186,37 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private void setupProgramMappings(ProgramImage program, SoftMMU mmu) {
         PageTable pageTable = mmu.getPageTable();
 
-        // Map code page (page 0: 0x0000) - R/W/X initially for writing code, then R/X
-        // LIMIT: Code must fit in page 0 only (4KB) to avoid overlapping with
-        // constants (page 1), data (pages 2-3), stack (pages 4-5), I/O (pages 6-7).
-        // Pages 8-15 are reserved for firmware/persistent use.
+        // Code region: up to CODE_PAGES pages (firmware ROM page 0 + user code
+        // page 1). The region is reserved in full so code never aliases the
+        // constants page, regardless of whether firmware is enabled. R/W/X
+        // initially so the image can be written, then demoted to R/X.
         byte[] code = program.code();
-        int codePages = (code.length + SoftMMU.PAGE_SIZE - 1) / SoftMMU.PAGE_SIZE;
-        final int MAX_CODE_PAGES = 1; // Only page 0 available for code
-        if (codePages > MAX_CODE_PAGES) {
+        int codePages = (code.length + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
+        if (codePages > VmMemoryMap.CODE_PAGES) {
             throw new IllegalArgumentException(
                 "Program code too large: " + code.length + " bytes (" + codePages + " pages), " +
-                "maximum is " + (MAX_CODE_PAGES * SoftMMU.PAGE_SIZE) + " bytes (1 page). " +
-                "Reduce code size or use firmware for shared functions."
+                "maximum is " + VmMemoryMap.CODE_MAX_SIZE + " bytes (" + VmMemoryMap.CODE_PAGES +
+                " pages: firmware ROM + user code)."
             );
         }
-        for (int p = 0; p < codePages && p < 16; p++) {
-            int frameBase = p * SoftMMU.PAGE_SIZE; // Identity mapping for now
-            int perms = PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE;
-            pageTable.mapPage(CODE_PAGE + p, frameBase, perms);
+        for (int p = 0; p < codePages; p++) {
+            int vaddrPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p;
+            int frameBase = VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE; // Identity mapping
+            pageTable.mapPage(vaddrPage, frameBase,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
         }
 
         // Copy code into physical memory
-        mmu.writeBlock(0x0000, code, 0, code.length);
+        mmu.writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
 
-        // Change code page to R/X (remove write permission after writing)
-        for (int p = 0; p < codePages && p < 16; p++) {
-            int frameBase = p * SoftMMU.PAGE_SIZE;
-            int perms = PageEntry.PERM_READ | PageEntry.PERM_EXECUTE;
-            pageTable.mapPage(CODE_PAGE + p, frameBase, perms);
+        // Demote code pages to R/X (remove write permission after writing)
+        for (int p = 0; p < codePages; p++) {
+            int vaddrPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p;
+            int frameBase = VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE;
+            pageTable.mapPage(vaddrPage, frameBase, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
         }
 
-        // Map constants page (page 1: 0x1000) - R/W initially for writing constants, then R
+        // Map the constants page - R/W initially for writing constants, then R
         if (program.constants().length > 0) {
             byte[] constBytes = new byte[program.constants().length * 2];
             for (int i = 0; i < program.constants().length; i++) {
@@ -236,29 +224,39 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 constBytes[i * 2] = (byte) (val & 0xFF);
                 constBytes[i * 2 + 1] = (byte) ((val >> 8) & 0xFF);
             }
-            pageTable.mapPage(CONSTANTS_PAGE, CONSTANTS_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-            mmu.writeBlock(0x1000, constBytes, 0, constBytes.length);
+            int constPage = VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE);
+            pageTable.mapPage(constPage, VmMemoryMap.CONSTANTS_BASE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+            mmu.writeBlock(VmMemoryMap.CONSTANTS_BASE, constBytes, 0, constBytes.length);
             // Change to read-only after writing
-            pageTable.mapPage(CONSTANTS_PAGE, CONSTANTS_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ);
+            pageTable.mapPage(constPage, VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
         }
 
-        // Map data pages (pages 2-3: 0x2000-0x3FFF) - R/W
-        pageTable.mapPage(DATA_PAGE_START, DATA_PAGE_START * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        pageTable.mapPage(DATA_PAGE_START + 1, (DATA_PAGE_START + 1) * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Map data pages - R/W
+        for (int p = 0; p < VmMemoryMap.DATA_PAGES; p++) {
+            int page = VmMemoryMap.pageOf(VmMemoryMap.DATA_BASE) + p;
+            pageTable.mapPage(page, VmMemoryMap.DATA_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
 
-        // Map stack pages (pages 4-5: 0x4000-0x5FFF) - R/W
-        pageTable.mapPage(STACK_PAGE_START, STACK_PAGE_START * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        pageTable.mapPage(STACK_PAGE_START + 1, (STACK_PAGE_START + 1) * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Map stack pages - R/W
+        for (int p = 0; p < VmMemoryMap.STACK_PAGES; p++) {
+            int page = VmMemoryMap.pageOf(VmMemoryMap.STACK_BASE) + p;
+            pageTable.mapPage(page, VmMemoryMap.STACK_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
 
-        // Map I/O buffer pages (pages 6-7: 0x6000-0x7FFF) - R/W
-        pageTable.mapPage(INPUT_BUFFER_PAGE, INPUT_BUFFER_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        pageTable.mapPage(OUTPUT_BUFFER_PAGE, OUTPUT_BUFFER_PAGE * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Map I/O buffer pages - R/W
+        pageTable.mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE), VmMemoryMap.INPUT_BASE,
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        pageTable.mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE), VmMemoryMap.OUTPUT_BASE,
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE);
     }
 
     private void prepareInput(ExecutionContext ctx, Message message, Actor emitter,
                               Actor recipient, String channelPath) {
-        // Write message properties to input buffer (page 6: 0x6000)
-        int inputVAddr = ctx.inputBufferVAddr(); // 0x6000
+        // Write message properties to the input buffer (see VmMemoryMap)
+        int inputVAddr = ctx.inputBufferVAddr();
         int offset = 0;
 
         // Write message text

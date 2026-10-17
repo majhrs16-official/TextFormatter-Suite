@@ -412,7 +412,7 @@ class EndToEndIntegrationTest {
         return ProgramImage.builder()
             .entryPoint(0)
             .code(new byte[]{
-                Opcode.LDB, 1, 0x60, 0x00,              // LDB R1, [0x6000] (first content byte)
+                Opcode.LDB, 1, 0x70, 0x00,              // LDB R1, [0x7000] (first content byte)
                 Opcode.LI, 2, 0x00, (byte) (ch & 0xFF), // LI R2, ch
                 Opcode.CMP, 0x12,                       // CMP R1, R2
                 Opcode.JZ, 0x00, 0x0B,                  // JZ drop

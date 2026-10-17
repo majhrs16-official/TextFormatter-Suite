@@ -67,12 +67,12 @@ node dist/cli.js test/firmware.flowasm -o test/firmware.flow -d -l
 ; Data transfer
 LI   R0, 0x1234       ; Load immediate 16-bit
 MOV  R1, R2           ; Move register (packed)
-LDB  R0, 0x6000       ; Load byte from virtual address
-LDW  R1, 0x6002       ; Load word (little-endian)
-STB  R2, 0x7000       ; Store byte
-STW  R3, 0x7002       ; Store word
-COPY 0x1000, 0x2000, 64  ; Copy block (no overlap)
-MOVE 0x1000, 0x1002, 64  ; Move block (allows overlap)
+LDB  R0, 0x3000       ; Load byte from virtual address (data region)
+LDW  R1, 0x3002       ; Load word (little-endian)
+STB  R2, 0x8000       ; Store byte (output buffer)
+STW  R3, 0x8002       ; Store word
+COPY 0x3000, 0x3200, 64  ; Copy block (no overlap)
+MOVE 0x3000, 0x3002, 64  ; Move block (allows overlap)
 
 ; Arithmetic
 ADD  R0, R1
@@ -179,16 +179,16 @@ MOV R3, R7     ; byte = 0x37
 .section code
 
 main:
-    ; Read message.content into buffer at 0x6000.
+    ; Read message.content into the input buffer at 0x7000.
     ; HOST ABI v2: R0=op, R1=options=(scope<<8)|propId, R2=base, R3=length.
     LI R0, SERVICE_PROPERTY_READ
     LI R1, 0x0110          ; (SCOPE_MESSAGE << 8) | PROP_CONTENT
-    LI R2, 0x6000          ; base vaddr of the buffer
+    LI R2, 0x7000          ; base vaddr of the buffer (input buffer)
     LI R3, 0x0100          ; max bytes to write
     HOST                   ; R0=status, R3=bytes written
 
     ; Check first byte == 's' (0x73)
-    LDB R0, 0x6000
+    LDB R0, 0x7000
     LI R1, 0x73
     CMP R0, R1
     JZ drop

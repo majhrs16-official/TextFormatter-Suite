@@ -1,6 +1,6 @@
 ; iFlow Assembly Listing
 ; Source: /home/majhrs16/Documentos/textformatter-suite/tools/iflow-compiler/test/firmware.flowasm
-; Generated: 2026-10-17T03:32:08.562Z
+; Generated: 2026-10-17T05:30:21.746Z
 
 ; Symbol Table:
 ; SERVICE_PROPERTY_READ            = 0x0100 (code)
@@ -19,9 +19,9 @@
 ; DECISION_DROP                    = 0x0001 (code)
 ; DECISION_REJECT                  = 0x0002 (code)
 ; DECISION_REDIRECT                = 0x0003 (code)
-; TEST_BUFFER                      = 0x1000 (code)
-; RESULT_BUFFER                    = 0x1100 (code)
-; STACK_TOP                        = 0x7ff0 (code)
+; TEST_BUFFER                      = 0x3000 (code)
+; RESULT_BUFFER                    = 0x3100 (code)
+; STACK_TOP                        = 0x6ff0 (code)
 ; main                             = 0x1000 (code)
 ; test_arithmetic                  = 0x101a (code)
 ; test_memory                      = 0x1051 (code)
@@ -62,14 +62,14 @@
 ; PROP_SOUNDS                      = 0x0019 (code)
 ; PROP_PROCESSED                   = 0x001b (code)
 ; PROP_TRANSLATE                   = 0x001c (code)
-; PROP_ACTOR_NAME                  = 0x0100 (code)
-; PROP_ACTOR_UUID                  = 0x0101 (code)
-; PROP_ACTOR_LANG                  = 0x0102 (code)
-; PROP_ACTOR_WORLD                 = 0x0103 (code)
-; PROP_CHAN_NAME                   = 0x0200 (code)
-; PROP_CHAN_RATE                   = 0x0201 (code)
-; PROP_CHAN_SEND_POL               = 0x0202 (code)
-; PROP_CHAN_RECV_POL               = 0x0203 (code)
+; PROP_ACTOR_NAME                  = 0x0000 (code)
+; PROP_ACTOR_UUID                  = 0x0001 (code)
+; PROP_ACTOR_LANG                  = 0x0002 (code)
+; PROP_ACTOR_WORLD                 = 0x0003 (code)
+; PROP_CHAN_NAME                   = 0x0000 (code)
+; PROP_CHAN_RATE                   = 0x0001 (code)
+; PROP_CHAN_SEND_POL               = 0x0002 (code)
+; PROP_CHAN_RECV_POL               = 0x0003 (code)
 ; DECISION_CHAN_REDIR              = 0x0004 (code)
 ; DECISION_RATE_LIMIT              = 0x0005 (code)
 ; DECISION_CONTINUE                = 0x0006 (code)
@@ -105,16 +105,16 @@
   28: .const DECISION_REJECT       0x02
   29: .const DECISION_REDIRECT     0x03
   30: 
-  31: ; Memory addresses for test data
-  32: .const TEST_BUFFER       0x1000
-  33: .const RESULT_BUFFER     0x1100
-  34: .const STACK_TOP         0x7FF0
+  31: ; Memory addresses for test data (data region: 0x3000-0x4FFF)
+  32: .const TEST_BUFFER       0x3000
+  33: .const RESULT_BUFFER     0x3100
+  34: .const STACK_TOP         0x6FF0
   35: 
   36: ; ============================================================
   37: ; MAIN ENTRY POINT
   38: ; ============================================================
   39: main:
-  40:     ; Stack pointer and frame pointer are initialized by VM (SP=0x6000, FP=0x6000)
+  40:     ; Stack pointer and frame pointer are initialized by VM (SP=0x7000, FP=0x7000)
   41:     
   42:     ; Test 1: Basic arithmetic and logic
   43:     CALL test_arithmetic

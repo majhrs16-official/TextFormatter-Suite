@@ -5,6 +5,7 @@ import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,9 +20,11 @@ class HostServiceRegistryTest {
 
     private ExecutionContext createContext(HostServiceRegistry hsr, String... caps) {
         SoftMMU mmu = new SoftMMU();
-        // Map I/O pages (page 6 and 7)
-        mmu.getPageTable().mapPage(6, 6 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(7, 7 * SoftMMU.PAGE_SIZE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Map the standard I/O buffers (input 0x7000, output 0x8000)
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+            VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+            VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         
         ExecutionContext ctx = new ExecutionContext()
             .executionId("test")

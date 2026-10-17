@@ -1,7 +1,7 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-16 (**rediseño del ABI de `HOST` (iflow) + toolchain `.flowasm` EN CURSO — ver sección final**; antes: fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, SpEL allowlist, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
+> Última actualización: 2026-10-17 (**ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`) ✅ — ver sección final**; antes: fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, SpEL allowlist, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
 
 ---
 
@@ -725,11 +725,12 @@ cd tools/iflow-compiler && npm run build && npm run test:validation
 ./gradlew :src:iflow:iflowAsm -Piflow.source=ruta/prog.flowasm -Piflow.output=policy.flow
 ```
 
-> ⚠️ **Memoria del entorno**: hay ~2.4 GB libres. Los procesos Node pueden fallar
-> al reservar el *CodeRange* de V8 (`Failed to reserve virtual memory for
-> CodeRange`, exit 133, o `exit null` en el runner de validación). Workaround:
-> `NODE_OPTIONS=--jitless`. Afecta a `npm run test:validation` y a
-> `iflowCompilerBuild` cuando recompila de verdad.
+> ⚠️ **Memoria del entorno**: es la máquina anfitriona (no un contenedor): ~7.5 GiB
+> de RAM total, ~3 GiB disponibles y `ulimit -v` sin límite. Bajo presión de memoria
+> los procesos Node pueden fallar al reservar el *CodeRange* de V8
+> (`Failed to reserve virtual memory for CodeRange`, exit 133, o `exit null` en el
+> runner de validación). Workaround: `NODE_OPTIONS=--jitless`. Afecta a
+> `npm run test:validation` y a `iflowCompilerBuild` cuando recompila de verdad.
 
 ---
 
@@ -1041,3 +1042,103 @@ Todas resueltas:
 | 2026-10-16 | `65af8ce` | Gradle: tarea `iflowAsm` + `-Piflow.baremetal`; ejemplo `policy.flowasm` |
 | 2026-10-16 | `280f790` | compilador: `.const` ya no contamina los símbolos con el índice del pool (solo afectaba a listing/debug) |
 | 2026-10-16 | — | ✅ **ABI v2 completa (D1–D11)**. `Sentinel-1` (programa del usuario) ensambla: solo quedaba `RET R7` + ABI viejo, ya portado a v2 |
+
+---
+
+## REVISIÓN 2026-10-17 — propId, entorno y solapamiento de páginas
+
+> Respuesta a la revisión del usuario sobre (1) D2 (`propId` 8 bits), (2) la nota de
+> entorno (no hay contenedor) y (3) el límite de 2 páginas de `ProgramImageParser`.
+> **Releer antes de tocar el mapa de memoria.**
+
+### R1. `scope`/`propId` — dónde viven los datos (aclaración)
+
+- **No hay registro ni memoria dedicada.** `scope` y `propId` se empaquetan en `R1`
+  (`options`) y se decodifican *dentro* del servicio:
+  `scope = (options >> 8) & 0xFF`, `propId = options & 0x00FF`.
+- El **dato** de la propiedad no viaja por `options`: viaja por el buffer apuntado por
+  `R2` (base) + `R3` (longitud). La lectura/escritura real la hace el host vía callbacks
+  inyectados (`propertyReader`/`propertyWriter`, `stateReader`/`stateWriter`,
+  `channelResolver`). Es decir: `options` **selecciona qué** propiedad; el buffer
+  **lleva el valor**.
+- Por tanto, reasignar los IDs de actor/channel a `0x00–0x03` **no cambia la forma del
+  ABI** (mismos 5 registros de entrada, mismos roles de retorno, mismo tamaño de
+  instrucción `HOST`): solo cambia el **espacio de nombres de IDs de 8 bits por `scope`**.
+  Sin complicación del ABI. ✅ aprobado por el usuario.
+
+  | `scope` | `propId` | Significado |
+  |---|---|---|
+  | `0x02` EMITTER / `0x03` RECIPIENT | `0x00` | nombre del actor |
+  | | `0x01` | UUID |
+  | | `0x02` | idioma |
+  | | `0x03` | mundo |
+  | `0x04` CHANNEL | `0x00` | nombre |
+  | | `0x01` | rate limit |
+  | | `0x02` | política de envío |
+  | | `0x03` | política de recepción |
+  | `0x01` MESSAGE | `0x10–0x1C` | contenido, canal, dirección, tipo, langs, color, papi, sleep, sounds, cancelled, processed, translate |
+
+### R2. Inconsistencia detectada (toolchain) — D2 no está completo
+
+El ROM de firmware del compilador (`tools/iflow-compiler/src/assembler.ts:240-249`)
+**todavía emite las equates viejas**: `PROP_ACTOR_NAME=0x0100..0x0103`,
+`PROP_CHAN_NAME=0x0200..0x0203`. Con D2, `0x0100` se decodifica como
+`scope=MESSAGE(0x01), propId=0x00` → un programa que haga `LI R1, PROP_ACTOR_NAME`
+leería **MESSAGE/propId 0**, no el nombre del actor. Las equates deben reasignarse a
+`0x00–0x03` **dentro de su scope**. No hay fixtures que usen esas equates hoy (solo
+`PROP_CHANNEL=0x0011`, que es de message y es correcto).
+
+**Fix pendiente:** `assembler.ts` equates + regenerar los 4 artefactos
+(`test/{firmware,main_only,simple}.flow`, `test/firmware.lst`).
+
+### R3. Solapamiento de páginas — resolución por prevención
+
+**Problema (ya no es sólo futuro).** Con el firmware ON, el array de código del `.flow`
+es `ROM (0x0000-0x0FFF) + código de usuario (0x1000-0x1FFF)` = **2 páginas**. Pero:
+
+- `VmPolicyEngine.setupProgramMappings` mapea las **constantes en la página 1
+  (0x1000)** — exactamente donde empieza el código de usuario → **solapan**.
+- Además el motor tiene `MAX_CODE_PAGES = 1`, así que **rechaza** cualquier programa de
+  firmware ON (`IllegalArgumentException: code too large`). `VmConfigLoader` hoy no lo
+  expone porque `loadNativeProgram` es un stub que devuelve pass-through, pero en cuanto
+  se implemente la carga real, el `policy.flow` por defecto (firmware ON) **no cargará**.
+- El `ProgramImageParser` ya acepta 2 páginas; parser y motor **no coinciden**.
+
+**Principio de prevención:** una **única fuente de verdad** del mapa de memoria
+(`VmMemoryMap`) usada por parser, motor y `ExecutionContext`, con la región de código y
+la de constantes **disjuntas por construcción**.
+
+**Decisión (2026-10-17): Opción A — layout convencional, ✅ implementada.**
+
+El usuario aprobó A y la corrección + regeneración de artefactos. Mapa resultante
+(fuente única: `vm/memory/VmMemoryMap.java`):
+
+```
+código     0x0000-0x1FFF  (páginas 0-1: ROM de firmware + código de usuario)  R/X
+constantes 0x2000-0x2FFF  (página 2)                                          R
+datos      0x3000-0x4FFF  (páginas 3-4)                                       R/W
+pila       0x5000-0x6FFF  (páginas 5-6, crece hacia abajo desde 0x7000)       R/W
+entrada    0x7000-0x7FFF  (página 7)                                          R/W
+salida     0x8000-0x8FFF  (página 8)                                          R/W
+```
+
+El mapa es independiente del modo: en bare-metal sólo se usa la página 0 de código y
+la 1 queda reservada. `VmPolicyEngine` mapea ahora hasta 2 páginas de código y deriva
+todas las regiones de `VmMemoryMap`; `ExecutionContext` toma de ahí SP/FP, buffers y
+límite de pila; `ProgramImageParser` valida `codeLength` y `constantsLength` contra el
+mapa (`CONSTANTS_MAX_SIZE` evita que las constantes invadan datos).
+
+**Artefactos y toolchain:**
+- `assembler.ts`: equates del ROM `PROP_ACTOR_*` / `PROP_CHAN_*` reasignadas a
+  `0x00–0x03` (D2); regenerados `test/{firmware,main_only,simple}.flow` + `firmware.lst`.
+- `test/firmware.flowasm`: `TEST_BUFFER`/`RESULT_BUFFER` movidos a `0x3000`/`0x3100`
+  (antes `0x1000`/`0x1100` **solapaban con el propio código de usuario**, el bug que
+  motivó todo esto); comentario de SP actualizado.
+- `examples/policy.flowasm`, READMEs e `implement.md`: buffer de entrada `0x7000`.
+- Tests actualizados: `ExecutionContext`, `VmInterpreter`, `VmIntegration`,
+  `FirmwareIntegration`, `VmPolicyEngine`, `HostServiceRegistry`, `PolicyPrograms`,
+  `EndToEndIntegration`; nuevos `VmMemoryMapTest` y `ProgramImageParserTest`.
+
+**Verificación:** `:src:iflow:test` (257 tests), `:src:host:test`, `:src:loadtest:test`
+→ BUILD SUCCESSFUL; suite de validación del compilador 11/11; `firmware.flow` sigue en
+4615 bytes (mismo tamaño; cambian bytes de equates y símbolos).

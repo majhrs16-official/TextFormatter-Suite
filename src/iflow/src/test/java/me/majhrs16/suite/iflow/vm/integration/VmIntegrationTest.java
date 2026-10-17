@@ -15,6 +15,7 @@ import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 import org.junit.jupiter.api.Test;
@@ -32,14 +33,28 @@ class VmIntegrationTest {
 
     private SoftMMU createFullMMU() {
         SoftMMU mmu = new SoftMMU();
-        mmu.getPageTable().mapPage(0, 0x0000, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
-        mmu.getPageTable().mapPage(1, 0x1000, PageEntry.PERM_READ);
-        mmu.getPageTable().mapPage(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(3, 0x3000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(4, 0x4000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(5, 0x5000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(6, 0x6000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(7, 0x7000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // Standard layout, derived from the single-source memory map (VmMemoryMap).
+        for (int p = 0; p < VmMemoryMap.CODE_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
+                VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE),
+            VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
+        for (int p = 0; p < VmMemoryMap.DATA_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.DATA_BASE) + p,
+                VmMemoryMap.DATA_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        for (int p = 0; p < VmMemoryMap.STACK_PAGES; p++) {
+            mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.STACK_BASE) + p,
+                VmMemoryMap.STACK_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+            VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+            VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         return mmu;
     }
 
@@ -77,10 +92,10 @@ private RateLimiter createRateLimiter() {
         // STW Rs, [vaddr] format: opcode + rs + vaddr16 (4 bytes)
         // LDW Rd, [vaddr] format: opcode + rd + vaddr16 (4 bytes)
         byte[] code = new byte[]{
-            Opcode.LI, 0, 0x20, 0x00,  // LI R0, 0x2000 (data page)
+            Opcode.LI, 0, 0x30, 0x00,  // LI R0, 0x3000 (data region)
             Opcode.LI, 1, 0x00, 0x42,  // LI R1, 0x42
-            Opcode.STW, 1, 0x20, 0x00,  // STW R1, [0x2000]
-            Opcode.LDW, 0, 0x20, 0x00,  // LDW R0, [0x2000]
+            Opcode.STW, 1, 0x30, 0x00,  // STW R1, [0x3000]
+            Opcode.LDW, 0, 0x30, 0x00,  // LDW R0, [0x3000]
             Opcode.HALT
         };
         
@@ -114,8 +129,8 @@ private RateLimiter createRateLimiter() {
             .propertyReader((scope, propId) -> "test-value")
             .propertyWriter((scope, value) -> {});
         
-        // Test property read writes to virtual address
-        int vaddr = 0x6000;
+        // Test property read writes to the input buffer virtual address
+        int vaddr = VmMemoryMap.INPUT_BASE;
         me.majhrs16.suite.iflow.vm.execution.ExecutionContext ctx = 
             new me.majhrs16.suite.iflow.vm.execution.ExecutionContext()
                 .executionId("test")
@@ -147,7 +162,7 @@ private RateLimiter createRateLimiter() {
             .permissionChecker((actor, perm) -> "allowed".equals(perm));
         
         // Write args to virtual address: actor\0perm
-        int vaddr = 0x6000;
+        int vaddr = VmMemoryMap.INPUT_BASE;
         String args = "Alice\0allowed";
         byte[] argsBytes = args.getBytes(StandardCharsets.UTF_8);
         
@@ -160,7 +175,7 @@ private RateLimiter createRateLimiter() {
                 .allowedCapabilities(new String[]{"permission.check"});
         ctx.initialize();
         
-        // Write test data AFTER initialize() (which clears I/O buffers at 0x6000)
+        // Write test data AFTER initialize() (which clears the I/O buffers)
         mmu.writeBlock(vaddr, argsBytes, 0, argsBytes.length);
         
         ServiceResult result = hsr.invoke(
@@ -196,30 +211,29 @@ private RateLimiter createRateLimiter() {
     @Test
     void softMMUCopyConstructorIsolation() {
         SoftMMU original = createFullMMU();
-        original.writeWord(0x2000, 0xDEAD);
+        original.writeWord(VmMemoryMap.DATA_BASE, 0xDEAD);
         
         SoftMMU copy = new SoftMMU(original);
-        copy.writeWord(0x2000, 0xBEEF);
+        copy.writeWord(VmMemoryMap.DATA_BASE, 0xBEEF);
         
-        assertEquals(0xDEAD, original.readWord(0x2000));
-        assertEquals(0xBEEF, copy.readWord(0x2000));
+        assertEquals(0xDEAD, original.readWord(VmMemoryMap.DATA_BASE));
+        assertEquals(0xBEEF, copy.readWord(VmMemoryMap.DATA_BASE));
     }
 
     @Test
     void pageTablePermissionsEnforcedAcrossComponents() {
         SoftMMU mmu = createFullMMU();
         
-        // Page 2 has R/W
-        mmu.writeByte(0x2000, 0x01);
-        assertEquals(0x01, mmu.readByte(0x2000));
+        // The data region (page 3) has R/W
+        mmu.writeByte(VmMemoryMap.DATA_BASE, 0x01);
+        assertEquals(0x01, mmu.readByte(VmMemoryMap.DATA_BASE));
         
-        // Page 1 is read-only - write should fail
-        mmu.getPageTable().mapPage(1, 0x1000, PageEntry.PERM_READ);
+        // The constants page (page 2) is read-only - write should fail
         assertThrows(me.majhrs16.suite.iflow.vm.isa.VmException.class, 
-            () -> mmu.writeByte(0x1000, 0x01));
+            () -> mmu.writeByte(VmMemoryMap.CONSTANTS_BASE, 0x01));
         
         // But read should still work
-        assertEquals(0x00, mmu.readByte(0x1000)); // Default value is 0
+        assertEquals(0x00, mmu.readByte(VmMemoryMap.CONSTANTS_BASE)); // Default value is 0
     }
 
     @Test
@@ -255,16 +269,14 @@ private RateLimiter createRateLimiter() {
     @Test
     void crossPageMemoryOperations() {
         SoftMMU mmu = createFullMMU();
-        mmu.getPageTable().mapPage(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        mmu.getPageTable().mapPage(3, 0x3000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         
-        // Write block crossing page boundary
+        // Write block crossing a page boundary within the data/stack region
         byte[] src = new byte[5000];
         for (int i = 0; i < src.length; i++) src[i] = (byte)(i & 0xFF);
-        mmu.writeBlock(0x2F00, src, 0, src.length);
+        mmu.writeBlock(0x3F00, src, 0, src.length);
         
         byte[] dst = new byte[src.length];
-        mmu.readBlock(0x2F00, dst, 0, dst.length);
+        mmu.readBlock(0x3F00, dst, 0, dst.length);
         assertArrayEquals(src, dst);
     }
 
@@ -278,11 +290,11 @@ private RateLimiter createRateLimiter() {
         SoftMMU mmu1 = new SoftMMU(templateMmu);
         SoftMMU mmu2 = new SoftMMU(templateMmu);
         
-        mmu1.writeWord(0x2000, 0x1111);
-        mmu2.writeWord(0x2000, 0x2222);
+        mmu1.writeWord(VmMemoryMap.DATA_BASE, 0x1111);
+        mmu2.writeWord(VmMemoryMap.DATA_BASE, 0x2222);
         
-        assertEquals(0x1111, mmu1.readWord(0x2000));
-        assertEquals(0x2222, mmu2.readWord(0x2000));
+        assertEquals(0x1111, mmu1.readWord(VmMemoryMap.DATA_BASE));
+        assertEquals(0x2222, mmu2.readWord(VmMemoryMap.DATA_BASE));
     }
 
     @Test
@@ -297,11 +309,11 @@ private RateLimiter createRateLimiter() {
         ProgramImage program = ProgramImage.builder()
             .entryPoint(0)
             .code(new byte[]{
-                // Read message.content into the output buffer.
+                // Read message.content into the input buffer.
                 // HOST ABI v2: R0=op, R1=options, R2=base, R3=length.
                 Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
                 Opcode.LI, 1, (byte)0x01, (byte)0x10,   // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
-                Opcode.LI, 2, (byte)0x60, (byte)0x00,   // base = 0x6000
+                Opcode.LI, 2, (byte)0x70, (byte)0x00,   // base = 0x7000 (input buffer)
                 Opcode.LI, 3, (byte)0x00, (byte)0xFF,   // length = 255
                 Opcode.HOST, (byte)0x00,
                 // Continue

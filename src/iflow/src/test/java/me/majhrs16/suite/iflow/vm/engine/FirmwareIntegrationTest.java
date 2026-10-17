@@ -34,18 +34,34 @@ class FirmwareIntegrationTest {
         registry.declareCapability("state.write");
         registry.declareCapability("channel.resolve");
         
-        // Create SoftMMU with pages mapped
+        // Create SoftMMU with the standard layout (see VmMemoryMap)
         SoftMMU softMMU = new SoftMMU();
-        softMMU.mapPage(0x5000 >> 12, 0x5000, PageEntry.PERM_READ | PageEntry.PERM_WRITE); // stack page
-        softMMU.mapPage(0x6000 >> 12, 0x6000, PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
-        softMMU.mapPage(0x1000 >> 12, 0x1000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        softMMU.mapPage(0x2000 >> 12, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-        softMMU.mapPage(0x7000 >> 12, 0x7000, PageEntry.PERM_READ | PageEntry.PERM_WRITE); // output buffer
+        for (int p = 0; p < VmMemoryMap.CODE_PAGES; p++) {
+            softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
+                VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
+        softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE),
+            VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
+        for (int p = 0; p < VmMemoryMap.DATA_PAGES; p++) {
+            softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.DATA_BASE) + p,
+                VmMemoryMap.DATA_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        for (int p = 0; p < VmMemoryMap.STACK_PAGES; p++) {
+            softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.STACK_BASE) + p,
+                VmMemoryMap.STACK_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+        softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.INPUT_BASE),
+            VmMemoryMap.INPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
+            VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         
-        // Write test message content at 0x6000
+        // Write test message content at the input buffer
         String testMsg = "spam message";
         for (int i = 0; i < testMsg.length(); i++) {
-            softMMU.writeByte(0x6000 + i, (byte)testMsg.charAt(i));
+            softMMU.writeByte(VmMemoryMap.INPUT_BASE + i, (byte)testMsg.charAt(i));
         }
         
         ExecutionContextPool pool = new ExecutionContextPool(registry, ctx -> {
