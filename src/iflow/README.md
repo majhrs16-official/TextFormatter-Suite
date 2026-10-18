@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (298 tests)  
+> **Estado**: ✅ Implementada y probada (318 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -17,8 +17,8 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
 | `VmInterpreter` | CPU: fetch/decode/execute loop, ISA v2, fuel budget; maestro del bus |
 | `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
-| `VmBus` | Bus de datos explícito: única vía de transacción de CPU y DMA hacia `SoftMMU` |
-| `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus) |
+| `VmBus` | Bus de datos explícito: única vía de transacción de CPU y DMA hacia `SoftMMU`; lleva el `Privilege` del maestro |
+| `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus); maestro supervisor |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
 | `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
 | `VmException` | Excepciones tipadas con IP capture (INVALID_OPCODE, MEMORY_FAULT, OUT_OF_FUEL, etc.) |
@@ -28,9 +28,13 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 - **Espacio plano**: 64 KB (0x0000–0xFFFF)
 - **Paginación**: 16 páginas × 4 KB = 64 KB
 - **Permisos por página**: READ (0x1), WRITE (0x2), EXECUTE (0x4)
+- **Propiedad de página** (`Privilege`): las páginas *kernel* (código/constantes) son
+  legibles/ejecutables por el programa pero **solo escribibles por el supervisor** (host,
+  cargador y DMA); un write del programa falla con `PRIVILEGE_FAULT` aunque el bit W esté
+  presente. El cargador mapea código/constantes como kernel y baja W con `mprotect`.
 - **Mapeo típico** (fuente única: `VmMemoryMap`):
-  - Páginas 0-1: Código (R/X) — ROM de firmware (0x0000) + código de usuario (0x1000); en bare-metal sólo se usa la página 0
-  - Página 2: Constantes (R) (0x2000)
+  - Páginas 0-1: Código (R/X, **kernel**) — ROM de firmware (0x0000) + código de usuario (0x1000); en bare-metal sólo se usa la página 0
+  - Página 2: Constantes (R, **kernel**) (0x2000)
   - Páginas 3-4: Datos/Heap (R/W) (0x3000–0x4FFF)
   - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
@@ -85,7 +89,7 @@ Convención de registros (estilo syscall):
 | `3` | INVALID_ARGUMENT | | `8` | PARTIAL |
 | `4` | BUFFER_TOO_SMALL (`R3` = bytes requeridos) | | | |
 
-Servicios estándar (12 IDs; sólo los 7 marcados ✅ están registrados hoy — el resto responde `status=5` UNSUPPORTED):
+Servicios estándar (13 IDs; sólo los 8 marcados ✅ están registrados hoy — el resto responde `status=5` UNSUPPORTED):
 
 | ID | Servicio | Capability | |
 |----|----------|------------|---|
@@ -97,10 +101,16 @@ Servicios estándar (12 IDs; sólo los 7 marcados ✅ están registrados hoy —
 | 0x0300 | ROUTE_DECISION | `routing.decide` | ✅ |
 | 0x0301 | ROUTE_REDIRECT | `routing.decide` | |
 | 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | |
+| 0x0400 | TRANSFORM_APPLY | `transform.apply` | ✅ |
 | 0x0500 | STATE_READ | `state.read` | ✅ |
 | 0x0501 | STATE_WRITE | `state.write` | ✅ |
 | 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | ✅ |
 | 0x0601 | CHANNEL_POLICY | `channel.resolve` | |
+
+`TRANSFORM_APPLY` (0x0400): el byte bajo de `options` elige el tipo — `0` resuelve
+placeholders (hook `placeholderResolver`) y `1` detecta el idioma (hook `translationDetector`);
+sin hook inyectado responde `UNSUPPORTED`. `PROPERTY_READ` usa ambos hooks para resolver el
+contenido y autodetectar el idioma de origen cuando falta.
 
 `options` para servicios de propiedad: `(scope << 8) | propId`, con `propId` en los **8 bits bajos** (namespaceado por `scope`).
 `scope`: `0x01` MESSAGE · `0x02` EMITTER · `0x03` RECIPIENT · `0x04` CHANNEL · `0x05` SERVER.
@@ -174,7 +184,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 298 tests passing**
+**Total: 318 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -224,6 +234,7 @@ src/iflow/
 │       │   ├── SoftMMU.java
 │       │   ├── PageTable.java
 │       │   ├── PageEntry.java
+│       │   ├── Privilege.java
 │       │   ├── VmMemoryMap.java
 │       │   ├── VmBus.java
 │       │   └── VmDmaController.java
@@ -233,7 +244,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 298 tests
+├── src/test/java/...                  # 318 tests
 └── build.gradle
 ```
 

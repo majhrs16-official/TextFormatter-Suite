@@ -31,10 +31,11 @@ public final class VmDmaController {
     }
 
     /**
-     * Compatibility constructor: wires the DMA over a bus wrapping the given MMU.
+     * Compatibility constructor: wires the DMA over a supervisor bus wrapping the
+     * given MMU (the DMA is a supervisor master, design.md §14).
      */
     public VmDmaController(SoftMMU softMMU) {
-        this(new VmBus(softMMU));
+        this(VmBus.supervisor(softMMU));
     }
 
     // ===== Read Operations =====

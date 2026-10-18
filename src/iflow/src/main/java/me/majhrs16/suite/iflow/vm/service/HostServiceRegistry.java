@@ -52,9 +52,9 @@ public final class HostServiceRegistry {
     // ===== Service IDs (matching the ABI namespace) =====
     //
     // Implemented (registered below): PROPERTY_READ, PROPERTY_WRITE,
-    // PERMISSION_CHECK, ROUTE_DECISION, STATE_READ, STATE_WRITE, CHANNEL_RESOLVE.
-    // The remaining IDs are declared ABI surface but have no implementation yet, so
-    // dispatching them returns UNSUPPORTED (AUD-026).
+    // PERMISSION_CHECK, ROUTE_DECISION, TRANSFORM_APPLY, STATE_READ, STATE_WRITE,
+    // CHANNEL_RESOLVE. The other IDs are declared ABI surface with no
+    // implementation yet, so dispatching them returns UNSUPPORTED.
 
     // Property services
     public static final int PROPERTY_READ     = 0x0100;
@@ -127,7 +127,6 @@ public final class HostServiceRegistry {
     public static final int PROP_CHAN_RECV_POL = 0x03;
 
     // ===== Routing decision codes (options) =====
-
     public static final int DECISION_LOG         = 0;
     public static final int DECISION_DROP        = 1;
     public static final int DECISION_REJECT      = 2;
@@ -136,11 +135,28 @@ public final class HostServiceRegistry {
     public static final int DECISION_RATE_LIMIT  = 5;
     public static final int DECISION_CONTINUE    = 6;
 
+    // ===== Transform kinds (options for TRANSFORM_APPLY) =====
+
+    /** Resolve external placeholders in the buffer text. */
+    public static final int TRANSFORM_RESOLVE_PLACEHOLDERS = 0;
+    /** Detect the language of the buffer text. */
+    public static final int TRANSFORM_DETECT_LANGUAGE      = 1;
+
     private final Map<Integer, HostService> services = new HashMap<>();
     private final Map<String, Integer> capabilityMap = new HashMap<>();
 
     // Host-injected dependencies
     private BiFunction<String, String, Boolean> permissionChecker;
+    /**
+     * Resolves external placeholders (e.g. PlaceholderAPI) in a text. The host
+     * binds the actor in the lambda. Backs TRANSFORM_APPLY kind 0.
+     */
+    private java.util.function.Function<String, String> placeholderResolver;
+    /**
+     * Detects the language code of a text. Backs TRANSFORM_APPLY kind 1 and the
+     * auto-detection of an unset source language in PROPERTY_READ.
+     */
+    private java.util.function.Function<String, String> translationDetector;
     private me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter;
 
     public HostServiceRegistry() {
@@ -186,6 +202,16 @@ public final class HostServiceRegistry {
             @Override public int baseCost() { return 20; }
             @Override public int varCostPerByte() { return 0; }
             @Override public String[] requiredCapabilities() { return new String[]{"routing.decide"}; }
+        });
+
+        // Transform apply (placeholder resolution / language detection)
+        register(TRANSFORM_APPLY, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doTransformApply(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 20; }
+            @Override public int varCostPerByte() { return 1; }
+            @Override public String[] requiredCapabilities() { return new String[]{"transform.apply"}; }
         });
 
         // State read/write
@@ -301,6 +327,28 @@ public final class HostServiceRegistry {
         int propId = options & 0x00FF;
 
         String value = ctx.hostContext().readProperty(scope, propId);
+
+        // Host-side enrichment (design.md §10.1): resolve placeholders when a
+        // resolver is injected, and auto-detect a missing source language.
+        try {
+            if (scope == SCOPE_MESSAGE && propId == PROP_LANG_SOURCE
+                    && (value == null || value.isEmpty()) && translationDetector != null) {
+                String content = ctx.hostContext().readProperty(SCOPE_MESSAGE, PROP_CONTENT);
+                if (content != null) {
+                    String detected = translationDetector.apply(content);
+                    if (detected != null && !detected.isEmpty()) {
+                        value = detected;
+                    }
+                }
+            }
+            if (value != null && scope == SCOPE_MESSAGE && propId == PROP_CONTENT
+                    && placeholderResolver != null) {
+                value = placeholderResolver.apply(value);
+            }
+        } catch (RuntimeException e) {
+            return ServiceResult.hostFailure("Property enrichment failed: " + e.getMessage());
+        }
+
         if (value == null) {
             return ServiceResult.notFound(
                 String.format("no property scope=%d id=0x%02X", scope, propId));
@@ -318,6 +366,53 @@ public final class HostServiceRegistry {
         }
 
         return ServiceResult.ok(bytes.length);
+    }
+
+    /**
+     * Applies a host transformation to the buffer text, selected by the low byte
+     * of {@code options}: {@link #TRANSFORM_RESOLVE_PLACEHOLDERS} resolves external
+     * placeholders and {@link #TRANSFORM_DETECT_LANGUAGE} detects the language.
+     * The result replaces the input in place. Returns {@code UNSUPPORTED} when the
+     * host did not inject the hook for the requested kind.
+     */
+    private ServiceResult doTransformApply(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        int kind = options & 0x00FF;
+        java.util.function.Function<String, String> transform = switch (kind) {
+            case TRANSFORM_RESOLVE_PLACEHOLDERS -> placeholderResolver;
+            case TRANSFORM_DETECT_LANGUAGE -> translationDetector;
+            default -> null;
+        };
+        if (transform == null) {
+            return ServiceResult.unsupported("transform not configured: kind=" + kind);
+        }
+
+        byte[] bytes;
+        try {
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        }
+
+        String output;
+        try {
+            output = transform.apply(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            return ServiceResult.hostFailure("Transform failed: " + e.getMessage());
+        }
+        if (output == null) {
+            return ServiceResult.notFound("transform produced no value: kind=" + kind);
+        }
+
+        byte[] out = output.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (out.length > argLength) {
+            return ServiceResult.bufferTooSmall(out.length);
+        }
+        try {
+            ctx.dma().writeBlock(argVAddr, out, 0, out.length);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
+        }
+        return ServiceResult.ok(out.length);
     }
 
     private ServiceResult doPropertyWrite(ExecutionContext ctx, int argVAddr, int argLength, int options) {
@@ -487,6 +582,24 @@ public final class HostServiceRegistry {
 
     public HostServiceRegistry permissionChecker(BiFunction<String, String, Boolean> checker) {
         this.permissionChecker = checker;
+        return this;
+    }
+
+    /**
+     * Injects the placeholder resolver (host binds the actor). Enables
+     * TRANSFORM_APPLY kind 0 and placeholder resolution in PROPERTY_READ content.
+     */
+    public HostServiceRegistry placeholderResolver(java.util.function.Function<String, String> resolver) {
+        this.placeholderResolver = resolver;
+        return this;
+    }
+
+    /**
+     * Injects the language detector. Enables TRANSFORM_APPLY kind 1 and the
+     * auto-detection of an unset source language in PROPERTY_READ.
+     */
+    public HostServiceRegistry translationDetector(java.util.function.Function<String, String> detector) {
+        this.translationDetector = detector;
         return this;
     }
 

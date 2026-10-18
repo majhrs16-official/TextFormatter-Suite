@@ -1381,36 +1381,43 @@ mapea a la `OpType` ya existente:
 - Cualquier otro par → `UNSUPPORTED` (el ABI ya tiene ese estado). `HostContext.writeProperty`
   pasa a devolver `boolean` (aceptado/rechazado) para que el servicio informe el fallo.
 
-**D21 — Limpieza de API/estado muerto (AUD-022/024/026/027).**
-- `SoftMMU`: elimina `getPhysicalMemory`, `getPageTableDirect`, `getPageTableForInspection`,
-  `getPageTableForMutation` (nadie los usa; el bus `VmBus` es la vía explícita).
-- `ExecutionContext`: elimina el campo `pageTable` y `pageTable()`/`setPageTable` (nunca se
-  asigna en producción; la tabla vive en `ctx.softMMU().getPageTable()`).
-- `HostServiceRegistry`: elimina `placeholderResolver`/`translationDetector` (inyectables
-  muertos); agrupa las constantes de servicio declaradas pero no registradas.
-- Extrae el programa pass-through a `PassThroughProgram.INSTANCE` (elimina la duplicación y
-  los stubs inline de `VmConfigLoader`).
+**D21 — Código muerto convertido en funcional, no eliminado (AUD-022/024/026/027).**
+Criterio corregido: el código existente se **trabaja** hasta que sea funcional; no se
+elimina (podría ser una capacidad). Resultado:
+- `SoftMMU`: se conservan los cuatro accesores con semántica distinta y uso real:
+  `getPageTableDirect()` (tabla viva, decodificación del bus), `getPageTableForMutation()`
+  (tabla viva, cambios de mapeo del cargador), `getPageTableForInspection()` (copia: inspección
+  sin mutar) y `getPhysicalMemory()` (vista física que respalda `getMemorySnapshot()` y el
+  cargador).
+- `ExecutionContext`: se conserva `pageTable` + `pageTable()`/`setPageTable`, ahora cableados
+  a la MMU/bus en `softMMU(...)`/`bus(...)`.
+- `HostServiceRegistry`: se conservan `placeholderResolver`/`translationDetector` y se hacen
+  funcionales vía el servicio declarado `TRANSFORM_APPLY` (0x0400): kind 0 resuelve
+  placeholders, kind 1 detecta idioma; además `PROPERTY_READ` los usa para enriquecer contenido
+  y autodetectar idioma de origen. Sin hook inyectado responden `UNSUPPORTED`.
+- `PageEntry.setPermissions` se hace funcional (mprotect) en lugar de lanzar
+  `UnsupportedOperationException`; `PageTable.protect` y `copy()` (profundo: las entradas dejan
+  de compartirse) lo usan.
+- Se extrae el programa pass-through a `PassThroughProgram.INSTANCE` (una sola fuente; sin
+  stubs inline duplicados en `VmConfigLoader`).
 
-**D22 — Modelo de privilegios: dos dominios, sin anillos muertos (AUD-030).**
-`implement.md` §12.1 rechaza el modelo «ring 0 = firmware»: el firmware **no** es
-privilegiado por ser firmware; la autoridad es del runtime Java. El modelo real ya existe:
-- **Dominio programa** (todo el bytecode): acotado por permisos R/W/X por página, fuel,
-  pila y capacidades de `HOST`.
-- **Dominio supervisor** (host Java): carga el programa, mapea páginas, ejecuta servicios,
-  valida y confirma el journal.
-
-`PageEntry.user`/`mapPageKernel` no aplican ninguna comprobación en `translate` (y el
-firmware no debe tener un anillo propio), así que se **eliminan** en lugar de prometer un
-modelo inexistente. La protección de código ya es efectiva: las páginas de código quedan
-R/X (sin W) y las constantes R tras la carga.
+**D22 — Modelo de privilegios (anillos) funcional (AUD-030).**
+`implement.md` §12.1 rechaza «ring 0 = firmware», pero exige límites de autoridad reales
+(§14). Se implementa con dos dominios y verificación efectiva:
+- `Privilege.{PROGRAM,SUPERVISOR}` viaja en el `VmBus` (maestro de bus). El CPU es `PROGRAM`;
+  el cargador y el `VmDmaController` son `SUPERVISOR`.
+- `PageEntry.user`/`mappedKernel`/`isUser` y `mapPageKernel` se conservan y **aplican** la
+  regla: una página kernel (ROM de código, constantes) es legible/ejecutable por el programa
+  pero **solo escribible por el supervisor**; el programa falla con `PRIVILEGE_FAULT` aunque
+  el bit W estuviera presente.
+- El cargador mapea código/constantes como kernel y usa `mprotect` para bajar W tras escribir;
+  nunca hay una ventana en la que el programa pueda escribir ROM/constantes.
 
 **AUD-021 (documentación).** `0x7000` se declara contrato estable del engine (framing de
-entrada) en el README; la E/S de propiedades sigue siendo bajo demanda por `HOST`. Se elige
-la opción (b) del informe (documentar) por coste/riesgo; eliminar el framing exige migrar
-los servicios de buffer.
+entrada) en el README; la E/S de propiedades sigue siendo bajo demanda por `HOST`.
 
-**No cambia** el ABI (salvo el estado `UNSUPPORTED` ya existente para propiedades no
-soportadas), el mapa de memoria ni la semántica de las propiedades soportadas.
+**No cambia** el mapa de memoria ni la semántica de las propiedades soportadas. Se añade
+`TRANSFORM_APPLY` ya declarado en el código; la ABI (convención de registros/estados) no cambia.
 
 ### Bitácora de remediación
 

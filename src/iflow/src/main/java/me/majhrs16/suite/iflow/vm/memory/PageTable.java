@@ -42,6 +42,41 @@ public final class PageTable {
         entries[virtualPage] = PageEntry.mapped(frameBase, permissions);
     }
 
+    /**
+     * Maps a virtual page as kernel-owned: the program domain may read/execute it
+     * if the permission bits allow, but only the supervisor may write it.
+     */
+    public void mapPageKernel(int virtualPage, int frameBase, int permissions) {
+        if (virtualPage < 0 || virtualPage >= NUM_PAGES) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Invalid page index: " + virtualPage);
+        }
+        if ((frameBase & ~PageEntry.PAGE_MASK) != 0) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Frame base not page-aligned: 0x" + Integer.toHexString(frameBase));
+        }
+        entries[virtualPage] = PageEntry.mappedKernel(frameBase, permissions);
+    }
+
+    /**
+     * Changes the protection bits of an already-mapped page (mprotect), without
+     * remapping it. Used by the boot loader to drop the temporary write bit.
+     *
+     * @throws VmException if the page is not mapped or the index is invalid
+     */
+    public void protect(int virtualPage, int permissions) {
+        if (virtualPage < 0 || virtualPage >= NUM_PAGES) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Invalid page index: " + virtualPage);
+        }
+        PageEntry entry = entries[virtualPage];
+        if (!entry.isValid()) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Page not mapped: " + virtualPage);
+        }
+        entry.setPermissions(permissions);
+    }
+
     /** Removes a page mapping. */
     public void unmapPage(int virtualPage) {
         if (virtualPage >= 0 && virtualPage < NUM_PAGES) {
@@ -57,6 +92,24 @@ public final class PageTable {
      * @throws VmException if page not mapped, permissions insufficient, or address invalid
      */
     public int translate(int virtualAddr, int requiredPerm) {
+        return translate(virtualAddr, requiredPerm, Privilege.PROGRAM);
+    }
+
+    /**
+     * Translates a virtual address to physical address, checking permissions and
+     * page ownership for the given master privilege.
+     * <p>
+     * A kernel-owned page is readable/executable by the program domain but only
+     * writable by the supervisor. A program that holds the WRITE bit on a kernel
+     * page — e.g. transiently during boot, or via a mapping bug — still fails
+     * with {@code PRIVILEGE_FAULT}: the owner of the page decides, not the bit.
+     * </p>
+     *
+     * @param privilege privilege level of the bus master issuing the access
+     * @throws VmException if page not mapped, permissions insufficient, or the
+     *         master is not allowed to write a kernel-owned page
+     */
+    public int translate(int virtualAddr, int requiredPerm, Privilege privilege) {
         if (virtualAddr < 0 || virtualAddr >= ADDRESS_SPACE_SIZE) {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Address out of bounds: 0x" + Integer.toHexString(virtualAddr & 0xFFFF));
@@ -75,6 +128,12 @@ public final class PageTable {
                 "Permission denied for 0x" + Integer.toHexString(virtualAddr & 0xFFFF) +
                 " (need " + permToString(requiredPerm) + ")");
         }
+        if ((requiredPerm & PageEntry.PERM_WRITE) != 0 && !entry.isUser()
+                && !privilege.isSupervisor()) {
+            throw new VmException(VmException.Code.PRIVILEGE_FAULT,
+                "Kernel page write denied for 0x" + Integer.toHexString(virtualAddr & 0xFFFF) +
+                " (supervisor only)");
+        }
 
         return entry.getFrameBase() + offset;
     }
@@ -84,9 +143,14 @@ public final class PageTable {
         return translate(virtualAddr, PageEntry.PERM_READ);
     }
 
-    /** Translates for write access. */
+    /** Translates for write access from the program domain. */
     public int translateWrite(int virtualAddr) {
-        return translate(virtualAddr, PageEntry.PERM_WRITE);
+        return translate(virtualAddr, PageEntry.PERM_WRITE, Privilege.PROGRAM);
+    }
+
+    /** Translates for write access from the given privilege level. */
+    public int translateWrite(int virtualAddr, Privilege privilege) {
+        return translate(virtualAddr, PageEntry.PERM_WRITE, privilege);
     }
 
     /** Translates for execute/fetch access. */
@@ -106,10 +170,13 @@ public final class PageTable {
         return entries[pageIndex];
     }
 
-    /** Copies this page table (for context cloning). */
+    /** Copies this page table (for context cloning). Entries are copied too, since
+     * their protection bits are mutable (mprotect). */
     public PageTable copy() {
         PageTable copy = new PageTable();
-        System.arraycopy(this.entries, 0, copy.entries, 0, NUM_PAGES);
+        for (int i = 0; i < NUM_PAGES; i++) {
+            copy.entries[i] = this.entries[i].copy();
+        }
         return copy;
     }
 

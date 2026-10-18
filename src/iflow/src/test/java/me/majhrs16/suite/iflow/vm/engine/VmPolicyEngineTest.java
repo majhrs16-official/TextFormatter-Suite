@@ -417,4 +417,46 @@ class VmPolicyEngineTest {
         assertEquals("X", outcome.message().channel());
         assertEquals("original", outcome.message().text(), "channel write must not change the text");
     }
+
+    // ===== Privilege model (design.md §14): kernel pages are supervisor-only =====
+
+    /** Program that stores 'X' at {@code target} and then continues. */
+    private static ProgramImage storeThenContinue(int target) {
+        return ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, 0x00, 0x58,                        // R0 = 'X'
+                Opcode.STB, 0, (byte)((target >> 8) & 0xFF), (byte)(target & 0xFF),
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                              (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, 0x00, (byte)HostServiceRegistry.DECISION_CONTINUE,
+                Opcode.HOST, 0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"routing.decide"})
+            .build();
+    }
+
+    @Test
+    void programWritingConstantsKernelPageIsRejected() {
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(storeThenContinue(0x2000)); // constants: kernel-owned
+
+        RouteOutcome outcome = engine.route(
+            createMessage("original", "chat", createActor("Alice")), createActor("Bob"));
+
+        assertEquals(PolicyTarget.REJECT, outcome.decision().target(),
+            "a program must not write a kernel-owned page");
+    }
+
+    @Test
+    void programWritingDataPageIsAllowed() {
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(storeThenContinue(0x3000)); // data: program-owned
+
+        RouteOutcome outcome = engine.route(
+            createMessage("original", "chat", createActor("Alice")), createActor("Bob"));
+
+        assertEquals(PolicyTarget.LOG, outcome.decision().target());
+    }
 }

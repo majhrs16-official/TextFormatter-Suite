@@ -2,6 +2,7 @@ package me.majhrs16.suite.iflow.vm.execution;
 
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
+import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
@@ -39,6 +40,12 @@ public final class ExecutionContext {
 
     // ===== Runtime-injected services =====
     private SoftMMU softMMU;
+    /**
+     * The page table of this execution (live; single source of truth for
+     * mappings). Derived from {@link #softMMU} / {@link #bus(VmBus)}; a test or a
+     * subclass can rebind it explicitly via {@link #setPageTable(PageTable)}.
+     */
+    private PageTable pageTable;
     /**
      * Data bus interconnecting CPU, DMA and memory (D18). Derived from
      * {@link #softMMU}; set it explicitly only from tests via {@link #bus(VmBus)}.
@@ -104,6 +111,7 @@ public final class ExecutionContext {
     public ExecutionContext maxStackSize(int bytes) { this.maxStackSize = bytes; return this; }
     public ExecutionContext softMMU(SoftMMU mmu) {
         this.softMMU = mmu;
+        this.pageTable = mmu != null ? mmu.getPageTableDirect() : null;
         this.bus = null;           // re-derived from the new MMU
         this.dmaController = null; // re-derived from the new bus
         return this;
@@ -115,6 +123,7 @@ public final class ExecutionContext {
      */
     public ExecutionContext bus(VmBus bus) {
         this.bus = bus;
+        this.pageTable = bus != null ? bus.memory().getPageTableDirect() : null;
         this.dmaController = null;
         return this;
     }
@@ -312,12 +321,24 @@ public final class ExecutionContext {
      * The DMA controller for this execution (D17). Lazily derived from
      * {@link #bus()} so host&harr;VM transfers always target this execution's
      * memory; {@link #softMMU(SoftMMU)} resets it.
+     * <p>
+     * The DMA is a {@link Privilege#SUPERVISOR} bus master: it may load code and
+     * constants and write kernel-owned pages, unlike the CPU (design.md §14).
+     * </p>
      */
     public VmDmaController dma() {
         if (dmaController == null) {
-            dmaController = new VmDmaController(bus());
+            dmaController = new VmDmaController(VmBus.supervisor(bus().memory()));
         }
         return dmaController;
+    }
+
+    /** The page table of this execution (live mappings). */
+    public PageTable pageTable() { return pageTable; }
+
+    /** Rebinds the execution's page table (used when wiring a custom MMU/bus). */
+    public void setPageTable(PageTable pageTable) {
+        this.pageTable = pageTable;
     }
 
     /** Gets the virtual address of the input buffer (see {@link VmMemoryMap#INPUT_BASE}). */

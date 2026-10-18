@@ -3,6 +3,8 @@ package me.majhrs16.suite.iflow.vm.execution;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
+import me.majhrs16.suite.iflow.vm.memory.PageTable;
+import me.majhrs16.suite.iflow.vm.memory.Privilege;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
@@ -250,6 +252,18 @@ class ExecutionContextTest {
     }
 
     @Test
+    void pageTableAccess() {
+        SoftMMU mmu = createMappedMMU();
+        ExecutionContext ctx = createContext(mmu);
+        ctx.initialize();
+        assertSame(mmu.getPageTableDirect(), ctx.pageTable(),
+            "the execution page table is derived from its MMU");
+        PageTable rebind = new PageTable();
+        ctx.setPageTable(rebind);
+        assertSame(rebind, ctx.pageTable());
+    }
+
+    @Test
     void callHostInvokesService() {
         SoftMMU mmu = createMappedMMU();
         HostServiceRegistry hsr = new HostServiceRegistry();
@@ -384,7 +398,11 @@ class ExecutionContextTest {
         ExecutionContext ctx = createContext(mmu);
         assertSame(mmu, ctx.bus().memory());
         assertSame(ctx.bus(), ctx.bus(), "the bus must be cached per execution");
-        assertSame(ctx.bus(), ctx.dma().getBus(), "the DMA must master the execution bus");
+        // The CPU is a program master; the DMA is a supervisor master on the same
+        // memory (design.md §14).
+        assertSame(Privilege.PROGRAM, ctx.bus().privilege());
+        assertSame(mmu, ctx.dma().getBus().memory(), "the DMA must target the execution memory");
+        assertSame(Privilege.SUPERVISOR, ctx.dma().getBus().privilege());
     }
 
     @Test
@@ -395,7 +413,8 @@ class ExecutionContextTest {
         ctx.softMMU(other);
         assertNotSame(before, ctx.bus());
         assertSame(other, ctx.bus().memory());
-        assertSame(ctx.bus(), ctx.dma().getBus());
+        assertSame(other, ctx.dma().getBus().memory());
+        assertSame(other.getPageTableDirect(), ctx.pageTable());
     }
 
     @Test
@@ -405,15 +424,18 @@ class ExecutionContextTest {
     }
 
     @Test
-    void injectedBusIsTheDmaMaster() {
-        // D18 seam: an explicitly wired bus must be the one the DMA transacts on.
+    void injectedBusProvidesTheDmaMemory() {
+        // D18 seam: an explicitly wired bus must be the memory the DMA transacts on
+        // (the DMA keeps its own supervisor privilege over that memory).
         SoftMMU contextMmu = createMappedMMU();
         SoftMMU busMmu = createMappedMMU();
         ExecutionContext ctx = createContext(contextMmu);
         VmBus bus = new VmBus(busMmu);
         ctx.bus(bus);
         assertSame(bus, ctx.bus());
-        assertSame(bus, ctx.dma().getBus());
+        assertSame(busMmu, ctx.dma().getBus().memory());
+        assertSame(Privilege.SUPERVISOR, ctx.dma().getBus().privilege());
+        assertSame(busMmu.getPageTable(), ctx.pageTable());
     }
 
     @Test

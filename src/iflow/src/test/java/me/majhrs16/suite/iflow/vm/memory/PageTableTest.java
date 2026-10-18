@@ -24,6 +24,55 @@ class PageTableTest {
     }
 
     @Test
+    void mapPageKernelCreatesNonUserEntry() {
+        PageTable table = new PageTable();
+        table.mapPageKernel(1, 0x1000, PageEntry.PERM_READ);
+        assertTrue(table.getEntryByIndex(1).isValid());
+        assertFalse(table.getEntryByIndex(1).isUser());
+    }
+
+    @Test
+    void programCannotWriteKernelPageEvenWithWriteBit() {
+        PageTable table = new PageTable();
+        table.mapPageKernel(1, 0x1000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        // The supervisor may write it...
+        assertEquals(0x1000, table.translateWrite(0x1000, Privilege.SUPERVISOR));
+        // ...but the program domain must not, regardless of the WRITE bit.
+        VmException e = assertThrows(VmException.class,
+            () -> table.translateWrite(0x1000, Privilege.PROGRAM));
+        assertEquals(VmException.Code.PRIVILEGE_FAULT, e.code());
+    }
+
+    @Test
+    void programMayReadAndExecuteKernelPage() {
+        PageTable table = new PageTable();
+        table.mapPageKernel(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        assertEquals(0x2000, table.translateRead(0x2000));
+        assertEquals(0x2000, table.translateExecute(0x2000));
+    }
+
+    @Test
+    void protectChangesPermissionsInPlace() {
+        PageTable table = new PageTable();
+        table.mapPage(3, 0x3000,
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
+        table.protect(3, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        assertFalse(table.getEntryByIndex(3).canWrite());
+        assertTrue(table.getEntryByIndex(3).canRead());
+        assertEquals(0x3000, table.getEntryByIndex(3).getFrameBase());
+    }
+
+    @Test
+    void copyIsDeep() {
+        PageTable table = new PageTable();
+        table.mapPage(4, 0x4000, PageEntry.PERM_READ);
+        PageTable copy = table.copy();
+        copy.protect(4, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        assertFalse(table.getEntryByIndex(4).canWrite());
+        assertTrue(copy.getEntryByIndex(4).canWrite());
+    }
+
+    @Test
     void unmapPageClearsEntry() {
         PageTable table = new PageTable();
         table.mapPage(5, 0x5000, PageEntry.PERM_READ);

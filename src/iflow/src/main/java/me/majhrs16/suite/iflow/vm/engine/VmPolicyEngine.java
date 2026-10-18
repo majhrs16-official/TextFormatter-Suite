@@ -199,13 +199,15 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private void setupProgramMappings(ProgramImage program, SoftMMU mmu) {
         PageTable pageTable = mmu.getPageTable();
         // Boot-time loads are bus transactions too (D18): the host writes the
-        // image through the same interconnection the CPU and DMA use.
-        VmBus bus = new VmBus(mmu);
+        // image through the same interconnection the CPU and DMA use. The loader
+        // is a supervisor master, so it may write kernel-owned pages (design.md §14).
+        VmBus bus = VmBus.supervisor(mmu);
 
         // Code region: up to CODE_PAGES pages (firmware ROM page 0 + user code
         // page 1). The region is reserved in full so code never aliases the
-        // constants page, regardless of whether firmware is enabled. R/W/X
-        // initially so the image can be written, then demoted to R/X.
+        // constants page, regardless of whether firmware is enabled. It is mapped
+        // as kernel-owned (R/W/X) while the image is written, then demoted to R/X
+        // with mprotect: the program can never write it, not even during boot.
         byte[] code = program.code();
         int codePages = (code.length + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
         if (codePages > VmMemoryMap.CODE_PAGES) {
@@ -218,21 +220,20 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         for (int p = 0; p < codePages; p++) {
             int vaddrPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p;
             int frameBase = VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE; // Identity mapping
-            pageTable.mapPage(vaddrPage, frameBase,
+            pageTable.mapPageKernel(vaddrPage, frameBase,
                 PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
         }
 
         // Copy code into physical memory
         bus.writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
 
-        // Demote code pages to R/X (remove write permission after writing)
+        // Demote code pages to R/X (mprotect: remove write after writing)
         for (int p = 0; p < codePages; p++) {
             int vaddrPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p;
-            int frameBase = VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE;
-            pageTable.mapPage(vaddrPage, frameBase, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+            pageTable.protect(vaddrPage, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
         }
 
-        // Map the constants page - R/W initially for writing constants, then R
+        // Map the constants page - kernel-owned R/W while writing, then R
         if (program.constants().length > 0) {
             byte[] constBytes = new byte[program.constants().length * 2];
             for (int i = 0; i < program.constants().length; i++) {
@@ -241,11 +242,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 constBytes[i * 2 + 1] = (byte) ((val >> 8) & 0xFF);
             }
             int constPage = VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE);
-            pageTable.mapPage(constPage, VmMemoryMap.CONSTANTS_BASE,
+            pageTable.mapPageKernel(constPage, VmMemoryMap.CONSTANTS_BASE,
                 PageEntry.PERM_READ | PageEntry.PERM_WRITE);
             bus.writeBlock(VmMemoryMap.CONSTANTS_BASE, constBytes, 0, constBytes.length);
-            // Change to read-only after writing
-            pageTable.mapPage(constPage, VmMemoryMap.CONSTANTS_BASE, PageEntry.PERM_READ);
+            // Read-only for the program after writing (mprotect)
+            pageTable.protect(constPage, PageEntry.PERM_READ);
         }
 
         // Map data pages - R/W

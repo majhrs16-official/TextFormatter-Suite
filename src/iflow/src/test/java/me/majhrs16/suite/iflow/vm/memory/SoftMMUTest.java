@@ -220,4 +220,47 @@ class SoftMMUTest {
         // 0x0FFE..0x0FFF is the last word fully inside page 0 (no crossing).
         assertEquals(0xBEEF, mmu.fetchWord(0x0FFE));
     }
+
+    @Test
+    void programCannotWriteKernelPage() {
+        SoftMMU mmu = new SoftMMU();
+        mmu.mapPageKernel(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        assertThrows(VmException.class, () -> mmu.writeByte(0x2000, 0x42));
+        // The supervisor master may write it.
+        mmu.writeByte(0x2000, 0x42, Privilege.SUPERVISOR);
+        assertEquals(0x42, mmu.readByte(0x2000));
+    }
+
+    @Test
+    void busCarriesMasterPrivilege() {
+        SoftMMU mmu = new SoftMMU();
+        mmu.mapPageKernel(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+
+        VmBus program = new VmBus(mmu);
+        assertSame(Privilege.PROGRAM, program.privilege());
+        assertThrows(VmException.class, () -> program.writeByte(0x2000, 1));
+
+        VmBus supervisor = VmBus.supervisor(mmu);
+        assertSame(Privilege.SUPERVISOR, supervisor.privilege());
+        supervisor.writeByte(0x2000, 1);
+        assertEquals(1, program.readByte(0x2000));
+    }
+
+    @Test
+    void pageTableForInspectionIsACopy() {
+        SoftMMU mmu = createMappedMMU();
+        PageTable snapshot = mmu.getPageTableForInspection();
+        assertNotSame(mmu.getPageTable(), snapshot);
+        snapshot.protect(2, PageEntry.PERM_READ);
+        assertTrue(mmu.getPageTable().getEntryByIndex(2).canWrite(),
+            "inspecting must not mutate the live page table");
+    }
+
+    @Test
+    void physicalMemoryBacksSnapshots() {
+        SoftMMU mmu = createMappedMMU();
+        mmu.writeByte(0x2000, 0x7F);
+        assertEquals(0x7F, mmu.getPhysicalMemory()[0x2000] & 0xFF);
+        assertArrayEquals(mmu.getMemorySnapshot(), mmu.getPhysicalMemory());
+    }
 }

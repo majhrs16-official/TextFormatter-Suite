@@ -391,4 +391,81 @@ class HostServiceRegistryTest {
 
         assertEquals(ServiceResult.Status.UNSUPPORTED, result.status());
     }
+
+    @Test
+    void transformApplyResolvesPlaceholders() {
+        HostServiceRegistry hsr = new HostServiceRegistry().placeholderResolver(
+            text -> text.replace("%player%", "Alice"));
+        ExecutionContext ctx = createContext(hsr, "transform.apply");
+        ctx.hostContext(propertyContext("hola %player%"));
+
+        byte[] in = "hola %player%".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), in, 0, in.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.TRANSFORM_APPLY,
+            ctx.outputBufferVAddr(), in.length, HostServiceRegistry.TRANSFORM_RESOLVE_PLACEHOLDERS);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), result.bytesTransferred());
+        assertEquals("hola Alice", new String(out, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void transformApplyDetectsLanguage() {
+        HostServiceRegistry hsr = new HostServiceRegistry().translationDetector(text -> "en");
+        ExecutionContext ctx = createContext(hsr, "transform.apply");
+
+        byte[] in = "hello".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), in, 0, in.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.TRANSFORM_APPLY,
+            ctx.outputBufferVAddr(), in.length, HostServiceRegistry.TRANSFORM_DETECT_LANGUAGE);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), result.bytesTransferred());
+        assertEquals("en", new String(out, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void transformApplyIsUnsupportedWithoutHook() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "transform.apply");
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.TRANSFORM_APPLY,
+            ctx.outputBufferVAddr(), 64, HostServiceRegistry.TRANSFORM_RESOLVE_PLACEHOLDERS);
+        assertEquals(ServiceResult.Status.UNSUPPORTED, result.status());
+    }
+
+    @Test
+    void propertyReadResolvesPlaceholdersInContent() {
+        HostServiceRegistry hsr = new HostServiceRegistry().placeholderResolver(
+            text -> text.replace("%player%", "Alice"));
+        ExecutionContext ctx = createContext(hsr, "property.read");
+        ctx.hostContext(propertyContext("hola %player%"));
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ,
+            ctx.outputBufferVAddr(), 64,
+            (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_CONTENT);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), result.bytesTransferred());
+        assertEquals("hola Alice", new String(out, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void propertyReadAutoDetectsMissingSourceLanguage() {
+        HostServiceRegistry hsr = new HostServiceRegistry().translationDetector(text -> "de");
+        ExecutionContext ctx = createContext(hsr, "property.read");
+        // Content is available; the source language is unset (null).
+        ctx.hostContext(new HostContext() {
+            @Override public String readProperty(int scope, int propId) {
+                return propId == HostServiceRegistry.PROP_CONTENT ? "hallo" : null;
+            }
+        });
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_READ,
+            ctx.outputBufferVAddr(), 64,
+            (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_LANG_SOURCE);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), result.bytesTransferred());
+        assertEquals("de", new String(out, StandardCharsets.UTF_8));
+    }
 }

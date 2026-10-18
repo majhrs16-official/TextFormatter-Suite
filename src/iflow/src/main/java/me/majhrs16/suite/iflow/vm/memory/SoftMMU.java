@@ -46,21 +46,55 @@ public final class SoftMMU {
         pageTable.mapPage(virtualPage, frameBase, permissions);
     }
 
+    /** Maps a virtual page as kernel-owned (program-readable, supervisor-writable). */
+    public void mapPageKernel(int virtualPage, int frameBase, int permissions) {
+        pageTable.mapPageKernel(virtualPage, frameBase, permissions);
+    }
+
     /** Removes a page mapping. */
     public void unmapPage(int virtualPage) {
         pageTable.unmapPage(virtualPage);
     }
 
+    /** The live page table, for address decoding by a bus master. */
+    public PageTable getPageTableDirect() {
+        return pageTable;
+    }
+
+    /**
+     * A snapshot of the page table for read-only inspection. Unlike
+     * {@link #getPageTable()}, the returned table is a copy: inspecting it cannot
+     * mutate the mappings of this MMU.
+     */
+    public PageTable getPageTableForInspection() {
+        return pageTable.copy();
+    }
+
+    /** The live page table, for mapping changes (boot loader / supervisor). */
+    public PageTable getPageTableForMutation() {
+        return pageTable;
+    }
+
     // ===== Memory Access (with translation + permission checks) =====
 
-    /** Reads a byte from virtual address. */
+    /** Reads a byte from virtual address (program domain). */
     public int readByte(int virtualAddr) {
+        return readByte(virtualAddr, Privilege.PROGRAM);
+    }
+
+    /** Reads a byte from virtual address as the given master privilege. */
+    public int readByte(int virtualAddr, Privilege privilege) {
         int physAddr = pageTable.translateRead(virtualAddr);
         return physicalMemory[physAddr] & 0xFF;
     }
 
     /** Reads a 16-bit word (little-endian) from virtual address. */
     public int readWord(int virtualAddr) {
+        return readWord(virtualAddr, Privilege.PROGRAM);
+    }
+
+    /** Reads a 16-bit word (little-endian) as the given master privilege. */
+    public int readWord(int virtualAddr, Privilege privilege) {
         int physAddr = pageTable.translateRead(virtualAddr);
         // Check if word crosses page boundary
         if ((virtualAddr & PageTable.OFFSET_MASK) == PageTable.OFFSET_MASK) {
@@ -76,6 +110,11 @@ public final class SoftMMU {
 
     /** Reads a block of bytes from virtual address. */
     public void readBlock(int virtualAddr, byte[] dest, int destOffset, int length) {
+        readBlock(virtualAddr, dest, destOffset, length, Privilege.PROGRAM);
+    }
+
+    /** Reads a block of bytes from virtual address as the given master privilege. */
+    public void readBlock(int virtualAddr, byte[] dest, int destOffset, int length, Privilege privilege) {
         // Check full range first
         int endAddr = virtualAddr + length;
         if (endAddr > PageTable.ADDRESS_SPACE_SIZE) {
@@ -94,28 +133,43 @@ public final class SoftMMU {
         }
     }
 
-    /** Writes a byte to virtual address. */
+    /** Writes a byte to virtual address (program domain). */
     public void writeByte(int virtualAddr, int value) {
-        int physAddr = pageTable.translateWrite(virtualAddr);
+        writeByte(virtualAddr, value, Privilege.PROGRAM);
+    }
+
+    /** Writes a byte to virtual address as the given master privilege. */
+    public void writeByte(int virtualAddr, int value, Privilege privilege) {
+        int physAddr = pageTable.translateWrite(virtualAddr, privilege);
         physicalMemory[physAddr] = (byte) (value & 0xFF);
     }
 
-    /** Writes a 16-bit word (little-endian) to virtual address. */
+    /** Writes a 16-bit word (little-endian) to virtual address (program domain). */
     public void writeWord(int virtualAddr, int value) {
-        int physAddr = pageTable.translateWrite(virtualAddr);
+        writeWord(virtualAddr, value, Privilege.PROGRAM);
+    }
+
+    /** Writes a 16-bit word (little-endian) as the given master privilege. */
+    public void writeWord(int virtualAddr, int value, Privilege privilege) {
+        int physAddr = pageTable.translateWrite(virtualAddr, privilege);
         // Check if word crosses page boundary
         if ((virtualAddr & PageTable.OFFSET_MASK) == PageTable.OFFSET_MASK) {
             // Crosses page boundary - write byte by byte
-            writeByte(virtualAddr, value & 0xFF);
-            writeByte(virtualAddr + 1, (value >> 8) & 0xFF);
+            writeByte(virtualAddr, value & 0xFF, privilege);
+            writeByte(virtualAddr + 1, (value >> 8) & 0xFF, privilege);
         } else {
             physicalMemory[physAddr] = (byte) (value & 0xFF);
             physicalMemory[physAddr + 1] = (byte) ((value >> 8) & 0xFF);
         }
     }
 
-    /** Writes a block of bytes to virtual address. */
+    /** Writes a block of bytes to virtual address (program domain). */
     public void writeBlock(int virtualAddr, byte[] src, int srcOffset, int length) {
+        writeBlock(virtualAddr, src, srcOffset, length, Privilege.PROGRAM);
+    }
+
+    /** Writes a block of bytes to virtual address as the given master privilege. */
+    public void writeBlock(int virtualAddr, byte[] src, int srcOffset, int length, Privilege privilege) {
         int endAddr = virtualAddr + length;
         if (endAddr > PageTable.ADDRESS_SPACE_SIZE) {
             throw new VmException(VmException.Code.MEMORY_FAULT,
@@ -123,20 +177,20 @@ public final class SoftMMU {
         }
         
         // Pre-validate all pages for write permission before any modification
-        validateWriteRange(virtualAddr, length);
+        validateWriteRange(virtualAddr, length, privilege);
         
-        int physAddr = pageTable.translateWrite(virtualAddr);
+        int physAddr = pageTable.translateWrite(virtualAddr, privilege);
         if (isContiguous(virtualAddr, length)) {
             System.arraycopy(src, srcOffset, physicalMemory, physAddr, length);
         } else {
             for (int i = 0; i < length; i++) {
-                writeByte(virtualAddr + i, src[srcOffset + i] & 0xFF);
+                writeByte(virtualAddr + i, src[srcOffset + i] & 0xFF, privilege);
             }
         }
     }
 
     /** Validates that the entire virtual address range is mapped and writable. */
-    private void validateWriteRange(int virtualAddr, int length) {
+    private void validateWriteRange(int virtualAddr, int length, Privilege privilege) {
         int endAddr = virtualAddr + length;
         int startPage = virtualAddr >> PageTable.PAGE_SHIFT;
         int endPage = (endAddr - 1) >> PageTable.PAGE_SHIFT;
@@ -147,8 +201,9 @@ public final class SoftMMU {
             int pageOffset = pageStart - (page << PageTable.PAGE_SHIFT);
             int pageLength = pageEnd - pageStart;
             
-            // translateWrite will throw if page not mapped or not writable
-            pageTable.translateWrite(pageStart);
+            // translateWrite will throw if page not mapped, not writable, or
+            // kernel-owned and the master is not the supervisor
+            pageTable.translateWrite(pageStart, privilege);
         }
     }
 
@@ -184,9 +239,19 @@ public final class SoftMMU {
 
     // ===== Memory Inspection =====
 
+    /**
+     * The raw physical backing store. This is the physical view used by the boot
+     * loader and by snapshots; virtual accesses must still go through the
+     * translating methods above. Callers that mutate it bypass all page checks,
+     * so it is reserved for the supervisor (loader/DMA/inspection).
+     */
+    public byte[] getPhysicalMemory() {
+        return physicalMemory;
+    }
+
     /** Gets a copy of the entire physical memory. */
     public byte[] getMemorySnapshot() {
-        return physicalMemory.clone();
+        return getPhysicalMemory().clone();
     }
 
     /** Gets a copy of a memory region. */
