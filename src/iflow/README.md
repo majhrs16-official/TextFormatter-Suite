@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (357 tests)  
+> **Estado**: ✅ Implementada y probada (368 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -22,6 +22,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus); maestro supervisor |
 | `VmDevice` | Interfaz de esclavo de bus: un periférico que decodifica su propio rango y responde lecturas/escrituras (D31) |
 | `VmDisplay` | Pantalla de texto mapeada en memoria (D31): celda de 2 bytes (carácter + atributo `[letra:4][fondo:4]`, estilo VERA/X16); registros de control MMIO; API de framebuffer para el host |
+| `VmNvram` | NVRAM del BIOS (D32): ventana de almacenamiento persistente en la apertura MMIO para el estado que sobrevive entre mensajes (p. ej. la bandera de arranque en frío) |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
 | `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
 | `VmException` | Excepciones tipadas con IP capture (INVALID_OPCODE, MEMORY_FAULT, OUT_OF_FUEL, etc.) |
@@ -47,7 +48,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
   - Página 8: Buffer salida I/O (R/W) (0x8000)
   - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia
-  - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — banco de registros de la pantalla; el *interconnect* la decodifica antes que la ROM/RAM (D31). Reutiliza la cola libre del ROM (el firmware acaba en 0x0204), así no recorta RAM de usuario
+  - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — `0x0F00–0x0F0F` banco de registros de la pantalla (D31) y `0x0F10–0x0FFF` NVRAM del BIOS (D32); el *interconnect* lo decodifica antes que la ROM/RAM. Reutiliza la cola libre del ROM (el firmware acaba en 0x0257), así no recorta RAM de usuario
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
   `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
   siguen consultándose bajo demanda vía `HOST`/`HostContext` (AUD-021).
@@ -81,6 +82,24 @@ framebuffer aparece en pantalla.
   producción y tests. En builds de **debug** (`logger.debug=true`) se vuelca la pantalla al log tras
   cada mensaje; el volcado está tras `DebugConfig.DEBUG`, así que es apagable y de coste cero cuando
   está desactivado.
+
+### BIOS activo (D32)
+
+Con el firmware ON la máquina **resetea en el BIOS**, no en el `main`: el `entryPoint` de la imagen es
+la rutina `fw_reset` de la ROM, que encadena con el `main` del usuario. Así el hardware queda listo sin
+que el programa tenga que configurarlo.
+
+- **POST**: `fw_reset` detecta arranque **en frío vs. caliente** con una bandera persistente en la
+  NVRAM. En frío limpia la **RAM volátil de datos** (0x3000–0x4FFF) y **configura la pantalla** por
+  MMIO (`BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`); después marca el arranque y encadena con
+  `main`. En caliente salta directo a `main`.
+- **«Limpiar memoria» sin romper D30**: el BIOS **nunca** toca la RAM de propósito general
+  (0x9000+) ni la memoria del programa en el camino caliente, así que la persistencia implícita de D30
+  se conserva; sólo el primer mensaje ve el POST.
+- **NVRAM (`VmNvram`)**: ventana persistente en `0x0F10–0x0FFF` (dentro de la apertura MMIO). Como el
+  engine mantiene una única máquina por programa, el dispositivo vive toda la vida de la máquina: lo
+  escrito en un mensaje sigue ahí en el siguiente.
+- El `main` ya no necesita configurar la pantalla; puede reconfigurarla en caliente si quiere.
 
 ### ISA v2 (resumen)
 
@@ -239,11 +258,13 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `HostServiceRegistryTest` | ABI v2 de los 15 servicios HOST, capabilities, journal, transferencias vía DMA, copy-on-write del buffer |
 | `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30); pantalla mapeada en memoria (D31) |
 | `VmDisplayTest` | Periférico de vídeo: decodificación de la ventana y del banco de registros, geometría, carácter/atributo, bloques, limpieza y render ANSI (D31) |
+| `VmNvramTest` | NVRAM del BIOS: decodificación de ventana, R/W byte/palabra/bloque, ventana por defecto (D32) |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
-| `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
+| `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) y POST del BIOS que configura la pantalla (D32) |
+| `BiosBootTest` | End-to-end del BIOS activo: resetea en `fw_reset`, configura la pantalla, encadena a `main` y toma el camino caliente en el segundo mensaje (D32) |
 
-**Total: 357 tests passing**
+**Total: 368 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -304,7 +325,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 357 tests
+├── src/test/java/...                  # 368 tests
 └── build.gradle
 ```
 

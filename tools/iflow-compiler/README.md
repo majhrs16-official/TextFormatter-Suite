@@ -181,6 +181,7 @@ CALL fw_strlen        ; R1 = dirección de la cadena → R0 = longitud
 
 | Función | Entrada | Salida |
 |---|---|---|
+| `fw_reset` | — (punto de entrada del BIOS, D32) | POST + encadena con el `main` |
 | `fw_strlen` | `R1` = cadena | `R0` = longitud |
 | `fw_strcpy` | `R1` = destino, `R2` = origen | `R0` = bytes copiados |
 | `fw_strcmp` | `R1` = a, `R2` = b | `R0` = 0 si iguales, si no signo(a−b) |
@@ -197,6 +198,15 @@ CALL fw_strlen        ; R1 = dirección de la cadena → R0 = longitud
 
 Las utilidades de cadena/memoria usan el direccionamiento indirecto de la ISA v2
 (`LDBI`/`STBI`) para recorrer los buffers.
+
+**BIOS activo (D32).** Con firmware activado, el `entryPoint` de la imagen es
+`fw_reset`, **no** el `main`: la máquina resetea en el BIOS. En el primer arranque
+(frío) `fw_reset` limpia la RAM volátil de datos (0x3000–0x4FFF) y configura la
+pantalla por MMIO (`BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`), marca la
+NVRAM (0x0F10) y encadena con el `main`; en los siguientes arranques (caliente)
+salta directo al `main`. La cola de la página del BIOS (0x0F00–0x0FFF) está
+reservada para el bloque de control MMIO (pantalla 0x0F00–0x0F0F, NVRAM
+0x0F10–0x0FFF); el ensamblador da error si el firmware creciera dentro de ella.
 
 ---
 

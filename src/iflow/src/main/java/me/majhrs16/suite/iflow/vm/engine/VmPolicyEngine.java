@@ -24,6 +24,7 @@ import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
+import me.majhrs16.suite.iflow.vm.memory.VmNvram;
 import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.video.VmDisplay;
@@ -99,6 +100,12 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
          */
         public final VmDisplay display;
         /**
+         * The machine's BIOS NVRAM (D32): a small persistent scratch window the
+         * reset routine uses for state that must survive across messages (the
+         * cold-boot flag). Same instance across messages, like {@link #display}.
+         */
+        public final VmNvram nvram;
+        /**
          * The interpreter is immutable and stateless (it reads the bus/MMU from the
          * execution context), so one instance serves every execution of this program
          * (IFLOW-AUD-029).
@@ -106,10 +113,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         public final VmInterpreter interpreter;
 
         public LoadedProgram(ProgramImage program, SoftMMU softMMU, VmDisplay display,
-                             VmInterpreter interpreter) {
+                             VmNvram nvram, VmInterpreter interpreter) {
             this.program = program;
             this.softMMU = softMMU;
             this.display = display;
+            this.nvram = nvram;
             this.interpreter = interpreter;
         }
     }
@@ -568,17 +576,27 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // BIOS enables it.
         VmDisplay display = new VmDisplay();
         newMMU.attach(display);
+        // Attach the BIOS NVRAM (D32): persistent scratch the reset routine uses
+        // to tell a cold boot from a warm one (see VmNvram).
+        VmNvram nvram = new VmNvram();
+        newMMU.attach(nvram);
         // The interpreter is stateless (bus/MMU come from the execution context) and
         // the program is immutable, so build it once per program, not per message.
         VmInterpreter interpreter = new VmInterpreter(program, serviceRegistry);
         // Atomically publish program + memory + display + interpreter together
-        loadedProgramRef.set(new LoadedProgram(program, newMMU, display, interpreter));
+        loadedProgramRef.set(new LoadedProgram(program, newMMU, display, nvram, interpreter));
     }
 
     /** The current machine's text screen (D31), or {@code null} before a program loads. */
     public VmDisplay display() {
         LoadedProgram loaded = loadedProgramRef.get();
         return loaded != null ? loaded.display : null;
+    }
+
+    /** The current machine's BIOS NVRAM (D32), or {@code null} before a program loads. */
+    public VmNvram nvram() {
+        LoadedProgram loaded = loadedProgramRef.get();
+        return loaded != null ? loaded.nvram : null;
     }
 
     public ProgramImage program() {

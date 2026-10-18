@@ -1,0 +1,17 @@
+; BIOS end-to-end fixture (D32).
+; Assembled with the firmware ROM enabled, so the machine resets into the BIOS
+; reset routine (fw_reset), which configures the text screen through its MMIO
+; registers and then chains here. main only draws on the screen; it never
+; configures it. Seeing the character therefore proves the active BIOS enabled
+; the device before the program ran.
+.entry main
+
+.section code
+
+main:
+    LI R1, 0xE000
+    LI R2, 0x0042      ; 'B'
+    STBI R2, [R1]      ; cell 0 of the BIOS-configured framebuffer
+    HALT
+
+.end

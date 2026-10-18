@@ -40,6 +40,10 @@ class Assembler {
   private currentSection = 'code';
   private constantPool: number[] = [];
   private firmwareEnabled = true;
+  /** Address of the BIOS reset routine ({@code fw_reset}); -1 when firmware is off. */
+  private biosEntry = -1;
+  /** Address of the user's entry point (firmware on), resolved during secondPass. */
+  private userEntryAddress = -1;
 
   constructor(options: AssemblerOptions = {}) {
     this.options = options;
@@ -79,6 +83,8 @@ class Assembler {
     this.capabilities.clear();
     this.constantPool = [];
     this.firmwareEnabled = this.options.firmware ?? true;
+    this.biosEntry = -1;
+    this.userEntryAddress = -1;
     this.currentAddress = this.userOrigin();
     this.currentLine = 0;
     this.currentSection = 'code';
@@ -127,9 +133,13 @@ class Assembler {
     // Prepend firmware ROM if enabled (occupies 0x0000-0x0FFF). User code was
     // already laid out from userOrigin() (>= 0x1000), so instruction addresses
     // match the labels/entry point and the gap is filled with padding below.
+    // The ROM's reset routine is the machine's entry point (D32): it chains to
+    // the user entry, which the assembler embeds as a relative jump.
     if (this.firmwareEnabled) {
-      const firmware = this.generateFirmware();
-      code.push(...firmware);
+      this.userEntryAddress = this.resolveUserEntry();
+      const firmware = this.generateFirmware(this.userEntryAddress);
+      this.biosEntry = firmware.reset;
+      code.push(...firmware.rom);
     }
 
     for (const instr of this.instructions) {
@@ -161,12 +171,27 @@ class Assembler {
 
   /**
    * Generates the firmware ROM (4KB at 0x0000-0x0FFF).
-   * Contains: vector table, service constants, string/memory utils, host wrappers.
+   * Contains: vector table, service constants, string/memory utils, host wrappers
+   * and the active BIOS reset routine {@code fw_reset} (D32).
    * The final 256 bytes (0x0F00-0x0FFF) are reserved for the device control
    * block (MMIO registers of the text screen, see VmMemoryMap.DEVICE_MMIO_BASE).
+   *
+   * @param userEntry absolute address the reset routine chains to
+   * @returns the ROM bytes and the address of the {@code fw_reset} entry
    */
-  private generateFirmware(): number[] {
+  private generateFirmware(userEntry: number): { rom: number[]; reset: number } {
     const fw: number[] = [];
+
+    // ===== BIOS / device addresses (mirror VmMemoryMap; the assembler is a
+    // separate project and cannot import the Java constants) =====
+    const MMIO_DISPLAY_BASE = 0x0F00;  // screen register bank
+    const DEVICE_NVRAM_BASE = 0x0F10;  // BIOS NVRAM scratch
+    const BOOT_MAGIC        = 0xB105;  // "booted" marker stored in NVRAM
+    const DATA_BASE         = 0x3000;  // volatile data/heap region
+    const DATA_WORDS        = 4096;    // 2 pages / 2 bytes per word
+    const DISPLAY_BASE      = 0xE000;  // default framebuffer window
+    const DISPLAY_COLS      = 80;
+    const DISPLAY_ROWS      = 25;
 
     // ===== Size-correct emitter with label/fixup support =====
     const u8 = (b: number) => { fw.push(b & 0xFF); };
@@ -176,7 +201,9 @@ class Assembler {
     const mov = (rd: number, rs: number) => { u8(Opcode.MOV); pack(rd, rs); };
     const rr = (op: Opcode, rd: number, rs: number) => { u8(op); pack(rd, rs); };
     const ldbi = (rd: number, rs: number) => { u8(Opcode.LDBI); pack(rd, rs); };
+    const ldwi = (rd: number, rs: number) => { u8(Opcode.LDWI); pack(rd, rs); };
     const stbi = (rv: number, ra: number) => { u8(Opcode.STBI); pack(rv, ra); };
+    const stwi = (rv: number, ra: number) => { u8(Opcode.STWI); pack(rv, ra); };
     const ret = () => u8(Opcode.RET);
     const host = () => { u8(Opcode.HOST); u8(0); };
     const labelAddr = new Map<string, number>();
@@ -439,6 +466,56 @@ class Assembler {
     host();
     ret();
 
+    // ===== BIOS reset / POST routine (D32, entry point) =====
+    // The machine resets into this routine. On a cold boot (the NVRAM boot flag
+    // is clear) it performs POST: it clears the volatile data region word by word
+    // and configures the text screen through the device MMIO registers. It never
+    // touches the program's general-purpose RAM, which persists across messages
+    // (D30), and it marks the boot as done so later messages take the warm path.
+    // It then chains to the user entry point (a relative jump patched below).
+    mark('fw_reset');
+
+    // Cold-boot detection: R3 = NVRAM boot flag.
+    li(1, DEVICE_NVRAM_BASE);
+    ldwi(3, 1);
+    li(2, BOOT_MAGIC);
+    rr(Opcode.CMP, 3, 2);
+    br(Opcode.JZ, 'fw_reset_warm');   // already booted -> chain
+
+    // ---- Cold POST ----
+    // Clear volatile data/heap (0x3000-0x4FFF), one word per iteration.
+    li(1, DATA_BASE);
+    li(2, DATA_WORDS);
+    li(4, 0);                         // zero word (also the loop's compare value)
+    li(5, 2);                         // word stride
+    li(6, 1);                         // decrement
+    mark('fw_reset_clear');
+    stwi(4, 1);
+    rr(Opcode.ADD, 1, 5);
+    rr(Opcode.SUB, 2, 6);
+    rr(Opcode.CMP, 2, 4);
+    br(Opcode.JNZ, 'fw_reset_clear');
+
+    // Configure the text screen: framebuffer base, geometry and enable.
+    li(1, MMIO_DISPLAY_BASE + 0x00); li(2, DISPLAY_BASE);       stwi(2, 1);
+    li(1, MMIO_DISPLAY_BASE + 0x02); li(2, DISPLAY_COLS);       stwi(2, 1);
+    li(1, MMIO_DISPLAY_BASE + 0x04); li(2, DISPLAY_ROWS);       stwi(2, 1);
+    li(1, MMIO_DISPLAY_BASE + 0x06); li(2, 1);                  stwi(2, 1); // CTRL: enable
+
+    // Mark the boot as done in NVRAM.
+    li(1, DEVICE_NVRAM_BASE); li(2, BOOT_MAGIC);                stwi(2, 1);
+
+    mark('fw_reset_warm');
+    // Chain to the user entry point. The 16-bit offset is relative to the end of
+    // this 3-byte instruction and is patched here (the user entry is known).
+    const chainAt = fw.length;
+    u8(Opcode.JMP);
+    u8(0x00);
+    u8(0x00);
+    const chainRel = (userEntry - (chainAt + 3)) & 0xFFFF;
+    fw[chainAt + 1] = (chainRel >> 8) & 0xFF;
+    fw[chainAt + 2] = chainRel & 0xFF;
+
     // ===== Resolve relative branches =====
     for (const fx of fixups) {
       const target = labelAddr.get(fx.label);
@@ -475,7 +552,7 @@ class Assembler {
       this.defineEquate(name, addr);
     }
 
-    return fw;
+    return { rom: fw, reset: labelAddr.get('fw_reset')! };
   }
 
   /**
@@ -1167,13 +1244,32 @@ class Assembler {
     }
   }
 
-  private getEntryPointAddress(): number {
+  /**
+   * Resolves the user program's entry point from {@code .entry} (a label) or the
+   * user origin. Emits a diagnostic when a named entry label is missing.
+   */
+  private resolveUserEntry(): number {
     if (this.options.entryPoint) {
       const label = this.labels.get(this.options.entryPoint);
       if (label) return label.address;
       this.addDiagnostic('error', `Entry point label not found: ${this.options.entryPoint}`, 0, 0);
     }
     return this.userOrigin();
+  }
+
+  /**
+   * The machine's reset entry point. With the firmware ROM active the machine
+   * resets into the BIOS ({@code fw_reset}, D32), which chains to the user
+   * entry; a bare-metal image enters directly at the user entry.
+   */
+  private getEntryPointAddress(): number {
+    if (this.firmwareEnabled && this.biosEntry >= 0) {
+      return this.biosEntry;
+    }
+    if (this.userEntryAddress >= 0) {
+      return this.userEntryAddress;
+    }
+    return this.resolveUserEntry();
   }
 
   private generateDebugInfo(): string {

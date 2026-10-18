@@ -20,7 +20,8 @@ package me.majhrs16.suite.iflow.vm.memory;
  *   page 7      0x7000-0x7FFF   input buffer (I/O)                         R/W
  *   page 8      0x8000-0x8FFF   output buffer (I/O)                        R/W
  *   pages 9-15  0x9000-0xFFFF   general-purpose user RAM                   R/W
- *   0x0F00      0x0F00-0x0FFF   device MMIO control block (in the BIOS page) I/O
+ *   0x0F00      0x0F00-0x0F0F   screen MMIO registers (in the BIOS page)    I/O
+ *   0x0F10      0x0F10-0x0FFF   BIOS NVRAM / scratch window                 I/O
  * </pre>
  *
  * <p>
@@ -97,6 +98,17 @@ public final class VmMemoryMap {
      */
     public static final int DEVICE_MMIO_BASE = 0x0F00;
     public static final int DEVICE_MMIO_SIZE = 0x0100; // 256 bytes
+
+    /**
+     * Base of the BIOS non-volatile scratch window (NVRAM), carved out of the
+     * device MMIO aperture right after the screen's 16 register bytes. The BIOS
+     * uses it for state that must survive across messages (today the cold-boot
+     * flag that makes the reset routine clear volatile RAM exactly once). Like
+     * every device register, it is decoded by the interconnect before the MMU,
+     * so it is not part of the program's RAM.
+     */
+    public static final int DEVICE_NVRAM_BASE = DEVICE_MMIO_BASE + 0x10;   // 0x0F10
+    public static final int DEVICE_NVRAM_SIZE = DEVICE_MMIO_SIZE - 0x10;   // 0xF0
 
     // ===== Text screen defaults (the BIOS may reconfigure them at runtime) =====
 

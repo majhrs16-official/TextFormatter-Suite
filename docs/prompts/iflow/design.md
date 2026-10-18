@@ -586,6 +586,14 @@ Especifica qué errores pueden capturarse mediante manejadores y cuáles deben a
 
 Una excepción de programa no debe convertirse accidentalmente en una excepción fatal del servidor.
 
+> **Resolución implementada (D31–D33).** Las llamadas voluntarias al host usan la instrucción `HOST`
+> con un registro de servicios del runtime (opción 3) y un ABI de servicio versionado. Las excepciones
+> del programa se traducen a códigos internos y a un resultado de fallo controlado del router; nunca
+> escapan al servidor. La **tabla de IRQ** la define el BIOS en memoria (no el programa de usuario),
+> con **fuentes de interrupción por E/S** (D33, prevista); mientras tanto no hay un vector de
+> interrupciones modificable por el programa. El firmware ROM es **activo** (D32): resetea en su rutina
+> de POST y encadena con el `main`. Ver `src/iflow/HDL.md` y `docs/workdir/PLAN.md`.
+
 ---
 
 # 12. Firmware, BIOS y bibliotecas estándar

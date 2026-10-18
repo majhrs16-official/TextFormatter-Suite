@@ -1693,17 +1693,51 @@ debajo del banco, desbordamiento del espacio, carácter/atributo, bloque, limpie
 `VmPolicyEngineTest.programDrawsOnTheMemoryMappedScreen`.
 Total: **359 tests, 0 fallos**.
 
-### D32 — BIOS activo (propuesto)
+### D32 — BIOS activo — ✅ aplicado
 
-El firmware ROM pasa de **pasivo** (solo stdlib) a **activo**: al arrancar ejecuta una rutina de
-reset que (1) limpia la RAM volátil, (2) **configura el dispositivo de pantalla** (registra el rango
-de memoria y las dimensiones vía MMIO/DMA), (3) **publica la tabla de IRQ** (D33), y (4) cede el
-control al `main` del usuario. El engine ejecutaría desde el entry del BIOS cuando el firmware está
-ON; el BIOS encadena al programa. Esto permite reconfigurar el hardware en el arranque.
+El firmware ROM pasa de **pasivo** (solo stdlib) a **activo**: con el firmware ON, la máquina
+**resetea en el BIOS** (`fw_reset`), no directamente en el `main`. La rutina de reset (1) detecta
+arranque en frío vs. caliente, (2) en frío limpia la RAM volátil y **configura el dispositivo de
+pantalla** por MMIO, y (3) encadena con el `main` del usuario. El `main` ya no tiene que configurar el
+hardware.
 
-> ⚠️ Contradice la spec vigente (`implement.md` §12.4: «no se habilita un vector de interrupciones
-> modificable por programas»; §13.1: «no es un BIOS de hardware»). Habrá que **actualizar la spec y
-> los READMEs** como parte del lote, no dejarla divergente.
+- **Entry point**: el ensamblador pone `entryPoint` = dirección de `fw_reset` cuando el firmware está
+  ON (en la página del ROM). En bare-metal sigue siendo el origin del usuario. El `ProgramImage` no
+  cambia de formato: el BIOS y el usuario viven en la misma sección de código.
+- **POST en frío vs. caliente**: la rutina de reset lee una bandera persistente en **NVRAM**; si ya
+  está marcada, salta directo al `main` (camino caliente). Así el `main` corre en cada mensaje y el
+  hardware sólo se reinicializa una vez.
+- **«Limpiar memoria» sin romper D30**: en frío el BIOS limpia la **región volátil de datos**
+  (0x3000–0x4FFF); **nunca** toca la RAM de propósito general (0x9000+) ni la memoria del programa en
+  el camino caliente. La persistencia implícita de D30 se conserva.
+- **NVRAM del BIOS (`VmNvram`)**: nuevo esclavo de bus en la apertura MMIO
+  (`0x0F10–0x0FFF`, justo tras el banco de la pantalla). Como el engine mantiene **una sola máquina
+  por programa** (D30), el dispositivo vive toda la vida de la máquina: lo que el BIOS escribe en un
+  mensaje sigue ahí en el siguiente. Lo usa la bandera de arranque en frío (y servirá para la tabla de
+  IRQ de D33). Direcciones en `VmMemoryMap.DEVICE_NVRAM_*`.
+- **Configuración de pantalla**: el BIOS escribe `BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`
+  en el banco MMIO de la pantalla (D31); reconfigurable en caliente por el programa después.
+
+**Implementado:**
+
+- `tools/iflow-compiler`: la ROM incorpora `fw_reset` (entry) con POST + encadenado; el `entryPoint`
+  de la imagen pasa a ser el BIOS. Se añaden los helpers `LDWI`/`STWI` al generador.
+- `vm/memory/VmNvram`: NVRAM del BIOS (`VmDevice`), persistente entre mensajes.
+- `vm/memory/VmMemoryMap`: `DEVICE_NVRAM_BASE/SIZE` (0x0F10, 0xF0) dentro de la apertura MMIO.
+- `VmPolicyEngine`: adjunta la NVRAM junto a la pantalla y la expone con `nvram()`.
+- `BiosBootTest` (nuevo): fixture `bios_screen.flow` — el `main` sólo dibuja; el test comprueba que el
+  BIOS habilitó/configuró la pantalla y encadenó a `main`, y que el segundo mensaje toma el camino
+  caliente. `VmNvramTest` (nuevo): decodificación, R/W byte/palabra/bloque y ventana por defecto.
+
+**Decisión de alcance:** la **publicación de la tabla de IRQ** pasa a **D33** (junto con el despacho y
+las fuentes de E/S), que es donde se define su estructura; la NVRAM es el sitio natural para esa
+tabla persistente y reconfigurable.
+
+**Verificado:** `FirmwareIntegrationTest` actualizado (el engine ahora resetea en el BIOS; se adjuntan
+pantalla y NVRAM) + `BiosBootTest` + `VmNvramTest`. Total: **368 tests, 0 fallos**; ensamblador 13/13.
+
+> Nota: la spec previa (`implement.md` §12.4 y §13.1) describía el firmware como pasivo y sin vectores
+> modificables; se actualiza en este lote (ver más abajo) para no dejarla divergente.
 
 ### D33 — Tabla de IRQ configurable por el BIOS + E/S (propuesto)
 
@@ -1721,4 +1755,5 @@ la línea). Queda por definir la estructura exacta de la tabla y la política de
 3. **Persistencia**: banco persistente en RAM, pero **de propósito general para el userspace** (el
    BIOS no elige ni reserva el rango); la persistencia es **implícita** (la VM no se reinicializa y
    no se limpia la memoria). Ya aplicado en D30.
-4. **Orden**: D27/D28/D29 aplicados; sigue **D31** (pantalla) → **D32** (BIOS) → **D33** (IRQ + E/S).
+4. **Orden**: D27/D28/D29/D30/D31 aplicados; **D32 aplicado** (BIOS activo + NVRAM). Sigue **D33**
+   (tabla de IRQ configurable por el BIOS + fuentes de interrupción por E/S).

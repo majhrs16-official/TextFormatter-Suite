@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.isa.*;
 import me.majhrs16.suite.iflow.vm.execution.*;
 import me.majhrs16.suite.iflow.vm.service.*;
 import me.majhrs16.suite.iflow.vm.memory.*;
+import me.majhrs16.suite.iflow.vm.video.VmDisplay;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.*;
@@ -21,11 +22,11 @@ class FirmwareIntegrationTest {
         System.out.println("Code length: " + program.code().length);
         System.out.println("Capabilities: " + String.join(", ", program.capabilities()));
 
-        // Structural expectations of a firmware-on image: the ROM occupies page 0
-        // and the user code starts at 0x1000 (page 1), so the code section spans
-        // both pages.
-        assertEquals(VmMemoryMap.PAGE, program.entryPoint(),
-            "user code must start at 0x1000 when the firmware ROM is present");
+        // With the firmware ROM active the machine resets into the BIOS reset
+        // routine (D32), which lives in the ROM page (0x0000-0x0FFF) and chains
+        // to the user entry at 0x1000. The code section spans both pages.
+        assertTrue(program.entryPoint() < VmMemoryMap.PAGE,
+            "firmware-on images must reset into the BIOS, inside the ROM page");
         assertTrue(program.code().length > VmMemoryMap.PAGE,
             "firmware-on code section must span ROM + user code");
         
@@ -76,6 +77,14 @@ class FirmwareIntegrationTest {
             softMMU.getPageTable().protect(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
                 PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
         }
+
+        // Attach the machine peripherals after the image is laid out (as the engine
+        // does, so the loader never writes into the devices): the BIOS drives the
+        // text screen and stores its cold-boot flag in NVRAM through MMIO.
+        VmDisplay display = new VmDisplay();
+        softMMU.attach(display);
+        VmNvram nvram = new VmNvram();
+        softMMU.attach(nvram);
         
         // Write test message content at the input buffer
         String testMsg = "spam message";
@@ -114,6 +123,16 @@ class FirmwareIntegrationTest {
                 System.out.println("R" + i + ": " + ctx.registers().get(i));
             }
             assertTrue(ctx.fuelRemaining() > 0, "Should have fuel remaining");
+
+            // The BIOS ran before user main (D32): it enabled and configured the
+            // text screen and marked its cold boot in NVRAM.
+            assertTrue(display.isEnabled(), "BIOS must enable the text screen");
+            assertEquals(VmMemoryMap.DISPLAY_DEFAULT_BASE, display.baseAddress(),
+                "BIOS must map the screen at the default base");
+            assertEquals(VmMemoryMap.DISPLAY_DEFAULT_COLS, display.columns());
+            assertEquals(VmMemoryMap.DISPLAY_DEFAULT_ROWS, display.rows());
+            assertEquals(0xB105, nvram.readWord(VmMemoryMap.DEVICE_NVRAM_BASE),
+                "BIOS must record its cold boot in NVRAM");
 
             // Test 8 in the fixture writes "Hi\0" at FW_STR and calls the ROM's
             // fw_strlen (R1 = src -> R0 = length), storing the result at
