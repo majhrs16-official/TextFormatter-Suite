@@ -133,11 +133,11 @@ reales y `maturity.py` sustituye su proxy:
 | `gitleaks` | 5 · Secretos | fugas en **todo el histórico** git, asignadas a la fecha del commit |
 | `semgrep` | 4 · Seguridad | hallazgos de seguridad por snapshot (peso: ERROR=4, WARNING=1) |
 | `pmd` | 1 · Calidad | violaciones Java por snapshot (árbol completo; cubre el layout pre-split) |
-| `eslint` | 1 · Calidad | reservado (JS/TS) |
+| `eslint` | 1 · Calidad | errores/avisos JS del propio `web-editor` (su `eslint.config.js`); avisos ×0.25 |
 
 Rutas por entorno o autodetección: `PM_GITLEAKS`, `PM_SEMGREP`, `PM_PMD`,
-`PM_ESLINT`, `PM_JAVA_HOME`. Son **opcionales**: sin ellas la rúbrica usa los
-proxies y el resto del pipeline no cambia.
+`PM_ESLINT`, `PM_ESLINT_MODULES`, `PM_JAVA_HOME`. Son **opcionales**: sin ellas la
+rúbrica usa los proxies y el resto del pipeline no cambia.
 
 ```bash
 PM_SCAN=1 ./run_all.sh                 # con analizadores si están

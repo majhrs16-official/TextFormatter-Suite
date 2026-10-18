@@ -60,6 +60,10 @@ SEMGREP = find_tool("PM_SEMGREP", ["semgrep"])
 PMD = os.environ.get("PM_PMD") or (
     "/tmp/opencode/bin/pmd/bin/pmd"
     if os.path.exists("/tmp/opencode/bin/pmd/bin/pmd") else None)
+ESLINT_BIN = os.environ.get("PM_ESLINT") or (
+    "/tmp/opencode/eslint/node_modules/.bin/eslint"
+    if os.path.exists("/tmp/opencode/eslint/node_modules/.bin/eslint") else None)
+ESLINT_MODULES = os.environ.get("PM_ESLINT_MODULES") or "/tmp/opencode/eslint/node_modules"
 JAVA_HOME = os.environ.get("PM_JAVA_HOME") or os.environ.get("JAVA_HOME") \
     or ("/opt/javac/x64/21" if os.path.exists("/opt/javac/x64/21/bin/java") else None)
 
@@ -209,10 +213,55 @@ def run_pmd(date, commit, workdir):
             "by_module": {m: round(bym.get(m, 0.0), 1) for m in sorted(java_mods)}}
 
 
+def run_eslint(date, commit, workdir):
+    if not ESLINT_BIN:
+        return None
+    tree = _extract(commit, workdir)
+    editor = None
+    for root, dirs, _files in os.walk(tree):
+        dirs[:] = [d for d in dirs if d != "node_modules"]
+        if os.path.basename(root) == "web-editor" and "eslint.config.js" in _files:
+            editor = root
+            break
+    if not editor:
+        shutil.rmtree(tree, ignore_errors=True)
+        return {"errors": 0, "warnings": 0, "files": 0, "by_module": {}}
+    nm = os.path.join(editor, "node_modules")           # dependencias compartidas
+    if not os.path.exists(nm):
+        os.symlink(ESLINT_MODULES, nm)
+    rp = os.path.join(workdir, "eslint.json")
+    env = dict(os.environ, ESLINT_USE_FLAT_CONFIG="true")
+    subprocess.run([ESLINT_BIN, ".", "-f", "json", "-o", rp],
+                   cwd=editor, capture_output=True, text=True, env=env)
+    res = []
+    if os.path.exists(rp):
+        try:
+            res = json.load(open(rp))
+        except Exception:
+            res = []
+    if os.path.islink(nm):
+        os.unlink(nm)
+    shutil.rmtree(tree, ignore_errors=True)
+    errs = sum(f.get("errorCount", 0) for f in res)
+    warns = sum(f.get("warningCount", 0) for f in res)
+    bym = Counter()
+    for f in res:
+        p = f.get("filePath", "")
+        if tree in p:
+            p = os.path.relpath(p, tree)
+        p = p.lstrip("/")
+        if p.startswith("./"):
+            p = p[2:]
+        bym[module_of(p)] += f.get("errorCount", 0) + f.get("warningCount", 0) * 0.25
+    return {"errors": errs, "warnings": warns,
+            "files": sum(1 for f in res if f.get("errorCount") or f.get("warningCount")),
+            "by_module": {k: round(v, 1) for k, v in bym.items() if v}}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="all",
-                    choices=["all", "gitleaks", "semgrep", "pmd"])
+                    choices=["all", "gitleaks", "semgrep", "pmd", "eslint"])
     ap.add_argument("--dates", default="", help="lista separada por comas; por defecto todos")
     a = ap.parse_args()
 
@@ -221,7 +270,8 @@ def main():
     dates = [d for d in (a.dates.split(",") if a.dates else all_dates) if d]
     print(f"cortes: {len(dates)}  gitleaks={'ok' if GITLEAKS else '-'}  "
           f"semgrep={'ok' if SEMGREP else '-'}  "
-          f"pmd={'ok' if (PMD and JAVA_HOME) else '-'}")
+          f"pmd={'ok' if (PMD and JAVA_HOME) else '-'}  "
+          f"eslint={'ok' if ESLINT_BIN else '-'}")
 
     if a.only in ("all", "gitleaks"):
         run_gitleaks(all_dates)
@@ -250,6 +300,19 @@ def main():
                 merge(d, {"pmd": r})
                 print(f"  [{i+1}/{len(dates)}] {d}  violaciones={r['violations']:<5} "
                       f"modulos={len(r['by_module'])}")
+        shutil.rmtree(work, ignore_errors=True)
+
+    if a.only in ("all", "eslint"):
+        work = tempfile.mkdtemp(dir="/tmp/opencode", prefix="eslint-")
+        for i, d in enumerate(dates):
+            commit = de.get(d)
+            if not commit:
+                continue
+            r = run_eslint(d, commit, work)
+            if r:
+                merge(d, {"eslint": r})
+                print(f"  [{i+1}/{len(dates)}] {d}  errores={r['errors']:<4} "
+                      f"avisos={r['warnings']:<4} ficheros={r['files']}")
         shutil.rmtree(work, ignore_errors=True)
 
     print("OK -> data/tools/<fecha>.json")

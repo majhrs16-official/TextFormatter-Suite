@@ -72,11 +72,11 @@ def fill(dates, series):
 
 
 def sources_used():
-    """{familia: {fuentes}} para el ambito (total), excluyendo 'determinista'."""
+    """{familia: {fuentes}} de las herramientas realmente aplicadas."""
     fam = defaultdict(set)
     with open(os.path.join(DIR, "maturity_long.csv")) as f:
         for r in csv.DictReader(f):
-            if r["module"] == "(total)" and r["source"] not in ("determinista", "asumido", "estructura"):
+            if r["source"] not in ("determinista", "asumido", "estructura"):
                 fam[r["family"]].add(r["source"])
     return fam
 

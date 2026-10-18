@@ -108,16 +108,22 @@ def score_scope(m, dep=0.0, tools=None, module="(total)"):
     s = clamp(100 - min(40, d("stubs") * 40) - min(30, d("bare_catch") * 40)
               - min(20, d("todo") * 40))
     out["calidad_codigo"] = (s, D)
-    if "pmd" in tools:
-        p = tools["pmd"]
-        by = p.get("by_module", {})
-        if module == "(total)":
-            v, ok = p.get("violations", 0), True
-        else:
-            v, ok = by.get(module, 0), module in by
-        if ok:
-            base = max(src, 5000) / 1000.0      # suelo: evita ruido en modulos pequenos
-            out["calidad_codigo"] = (clamp(100 - min(100, v / base * 1.5)), "pmd")
+    base = max(src, 5000) / 1000.0              # suelo: evita ruido en modulos pequenos
+    cand = []
+    pmd = tools.get("pmd")
+    if pmd:
+        v = (pmd.get("violations", 0) if module == "(total)"
+             else pmd.get("by_module", {}).get(module))
+        if v is not None:
+            cand.append((clamp(100 - min(100, v / base * 1.5)), "pmd"))
+    esl = tools.get("eslint")
+    if esl:
+        v = (esl.get("errors", 0) + esl.get("warnings", 0) * 0.25 if module == "(total)"
+             else esl.get("by_module", {}).get(module))
+        if v is not None:
+            cand.append((clamp(100 - min(100, v / base * 1.5)), "eslint"))
+    if cand:
+        out["calidad_codigo"] = min(cand, key=lambda x: x[0])
 
     # 2. cobertura de tests
     s = 0.70 * sat(test_ratio, 0.30) + 0.30 * sat(d("test_annotations"), 20)
