@@ -45,14 +45,17 @@
   │  BROM    │
   └──────────┘
 
-  Previsto (sección 8):  VmDisplay (periférico de vídeo) · IRQ (línea de interrupción)
+  Previsto (sección 8):  BIOS activo · IRQ (línea de interrupción + tabla)
 ```
 
 Un **único** bus de datos (`VmBus`) conecta a todos los maestros (CPU y DMA) con
-el esclavo (la memoria, `SoftMMU`). La CPU **no** accede a la memoria física
-directamente: emite transacciones por el bus. Lo mismo hace el DMA. La MMU
-decodifica la dirección, traduce virtual→físico, comprueba permisos y *propiedad*
-(privilegio) y sirve el dato desde `PhysicalMemory`.
+los esclavos: la memoria (`SoftMMU`) y los periféricos (`VmDevice`, hoy la
+pantalla `VmDisplay`). La CPU **no** accede a la memoria física directamente:
+emite transacciones por el bus. Lo mismo hace el DMA. El *interconnect* decodifica
+la dirección: si pertenece a un periférico, enruta la transacción al dispositivo
+(MMIO, sin traducción ni permisos); si no, la MMU traduce virtual→físico,
+comprueba permisos y *propiedad* (privilegio) y sirve el dato desde
+`PhysicalMemory`.
 
 ---
 
@@ -62,8 +65,10 @@ decodifica la dirección, traduce virtual→físico, comprueba permisos y *propi
 |---|---|---|---|
 | `cpu` | `vm/execution/VmInterpreter` | maestro (PROGRAM) | Fetch/decode/execute, ISA v2, *fuel budget*; inmutable y compartida por programa |
 | `dma` | `vm/memory/VmDmaController` | maestro (SUPERVISOR) | Transferencias en bloque host↔VM (`read/write/copy/move`) |
-| `interconnect` | `vm/memory/VmBus` | — | Bus de sistema: única vía de transacción de los maestros hacia el esclavo; lleva el privilegio |
-| `mmu` | `vm/memory/SoftMMU` | esclavo | Decodificación de dirección, traducción V→F, permisos R/W/X y propiedad |
+| `interconnect` | `vm/memory/VmBus` | — | Bus de sistema: única vía de transacción de los maestros; lleva el privilegio y **decodifica MMIO** hacia los periféricos |
+| `mmu` | `vm/memory/SoftMMU` | esclavo | Decodificación de dirección, traducción V→F, permisos R/W/X y propiedad; hospeda la lista de periféricos |
+| `device` | `vm/memory/VmDevice` | esclavo | Interfaz de periférico: decodifica su rango y responde a las transacciones |
+| `video` | `vm/video/VmDisplay` | esclavo (MMIO) | Pantalla de texto mapeada en memoria (D31): celda de 2 B (carácter + atributo `[letra:4][fondo:4]`) y banco de registros MMIO |
 | `pagetable` | `vm/memory/PageTable` + `PageEntry` | esclavo (interno) | 16 entradas (páginas de 4 KB); cada una mapea vpage→frame + permisos |
 | `ram` | `vm/memory/PhysicalMemory` | esclavo (interno) | Banco físico de 64 KB en frames de 4 KB con *copy-on-write* |
 | `brom` | ROM embebida en `ProgramImage` (cargada por el *boot loader*) | esclavo | Páginas de código kernel (firmware), R/X, solo escritura supervisor |
@@ -100,8 +105,12 @@ transferencia. No hay líneas físicas, pero la nomenclatura es la de un bus:
 
 - Todas las transacciones atraviesan `VmBus`; el maestro nunca toca
   `PhysicalMemory`.
-- El esclavo (`SoftMMU`) aplica, en este orden: *bounds* → *translate* (válido) →
-  permisos (`R`/`W`/`X`) → propiedad (`priv` vs página *kernel*).
+- El *interconnect* decodifica primero los periféricos (`SoftMMU.deviceFor`): si la
+  dirección pertenece a un `VmDevice`, la transacción es MMIO y se entrega al
+  dispositivo (sin traducción ni permisos); si no, va a la memoria.
+- Para la memoria, el esclavo (`SoftMMU`) aplica, en este orden: *bounds* →
+  *translate* (válido) → permisos (`R`/`W`/`X`) → propiedad (`priv` vs página
+  *kernel*).
 - Un fallo se señala con `VmException` (`MEMORY_FAULT`, `PRIVILEGE_FAULT`), con la
   IP capturada.
 
@@ -157,6 +166,12 @@ la CPU (PROGRAM) y `dma()` el bus del DMA (SUPERVISOR). Así el privilegio viaja
    consume explícitamente por servicio/DMA (D19). La salida canónica sigue siendo
    el *journal*.
 
+6. **MMIO de dispositivo (CPU/DMA → interconnect → device)**
+   Si la dirección cae en el rango de un periférico (la ventana del framebuffer o
+   el banco de registros en `0xFF00`), el *interconnect* entrega la transacción al
+   `VmDisplay` (D31). Así cada escritura a la ventana se refleja en pantalla, sin
+   pasar por la MMU.
+
 ---
 
 ## 6. Decodificación de dirección / mapa de memoria
@@ -174,6 +189,7 @@ firmware está activa** (el código siempre reserva dos páginas):
 | Entrada | `0x7000-0x7FFF` | R/W | user | Buffer de entrada |
 | Salida | `0x8000-0x8FFF` | R/W | user | Buffer de salida |
 | RAM de usuario | `0x9000-0xFFFF` | R/W | user | Almacenamiento libre del programa; persiste entre mensajes (el runtime no la limpia) |
+| MMIO de dispositivo | `0xFF00-0xFFFF` | I/O | — | Banco de registros de la pantalla; el *interconnect* lo decodifica antes que la RAM (D31) |
 
 El código y las constantes son **disjuntas por construcción** (prevención de
 solapamiento, R3).
@@ -200,20 +216,18 @@ vive en `vm/isa/Opcode`.
 
 ---
 
-## 8. Hardware previsto
-
-Estas entidades están **documentadas pero aún no implementadas** (ver
-`docs/workdir/PLAN.md`, revisión 2026-10-17 (2)):
+## 8. Estado del hardware
 
 | Entidad | Decisión | Estado |
 |---|---|---|
-| `video` (`VmDisplay`) | Periférico de texto mapeado en memoria; celda de 2 bytes (carácter + atributo `[letra:4][fondo:4]`, estilo VERA/X16); el *interconnect* decodifica la región y enruta ahí las escrituras. D31 | ⏳ |
+| `video` (`VmDisplay`) | Periférico de texto mapeado en memoria; celda de 2 bytes (carácter + atributo `[letra:4][fondo:4]`, estilo VERA/X16); el *interconnect* decodifica su ventana y su banco de registros. D31 | ✅ |
 | `bios` | ROM de firmware **activa**: reset que limpia RAM, configura la pantalla vía MMIO/DMA y publica la tabla de IRQ, luego cede al `main`. D32 | ⏳ |
-| `irq` (tabla) | La tabla de interrupciones la define el BIOS en memoria (configurable), no hardcodeada en el emulador. D33 | ⏳ |
+| `irq` (tabla) | La tabla de interrupciones la define el BIOS en memoria (configurable), no hardcodeada en el emulador; fuentes por E/S. D33 | ⏳ |
 
-Cuando se implementen, este documento incorporará sus puertos/señales (registros
-MMIO de la pantalla, rango de la tabla de IRQ, líneas de evento) en las secciones
-2–6.
+La pantalla (D31) ya incorpora sus puertos/señales en las secciones 2–6. El BIOS
+activo (D32) y la tabla de IRQ con fuentes de E/S (D33) están **documentadas pero
+aún no implementadas** (ver `docs/workdir/PLAN.md`, revisión 2026-10-17 (2)); cuando
+se implementen, este documento añadirá su rango y líneas de evento.
 
 ---
 

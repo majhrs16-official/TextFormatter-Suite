@@ -1645,22 +1645,42 @@ implementa como **una única máquina viva por programa**:
 **Verificado:** nuevo test `programMemoryPersistsAcrossMessages` (un contador en `0x9000` decide
 `LOG` en el 1.er mensaje y `DROP` en el 2.º). Total: **349 tests, 0 fallos**.
 
-### D31 — Pantalla de texto mapeada en memoria (`VmDisplay`) — propuesto
+### D31 — Pantalla de texto mapeada en memoria (`VmDisplay`) — ✅ aplicado
 
 «Debug» deja de ser código en el firmware (imposible sin opcode/servicio/mapa nuevos) y pasa a ser
-**hardware**: un periférico de texto mapeado en memoria, insipirado en la VERA de la X16.
+**hardware**: un periférico de texto mapeado en memoria, inspirado en la VERA de la X16.
 
 - **Formato de celda (2 bytes)**: byte bajo = **carácter** (8 bits); byte alto = **atributo**
   `[letra:4][fondo:4]` (nibble alto = color de letra, nibble bajo = color de fondo).
-- **Mapeo**: el `VmBus` (interconnect) decodifica la región de pantalla registrada y enruta ahí las
-  escrituras; el resto sigue a `SoftMMU`. Cada escritura (CPU o DMA) se refleja en el framebuffer.
+- **Mapeo**: el `VmBus` (interconnect) decodifica la ventana de pantalla y el banco de registros y
+  enruta ahí las escrituras; el resto sigue a `SoftMMU`. Cada escritura (CPU o DMA) se refleja en el
+  framebuffer.
 - **El BIOS fija la base y las dimensiones** (D32) escribiendo registros MMIO del dispositivo;
   reconfigurable en caliente.
 - **Consumo por el host (decidido)**: el `VmDisplay` expone el framebuffer por **API** (tests/UI) y
-  admite un **volcado a log apagable**. Se configura en `gradle.properties` (D27). El framebuffer
-  está pensado para **producción** (datos útiles), no solo para depurar; si el flag de debug está
-  activo, se **inyecta código adicional** en el programa y/o el BIOS que usa el framebuffer como
-  salida.
+  admite un **volcado a log apagable** (tras `DebugConfig.DEBUG`, es decir `logger.debug` en
+  `gradle.properties`; cero coste si está apagado). El framebuffer está pensado para **producción**
+  (datos útiles), no solo para depurar; si el flag de debug está activo, se **inyecta código
+  adicional** en el programa y/o el BIOS que usa el framebuffer como salida.
+
+**Implementado:**
+
+- `vm/memory/VmDevice`: interfaz de esclavo de bus (decodifica un rango, responde R/W; palabra y
+  bloque por defecto byte a byte).
+- `vm/video/VmDisplay`: dispositivo de vídeo. Ventana `cols×rows×2` y banco de registros MMIO de 16 B
+  en `0xFF00`: `BASE`(0x00), `COLS`(0x02), `ROWS`(0x04), `CTRL`(0x06: bit0 habilitar, bit1 limpiar),
+  `CURSOR`(0x08), `STATUS`(0x0A ro). Se **rechaza** una ventana que solape el banco de registros.
+  API: `renderText()`, `renderTextTrimmed()`, `renderAnsi()`, `cellChar`/`cellAttribute`, `clearScreen`.
+- `SoftMMU`: aloja la lista de periféricos (`attach`/`deviceFor`/`isDeviceAddress`).
+- `VmBus`: decodifica MMIO antes de la RAM en byte/palabra/bloque/clear/region.
+- `VmPolicyEngine`: crea y adjunta la pantalla al cargar el programa (`display()`); vuelca la pantalla
+  al log tras cada mensaje en builds de debug.
+- Mapa (`VmMemoryMap`): apertura MMIO `0xFF00-0xFFFF` (256 B, decodificada antes de la RAM) y
+  defaults de pantalla (`0xE000`, 80×25).
+
+**Verificado:** `VmDisplayTest` (7 tests: decodificación, geometría, rechazo de solape, carácter/
+atributo, bloque, limpieza, ANSI) y `VmPolicyEngineTest.programDrawsOnTheMemoryMappedScreen`.
+Total: **357 tests, 0 fallos**.
 
 ### D32 — BIOS activo (propuesto)
 
