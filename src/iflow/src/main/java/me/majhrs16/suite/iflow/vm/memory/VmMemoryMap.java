@@ -19,7 +19,7 @@ package me.majhrs16.suite.iflow.vm.memory;
  *   pages 5-6   0x5000-0x6FFF   stack (grows down from {@link #STACK_TOP})   R/W
  *   page 7      0x7000-0x7FFF   input buffer (I/O)                         R/W
  *   page 8      0x8000-0x8FFF   output buffer (I/O)                        R/W
- *   pages 9-15  0x9000-0xFFFF   reserved / persistent state
+ *   pages 9-15  0x9000-0xFFFF   general-purpose user RAM                   R/W
  * </pre>
  *
  * <p>
@@ -68,6 +68,20 @@ public final class VmMemoryMap {
     public static final int OUTPUT_BASE = 0x8000;
     public static final int IO_PAGES = 1;
     public static final int IO_BUFFER_SIZE = IO_PAGES * PAGE; // 4096
+
+    // ===== General-purpose user RAM =====
+
+    /**
+     * Remaining address space, mapped R/W and owned by the program. It is
+     * deliberately <em>not</em> reserved for any device or runtime subsystem:
+     * a program can use it as free storage (counters, tables, caches…). Because
+     * the VM keeps a single long-lived machine (see {@code VmPolicyEngine}), what
+     * the program leaves here is simply still there on the next message; the
+     * program, not the runtime, decides when to clear or reuse it.
+     */
+    public static final int USER_BASE = 0x9000;
+    public static final int USER_PAGES = 7;
+    public static final int USER_SIZE = USER_PAGES * PAGE; // 28 KB
 
     /** Page index of a virtual address. */
     public static int pageOf(int vaddr) {

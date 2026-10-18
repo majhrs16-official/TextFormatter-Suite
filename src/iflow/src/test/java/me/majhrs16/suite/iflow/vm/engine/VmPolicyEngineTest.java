@@ -559,4 +559,39 @@ class VmPolicyEngineTest {
         }
         pool.shutdownNow();
     }
+
+    // ===== Persistent machine memory (D30) =====
+
+    @Test
+    void programMemoryPersistsAcrossMessages() {
+        // The program uses a word in general-purpose user RAM (0x9000) as the route
+        // decision and then stores 0x0001 back. On the first message the cell is
+        // zero (decision 0 = LOG); on the second it is 1 (decision 1 = DROP). That
+        // only holds if the machine's memory survives between messages, which is
+        // exactly what D30 guarantees: the runtime never clears it.
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 2, (byte)0x90, 0x00,         // R2 = 0x9000 (address; preserved across HOST)
+                Opcode.LDWI, (1 << 4) | 2,              // R1 = word[R2] -> options (decision)
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                              (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.HOST, 0x00,
+                Opcode.LI, 3, 0x00, 0x01,               // R3 = 1
+                Opcode.STWI, (3 << 4) | 2,              // word[R2] = 1 (for the next message)
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"routing.decide"})
+            .build());
+
+        Actor sender = createActor("Alice");
+        Actor recipient = createActor("Bob");
+
+        RouteOutcome first = engine.route(createMessage("one", "chat", sender), recipient);
+        assertEquals(PolicyTarget.LOG, first.decision().target());
+
+        RouteOutcome second = engine.route(createMessage("two", "chat", sender), recipient);
+        assertEquals(PolicyTarget.DROP, second.decision().target());
+    }
 }

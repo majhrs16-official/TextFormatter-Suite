@@ -64,6 +64,14 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      */
     private final Map<Integer, Object> hostState = new ConcurrentHashMap<>();
 
+    /**
+     * Serializes executions on the program's single physical machine (one core).
+     * The machine memory is long-lived and mutated in place (see {@code route}),
+     * so two messages must not interleave their execution.
+     */
+    private final java.util.concurrent.locks.ReentrantLock machineLock =
+        new java.util.concurrent.locks.ReentrantLock();
+
     // Configuration
     private final long defaultFuelBudget = 100_000; // 100K fuel units per evaluation
 
@@ -77,6 +85,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      */
     public static final class LoadedProgram {
         public final ProgramImage program;
+        /**
+         * The machine's live memory: mapped once at boot and then mutated in place
+         * by every execution, so program data persists across messages (D30). It is
+         * not a per-execution fork.
+         */
         public final SoftMMU softMMU;
         /**
          * The interpreter is immutable and stateless (it reads the bus/MMU from the
@@ -151,53 +164,65 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 "recipient lacks receive permission on " + path, 0, recipient, emitter), message);
         }
 
-        // Acquire execution context from pool
-        ExecutionContext ctx = contextPool.acquire();
+        // One physical machine per program: executions are serialized on the
+        // single core, so the long-lived memory below needs neither a per-message
+        // fork nor locking inside the MMU. This is what makes the VM instance
+        // persist across messages: a counter a program leaves at 0x9000+ is still
+        // there on the next message, because the runtime never clears it.
+        machineLock.lock();
         try {
-            // Get current loaded program (program + memory mappings)
+            // Get current loaded program (program + live machine memory)
             LoadedProgram loaded = loadedProgramRef.get();
             if (loaded == null) {
                 throw new IllegalStateException("No program loaded");
             }
 
-            // Configure context for this evaluation
-            ctx.executionId(java.util.UUID.randomUUID().toString())
-               .programId(loaded.program.hashCode() + "")
-               .messageId(message.id().toString())
-               .actorId(recipient.name())
-               .softMMU(new SoftMMU(loaded.softMMU))  // COW fork: page table copied, physical memory shared
-               .serviceRegistry(serviceRegistry)
-               .allowedCapabilities(grantedCapabilities(
-                   loaded.program.capabilities(), serviceRegistry.declaredCapabilities()));
+            // Acquire execution context from pool
+            ExecutionContext ctx = contextPool.acquire();
+            try {
+                // Configure context for this evaluation. The MMU is the machine's
+                // live memory, shared by every message (no fork): writes land in
+                // the program's own RAM and stay there.
+                ctx.executionId(java.util.UUID.randomUUID().toString())
+                   .programId(loaded.program.hashCode() + "")
+                   .messageId(message.id().toString())
+                   .actorId(recipient.name())
+                   .softMMU(loaded.softMMU)
+                   .serviceRegistry(serviceRegistry)
+                   .allowedCapabilities(grantedCapabilities(
+                       loaded.program.capabilities(), serviceRegistry.declaredCapabilities()));
 
-            // Initialize context (resets registers, fuel, clears I/O buffers)
-            ctx.initialize();
+                // Initialize context (resets registers, fuel, clears I/O buffers)
+                ctx.initialize();
 
-            // Install the host view for this message: property reads, channel
-            // resolution and persistent state now go through the HostContext port.
-            ctx.hostContext(new MessageHostContext(ctx, message, emitter, recipient, path));
+                // Install the host view for this message: property reads, channel
+                // resolution and persistent state now go through the HostContext port.
+                ctx.hostContext(new MessageHostContext(ctx, message, emitter, recipient, path));
 
-            // Prepare input: serialize message to the input buffer (see VmMemoryMap)
-            prepareInput(ctx, message, emitter, recipient, path);
+                // Prepare input: serialize message to the input buffer (see VmMemoryMap)
+                prepareInput(ctx, message, emitter, recipient, path);
 
-            // Execute VM (the per-program interpreter is immutable and reused)
-            loaded.interpreter.execute(ctx);
+                // Execute VM (the per-program interpreter is immutable and reused)
+                loaded.interpreter.execute(ctx);
 
-            // Validate and produce outcome
-            return validator.validate(ctx, message, recipient, emitter);
+                // Validate and produce outcome
+                return validator.validate(ctx, message, recipient, emitter);
 
-        } catch (VmException e) {
-            // VM execution error - reject
-            return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
-                "VM error: " + e.getMessage(), 0, recipient, emitter), message);
-        } catch (RuntimeException e) {
-            // Safety net for the message path: an unexpected runtime failure must
-            // never escape the router (it would propagate to the server's chat
-            // pipeline). Reject the message instead.
-            return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
-                "VM internal error: " + e.getMessage(), 0, recipient, emitter), message);
+            } catch (VmException e) {
+                // VM execution error - reject
+                return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
+                    "VM error: " + e.getMessage(), 0, recipient, emitter), message);
+            } catch (RuntimeException e) {
+                // Safety net for the message path: an unexpected runtime failure must
+                // never escape the router (it would propagate to the server's chat
+                // pipeline). Reject the message instead.
+                return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
+                    "VM internal error: " + e.getMessage(), 0, recipient, emitter), message);
+            } finally {
+                contextPool.release(ctx);
+            }
         } finally {
-            contextPool.release(ctx);
+            machineLock.unlock();
         }
     }
 
@@ -277,6 +302,14 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         pageTable.mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE), VmMemoryMap.OUTPUT_BASE,
             PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+
+        // Map the general-purpose user RAM - R/W. This is plain memory the
+        // program owns; it is not a device and is never cleared by the runtime.
+        for (int p = 0; p < VmMemoryMap.USER_PAGES; p++) {
+            int page = VmMemoryMap.pageOf(VmMemoryMap.USER_BASE) + p;
+            pageTable.mapPage(page, VmMemoryMap.USER_BASE + p * VmMemoryMap.PAGE,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
     }
 
     private void prepareInput(ExecutionContext ctx, Message message, Actor emitter,
@@ -511,12 +544,12 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      */
     public void setProgram(ProgramImage program) {
         Objects.requireNonNull(program, "program");
-        // Create new SoftMMU with program mappings
+        // Create the machine's memory and lay the program out on it (boot).
         SoftMMU newMMU = new SoftMMU();
         setupProgramMappings(program, newMMU);
-        // Publish the loaded image as the immutable snapshot shared by every
-        // execution's forked MMU (copy-on-write): only frames an execution
-        // actually writes are ever copied.
+        // Publish the boot image (code/constants) as an immutable snapshot. The
+        // machine memory is then mutated in place across messages (D30), so the
+        // program's data survives from one message to the next.
         newMMU.freeze();
         // The interpreter is stateless (bus/MMU come from the execution context) and
         // the program is immutable, so build it once per program, not per message.
