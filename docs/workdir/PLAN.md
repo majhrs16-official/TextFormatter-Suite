@@ -1434,10 +1434,21 @@ soportadas), el mapa de memoria ni la semántica de las propiedades soportadas.
 | 2026-10-17 | `e0ee7eb` | 2ª auditoría en `AUDITORIA.md` (IFLOW-AUD-019…030: memoria/DMA/hardware) |
 | 2026-10-17 | `31fcf89` | D17: integra el DMA en la E/S (IFLOW-AUD-019) |
 | 2026-10-17 | `688dd5f` | D18: bus de datos `VmBus` (CPU+DMA maestros); D19: aclara AUD-020 (sin auto-lectura de `0x8000`) |
+| 2026-10-17 | `9c242eb` | Lote 4: D20 `PROPERTY_WRITE` honra `(scope, propId)` (AUD-028); D21 limpia API/estado muerto (AUD-022/024/026/027); D22 dos dominios, sin anillos muertos (AUD-030); AUD-021/025 documentados |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
 segunda auditoría (`AUDITORIA.md` en `e0ee7eb`, IFLOW-AUD-019…030) es el informe vigente y
 su seguimiento vive en este PLAN. De ella ya están atendidos AUD-019 (D17), el bus de datos
-(D18) y AUD-020 (D19, aclarado por diseño); quedan IRQ y privilegios/rings como brechas de
-fidelidad hardware.
+(D18), AUD-020 (D19, aclarado por diseño) y el lote 4 (AUD-021/022/024/025/026/027/028/030).
+
+**Pendiente de la 2ª auditoría (lote 5):**
+- **AUD-023** (fetch vía MMU): hoy el CPU ejecuta desde `program.code()` (caché local) y sólo
+  traduce en `translateExecute`; hacer que el *fetch* pase por `SoftMMU` exige cargar el
+  código en memoria en **todos** los tests (hoy no lo hacen) y añadir caché de página
+  validada para no degradar el intérprete.
+- **AUD-029** (rendimiento): reutilizar un `VmInterpreter` por programa (el bus es de la
+  ejecución) y evitar el clon de código por ejecución.
+- **IRQ**: no está en el informe; el despachador de servicios `HOST` + `VmException` cubre el
+  papel de «controlador de interrupciones» de `design.md` §4.7. No se añade una línea de
+  interrupción sin requisito de la especificación.
