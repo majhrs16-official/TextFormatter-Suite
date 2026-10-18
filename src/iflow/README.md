@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (321 tests)  
+> **Estado**: ✅ Implementada y probada (335 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -16,7 +16,8 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 |------------|-----------------|
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
 | `VmInterpreter` | CPU: fetch/decode/execute loop, ISA v2, fuel budget; maestro del bus. El *fetch* va por el bus/`SoftMMU` (permiso `EXECUTE` efectivo, ventana de página validada); es inmutable y se reutiliza por programa (AUD-023/029) |
-| `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
+| `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico; soporta *fork* copy-on-write por ejecución (AUD-029/D25) |
+| `PhysicalMemory` | Almacén físico de 64 KB en frames de 4 KB con *copy-on-write*: snapshot inmutable compartido + overlay privado; un frame se copia solo al escribirse |
 | `VmBus` | Bus de datos explícito: única vía de transacción de CPU y DMA hacia `SoftMMU`; lleva el `Privilege` del maestro |
 | `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus); maestro supervisor |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
@@ -47,6 +48,12 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
   `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
   siguen consultándose bajo demanda vía `HOST`/`HostContext` (AUD-021).
+- **Copy-on-write (AUD-029/D25)**: cada mensaje ejecuta sobre un *fork* de la MMU del programa.
+  La memoria física es un snapshot inmutable compartido (código/constantes nunca se copian) más
+  un overlay privado por frame de 4 KB que se copia solo al escribirse; la tabla de páginas se
+  comparte y se copia en la primera mutación. La limpieza de E/S (`clearBlock`) no copia ni
+  compara si la página compartida ya es cero. Consecuencia: el *fork* por mensaje pasa de
+  clonar 64 KB + 16 entradas a un coste casi constante (medido ~15× más barato en conjunto).
 
 ### ISA v2 (resumen)
 
@@ -179,7 +186,9 @@ RouteOutcome outcome = engine.route(message, recipient);
 | Test | Cobertura |
 |------|-----------|
 | `VmInterpreterTest` | Todas las instrucciones ISA (data transfer, aritmética, lógica, shifts, saltos, CALL/RET, memoria indirecta) + fetch por MMU (EXECUTE efectivo, lectura desde memoria) |
-| `SoftMMUTest` | Traducción, permisos, fetch, bloques, aislamiento de copias |
+| `SoftMMUTest` | Traducción, permisos, fetch, bloques, aislamiento de copias, fork/`clearBlock` copy-on-write |
+| `PhysicalMemoryTest` | Copy-on-write: fork comparte snapshot, copia por frame, omite escrituras sin cambio |
+| `PageTableTest` | Mapeo, permisos, mprotect, fork copy-on-write aislado |
 | `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
 | `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
@@ -188,7 +197,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 321 tests passing**
+**Total: 335 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -236,6 +245,7 @@ src/iflow/
 │       │   └── ModificationJournal.java
 │       ├── memory/
 │       │   ├── SoftMMU.java
+│       │   ├── PhysicalMemory.java    # Copy-on-write physical store (AUD-029/D25)
 │       │   ├── PageTable.java
 │       │   ├── PageEntry.java
 │       │   ├── Privilege.java
@@ -248,7 +258,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 321 tests
+├── src/test/java/...                  # 335 tests
 └── build.gradle
 ```
 

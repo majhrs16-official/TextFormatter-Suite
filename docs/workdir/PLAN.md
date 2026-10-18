@@ -1441,11 +1441,26 @@ estado propio (antes guardaba `codeCache = program.code()`, un clon por ejecuci�
 bus/MMU desde el `ExecutionContext` en `execute(ctx)`. El engine lo construye **una vez** en
 `setProgram` y lo guarda en `LoadedProgram`, reutilizándolo en cada `route()`. Se elimina el
 clon de código por mensaje y la creación de intérprete por mensaje.
-- Queda pendiente (no exigido por el lote 5) el **clon de la MMU** por ejecución (64 KB + tabla)
-  y una posible política COW o de páginas compartidas de solo lectura (código/constantes), que
-  reduciría aún más el camino caliente. Se anota como optimización futura.
 - Punto (3) del informe (`initialize()` con 8192 `writeByte`) ya estaba resuelto por D17: la
-  limpieza de E/S usa dos `dma.writeBlock` (un `arraycopy` por buffer).
+  limpieza de E/S usa dos bloque de E/S; ver D25, que además la hace prácticamente gratuita.
+
+**D25 — Memoria física y tabla de páginas copy-on-write (AUD-029, optimización del clon).**
+El segundo punto del informe (el clon de la MMU por ejecución: 64 KB + 16 entradas de tabla) se
+resuelve con un *fork* copy-on-write:
+- Nuevo `PhysicalMemory` (`vm.memory`): snapshot inmutable compartido + overlay privado por
+  frame de 4 KB. Un frame se copia **solo la primera vez que se escribe**; código y constantes
+  (solo-lectura) nunca se copian. Las escrituras que no cambian memoria se omiten.
+- `PageTable.fork()`: comparte las entradas y las copia en la primera mutación
+  (`mapPage`/`mapPageKernel`/`protect`/`unmapPage`/`clear`); las lecturas (`translate`) no
+  copian. Es seguro porque ninguna mutación de entradas ocurre durante la ejecución (todas
+  pasan por `PageTable`).
+- `SoftMMU.freeze()` publica el snapshot tras cargar la imagen; el engine lo llama en
+  `setProgram`, de modo que cada `route()` bifurca una MMU ya congelada (coste ≈ constante).
+- Nueva vía `clearBlock` (`SoftMMU`/`VmBus`/`VmDmaController`): la limpieza de E/S de cada
+  ejecución no copia ni compara cuando la página compartida ya es cero (el caso normal).
+- Semántica observable: idéntica (mismo mapa, permisos, privilegios y datos); solo cambia el
+  coste. Medición en micro-benchmark (200 k ejecuciones): ~11.110 ns → ~731 ns por creación de
+  MMU por mensaje (**15,2×**), y el *fork* aislado ~10.000 ns → ~51 ns (~200×).
 
 **No cambia** el ABI, el mapa de memoria, la ISA ni la semántica de los programas. La única
 observable nueva es la correcta: ejecutar una página de código sin `EXECUTE` ahora falla.
@@ -1475,23 +1490,23 @@ observable nueva es la correcta: ejecutar una página de código sin `EXECUTE` a
 | 2026-10-17 | `9c242eb` | Lote 4 (parte 1): D20 `PROPERTY_WRITE` honra `(scope, propId)` (AUD-028); AUD-021/025 documentados ⚠️ ver corrección siguiente |
 | 2026-10-17 | `7ddcff4` | Lote 4 (parte 2, criterio corregido): se **restaura y hace funcional** lo que se había eliminado — anillos `Privilege`/`mprotect` (AUD-030/022), `pageTable` cableado (AUD-024), accesores con uso real (AUD-022), `placeholderResolver`/`translationDetector` vía `TRANSFORM_APPLY` (AUD-026/027) |
 | 2026-10-17 | `ba1e128` | Lote 5: fetch por la MMU con ventana de página validada (AUD-023) + `VmInterpreter` inmutable reutilizado por programa, sin clon de código (AUD-029) |
+| 2026-10-17 | `a87622b` | D25: memoria física y tabla de páginas copy-on-write + `clearBlock` (AUD-029, optimización del clon de la MMU; fork ~15× medido) |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
 segunda auditoría (`AUDITORIA.md` en `e0ee7eb`, IFLOW-AUD-019…030) es el informe vigente y
 su seguimiento vive en este PLAN. De ella ya están atendidos AUD-019 (D17), el bus de datos
 (D18), AUD-020 (D19, aclarado por diseño), el lote 4
-(AUD-021/022/024/025/026/027/028/030) y el lote 5 (AUD-023/029, ver D23/D24).
+(AUD-021/022/024/025/026/027/028/030) y el lote 5 (AUD-023/029, ver D23/D24/D25).
 
 **Atendido en el lote 5 (AUD-023/029):**
 - **AUD-023** (fetch vía MMU): resuelto en D23. El CPU hace *fetch* por el bus/`SoftMMU` con
   ventana de página validada; `EXECUTE` es efectivo y las instrucciones se leen de memoria.
 - **AUD-029** (rendimiento): resuelto en D24 (un `VmInterpreter` por programa, sin clon de
-  código por ejecución). El punto (3) del informe (limpieza de E/S byte a byte) ya estaba
-  resuelto por D17.
-- **Optimización futura anotada (no exigida por el lote 5):** el **clon de la MMU** por
-  ejecución (64 KB + tabla). Una política COW o de páginas de solo lectura compartidas
-  (código/constantes) lo reduciría; queda pendiente como optimización medida.
+  código por ejecución) y D25 (memoria física y tabla de páginas copy-on-write; `clearBlock`
+  para la E/S). El clon de la MMU por ejecución queda eliminado (fork ~15× más barato medido).
+  El punto (3) del informe (limpieza de E/S byte a byte) ya estaba resuelto por D17 y D25 lo
+  hace prácticamente gratuito.
 
 **IRQ:** no está en el informe; el despachador de servicios `HOST` + `VmException` cubre el
 papel de «controlador de interrupciones» de `design.md` §4.7. No se añade una línea de
