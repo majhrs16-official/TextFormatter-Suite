@@ -16,9 +16,10 @@ tasks.withType(Jar).configureEach { jar ->
     if (project.version.endsWith('-SNAPSHOT')) {
         buildTimestamp = 0L
     } else {
-        // Allow override via environment variable or project property for release builds
+        // Allow override via environment variable or the gradle.properties entry
+        // (buildTimestamp; -PbuildTimestamp=... overrides for one build).
         def envTs = System.getenv('BUILD_TIMESTAMP')
-        def propTs = project.hasProperty('buildTimestamp') ? project.property('buildTimestamp') : null
+        def propTs = providers.gradleProperty('buildTimestamp').getOrNull()
         buildTimestamp = (envTs ?: propTs ?: '0') as long
         if (buildTimestamp == 0) {
             logger.warn("Release build without BUILD_TIMESTAMP env var or buildTimestamp property - using epoch (non-reproducible across builds)")

@@ -9,7 +9,8 @@ package me.majhrs16.suite.logger;
  * resulting in zero overhead.
  * </p>
  * <p>
- * Enable at compile time via Gradle: {@code -Plogger.debug=true}
+ * Enable at compile time via {@code gradle.properties} ({@code logger.debug=true})
+ * or, for a single build, {@code -Plogger.debug=true}.
  * </p>
  * <p>
  * This class is generated/modified by the build process. Do not edit manually.

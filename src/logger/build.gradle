@@ -17,8 +17,9 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
-// Read debug flag from Gradle property (default: false)
-ext.loggerDebug = project.hasProperty('logger.debug') ? project.property('logger.debug').toString().toLowerCase() : 'false'
+// Read the debug flag from gradle.properties (or -Plogger.debug=true). The file
+// is the canonical place for build options; see /gradle.properties.
+ext.loggerDebug = providers.gradleProperty('logger.debug').getOrElse('false').trim().toLowerCase()
 
 // Task to replace DEBUG placeholder in source before compilation
 tasks.register('replaceDebugFlag') {

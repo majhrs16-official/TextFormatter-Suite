@@ -37,12 +37,16 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
+// Build options come from gradle.properties (see /gradle.properties); -P still
+// overrides them for a one-off build.
+def loggerDebug = providers.gradleProperty('logger.debug').getOrElse('false').toString().toBoolean()
+
 test {
     useJUnitPlatform()
     testLogging {
         events 'passed', 'skipped', 'failed'
         // Show VM debug dumps on screen when built with debug enabled.
-        if (project.hasProperty('logger.debug') && project.property('logger.debug').toString() == 'true') {
+        if (loggerDebug) {
             showStandardStreams = true
         }
     }
@@ -88,12 +92,17 @@ tasks.register('printSourceDirs') {
 // iflowAsm: assemble a .flowasm policy program with the Node CLI
 // ============================================================
 // The firmware ROM is ON by default: it occupies 0x0000-0x0FFF and the user
-// program is placed at 0x1000. Pass -Piflow.baremetal=true to assemble a
-// bare-metal program (no ROM, default origin 0x0000).
+// program is placed at 0x1000. Set iflow.baremetal=true in gradle.properties to
+// assemble a bare-metal program (no ROM, default origin 0x0000).
+//
+// Options (see /gradle.properties; -P<key>=<value> overrides for one build):
+//   iflow.source     input .flowasm  (default: examples/policy.flowasm)
+//   iflow.output     output .flow    (default: <buildDir>/iflow/policy.flow)
+//   iflow.origin     hex origin      (default: firmware/bare-metal decides)
+//   iflow.baremetal  true/false      (default: false)
 //
 //   ./gradlew :src:iflow:iflowAsm
-//   ./gradlew :src:iflow:iflowAsm -Piflow.source=path/to/prog.flowasm -Piflow.output=policy.flow
-//   ./gradlew :src:iflow:iflowAsm -Piflow.baremetal=true -Piflow.origin=0x0000
+//   ./gradlew :src:iflow:iflowAsm -Piflow.source=path/to/prog.flowasm
 //
 // Requires Node.js 18+ and tools/iflow-compiler/node_modules (run: npm ci).
 
@@ -114,10 +123,10 @@ tasks.register('iflowAsm', Exec) {
     dependsOn 'iflowCompilerBuild'
     workingDir iflowCompilerDir
 
-    def source = rootProject.file(project.findProperty('iflow.source') ?: 'tools/iflow-compiler/examples/policy.flowasm')
-    def output = rootProject.file(project.findProperty('iflow.output') ?: "${layout.buildDirectory.get().asFile}/iflow/policy.flow")
-    def origin = project.findProperty('iflow.origin')
-    def baremetal = (project.findProperty('iflow.baremetal') ?: 'false').toString().toBoolean()
+    def source = rootProject.file(providers.gradleProperty('iflow.source').getOrElse('tools/iflow-compiler/examples/policy.flowasm'))
+    def output = rootProject.file(providers.gradleProperty('iflow.output').getOrElse("${layout.buildDirectory.get().asFile}/iflow/policy.flow"))
+    def origin = providers.gradleProperty('iflow.origin').getOrNull()
+    def baremetal = providers.gradleProperty('iflow.baremetal').getOrElse('false').toString().toBoolean()
 
     inputs.file(source)
     outputs.file(output)
