@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.UUID;
 import java.util.Collections;
+import java.util.Optional;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -159,7 +160,7 @@ private RateLimiter createRateLimiter() {
                 .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
         ctx.hostContext(new me.majhrs16.suite.iflow.vm.service.HostContext() {
-            @Override public String readProperty(int scope, int propId) { return "test-value"; }
+            @Override public Optional<String> readProperty(int scope, int propId) { return Optional.of("test-value"); }
         });
         
         ServiceResult result = hsr.invoke(

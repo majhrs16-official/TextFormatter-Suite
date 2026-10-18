@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -350,14 +351,14 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         }
 
         @Override
-        public String readProperty(int scope, int propId) {
-            return switch (scope) {
+        public Optional<String> readProperty(int scope, int propId) {
+            return Optional.ofNullable(switch (scope) {
                 case HostServiceRegistry.SCOPE_MESSAGE -> messageProperty(propId);
                 case HostServiceRegistry.SCOPE_EMITTER -> actorProperty(emitter, propId);
                 case HostServiceRegistry.SCOPE_RECIPIENT -> actorProperty(recipient, propId);
                 case HostServiceRegistry.SCOPE_CHANNEL -> channelProperty(propId);
                 default -> null;
-            };
+            });
         }
 
         @Override
@@ -395,26 +396,25 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         }
 
         @Override
-        public String resolveChannel(String name) {
+        public Optional<String> resolveChannel(String name) {
             if (name == null) {
-                return null;
+                return Optional.empty();
             }
-            return channels.get(name).map(ch -> ch.name()).orElse(null);
+            return channels.get(name).map(ch -> ch.name());
         }
 
         @Override
-        public String readChannelProperty(String channelName, int propId) {
+        public Optional<String> readChannelProperty(String channelName, int propId) {
             if (channelName == null) {
-                return null;
+                return Optional.empty();
             }
             return channels.get(channelName)
-                .map(ch -> channelProperty(ch, ch.name(), propId))
-                .orElse(null);
+                .map(ch -> channelProperty(ch, ch.name(), propId));
         }
 
         @Override
-        public Object readState(int key) {
-            return hostState.get(key);
+        public Optional<Object> readState(int key) {
+            return Optional.ofNullable(hostState.get(key));
         }
 
         @Override

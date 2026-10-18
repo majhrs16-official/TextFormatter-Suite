@@ -10,6 +10,7 @@ import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,8 +47,8 @@ class HostServiceRegistryTest {
     /** Host context that serves a single value for every property read. */
     private static HostContext propertyContext(String value) {
         return new HostContext() {
-            @Override public String readProperty(int scope, int propId) {
-                return value;
+            @Override public Optional<String> readProperty(int scope, int propId) {
+                return Optional.ofNullable(value);
             }
         };
     }
@@ -56,12 +57,12 @@ class HostServiceRegistryTest {
     void builtinServicesRegistered() {
         HostServiceRegistry hsr = new HostServiceRegistry();
 
-        assertNotNull(hsr.getService(HostServiceRegistry.PROPERTY_READ));
-        assertNotNull(hsr.getService(HostServiceRegistry.PROPERTY_WRITE));
-        assertNotNull(hsr.getService(HostServiceRegistry.PERMISSION_CHECK));
-        assertNotNull(hsr.getService(HostServiceRegistry.ROUTE_DECISION));
-        assertNotNull(hsr.getService(HostServiceRegistry.STATE_READ));
-        assertNotNull(hsr.getService(HostServiceRegistry.STATE_WRITE));
+        assertTrue(hsr.getService(HostServiceRegistry.PROPERTY_READ).isPresent());
+        assertTrue(hsr.getService(HostServiceRegistry.PROPERTY_WRITE).isPresent());
+        assertTrue(hsr.getService(HostServiceRegistry.PERMISSION_CHECK).isPresent());
+        assertTrue(hsr.getService(HostServiceRegistry.ROUTE_DECISION).isPresent());
+        assertTrue(hsr.getService(HostServiceRegistry.STATE_READ).isPresent());
+        assertTrue(hsr.getService(HostServiceRegistry.STATE_WRITE).isPresent());
     }
 
     @Test
@@ -185,10 +186,10 @@ class HostServiceRegistryTest {
     void propertyReadDecodesScopeAndPropIdFromOptions() {
         int[] captured = new int[2];
         HostContext hc = new HostContext() {
-            @Override public String readProperty(int scope, int propId) {
+            @Override public Optional<String> readProperty(int scope, int propId) {
                 captured[0] = scope;
                 captured[1] = propId;
-                return "test-value";
+                return Optional.of("test-value");
             }
         };
         HostServiceRegistry hsr = new HostServiceRegistry();
@@ -240,7 +241,7 @@ class HostServiceRegistryTest {
     void stateReadAndWriteUseHostContext() {
         java.util.Map<Integer, Object> state = new java.util.HashMap<>();
         HostContext hc = new HostContext() {
-            @Override public Object readState(int key) { return state.get(key); }
+            @Override public Optional<Object> readState(int key) { return Optional.ofNullable(state.get(key)); }
             @Override public void writeState(int key, Object value) { state.put(key, value); }
         };
         HostServiceRegistry hsr = new HostServiceRegistry();
@@ -267,8 +268,8 @@ class HostServiceRegistryTest {
     @Test
     void channelResolveUsesHostContext() {
         HostContext hc = new HostContext() {
-            @Override public String resolveChannel(String name) {
-                return "chat".equals(name) ? "chat" : null;
+            @Override public Optional<String> resolveChannel(String name) {
+                return "chat".equals(name) ? Optional.of("chat") : Optional.empty();
             }
         };
         HostServiceRegistry hsr = new HostServiceRegistry();
@@ -455,8 +456,8 @@ class HostServiceRegistryTest {
         ExecutionContext ctx = createContext(hsr, "property.read");
         // Content is available; the source language is unset (null).
         ctx.hostContext(new HostContext() {
-            @Override public String readProperty(int scope, int propId) {
-                return propId == HostServiceRegistry.PROP_CONTENT ? "hallo" : null;
+            @Override public Optional<String> readProperty(int scope, int propId) {
+                return propId == HostServiceRegistry.PROP_CONTENT ? Optional.of("hallo") : Optional.empty();
             }
         });
 
@@ -495,8 +496,8 @@ class HostServiceRegistryTest {
         HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr, "property.read");
         ctx.hostContext(new HostContext() {
-            @Override public String readProperty(int scope, int propId) {
-                return propId == HostServiceRegistry.PROP_CONTENT ? "text" : null;
+            @Override public Optional<String> readProperty(int scope, int propId) {
+                return propId == HostServiceRegistry.PROP_CONTENT ? Optional.of("text") : Optional.empty();
             }
         });
 
@@ -612,11 +613,11 @@ class HostServiceRegistryTest {
         HostServiceRegistry hsr = new HostServiceRegistry();
         ExecutionContext ctx = createContext(hsr, "channel.resolve");
         ctx.hostContext(new HostContext() {
-            @Override public String readChannelProperty(String channelName, int propId) {
+            @Override public Optional<String> readChannelProperty(String channelName, int propId) {
                 if (!"lobby".equals(channelName)) {
-                    return null;
+                    return Optional.empty();
                 }
-                return propId == HostServiceRegistry.PROP_CHAN_SEND_POL ? "lobby.chat" : null;
+                return propId == HostServiceRegistry.PROP_CHAN_SEND_POL ? Optional.of("lobby.chat") : Optional.empty();
             }
         });
 

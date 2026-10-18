@@ -11,6 +11,8 @@ import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class VmInterpreterTest {
@@ -538,7 +540,7 @@ class VmInterpreterTest {
         ExecutionContext ctx = createContext(mm, hsr)
             .allowedCapabilities(new String[]{"property.read"});
         ctx.hostContext(new me.majhrs16.suite.iflow.vm.service.HostContext() {
-            @Override public String readProperty(int scope, int propId) { return "xyz"; }
+            @Override public Optional<String> readProperty(int scope, int propId) { return Optional.of("xyz"); }
         });
 
         byte[] code = {

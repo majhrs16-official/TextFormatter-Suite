@@ -9,6 +9,7 @@ import me.majhrs16.suite.logger.Logger;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiFunction;
 
 /**
@@ -265,8 +266,8 @@ public final class HostServiceRegistry {
             @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
                 int scope = (options >> 8) & 0xFF;
                 int propId = options & 0x00FF;
-                String value = ctx.hostContext().readProperty(scope, propId);
-                return ServiceResult.ok(0, value != null ? 1 : 0);
+                Optional<String> value = ctx.hostContext().readProperty(scope, propId);
+                return ServiceResult.ok(0, value.isPresent() ? 1 : 0);
             }
             @Override public int baseCost() { return 5; }
             @Override public int varCostPerByte() { return 0; }
@@ -342,8 +343,8 @@ public final class HostServiceRegistry {
         }
     }
 
-    public HostService getService(int serviceId) {
-        return services.get(serviceId);
+    public Optional<HostService> getService(int serviceId) {
+        return Optional.ofNullable(services.get(serviceId));
     }
 
     public boolean hasService(int serviceId) {
@@ -416,14 +417,14 @@ public final class HostServiceRegistry {
         int scope = (options >> 8) & 0xFF;
         int propId = options & 0x00FF;
 
-        String value = ctx.hostContext().readProperty(scope, propId);
+        String value = ctx.hostContext().readProperty(scope, propId).orElse(null);
 
         // Host-side enrichment (design.md §10.1): resolve placeholders when a
         // resolver is injected, and auto-detect a missing source language.
         try {
             if (scope == SCOPE_MESSAGE && propId == PROP_LANG_SOURCE
                     && (value == null || value.isEmpty()) && translationDetector != null) {
-                String content = ctx.hostContext().readProperty(SCOPE_MESSAGE, PROP_CONTENT);
+                String content = ctx.hostContext().readProperty(SCOPE_MESSAGE, PROP_CONTENT).orElse(null);
                 if (content != null) {
                     String detected = translationDetector.apply(content);
                     if (detected != null && !detected.isEmpty()) {
@@ -614,7 +615,7 @@ public final class HostServiceRegistry {
 
     private ServiceResult doStateRead(ExecutionContext ctx, int argVAddr, int argLength, int options) {
         Integer key = options & 0xFFFF;
-        Object value = ctx.hostContext().readState(key);
+        Object value = ctx.hostContext().readState(key).orElse(null);
         if (value == null) {
             return ServiceResult.notFound("state key=" + key);
         }
@@ -652,7 +653,7 @@ public final class HostServiceRegistry {
             return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
         }
         String channelName = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-        String channelId = ctx.hostContext().resolveChannel(channelName);
+        String channelId = ctx.hostContext().resolveChannel(channelName).orElse(null);
         if (channelId == null) {
             return ServiceResult.notFound("unknown channel: " + channelName);
         }
@@ -771,7 +772,7 @@ public final class HostServiceRegistry {
         // The buffer carries the channel name as a C string, so R3 can also be
         // used as the output capacity (the policy is written over the name).
         String channelName = cString(bytes);
-        String value = ctx.hostContext().readChannelProperty(channelName, propId);
+        String value = ctx.hostContext().readChannelProperty(channelName, propId).orElse(null);
         if (value == null) {
             return ServiceResult.notFound("unknown channel or policy: " + channelName);
         }

@@ -1,5 +1,7 @@
 package me.majhrs16.suite.iflow.vm.service;
 
+import java.util.Optional;
+
 /**
  * Formal port through which the VM reaches host-owned state during an execution
  * (IFLOW-AUD-016).
@@ -16,6 +18,10 @@ package me.majhrs16.suite.iflow.vm.service;
  * Every method has a safe default, so a host only overrides what it supports.
  * {@link #NONE} is the null-object used when no context is installed.
  * </p>
+ * <p>
+ * Absent values are modelled with {@link Optional} (D29) instead of a bare
+ * {@code null}: the API makes "not present" explicit and impossible to ignore.
+ * </p>
  */
 public interface HostContext {
 
@@ -27,10 +33,10 @@ public interface HostContext {
      *
      * @param scope  one of the {@code SCOPE_*} constants
      * @param propId one of the {@code PROP_*} constants
-     * @return the value, or {@code null} if the property does not exist
+     * @return the value, or {@link Optional#empty()} if the property does not exist
      */
-    default String readProperty(int scope, int propId) {
-        return null;
+    default Optional<String> readProperty(int scope, int propId) {
+        return Optional.empty();
     }
 
     /**
@@ -48,10 +54,10 @@ public interface HostContext {
     /**
      * Resolves a channel name to its canonical id.
      *
-     * @return the canonical channel name, or {@code null} if it is unknown
+     * @return the canonical channel name, or {@link Optional#empty()} if it is unknown
      */
-    default String resolveChannel(String name) {
-        return null;
+    default Optional<String> resolveChannel(String name) {
+        return Optional.empty();
     }
 
     /**
@@ -60,20 +66,20 @@ public interface HostContext {
      * — which reads the current message's channel — this addresses any channel by
      * name. Backs the {@code CHANNEL_POLICY} service.
      *
-     * @return the value, or {@code null} if the channel is unknown or the property
-     *         is absent
+     * @return the value, or {@link Optional#empty()} if the channel is unknown or the
+     *         property is absent
      */
-    default String readChannelProperty(String channelName, int propId) {
-        return null;
+    default Optional<String> readChannelProperty(String channelName, int propId) {
+        return Optional.empty();
     }
 
     /**
      * Reads a persistent host state entry.
      *
-     * @return the stored value, or {@code null} if the key is absent
+     * @return the stored value, or {@link Optional#empty()} if the key is absent
      */
-    default Object readState(int key) {
-        return null;
+    default Optional<Object> readState(int key) {
+        return Optional.empty();
     }
 
     /** Writes a persistent host state entry. */

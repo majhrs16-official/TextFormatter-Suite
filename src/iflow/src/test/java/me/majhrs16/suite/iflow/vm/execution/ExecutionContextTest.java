@@ -12,6 +12,9 @@ import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExecutionContextTest {
@@ -275,7 +278,7 @@ class ExecutionContextTest {
             .allowedCapabilities(new String[]{"property.read"});
         ctx.initialize();
         ctx.hostContext(new me.majhrs16.suite.iflow.vm.service.HostContext() {
-            @Override public String readProperty(int scope, int propId) { return "test-value"; }
+            @Override public Optional<String> readProperty(int scope, int propId) { return Optional.of("test-value"); }
         });
         ServiceResult result = ctx.callHost(HostServiceRegistry.PROPERTY_READ, ctx.outputBufferVAddr(), 10, 0);
         assertNotNull(result);
