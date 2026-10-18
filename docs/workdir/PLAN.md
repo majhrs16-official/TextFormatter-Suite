@@ -1419,6 +1419,37 @@ entrada) en el README; la E/S de propiedades sigue siendo bajo demanda por `HOST
 **No cambia** el mapa de memoria ni la semántica de las propiedades soportadas. Se añade
 `TRANSFORM_APPLY` ya declarado en el código; la ABI (convención de registros/estados) no cambia.
 
+### Lote 5 — fetch por la MMU y reutilización del intérprete (AUD-023/029)
+
+**D23 — El CPU hace *fetch* por la MMU (AUD-023).** El intérprete ya no decodifica desde
+`program.code()`: lee las instrucciones a través del bus/`SoftMMU`, de modo que el permiso
+`EXECUTE` de la página de código es **efectivo**.
+- Nuevo `ExecutionContext.fetchCodeByte(ip)` + ventana de instrucción validada (una «línea de
+  I-cache» de 4 KB): la primera lectura de una página la traduce con `EXECUTE`
+  (`SoftMMU.fillCodeWindow` vía `VmBus`) y copia la página física; el resto de bytes de esa
+  página se sirven de la ventana. Sólo se revalida al cambiar de página (coste acotado, como
+  recomienda el informe).
+- La fuente de las instrucciones es **memoria**, no la imagen de despliegue: un parche en la
+  ROM (supervisor) se ejecuta; una página sin `EXECUTE` produce `PRIVILEGE_FAULT` en ejecución.
+- La ventana vive en el `ExecutionContext` (pooled), no en el intérprete, para que éste siga
+  siendo inmutable/hilo-seguro. Se invalida en `softMMU(...)`, `bus(...)` e `initialize()`.
+- Consecuencia: el código debe estar **en memoria** para ejecutarse; el cargador del engine ya
+  lo hace, y los tests que construyen MMUs a mano ahora cargan la imagen (helper `loadCode`).
+
+**D24 — Un `VmInterpreter` por programa (AUD-029).** El intérprete pasa a ser inmutable y sin
+estado propio (antes guardaba `codeCache = program.code()`, un clon por ejecución): recibe el
+bus/MMU desde el `ExecutionContext` en `execute(ctx)`. El engine lo construye **una vez** en
+`setProgram` y lo guarda en `LoadedProgram`, reutilizándolo en cada `route()`. Se elimina el
+clon de código por mensaje y la creación de intérprete por mensaje.
+- Queda pendiente (no exigido por el lote 5) el **clon de la MMU** por ejecución (64 KB + tabla)
+  y una posible política COW o de páginas compartidas de solo lectura (código/constantes), que
+  reduciría aún más el camino caliente. Se anota como optimización futura.
+- Punto (3) del informe (`initialize()` con 8192 `writeByte`) ya estaba resuelto por D17: la
+  limpieza de E/S usa dos `dma.writeBlock` (un `arraycopy` por buffer).
+
+**No cambia** el ABI, el mapa de memoria, la ISA ni la semántica de los programas. La única
+observable nueva es la correcta: ejecutar una página de código sin `EXECUTE` ahora falla.
+
 ### Bitácora de remediación
 
 | Fecha | Commit | Qué |
@@ -1443,23 +1474,28 @@ entrada) en el README; la E/S de propiedades sigue siendo bajo demanda por `HOST
 | 2026-10-17 | `688dd5f` | D18: bus de datos `VmBus` (CPU+DMA maestros); D19: aclara AUD-020 (sin auto-lectura de `0x8000`) |
 | 2026-10-17 | `9c242eb` | Lote 4 (parte 1): D20 `PROPERTY_WRITE` honra `(scope, propId)` (AUD-028); AUD-021/025 documentados ⚠️ ver corrección siguiente |
 | 2026-10-17 | `7ddcff4` | Lote 4 (parte 2, criterio corregido): se **restaura y hace funcional** lo que se había eliminado — anillos `Privilege`/`mprotect` (AUD-030/022), `pageTable` cableado (AUD-024), accesores con uso real (AUD-022), `placeholderResolver`/`translationDetector` vía `TRANSFORM_APPLY` (AUD-026/027) |
+| 2026-10-17 | `ba1e128` | Lote 5: fetch por la MMU con ventana de página validada (AUD-023) + `VmInterpreter` inmutable reutilizado por programa, sin clon de código (AUD-029) |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
 segunda auditoría (`AUDITORIA.md` en `e0ee7eb`, IFLOW-AUD-019…030) es el informe vigente y
 su seguimiento vive en este PLAN. De ella ya están atendidos AUD-019 (D17), el bus de datos
-(D18), AUD-020 (D19, aclarado por diseño) y el lote 4 (AUD-021/022/024/025/026/027/028/030).
+(D18), AUD-020 (D19, aclarado por diseño), el lote 4
+(AUD-021/022/024/025/026/027/028/030) y el lote 5 (AUD-023/029, ver D23/D24).
 
-**Pendiente de la 2ª auditoría (lote 5):**
-- **AUD-023** (fetch vía MMU): hoy el CPU ejecuta desde `program.code()` (caché local) y sólo
-  traduce en `translateExecute`; hacer que el *fetch* pase por `SoftMMU` exige cargar el
-  código en memoria en **todos** los tests (hoy no lo hacen) y añadir caché de página
-  validada para no degradar el intérprete.
-- **AUD-029** (rendimiento): reutilizar un `VmInterpreter` por programa (el bus es de la
-  ejecución) y evitar el clon de código por ejecución.
-- **IRQ**: no está en el informe; el despachador de servicios `HOST` + `VmException` cubre el
-  papel de «controlador de interrupciones» de `design.md` §4.7. No se añade una línea de
-  interrupción sin requisito de la especificación.
+**Atendido en el lote 5 (AUD-023/029):**
+- **AUD-023** (fetch vía MMU): resuelto en D23. El CPU hace *fetch* por el bus/`SoftMMU` con
+  ventana de página validada; `EXECUTE` es efectivo y las instrucciones se leen de memoria.
+- **AUD-029** (rendimiento): resuelto en D24 (un `VmInterpreter` por programa, sin clon de
+  código por ejecución). El punto (3) del informe (limpieza de E/S byte a byte) ya estaba
+  resuelto por D17.
+- **Optimización futura anotada (no exigida por el lote 5):** el **clon de la MMU** por
+  ejecución (64 KB + tabla). Una política COW o de páginas de solo lectura compartidas
+  (código/constantes) lo reduciría; queda pendiente como optimización medida.
+
+**IRQ:** no está en el informe; el despachador de servicios `HOST` + `VmException` cubre el
+papel de «controlador de interrupciones» de `design.md` §4.7. No se añade una línea de
+interrupción sin requisito de la especificación.
 
 **Pendiente de la 2ª auditoría (lote 6):** los servicios **declarados y no registrados**
 siguen siendo capacidades por implementar (criterio: hacerlos funcionales, no borrarlos):

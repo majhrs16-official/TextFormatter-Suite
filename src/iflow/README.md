@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (318 tests)  
+> **Estado**: ✅ Implementada y probada (321 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -15,7 +15,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | Componente | Responsabilidad |
 |------------|-----------------|
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
-| `VmInterpreter` | CPU: fetch/decode/execute loop, ISA v2, fuel budget; maestro del bus |
+| `VmInterpreter` | CPU: fetch/decode/execute loop, ISA v2, fuel budget; maestro del bus. El *fetch* va por el bus/`SoftMMU` (permiso `EXECUTE` efectivo, ventana de página validada); es inmutable y se reutiliza por programa (AUD-023/029) |
 | `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico |
 | `VmBus` | Bus de datos explícito: única vía de transacción de CPU y DMA hacia `SoftMMU`; lleva el `Privilege` del maestro |
 | `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus); maestro supervisor |
@@ -27,7 +27,11 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 
 - **Espacio plano**: 64 KB (0x0000–0xFFFF)
 - **Paginación**: 16 páginas × 4 KB = 64 KB
-- **Permisos por página**: READ (0x1), WRITE (0x2), EXECUTE (0x4)
+- **Permisos por página**: READ (0x1), WRITE (0x2), EXECUTE (0x4). El CPU hace *fetch* por la
+  MMU, así que una página de código sin `EXECUTE` falla con `PRIVILEGE_FAULT` en ejecución
+  (no es un permiso nominal); las instrucciones se leen de memoria, no de la imagen de
+  despliegue. La página se valida al entrar en ella y se sirve de una ventana de 4 KB
+  (I-cache) en el contexto.
 - **Propiedad de página** (`Privilege`): las páginas *kernel* (código/constantes) son
   legibles/ejecutables por el programa pero **solo escribibles por el supervisor** (host,
   cargador y DMA); un write del programa falla con `PRIVILEGE_FAULT` aunque el bit W esté
@@ -174,17 +178,17 @@ RouteOutcome outcome = engine.route(message, recipient);
 
 | Test | Cobertura |
 |------|-----------|
-| `VmInterpreterTest` | Todas las instrucciones ISA (data transfer, aritmética, lógica, shifts, saltos, CALL/RET, memoria indirecta) |
+| `VmInterpreterTest` | Todas las instrucciones ISA (data transfer, aritmética, lógica, shifts, saltos, CALL/RET, memoria indirecta) + fetch por MMU (EXECUTE efectivo, lectura desde memoria) |
 | `SoftMMUTest` | Traducción, permisos, fetch, bloques, aislamiento de copias |
 | `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
 | `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
-| `VmPolicyEngineTest` | Integración Router + VM |
+| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 318 tests passing**
+**Total: 321 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -244,7 +248,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 318 tests
+├── src/test/java/...                  # 321 tests
 └── build.gradle
 ```
 
