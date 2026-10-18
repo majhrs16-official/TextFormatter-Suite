@@ -168,7 +168,7 @@ la CPU (PROGRAM) y `dma()` el bus del DMA (SUPERVISOR). Así el privilegio viaja
 
 6. **MMIO de dispositivo (CPU/DMA → interconnect → device)**
    Si la dirección cae en el rango de un periférico (la ventana del framebuffer o
-   el banco de registros en `0xFF00`), el *interconnect* entrega la transacción al
+   el banco de registros en `0x0F00`), el *interconnect* entrega la transacción al
    `VmDisplay` (D31). Así cada escritura a la ventana se refleja en pantalla, sin
    pasar por la MMU.
 
@@ -189,7 +189,7 @@ firmware está activa** (el código siempre reserva dos páginas):
 | Entrada | `0x7000-0x7FFF` | R/W | user | Buffer de entrada |
 | Salida | `0x8000-0x8FFF` | R/W | user | Buffer de salida |
 | RAM de usuario | `0x9000-0xFFFF` | R/W | user | Almacenamiento libre del programa; persiste entre mensajes (el runtime no la limpia) |
-| MMIO de dispositivo | `0xFF00-0xFFFF` | I/O | — | Banco de registros de la pantalla; el *interconnect* lo decodifica antes que la RAM (D31) |
+| MMIO de dispositivo | `0x0F00-0x0FFF` | I/O | — | Banco de registros de la pantalla, **dentro de la página del BIOS** (reutiliza la cola libre del ROM); el *interconnect* lo decodifica antes que la ROM/RAM (D31) |
 
 El código y las constantes son **disjuntas por construcción** (prevención de
 solapamiento, R3).

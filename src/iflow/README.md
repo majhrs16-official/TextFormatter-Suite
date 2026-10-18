@@ -47,7 +47,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
   - Página 8: Buffer salida I/O (R/W) (0x8000)
   - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia
-  - Apertura MMIO de dispositivos: 256 B (0xFF00–0xFFFF) — banco de registros de la pantalla; el *interconnect* la decodifica antes que la RAM (D31)
+  - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — banco de registros de la pantalla; el *interconnect* la decodifica antes que la ROM/RAM (D31). Reutiliza la cola libre del ROM (el firmware acaba en 0x0204), así no recorta RAM de usuario
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
   `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
   siguen consultándose bajo demanda vía `HOST`/`HostContext` (AUD-021).
@@ -72,7 +72,7 @@ framebuffer aparece en pantalla.
 - **Ventana**: `cols × rows × 2` bytes en una base elegida por el BIOS (por defecto `0xE000`).
   El *interconnect* (`VmBus`) decodifica la ventana y enruta las escrituras al dispositivo, sombreando
   la RAM que hubiera debajo.
-- **Registros MMIO** (banco de 16 B en `0xFF00`): `BASE` (0x00), `COLS` (0x02), `ROWS` (0x04),
+- **Registros MMIO** (banco de 16 B en `0x0F00`, dentro de la memoria del BIOS): `BASE` (0x00), `COLS` (0x02), `ROWS` (0x04),
   `CTRL` (0x06: bit0 = habilitar, bit1 = limpiar), `CURSOR` (0x08), `STATUS` (0x0A, solo lectura). El
   BIOS los escribe al arrancar (D32); reconfigurable en caliente. Una ventana que solapara el banco de
   registros se rechaza (la pantalla queda deshabilitada).

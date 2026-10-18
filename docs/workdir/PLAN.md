@@ -1668,19 +1668,30 @@ implementa como **una única máquina viva por programa**:
 - `vm/memory/VmDevice`: interfaz de esclavo de bus (decodifica un rango, responde R/W; palabra y
   bloque por defecto byte a byte).
 - `vm/video/VmDisplay`: dispositivo de vídeo. Ventana `cols×rows×2` y banco de registros MMIO de 16 B
-  en `0xFF00`: `BASE`(0x00), `COLS`(0x02), `ROWS`(0x04), `CTRL`(0x06: bit0 habilitar, bit1 limpiar),
-  `CURSOR`(0x08), `STATUS`(0x0A ro). Se **rechaza** una ventana que solape el banco de registros.
+  en `0x0F00` (**dentro de la página del BIOS**, 0x0000-0x0FFF): `BASE`(0x00), `COLS`(0x02),
+  `ROWS`(0x04), `CTRL`(0x06: bit0 habilitar, bit1 limpiar), `CURSOR`(0x08), `STATUS`(0x0A ro). Se
+  **rechaza** una ventana que solape el banco de registros o que se salga del espacio de 64 KB.
   API: `renderText()`, `renderTextTrimmed()`, `renderAnsi()`, `cellChar`/`cellAttribute`, `clearScreen`.
 - `SoftMMU`: aloja la lista de periféricos (`attach`/`deviceFor`/`isDeviceAddress`).
 - `VmBus`: decodifica MMIO antes de la RAM en byte/palabra/bloque/clear/region.
 - `VmPolicyEngine`: crea y adjunta la pantalla al cargar el programa (`display()`); vuelca la pantalla
   al log tras cada mensaje en builds de debug.
-- Mapa (`VmMemoryMap`): apertura MMIO `0xFF00-0xFFFF` (256 B, decodificada antes de la RAM) y
-  defaults de pantalla (`0xE000`, 80×25).
+- Mapa (`VmMemoryMap`): bloque de control MMIO `0x0F00-0x0FFF` (256 B, decodificado antes de ROM/RAM)
+  y defaults de pantalla (`0xE000`, 80×25).
 
-**Verificado:** `VmDisplayTest` (7 tests: decodificación, geometría, rechazo de solape, carácter/
-atributo, bloque, limpieza, ANSI) y `VmPolicyEngineTest.programDrawsOnTheMemoryMappedScreen`.
-Total: **357 tests, 0 fallos**.
+**Reubicación del bloque MMIO (revisión):** el usuario pidió probar a meter los 256 B **dentro de la
+memoria del BIOS** en vez de al final de la memoria. El firmware termina en `0x0204`, así que la
+página del ROM tiene 3579 B libres; los 256 B caben. Se movió la apertura a `0x0F00-0x0FFF`,
+reutilizando la cola no usada del ROM: no se recorta RAM de usuario y los «puntos de control» viven
+coherentemente en la memoria del BIOS. Como el *interconnect* decodifica MMIO antes que la ROM, el
+BIOS puede escribir los registros aunque la página sea R/X kernel. El ensamblador ahora **reserva**
+esa cola (guard de diagnóstico si el firmware pretendiera crecer dentro de ella). Si no hubiera
+cabido, se habría dejado al final de la memoria (`0xFF00`).
+
+**Verificado:** `VmDisplayTest` (9 tests: decodificación, geometría, rechazo de solape, aceptación por
+debajo del banco, desbordamiento del espacio, carácter/atributo, bloque, limpieza, ANSI) y
+`VmPolicyEngineTest.programDrawsOnTheMemoryMappedScreen`.
+Total: **359 tests, 0 fallos**.
 
 ### D32 — BIOS activo (propuesto)
 

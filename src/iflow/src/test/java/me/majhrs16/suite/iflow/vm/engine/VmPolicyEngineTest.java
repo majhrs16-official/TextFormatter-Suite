@@ -607,16 +607,16 @@ class VmPolicyEngineTest {
         engine.setProgram(ProgramImage.builder()
             .entryPoint(0)
             .code(new byte[]{
-                Opcode.LI, 1, (byte)0xFF, 0x00,
+                Opcode.LI, 1, 0x0F, 0x00,
                 Opcode.LI, 2, (byte)0xE0, 0x00,
                 Opcode.STWI, (2 << 4) | 1,          // REG_BASE  = 0xE000
-                Opcode.LI, 1, (byte)0xFF, 0x02,
+                Opcode.LI, 1, 0x0F, 0x02,
                 Opcode.LI, 2, 0x00, 0x02,
                 Opcode.STWI, (2 << 4) | 1,          // REG_COLS  = 2
-                Opcode.LI, 1, (byte)0xFF, 0x04,
+                Opcode.LI, 1, 0x0F, 0x04,
                 Opcode.LI, 2, 0x00, 0x02,
                 Opcode.STWI, (2 << 4) | 1,          // REG_ROWS  = 2
-                Opcode.LI, 1, (byte)0xFF, 0x06,
+                Opcode.LI, 1, 0x0F, 0x06,
                 Opcode.LI, 2, 0x00, 0x01,
                 Opcode.STWI, (2 << 4) | 1,          // REG_CTRL  = ENABLE
                 Opcode.LI, 1, (byte)0xE0, 0x00,

@@ -38,8 +38,28 @@ class VmDisplayTest {
     @Test
     void rejectsAWindowThatWouldOverlapTheRegisterBank() {
         VmDisplay d = new VmDisplay();
-        // 80*25*2 = 4000 bytes; a base of 0xF000 would run past 0xFF00.
-        configure(d, 0xF000, 80, 25);
+        // The bank lives at 0x0F00 (inside the BIOS page): a window starting
+        // there would shadow the device's own registers.
+        configure(d, CTRL, 80, 25);
+        assertFalse(d.isEnabled());
+    }
+
+    @Test
+    void acceptsAWindowBelowTheRegisterBank() {
+        // Since the bank sits inside the BIOS page (not at the top of memory),
+        // a framebuffer below it is now legal.
+        VmDisplay d = new VmDisplay();
+        configure(d, 0x0010, 2, 2); // 8 bytes at 0x0010-0x0017, bank starts at 0x0F00
+        assertTrue(d.isEnabled());
+        d.writeByte(0x0010, 'Y');
+        assertEquals('Y', d.cellChar(0));
+    }
+
+    @Test
+    void rejectsAWindowThatRunsPastTheAddressSpace() {
+        VmDisplay d = new VmDisplay();
+        // 80*25*2 = 4000 bytes at 0xFF00 would end at 0x10FA0 > 0xFFFF.
+        configure(d, 0xFF00, 80, 25);
         assertFalse(d.isEnabled());
     }
 

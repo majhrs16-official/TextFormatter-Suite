@@ -162,6 +162,8 @@ class Assembler {
   /**
    * Generates the firmware ROM (4KB at 0x0000-0x0FFF).
    * Contains: vector table, service constants, string/memory utils, host wrappers.
+   * The final 256 bytes (0x0F00-0x0FFF) are reserved for the device control
+   * block (MMIO registers of the text screen, see VmMemoryMap.DEVICE_MMIO_BASE).
    */
   private generateFirmware(): number[] {
     const fw: number[] = [];
@@ -444,6 +446,19 @@ class Assembler {
       const offset = (target - (fx.at + 2)) & 0xFFFF;
       fw[fx.at] = (offset >> 8) & 0xFF;
       fw[fx.at + 1] = offset & 0xFF;
+    }
+
+    // ===== Device control block reservation (D31) =====
+    // The last 256 bytes of the BIOS ROM page (0x0F00-0x0FFF) host the
+    // memory-mapped device control registers (the text screen's MMIO bank; see
+    // VmMemoryMap.DEVICE_MMIO_BASE). The interconnect decodes them before the
+    // ROM, so whatever sits there is shadowed; keeping firmware code out of the
+    // range guarantees nothing executable is ever hidden.
+    const DEVICE_MMIO_BASE = 0x0F00;
+    if (fw.length > DEVICE_MMIO_BASE) {
+      this.addDiagnostic('error',
+        `Firmware code (${fw.length} bytes) overruns the device control block reserved at 0x${DEVICE_MMIO_BASE.toString(16).toUpperCase()}`,
+        0, 0);
     }
 
     // Pad to 4KB (0x1000)

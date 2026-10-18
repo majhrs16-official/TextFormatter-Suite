@@ -135,8 +135,9 @@ public final class VmDisplay implements VmDevice {
 
     /**
      * Re-decodes the register bank after a write: validates the geometry, keeps
-     * the framebuffer below the MMIO aperture (so it can never shadow the
-     * device's own registers), and (re)allocates the cell store when needed.
+     * the framebuffer inside the address space and clear of the MMIO aperture
+     * (so it can never shadow the device's own registers), and (re)allocates the
+     * cell store when needed.
      */
     private void reconfigure() {
         int newBase = readRegister(REG_BASE);
@@ -149,8 +150,12 @@ public final class VmDisplay implements VmDevice {
                      && newRows > 0 && newRows <= MAX_DIM
                      && newBase != 0;
         long size = valid ? (long) newCols * newRows * 2 : 0;
-        // The window must fit below the register bank (MMIO aperture).
-        if (valid && (newBase + size > ctrlBase)) {
+        long end = (long) newBase + size;
+        // The window must fit in the 64 KB space and must not overlap the
+        // register bank (which lives inside the BIOS page).
+        boolean overlapsBank = (long) newBase < (long) ctrlBase + REG_COUNT
+                            && ctrlBase < end;
+        if (valid && (end > 0x10000L || overlapsBank)) {
             valid = false;
         }
 

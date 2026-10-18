@@ -20,7 +20,7 @@ package me.majhrs16.suite.iflow.vm.memory;
  *   page 7      0x7000-0x7FFF   input buffer (I/O)                         R/W
  *   page 8      0x8000-0x8FFF   output buffer (I/O)                        R/W
  *   pages 9-15  0x9000-0xFFFF   general-purpose user RAM                   R/W
- *   top 256 B   0xFF00-0xFFFF   device MMIO aperture (screen registers)    I/O
+ *   0x0F00      0x0F00-0x0FFF   device MMIO control block (in the BIOS page) I/O
  * </pre>
  *
  * <p>
@@ -88,12 +88,14 @@ public final class VmMemoryMap {
 
     /**
      * Base of the 256-byte MMIO aperture where peripherals expose their register
-     * banks (today the text screen of D31). It sits at the very top of the 64 KB
-     * space; the interconnect decodes it <em>before</em> RAM, so it shadows the
-     * last 256 bytes of the user region and the BIOS can drive devices with plain
-     * stores. It is a normal hardware carve-out, not a runtime-reserved bank.
+     * banks (today the text screen of D31). It lives <em>inside the BIOS ROM page</em>
+     * (0x0000-0x0FFF): the firmware functions end well before it (currently at
+     * 0x0204), so the unused tail of the ROM page is reused for the device control
+     * block instead of carving a hole out of user RAM. The interconnect decodes it
+     * <em>before</em> ROM/RAM, so the BIOS can drive devices with plain stores
+     * without write permission on the (R/X) code page.
      */
-    public static final int DEVICE_MMIO_BASE = 0xFF00;
+    public static final int DEVICE_MMIO_BASE = 0x0F00;
     public static final int DEVICE_MMIO_SIZE = 0x0100; // 256 bytes
 
     // ===== Text screen defaults (the BIOS may reconfigure them at runtime) =====
