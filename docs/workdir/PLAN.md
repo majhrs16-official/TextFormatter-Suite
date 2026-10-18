@@ -719,7 +719,8 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 ```bash
 cd tools/iflow-compiler && npm run build && npm run test:validation
 
-# Ensamblar un programa policy (firmware ON por defecto; ROM 0x0000-0x0FFF, código en 0x1000)
+# Ensamblar un programa policy (firmware ON por defecto; ROM 0x0000-0x0FFF, código en 0x1000).
+# Las opciones se configuran en /gradle.properties (D27) y se pueden sobrescribir con -P.
 ./gradlew :src:iflow:iflowAsm
 ./gradlew :src:iflow:iflowAsm -Piflow.baremetal=true            # bare-metal (sin ROM, origin 0x0000)
 ./gradlew :src:iflow:iflowAsm -Piflow.source=ruta/prog.flowasm -Piflow.output=policy.flow
@@ -1551,3 +1552,127 @@ están registrados; cualquier otro sigue devolviendo `UNSUPPORTED`.
 
 **Cierre de la 2ª auditoría:** con el lote 6 quedan atendidos todos los hallazgos del informe
 vigente (IFLOW-AUD-019…030), sin cambios de ABI, ISA ni mapa de memoria.
+
+---
+
+## REVISIÓN 2026-10-17 (2) — Configuración, HDL, API y hardware (pantalla/BIOS/IRQ)
+
+> Respuesta a la revisión del usuario. Cinco frentes: (1) centralizar las opciones de build en
+> `gradle.properties`; (2) formalizar el mapeo a HDL; (3) endurecer la API (`@Nullable`/
+> `Optional`); (4) aclarar la persistencia entre mensajes —hoy **no** persiste tal cual se
+> supone—; (5) sustituir la idea de «debug en el firmware» (imposible sin nuevo opcode/servicio/
+> mapeo) por un **dispositivo de pantalla de texto mapeado en memoria**, un **BIOS activo** que
+> lo inicializa y una **tabla de IRQ configurable por el BIOS** (no hardcodeada en el emulador).
+
+### D27 — Opciones de build en `gradle.properties` (✅ aplicado)
+
+Las opciones del build dejan de pasarse como `-P` sueltos y viven **documentadas** en
+`/gradle.properties` (fuente única, acumulable y fácil de encontrar). El build las lee con
+`providers.gradleProperty(...)`; `-P<clave>=<valor>` sigue sobrescribiendo para un build puntual.
+
+| Opción | Default | Para |
+|---|---|---|
+| `logger.debug` | `false` | inyecta `DEBUG` en `DebugConfig.java` (y muestra stdout/stderr en `:src:iflow:test`) |
+| `iflow.source` | `examples/policy.flowasm` | entrada de `:src:iflow:iflowAsm` |
+| `iflow.output` | `<buildDir>/iflow/policy.flow` | salida de `:src:iflow:iflowAsm` |
+| `iflow.origin` | (lo decide el modo) | origin de ensamblado |
+| `iflow.baremetal` | `false` | sin ROM de firmware |
+| `buildTimestamp` | `0` en SNAPSHOT | releases reproducibles |
+
+Tocados: `gradle.properties` (nuevo), `build.gradle` (raíz), `src/logger/build.gradle`,
+`src/iflow/build.gradle`. Verificado que el default compila y que `-Plogger.debug=true` recompila
+con `DEBUG=true` y restaura el placeholder. **No** se añade `org.gradle.*` al archivo para no
+alterar el comportamiento del build.
+
+### D28 — Mapeo formal a HDL (✅ aplicado)
+
+Objetivo: legibilidad **estándar** de la correspondencia VM↔hardware. Entregable: un documento
+`src/iflow/HDL.md` con:
+
+- **Componentes → módulos**: `VmInterpreter` (CPU/control/unidad de decodificación),
+  `SoftMMU` (MMU: traducción + permisos), `PhysicalMemory` (RAM), `VmBus` (interconnect/decodificador
+  de direcciones), `VmDmaController` (controlador DMA), `VmDisplay` (periférico de vídeo, D31),
+  ROM de firmware (BROM), `ExecutionContext` (banco de registros + estado), `HostServiceRegistry`
+  (controlador de «syscalls»/E/S).
+- **Buses/señales**: address/data/control; *reset* = `initialize()`; *clock* no aplica (interpretado,
+  ciclo = instrucción); IRQ (D33).
+- **Paso de datos**: fetch (ventana I-cache), load/store por el bus, transferencia en bloque del DMA,
+  decodificación de MMIO por el interconnect.
+- **Estructura/ISA**: formato de instrucción, opcodes y mapa de memoria (`VmMemoryMap`).
+
+**Entregado**: `src/iflow/HDL.md` (§1 vista del SoC, §2 módulos entidad↔clase, §3 señales del bus,
+§4 clock/reset, §5 flujo de datos, §6 decodificación/mapa, §7 estructura código↔HDL, §8 hardware
+previsto, §9 nomenclatura). Enlazado desde `README.md`.
+
+### D29 — API endurecida con `Optional` (✅ aplicado)
+
+En vez de `@Nullable` (que exigiría una dependencia de anotaciones que el repo no usa) se adopta
+**`Optional`** (JDK puro), coherente con `ChannelRegistry.get`, que ya devuelve `Optional`. La API
+pública deja de devolver `null` «invisible»:
+
+- `HostContext.readProperty` / `resolveChannel` / `readChannelProperty` → `Optional<String>`
+  (default: `Optional.empty()`).
+- `HostContext.readState` → `Optional<Object>`.
+- `HostServiceRegistry.getService` → `Optional<HostService>`.
+
+Llamadores adaptados (`HostServiceRegistry`, `VmPolicyEngine.MessageHostContext`) y tests
+(`HostServiceRegistryTest`, `VmIntegrationTest`, `VmInterpreterTest`, `ExecutionContextTest`).
+Verificado: **348 tests, 0 fallos**.
+
+### D30 — Persistencia entre mensajes (hallazgo: hoy **no** persiste)
+
+Corrección a la premisa del usuario: aunque `initialize()` *solo* limpia los buffers de E/S
+(`0x7000`/`0x8000`), en `route()` cada mensaje se ejecuta sobre
+`new SoftMMU(loaded.softMMU)` —un **fork copy-on-write del snapshot congelado**— de modo que las
+páginas de datos (`0x3000-0x4FFF`) parten de cero en **cada** mensaje. Por tanto la RAM de
+ejecución **no** conserva estado entre mensajes hoy. Opciones:
+
+- **(a) Banco persistente en RAM** sobre las páginas 9-15 (`0x9000-0xFFFF`, ya reservadas como
+  «reserved / persistent state» en `VmMemoryMap`): un almacén por programa que **no** se forkea ni
+  se limpia; el BIOS elige el rango. Es la opción más alineada con la propuesta del BIOS activo.
+- **(b) Solo `STATE_READ`/`STATE_WRITE`** (`HostContext`) como estado persistente, dejando la RAM
+  de ejecución volátil. Ya existe y no toca el modelo de memoria.
+- **(c) MMU del programa persistente** (sin fork por mensaje): recupera la persistencia total pero
+  revierte parte de D25 (aislamiento/optimización).
+
+### D31 — Pantalla de texto mapeada en memoria (`VmDisplay`) — propuesto
+
+«Debug» deja de ser código en el firmware (imposible sin opcode/servicio/mapa nuevos) y pasa a ser
+**hardware**: un periférico de texto mapeado en memoria, insipirado en la VERA de la X16.
+
+- **Formato de celda (2 bytes)**: byte bajo = **carácter** (8 bits); byte alto = **atributo**
+  `[letra:4][fondo:4]` (nibble alto = color de letra, nibble bajo = color de fondo).
+- **Mapeo**: el `VmBus` (interconnect) decodifica la región de pantalla registrada y enruta ahí las
+  escrituras; el resto sigue a `SoftMMU`. Cada escritura (CPU o DMA) se refleja en el framebuffer.
+- **El BIOS fija la base y las dimensiones** (D32) escribiendo registros MMIO del dispositivo;
+  reconfigurable en caliente.
+- **Consumo por el host**: el `VmDisplay` expone el framebuffer (API) para logs/tests/UI; sin salida
+  automática. (A confirmar: ver «Preguntas abiertas».)
+
+### D32 — BIOS activo (propuesto)
+
+El firmware ROM pasa de **pasivo** (solo stdlib) a **activo**: al arrancar ejecuta una rutina de
+reset que (1) limpia la RAM volátil, (2) **configura el dispositivo de pantalla** (registra el rango
+de memoria y las dimensiones vía MMIO/DMA), (3) **publica la tabla de IRQ** (D33), y (4) cede el
+control al `main` del usuario. El engine ejecutaría desde el entry del BIOS cuando el firmware está
+ON; el BIOS encadena al programa. Esto permite reconfigurar el hardware en el arranque.
+
+> ⚠️ Contradice la spec vigente (`implement.md` §12.4: «no se habilita un vector de interrupciones
+> modificable por programas»; §13.1: «no es un BIOS de hardware»). Habrá que **actualizar la spec y
+> los READMEs** como parte del lote, no dejarla divergente.
+
+### D33 — Tabla de IRQ configurable por el BIOS (propuesto)
+
+El emulador **no** hardcodea la tabla de interrupciones; el BIOS la define en memoria (tabla de
+vectores con estructura y rango reservado) y el runtime la usa para despachar. Falta decidir si se
+introducen **fuentes** de interrupción reales o solo la estructura/tabla.
+
+### Preguntas abiertas (revisión 2)
+
+1. **Pantalla**: ¿cómo la consume el host? ¿API de framebuffer consultable (tests/UI), volcado a log,
+   ambas? ¿Apagable para no costar en producción?
+2. **IRQ**: ¿introducir eventos reales (por ejemplo *timer* o E/S) además de la tabla configurable, o
+   solo la estructura por ahora?
+3. **Persistencia**: ¿opción (a) banco persistente en RAM, (b) solo `STATE_*`, o (c) MMU persistente?
+4. **Alcance/orden**: ¿aplico primero D28/D29 (documentación + API, bajo riesgo) y después D31–D33
+   (hardware, alto impacto)?
