@@ -71,6 +71,15 @@ public final class VmBus {
         return memory.fetchWord(ip);
     }
 
+    /**
+     * Instruction prefetch (I-cache line fill): validates EXECUTE on the page and
+     * fills {@code dest} from physical memory. The CPU is the master that requests
+     * it; the MMU is the slave.
+     */
+    public void fillCodeWindow(int virtualPageBase, byte[] dest) {
+        memory.fillCodeWindow(virtualPageBase, dest);
+    }
+
     // ===== Data transactions =====
 
     public int readByte(int vaddr) {

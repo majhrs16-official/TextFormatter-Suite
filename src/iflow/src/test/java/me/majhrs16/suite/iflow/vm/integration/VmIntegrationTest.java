@@ -15,6 +15,7 @@ import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
@@ -56,6 +57,25 @@ class VmIntegrationTest {
         mmu.getPageTable().mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
             VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         return mmu;
+    }
+
+    /**
+     * Loads an image into the MMU like the engine's boot loader (writable via a
+     * supervisor bus, then demoted to R/X). The CPU fetches through the MMU, so the
+     * code must be in memory (IFLOW-AUD-023).
+     */
+    private void loadCode(SoftMMU mmu, byte[] code) {
+        int firstPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE);
+        int pages = (code.length + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
+        for (int p = 0; p < pages; p++) {
+            mmu.getPageTable().protect(firstPage + p,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
+        }
+        VmBus.supervisor(mmu).writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
+        for (int p = 0; p < pages; p++) {
+            mmu.getPageTable().protect(firstPage + p,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
     }
 
     private ChannelRegistry createChannelRegistry() {
@@ -103,10 +123,11 @@ private RateLimiter createRateLimiter() {
             .entryPoint(0)
             .code(code)
             .build();
+        loadCode(mmu, code);
         
         // Use VmInterpreter directly with our MMU
         me.majhrs16.suite.iflow.vm.execution.VmInterpreter interpreter = 
-            new me.majhrs16.suite.iflow.vm.execution.VmInterpreter(program, mmu, new HostServiceRegistry());
+            new me.majhrs16.suite.iflow.vm.execution.VmInterpreter(program, hsr);
         
         // Create a minimal execution context
         me.majhrs16.suite.iflow.vm.execution.ExecutionContext ctx = 
@@ -251,9 +272,10 @@ private RateLimiter createRateLimiter() {
             .entryPoint(0)
             .code(code)
             .build();
+        loadCode(mmu, code);
         
         me.majhrs16.suite.iflow.vm.execution.VmInterpreter interpreter = 
-            new me.majhrs16.suite.iflow.vm.execution.VmInterpreter(program, mmu, hsr);
+            new me.majhrs16.suite.iflow.vm.execution.VmInterpreter(program, hsr);
         me.majhrs16.suite.iflow.vm.execution.ExecutionContext ctx = 
             new me.majhrs16.suite.iflow.vm.execution.ExecutionContext()
                 .executionId("test")

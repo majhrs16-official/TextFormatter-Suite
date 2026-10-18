@@ -69,16 +69,24 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     // consumes it. See that class for the page map.
 
     /**
-     * Immutable container for a loaded program: bytecode + initialized SoftMMU.
-     * Published atomically to ensure program and memory are always in sync.
+     * Immutable container for a loaded program: bytecode + initialized SoftMMU +
+     * the per-program interpreter. Published atomically to ensure program, memory
+     * and interpreter are always in sync.
      */
     public static final class LoadedProgram {
         public final ProgramImage program;
         public final SoftMMU softMMU;
+        /**
+         * The interpreter is immutable and stateless (it reads the bus/MMU from the
+         * execution context), so one instance serves every execution of this program
+         * (IFLOW-AUD-029).
+         */
+        public final VmInterpreter interpreter;
 
-        public LoadedProgram(ProgramImage program, SoftMMU softMMU) {
+        public LoadedProgram(ProgramImage program, SoftMMU softMMU, VmInterpreter interpreter) {
             this.program = program;
             this.softMMU = softMMU;
+            this.interpreter = interpreter;
         }
     }
 
@@ -170,9 +178,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             // Prepare input: serialize message to the input buffer (see VmMemoryMap)
             prepareInput(ctx, message, emitter, recipient, path);
 
-            // Execute VM
-            VmInterpreter interpreter = new VmInterpreter(loaded.program, ctx.bus(), serviceRegistry);
-            interpreter.execute(ctx);
+            // Execute VM (the per-program interpreter is immutable and reused)
+            loaded.interpreter.execute(ctx);
 
             // Validate and produce outcome
             return validator.validate(ctx, message, recipient, emitter);
@@ -492,8 +499,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // Create new SoftMMU with program mappings
         SoftMMU newMMU = new SoftMMU();
         setupProgramMappings(program, newMMU);
-        // Atomically publish program + memory together
-        loadedProgramRef.set(new LoadedProgram(program, newMMU));
+        // The interpreter is stateless (bus/MMU come from the execution context) and
+        // the program is immutable, so build it once per program, not per message.
+        VmInterpreter interpreter = new VmInterpreter(program, serviceRegistry);
+        // Atomically publish program + memory + interpreter together
+        loadedProgramRef.set(new LoadedProgram(program, newMMU, interpreter));
     }
 
     public ProgramImage program() {

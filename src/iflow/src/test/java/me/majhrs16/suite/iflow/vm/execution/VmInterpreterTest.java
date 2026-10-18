@@ -47,7 +47,28 @@ class VmInterpreterTest {
             .entryPoint(0)
             .code(code)
             .build();
-        return new VmInterpreter(prog, mm, hsr);
+        loadCode(mm, code);
+        return new VmInterpreter(prog, hsr);
+    }
+
+    /**
+     * Loads an image into the MMU the way the engine's boot loader does: the code
+     * page is made writable through a supervisor bus, filled, then demoted back to
+     * R/X. The CPU fetches through the MMU, so the code must live in memory
+     * (IFLOW-AUD-023).
+     */
+    private static void loadCode(SoftMMU mm, byte[] code) {
+        int firstPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE);
+        int pages = (code.length + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
+        for (int p = 0; p < pages; p++) {
+            mm.getPageTable().protect(firstPage + p,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
+        }
+        VmBus.supervisor(mm).writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
+        for (int p = 0; p < pages; p++) {
+            mm.getPageTable().protect(firstPage + p,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
     }
 
     private static ExecutionContext createContext(SoftMMU mm, HostServiceRegistry hsr) {
@@ -529,16 +550,18 @@ class VmInterpreterTest {
             Opcode.LDB, 0, b(0x80), 0x00,      // R0 = first byte the host wrote
             Opcode.HALT
         };
-        new VmInterpreter(ProgramImage.builder().entryPoint(0).code(code).build(), mm, hsr)
-            .execute(ctx);
+        ProgramImage prog = ProgramImage.builder().entryPoint(0).code(code).build();
+        loadCode(mm, code);
+        new VmInterpreter(prog, hsr).execute(ctx);
 
         assertEquals(0x78, ctx.registers().get(RegisterFile.R0)); // 'x'
     }
 
     @Test
     void cpuTransactionsGoThroughItsBus() {
-        // D18: the CPU is a bus master. Wire the interpreter to a bus over one MMU
-        // while the context uses another; the store must land on the wired bus.
+        // D18: the CPU is a bus master. The interpreter reads the bus from the
+        // execution, so overriding the context's bus redirects both fetch and data
+        // traffic: the store must land on the wired bus, not on the context MMU.
         SoftMMU cpuMmu = createSoftMMU();
         SoftMMU ctxMmu = createSoftMMU();
         HostServiceRegistry hsr = new HostServiceRegistry();
@@ -549,8 +572,10 @@ class VmInterpreterTest {
             Opcode.HALT
         };
         ProgramImage prog = ProgramImage.builder().entryPoint(0).code(code).build();
-        VmInterpreter cpu = new VmInterpreter(prog, new VmBus(cpuMmu), hsr);
+        loadCode(cpuMmu, code);
+        VmInterpreter cpu = new VmInterpreter(prog, hsr);
         ExecutionContext ctx = createContext(ctxMmu, hsr);
+        ctx.bus(new VmBus(cpuMmu)); // CPU master over the wired bus
 
         cpu.execute(ctx);
 
@@ -558,5 +583,51 @@ class VmInterpreterTest {
             "the CPU store must travel on its wired bus");
         assertEquals(0, ctxMmu.readByte(VmMemoryMap.DATA_BASE),
             "the store must not reach the context MMU directly");
+    }
+
+    @Test
+    void executionEnforcesCodePageExecutePermission() {
+        // IFLOW-AUD-023: the fetch goes through the MMU, so a code page without
+        // EXECUTE must fault at execution time (before, the CPU decoded from a local
+        // copy of the image and ran regardless of the page's permission).
+        SoftMMU mm = createSoftMMU();
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        byte[] code = {Opcode.LI, 0, 0x12, 0x34, Opcode.HALT};
+        loadCode(mm, code);
+        // Demote the first code page to R/W (no EXECUTE).
+        mm.getPageTable().protect(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE),
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+
+        VmInterpreter cpu = new VmInterpreter(
+            ProgramImage.builder().entryPoint(0).code(code).build(), hsr);
+        ExecutionContext ctx = createContext(mm, hsr);
+
+        VmException e = assertThrows(VmException.class, () -> cpu.execute(ctx));
+        assertEquals(VmException.Code.PRIVILEGE_FAULT, e.code());
+    }
+
+    @Test
+    void fetchReadsInstructionsFromMemoryNotFromTheImage() {
+        // The deployment image encodes R0=0x1111 but memory holds R0=0x2222: the CPU
+        // must execute the bytes in memory, proving the image is no longer the fetch
+        // source (IFLOW-AUD-023).
+        SoftMMU mm = createSoftMMU();
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        byte[] image = {Opcode.LI, 0, 0x11, 0x11, Opcode.HALT};
+        loadCode(mm, image);
+
+        byte[] patched = {Opcode.LI, 0, 0x22, 0x22, Opcode.HALT};
+        int page = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE);
+        mm.getPageTable().protect(page,
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
+        VmBus.supervisor(mm).writeBlock(VmMemoryMap.CODE_BASE, patched, 0, patched.length);
+        mm.getPageTable().protect(page, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+
+        VmInterpreter cpu = new VmInterpreter(
+            ProgramImage.builder().entryPoint(0).code(image).build(), hsr);
+        ExecutionContext ctx = createContext(mm, hsr);
+        cpu.execute(ctx);
+
+        assertEquals(0x2222, ctx.registers().get(RegisterFile.R0));
     }
 }

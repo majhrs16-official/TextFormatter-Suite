@@ -459,4 +459,54 @@ class VmPolicyEngineTest {
 
         assertEquals(PolicyTarget.LOG, outcome.decision().target());
     }
+
+    // ===== Interpreter reuse (IFLOW-AUD-029) =====
+
+    @Test
+    void concurrentRoutesShareThePerProgramInterpreterSafely() throws Exception {
+        // The engine holds one stateless interpreter per program; the per-execution
+        // state (bus/MMU, registers, instruction window) lives in the pooled context.
+        // This hammers the shared interpreter from many threads: every route must be
+        // correct (a data-race in the fetch path would corrupt executions).
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8),
+                              (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
+                Opcode.LI, 1, 0x01, 0x10,                 // (SCOPE_MESSAGE<<8)|PROP_CONTENT
+                Opcode.LI, 2, 0x70, 0x00,                 // base = 0x7000
+                Opcode.LI, 3, 0x00, (byte)0xFF,           // length = 255
+                Opcode.HOST, 0x00,
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                              (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, 0x00, (byte)HostServiceRegistry.DECISION_CONTINUE,
+                Opcode.HOST, 0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"property.read", "routing.decide"})
+            .build());
+
+        int threads = 8;
+        int perThread = 150;
+        java.util.concurrent.ExecutorService pool =
+            java.util.concurrent.Executors.newFixedThreadPool(threads);
+        java.util.List<java.util.concurrent.Future<Boolean>> futures = new java.util.ArrayList<>();
+        for (int t = 0; t < threads; t++) {
+            futures.add(pool.submit(() -> {
+                for (int i = 0; i < perThread; i++) {
+                    RouteOutcome o = engine.route(
+                        createMessage("hi " + i, "chat", createActor("Alice")), createActor("Bob"));
+                    if (o.decision().target() != PolicyTarget.LOG) {
+                        return false;
+                    }
+                }
+                return true;
+            }));
+        }
+        for (java.util.concurrent.Future<Boolean> f : futures) {
+            assertTrue(f.get(), "every concurrent route must be LOG");
+        }
+        pool.shutdownNow();
+    }
 }

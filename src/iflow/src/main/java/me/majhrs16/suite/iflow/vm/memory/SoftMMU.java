@@ -237,6 +237,18 @@ public final class SoftMMU {
         return low | (high << 8);
     }
 
+    /**
+     * Instruction prefetch (I-cache line fill) for the whole page containing
+     * {@code virtualPageBase}: translates it with EXECUTE (validating the page's
+     * protection) and copies the 4KB page from physical memory into {@code dest}.
+     * The CPU issues this through the bus; the MMU is the slave.
+     */
+    public void fillCodeWindow(int virtualPageBase, byte[] dest) {
+        int physBase = pageTable.translateExecute(virtualPageBase & PageTable.PAGE_MASK);
+        int len = Math.min(dest.length, PageTable.PAGE_SIZE);
+        System.arraycopy(physicalMemory, physBase, dest, 0, len);
+    }
+
     // ===== Memory Inspection =====
 
     /**

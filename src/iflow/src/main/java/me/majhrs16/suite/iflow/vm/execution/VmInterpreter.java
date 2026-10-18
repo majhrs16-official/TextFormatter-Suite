@@ -7,7 +7,6 @@ import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
-import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
 
@@ -19,8 +18,16 @@ import java.util.function.IntBinaryOperator;
  * <p>
  * Executes a {@link ProgramImage} within an {@link ExecutionContext}.
  * Implements the ISA v2 instruction set.
- * The CPU is a bus master: every data transaction (load/store, CALL/RET
- * stack traffic) travels on the {@link VmBus} over the flat 64KB SoftMMU.
+ * </p>
+ * <p>
+ * The CPU is a bus master. Both data transactions (load/store, CALL/RET stack
+ * traffic) and <em>instruction fetch</em> travel on the execution's data bus over
+ * the flat 64KB SoftMMU: the interpreter never reads the deployment image, it
+ * fetches code through the MMU so the page {@code EXECUTE} permission is
+ * enforced (IFLOW-AUD-023). Fetched bytes are served from a validated page
+ * window kept in the {@link ExecutionContext} (an I-cache line per page), so the
+ * interpreter itself holds no mutable state and can be shared per program
+ * (IFLOW-AUD-029).
  * </p>
  */
 public final class VmInterpreter {
@@ -28,23 +35,17 @@ public final class VmInterpreter {
     private static final int MAX_INSTRUCTION_COST = 1000; // Safety limit
 
     private final ProgramImage program;
-    /** Bus master view: the CPU issues every data transaction on the bus (D18). */
-    private final VmBus bus;
     private final HostServiceRegistry serviceRegistry;
-    private final byte[] codeCache;
-
-    public VmInterpreter(ProgramImage program, VmBus bus, HostServiceRegistry serviceRegistry) {
-        this.program = Objects.requireNonNull(program);
-        this.bus = Objects.requireNonNull(bus);
-        this.serviceRegistry = Objects.requireNonNull(serviceRegistry);
-        this.codeCache = program.code(); // Cache defensive copy once
-    }
 
     /**
-     * Compatibility constructor: wires the CPU over a bus wrapping the given MMU.
+     * Creates an interpreter for a program. The interpreter is immutable and
+     * stateless: it reads the execution's bus/MMU from the {@link ExecutionContext}
+     * passed to {@link #execute(ExecutionContext)}, so one instance can be reused
+     * for every execution of the same program (and across threads).
      */
-    public VmInterpreter(ProgramImage program, SoftMMU softMMU, HostServiceRegistry serviceRegistry) {
-        this(program, new VmBus(softMMU), serviceRegistry);
+    public VmInterpreter(ProgramImage program, HostServiceRegistry serviceRegistry) {
+        this.program = Objects.requireNonNull(program);
+        this.serviceRegistry = Objects.requireNonNull(serviceRegistry);
     }
 
     /**
@@ -53,11 +54,13 @@ public final class VmInterpreter {
      * @throws VmException on execution error
      */
     public void execute(ExecutionContext context) {
+        int codeSize = program.codeSize();
+
         // Set entry point
         context.registers().set(RegisterFile.IP, program.entryPoint());
 
         // Verify entry point is valid
-        if (program.entryPoint() < 0 || program.entryPoint() >= program.codeSize()) {
+        if (program.entryPoint() < 0 || program.entryPoint() >= codeSize) {
             throw VmException.invalidJump(program.entryPoint(), program.entryPoint());
         }
 
@@ -66,9 +69,9 @@ public final class VmInterpreter {
             // Check cancellation
             context.checkCancelled();
 
-            // Fetch
+            // Fetch (through the bus/MMU: enforces the code page's EXECUTE permission)
             int ip = context.registers().get(RegisterFile.IP);
-            if (ip < 0 || ip >= program.codeSize()) {
+            if (ip < 0 || ip >= codeSize) {
                 throw VmException.invalidJump(ip, ip);
             }
 
@@ -76,13 +79,13 @@ public final class VmInterpreter {
             context.consumeFuel(1); // Base cost per instruction
 
             // Decode
-            int opcode = codeCache[ip] & 0xFF;
+            int opcode = fetch(context, ip);
             if (!Opcode.isValid(opcode)) {
                 throw VmException.invalidOpcode(opcode, ip);
             }
 
             int instrSize = Opcode.instructionSize(opcode);
-            if (ip + instrSize > program.codeSize()) {
+            if (ip + instrSize > codeSize) {
                 throw VmException.invalidOperand("Truncated instruction at IP=0x" + Integer.toHexString(ip), ip);
             }
 
@@ -123,10 +126,15 @@ public final class VmInterpreter {
 
             // Reached the end of the code (explicit HALT sets IP=codeSize, or the
             // last instruction simply runs off the end): stop normally.
-            if (newIp >= program.codeSize()) {
+            if (newIp >= codeSize) {
                 break;
             }
         }
+    }
+
+    /** Fetches an instruction byte through the execution's bus/MMU (validated window). */
+    private static int fetch(ExecutionContext ctx, int addr) {
+        return ctx.fetchCodeByte(addr);
     }
 
     private boolean executeInstruction(ExecutionContext ctx, int opcode, int ip) {
@@ -136,8 +144,8 @@ public final class VmInterpreter {
             // ===== Data transfer =====
             case Opcode.LI -> {
                 // RI16: LI Rd, imm16
-                int rd = codeCache[ip + 1] & 0xFF;
-                int imm = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
+                int rd = fetch(ctx, ip + 1);
+                int imm = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
                 checkGPR(rd, ip);
                 regs.set(rd, imm);
                 regs.updateZN(imm);
@@ -145,11 +153,10 @@ public final class VmInterpreter {
             }
             case Opcode.MOV -> {
                 // RR: MOV Rd, Rs (packed in one byte: high nibble Rd, low nibble Rs)
-                int packed = codeCache[ip + 1] & 0xFF;
+                int packed = fetch(ctx, ip + 1);
                 int rd = (packed >> 4) & 0x0F;
                 int rs = packed & 0x0F;
-                checkGPR(rd, ip);
-                checkGPR(rs, ip);
+                checkGPRs(ip, rd, rs);
                 int val = regs.get(rs);
                 regs.set(rd, val);
                 regs.updateZN(val);
@@ -159,125 +166,121 @@ public final class VmInterpreter {
             // ===== Memory =====
             case Opcode.LDB -> {
                 // MEM: LDB Rd, [virtualAddr]
-                int rd = codeCache[ip + 1] & 0xFF;
-                int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
+                int rd = fetch(ctx, ip + 1);
+                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
                 checkGPR(rd, ip);
-                int val = bus.readByte(virtualAddr);
+                int val = ctx.bus().readByte(virtualAddr);
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
             }
             case Opcode.LDW -> {
-                int rd = codeCache[ip + 1] & 0xFF;
-                int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
+                int rd = fetch(ctx, ip + 1);
+                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
                 checkGPR(rd, ip);
-                int val = bus.readWord(virtualAddr);
+                int val = ctx.bus().readWord(virtualAddr);
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
             }
             case Opcode.STB -> {
-                int rs = codeCache[ip + 1] & 0xFF;
-                int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
+                int rs = fetch(ctx, ip + 1);
+                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
                 checkGPR(rs, ip);
-                bus.writeByte(virtualAddr, regs.get(rs));
+                ctx.bus().writeByte(virtualAddr, regs.get(rs));
                 return false;
             }
             case Opcode.STW -> {
-                int rs = codeCache[ip + 1] & 0xFF;
-                int virtualAddr = ((codeCache[ip + 2] & 0xFF) << 8) | (codeCache[ip + 3] & 0xFF);
+                int rs = fetch(ctx, ip + 1);
+                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
                 checkGPR(rs, ip);
-                bus.writeWord(virtualAddr, regs.get(rs));
+                ctx.bus().writeWord(virtualAddr, regs.get(rs));
                 return false;
             }
 
             // ===== Indirect memory (ISA v2): address is the value of a register =====
             case Opcode.LDBI -> {
-                int packed = codeCache[ip + 1] & 0xFF;
+                int packed = fetch(ctx, ip + 1);
                 int rd = (packed >> 4) & 0x0F;
                 int rs = packed & 0x0F;
-                checkGPR(rd, ip);
-                checkGPR(rs, ip);
-                int val = bus.readByte(regs.get(rs));
+                checkGPRs(ip, rd, rs);
+                int val = ctx.bus().readByte(regs.get(rs));
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
             }
             case Opcode.LDWI -> {
-                int packed = codeCache[ip + 1] & 0xFF;
+                int packed = fetch(ctx, ip + 1);
                 int rd = (packed >> 4) & 0x0F;
                 int rs = packed & 0x0F;
-                checkGPR(rd, ip);
-                checkGPR(rs, ip);
-                int val = bus.readWord(regs.get(rs));
+                checkGPRs(ip, rd, rs);
+                int val = ctx.bus().readWord(regs.get(rs));
                 regs.set(rd, val);
                 regs.updateZN(val);
                 return false;
             }
             case Opcode.STBI -> {
-                int packed = codeCache[ip + 1] & 0xFF;
+                int packed = fetch(ctx, ip + 1);
                 int rv = (packed >> 4) & 0x0F;
                 int ra = packed & 0x0F;
-                checkGPR(rv, ip);
-                checkGPR(ra, ip);
-                bus.writeByte(regs.get(ra), regs.get(rv));
+                checkGPRs(ip, rv, ra);
+                ctx.bus().writeByte(regs.get(ra), regs.get(rv));
                 return false;
             }
             case Opcode.STWI -> {
-                int packed = codeCache[ip + 1] & 0xFF;
+                int packed = fetch(ctx, ip + 1);
                 int rv = (packed >> 4) & 0x0F;
                 int ra = packed & 0x0F;
-                checkGPR(rv, ip);
-                checkGPR(ra, ip);
-                bus.writeWord(regs.get(ra), regs.get(rv));
+                checkGPRs(ip, rv, ra);
+                ctx.bus().writeWord(regs.get(ra), regs.get(rv));
                 return false;
             }
             case Opcode.COPY -> {
                 // BLOCK: COPY srcAddr, dstAddr, len — a block transfer, delegated to
                 // the DMA controller (D17) so the CPU never bypasses it.
-                int srcAddr = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
-                int dstAddr = ((codeCache[ip + 3] & 0xFF) << 8) | (codeCache[ip + 4] & 0xFF);
-                int len = ((codeCache[ip + 5] & 0xFF) << 8) | (codeCache[ip + 6] & 0xFF);
+                int srcAddr = u16(ctx, ip + 1);
+                int dstAddr = u16(ctx, ip + 3);
+                int len = u16(ctx, ip + 5);
                 ctx.dma().copyBlock(srcAddr, dstAddr, len);
                 return false;
             }
             case Opcode.MOVE -> {
-                int srcAddr = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
-                int dstAddr = ((codeCache[ip + 3] & 0xFF) << 8) | (codeCache[ip + 4] & 0xFF);
-                int len = ((codeCache[ip + 5] & 0xFF) << 8) | (codeCache[ip + 6] & 0xFF);
+                int srcAddr = u16(ctx, ip + 1);
+                int dstAddr = u16(ctx, ip + 3);
+                int len = u16(ctx, ip + 5);
                 // MOVE allows overlap — the DMA's move has memmove semantics.
                 ctx.dma().moveBlock(srcAddr, dstAddr, len);
                 return false;
             }
 
             // ===== Arithmetic =====
-            case Opcode.ADD -> { executeArith(regs, ip, (a, b) -> a + b, true, false); return false; }
-            case Opcode.SUB -> { executeArith(regs, ip, (a, b) -> a - b, true, true); return false; }
-            case Opcode.MUL -> { executeMul(regs, ip); return false; }
-            case Opcode.DIV -> { executeDiv(regs, ip, true); return false; }
-            case Opcode.MOD -> { executeDiv(regs, ip, false); return false; }
+            case Opcode.ADD -> { executeArith(ctx, ip, (a, b) -> a + b, true, false); return false; }
+            case Opcode.SUB -> { executeArith(ctx, ip, (a, b) -> a - b, true, true); return false; }
+            case Opcode.MUL -> { executeMul(ctx, ip); return false; }
+            case Opcode.DIV -> { executeDiv(ctx, ip, true); return false; }
+            case Opcode.MOD -> { executeDiv(ctx, ip, false); return false; }
 
             // ===== Logic =====
-            case Opcode.AND -> { executeLogic(regs, ip, (a, b) -> a & b); return false; }
-            case Opcode.OR  -> { executeLogic(regs, ip, (a, b) -> a | b); return false; }
-            case Opcode.XOR -> { executeLogic(regs, ip, (a, b) -> a ^ b); return false; }
-            case Opcode.NOT -> { executeNot(regs, ip); return false; }
+            case Opcode.AND -> { executeLogic(ctx, ip, (a, b) -> a & b); return false; }
+            case Opcode.OR  -> { executeLogic(ctx, ip, (a, b) -> a | b); return false; }
+            case Opcode.XOR -> { executeLogic(ctx, ip, (a, b) -> a ^ b); return false; }
+            case Opcode.NOT -> { executeNot(ctx, ip); return false; }
 
             // ===== Shifts =====
-            case Opcode.SHL -> { executeShift(regs, ip, true, false); return false; }
-            case Opcode.SHR -> { executeShift(regs, ip, false, false); return false; }
-            case Opcode.SAR -> { executeShift(regs, ip, false, true); return false; }
+            case Opcode.SHL -> { executeShift(ctx, ip, true, false); return false; }
+            case Opcode.SHR -> { executeShift(ctx, ip, false, false); return false; }
+            case Opcode.SAR -> { executeShift(ctx, ip, false, true); return false; }
 
             // ===== Comparison =====
-            case Opcode.CMP  -> { executeCmp(regs, ip, true); return false; }
-            case Opcode.CMPU -> { executeCmp(regs, ip, false); return false; }
+            case Opcode.CMP  -> { executeCmp(ctx, ip, true); return false; }
+            case Opcode.CMPU -> { executeCmp(ctx, ip, false); return false; }
 
             // ===== Flow control =====
-            case Opcode.JMP -> { executeJump(regs, ip, true, false); return true; }
-            case Opcode.JZ  -> { return executeJump(regs, ip, regs.getZ(), false); }
-            case Opcode.JNZ -> { return executeJump(regs, ip, !regs.getZ(), false); }
-            case Opcode.JC  -> { return executeJump(regs, ip, regs.getC(), false); }
-            case Opcode.JV  -> { return executeJump(regs, ip, regs.getV(), false); }
+            case Opcode.JMP -> { executeJump(ctx, ip, true, false); return true; }
+            case Opcode.JZ  -> { return executeJump(ctx, ip, regs.getZ(), false); }
+            case Opcode.JNZ -> { return executeJump(ctx, ip, !regs.getZ(), false); }
+            case Opcode.JC  -> { return executeJump(ctx, ip, regs.getC(), false); }
+            case Opcode.JV  -> { return executeJump(ctx, ip, regs.getV(), false); }
             case Opcode.CALL -> { executeCall(ctx, regs, ip); return true; }
             case Opcode.RET  -> { executeReturn(ctx, regs, ip); return true; }
 
@@ -291,7 +294,7 @@ public final class VmInterpreter {
                 return true;
             }
             case Opcode.TRAP -> {
-                int code8 = codeCache[ip + 1] & 0xFF;
+                int code8 = fetch(ctx, ip + 1);
                 throw new VmException(VmException.Code.ARITHMETIC_FAULT, "TRAP 0x" + Integer.toHexString(code8), ip);
             }
 
@@ -307,21 +310,17 @@ public final class VmInterpreter {
         }
     }
 
-    private void checkGPRs(int... regs) {
-        for (int r : regs) checkGPR(r, 0);
+    /** Validates several register operands of one instruction (reports the real IP). */
+    private void checkGPRs(int ip, int... regs) {
+        for (int r : regs) checkGPR(r, ip);
     }
 
-    @FunctionalInterface
-    private interface IntBinaryOperator {
-        int applyAsInt(int a, int b);
-    }
-
-    private boolean executeArith(RegisterFile regs, int ip, java.util.function.IntBinaryOperator op, boolean signed, boolean isSub) {
-        int packed = codeCache[ip + 1] & 0xFF;
+    private boolean executeArith(ExecutionContext ctx, int ip, IntBinaryOperator op, boolean signed, boolean isSub) {
+        RegisterFile regs = ctx.registers();
+        int packed = fetch(ctx, ip + 1);
         int rd = (packed >> 4) & 0x0F;
         int rs = packed & 0x0F;
-        checkGPR(rd, ip);
-        checkGPR(rs, ip);
+        checkGPRs(ip, rd, rs);
         int a = regs.get(rd);
         int b = regs.get(rs);
         int result = op.applyAsInt(a, b) & 0xFFFF;
@@ -332,12 +331,12 @@ public final class VmInterpreter {
         return false;
     }
 
-    private boolean executeMul(RegisterFile regs, int ip) {
-        int packed = codeCache[ip + 1] & 0xFF;
+    private boolean executeMul(ExecutionContext ctx, int ip) {
+        RegisterFile regs = ctx.registers();
+        int packed = fetch(ctx, ip + 1);
         int rd = (packed >> 4) & 0x0F;
         int rs = packed & 0x0F;
-        checkGPR(rd, ip);
-        checkGPR(rs, ip);
+        checkGPRs(ip, rd, rs);
         int a = regs.get(rd);
         int b = regs.get(rs);
         int result = (a * b) & 0xFFFF;
@@ -346,12 +345,12 @@ public final class VmInterpreter {
         return false;
     }
 
-    private boolean executeDiv(RegisterFile regs, int ip, boolean isDiv) {
-        int packed = codeCache[ip + 1] & 0xFF;
+    private boolean executeDiv(ExecutionContext ctx, int ip, boolean isDiv) {
+        RegisterFile regs = ctx.registers();
+        int packed = fetch(ctx, ip + 1);
         int rd = (packed >> 4) & 0x0F;
         int rs = packed & 0x0F;
-        checkGPR(rd, ip);
-        checkGPR(rs, ip);
+        checkGPRs(ip, rd, rs);
         int a = regs.get(rd);
         int b = regs.get(rs);
         if (b == 0) {
@@ -369,12 +368,12 @@ public final class VmInterpreter {
         return false;
     }
 
-    private boolean executeLogic(RegisterFile regs, int ip, java.util.function.IntBinaryOperator op) {
-        int packed = codeCache[ip + 1] & 0xFF;
+    private boolean executeLogic(ExecutionContext ctx, int ip, IntBinaryOperator op) {
+        RegisterFile regs = ctx.registers();
+        int packed = fetch(ctx, ip + 1);
         int rd = (packed >> 4) & 0x0F;
         int rs = packed & 0x0F;
-        checkGPR(rd, ip);
-        checkGPR(rs, ip);
+        checkGPRs(ip, rd, rs);
         int a = regs.get(rd);
         int b = regs.get(rs);
         int result = op.applyAsInt(a, b) & 0xFFFF;
@@ -383,8 +382,9 @@ public final class VmInterpreter {
         return false;
     }
 
-    private boolean executeNot(RegisterFile regs, int ip) {
-        int rd = codeCache[ip + 1] & 0xFF;
+    private boolean executeNot(ExecutionContext ctx, int ip) {
+        RegisterFile regs = ctx.registers();
+        int rd = fetch(ctx, ip + 1);
         checkGPR(rd, ip);
         int a = regs.get(rd);
         int result = (~a) & 0xFFFF;
@@ -393,12 +393,12 @@ public final class VmInterpreter {
         return false;
     }
 
-    private void executeShift(RegisterFile regs, int ip, boolean left, boolean arithmetic) {
-        int packed = codeCache[ip + 1] & 0xFF;
+    private void executeShift(ExecutionContext ctx, int ip, boolean left, boolean arithmetic) {
+        RegisterFile regs = ctx.registers();
+        int packed = fetch(ctx, ip + 1);
         int rd = (packed >> 4) & 0x0F;
         int rs = packed & 0x0F;
-        checkGPR(rd, ip);
-        checkGPR(rs, ip);
+        checkGPRs(ip, rd, rs);
         int value = regs.get(rd);
         int rawCount = regs.get(rs); // Full 16-bit value
         if (rawCount < 0 || rawCount > 15) {
@@ -424,12 +424,12 @@ public final class VmInterpreter {
         regs.updateShiftFlags(result, lastBit);
     }
 
-    private void executeCmp(RegisterFile regs, int ip, boolean signed) {
-        int packed = codeCache[ip + 1] & 0xFF;
+    private void executeCmp(ExecutionContext ctx, int ip, boolean signed) {
+        RegisterFile regs = ctx.registers();
+        int packed = fetch(ctx, ip + 1);
         int rd = (packed >> 4) & 0x0F;
         int rs = packed & 0x0F;
-        checkGPR(rd, ip);
-        checkGPR(rs, ip);
+        checkGPRs(ip, rd, rs);
         int a = regs.get(rd);
         int b = regs.get(rs);
         if (signed) {
@@ -439,12 +439,13 @@ public final class VmInterpreter {
         }
     }
 
-    private boolean executeJump(RegisterFile regs, int ip, boolean condition, boolean unconditional) {
+    private boolean executeJump(ExecutionContext ctx, int ip, boolean condition, boolean unconditional) {
+        RegisterFile regs = ctx.registers();
         if (!unconditional && !condition) {
             return false; // Condition not met, don't jump, let main loop advance IP
         }
         // BR16: signed 16-bit relative offset from end of instruction
-        int offset = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
+        int offset = u16(ctx, ip + 1);
         // Sign extend
         if ((offset & 0x8000) != 0) {
             offset |= 0xFFFF0000;
@@ -459,7 +460,7 @@ public final class VmInterpreter {
     }
 
     private void executeCall(ExecutionContext ctx, RegisterFile regs, int ip) {
-        int offset = ((codeCache[ip + 1] & 0xFF) << 8) | (codeCache[ip + 2] & 0xFF);
+        int offset = u16(ctx, ip + 1);
         if ((offset & 0x8000) != 0) offset |= 0xFFFF0000;
         int target = ip + 3 + offset;
         if (target < 0 || target >= program.codeSize()) {
@@ -476,7 +477,7 @@ public final class VmInterpreter {
             throw new VmException(VmException.Code.STACK_LIMIT, "Stack overflow on CALL", ip);
         }
         sp -= 2;
-        bus.writeWord(sp, ip + 3); // Return address
+        ctx.bus().writeWord(sp, ip + 3); // Return address
         regs.set(RegisterFile.SP, sp);
 
         // Establish the new frame: FP is the base of the callee's frame.
@@ -497,7 +498,7 @@ public final class VmInterpreter {
         if (sp + 2 > SoftMMU.ADDRESS_SPACE_SIZE) {
             throw new VmException(VmException.Code.STACK_LIMIT, "Stack underflow on RET", ip);
         }
-        int retAddr = bus.readWord(sp);
+        int retAddr = ctx.bus().readWord(sp);
         sp += 2;
         regs.set(RegisterFile.SP, sp);
         regs.set(RegisterFile.FP, restoredFramePointer);
@@ -529,8 +530,9 @@ public final class VmInterpreter {
         return false;
     }
 
-    private static int u16(byte[] code, int offset) {
-        return ((code[offset] & 0xFF) << 8) | (code[offset + 1] & 0xFF);
+    /** Reads a big-endian 16-bit operand from the code stream (through the MMU). */
+    private static int u16(ExecutionContext ctx, int offset) {
+        return (fetch(ctx, offset) << 8) | fetch(ctx, offset + 1);
     }
 
     /**
@@ -549,27 +551,27 @@ public final class VmInterpreter {
         RegisterFile regs = ctx.registers();
         switch (opcode) {
             case Opcode.LDB -> {
-                int rd = codeCache[ip + 1] & 0xFF;
-                int addr = u16(codeCache, ip + 2);
+                int rd = fetch(ctx, ip + 1);
+                int addr = u16(ctx, ip + 2);
                 LoggerUtils.Module.debug("iflow", "MEM RD8  [0x%04X]=0x%02X -> R%d", addr, regs.get(rd) & 0xFF, rd);
             }
             case Opcode.LDW -> {
-                int rd = codeCache[ip + 1] & 0xFF;
-                int addr = u16(codeCache, ip + 2);
+                int rd = fetch(ctx, ip + 1);
+                int addr = u16(ctx, ip + 2);
                 LoggerUtils.Module.debug("iflow", "MEM RD16 [0x%04X]=0x%04X -> R%d", addr, regs.get(rd) & 0xFFFF, rd);
             }
             case Opcode.STB -> {
-                int rs = codeCache[ip + 1] & 0xFF;
-                int addr = u16(codeCache, ip + 2);
+                int rs = fetch(ctx, ip + 1);
+                int addr = u16(ctx, ip + 2);
                 LoggerUtils.Module.debug("iflow", "MEM WR8  [0x%04X]<-0x%02X (R%d)", addr, regs.get(rs) & 0xFF, rs);
             }
             case Opcode.STW -> {
-                int rs = codeCache[ip + 1] & 0xFF;
-                int addr = u16(codeCache, ip + 2);
+                int rs = fetch(ctx, ip + 1);
+                int addr = u16(ctx, ip + 2);
                 LoggerUtils.Module.debug("iflow", "MEM WR16 [0x%04X]<-0x%04X (R%d)", addr, regs.get(rs) & 0xFFFF, rs);
             }
             case Opcode.LDBI, Opcode.LDWI, Opcode.STBI, Opcode.STWI -> {
-                int packed = codeCache[ip + 1] & 0xFF;
+                int packed = fetch(ctx, ip + 1);
                 int r0 = (packed >> 4) & 0x0F;
                 int r1 = packed & 0x0F;
                 int addr = regs.get(r1) & 0xFFFF;
@@ -583,15 +585,15 @@ public final class VmInterpreter {
             }
             case Opcode.COPY, Opcode.MOVE -> {
                 String name = (opcode == Opcode.COPY) ? "COPY" : "MOVE";
-                int src = u16(codeCache, ip + 1);
-                int dst = u16(codeCache, ip + 3);
-                int len = u16(codeCache, ip + 5);
+                int src = u16(ctx, ip + 1);
+                int dst = u16(ctx, ip + 3);
+                int len = u16(ctx, ip + 5);
                 if (len == 0) {
                     LoggerUtils.Module.debug("iflow", "MEM %s len=0 (no-op) src=0x%04X dst=0x%04X", name, src, dst);
                     return;
                 }
-                int sumSrc = blockChecksum(src, len);
-                int sumDst = blockChecksum(dst, len);
+                int sumSrc = blockChecksum(ctx, src, len);
+                int sumDst = blockChecksum(ctx, dst, len);
                 LoggerUtils.Module.debug("iflow",
                     "MEM %s [0x%04X..0x%04X] -> [0x%04X..0x%04X] len=%d sumSrc=0x%04X sumDst=0x%04X",
                     name, src, src + len - 1, dst, dst + len - 1, len, sumSrc, sumDst);
@@ -621,10 +623,10 @@ public final class VmInterpreter {
     }
 
     /** 16-bit additive checksum over {@code len} bytes at {@code addr}. */
-    private int blockChecksum(int addr, int len) {
+    private int blockChecksum(ExecutionContext ctx, int addr, int len) {
         int sum = 0;
         for (int i = 0; i < len; i++) {
-            sum = (sum + (bus.readByte(addr + i) & 0xFF)) & 0xFFFF;
+            sum = (sum + (ctx.bus().readByte(addr + i) & 0xFF)) & 0xFFFF;
         }
         return sum;
     }

@@ -58,6 +58,17 @@ public final class ExecutionContext {
      */
     private VmDmaController dmaController;
     private HostServiceRegistry serviceRegistry;
+    /**
+     * Validated instruction window (an I-cache line): the current 4KB code page
+     * read through the data bus, plus the page base it was filled from. The CPU
+     * fetches instructions from memory via the MMU (IFLOW-AUD-023), so the code
+     * page's {@code EXECUTE} permission is enforced; the page is only revalidated
+     * when IP moves to a different page. It lives in the pooled context (not in
+     * {@link VmInterpreter}) so a reused interpreter stays stateless and
+     * thread-safe (IFLOW-AUD-029).
+     */
+    private byte[] codeWindow;
+    private int codeWindowBase = -1;
     private HostContext hostContext = HostContext.NONE;
     private Supplier<Long> nanoTimeSupplier = System::nanoTime;
 
@@ -114,6 +125,7 @@ public final class ExecutionContext {
         this.pageTable = mmu != null ? mmu.getPageTableDirect() : null;
         this.bus = null;           // re-derived from the new MMU
         this.dmaController = null; // re-derived from the new bus
+        this.codeWindowBase = -1;  // new memory: refetch the instruction window
         return this;
     }
 
@@ -125,6 +137,7 @@ public final class ExecutionContext {
         this.bus = bus;
         this.pageTable = bus != null ? bus.memory().getPageTableDirect() : null;
         this.dmaController = null;
+        this.codeWindowBase = -1;  // new bus: refetch the instruction window
         return this;
     }
 
@@ -164,6 +177,9 @@ public final class ExecutionContext {
         cancelled = false;
         fatalError = null;
         startNanos = nanoTimeSupplier == null ? System.nanoTime() : nanoTimeSupplier.get();
+        // The instruction window is per-execution state too: never serve code
+        // from a previous run (IFLOW-AUD-023).
+        codeWindowBase = -1;
 
         // Initialize stack pointer (stack grows down from the top of the stack region)
         registers.set(RegisterFile.SP, VmMemoryMap.STACK_TOP);
@@ -339,6 +355,29 @@ public final class ExecutionContext {
     /** Rebinds the execution's page table (used when wiring a custom MMU/bus). */
     public void setPageTable(PageTable pageTable) {
         this.pageTable = pageTable;
+    }
+
+    /**
+     * Fetches an instruction byte through the execution's data bus, validating the
+     * code page's {@code EXECUTE} permission (IFLOW-AUD-023).
+     * <p>
+     * The first access to a page fills the 4KB instruction window from physical
+     * memory through the MMU; subsequent bytes of the same page are served from the
+     * window (an I-cache line). {@link #softMMU(SoftMMU)}, {@link #bus(VmBus)} and
+     * {@link #initialize()} invalidate it, so a pooled context never serves code
+     * from a previous execution's memory.
+     * </p>
+     */
+    public int fetchCodeByte(int ip) {
+        int pageBase = ip & PageTable.PAGE_MASK;
+        if (codeWindowBase != pageBase) {
+            if (codeWindow == null) {
+                codeWindow = new byte[PageTable.PAGE_SIZE];
+            }
+            bus().fillCodeWindow(pageBase, codeWindow);
+            codeWindowBase = pageBase;
+        }
+        return codeWindow[ip & PageTable.OFFSET_MASK] & 0xFF;
     }
 
     /** Gets the virtual address of the input buffer (see {@link VmMemoryMap#INPUT_BASE}). */

@@ -62,6 +62,21 @@ class FirmwareIntegrationTest {
         softMMU.mapPage(VmMemoryMap.pageOf(VmMemoryMap.OUTPUT_BASE),
             VmMemoryMap.OUTPUT_BASE, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         
+        // Load the image into memory: the CPU now fetches instructions through the
+        // MMU, so the code must live at CODE_BASE (IFLOW-AUD-023). The loader is a
+        // supervisor master: writable temporarily, then demoted to R/X.
+        byte[] image = program.code();
+        int codePages = (image.length + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
+        for (int p = 0; p < codePages; p++) {
+            softMMU.getPageTable().protect(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
+                PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
+        }
+        VmBus.supervisor(softMMU).writeBlock(VmMemoryMap.CODE_BASE, image, 0, image.length);
+        for (int p = 0; p < codePages; p++) {
+            softMMU.getPageTable().protect(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p,
+                PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        }
+        
         // Write test message content at the input buffer
         String testMsg = "spam message";
         for (int i = 0; i < testMsg.length(); i++) {
@@ -80,7 +95,7 @@ class FirmwareIntegrationTest {
         });
         ctx.initialize();
 
-        VmInterpreter interpreter = new VmInterpreter(program, ctx.bus(), registry);
+        VmInterpreter interpreter = new VmInterpreter(program, registry);
         
         // Debug: check what the VM will fetch at IP=0
         byte[] vmCode = program.code();
