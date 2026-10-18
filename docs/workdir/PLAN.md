@@ -983,7 +983,11 @@ Todos los items P1 resueltos:
 | `0x0501` | STATE_WRITE | `state.write` | `key` | **lee** `R3` bytes | bytes leídos | — |
 | `0x0600` | CHANNEL_RESOLVE | `channel.resolve` | — | **lee** nombre y **escribe** id | bytes | — |
 
-IDs declarados pero **no registrados** (`0x0102/0x0201/0x0301/0x0302/0x0400/0x0601/0x0700/0x0701`) → `status=5 (UNSUPPORTED)`.
+**Estado (D26):** los 15 IDs declarados están **registrados** y son funcionales. Los que en su
+momento eran «declarados pero no registrados» (`0x0102 PROPERTY_EXISTS`, `0x0201 PERMISSION_QUERY`,
+`0x0301 ROUTE_REDIRECT`, `0x0302 ROUTE_RATE_LIMIT`, `0x0601 CHANNEL_POLICY`, `0x0700 MESSAGE_CLONE`,
+`0x0701 MESSAGE_ID`) se implementaron en el lote 6; `0x0400 TRANSFORM_APPLY` se registró en el
+lote 4. Cualquier otro ID responde `status=5 (UNSUPPORTED)`.
 
 **Valores de `options`:** `scope`: `0x01` MESSAGE, `0x02` EMITTER, `0x03` RECIPIENT, `0x04` CHANNEL, `0x05` SERVER · `propId` (8 bits bajos): message `0x10` CONTENT, `0x11` CHANNEL, `0x12` DIRECTION, `0x13` TYPE, `0x14` LANG_SOURCE, `0x15` LANG_TARGET, `0x16` COLOR_MODE, `0x17` FORMAT_PAPI, `0x18` SLEEP_MILLIS, `0x19` SOUNDS, `0x1A` CANCELLED, `0x1B` PROCESSED, `0x1C` TRANSLATE · actor `0x00–0x03` · channel `0x00–0x03` · `decision`: `0` LOG, `1` DROP, `2` REJECT, `3` REDIRECT, `4` CHAN_REDIR, `5` RATE_LIMIT, `6` CONTINUE.
 
@@ -1081,16 +1085,19 @@ Todas resueltas:
 
 ### R2. Inconsistencia detectada (toolchain) — D2 no está completo
 
-El ROM de firmware del compilador (`tools/iflow-compiler/src/assembler.ts:240-249`)
-**todavía emite las equates viejas**: `PROP_ACTOR_NAME=0x0100..0x0103`,
+El ROM de firmware del compilador (`tools/iflow-compiler/src/assembler.ts`)
+**emitía las equates viejas**: `PROP_ACTOR_NAME=0x0100..0x0103`,
 `PROP_CHAN_NAME=0x0200..0x0203`. Con D2, `0x0100` se decodifica como
 `scope=MESSAGE(0x01), propId=0x00` → un programa que haga `LI R1, PROP_ACTOR_NAME`
 leería **MESSAGE/propId 0**, no el nombre del actor. Las equates deben reasignarse a
-`0x00–0x03` **dentro de su scope**. No hay fixtures que usen esas equates hoy (solo
-`PROP_CHANNEL=0x0011`, que es de message y es correcto).
+`0x00–0x03` **dentro de su scope**.
 
-**Fix pendiente:** `assembler.ts` equates + regenerar los 4 artefactos
-(`test/{firmware,main_only,simple}.flow`, `test/firmware.lst`).
+**✅ Resuelto.** `assembler.ts` ya emite las equates reasignadas dentro de su scope
+(`PROP_ACTOR_NAME=0x00…0x03`, `PROP_CHAN_NAME=0x00…0x03`) y los 4 artefactos
+(`test/{firmware,main_only,simple}.flow`, `test/firmware.lst`) se regeneraron y commitean
+(el `.lst` muestra `PROP_ACTOR_NAME = 0x0000`). No hay fixtures que usen las equates de
+actor/canal (solo `PROP_CHANNEL=0x0011`, de message y correcto), así que no hubo cambio de
+comportamiento.
 
 ### R3. Solapamiento de páginas — resolución por prevención
 
