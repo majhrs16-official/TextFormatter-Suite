@@ -1441,8 +1441,9 @@ estado propio (antes guardaba `codeCache = program.code()`, un clon por ejecuci�
 bus/MMU desde el `ExecutionContext` en `execute(ctx)`. El engine lo construye **una vez** en
 `setProgram` y lo guarda en `LoadedProgram`, reutilizándolo en cada `route()`. Se elimina el
 clon de código por mensaje y la creación de intérprete por mensaje.
-- Punto (3) del informe (`initialize()` con 8192 `writeByte`) ya estaba resuelto por D17: la
-  limpieza de E/S usa dos bloque de E/S; ver D25, que además la hace prácticamente gratuita.
+- Punto (3) del informe (`initialize()` con 8192 `writeByte`) ya estaba resuelto por D17 (la
+  limpieza de E/S usa dos escrituras en bloque); ver D25, que además la hace prácticamente
+  gratuita.
 
 **D25 — Memoria física y tabla de páginas copy-on-write (AUD-029, optimización del clon).**
 El segundo punto del informe (el clon de la MMU por ejecución: 64 KB + 16 entradas de tabla) se
@@ -1464,6 +1465,27 @@ resuelve con un *fork* copy-on-write:
 
 **No cambia** el ABI, el mapa de memoria, la ISA ni la semántica de los programas. La única
 observable nueva es la correcta: ejecutar una página de código sin `EXECUTE` ahora falla.
+
+**D26 — Servicios declarados y no registrados (lote 6, AUD-026/027 y ABI).** Criterio: **hacer
+funcionales, no borrar**. Los siete IDs que estaban en la ABI pero no registrados se implementan
+y registran; cada uno reutiliza puertos existentes del host (`HostContext`, `permissionChecker`,
+`rateLimiter`, journal) y respeta la ABI v2 (`R0`=status, `R3`=bytes, `R4`=escalar):
+
+| ID | Servicio | Capability | Contrato (entrada → salida) |
+|----|----------|-----------|------------------------------|
+| `0x0102` | `PROPERTY_EXISTS` | `property.read` | `R1=(scope<<8)\|propId` → `R0=OK`, `R4=1` si la propiedad existe, `0` si no (sin transferir bytes) |
+| `0x0201` | `PERMISSION_QUERY` | `permission.check` | buffer `actor\0nodo` → `R0=OK`/`DENIED` según el resultado, `R4=1/0` (a diferencia de `PERMISSION_CHECK`, que siempre devuelve `OK` y solo distingue por `R4`) |
+| `0x0301` | `ROUTE_REDIRECT` | `routing.decide` | buffer=destino, `R1` byte bajo = `0` actor / `1` canal → `R0=OK`, `R4=tipo`; *journal* `REDIRECT_TARGET`/`REDIRECT_CHANNEL` |
+| `0x0302` | `ROUTE_RATE_LIMIT` | `routing.decide` | buffer=clave → `R0=OK`, `R4=backoff ms`; *journal* `RATE_LIMIT_BACKOFF`; sin `rateLimiter` → `UNSUPPORTED` |
+| `0x0601` | `CHANNEL_POLICY` | `channel.resolve` | buffer=canal, `R1` byte bajo = `0` envío / `1` recepción / `2` tasa → escribe la política en el buffer, `R3=bytes`; canal desconocido → `NOT_FOUND` |
+| `0x0700` | `MESSAGE_CLONE` | — | `R2=dst`, `R3=n` → copia `n` bytes del payload serializado de entrada (`0x7000`) al destino vía DMA; `R0=OK`, `R3=copiados` |
+| `0x0701` | `MESSAGE_ID` | — | escribe el id del mensaje (`ctx.messageId()`) en el buffer → `R0=OK`, `R3=bytes`; sin id → `NOT_FOUND` |
+
+Puertos añadidos para que sean genuinamente funcionales (no muertos): `HostContext.readChannelProperty(name, propId)`
+(implementado por `MessageHostContext` sobre `ChannelRegistry.get`), y `MESSAGE_CLONE`/`MESSAGE_ID`
+usan `VmDmaController` y `ExecutionContext.messageId()`. `PERMISSION_QUERY`/`ROUTE_RATE_LIMIT`
+reutilizan `permissionChecker`/`rateLimiter`. No cambia el ABI, la ISA, el mapa de memoria ni
+ninguna firma existente: solo se añaden servicios.
 
 ### Bitácora de remediación
 
@@ -1491,6 +1513,7 @@ observable nueva es la correcta: ejecutar una página de código sin `EXECUTE` a
 | 2026-10-17 | `7ddcff4` | Lote 4 (parte 2, criterio corregido): se **restaura y hace funcional** lo que se había eliminado — anillos `Privilege`/`mprotect` (AUD-030/022), `pageTable` cableado (AUD-024), accesores con uso real (AUD-022), `placeholderResolver`/`translationDetector` vía `TRANSFORM_APPLY` (AUD-026/027) |
 | 2026-10-17 | `ba1e128` | Lote 5: fetch por la MMU con ventana de página validada (AUD-023) + `VmInterpreter` inmutable reutilizado por programa, sin clon de código (AUD-029) |
 | 2026-10-17 | `a87622b` | D25: memoria física y tabla de páginas copy-on-write + `clearBlock` (AUD-029, optimización del clon de la MMU; fork ~15× medido) |
+| 2026-10-17 | `bfe9122` | Lote 6 (D26): los 7 servicios declarados y no registrados quedan funcionales (`PROPERTY_EXISTS`/`PERMISSION_QUERY`/`ROUTE_REDIRECT`/`ROUTE_RATE_LIMIT`/`CHANNEL_POLICY`/`MESSAGE_CLONE`/`MESSAGE_ID`); cierra la 2ª auditoría |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
@@ -1512,8 +1535,12 @@ su seguimiento vive en este PLAN. De ella ya están atendidos AUD-019 (D17), el 
 papel de «controlador de interrupciones» de `design.md` §4.7. No se añade una línea de
 interrupción sin requisito de la especificación.
 
-**Pendiente de la 2ª auditoría (lote 6):** los servicios **declarados y no registrados**
-siguen siendo capacidades por implementar (criterio: hacerlos funcionales, no borrarlos):
-`PROPERTY_EXISTS` (0x0102), `PERMISSION_QUERY` (0x0201), `ROUTE_REDIRECT` (0x0301),
-`ROUTE_RATE_LIMIT` (0x0302), `CHANNEL_POLICY` (0x0601), `MESSAGE_CLONE` (0x0700) y
-`MESSAGE_ID` (0x0701).
+**Lote 6 (D26) — servicios declarados y no registrados:** ✅ atendido. Los siete IDs que
+estaban en la ABI pero no registrados (`PROPERTY_EXISTS` 0x0102, `PERMISSION_QUERY` 0x0201,
+`ROUTE_REDIRECT` 0x0301, `ROUTE_RATE_LIMIT` 0x0302, `CHANNEL_POLICY` 0x0601, `MESSAGE_CLONE`
+0x0700, `MESSAGE_ID` 0x0701) se implementan y registran (criterio: hacerlos funcionales, no
+borrarlos); ver la tabla de contratos en **D26**. La ABI v2 declara ahora 15 IDs y **todos**
+están registrados; cualquier otro sigue devolviendo `UNSUPPORTED`.
+
+**Cierre de la 2ª auditoría:** con el lote 6 quedan atendidos todos los hallazgos del informe
+vigente (IFLOW-AUD-019…030), sin cambios de ABI, ISA ni mapa de memoria.

@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (335 tests)  
+> **Estado**: ✅ Implementada y probada (348 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -100,28 +100,45 @@ Convención de registros (estilo syscall):
 | `3` | INVALID_ARGUMENT | | `8` | PARTIAL |
 | `4` | BUFFER_TOO_SMALL (`R3` = bytes requeridos) | | | |
 
-Servicios estándar (13 IDs; sólo los 8 marcados ✅ están registrados hoy — el resto responde `status=5` UNSUPPORTED):
+Servicios estándar (15 IDs; **todos registrados** — cualquier otro responde `status=5` UNSUPPORTED):
 
-| ID | Servicio | Capability | |
-|----|----------|------------|---|
-| 0x0100 | PROPERTY_READ | `property.read` | ✅ |
-| 0x0101 | PROPERTY_WRITE | `property.write` | ✅ |
-| 0x0102 | PROPERTY_EXISTS | `property.read` | |
-| 0x0200 | PERMISSION_CHECK | `permission.check` | ✅ |
-| 0x0201 | PERMISSION_QUERY | `permission.check` | |
-| 0x0300 | ROUTE_DECISION | `routing.decide` | ✅ |
-| 0x0301 | ROUTE_REDIRECT | `routing.decide` | |
-| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | |
-| 0x0400 | TRANSFORM_APPLY | `transform.apply` | ✅ |
-| 0x0500 | STATE_READ | `state.read` | ✅ |
-| 0x0501 | STATE_WRITE | `state.write` | ✅ |
-| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | ✅ |
-| 0x0601 | CHANNEL_POLICY | `channel.resolve` | |
+| ID | Servicio | Capability |
+|----|----------|------------|
+| 0x0100 | PROPERTY_READ | `property.read` |
+| 0x0101 | PROPERTY_WRITE | `property.write` |
+| 0x0102 | PROPERTY_EXISTS | `property.read` |
+| 0x0200 | PERMISSION_CHECK | `permission.check` |
+| 0x0201 | PERMISSION_QUERY | `permission.check` |
+| 0x0300 | ROUTE_DECISION | `routing.decide` |
+| 0x0301 | ROUTE_REDIRECT | `routing.decide` |
+| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` |
+| 0x0400 | TRANSFORM_APPLY | `transform.apply` |
+| 0x0500 | STATE_READ | `state.read` |
+| 0x0501 | STATE_WRITE | `state.write` |
+| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` |
+| 0x0601 | CHANNEL_POLICY | `channel.resolve` |
+| 0x0700 | MESSAGE_CLONE | — |
+| 0x0701 | MESSAGE_ID | — |
 
 `TRANSFORM_APPLY` (0x0400): el byte bajo de `options` elige el tipo — `0` resuelve
 placeholders (hook `placeholderResolver`) y `1` detecta el idioma (hook `translationDetector`);
 sin hook inyectado responde `UNSUPPORTED`. `PROPERTY_READ` usa ambos hooks para resolver el
 contenido y autodetectar el idioma de origen cuando falta.
+
+Servicios añadidos en el lote 6 (D26):
+
+- `PROPERTY_EXISTS` (0x0102): no transfiere bytes; devuelve `R4=1` si la propiedad existe.
+- `PERMISSION_QUERY` (0x0201): como `PERMISSION_CHECK` (buffer `actor\0nodo`) pero reporta el
+  resultado en `R0` (`OK`/`DENIED`) además de `R4=1/0`.
+- `ROUTE_REDIRECT` (0x0301): buffer=destino, byte bajo de `options` = `0` actor / `1` canal;
+  escribe la entrada `REDIRECT_TARGET`/`REDIRECT_CHANNEL` del *journal*.
+- `ROUTE_RATE_LIMIT` (0x0302): buffer=clave; calcula el *backoff* con el `RateLimiter` inyectado
+  y escribe `RATE_LIMIT_BACKOFF`; sin limiter → `UNSUPPORTED`.
+- `CHANNEL_POLICY` (0x0601): buffer=nombre de canal (C string), byte bajo de `options` =
+  `0` envío / `1` recepción / `2` tasa; escribe la política en el buffer; desconocido → `NOT_FOUND`.
+- `MESSAGE_CLONE` (0x0700): `R2=dst`, `R3=n`; copia `n` bytes del payload serializado de entrada
+  (`0x7000`) al destino vía DMA.
+- `MESSAGE_ID` (0x0701): escribe el id del mensaje en el buffer.
 
 `options` para servicios de propiedad: `(scope << 8) | propId`, con `propId` en los **8 bits bajos** (namespaceado por `scope`).
 `scope`: `0x01` MESSAGE · `0x02` EMITTER · `0x03` RECIPIENT · `0x04` CHANNEL · `0x05` SERVER.
@@ -192,12 +209,13 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
 | `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
-| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa |
+| `HostServiceRegistryTest` | ABI v2 de los 15 servicios HOST, capabilities, journal, transferencias vía DMA, copy-on-write del buffer |
+| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 335 tests passing**
+**Total: 348 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -258,7 +276,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 335 tests
+├── src/test/java/...                  # 348 tests
 └── build.gradle
 ```
 
