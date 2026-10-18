@@ -90,7 +90,7 @@ def dep_score(files):
 
 # --- nucleo de la rubrica -----------------------------------------------------
 
-def score_scope(m, dep=0.0, tools=None):
+def score_scope(m, dep=0.0, tools=None, module="(total)"):
     """Devuelve {familia: (score, fuente)} para un ambito (modulo o total)."""
     tools = tools or {}
     src = float(m.get("src_loc", 0))
@@ -108,9 +108,16 @@ def score_scope(m, dep=0.0, tools=None):
     s = clamp(100 - min(40, d("stubs") * 40) - min(30, d("bare_catch") * 40)
               - min(20, d("todo") * 40))
     out["calidad_codigo"] = (s, D)
-    if "pmd" in tools or "eslint" in tools:
-        viol = tools.get("pmd", {}).get("violations", 0) + tools.get("eslint", {}).get("errors", 0)
-        out["calidad_codigo"] = (clamp(100 - min(90, viol / kl * 5)), "pmd+eslint")
+    if "pmd" in tools:
+        p = tools["pmd"]
+        by = p.get("by_module", {})
+        if module == "(total)":
+            v, ok = p.get("violations", 0), True
+        else:
+            v, ok = by.get(module, 0), module in by
+        if ok:
+            base = max(src, 5000) / 1000.0      # suelo: evita ruido en modulos pequenos
+            out["calidad_codigo"] = (clamp(100 - min(100, v / base * 1.5)), "pmd")
 
     # 2. cobertura de tests
     s = 0.70 * sat(test_ratio, 0.30) + 0.30 * sat(d("test_annotations"), 20)
@@ -125,8 +132,10 @@ def score_scope(m, dep=0.0, tools=None):
     s = 0.60 * (100 - min(50, d("bare_catch") * 50)) + 0.40 * sat(d("error_handling"), 25)
     out["seguridad"] = (clamp(s), D)
     if "semgrep" in tools:
-        f = tools["semgrep"].get("findings", 0)
-        out["seguridad"] = (clamp(100 - min(100, f / kl * 10)), "semgrep")
+        sg = tools["semgrep"]
+        w = (sg.get("weight", sg.get("findings", 0)) if module == "(total)"
+             else sg.get("by_module", {}).get(module, 0))
+        out["seguridad"] = (clamp(100 - min(100, w)), "semgrep")
 
     # 5. gestion de secretos (gitleaks). Sin herramienta no hay deteccion real.
     sc, src_tag = (100.0, "asumido") if "gitleaks" not in tools else \
@@ -195,7 +204,7 @@ def main():
     for d in dates:
         tools = load_tools(d)
         for mod, met in by[d].items():
-            sc = score_scope(met, dep_by_date[d], tools)
+            sc = score_scope(met, dep_by_date[d], tools, mod)
             for fam in FAMILIES:
                 v, tag = sc[fam]
                 rows.append([d, mod, fam, round(v, 1), tag])
@@ -218,7 +227,7 @@ def main():
         w = csv.writer(f)
         w.writerow(["module", "family", "score"])
         for mod, met in sorted(by[last].items()):
-            sc = score_scope(met, dep_by_date[last], tools)
+            sc = score_scope(met, dep_by_date[last], tools, mod)
             for fam in FAMILIES:
                 w.writerow([mod, fam, round(sc[fam][0], 1)])
 

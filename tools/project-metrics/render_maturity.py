@@ -71,6 +71,16 @@ def fill(dates, series):
     return out
 
 
+def sources_used():
+    """{familia: {fuentes}} para el ambito (total), excluyendo 'determinista'."""
+    fam = defaultdict(set)
+    with open(os.path.join(DIR, "maturity_long.csv")) as f:
+        for r in csv.DictReader(f):
+            if r["module"] == "(total)" and r["source"] not in ("determinista", "asumido", "estructura"):
+                fam[r["family"]].add(r["source"])
+    return fam
+
+
 def panel_temporal(dates, fam):
     cells = []
     for i, f in enumerate(FAMILIES):
@@ -78,8 +88,11 @@ def panel_temporal(dates, fam):
         col = C.PALETTE[i % len(C.PALETTE)]
         cells.append((LBL[f], [{"xs": dates, "ys": ys, "color": col}],
                       {"ymin": 0, "ymax": 100, "last_label": True}))
+    used = sources_used()
+    real = ", ".join(f"{k}={','.join(sorted(v))}" for k, v in sorted(used.items()))
     ft = ["Hitos: " + "  |  ".join(f"{d[5:]} {lab}" for d, lab in MILESTONES),
-          "Rubrica determinista 0-100 por familia (senales de git; se sustituye por Semgrep/gitleaks/PMD/ESLint si estan disponibles).",
+          "Herramientas reales: " + (real if real else
+                                     "(ninguna; puntuacion determinista)") + ".",
           "Escala fija 0-100 en todos los paneles. Dias sin commit = ultimo valor conocido (estado)."]
     p, _ = C.panel_grid(cells, os.path.join(OUT, "rubrica_familias.png"),
                         "TextFormatter Suite - rubrica de madurez (12 familias), corte diario",

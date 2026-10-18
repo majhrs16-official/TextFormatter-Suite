@@ -31,10 +31,11 @@ Eso ejecuta, en orden:
 | 1 | `extract_git.py` | Un snapshot por día con commit (días vacíos rellenados). Métricas de estado y de actividad, por módulo y total. |
 | 2 | `extract_chat.py` | Parsea `chat.log` y produce la tabla de eventos y las métricas diarias de la narrativa. |
 | 3 | `join_commits.py` | Resuelve los `git commit` vistos en el chat contra el histórico real. |
-| 4 | `maturity.py` | Rúbrica de madurez: 12 familias, 0–100, por módulo y por corte. |
-| 5 | `render_pil.py` | Paneles `panel_git`, `panel_chat`, `panel_actividad` y gráficas por módulo. |
-| 6 | `render_extra.py` | `heatmap_modulos` (módulo × tiempo) y `crecimiento` (primer vs último corte). |
-| 7 | `render_maturity.py` | `rubrica_familias` (evolución por familia) y `rubrica_matriz` (módulo × familia). |
+| 4 | `scan_tools.py` | *(opcional)* Analizadores reales (semgrep/gitleaks) → `data/tools/<fecha>.json`. |
+| 5 | `maturity.py` | Rúbrica de madurez: 12 familias, 0–100, por módulo y por corte. |
+| 6 | `render_pil.py` | Paneles `panel_git`, `panel_chat`, `panel_actividad` y gráficas por módulo. |
+| 7 | `render_extra.py` | `heatmap_modulos` (módulo × tiempo) y `crecimiento` (primer vs último corte). |
+| 8 | `render_maturity.py` | `rubrica_familias` (evolución por familia) y `rubrica_matriz` (módulo × familia). |
 
 ## La capa narrativa: `chat.log`
 
@@ -120,6 +121,29 @@ Las familias **5 (secretos)** y **6 (dependencias)** son de nivel proyecto: el
 mismo valor se aplica a todos los módulos. Las puntuaciones de densidad sobre
 códigos muy pequeños pueden saturar (base monolítica inicial); es un artefacto
 conocido y documentado de la heurística.
+
+## Analizadores reales (opcional)
+
+Las familias 1 (calidad), 4 (seguridad) y 5 (secretos) se aproximan de forma
+determinista; si hay herramientas disponibles, `scan_tools.py` ejecuta las
+reales y `maturity.py` sustituye su proxy:
+
+| Herramienta | Familia | Qué mide |
+|---|---|---|
+| `gitleaks` | 5 · Secretos | fugas en **todo el histórico** git, asignadas a la fecha del commit |
+| `semgrep` | 4 · Seguridad | hallazgos de seguridad por snapshot (peso: ERROR=4, WARNING=1) |
+| `pmd` | 1 · Calidad | violaciones Java por snapshot (árbol completo; cubre el layout pre-split) |
+| `eslint` | 1 · Calidad | reservado (JS/TS) |
+
+Rutas por entorno o autodetección: `PM_GITLEAKS`, `PM_SEMGREP`, `PM_PMD`,
+`PM_ESLINT`, `PM_JAVA_HOME`. Son **opcionales**: sin ellas la rúbrica usa los
+proxies y el resto del pipeline no cambia.
+
+```bash
+PM_SCAN=1 ./run_all.sh                 # con analizadores si están
+python3 scan_tools.py --only semgrep   # solo semgrep
+python3 scan_tools.py --dates 2026-10-18
+```
 
 ## Salidas
 
