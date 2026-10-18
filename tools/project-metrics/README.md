@@ -31,8 +31,10 @@ Eso ejecuta, en orden:
 | 1 | `extract_git.py` | Un snapshot por día con commit (días vacíos rellenados). Métricas de estado y de actividad, por módulo y total. |
 | 2 | `extract_chat.py` | Parsea `chat.log` y produce la tabla de eventos y las métricas diarias de la narrativa. |
 | 3 | `join_commits.py` | Resuelve los `git commit` vistos en el chat contra el histórico real. |
-| 4 | `render_pil.py` | Paneles `panel_git`, `panel_chat`, `panel_actividad` y gráficas por módulo. |
-| 5 | `render_extra.py` | `heatmap_modulos` (módulo × tiempo) y `crecimiento` (primer vs último corte). |
+| 4 | `maturity.py` | Rúbrica de madurez: 12 familias, 0–100, por módulo y por corte. |
+| 5 | `render_pil.py` | Paneles `panel_git`, `panel_chat`, `panel_actividad` y gráficas por módulo. |
+| 6 | `render_extra.py` | `heatmap_modulos` (módulo × tiempo) y `crecimiento` (primer vs último corte). |
+| 7 | `render_maturity.py` | `rubrica_familias` (evolución por familia) y `rubrica_matriz` (módulo × familia). |
 
 ## La capa narrativa: `chat.log`
 
@@ -92,6 +94,33 @@ Se excluyen rutas generadas o vendidas (`node_modules/`, `dist/`, `build/`,
 `*.bak`, `*.lock` o `package-lock.json`. Sin este filtro, un `node_modules`
 commiteado (caso real, 26-sep) hinchaba el conteo a ~600.000 líneas.
 
+## Rúbrica de madurez (12 familias)
+
+`maturity.py` puntúa el proyecto de 0 a 100 en 12 familias, por **módulo** y por
+**corte diario**, a partir de las señales de `git_long.csv`. Es una heurística
+**determinista** y transparente; donde existe salida de una herramienta real
+(`data/tools/<fecha>.json`), esa sustituye la aproximación.
+
+| # | Familia | Señal principal (proxy determinista) |
+|---|---|---|
+| 1 | Calidad de código | defectos por kLOC (`stubs`, `bare_catch`, `todo`) — PMD/SpotBugs+ESLint si están |
+| 2 | Cobertura de tests | `test_ratio` y anotaciones `@Test`/`describe(` por kLOC |
+| 3 | Documentación | `doc_loc`/`src_loc`, ratio de comentarios, nº de `*.md` |
+| 4 | Seguridad | manejo de errores vs `catch` vacíos — Semgrep/OWASP si están |
+| 5 | Secretos | 100 salvo fugas detectadas por **gitleaks** |
+| 6 | Dependencias | wrapper de Gradle, `verification-metadata.xml`, lockfiles |
+| 7 | Concurrencia | `synchronized`/`Concurrent*`/`Atomic*` por kLOC |
+| 8 | Estabilidad | manejo de errores + `timeout`/`retry`/`backoff` |
+| 9 | Rendimiento | timeouts y concurrencia (JMH/Gatling pendientes) |
+| 10 | Arquitectura | puertos/adaptadores (`*Port`, `*Adapter`, `*Spi`…), `interface` |
+| 11 | Implementación real | inverso de `stubs` + superficie de API pública |
+| 12 | Integración | API pública + puertos + ratio de tests |
+
+Las familias **5 (secretos)** y **6 (dependencias)** son de nivel proyecto: el
+mismo valor se aplica a todos los módulos. Las puntuaciones de densidad sobre
+códigos muy pequeños pueden saturar (base monolítica inicial); es un artefacto
+conocido y documentado de la heurística.
+
 ## Salidas
 
 En `PM_IMG` (por defecto `docs/metrics/`):
@@ -102,6 +131,8 @@ En `PM_IMG` (por defecto `docs/metrics/`):
 - `heatmap_modulos.png` — LOC por módulo y semana.
 - `crecimiento.png` — primer corte vs último, con factor de crecimiento.
 - `modules_src_loc.png`, `modules_test_loc.png` — por módulo.
+- `rubrica_familias.png` — las 12 familias de madurez en el tiempo (0–100).
+- `rubrica_matriz.png` — matriz módulo × familia en el último corte.
 
 Los paneles marcan 8 **hitos** (inicio, chats base, auditorías, split modular…)
 y sombrean dos **eras**: el monolito `src/suite` y el endurecimiento de iFlow.
