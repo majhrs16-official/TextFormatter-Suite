@@ -1320,8 +1320,8 @@ comprueba que la transferencia del servicio aterriza en la MMU del DMA y no en l
 contexto (guarda contra el bypass); test de que `dma()` envuelve la MMU del contexto y de
 que `softMMU(...)` la reinicia.
 
-**Pendiente (fuera de este cambio, para el mapeo a HDL):** bus de datos explícito (D18, abajo),
-IRQ y modelo de privilegios/rings.
+**Pendiente (fuera de este alcance, para el mapeo a HDL):** IRQ y modelo de
+privilegios/rings.
 
 ### D18 — Bus de datos explícito (`VmBus`)
 
@@ -1390,8 +1390,11 @@ a ella (p. ej. `PROPERTY_WRITE` sobre `CONTENT`), y ahora esas transferencias pa
 | 2026-10-17 | `dacf6c7` | AUD-018: confirma obsoleto el modelo de memoria por *handles* |
 | 2026-10-17 | `e0ee7eb` | 2ª auditoría en `AUDITORIA.md` (IFLOW-AUD-019…030: memoria/DMA/hardware) |
 | 2026-10-17 | `31fcf89` | D17: integra el DMA en la E/S (IFLOW-AUD-019) |
+| 2026-10-17 | `688dd5f` | D18: bus de datos `VmBus` (CPU+DMA maestros); D19: aclara AUD-020 (sin auto-lectura de `0x8000`) |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
 segunda auditoría (`AUDITORIA.md` en `e0ee7eb`, IFLOW-AUD-019…030) es el informe vigente y
-su seguimiento vive en este PLAN.
+su seguimiento vive en este PLAN. De ella ya están atendidos AUD-019 (D17), el bus de datos
+(D18) y AUD-020 (D19, aclarado por diseño); quedan IRQ y privilegios/rings como brechas de
+fidelidad hardware.
