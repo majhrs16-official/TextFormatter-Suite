@@ -1441,7 +1441,8 @@ entrada) en el README; la E/S de propiedades sigue siendo bajo demanda por `HOST
 | 2026-10-17 | `e0ee7eb` | 2ª auditoría en `AUDITORIA.md` (IFLOW-AUD-019…030: memoria/DMA/hardware) |
 | 2026-10-17 | `31fcf89` | D17: integra el DMA en la E/S (IFLOW-AUD-019) |
 | 2026-10-17 | `688dd5f` | D18: bus de datos `VmBus` (CPU+DMA maestros); D19: aclara AUD-020 (sin auto-lectura de `0x8000`) |
-| 2026-10-17 | `9c242eb` | Lote 4: D20 `PROPERTY_WRITE` honra `(scope, propId)` (AUD-028); D21 limpia API/estado muerto (AUD-022/024/026/027); D22 dos dominios, sin anillos muertos (AUD-030); AUD-021/025 documentados |
+| 2026-10-17 | `9c242eb` | Lote 4 (parte 1): D20 `PROPERTY_WRITE` honra `(scope, propId)` (AUD-028); AUD-021/025 documentados ⚠️ ver corrección siguiente |
+| 2026-10-17 | `7ddcff4` | Lote 4 (parte 2, criterio corregido): se **restaura y hace funcional** lo que se había eliminado — anillos `Privilege`/`mprotect` (AUD-030/022), `pageTable` cableado (AUD-024), accesores con uso real (AUD-022), `placeholderResolver`/`translationDetector` vía `TRANSFORM_APPLY` (AUD-026/027) |
 
 **Cierre:** los `IFLOW-AUD-001…018` quedan resueltos (lote 1 + lote 2 + lote 3), con la
 rectificación de AUD-018 (`VmDmaController` restaurado **e integrado**, ver D17). La
@@ -1459,3 +1460,9 @@ su seguimiento vive en este PLAN. De ella ya están atendidos AUD-019 (D17), el 
 - **IRQ**: no está en el informe; el despachador de servicios `HOST` + `VmException` cubre el
   papel de «controlador de interrupciones» de `design.md` §4.7. No se añade una línea de
   interrupción sin requisito de la especificación.
+
+**Pendiente de la 2ª auditoría (lote 6):** los servicios **declarados y no registrados**
+siguen siendo capacidades por implementar (criterio: hacerlos funcionales, no borrarlos):
+`PROPERTY_EXISTS` (0x0102), `PERMISSION_QUERY` (0x0201), `ROUTE_REDIRECT` (0x0301),
+`ROUTE_RATE_LIMIT` (0x0302), `CHANNEL_POLICY` (0x0601), `MESSAGE_CLONE` (0x0700) y
+`MESSAGE_ID` (0x0701).
