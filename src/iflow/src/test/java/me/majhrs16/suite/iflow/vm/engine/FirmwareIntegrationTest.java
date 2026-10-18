@@ -79,9 +79,8 @@ class FirmwareIntegrationTest {
             "routing.decide", "state.read", "state.write", "channel.resolve"
         });
         ctx.initialize();
-        ctx.setPageTable(softMMU.getPageTable());
-        
-        VmInterpreter interpreter = new VmInterpreter(program, softMMU, registry);
+
+        VmInterpreter interpreter = new VmInterpreter(program, ctx.bus(), registry);
         
         // Debug: check what the VM will fetch at IP=0
         byte[] vmCode = program.code();

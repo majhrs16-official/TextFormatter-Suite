@@ -15,7 +15,7 @@ import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContextPool;
 import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.execution.VmInterpreter;
-import me.majhrs16.suite.iflow.vm.isa.Opcode;
+import me.majhrs16.suite.iflow.vm.PassThroughProgram;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
@@ -94,7 +94,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         this.validator = new PolicyResultValidator(channels);
 
         // Initialize with empty program (pass-through)
-        setProgram(createPassThroughProgram());
+        setProgram(PassThroughProgram.INSTANCE);
     }
 
     private HostServiceRegistry createServiceRegistry() {
@@ -122,22 +122,6 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private void configureContext(ExecutionContext ctx) {
         // Set standard configuration
         ctx.fuelBudget(defaultFuelBudget);
-    }
-
-    private ProgramImage createPassThroughProgram() {
-        // Minimal program: call ROUTE_DECISION service with DECISION_CONTINUE
-        // HOST ABI v2: R0 = service ID, R1 = options (decision code)
-        // HOST instruction is 2 bytes: opcode + padding
-        return ProgramImage.builder()
-            .entryPoint(0)
-            .code(new byte[]{
-                Opcode.LI, 0, (HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF, HostServiceRegistry.ROUTE_DECISION & 0xFF, // LI R0, ROUTE_DECISION
-                Opcode.LI, 1, (HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, HostServiceRegistry.DECISION_CONTINUE & 0xFF, // LI R1, DECISION_CONTINUE
-                Opcode.HOST, 0x00,                                                    // HOST (2 bytes: opcode + padding)
-                Opcode.HALT                                                     // HALT
-            })
-            .capabilities(new String[]{"routing.decide"})
-            .build();
     }
 
     @Override
@@ -368,14 +352,37 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         }
 
         @Override
-        public void writeProperty(int scope, int propId, String value) {
+        public boolean writeProperty(int scope, int propId, String value) {
             if (value == null) {
-                return;
+                return false;
             }
-            // Message mutation is deferred: journal a text edit that the engine
-            // validates and commits after execution.
-            ctx.journal().record(new ModificationJournal.Entry(
-                ModificationJournal.OpType.SET_TEXT, value, "propWrite:" + propId));
+            // Message mutation is deferred: journal the edit that matches the
+            // requested (scope, propId), which the engine validates and commits
+            // after execution. Unknown pairs are rejected (AUD-028).
+            ModificationJournal.Entry entry = switch (scope) {
+                case HostServiceRegistry.SCOPE_MESSAGE -> switch (propId) {
+                    case HostServiceRegistry.PROP_CONTENT -> new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_TEXT, value, "propWrite:" + propId);
+                    case HostServiceRegistry.PROP_CHANNEL -> new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_CHANNEL, value, "propWrite:" + propId);
+                    case HostServiceRegistry.PROP_LANG_SOURCE -> new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_LANG_SOURCE, value, "propWrite:" + propId);
+                    case HostServiceRegistry.PROP_LANG_TARGET -> new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_LANG_TARGET, value, "propWrite:" + propId);
+                    case HostServiceRegistry.PROP_COLOR_MODE -> new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_COLOR_MODE, value, "propWrite:" + propId);
+                    default -> null;
+                };
+                case HostServiceRegistry.SCOPE_CHANNEL ->
+                    propId == HostServiceRegistry.PROP_CHAN_NAME ? new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_CHANNEL, value, "propWrite:" + propId) : null;
+                default -> null;
+            };
+            if (entry == null) {
+                return false;
+            }
+            ctx.journal().record(entry);
+            return true;
         }
 
         @Override

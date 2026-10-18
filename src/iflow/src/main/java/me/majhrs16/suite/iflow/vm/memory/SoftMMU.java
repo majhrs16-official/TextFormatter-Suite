@@ -36,6 +36,7 @@ public final class SoftMMU {
 
     // ===== Page Table Management =====
 
+    /** Gets the page table (single source of truth for mappings). */
     public PageTable getPageTable() {
         return pageTable;
     }
@@ -45,19 +46,9 @@ public final class SoftMMU {
         pageTable.mapPage(virtualPage, frameBase, permissions);
     }
 
-    /** Maps a page for kernel-only access. */
-    public void mapPageKernel(int virtualPage, int frameBase, int permissions) {
-        pageTable.mapPageKernel(virtualPage, frameBase, permissions);
-    }
-
     /** Removes a page mapping. */
     public void unmapPage(int virtualPage) {
         pageTable.unmapPage(virtualPage);
-    }
-
-    /** Gets the page table for inspection. */
-    public PageTable getPageTableDirect() {
-        return pageTable;
     }
 
     // ===== Memory Access (with translation + permission checks) =====
@@ -203,21 +194,6 @@ public final class SoftMMU {
         byte[] result = new byte[length];
         readBlock(virtualAddr, result, 0, length);
         return result;
-    }
-
-    /** Gets the PageTable for inspection. */
-    public PageTable getPageTableForInspection() {
-        return pageTable;
-    }
-
-    /** Gets the underlying physical memory array (for direct access by interpreter). */
-    public byte[] getPhysicalMemory() {
-        return physicalMemory;
-    }
-
-    /** Gets the PageTable for direct manipulation. */
-    public PageTable getPageTableForMutation() {
-        return pageTable;
     }
 
     @Override

@@ -2,7 +2,6 @@ package me.majhrs16.suite.iflow.vm.execution;
 
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
-import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
@@ -69,9 +68,6 @@ public final class ExecutionContext {
     private boolean cancelled = false;
     private VmException fatalError;
     private long startNanos;
-
-    // Page table for this execution (cloned from program's page table at init)
-    private PageTable pageTable;
 
     // Pre-allocated I/O buffer virtual addresses, taken from the single-source
     // memory map (input at 0x7000, output at 0x8000).
@@ -322,12 +318,6 @@ public final class ExecutionContext {
             dmaController = new VmDmaController(bus());
         }
         return dmaController;
-    }
-
-    public PageTable pageTable() { return pageTable; }
-
-    public void setPageTable(PageTable pageTable) {
-        this.pageTable = pageTable;
     }
 
     /** Gets the virtual address of the input buffer (see {@link VmMemoryMap#INPUT_BASE}). */

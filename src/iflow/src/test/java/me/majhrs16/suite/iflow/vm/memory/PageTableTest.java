@@ -24,14 +24,6 @@ class PageTableTest {
     }
 
     @Test
-    void mapPageKernelCreatesNonUserEntry() {
-        PageTable table = new PageTable();
-        table.mapPageKernel(1, 0x1000, PageEntry.PERM_READ);
-        assertTrue(table.getEntryByIndex(1).isValid());
-        assertFalse(table.getEntryByIndex(1).isUser());
-    }
-
-    @Test
     void unmapPageClearsEntry() {
         PageTable table = new PageTable();
         table.mapPage(5, 0x5000, PageEntry.PERM_READ);
@@ -89,14 +81,6 @@ class PageTableTest {
         table.mapPage(6, 0x6000, PageEntry.PERM_READ);
         int phys = table.translateRead(0x6000);
         assertEquals(0x6000, phys);
-    }
-
-    @Test
-    void translateReadSucceedsOnKernelPage() {
-        PageTable table = new PageTable();
-        table.mapPageKernel(4, 0x4000, PageEntry.PERM_READ);
-        int phys = table.translateRead(0x4000);
-        assertEquals(0x4000, phys);
     }
 
     @Test

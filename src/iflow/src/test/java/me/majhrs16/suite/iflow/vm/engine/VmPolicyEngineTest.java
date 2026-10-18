@@ -364,4 +364,57 @@ class VmPolicyEngineTest {
         Message other = createMessage("xyz", "chat", sender);
         assertEquals(PolicyTarget.DROP, engine.route(other, recipient).decision().target());
     }
+
+    // ===== AUD-028: PROPERTY_WRITE honours (scope, propId) =====
+
+    /** Builds a program that writes one byte ('X') at 0x3000 and publishes it. */
+    private static ProgramImage propertyWriteProgram(int scope, int propId) {
+        return ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, 0x00, 0x58,                        // R0 = 'X'
+                Opcode.STB, 0, 0x30, 0x00,                       // byte[0x3000] = R0
+                Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_WRITE >> 8),
+                              (byte)(HostServiceRegistry.PROPERTY_WRITE & 0xFF),
+                Opcode.LI, 1, (byte)scope, (byte)propId,         // options = (scope << 8) | propId
+                Opcode.LI, 2, 0x30, 0x00,                        // base = 0x3000
+                Opcode.LI, 3, 0x00, 0x01,                        // length = 1
+                Opcode.HOST, 0x00,
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                              (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, 0x00, (byte)HostServiceRegistry.DECISION_CONTINUE,
+                Opcode.HOST, 0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"property.write", "routing.decide"})
+            .build();
+    }
+
+    @Test
+    void propertyWriteContentUpdatesText() {
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(propertyWriteProgram(
+            HostServiceRegistry.SCOPE_MESSAGE, HostServiceRegistry.PROP_CONTENT));
+
+        RouteOutcome outcome = engine.route(
+            createMessage("original", "chat", createActor("Alice")), createActor("Bob"));
+
+        assertEquals(PolicyTarget.LOG, outcome.decision().target());
+        assertEquals("X", outcome.message().text());
+        assertEquals("chat", outcome.message().channel(), "content must not change the channel");
+    }
+
+    @Test
+    void propertyWriteChannelUpdatesChannel() {
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(propertyWriteProgram(
+            HostServiceRegistry.SCOPE_MESSAGE, HostServiceRegistry.PROP_CHANNEL));
+
+        RouteOutcome outcome = engine.route(
+            createMessage("original", "chat", createActor("Alice")), createActor("Bob"));
+
+        assertEquals(PolicyTarget.LOG, outcome.decision().target());
+        assertEquals("X", outcome.message().channel());
+        assertEquals("original", outcome.message().text(), "channel write must not change the text");
+    }
 }

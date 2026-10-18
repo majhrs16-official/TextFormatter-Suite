@@ -35,10 +35,14 @@ public interface HostContext {
 
     /**
      * Records a property write requested by the program. Message mutation is
-     * deferred: the host decides how to apply it (the reference host journals a
-     * text edit, which the engine validates and commits after execution).
+     * deferred: the host decides how to apply it (the reference host journals the
+     * matching edit, which the engine validates and commits after execution).
+     *
+     * @return {@code true} if the host accepted the write; {@code false} if the
+     *         {@code (scope, propId)} pair is not writable
      */
-    default void writeProperty(int scope, int propId, String value) {
+    default boolean writeProperty(int scope, int propId, String value) {
+        return false;
     }
 
     /**

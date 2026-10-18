@@ -12,7 +12,6 @@ class PageEntryTest {
         assertFalse(entry.canRead());
         assertFalse(entry.canWrite());
         assertFalse(entry.canExecute());
-        assertFalse(entry.isUser());
         assertEquals(0, entry.getPermissions());
     }
 
@@ -20,22 +19,11 @@ class PageEntryTest {
     void mappedEntryHasCorrectProperties() {
         PageEntry entry = PageEntry.mapped(0x1000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
         assertTrue(entry.isValid());
-        assertTrue(entry.isUser());
         assertTrue(entry.canRead());
         assertTrue(entry.canWrite());
         assertFalse(entry.canExecute());
         assertEquals(0x1000, entry.getFrameBase());
         assertEquals(PageEntry.PERM_READ | PageEntry.PERM_WRITE, entry.getPermissions());
-    }
-
-    @Test
-    void mappedKernelEntryNotUserAccessible() {
-        PageEntry entry = PageEntry.mappedKernel(0x2000, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
-        assertTrue(entry.isValid());
-        assertFalse(entry.isUser());
-        assertTrue(entry.canRead());
-        assertFalse(entry.canWrite());
-        assertTrue(entry.canExecute());
     }
 
     @Test
@@ -73,7 +61,6 @@ class PageEntryTest {
         String str = valid.toString();
         assertTrue(str.contains("0x3000"));
         assertTrue(str.contains("RW"));
-        assertTrue(str.contains("user=true"));
 
         PageEntry invalid = PageEntry.invalid();
         assertEquals("PageEntry[INVALID]", invalid.toString());

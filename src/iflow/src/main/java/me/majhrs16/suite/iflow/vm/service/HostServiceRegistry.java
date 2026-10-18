@@ -50,6 +50,11 @@ import java.util.function.BiFunction;
 public final class HostServiceRegistry {
 
     // ===== Service IDs (matching the ABI namespace) =====
+    //
+    // Implemented (registered below): PROPERTY_READ, PROPERTY_WRITE,
+    // PERMISSION_CHECK, ROUTE_DECISION, STATE_READ, STATE_WRITE, CHANNEL_RESOLVE.
+    // The remaining IDs are declared ABI surface but have no implementation yet, so
+    // dispatching them returns UNSUPPORTED (AUD-026).
 
     // Property services
     public static final int PROPERTY_READ     = 0x0100;
@@ -136,8 +141,6 @@ public final class HostServiceRegistry {
 
     // Host-injected dependencies
     private BiFunction<String, String, Boolean> permissionChecker;
-    private java.util.function.Function<String, String> placeholderResolver;
-    private java.util.function.Function<String, String> translationDetector;
     private me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter;
 
     public HostServiceRegistry() {
@@ -332,8 +335,11 @@ public final class HostServiceRegistry {
 
         // The host decides how to apply the write (the reference engine defers it
         // through the modification journal, which is validated and committed after
-        // execution).
-        ctx.hostContext().writeProperty(scope, propId, value);
+        // execution). Unsupported (scope, propId) pairs are reported to the program.
+        if (!ctx.hostContext().writeProperty(scope, propId, value)) {
+            return ServiceResult.unsupported(
+                "property not writable: scope=" + scope + " prop=" + propId);
+        }
 
         return ServiceResult.ok(argLength);
     }
@@ -481,16 +487,6 @@ public final class HostServiceRegistry {
 
     public HostServiceRegistry permissionChecker(BiFunction<String, String, Boolean> checker) {
         this.permissionChecker = checker;
-        return this;
-    }
-
-    public HostServiceRegistry placeholderResolver(java.util.function.Function<String, String> resolver) {
-        this.placeholderResolver = resolver;
-        return this;
-    }
-
-    public HostServiceRegistry translationDetector(java.util.function.Function<String, String> detector) {
-        this.translationDetector = detector;
         return this;
     }
 

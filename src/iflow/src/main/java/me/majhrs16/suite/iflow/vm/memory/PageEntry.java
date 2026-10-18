@@ -1,7 +1,5 @@
 package me.majhrs16.suite.iflow.vm.memory;
 
-import me.majhrs16.suite.iflow.vm.isa.VmException;
-
 /**
  * Page Table Entry for 4KB page.
  * <p>
@@ -24,25 +22,19 @@ public final class PageEntry {
     private final int frameBase;    // Physical frame base address (page-aligned)
     private final int permissions;  // Permission bits (R/W/X)
     private final boolean valid;    // Page is mapped
-    private final boolean user;     // User-mode accessible (vs kernel)
 
-    private PageEntry(int frameBase, int permissions, boolean valid, boolean user) {
+    private PageEntry(int frameBase, int permissions, boolean valid) {
         this.frameBase = frameBase & PAGE_MASK;
         this.permissions = permissions & (PERM_READ | PERM_WRITE | PERM_EXECUTE);
         this.valid = valid;
-        this.user = user;
     }
 
     public static PageEntry invalid() {
-        return new PageEntry(0, 0, false, false);
+        return new PageEntry(0, 0, false);
     }
 
     public static PageEntry mapped(int frameBase, int permissions) {
-        return new PageEntry(frameBase, permissions, true, true);
-    }
-
-    public static PageEntry mappedKernel(int frameBase, int permissions) {
-        return new PageEntry(frameBase, permissions, true, false);
+        return new PageEntry(frameBase, permissions, true);
     }
 
     public int getFrameBase() {
@@ -55,10 +47,6 @@ public final class PageEntry {
 
     public boolean isValid() {
         return valid;
-    }
-
-    public boolean isUser() {
-        return user;
     }
 
     public boolean canRead() {
@@ -77,11 +65,6 @@ public final class PageEntry {
         return valid && (permissions & perm) == perm;
     }
 
-    public void setPermissions(int permissions) {
-        // Not used in immutable design; create new entry instead
-        throw new UnsupportedOperationException("PageEntry is immutable");
-    }
-
     @Override
     public String toString() {
         if (!valid) return "PageEntry[INVALID]";
@@ -89,6 +72,6 @@ public final class PageEntry {
         if ((permissions & PERM_READ) != 0) perms.append('R');
         if ((permissions & PERM_WRITE) != 0) perms.append('W');
         if ((permissions & PERM_EXECUTE) != 0) perms.append('X');
-        return String.format("PageEntry[frame=0x%04X perms=%s user=%s]", frameBase, perms, user);
+        return String.format("PageEntry[frame=0x%04X perms=%s]", frameBase, perms);
     }
 }

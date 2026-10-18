@@ -331,8 +331,9 @@ class HostServiceRegistryTest {
         // which is why the buffer must not be auto-read on HALT.
         java.util.List<String> written = new java.util.ArrayList<>();
         HostContext hc = new HostContext() {
-            @Override public void writeProperty(int scope, int propId, String value) {
+            @Override public boolean writeProperty(int scope, int propId, String value) {
                 written.add(scope + ":" + propId + "=" + value);
+                return true;
             }
         };
 
@@ -368,5 +369,26 @@ class HostServiceRegistryTest {
         assertEquals(java.util.List.of(HostServiceRegistry.SCOPE_MESSAGE + ":" +
                 HostServiceRegistry.PROP_CONTENT + "=transformado"), written,
             "the output buffer must be consumed through the DMA bus path");
+    }
+
+    @Test
+    void propertyWriteUnsupportedPairIsReported() {
+        // AUD-028: when the host refuses a (scope, propId) pair, the service must
+        // report UNSUPPORTED instead of silently dropping the write.
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "property.write");
+        ctx.hostContext(new HostContext() {
+            @Override public boolean writeProperty(int scope, int propId, String value) {
+                return false;
+            }
+        });
+
+        byte[] value = "x".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), value, 0, value.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_WRITE,
+            ctx.outputBufferVAddr(), value.length,
+            (HostServiceRegistry.SCOPE_EMITTER << 8) | HostServiceRegistry.PROP_ACTOR_NAME);
+
+        assertEquals(ServiceResult.Status.UNSUPPORTED, result.status());
     }
 }

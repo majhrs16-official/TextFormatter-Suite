@@ -42,15 +42,6 @@ public final class PageTable {
         entries[virtualPage] = PageEntry.mapped(frameBase, permissions);
     }
 
-    /** Maps a page for kernel-only access (not user-accessible). */
-    public void mapPageKernel(int virtualPage, int frameBase, int permissions) {
-        if (virtualPage < 0 || virtualPage >= NUM_PAGES) {
-            throw new VmException(VmException.Code.MEMORY_FAULT,
-                "Invalid page index: " + virtualPage);
-        }
-        entries[virtualPage] = PageEntry.mappedKernel(frameBase, permissions);
-    }
-
     /** Removes a page mapping. */
     public void unmapPage(int virtualPage) {
         if (virtualPage >= 0 && virtualPage < NUM_PAGES) {

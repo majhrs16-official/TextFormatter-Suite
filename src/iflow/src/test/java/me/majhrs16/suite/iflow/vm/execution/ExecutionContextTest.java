@@ -250,15 +250,6 @@ class ExecutionContextTest {
     }
 
     @Test
-    void pageTableAccess() {
-        SoftMMU mmu = createMappedMMU();
-        ExecutionContext ctx = createContext(mmu);
-        ctx.initialize();
-        ctx.setPageTable(mmu.getPageTable());
-        assertSame(mmu.getPageTable(), ctx.pageTable());
-    }
-
-    @Test
     void callHostInvokesService() {
         SoftMMU mmu = createMappedMMU();
         HostServiceRegistry hsr = new HostServiceRegistry();

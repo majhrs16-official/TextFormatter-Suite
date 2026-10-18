@@ -1369,6 +1369,49 @@ a ella (p. ej. `PROPERTY_WRITE` sobre `CONTENT`), y ahora esas transferencias pa
 `PROPERTY_WRITE` a través del DMA: el valor llega al host (y, en el engine, al
 `SET_TEXT` del journal).
 
+### Lote 4 — API honesta y `PROPERTY_WRITE` (AUD-021/022/024/026/027/028/030)
+
+**D20 — `PROPERTY_WRITE` honra `(scope, propId)` (AUD-028, P0).** Hoy
+`MessageHostContext.writeProperty` ignora ambos y siempre journaliza `SET_TEXT`. Se
+mapea a la `OpType` ya existente:
+- `SCOPE_MESSAGE`: `PROP_CONTENT`→`SET_TEXT`, `PROP_CHANNEL`→`SET_CHANNEL`,
+  `PROP_LANG_SOURCE`→`SET_LANG_SOURCE`, `PROP_LANG_TARGET`→`SET_LANG_TARGET`,
+  `PROP_COLOR_MODE`→`SET_COLOR_MODE`.
+- `SCOPE_CHANNEL`: `PROP_CHAN_NAME`→`SET_CHANNEL`.
+- Cualquier otro par → `UNSUPPORTED` (el ABI ya tiene ese estado). `HostContext.writeProperty`
+  pasa a devolver `boolean` (aceptado/rechazado) para que el servicio informe el fallo.
+
+**D21 — Limpieza de API/estado muerto (AUD-022/024/026/027).**
+- `SoftMMU`: elimina `getPhysicalMemory`, `getPageTableDirect`, `getPageTableForInspection`,
+  `getPageTableForMutation` (nadie los usa; el bus `VmBus` es la vía explícita).
+- `ExecutionContext`: elimina el campo `pageTable` y `pageTable()`/`setPageTable` (nunca se
+  asigna en producción; la tabla vive en `ctx.softMMU().getPageTable()`).
+- `HostServiceRegistry`: elimina `placeholderResolver`/`translationDetector` (inyectables
+  muertos); agrupa las constantes de servicio declaradas pero no registradas.
+- Extrae el programa pass-through a `PassThroughProgram.INSTANCE` (elimina la duplicación y
+  los stubs inline de `VmConfigLoader`).
+
+**D22 — Modelo de privilegios: dos dominios, sin anillos muertos (AUD-030).**
+`implement.md` §12.1 rechaza el modelo «ring 0 = firmware»: el firmware **no** es
+privilegiado por ser firmware; la autoridad es del runtime Java. El modelo real ya existe:
+- **Dominio programa** (todo el bytecode): acotado por permisos R/W/X por página, fuel,
+  pila y capacidades de `HOST`.
+- **Dominio supervisor** (host Java): carga el programa, mapea páginas, ejecuta servicios,
+  valida y confirma el journal.
+
+`PageEntry.user`/`mapPageKernel` no aplican ninguna comprobación en `translate` (y el
+firmware no debe tener un anillo propio), así que se **eliminan** en lugar de prometer un
+modelo inexistente. La protección de código ya es efectiva: las páginas de código quedan
+R/X (sin W) y las constantes R tras la carga.
+
+**AUD-021 (documentación).** `0x7000` se declara contrato estable del engine (framing de
+entrada) en el README; la E/S de propiedades sigue siendo bajo demanda por `HOST`. Se elige
+la opción (b) del informe (documentar) por coste/riesgo; eliminar el framing exige migrar
+los servicios de buffer.
+
+**No cambia** el ABI (salvo el estado `UNSUPPORTED` ya existente para propiedades no
+soportadas), el mapa de memoria ni la semántica de las propiedades soportadas.
+
 ### Bitácora de remediación
 
 | Fecha | Commit | Qué |

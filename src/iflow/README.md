@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (299 tests)  
+> **Estado**: ✅ Implementada y probada (298 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -33,9 +33,12 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Página 2: Constantes (R) (0x2000)
   - Páginas 3-4: Datos/Heap (R/W) (0x3000–0x4FFF)
   - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
-  - Página 7: Buffer entrada I/O (0x7000)
-  - Página 8: Buffer salida I/O (0x8000)
-  - Páginas 9-15: Estado persistente / datos privados
+  - Página 7: Buffer entrada I/O (R/W) (0x7000)
+  - Página 8: Buffer salida I/O (R/W) (0x8000)
+  - Páginas 9-15: Reservadas — no mapeadas (acceso → `MEMORY_FAULT`)
+- **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
+  `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
+  siguen consultándose bajo demanda vía `HOST`/`HostContext` (AUD-021).
 
 ### ISA v2 (resumen)
 
@@ -171,7 +174,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 299 tests passing**
+**Total: 298 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -206,6 +209,7 @@ src/iflow/
 │   └── vm/
 │       ├── VmPolicyEngine.java        # Router impl + VM execution
 │       ├── VmConfigLoader.java        # Binary .flow loader
+│       ├── PassThroughProgram.java    # Fallback program (single source, AUD-027)
 │       ├── isa/
 │       │   ├── Opcode.java
 │       │   ├── ProgramImage.java
@@ -229,7 +233,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 299 tests
+├── src/test/java/...                  # 298 tests
 └── build.gradle
 ```
 
