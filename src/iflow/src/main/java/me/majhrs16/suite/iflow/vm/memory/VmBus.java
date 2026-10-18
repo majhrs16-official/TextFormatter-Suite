@@ -83,36 +83,82 @@ public final class VmBus {
     // ===== Data transactions =====
 
     public int readByte(int vaddr) {
+        VmDevice d = memory.deviceFor(vaddr);
+        if (d != null) {
+            return d.readByte(vaddr);
+        }
         return memory.readByte(vaddr, privilege);
     }
 
     public int readWord(int vaddr) {
+        VmDevice d = memory.deviceFor(vaddr);
+        if (d != null) {
+            return d.readWord(vaddr);
+        }
         return memory.readWord(vaddr, privilege);
     }
 
     public void writeByte(int vaddr, int value) {
+        VmDevice d = memory.deviceFor(vaddr);
+        if (d != null) {
+            d.writeByte(vaddr, value);
+            return;
+        }
         memory.writeByte(vaddr, value, privilege);
     }
 
     public void writeWord(int vaddr, int value) {
+        VmDevice d = memory.deviceFor(vaddr);
+        if (d != null) {
+            d.writeWord(vaddr, value);
+            return;
+        }
         memory.writeWord(vaddr, value, privilege);
     }
 
     public void readBlock(int vaddr, byte[] dest, int destOffset, int length) {
+        if (touchesDevice(vaddr, length)) {
+            for (int i = 0; i < length; i++) {
+                dest[destOffset + i] = (byte) readByte(vaddr + i);
+            }
+            return;
+        }
         memory.readBlock(vaddr, dest, destOffset, length, privilege);
     }
 
     public void writeBlock(int vaddr, byte[] src, int srcOffset, int length) {
+        if (touchesDevice(vaddr, length)) {
+            for (int i = 0; i < length; i++) {
+                writeByte(vaddr + i, src[srcOffset + i] & 0xFF);
+            }
+            return;
+        }
         memory.writeBlock(vaddr, src, srcOffset, length, privilege);
     }
 
     /** Zeroes a block of VM memory as this bus master. */
     public void clearBlock(int vaddr, int length) {
+        if (touchesDevice(vaddr, length)) {
+            for (int i = 0; i < length; i++) {
+                writeByte(vaddr + i, 0);
+            }
+            return;
+        }
         memory.clearBlock(vaddr, length, privilege);
     }
 
     public byte[] getRegion(int vaddr, int length) {
-        return memory.getRegion(vaddr, length);
+        byte[] result = new byte[length];
+        readBlock(vaddr, result, 0, length);
+        return result;
+    }
+
+    /** True if the range's first or last byte lands on a peripheral. */
+    private boolean touchesDevice(int vaddr, int length) {
+        if (length <= 0) {
+            return false;
+        }
+        return memory.isDeviceAddress(vaddr) || memory.isDeviceAddress(vaddr + length - 1);
     }
 
     @Override

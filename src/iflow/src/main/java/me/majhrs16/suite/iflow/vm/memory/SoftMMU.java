@@ -5,6 +5,8 @@ import me.majhrs16.suite.iflow.vm.isa.VmException;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * Software Memory Management Unit (SoftMMU) for 16-bit flat address space with 4KB paging.
@@ -22,6 +24,14 @@ public final class SoftMMU {
 
     private final PageTable pageTable;
     private final PhysicalMemory memory;  // Copy-on-write physical backing store
+
+    /**
+     * Peripherals attached to the fabric (bus slaves that decode their own
+     * address ranges). The interconnect ({@link VmBus}) asks them before RAM, so
+     * a device window shadows the RAM underneath it. A fork starts without
+     * peripherals: devices belong to the machine, not to an execution snapshot.
+     */
+    private VmDevice[] devices = new VmDevice[0];
 
     public SoftMMU() {
         this.memory = PhysicalMemory.blank();
@@ -47,6 +57,40 @@ public final class SoftMMU {
      */
     public void freeze() {
         memory.freeze();
+    }
+
+    // ===== Peripherals (bus slaves) =====
+
+    /** Attaches a peripheral that decodes its own address range (D31). */
+    public void attach(VmDevice device) {
+        Objects.requireNonNull(device, "device");
+        VmDevice[] next = Arrays.copyOf(devices, devices.length + 1);
+        next[devices.length] = device;
+        devices = next;
+    }
+
+    /**
+     * The peripheral that owns {@code vaddr}, or {@code null} if the address is
+     * plain RAM. Decoding happens in attachment order, so a device can be placed
+     * in front of another (not used today: the screen is the only device).
+     */
+    public VmDevice deviceFor(int vaddr) {
+        for (VmDevice d : devices) {
+            if (d.decodes(vaddr)) {
+                return d;
+            }
+        }
+        return null;
+    }
+
+    /** True if any attached peripheral decodes {@code vaddr}. */
+    public boolean isDeviceAddress(int vaddr) {
+        return deviceFor(vaddr) != null;
+    }
+
+    /** The attached peripherals (a copy of the list). */
+    public VmDevice[] devices() {
+        return devices.clone();
     }
 
     // ===== Page Table Management =====

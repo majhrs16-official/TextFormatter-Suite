@@ -26,6 +26,7 @@ import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
+import me.majhrs16.suite.iflow.vm.video.VmDisplay;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -92,15 +93,23 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
          */
         public final SoftMMU softMMU;
         /**
+         * The machine's text screen (D31): a memory-mapped peripheral attached to
+         * {@link #softMMU}. It is the same object across messages (the machine is
+         * long-lived), so what a program draws stays on screen.
+         */
+        public final VmDisplay display;
+        /**
          * The interpreter is immutable and stateless (it reads the bus/MMU from the
          * execution context), so one instance serves every execution of this program
          * (IFLOW-AUD-029).
          */
         public final VmInterpreter interpreter;
 
-        public LoadedProgram(ProgramImage program, SoftMMU softMMU, VmInterpreter interpreter) {
+        public LoadedProgram(ProgramImage program, SoftMMU softMMU, VmDisplay display,
+                             VmInterpreter interpreter) {
             this.program = program;
             this.softMMU = softMMU;
+            this.display = display;
             this.interpreter = interpreter;
         }
     }
@@ -205,7 +214,10 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 // Execute VM (the per-program interpreter is immutable and reused)
                 loaded.interpreter.execute(ctx);
 
-                // Validate and produce outcome
+                // Validate and produce outcome. In debug builds, dump the text
+                // screen (D31) so a policy's output is visible on the console;
+                // the supplier is never called when debug is off.
+                Logger.debug(() -> "iflow screen:\n" + loaded.display.renderTextTrimmed());
                 return validator.validate(ctx, message, recipient, emitter);
 
             } catch (VmException e) {
@@ -551,11 +563,22 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // machine memory is then mutated in place across messages (D30), so the
         // program's data survives from one message to the next.
         newMMU.freeze();
+        // Attach the text screen (D31): a memory-mapped peripheral the BIOS will
+        // configure at boot. It starts disabled so it decodes nothing until the
+        // BIOS enables it.
+        VmDisplay display = new VmDisplay();
+        newMMU.attach(display);
         // The interpreter is stateless (bus/MMU come from the execution context) and
         // the program is immutable, so build it once per program, not per message.
         VmInterpreter interpreter = new VmInterpreter(program, serviceRegistry);
-        // Atomically publish program + memory + interpreter together
-        loadedProgramRef.set(new LoadedProgram(program, newMMU, interpreter));
+        // Atomically publish program + memory + display + interpreter together
+        loadedProgramRef.set(new LoadedProgram(program, newMMU, display, interpreter));
+    }
+
+    /** The current machine's text screen (D31), or {@code null} before a program loads. */
+    public VmDisplay display() {
+        LoadedProgram loaded = loadedProgramRef.get();
+        return loaded != null ? loaded.display : null;
     }
 
     public ProgramImage program() {

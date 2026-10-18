@@ -20,6 +20,7 @@ package me.majhrs16.suite.iflow.vm.memory;
  *   page 7      0x7000-0x7FFF   input buffer (I/O)                         R/W
  *   page 8      0x8000-0x8FFF   output buffer (I/O)                        R/W
  *   pages 9-15  0x9000-0xFFFF   general-purpose user RAM                   R/W
+ *   top 256 B   0xFF00-0xFFFF   device MMIO aperture (screen registers)    I/O
  * </pre>
  *
  * <p>
@@ -82,6 +83,25 @@ public final class VmMemoryMap {
     public static final int USER_BASE = 0x9000;
     public static final int USER_PAGES = 7;
     public static final int USER_SIZE = USER_PAGES * PAGE; // 28 KB
+
+    // ===== Device MMIO aperture (peripherals) =====
+
+    /**
+     * Base of the 256-byte MMIO aperture where peripherals expose their register
+     * banks (today the text screen of D31). It sits at the very top of the 64 KB
+     * space; the interconnect decodes it <em>before</em> RAM, so it shadows the
+     * last 256 bytes of the user region and the BIOS can drive devices with plain
+     * stores. It is a normal hardware carve-out, not a runtime-reserved bank.
+     */
+    public static final int DEVICE_MMIO_BASE = 0xFF00;
+    public static final int DEVICE_MMIO_SIZE = 0x0100; // 256 bytes
+
+    // ===== Text screen defaults (the BIOS may reconfigure them at runtime) =====
+
+    /** Default framebuffer base for the screen window (below the MMIO aperture). */
+    public static final int DISPLAY_DEFAULT_BASE = 0xE000;
+    public static final int DISPLAY_DEFAULT_COLS = 80;
+    public static final int DISPLAY_DEFAULT_ROWS = 25;
 
     /** Page index of a virtual address. */
     public static int pageOf(int vaddr) {
