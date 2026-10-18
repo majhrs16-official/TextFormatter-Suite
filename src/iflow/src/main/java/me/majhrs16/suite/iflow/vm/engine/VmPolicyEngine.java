@@ -18,6 +18,7 @@ import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.execution.VmInterpreter;
 import me.majhrs16.suite.iflow.vm.PassThroughProgram;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
+import me.majhrs16.suite.iflow.vm.irq.VmPic;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
@@ -106,6 +107,13 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
          */
         public final VmNvram nvram;
         /**
+         * The machine's interrupt controller (D33): a memory-mapped slave that
+         * latches interrupt lines. Same instance across messages, like
+         * {@link #display} and {@link #nvram}, so a line raised in one message is
+         * still pending in the next.
+         */
+        public final VmPic pic;
+        /**
          * The interpreter is immutable and stateless (it reads the bus/MMU from the
          * execution context), so one instance serves every execution of this program
          * (IFLOW-AUD-029).
@@ -113,11 +121,12 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         public final VmInterpreter interpreter;
 
         public LoadedProgram(ProgramImage program, SoftMMU softMMU, VmDisplay display,
-                             VmNvram nvram, VmInterpreter interpreter) {
+                             VmNvram nvram, VmPic pic, VmInterpreter interpreter) {
             this.program = program;
             this.softMMU = softMMU;
             this.display = display;
             this.nvram = nvram;
+            this.pic = pic;
             this.interpreter = interpreter;
         }
     }
@@ -205,6 +214,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                    .messageId(message.id().toString())
                    .actorId(recipient.name())
                    .softMMU(loaded.softMMU)
+                   .pic(loaded.pic)
+                   .nvram(loaded.nvram)
                    .serviceRegistry(serviceRegistry)
                    .allowedCapabilities(grantedCapabilities(
                        loaded.program.capabilities(), serviceRegistry.declaredCapabilities()));
@@ -218,6 +229,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
                 // Prepare input: serialize message to the input buffer (see VmMemoryMap)
                 prepareInput(ctx, message, emitter, recipient, path);
+
+                // I/O interrupt source (D33): the input buffer now holds the
+                // message, so raise the "message ready" line. It stays masked until
+                // a program enables it; a handler then runs at the next boundary.
+                loaded.pic.raise(VmPic.IRQ_MESSAGE);
 
                 // Execute VM (the per-program interpreter is immutable and reused)
                 loaded.interpreter.execute(ctx);
@@ -580,11 +596,15 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // to tell a cold boot from a warm one (see VmNvram).
         VmNvram nvram = new VmNvram();
         newMMU.attach(nvram);
+        // Attach the interrupt controller (D33): latches interrupt lines raised by
+        // I/O sources or software, and exposes them to the runtime for dispatch.
+        VmPic pic = new VmPic();
+        newMMU.attach(pic);
         // The interpreter is stateless (bus/MMU come from the execution context) and
         // the program is immutable, so build it once per program, not per message.
         VmInterpreter interpreter = new VmInterpreter(program, serviceRegistry);
-        // Atomically publish program + memory + display + interpreter together
-        loadedProgramRef.set(new LoadedProgram(program, newMMU, display, nvram, interpreter));
+        // Atomically publish program + memory + display + nvram + pic + interpreter
+        loadedProgramRef.set(new LoadedProgram(program, newMMU, display, nvram, pic, interpreter));
     }
 
     /** The current machine's text screen (D31), or {@code null} before a program loads. */
@@ -597,6 +617,12 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     public VmNvram nvram() {
         LoadedProgram loaded = loadedProgramRef.get();
         return loaded != null ? loaded.nvram : null;
+    }
+
+    /** The current machine's interrupt controller (D33), or {@code null} before a program loads. */
+    public VmPic pic() {
+        LoadedProgram loaded = loadedProgramRef.get();
+        return loaded != null ? loaded.pic : null;
     }
 
     public ProgramImage program() {

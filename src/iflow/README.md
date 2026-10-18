@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (368 tests)  
+> **Estado**: ✅ Implementada y probada (383 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -22,7 +22,8 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus); maestro supervisor |
 | `VmDevice` | Interfaz de esclavo de bus: un periférico que decodifica su propio rango y responde lecturas/escrituras (D31) |
 | `VmDisplay` | Pantalla de texto mapeada en memoria (D31): celda de 2 bytes (carácter + atributo `[letra:4][fondo:4]`, estilo VERA/X16); registros de control MMIO; API de framebuffer para el host |
-| `VmNvram` | NVRAM del BIOS (D32): ventana de almacenamiento persistente en la apertura MMIO para el estado que sobrevive entre mensajes (p. ej. la bandera de arranque en frío) |
+| `VmNvram` | NVRAM del BIOS (D32): ventana de almacenamiento persistente en la apertura MMIO para el estado que sobrevive entre mensajes (p. ej. la bandera de arranque en frío, la tabla de IRQ) |
+| `VmPic` | Controlador de interrupciones (D33): esclavo MMIO con latch/máscara de 16 líneas, disparo por software (`RAISE`) y confirmación (`ACK`); el runtime lo consulta para despachar |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
 | `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
 | `VmException` | Excepciones tipadas con IP capture (INVALID_OPCODE, MEMORY_FAULT, OUT_OF_FUEL, etc.) |
@@ -48,7 +49,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
   - Página 8: Buffer salida I/O (R/W) (0x8000)
   - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia
-  - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — `0x0F00–0x0F0F` banco de registros de la pantalla (D31) y `0x0F10–0x0FFF` NVRAM del BIOS (D32); el *interconnect* lo decodifica antes que la ROM/RAM. Reutiliza la cola libre del ROM (el firmware acaba en 0x0257), así no recorta RAM de usuario
+  - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — `0x0F00–0x0F0F` banco de registros de la pantalla (D31), `0x0F10–0x0FEF` NVRAM del BIOS (D32) y `0x0FF0–0x0FFF` controlador de interrupciones (D33); el *interconnect* lo decodifica antes que la ROM/RAM. Reutiliza la cola libre del ROM (el firmware acaba en 0x029B), así no recorta RAM de usuario
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
   `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
   siguen consultándose bajo demanda vía `HOST`/`HostContext` (AUD-021).
@@ -96,10 +97,34 @@ que el programa tenga que configurarlo.
 - **«Limpiar memoria» sin romper D30**: el BIOS **nunca** toca la RAM de propósito general
   (0x9000+) ni la memoria del programa en el camino caliente, así que la persistencia implícita de D30
   se conserva; sólo el primer mensaje ve el POST.
-- **NVRAM (`VmNvram`)**: ventana persistente en `0x0F10–0x0FFF` (dentro de la apertura MMIO). Como el
+- **NVRAM (`VmNvram`)**: ventana persistente en `0x0F10–0x0FEF` (dentro de la apertura MMIO). Como el
   engine mantiene una única máquina por programa, el dispositivo vive toda la vida de la máquina: lo
   escrito en un mensaje sigue ahí en el siguiente.
 - El `main` ya no necesita configurar la pantalla; puede reconfigurarla en caliente si quiere.
+
+### Interrupciones (D33)
+
+El emulador **no** hardcodea la tabla de interrupciones: el BIOS la publica en su NVRAM y el runtime la
+usa para despachar. Además de la tabla hay **fuentes de interrupción por E/S**.
+
+- **Controlador (`VmPic`)**: banco de registros MMIO de 16 B en `0x0FF0–0x0FFF`, al final de la
+  apertura. 16 líneas; registros `PENDING` (lectura), `ENABLE` (rw, máscara), `RAISE` (escritura:
+  disparo software), `ACK` (escritura: completa la línea), `IN_SERVICE` (lectura) y `CURRENT`
+  (lectura). Las líneas llegan **enmascaradas**: no se despacha nada hasta habilitar `ENABLE`.
+- **Tabla**: `[boot:2][magic:2][count:2][handler_0:2]…[handler_n:2]` en la NVRAM. En el POST el BIOS
+  publica `magic`, `count` y una entrada por línea apuntando a su stub por defecto (`fw_irq_stub`,
+  que hace `ACK` y `RET`). El programa puede sobreescribir su entrada por MMIO.
+- **Entrega tipo hardware**: en cada frontera de instrucción el intérprete consulta la línea pendiente,
+  habilitada y no en servicio de menor número. Si hay, guarda el **estado completo de la CPU**
+  (registros y `IP`/`SP`/`FP`/`FL`, más la profundidad de llamada), empuja la dirección de retorno en la
+  pila (como `CALL`) y salta al manejador. El `RET` que cierra su marco restaura el estado, así que la
+  interrupción es **transparente** al código interrumpido; no hay `IRET` ni el manejador salva
+  registros. La línea queda *en servicio* (sin reentrada) hasta el `ACK`.
+- **Fuentes de E/S**: (1) **llegada de mensaje** (IRQ 0, la levanta el runtime al preparar el buffer de
+  entrada), (2) **software** vía `RAISE`, y (3) **fin de servicio HOST** (IRQ 1) cuando el servicio
+  devuelve un error.
+- El assembly expone las constantes `PIC_*`, `IRQ_TABLE_ENTRIES`, `IRQ_TABLE_MAGIC` e `IRQ_LINES`
+  para que el programa instale su manejador sin conocer las direcciones a mano.
 
 ### ISA v2 (resumen)
 
@@ -259,12 +284,14 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30); pantalla mapeada en memoria (D31) |
 | `VmDisplayTest` | Periférico de vídeo: decodificación de la ventana y del banco de registros, geometría, carácter/atributo, bloques, limpieza y render ANSI (D31) |
 | `VmNvramTest` | NVRAM del BIOS: decodificación de ventana, R/W byte/palabra/bloque, ventana por defecto (D32) |
+| `VmPicTest` | Controlador de interrupciones: decodificación, latch/máscara, prioridad, servicio/ACK, registros MMIO (D33) |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) y POST del BIOS que configura la pantalla (D32) |
 | `BiosBootTest` | End-to-end del BIOS activo: resetea en `fw_reset`, configura la pantalla, encadena a `main` y toma el camino caliente en el segundo mensaje (D32) |
+| `IrqDeliveryTest` | End-to-end de IRQ: el BIOS publica la tabla, `main` instala su manejador, habilita y dispara la línea; el manejador corre y la interrupción es transparente (registros restaurados) (D33) |
 
-**Total: 368 tests passing**
+**Total: 383 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -325,7 +352,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 368 tests
+├── src/test/java/...                  # 383 tests
 └── build.gradle
 ```
 

@@ -1,6 +1,6 @@
 ; iFlow Assembly Listing
 ; Source: /home/majhrs16/Documentos/textformatter-suite/tools/iflow-compiler/test/firmware.flowasm
-; Generated: 2026-10-18T06:33:59.276Z
+; Generated: 2026-10-18T07:05:16.273Z
 
 ; Symbol Table:
 ; SERVICE_PROPERTY_READ            = 0x0100 (code)
@@ -89,6 +89,16 @@
 ; fw_state_read                    = 0x01d6 (code)
 ; fw_state_write                   = 0x01dd (code)
 ; fw_channel_resolve               = 0x01e4 (code)
+; PIC_BASE                         = 0x0ff0 (code)
+; PIC_PENDING                      = 0x0ff0 (code)
+; PIC_ENABLE                       = 0x0ff2 (code)
+; PIC_RAISE                        = 0x0ff4 (code)
+; PIC_ACK                          = 0x0ff6 (code)
+; PIC_IN_SERVICE                   = 0x0ff8 (code)
+; PIC_CURRENT                      = 0x0ffa (code)
+; IRQ_TABLE_MAGIC                  = 0x1a7b (code)
+; IRQ_TABLE_ENTRIES                = 0x0f16 (code)
+; IRQ_LINES                        = 0x0010 (code)
 
 ; Source:
    1: ; iFlow VM Firmware Test Program

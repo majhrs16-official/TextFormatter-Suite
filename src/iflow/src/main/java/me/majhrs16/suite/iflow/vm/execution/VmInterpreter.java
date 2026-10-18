@@ -6,6 +6,7 @@ import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
+import me.majhrs16.suite.iflow.vm.irq.VmPic;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
@@ -68,6 +69,11 @@ public final class VmInterpreter {
         while (true) {
             // Check cancellation
             context.checkCancelled();
+
+            // Service an interrupt at the instruction boundary (D33): the PIC
+            // raises a line and the runtime performs a hardware CALL to the
+            // BIOS-published handler before the next instruction runs.
+            deliverPendingInterrupt(context);
 
             // Fetch (through the bus/MMU: enforces the code page's EXECUTE permission)
             int ip = context.registers().get(RegisterFile.IP);
@@ -459,6 +465,46 @@ public final class VmInterpreter {
         return true;
     }
 
+    /**
+     * Dispatches at most one pending interrupt (D33). A hardware CALL transfers
+     * control to the handler published by the BIOS for the highest-priority
+     * ready line, saving the whole CPU state so the handler is transparent to the
+     * interrupted code. A line with no valid handler is dropped (no livelock).
+     */
+    private void deliverPendingInterrupt(ExecutionContext ctx) {
+        VmPic pic = ctx.pic();
+        if (pic == null) {
+            return;
+        }
+        int irq = pic.nextPending();
+        if (irq < 0) {
+            return;
+        }
+        int handler = ctx.irqHandler(irq);
+        if (handler <= 0 || handler >= program.codeSize()) {
+            pic.complete(irq); // no handler: drop the line
+            return;
+        }
+
+        RegisterFile regs = ctx.registers();
+        int ip = regs.get(RegisterFile.IP);
+        pic.beginService(irq); // clear from pending, mark in service
+
+        // Hardware CALL: save the CPU state, push the return address, jump.
+        ctx.enterInterrupt(ip);
+        int callerFramePointer = regs.get(RegisterFile.FP);
+        ctx.enterCall(callerFramePointer);
+        int sp = regs.get(RegisterFile.SP);
+        if (sp < 2) {
+            throw new VmException(VmException.Code.STACK_LIMIT, "Stack overflow on IRQ", ip);
+        }
+        sp -= 2;
+        ctx.bus().writeWord(sp, ip); // return to the interrupted instruction
+        regs.set(RegisterFile.SP, sp);
+        regs.set(RegisterFile.FP, sp);
+        regs.set(RegisterFile.IP, handler);
+    }
+
     private void executeCall(ExecutionContext ctx, RegisterFile regs, int ip) {
         int offset = u16(ctx, ip + 1);
         if ((offset & 0x8000) != 0) offset |= 0xFFFF0000;
@@ -503,6 +549,9 @@ public final class VmInterpreter {
         regs.set(RegisterFile.SP, sp);
         regs.set(RegisterFile.FP, restoredFramePointer);
         regs.set(RegisterFile.IP, retAddr);
+        // If this RET closes an interrupt handler, restore the interrupted code's
+        // full register state (D33), making the handler transparent.
+        ctx.leaveInterrupt();
         return true;
     }
 
@@ -527,6 +576,15 @@ public final class VmInterpreter {
         regs.set(RegisterFile.R0, result.status().code());
         regs.set(RegisterFile.R3, result.bytesTransferred());
         regs.set(RegisterFile.R4, result.result());
+        // I/O interrupt source (D33): a HOST service that fails raises IRQ_HOST so
+        // a real-time program can react without branching on every call. Masked by
+        // default, so it only matters when a program enables the line.
+        if (result.status() != ServiceResult.Status.OK) {
+            VmPic pic = ctx.pic();
+            if (pic != null) {
+                pic.raise(VmPic.IRQ_HOST);
+            }
+        }
         return false;
     }
 

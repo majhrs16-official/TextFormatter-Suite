@@ -1739,12 +1739,47 @@ pantalla y NVRAM) + `BiosBootTest` + `VmNvramTest`. Total: **368 tests, 0 fallos
 > Nota: la spec previa (`implement.md` §12.4 y §13.1) describía el firmware como pasivo y sin vectores
 > modificables; se actualiza en este lote (ver más abajo) para no dejarla divergente.
 
-### D33 — Tabla de IRQ configurable por el BIOS + E/S (propuesto)
+### D33 — Tabla de IRQ configurable por el BIOS + E/S (aplicado)
 
-El emulador **no** hardcodea la tabla de interrupciones; el BIOS la define en memoria (tabla de
-vectores con estructura y rango) y el runtime la usa para despachar. **Alcance decidido**: además
-de la tabla, se introducen **fuentes de interrupción por E/S** (eventos de entrada/salida disparan
-la línea). Queda por definir la estructura exacta de la tabla y la política de habilitación.
+El emulador **no** hardcodea la tabla de interrupciones; el BIOS la define en memoria y el runtime la
+usa para despachar. **Alcance decidido**: además de la tabla, se introducen **fuentes de interrupción
+por E/S**. Diseño aplicado:
+
+- **Controlador de interrupciones (`VmPic`)**, esclavo de bus al final de la apertura MMIO
+  (`0x0FF0–0x0FFF`, 16 B); la NVRAM (D32) se reduce a `0x0F10–0x0FEF`. Registros de 16 bits:
+  `PENDING` (lectura, bitmap de líneas pendientes), `ENABLE` (máscara, rw), `RAISE` (escritura: dispara
+  la línea indicada — interrupción *software*), `ACK` (escritura: completa la línea en servicio),
+  `IN_SERVICE` (lectura) y `CURRENT` (lectura: línea despachada o `0xFFFF`). 16 líneas.
+- **Tabla de IRQ**, publicada por el BIOS en la NVRAM con estructura fija y versionada:
+  `[boot:2][magic:2][count:2][handler_0:2]…[handler_n:2]` (16 bits por línea). El runtime la lee para
+  resolver el manejador; el BIOS puede reescribirla (es **configurable**, viva). Su disposición la fija
+  `IrqTable` en Java y el firmware en TS.
+- **Entrega tipo hardware**: en cada frontera de instrucción el intérprete consulta al `VmPic` la línea
+  de menor número pendiente, habilitada y no en servicio. Si la hay, hace una *llamada de hardware*:
+  guarda el **estado completo de la CPU** en una pila en la sombra (registros, `IP`/`SP`/`FP`/`FL` y la
+  profundidad de llamada), empuja la dirección de retorno en la pila del programa (como `CALL`) y salta
+  al manejador de la tabla. El manejador termina con `RET`; el `RET` que cierra su marco restaura el
+  estado, de modo que la interrupción es **transparente** al código interrumpido (no hace falta `IRET`
+  ni que el manejador salve registros). La línea queda *en servicio* (sin reentrada) hasta que el
+  manejador escribe `ACK`.
+- **Fuentes de E/S** (disparan la línea): (1) **llegada de mensaje** (IRQ 0, la levanta el runtime al
+  materializar el buffer de entrada), (2) **software** vía `RAISE` (BIOS/programa/tests), y
+  (3) **finalización de servicio HOST** (IRQ 1) cuando el servicio devuelve un estado de error.
+- **Política**: las líneas llegan **enmascaradas por defecto**; el BIOS publica manejadores seguros
+  (el stub por defecto hace `ACK` y `RET`) y una línea sólo se despacha cuando el programa la habilita
+  en `ENABLE`. La tabla vive en NVRAM (memoria de dispositivo, fuera de la RAM del programa), así que
+  no se corrompe con el tráfico normal de memoria; reescribirla es una operación explícita de MMIO.
+
+Alternativas descartadas: (a) **polling cooperativo** — la tabla existe pero el programa consulta
+`PENDING` y llama al manejador él mismo (sin preempción del intérprete): más simple, menos fiel;
+(b) **solo publicar la tabla** — el BIOS escribe la tabla y la API la expone, pero el despacho queda
+para más adelante.
+
+**Aplicado**: `VmPic` + `IrqTable` (`vm/irq`), `VmMemoryMap.DEVICE_PIC_BASE`, `ExecutionContext`
+(estado/frames de interrupción), `VmInterpreter` (entrega en la frontera, `leaveInterrupt` en `RET`,
+fuente HOST), `VmPolicyEngine` (adjunta el PIC, lo cablea y levanta la IRQ de mensaje), firmware
+(`fw_irq_stub`, publicación de la tabla en POST, equates `PIC_*`/`IRQ_*`) y tests (`VmPicTest` +
+`IrqDeliveryTest`, fixture `irq.flow`).
 
 ### Respuestas del usuario (revisión 2)
 
@@ -1755,5 +1790,5 @@ la línea). Queda por definir la estructura exacta de la tabla y la política de
 3. **Persistencia**: banco persistente en RAM, pero **de propósito general para el userspace** (el
    BIOS no elige ni reserva el rango); la persistencia es **implícita** (la VM no se reinicializa y
    no se limpia la memoria). Ya aplicado en D30.
-4. **Orden**: D27/D28/D29/D30/D31 aplicados; **D32 aplicado** (BIOS activo + NVRAM). Sigue **D33**
+4. **Orden**: D27/D28/D29/D30/D31 aplicados; **D32 aplicado** (BIOS activo + NVRAM); **D33 aplicado**
    (tabla de IRQ configurable por el BIOS + fuentes de interrupción por E/S).

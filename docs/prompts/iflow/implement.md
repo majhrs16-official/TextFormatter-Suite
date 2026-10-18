@@ -811,12 +811,13 @@ La pila y los registros se descartan tras una excepción. El estado persistente 
 
 No se habilita inicialmente un vector de interrupciones modificable por programas. Las excepciones se representan mediante códigos internos y rutas de error controladas.
 
-> **Actualización (D31–D32).** El firmware dejó de ser pasivo: con el firmware ON, la máquina resetea
+> **Actualización (D31–D33).** El firmware dejó de ser pasivo: con el firmware ON, la máquina resetea
 > en una rutina de BIOS (`fw_reset`) que hace POST, configura el hardware (pantalla por MMIO) y cede
 > el control al `main`. Una **tabla de interrupciones configurable por el BIOS** (no por el programa
-> de usuario) y **fuentes de interrupción por E/S** están previstas en D33; el despacho sigue estando
-> bajo control del runtime, no de un vector arbitrario del programa. Ver `docs/workdir/PLAN.md`,
-> revisión 2026-10-17 (2), y `src/iflow/HDL.md`.
+> de usuario) y **fuentes de interrupción por E/S** (D33) ya están implementadas: el BIOS publica la
+> tabla en su NVRAM, el runtime la lee y despacha la línea como una llamada de hardware. El despacho
+> sigue estando bajo control del runtime, no de un vector arbitrario del programa. Ver
+> `docs/workdir/PLAN.md`, revisión 2026-10-17 (2), y `src/iflow/HDL.md`.
 
 # 13. Firmware y bibliotecas estándar
 
@@ -824,13 +825,12 @@ No se habilita inicialmente un vector de interrupciones modificable por programa
 
 El firmware es una capa de convenciones, rutinas reutilizables y servicios estándar. No es un BIOS de hardware ni un kernel completo.
 
-> **Actualización (D32).** En la implementación actual el firmware ROM es **activo**: además de la
+> **Actualización (D32–D33).** En la implementación actual el firmware ROM es **activo**: además de la
 > capa de convenciones (stdlib y ABI), el punto de entrada de una imagen con firmware es su rutina de
-> reset (`fw_reset`), que ejecuta un POST mínimo —limpia la RAM volátil y configura la pantalla por
-> MMIO— y encadena con el `main` del usuario. Sigue **sin ser un kernel completo**: no hay
-> planificación, ni aislamiento entre programas, ni servicios privilegiados propios del firmware. La
-> publicación de una tabla de IRQ (D33) completará esta capa. Ver `src/iflow/HDL.md` §8 y
-> `docs/workdir/PLAN.md`.
+> reset (`fw_reset`), que ejecuta un POST mínimo —limpia la RAM volátil, configura la pantalla por
+> MMIO y publica la tabla de interrupciones en la NVRAM— y encadena con el `main` del usuario. Sigue
+> **sin ser un kernel completo**: no hay planificación, ni aislamiento entre programas, ni servicios
+> privilegiados propios del firmware. Ver `src/iflow/HDL.md` §8 y `docs/workdir/PLAN.md`.
 
 Sus responsabilidades son:
 

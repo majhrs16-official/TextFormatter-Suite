@@ -186,7 +186,11 @@ class Assembler {
     // separate project and cannot import the Java constants) =====
     const MMIO_DISPLAY_BASE = 0x0F00;  // screen register bank
     const DEVICE_NVRAM_BASE = 0x0F10;  // BIOS NVRAM scratch
+    const DEVICE_PIC_BASE   = 0x0FF0;  // interrupt controller register bank (D33)
     const BOOT_MAGIC        = 0xB105;  // "booted" marker stored in NVRAM
+    const IRQ_TABLE_MAGIC   = 0x1A7B;  // marks a valid interrupt vector table (D33)
+    const IRQ_TABLE_COUNT   = 16;      // number of lines in the BIOS default table
+    const IRQ_TABLE_OFF     = 0x06;    // NVRAM offset of entry 0 (magic@0x02, count@0x04)
     const DATA_BASE         = 0x3000;  // volatile data/heap region
     const DATA_WORDS        = 4096;    // 2 pages / 2 bytes per word
     const DISPLAY_BASE      = 0xE000;  // default framebuffer window
@@ -466,6 +470,17 @@ class Assembler {
     host();
     ret();
 
+    // ===== Default interrupt handler (D33) =====
+    // The BIOS publishes this stub for every line in the vector table. It reads
+    // the line under service (CURRENT), acknowledges it (ACK) and returns; the
+    // runtime saved the interrupted CPU state, so the stub is transparent.
+    mark('fw_irq_stub');
+    li(1, DEVICE_PIC_BASE + 0x0A);    // CURRENT (line being serviced)
+    ldwi(2, 1);
+    li(1, DEVICE_PIC_BASE + 0x06);    // ACK
+    stwi(2, 1);
+    ret();
+
     // ===== BIOS reset / POST routine (D32, entry point) =====
     // The machine resets into this routine. On a cold boot (the NVRAM boot flag
     // is clear) it performs POST: it clears the volatile data region word by word
@@ -501,6 +516,25 @@ class Assembler {
     li(1, MMIO_DISPLAY_BASE + 0x02); li(2, DISPLAY_COLS);       stwi(2, 1);
     li(1, MMIO_DISPLAY_BASE + 0x04); li(2, DISPLAY_ROWS);       stwi(2, 1);
     li(1, MMIO_DISPLAY_BASE + 0x06); li(2, 1);                  stwi(2, 1); // CTRL: enable
+
+    // Publish the interrupt vector table (D33) in NVRAM: magic, count and one
+    // entry per line, all pointing at the default stub. It lives in device memory,
+    // so the program's RAM traffic never clobbers it; the BIOS can rewrite it.
+    li(1, DEVICE_NVRAM_BASE + 0x02); li(2, IRQ_TABLE_MAGIC);    stwi(2, 1);
+    li(1, DEVICE_NVRAM_BASE + 0x04); li(2, IRQ_TABLE_COUNT);    stwi(2, 1);
+    const stubAddr = labelAddr.get('fw_irq_stub')!;
+    li(1, DEVICE_NVRAM_BASE + IRQ_TABLE_OFF);
+    li(2, stubAddr);
+    li(3, IRQ_TABLE_COUNT);
+    li(4, 1);                          // decrement
+    li(5, 2);                          // word stride
+    li(6, 0);                          // zero (loop compare value)
+    mark('fw_reset_irq_table');
+    stwi(2, 1);
+    rr(Opcode.ADD, 1, 5);
+    rr(Opcode.SUB, 3, 4);
+    rr(Opcode.CMP, 3, 6);
+    br(Opcode.JNZ, 'fw_reset_irq_table');
 
     // Mark the boot as done in NVRAM.
     li(1, DEVICE_NVRAM_BASE); li(2, BOOT_MAGIC);                stwi(2, 1);
@@ -551,6 +585,20 @@ class Assembler {
       // Expose the entry point as an equate so user code can `CALL fw_strlen`.
       this.defineEquate(name, addr);
     }
+
+    // ===== Interrupt controller + table layout (D33) =====
+    // Exposed so a program can enable a line, raise one, acknowledge it or
+    // overwrite its own handler entry in the BIOS-published table.
+    this.defineEquate('PIC_BASE', DEVICE_PIC_BASE);
+    this.defineEquate('PIC_PENDING', DEVICE_PIC_BASE + 0x00);
+    this.defineEquate('PIC_ENABLE', DEVICE_PIC_BASE + 0x02);
+    this.defineEquate('PIC_RAISE', DEVICE_PIC_BASE + 0x04);
+    this.defineEquate('PIC_ACK', DEVICE_PIC_BASE + 0x06);
+    this.defineEquate('PIC_IN_SERVICE', DEVICE_PIC_BASE + 0x08);
+    this.defineEquate('PIC_CURRENT', DEVICE_PIC_BASE + 0x0A);
+    this.defineEquate('IRQ_TABLE_MAGIC', IRQ_TABLE_MAGIC);
+    this.defineEquate('IRQ_TABLE_ENTRIES', DEVICE_NVRAM_BASE + IRQ_TABLE_OFF);
+    this.defineEquate('IRQ_LINES', IRQ_TABLE_COUNT);
 
     return { rom: fw, reset: labelAddr.get('fw_reset')! };
   }

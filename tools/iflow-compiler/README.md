@@ -182,6 +182,7 @@ CALL fw_strlen        ; R1 = dirección de la cadena → R0 = longitud
 | Función | Entrada | Salida |
 |---|---|---|
 | `fw_reset` | — (punto de entrada del BIOS, D32) | POST + encadena con el `main` |
+| `fw_irq_stub` | — (manejador de IRQ por defecto, D33) | `ACK` de la línea y `RET` |
 | `fw_strlen` | `R1` = cadena | `R0` = longitud |
 | `fw_strcpy` | `R1` = destino, `R2` = origen | `R0` = bytes copiados |
 | `fw_strcmp` | `R1` = a, `R2` = b | `R0` = 0 si iguales, si no signo(a−b) |
@@ -201,12 +202,23 @@ Las utilidades de cadena/memoria usan el direccionamiento indirecto de la ISA v2
 
 **BIOS activo (D32).** Con firmware activado, el `entryPoint` de la imagen es
 `fw_reset`, **no** el `main`: la máquina resetea en el BIOS. En el primer arranque
-(frío) `fw_reset` limpia la RAM volátil de datos (0x3000–0x4FFF) y configura la
-pantalla por MMIO (`BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`), marca la
-NVRAM (0x0F10) y encadena con el `main`; en los siguientes arranques (caliente)
-salta directo al `main`. La cola de la página del BIOS (0x0F00–0x0FFF) está
-reservada para el bloque de control MMIO (pantalla 0x0F00–0x0F0F, NVRAM
-0x0F10–0x0FFF); el ensamblador da error si el firmware creciera dentro de ella.
+(frío) `fw_reset` limpia la RAM volátil de datos (0x3000–0x4FFF), configura la
+pantalla por MMIO (`BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`), publica la
+tabla de interrupciones en la NVRAM, marca el arranque y encadena con el `main`; en
+los siguientes arranques (caliente) salta directo al `main`. La cola de la página
+del BIOS (0x0F00–0x0FFF) está reservada para el bloque de control MMIO (pantalla
+0x0F00–0x0F0F, NVRAM 0x0F10–0x0FEF, PIC 0x0FF0–0x0FFF); el ensamblador da error si
+el firmware creciera dentro de ella.
+
+**Interrupciones (D33).** El BIOS publica en la NVRAM una tabla de vectores
+(`[boot][magic][count][handler_0]…`) con todas las entradas apuntando a
+`fw_irq_stub`. El programa puede instalar su propio manejador sobrescribiendo su
+entrada por MMIO y habilitar la línea en el PIC. El ensamblador expone las
+constantes `PIC_BASE`, `PIC_PENDING`, `PIC_ENABLE`, `PIC_RAISE`, `PIC_ACK`,
+`PIC_IN_SERVICE`, `PIC_CURRENT`, `IRQ_TABLE_MAGIC`, `IRQ_TABLE_ENTRIES` e
+`IRQ_LINES`. El manejador termina con `RET`; el runtime salva y restaura el estado
+completo de la CPU, de modo que la interrupción es transparente al código
+interrumpido.
 
 ---
 

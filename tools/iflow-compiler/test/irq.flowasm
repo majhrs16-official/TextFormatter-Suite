@@ -1,0 +1,60 @@
+; IRQ end-to-end fixture (D33).
+; Assembled with the firmware ROM enabled, so the BIOS publishes a default
+; interrupt vector table in its NVRAM during POST. main installs its own handler
+; for line 5, enables it, raises it and checks that:
+;   * the handler actually ran (it draws 'I' in cell 1), and
+;   * the interrupt was transparent: the register R5 clobbered by the handler
+;     survives, so main draws 'S' (survived) and not 'C' (clobbered).
+.entry main
+
+.section code
+
+main:
+    ; Install our handler for line 5 in the BIOS-published table (entry 5, +10).
+    LI R1, IRQ_TABLE_ENTRIES + 10
+    LI R2, handler
+    STWI R2, [R1]
+
+    ; Enable line 5 in the PIC (bit 5 = 0x0020).
+    LI R1, PIC_ENABLE
+    LI R2, 0x0020
+    STWI R2, [R1]
+
+    ; A value the handler will clobber; it must be restored by the runtime.
+    LI R5, 0x1234
+
+    ; Raise line 5 (software interrupt); delivery happens at the next boundary.
+    LI R1, PIC_RAISE
+    LI R2, 5
+    STWI R2, [R1]
+
+    ; If R5 survived, draw 'S'; otherwise draw 'C'.
+    LI R1, 0xE000
+    LI R2, 0x0043      ; 'C'
+    LI R3, 0x1234
+    CMP R5, R3
+    JNZ main_clobbered
+    LI R2, 0x0053      ; 'S'
+main_clobbered:
+    STBI R2, [R1]
+    HALT
+
+handler:
+    ; Clobber the GPRs to prove the runtime saved/restored them.
+    LI R1, 0xDEAD
+    LI R2, 0xBEEF
+    LI R3, 0x1111
+
+    ; Draw 'I' in cell 1, proving the handler ran.
+    LI R1, 0xE002
+    LI R2, 0x0049      ; 'I'
+    STBI R2, [R1]
+
+    ; Acknowledge the interrupt: read the line in service, then write ACK.
+    LI R1, PIC_CURRENT
+    LDWI R2, [R1]
+    LI R1, PIC_ACK
+    STWI R2, [R1]
+    RET
+
+.end

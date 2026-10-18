@@ -12,7 +12,7 @@
 > portable a un HDL.
 >
 > Documento vivo: la sección [8](#8-hardware-previsto) reúne el hardware que aún
-> no está implementado (pantalla, BIOS activo, tabla de IRQ).
+> no está implementado.
 
 ---
 
@@ -42,15 +42,16 @@
 
   Memoria de programa (solo lectura):
   ┌──────────┐   ROM de firmware (BROM)  0x0000-0x0FFF   (opcional)
-  │  BROM    │   incluye fw_reset (BIOS activo, D32)
+  │  BROM    │   incluye fw_reset (BIOS activo, D32) y fw_irq_stub (D33)
   └──────────┘
 
-  Previsto (sección 8): IRQ (línea de interrupción + tabla configurable)
+  Interrupciones (D33): VmPic (línea + máscara) → runtime → tabla en NVRAM
 ```
 
 Un **único** bus de datos (`VmBus`) conecta a todos los maestros (CPU y DMA) con
 los esclavos: la memoria (`SoftMMU`) y los periféricos (`VmDevice`, hoy la
-pantalla `VmDisplay` y la NVRAM `VmNvram`). La CPU **no** accede a la memoria física directamente:
+pantalla `VmDisplay`, la NVRAM `VmNvram` y el controlador de interrupciones
+`VmPic`). La CPU **no** accede a la memoria física directamente:
 emite transacciones por el bus. Lo mismo hace el DMA. El *interconnect* decodifica
 la dirección: si pertenece a un periférico, enruta la transacción al dispositivo
 (MMIO, sin traducción ni permisos); si no, la MMU traduce virtual→físico,
@@ -69,7 +70,8 @@ comprueba permisos y *propiedad* (privilegio) y sirve el dato desde
 | `mmu` | `vm/memory/SoftMMU` | esclavo | Decodificación de dirección, traducción V→F, permisos R/W/X y propiedad; hospeda la lista de periféricos |
 | `device` | `vm/memory/VmDevice` | esclavo | Interfaz de periférico: decodifica su rango y responde a las transacciones |
 | `video` | `vm/video/VmDisplay` | esclavo (MMIO) | Pantalla de texto mapeada en memoria (D31): celda de 2 B (carácter + atributo `[letra:4][fondo:4]`) y banco de registros MMIO |
-| `nvram` | `vm/memory/VmNvram` | esclavo (MMIO) | NVRAM del BIOS (D32): ventana de almacenamiento persistente entre mensajes (bandera de arranque en frío) |
+| `nvram` | `vm/memory/VmNvram` | esclavo (MMIO) | NVRAM del BIOS (D32): ventana de almacenamiento persistente entre mensajes (bandera de arranque en frío, tabla de IRQ) |
+| `pic` | `vm/irq/VmPic` | esclavo (MMIO) | Controlador de interrupciones (D33): latch y máscara de 16 líneas, disparo software (`RAISE`), confirmación (`ACK`) |
 | `bios` | `fw_reset` en la ROM (`ProgramImage`) | esclavo (BROM, ejecutado por `cpu`) | Rutina de reset activa (D32): POST en frío (limpia RAM volátil, configura la pantalla por MMIO) y encadena con el `main` |
 | `pagetable` | `vm/memory/PageTable` + `PageEntry` | esclavo (interno) | 16 entradas (páginas de 4 KB); cada una mapea vpage→frame + permisos |
 | `ram` | `vm/memory/PhysicalMemory` | esclavo (interno) | Banco físico de 64 KB en frames de 4 KB con *copy-on-write* |
@@ -139,12 +141,13 @@ la CPU (PROGRAM) y `dma()` el bus del DMA (SUPERVISOR). Así el privilegio viaja
   imagen y publica el snapshot de arranque. Como la máquina es **una sola y viva**, la memoria del
   programa persiste entre mensajes (D30).
 - **Reset del BIOS (D32)**: con el firmware ON, el `IP` inicial es `fw_reset` (el BIOS), no el `main`.
-  En el primer arranque (frío) ejecuta el POST —limpia la RAM volátil de datos y configura la pantalla
-  por MMIO— y marca la NVRAM; en los siguientes (caliente) salta directo al `main`. El «reset» de
-  hardware real deja, por tanto, la máquina lista antes de ceder el control al programa.
+  En el primer arranque (frío) ejecuta el POST —limpia la RAM volátil de datos, configura la pantalla
+  por MMIO y publica la tabla de IRQ en la NVRAM— y marca la NVRAM; en los siguientes (caliente) salta
+  directo al `main`. El «reset» de hardware real deja, por tanto, la máquina lista antes de ceder el
+  control al programa.
 - **Reset de dispositivo**: la E/S de la ejecución se limpia con
-  `dma().clearBlock(...)` (no copia si el frame compartido ya es cero). La pantalla y la NVRAM **no**
-  se limpian por mensaje: son hardware persistente.
+  `dma().clearBlock(...)` (no copia si el frame compartido ya es cero). La pantalla, la NVRAM y el PIC
+  **no** se limpian por mensaje: son hardware persistente (una línea pendiente sobrevive).
 
 ---
 
@@ -174,10 +177,16 @@ la CPU (PROGRAM) y `dma()` el bus del DMA (SUPERVISOR). Así el privilegio viaja
    el *journal*.
 
 6. **MMIO de dispositivo (CPU/DMA → interconnect → device)**
-   Si la dirección cae en el rango de un periférico (la ventana del framebuffer o
-   el banco de registros en `0x0F00`), el *interconnect* entrega la transacción al
-   `VmDisplay` (D31). Así cada escritura a la ventana se refleja en pantalla, sin
-   pasar por la MMU.
+   Si la dirección cae en el rango de un periférico (la ventana del framebuffer, el
+   banco de registros en `0x0F00`, la NVRAM en `0x0F10` o el PIC en `0x0FF0`), el
+   *interconnect* entrega la transacción al dispositivo (`VmDisplay`, `VmNvram` o
+   `VmPic`). Así cada escritura a la ventana se refleja en pantalla, sin pasar por la MMU.
+
+7. **Interrupción (device → runtime → cpu)**
+   Un dispositivo levanta una línea en el `VmPic` (o el software escribe `RAISE`). En la
+   siguiente frontera de instrucción el runtime lee `PENDING & ENABLE & ~IN_SERVICE`, resuelve el
+   manejador en la tabla de la NVRAM y transfiere el control con una **llamada de hardware**
+   (estado completo salvado). El manejador termina con `RET`, que lo restaura (D33).
 
 ---
 
@@ -197,7 +206,8 @@ firmware está activa** (el código siempre reserva dos páginas):
 | Salida | `0x8000-0x8FFF` | R/W | user | Buffer de salida |
 | RAM de usuario | `0x9000-0xFFFF` | R/W | user | Almacenamiento libre del programa; persiste entre mensajes (el runtime no la limpia) |
 | MMIO de dispositivo (pantalla) | `0x0F00-0x0F0F` | I/O | — | Banco de registros de la pantalla, **dentro de la página del BIOS** (reutiliza la cola libre del ROM); el *interconnect* lo decodifica antes que la ROM/RAM (D31) |
-| MMIO de dispositivo (NVRAM) | `0x0F10-0x0FFF` | I/O | — | NVRAM del BIOS (D32): almacenamiento persistente entre mensajes dentro de la apertura MMIO |
+| MMIO de dispositivo (NVRAM) | `0x0F10-0x0FEF` | I/O | — | NVRAM del BIOS (D32): almacenamiento persistente entre mensajes dentro de la apertura MMIO |
+| MMIO de dispositivo (PIC) | `0x0FF0-0x0FFF` | I/O | — | Controlador de interrupciones (D33): latch/máscara de 16 líneas, disparo software y confirmación |
 
 El código y las constantes son **disjuntas por construcción** (prevención de
 solapamiento, R3).
@@ -230,13 +240,13 @@ vive en `vm/isa/Opcode`.
 |---|---|---|
 | `video` (`VmDisplay`) | Periférico de texto mapeado en memoria; celda de 2 bytes (carácter + atributo `[letra:4][fondo:4]`, estilo VERA/X16); el *interconnect* decodifica su ventana y su banco de registros. D31 | ✅ |
 | `nvram` (`VmNvram`) | NVRAM del BIOS: ventana persistente entre mensajes en la apertura MMIO (bandera de arranque en frío). D32 | ✅ |
-| `bios` (`fw_reset`) | ROM de firmware **activa**: la máquina resetea en el BIOS, que hace POST (limpia RAM volátil, configura la pantalla vía MMIO) y encadena con el `main`. D32 | ✅ |
-| `irq` (tabla) | La tabla de interrupciones la define el BIOS en memoria (configurable), no hardcodeada en el emulador; fuentes por E/S. D33 | ⏳ |
+| `bios` (`fw_reset`) | ROM de firmware **activa**: la máquina resetea en el BIOS, que hace POST (limpia RAM volátil, configura la pantalla vía MMIO, publica la tabla de IRQ) y encadena con el `main`. D32 | ✅ |
+| `pic` (`VmPic`) | Controlador de interrupciones en la apertura MMIO: latch/máscara de 16 líneas con disparo software y confirmación. D33 | ✅ |
+| `irq` (entrega) | El BIOS publica la tabla en su NVRAM (configurable, no hardcodeada); el runtime la lee y entrega la línea como **llamada de hardware** (salva/restaura el estado completo, el manejador hace `RET`). Fuentes por E/S: mensaje, software y fin de HOST. D33 | ✅ |
 
-La pantalla (D31) y el BIOS activo con su NVRAM (D32) ya incorporan sus puertos/señales en las
-secciones 2–6. La tabla de IRQ con fuentes de E/S (D33) está **documentada pero aún no
-implementada** (ver `docs/workdir/PLAN.md`, revisión 2026-10-17 (2)); cuando se implemente, este
-documento añadirá su rango y líneas de evento.
+La pantalla (D31), el BIOS activo con su NVRAM (D32) y las interrupciones con su
+controlador (D33) ya incorporan sus puertos/señales en las secciones 2–6. No queda
+hardware previsto pendiente.
 
 ---
 

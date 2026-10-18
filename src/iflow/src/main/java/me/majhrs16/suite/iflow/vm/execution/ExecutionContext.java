@@ -2,11 +2,14 @@ package me.majhrs16.suite.iflow.vm.execution;
 
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
+import me.majhrs16.suite.iflow.vm.irq.IrqTable;
+import me.majhrs16.suite.iflow.vm.irq.VmPic;
 import me.majhrs16.suite.iflow.vm.memory.PageTable;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
+import me.majhrs16.suite.iflow.vm.memory.VmNvram;
 import me.majhrs16.suite.iflow.vm.service.HostContext;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import me.majhrs16.suite.iflow.vm.service.ServiceResult;
@@ -57,6 +60,17 @@ public final class ExecutionContext {
      * explicitly only from tests via {@link #dmaController(VmDmaController)}.
      */
     private VmDmaController dmaController;
+    /**
+     * Interrupt controller of this execution (D33), wired from the loaded
+     * program's machine. {@code null} disables interrupt delivery (bare-metal
+     * tests that do not attach a PIC).
+     */
+    private VmPic pic;
+    /**
+     * BIOS NVRAM of this execution (D32/D33), used to resolve interrupt handlers
+     * from the BIOS-published table.
+     */
+    private VmNvram nvram;
     private HostServiceRegistry serviceRegistry;
     /**
      * Validated instruction window (an I-cache line): the current 4KB code page
@@ -83,6 +97,11 @@ public final class ExecutionContext {
     // VM memory stack on purpose, so the 2-byte return-address ABI stays unchanged.
     private int[] framePointerStack;
     private int framePointerDepth = 0;
+    // Shadow stack of saved CPU states for interrupt delivery (D33). Each frame
+    // holds [callDepth, R0..R7, IP, SP, FP, FL] and is popped by the RET that
+    // closes the handler, so a handler runs transparently to the interrupted code.
+    private int[][] irqFrames;
+    private int irqDepth = 0;
     private boolean cancelled = false;
     private VmException fatalError;
     private long startNanos;
@@ -147,6 +166,18 @@ public final class ExecutionContext {
         this.dmaController = dma;
         return this;
     }
+
+    /** Wires the interrupt controller for this execution (D33); null disables IRQs. */
+    public ExecutionContext pic(VmPic pic) {
+        this.pic = pic;
+        return this;
+    }
+
+    /** Wires the BIOS NVRAM used to resolve interrupt handlers (D32/D33). */
+    public ExecutionContext nvram(VmNvram nvram) {
+        this.nvram = nvram;
+        return this;
+    }
     public ExecutionContext serviceRegistry(HostServiceRegistry r) { this.serviceRegistry = r; return this; }
     public ExecutionContext nanoTimeSupplier(Supplier<Long> s) { this.nanoTimeSupplier = s; return this; }
     public ExecutionContext allowedCapabilities(String[] caps) { this.allowedCapabilities = caps != null ? caps.clone() : new String[0]; return this; }
@@ -169,6 +200,7 @@ public final class ExecutionContext {
         fuelRemaining = fuelBudget;
         callDepth = 0;
         framePointerDepth = 0;
+        irqDepth = 0;
         if (framePointerStack == null || framePointerStack.length <= maxCallDepth) {
             framePointerStack = new int[maxCallDepth + 1];
         }
@@ -261,6 +293,86 @@ public final class ExecutionContext {
     }
 
     public int callDepth() { return callDepth; }
+
+    // ===== Interrupts (D33) =====
+
+    /** The interrupt controller wired to this execution, or {@code null}. */
+    public VmPic pic() { return pic; }
+
+    /** The BIOS NVRAM wired to this execution, or {@code null}. */
+    public VmNvram nvram() { return nvram; }
+
+    /**
+     * Resolves the handler the BIOS published for {@code irq} in the NVRAM table.
+     *
+     * @return handler address, or 0 when there is no valid table or no entry
+     */
+    public int irqHandler(int irq) {
+        if (nvram == null || irq < 0 || irq >= IrqTable.MAX_ENTRIES) {
+            return 0;
+        }
+        int base = nvram.base();
+        if (nvram.readWord(base + IrqTable.OFFSET_MAGIC) != IrqTable.MAGIC) {
+            return 0;
+        }
+        int count = nvram.readWord(base + IrqTable.OFFSET_COUNT);
+        if (irq >= count) {
+            return 0;
+        }
+        return nvram.readWord(base + IrqTable.entryOffset(irq));
+    }
+
+    /**
+     * Saves the whole CPU state before transferring control to an interrupt
+     * handler (D33), recording the call depth at entry so the matching RET can
+     * restore it. Handlers are therefore transparent to the interrupted code.
+     *
+     * @throws VmException STACK_LIMIT if interrupts nest too deeply
+     */
+    public void enterInterrupt(int ip) {
+        if (irqFrames == null || irqFrames.length <= maxCallDepth) {
+            irqFrames = new int[maxCallDepth + 1][];
+        }
+        if (irqDepth >= irqFrames.length) {
+            throw new VmException(VmException.Code.STACK_LIMIT,
+                "Interrupt nesting too deep: " + irqDepth, ip);
+        }
+        int[] frame = irqFrames[irqDepth];
+        if (frame == null) {
+            frame = new int[RegisterFile.REG_COUNT + 1];
+            irqFrames[irqDepth] = frame;
+        }
+        frame[0] = callDepth;
+        for (int i = 0; i < RegisterFile.REG_COUNT; i++) {
+            frame[i + 1] = registers.get(i);
+        }
+        irqDepth++;
+    }
+
+    /**
+     * Restores the CPU state saved by {@link #enterInterrupt(int)} when a RET
+     * closes an interrupt frame. A RET that still leaves nested calls inside the
+     * handler (call depth above the saved one) does nothing.
+     *
+     * @return true if a saved frame was restored
+     */
+    public boolean leaveInterrupt() {
+        if (irqDepth == 0) {
+            return false;
+        }
+        int[] frame = irqFrames[irqDepth - 1];
+        if (callDepth != frame[0]) {
+            return false;
+        }
+        for (int i = 0; i < RegisterFile.REG_COUNT; i++) {
+            registers.set(i, frame[i + 1]);
+        }
+        irqDepth--;
+        return true;
+    }
+
+    /** Number of interrupt handlers currently active (0 when none). */
+    public int interruptDepth() { return irqDepth; }
 
     // ===== Property cache =====
 

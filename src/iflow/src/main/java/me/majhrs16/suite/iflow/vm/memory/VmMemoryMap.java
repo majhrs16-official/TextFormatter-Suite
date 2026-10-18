@@ -21,7 +21,8 @@ package me.majhrs16.suite.iflow.vm.memory;
  *   page 8      0x8000-0x8FFF   output buffer (I/O)                        R/W
  *   pages 9-15  0x9000-0xFFFF   general-purpose user RAM                   R/W
  *   0x0F00      0x0F00-0x0F0F   screen MMIO registers (in the BIOS page)    I/O
- *   0x0F10      0x0F10-0x0FFF   BIOS NVRAM / scratch window                 I/O
+ *   0x0F10      0x0F10-0x0FEF   BIOS NVRAM / scratch window                 I/O
+ *   0x0FF0      0x0FF0-0x0FFF   interrupt controller (PIC) registers        I/O
  * </pre>
  *
  * <p>
@@ -108,7 +109,16 @@ public final class VmMemoryMap {
      * so it is not part of the program's RAM.
      */
     public static final int DEVICE_NVRAM_BASE = DEVICE_MMIO_BASE + 0x10;   // 0x0F10
-    public static final int DEVICE_NVRAM_SIZE = DEVICE_MMIO_SIZE - 0x10;   // 0xF0
+    public static final int DEVICE_NVRAM_SIZE = 0xE0;                      // 0x0F10-0x0FEF
+
+    /**
+     * Base of the interrupt controller (PIC) register bank (D33), at the very end
+     * of the device MMIO aperture. The PIC holds the interrupt latch/mask and
+     * exposes it as MMIO, so both the BIOS (during POST) and a program can enable
+     * a line and raise/acknowledge it. The interconnect decodes it before ROM/RAM.
+     */
+    public static final int DEVICE_PIC_BASE = DEVICE_MMIO_BASE + 0xF0;     // 0x0FF0
+    public static final int DEVICE_PIC_SIZE = 0x10;                        // 0x0FF0-0x0FFF
 
     // ===== Text screen defaults (the BIOS may reconfigure them at runtime) =====
 
