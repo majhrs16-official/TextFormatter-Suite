@@ -122,10 +122,11 @@ la CPU (PROGRAM) y `dma()` el bus del DMA (SUPERVISOR). Así el privilegio viaja
 - **Clock**: la máquina es interpretada; el «ciclo» es una instrucción (o una
   transacción de bus). No hay señal de reloj global. El *fuel budget* limita el
   número de ciclos por ejecución (equivalente a un *watchdog*).
-- **Reset** (arranque de una ejecución): `ExecutionContext.initialize()`
-  restablece registros, IP/SP, fuel, journal, ventana I-cache y E/S; después el
-  *boot loader* del engine mapea la imagen y **congela** (`SoftMMU.freeze()`) el
-  snapshot físico compartido.
+- **Reset** (arranque de una ejecución): `ExecutionContext.initialize()` restablece el **estado del
+  core** (registros, IP/SP, fuel, journal, ventana I-cache) y los buffers de E/S; **no** borra la RAM
+  del programa. El arranque (`setProgram` + `setupProgramMappings`) es el *boot loader*: mapea la
+  imagen y publica el snapshot de arranque. Como la máquina es **una sola y viva**, la memoria del
+  programa persiste entre mensajes (D30).
 - **Reset de dispositivo**: la E/S de la ejecución se limpia con
   `dma().clearBlock(...)` (no copia si el frame compartido ya es cero).
 
@@ -172,7 +173,7 @@ firmware está activa** (el código siempre reserva dos páginas):
 | Pila | `0x5000-0x6FFF` | R/W | user | Crece hacia abajo desde `STACK_TOP` |
 | Entrada | `0x7000-0x7FFF` | R/W | user | Buffer de entrada |
 | Salida | `0x8000-0x8FFF` | R/W | user | Buffer de salida |
-| Reservado | `0x9000-0xFFFF` | — | — | No mapeado (o estado persistente, D30) |
+| RAM de usuario | `0x9000-0xFFFF` | R/W | user | Almacenamiento libre del programa; persiste entre mensajes (el runtime no la limpia) |
 
 El código y las constantes son **disjuntas por construcción** (prevención de
 solapamiento, R3).

@@ -1619,21 +1619,31 @@ Llamadores adaptados (`HostServiceRegistry`, `VmPolicyEngine.MessageHostContext`
 (`HostServiceRegistryTest`, `VmIntegrationTest`, `VmInterpreterTest`, `ExecutionContextTest`).
 Verificado: **348 tests, 0 fallos**.
 
-### D30 — Persistencia entre mensajes (hallazgo: hoy **no** persiste)
+### D30 — Una sola máquina viva: memoria persistente implícita (✅ aplicado)
 
-Corrección a la premisa del usuario: aunque `initialize()` *solo* limpia los buffers de E/S
-(`0x7000`/`0x8000`), en `route()` cada mensaje se ejecuta sobre
-`new SoftMMU(loaded.softMMU)` —un **fork copy-on-write del snapshot congelado**— de modo que las
-páginas de datos (`0x3000-0x4FFF`) parten de cero en **cada** mensaje. Por tanto la RAM de
-ejecución **no** conserva estado entre mensajes hoy. Opciones:
+**Hallazgo.** Aunque `initialize()` *solo* limpia los buffers de E/S (`0x7000`/`0x8000`), en
+`route()` cada mensaje se ejecutaba sobre `new SoftMMU(loaded.softMMU)` —un *fork* copy-on-write del
+snapshot congelado— de modo que los datos (`0x3000-0x4FFF`) partían de cero en **cada** mensaje: la
+persistencia que el usuario daba por supuesta **no existía**.
 
-- **(a) Banco persistente en RAM** sobre las páginas 9-15 (`0x9000-0xFFFF`, ya reservadas como
-  «reserved / persistent state» en `VmMemoryMap`): un almacén por programa que **no** se forkea ni
-  se limpia; el BIOS elige el rango. Es la opción más alineada con la propuesta del BIOS activo.
-- **(b) Solo `STATE_READ`/`STATE_WRITE`** (`HostContext`) como estado persistente, dejando la RAM
-  de ejecución volátil. Ya existe y no toca el modelo de memoria.
-- **(c) MMU del programa persistente** (sin fork por mensaje): recupera la persistencia total pero
-  revierte parte de D25 (aislamiento/optimización).
+**Decisión (aclaración del usuario).** No hay que *hacer explícita* la persistencia: la instancia de
+la VM no se reinicializa y cada mensaje **no** limpia la memoria (eso se delega al programa). Se
+implementa como **una única máquina viva por programa**:
+
+- El motor mantiene **una sola `SoftMMU`** por programa (`LoadedProgram.softMMU`), mapeada al cargar
+  y **mutada en el sitio**; `route()` ya **no forka**: usa esa memoria viva directamente.
+- Las ejecuciones se **serializan** en el único core (`machineLock`), porque la memoria es
+  compartida y mutable. Es el modelo de una CPU de un solo núcleo.
+- `initialize()` sigue limpiando **solo** los buffers de E/S; los datos persisten.
+- Las páginas **9-15 (`0x9000-0xFFFF`)** dejan de estar «reservadas» y pasan a ser **RAM de usuario
+  de propósito general (R/W)**: el BIOS **no** elige ni reserva el rango. Un contador de 4 bytes en
+  `0x9000+` funciona sin más.
+- `SoftMMU` conserva su capacidad *copy-on-write* (`SoftMMU(SoftMMU)`, `PhysicalMemory.fork`) para
+  copias aisladas (tests/snapshots); el camino por mensaje ya no la usa, así que no reintroduce el
+  coste de *freeze* por mensaje.
+
+**Verificado:** nuevo test `programMemoryPersistsAcrossMessages` (un contador en `0x9000` decide
+`LOG` en el 1.er mensaje y `DROP` en el 2.º). Total: **349 tests, 0 fallos**.
 
 ### D31 — Pantalla de texto mapeada en memoria (`VmDisplay`) — propuesto
 
@@ -1646,8 +1656,11 @@ ejecución **no** conserva estado entre mensajes hoy. Opciones:
   escrituras; el resto sigue a `SoftMMU`. Cada escritura (CPU o DMA) se refleja en el framebuffer.
 - **El BIOS fija la base y las dimensiones** (D32) escribiendo registros MMIO del dispositivo;
   reconfigurable en caliente.
-- **Consumo por el host**: el `VmDisplay` expone el framebuffer (API) para logs/tests/UI; sin salida
-  automática. (A confirmar: ver «Preguntas abiertas».)
+- **Consumo por el host (decidido)**: el `VmDisplay` expone el framebuffer por **API** (tests/UI) y
+  admite un **volcado a log apagable**. Se configura en `gradle.properties` (D27). El framebuffer
+  está pensado para **producción** (datos útiles), no solo para depurar; si el flag de debug está
+  activo, se **inyecta código adicional** en el programa y/o el BIOS que usa el framebuffer como
+  salida.
 
 ### D32 — BIOS activo (propuesto)
 
@@ -1661,18 +1674,20 @@ ON; el BIOS encadena al programa. Esto permite reconfigurar el hardware en el ar
 > modificable por programas»; §13.1: «no es un BIOS de hardware»). Habrá que **actualizar la spec y
 > los READMEs** como parte del lote, no dejarla divergente.
 
-### D33 — Tabla de IRQ configurable por el BIOS (propuesto)
+### D33 — Tabla de IRQ configurable por el BIOS + E/S (propuesto)
 
 El emulador **no** hardcodea la tabla de interrupciones; el BIOS la define en memoria (tabla de
-vectores con estructura y rango reservado) y el runtime la usa para despachar. Falta decidir si se
-introducen **fuentes** de interrupción reales o solo la estructura/tabla.
+vectores con estructura y rango) y el runtime la usa para despachar. **Alcance decidido**: además
+de la tabla, se introducen **fuentes de interrupción por E/S** (eventos de entrada/salida disparan
+la línea). Queda por definir la estructura exacta de la tabla y la política de habilitación.
 
-### Preguntas abiertas (revisión 2)
+### Respuestas del usuario (revisión 2)
 
-1. **Pantalla**: ¿cómo la consume el host? ¿API de framebuffer consultable (tests/UI), volcado a log,
-   ambas? ¿Apagable para no costar en producción?
-2. **IRQ**: ¿introducir eventos reales (por ejemplo *timer* o E/S) además de la tabla configurable, o
-   solo la estructura por ahora?
-3. **Persistencia**: ¿opción (a) banco persistente en RAM, (b) solo `STATE_*`, o (c) MMU persistente?
-4. **Alcance/orden**: ¿aplico primero D28/D29 (documentación + API, bajo riesgo) y después D31–D33
-   (hardware, alto impacto)?
+1. **Pantalla**: API + log **apagable**, configurado en `gradle.properties`. El framebuffer sirve en
+   producción para datos útiles y, opcionalmente, para debug: con el flag de debug activo se inyecta
+   código adicional en el programa y/o el BIOS.
+2. **IRQ**: **tabla + E/S** (interrupciones por eventos de E/S).
+3. **Persistencia**: banco persistente en RAM, pero **de propósito general para el userspace** (el
+   BIOS no elige ni reserva el rango); la persistencia es **implícita** (la VM no se reinicializa y
+   no se limpia la memoria). Ya aplicado en D30.
+4. **Orden**: D27/D28/D29 aplicados; sigue **D31** (pantalla) → **D32** (BIOS) → **D33** (IRQ + E/S).

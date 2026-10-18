@@ -1,6 +1,6 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (348 tests)  
+> **Estado**: ✅ Implementada y probada (349 tests)  
 > **Tipo**: Módulo funcional (VM interpreted)  
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
@@ -16,8 +16,8 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 |------------|-----------------|
 | `VmPolicyEngine` | Motor principal: implementa `Router`, ejecuta bytecode `.flow` via `VmInterpreter` |
 | `VmInterpreter` | CPU: fetch/decode/execute loop, ISA v2, fuel budget; maestro del bus. El *fetch* va por el bus/`SoftMMU` (permiso `EXECUTE` efectivo, ventana de página validada); es inmutable y se reutiliza por programa (AUD-023/029) |
-| `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico; soporta *fork* copy-on-write por ejecución (AUD-029/D25) |
-| `PhysicalMemory` | Almacén físico de 64 KB en frames de 4 KB con *copy-on-write*: snapshot inmutable compartido + overlay privado; un frame se copia solo al escribirse |
+| `SoftMMU` | MMU por software: 16 páginas de 4 KB, permisos R/W/X, traducción virtual→físico; almacén físico *copy-on-write* (snapshot inmutable + overlay por frame) y *fork* aislado disponible (AUD-029/D25) |
+| `PhysicalMemory` | Almacén físico de 64 KB en frames de 4 KB; la memoria viva de la máquina es la del programa y persiste entre mensajes (D30) |
 | `VmBus` | Bus de datos explícito: única vía de transacción de CPU y DMA hacia `SoftMMU`; lleva el `Privilege` del maestro |
 | `VmDmaController` | Vía canónica de transferencia host↔VM (read/write/copy/move validados sobre el bus); maestro supervisor |
 | `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
@@ -44,16 +44,19 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
   - Página 8: Buffer salida I/O (R/W) (0x8000)
-  - Páginas 9-15: Reservadas — no mapeadas (acceso → `MEMORY_FAULT`)
+  - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
   `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
   siguen consultándose bajo demanda vía `HOST`/`HostContext` (AUD-021).
-- **Copy-on-write (AUD-029/D25)**: cada mensaje ejecuta sobre un *fork* de la MMU del programa.
-  La memoria física es un snapshot inmutable compartido (código/constantes nunca se copian) más
-  un overlay privado por frame de 4 KB que se copia solo al escribirse; la tabla de páginas se
-  comparte y se copia en la primera mutación. La limpieza de E/S (`clearBlock`) no copia ni
-  compara si la página compartida ya es cero. Consecuencia: el *fork* por mensaje pasa de
-  clonar 64 KB + 16 entradas a un coste casi constante (medido ~15× más barato en conjunto).
+- **Memoria persistente — una sola máquina viva (D30)**: el motor mantiene **una única `SoftMMU`
+  por programa** (la memoria viva de la máquina). Cada mensaje se ejecuta **directamente** sobre
+  ella (sin *fork* por mensaje) y las ejecuciones se **serializan** en el único core, así que lo que
+  el programa deja en memoria sigue ahí en el mensaje siguiente. La persistencia es **implícita**:
+  el runtime solo limpia los buffers de E/S (`clearBlock`), nunca los datos; es el programa quien
+  decide cuándo reutilizar o borrar. Un contador en `0x9000+` (p. ej. un entero de 4 bytes)
+  simplemente funciona. La MMU conserva su capacidad *copy-on-write* (`SoftMMU(SoftMMU)`,
+  `PhysicalMemory.fork`) para obtener copias aisladas (tests/snapshots), pero el camino por
+  mensaje ya no forka.
 
 ### ISA v2 (resumen)
 
@@ -210,12 +213,12 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
 | `HostServiceRegistryTest` | ABI v2 de los 15 servicios HOST, capabilities, journal, transferencias vía DMA, copy-on-write del buffer |
-| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo |
+| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30) |
 | `VmIntegrationTest` | Programas multi-instrucción |
 | `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) |
 
-**Total: 348 tests passing**
+**Total: 349 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -276,7 +279,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 348 tests
+├── src/test/java/...                  # 349 tests
 └── build.gradle
 ```
 
