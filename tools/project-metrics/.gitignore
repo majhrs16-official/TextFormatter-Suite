@@ -1,0 +1,5 @@
+# salidas generadas (se reproducen con ./run_all.sh)
+data/
+img/
+__pycache__/
+*.pyc

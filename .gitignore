@@ -22,5 +22,9 @@ Thumbs.db
 *.log
 debug.log
 
+# Python
+__pycache__/
+*.pyc
+
 # Suite modules (independent repos)
 src/web-editor/node_modules/
