@@ -418,6 +418,56 @@ class VmPolicyEngineTest {
         assertEquals("original", outcome.message().text(), "channel write must not change the text");
     }
 
+    // ===== Lote 6 (D26): CHANNEL_POLICY reaches the channel registry =====
+
+    @Test
+    void channelPolicyServiceReadsNamedChannelThroughHostContext() {
+        VmPolicyEngine engine = createEngine();
+        // Writes "chat" at 0x8000, queries the channel's send policy, then checks
+        // that exactly len("chat.send") = 9 bytes came back: CONTINUE when found,
+        // DROP otherwise. Exercises MessageHostContext.readChannelProperty.
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, 0x00, 0x63,   // 'c'
+                Opcode.STB, 0, (byte)0x80, 0x00,
+                Opcode.LI, 0, 0x00, 0x68,   // 'h'
+                Opcode.STB, 0, (byte)0x80, 0x01,
+                Opcode.LI, 0, 0x00, 0x61,   // 'a'
+                Opcode.STB, 0, (byte)0x80, 0x02,
+                Opcode.LI, 0, 0x00, 0x74,   // 't'
+                Opcode.STB, 0, (byte)0x80, 0x03,
+                Opcode.LI, 0, (byte)(HostServiceRegistry.CHANNEL_POLICY >> 8),
+                              (byte)(HostServiceRegistry.CHANNEL_POLICY & 0xFF),
+                Opcode.LI, 1, 0x00, (byte)HostServiceRegistry.CHANNEL_POLICY_SEND,
+                Opcode.LI, 2, (byte)0x80, 0x00,   // base = 0x8000
+                Opcode.LI, 3, 0x00, 0x40,   // capacity = 64
+                Opcode.HOST, 0x00,
+                Opcode.LI, 0, 0x00, 0x09,   // R0 = 9 = len("chat.send")
+                Opcode.CMP, (3 << 4) | 0,   // compare R3 (bytes) with R0
+                Opcode.JZ, 0x00, 0x0B,      // equal -> continue (offset 11)
+                // Not found -> DROP
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                              (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, 0x00, (byte)HostServiceRegistry.DECISION_DROP,
+                Opcode.HOST, 0x00,
+                Opcode.HALT,
+                // Found -> CONTINUE
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                              (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, 0x00, (byte)HostServiceRegistry.DECISION_CONTINUE,
+                Opcode.HOST, 0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"channel.resolve", "routing.decide"})
+            .build();
+        engine.setProgram(program);
+
+        RouteOutcome outcome = engine.route(
+            createMessage("Hello world", "chat", createActor("Alice")), createActor("Bob"));
+        assertEquals(PolicyTarget.LOG, outcome.decision().target());
+    }
+
     // ===== Privilege model (design.md §14): kernel pages are supervisor-only =====
 
     /** Program that stores 'X' at {@code target} and then continues. */

@@ -55,6 +55,19 @@ public interface HostContext {
     }
 
     /**
+     * Reads a policy of a <em>named</em> channel (the {@code PROP_CHAN_*} ids).
+     * Unlike {@link #readProperty(int, int)} with {@link HostServiceRegistry#SCOPE_CHANNEL}
+     * — which reads the current message's channel — this addresses any channel by
+     * name. Backs the {@code CHANNEL_POLICY} service.
+     *
+     * @return the value, or {@code null} if the channel is unknown or the property
+     *         is absent
+     */
+    default String readChannelProperty(String channelName, int propId) {
+        return null;
+    }
+
+    /**
      * Reads a persistent host state entry.
      *
      * @return the stored value, or {@code null} if the key is absent

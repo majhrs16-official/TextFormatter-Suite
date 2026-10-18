@@ -51,10 +51,11 @@ public final class HostServiceRegistry {
 
     // ===== Service IDs (matching the ABI namespace) =====
     //
-    // Implemented (registered below): PROPERTY_READ, PROPERTY_WRITE,
-    // PERMISSION_CHECK, ROUTE_DECISION, TRANSFORM_APPLY, STATE_READ, STATE_WRITE,
-    // CHANNEL_RESOLVE. The other IDs are declared ABI surface with no
-    // implementation yet, so dispatching them returns UNSUPPORTED.
+    // Every declared ID is now registered and functional (D26): PROPERTY_READ,
+    // PROPERTY_WRITE, PROPERTY_EXISTS, PERMISSION_CHECK, PERMISSION_QUERY,
+    // ROUTE_DECISION, ROUTE_REDIRECT, ROUTE_RATE_LIMIT, TRANSFORM_APPLY,
+    // STATE_READ, STATE_WRITE, CHANNEL_RESOLVE, CHANNEL_POLICY, MESSAGE_CLONE and
+    // MESSAGE_ID. Any other id still returns UNSUPPORTED.
 
     // Property services
     public static final int PROPERTY_READ     = 0x0100;
@@ -141,6 +142,22 @@ public final class HostServiceRegistry {
     public static final int TRANSFORM_RESOLVE_PLACEHOLDERS = 0;
     /** Detect the language of the buffer text. */
     public static final int TRANSFORM_DETECT_LANGUAGE      = 1;
+
+    // ===== Redirect kinds (options for ROUTE_REDIRECT) =====
+
+    /** Redirect the message to a specific actor (default). */
+    public static final int REDIRECT_KIND_ACTOR   = 0;
+    /** Redirect the message to a channel. */
+    public static final int REDIRECT_KIND_CHANNEL = 1;
+
+    // ===== Channel policies (options for CHANNEL_POLICY) =====
+
+    /** The channel's send policy. */
+    public static final int CHANNEL_POLICY_SEND    = 0;
+    /** The channel's receive policy. */
+    public static final int CHANNEL_POLICY_RECEIVE = 1;
+    /** The channel's rate limit (messages per second). */
+    public static final int CHANNEL_POLICY_RATE    = 2;
 
     private final Map<Integer, HostService> services = new HashMap<>();
     private final Map<String, Integer> capabilityMap = new HashMap<>();
@@ -241,6 +258,79 @@ public final class HostServiceRegistry {
             @Override public int baseCost() { return 10; }
             @Override public int varCostPerByte() { return 1; }
             @Override public String[] requiredCapabilities() { return new String[]{"channel.resolve"}; }
+        });
+
+        // Property exists: no bytes move, the answer travels in R4 (D26).
+        register(PROPERTY_EXISTS, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                int scope = (options >> 8) & 0xFF;
+                int propId = options & 0x00FF;
+                String value = ctx.hostContext().readProperty(scope, propId);
+                return ServiceResult.ok(0, value != null ? 1 : 0);
+            }
+            @Override public int baseCost() { return 5; }
+            @Override public int varCostPerByte() { return 0; }
+            @Override public String[] requiredCapabilities() { return new String[]{"property.read"}; }
+        });
+
+        // Permission query: like PERMISSION_CHECK but reports the outcome in R0.
+        register(PERMISSION_QUERY, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doPermissionQuery(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 5; }
+            @Override public int varCostPerByte() { return 0; }
+            @Override public String[] requiredCapabilities() { return new String[]{"permission.check"}; }
+        });
+
+        // Route redirect: journal a target/channel redirect directly.
+        register(ROUTE_REDIRECT, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doRouteRedirect(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 20; }
+            @Override public int varCostPerByte() { return 0; }
+            @Override public String[] requiredCapabilities() { return new String[]{"routing.decide"}; }
+        });
+
+        // Route rate limit: journal a backoff computed by the rate limiter.
+        register(ROUTE_RATE_LIMIT, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doRouteRateLimit(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 20; }
+            @Override public int varCostPerByte() { return 0; }
+            @Override public String[] requiredCapabilities() { return new String[]{"routing.decide"}; }
+        });
+
+        // Channel policy: read a named channel's send/receive/rate policy.
+        register(CHANNEL_POLICY, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doChannelPolicy(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 10; }
+            @Override public int varCostPerByte() { return 1; }
+            @Override public String[] requiredCapabilities() { return new String[]{"channel.resolve"}; }
+        });
+
+        // Message clone: copy the serialized message payload into VM memory.
+        register(MESSAGE_CLONE, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doMessageClone(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 15; }
+            @Override public int varCostPerByte() { return 1; }
+            @Override public String[] requiredCapabilities() { return new String[0]; }
+        });
+
+        // Message id: materialize the current message id.
+        register(MESSAGE_ID, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doMessageId(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 10; }
+            @Override public int varCostPerByte() { return 1; }
+            @Override public String[] requiredCapabilities() { return new String[0]; }
         });
     }
 
@@ -576,6 +666,175 @@ public final class HostServiceRegistry {
             return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
         }
         return ServiceResult.ok(resultBytes.length);
+    }
+
+    /**
+     * PERMISSION_QUERY: same {@code actor\0node} argument as PERMISSION_CHECK but
+     * reports the outcome through the status ({@code OK}/{@code DENIED}) so the
+     * program can branch on {@code R0}; the boolean still travels in {@code R4}.
+     */
+    private ServiceResult doPermissionQuery(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        if (permissionChecker == null) {
+            return ServiceResult.hostFailure("Permission checker not configured");
+        }
+        byte[] bytes;
+        try {
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        }
+        String data = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        String[] parts = data.split("\0", 2);
+        if (parts.length < 2) {
+            return ServiceResult.invalidArgument("Invalid permission query args");
+        }
+        boolean allowed = permissionChecker.apply(parts[0], parts[1]);
+        return allowed ? ServiceResult.ok(argLength, 1) : ServiceResult.denied("permission not granted");
+    }
+
+    /**
+     * ROUTE_REDIRECT: journals a redirect to the actor/channel named in the buffer.
+     * The low byte of {@code options} selects the kind
+     * ({@link #REDIRECT_KIND_ACTOR}/{@link #REDIRECT_KIND_CHANNEL}).
+     */
+    private ServiceResult doRouteRedirect(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        int kind = options & 0x00FF;
+        if (argLength <= 0) {
+            return ServiceResult.invalidArgument("redirect requires a target");
+        }
+        byte[] bytes;
+        try {
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        }
+        String target = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        if (target.isEmpty()) {
+            return ServiceResult.invalidArgument("redirect target is empty");
+        }
+        ModificationJournal.OpType type = kind == REDIRECT_KIND_CHANNEL
+            ? ModificationJournal.OpType.REDIRECT_CHANNEL
+            : ModificationJournal.OpType.REDIRECT_TARGET;
+        ctx.journal().record(new ModificationJournal.Entry(type, target, "routeRedirect:" + kind));
+        return ServiceResult.ok(argLength, kind);
+    }
+
+    /**
+     * ROUTE_RATE_LIMIT: computes the backoff for the key in the buffer through the
+     * injected {@link me.majhrs16.suite.iflow.channel.RateLimiter} and journals it.
+     * Without a limiter the service is {@code UNSUPPORTED}.
+     */
+    private ServiceResult doRouteRateLimit(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        if (rateLimiter == null) {
+            return ServiceResult.unsupported("rate limiter not configured");
+        }
+        byte[] bytes;
+        try {
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        }
+        String key = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        long backoff = rateLimiter.nanosUntilNextWindow(key) / 1_000_000L; // nanos -> millis
+        if (backoff < 0) {
+            backoff = 0;
+        }
+        ctx.journal().record(new ModificationJournal.Entry(
+            ModificationJournal.OpType.RATE_LIMIT_BACKOFF, backoff, "routeRateLimit"));
+        return ServiceResult.ok(argLength, (int) Math.min(backoff, Integer.MAX_VALUE));
+    }
+
+    /**
+     * CHANNEL_POLICY: reads a named channel's policy (send/receive/rate, selected
+     * by the low byte of {@code options}) and writes it into the buffer.
+     */
+    private ServiceResult doChannelPolicy(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        int policy = options & 0x00FF;
+        if (argLength <= 0) {
+            return ServiceResult.invalidArgument("channel policy requires a channel name");
+        }
+        int propId = switch (policy) {
+            case CHANNEL_POLICY_SEND -> PROP_CHAN_SEND_POL;
+            case CHANNEL_POLICY_RECEIVE -> PROP_CHAN_RECV_POL;
+            case CHANNEL_POLICY_RATE -> PROP_CHAN_RATE;
+            default -> -1;
+        };
+        if (propId < 0) {
+            return ServiceResult.invalidArgument("unknown channel policy: " + policy);
+        }
+        byte[] bytes;
+        try {
+            bytes = ctx.dma().getRegion(argVAddr, argLength);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        }
+        // The buffer carries the channel name as a C string, so R3 can also be
+        // used as the output capacity (the policy is written over the name).
+        String channelName = cString(bytes);
+        String value = ctx.hostContext().readChannelProperty(channelName, propId);
+        if (value == null) {
+            return ServiceResult.notFound("unknown channel or policy: " + channelName);
+        }
+        byte[] out = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (out.length > argLength) {
+            return ServiceResult.bufferTooSmall(out.length);
+        }
+        try {
+            ctx.dma().writeBlock(argVAddr, out, 0, out.length);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
+        }
+        return ServiceResult.ok(out.length);
+    }
+
+    /**
+     * MESSAGE_CLONE: copies {@code argLength} bytes of the message's serialized
+     * input representation ({@code INPUT_BASE}) into the destination buffer through
+     * the DMA, giving the program a private copy of the message to transform.
+     */
+    private ServiceResult doMessageClone(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        int size = ctx.ioBufferSize();
+        if (argLength <= 0) {
+            return ServiceResult.invalidArgument("clone length must be positive");
+        }
+        if (argLength > size) {
+            return ServiceResult.invalidArgument(
+                "clone length exceeds the input buffer: " + argLength + " > " + size);
+        }
+        try {
+            byte[] payload = ctx.dma().getRegion(ctx.inputBufferVAddr(), argLength);
+            ctx.dma().writeBlock(argVAddr, payload, 0, argLength);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory transfer failed: " + e.getMessage());
+        }
+        return ServiceResult.ok(argLength);
+    }
+
+    /** MESSAGE_ID: writes the current message id into the buffer. */
+    private ServiceResult doMessageId(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        String id = ctx.messageId();
+        if (id == null || id.isEmpty()) {
+            return ServiceResult.notFound("message id unavailable");
+        }
+        byte[] bytes = id.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (bytes.length > argLength) {
+            return ServiceResult.bufferTooSmall(bytes.length);
+        }
+        try {
+            ctx.dma().writeBlock(argVAddr, bytes, 0, bytes.length);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
+        }
+        return ServiceResult.ok(bytes.length);
+    }
+
+    /** Decodes a NUL-terminated C string from a (possibly longer) byte buffer. */
+    private static String cString(byte[] bytes) {
+        int end = 0;
+        while (end < bytes.length && bytes[end] != 0) {
+            end++;
+        }
+        return new String(bytes, 0, end, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     // ===== Host dependency injection =====

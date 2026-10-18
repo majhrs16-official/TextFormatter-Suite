@@ -8,6 +8,7 @@ import me.majhrs16.suite.iflow.RouteOutcome;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.engine.PolicyResultValidator;
@@ -402,6 +403,16 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         }
 
         @Override
+        public String readChannelProperty(String channelName, int propId) {
+            if (channelName == null) {
+                return null;
+            }
+            return channels.get(channelName)
+                .map(ch -> channelProperty(ch, ch.name(), propId))
+                .orElse(null);
+        }
+
+        @Override
         public Object readState(int key) {
             return hostState.get(key);
         }
@@ -442,12 +453,16 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         }
 
         private String channelProperty(int propId) {
+            return channelProperty(channels.resolve(path), path, propId);
+        }
+
+        private String channelProperty(Channel channel, String name, int propId) {
             return switch (propId) {
-                case HostServiceRegistry.PROP_CHAN_NAME -> path;
+                case HostServiceRegistry.PROP_CHAN_NAME -> name;
                 case HostServiceRegistry.PROP_CHAN_RATE ->
-                    String.valueOf(channels.resolve(path).rateLimitPerSecond());
-                case HostServiceRegistry.PROP_CHAN_SEND_POL -> channels.resolve(path).sendPolicy();
-                case HostServiceRegistry.PROP_CHAN_RECV_POL -> channels.resolve(path).receivePolicy();
+                    String.valueOf(channel.rateLimitPerSecond());
+                case HostServiceRegistry.PROP_CHAN_SEND_POL -> channel.sendPolicy();
+                case HostServiceRegistry.PROP_CHAN_RECV_POL -> channel.receivePolicy();
                 default -> null;
             };
         }

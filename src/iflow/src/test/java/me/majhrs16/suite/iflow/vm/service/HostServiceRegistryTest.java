@@ -468,4 +468,218 @@ class HostServiceRegistryTest {
         byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), result.bytesTransferred());
         assertEquals("de", new String(out, StandardCharsets.UTF_8));
     }
+
+    // ===== Lote 6 (D26): services previously declared but not registered =====
+
+    @Test
+    void everyDeclaredServiceIsRegistered() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        int[] ids = {
+            HostServiceRegistry.PROPERTY_READ, HostServiceRegistry.PROPERTY_WRITE,
+            HostServiceRegistry.PROPERTY_EXISTS, HostServiceRegistry.PERMISSION_CHECK,
+            HostServiceRegistry.PERMISSION_QUERY, HostServiceRegistry.ROUTE_DECISION,
+            HostServiceRegistry.ROUTE_REDIRECT, HostServiceRegistry.ROUTE_RATE_LIMIT,
+            HostServiceRegistry.TRANSFORM_APPLY, HostServiceRegistry.STATE_READ,
+            HostServiceRegistry.STATE_WRITE, HostServiceRegistry.CHANNEL_RESOLVE,
+            HostServiceRegistry.CHANNEL_POLICY, HostServiceRegistry.MESSAGE_CLONE,
+            HostServiceRegistry.MESSAGE_ID,
+        };
+        for (int id : ids) {
+            assertTrue(hsr.hasService(id),
+                "service 0x" + Integer.toHexString(id) + " must be registered");
+        }
+    }
+
+    @Test
+    void propertyExistsReportsPresenceInR4() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "property.read");
+        ctx.hostContext(new HostContext() {
+            @Override public String readProperty(int scope, int propId) {
+                return propId == HostServiceRegistry.PROP_CONTENT ? "text" : null;
+            }
+        });
+
+        int present = (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_CONTENT;
+        ServiceResult yes = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_EXISTS, 0, 0, present);
+        assertEquals(ServiceResult.Status.OK, yes.status());
+        assertEquals(0, yes.bytesTransferred());
+        assertEquals(1, yes.result());
+
+        int absent = (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_LANG_TARGET;
+        ServiceResult no = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_EXISTS, 0, 0, absent);
+        assertEquals(ServiceResult.Status.OK, no.status());
+        assertEquals(0, no.result());
+    }
+
+    @Test
+    void permissionQueryReportsOutcomeInStatus() {
+        HostServiceRegistry hsr = new HostServiceRegistry()
+            .permissionChecker((actor, perm) -> "allowed".equals(perm));
+        ExecutionContext ctx = createContext(hsr, "permission.check");
+
+        byte[] granted = "Alice\0allowed".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.inputBufferVAddr(), granted, 0, granted.length);
+        ServiceResult ok = hsr.invoke(ctx, HostServiceRegistry.PERMISSION_QUERY,
+            ctx.inputBufferVAddr(), granted.length, 0);
+        assertEquals(ServiceResult.Status.OK, ok.status());
+        assertEquals(1, ok.result());                       // R4
+        assertEquals(granted.length, ok.bytesTransferred()); // R3
+
+        byte[] refused = "Alice\0nope".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.inputBufferVAddr(), refused, 0, refused.length);
+        ServiceResult denied = hsr.invoke(ctx, HostServiceRegistry.PERMISSION_QUERY,
+            ctx.inputBufferVAddr(), refused.length, 0);
+        assertEquals(ServiceResult.Status.DENIED, denied.status());
+        assertEquals(0, denied.result());
+    }
+
+    @Test
+    void permissionQueryReportsHostFailureWithoutChecker() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "permission.check");
+        byte[] args = "Alice\0node".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.inputBufferVAddr(), args, 0, args.length);
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.PERMISSION_QUERY,
+            ctx.inputBufferVAddr(), args.length, 0);
+        assertEquals(ServiceResult.Status.HOST_FAILURE, r.status());
+    }
+
+    @Test
+    void routeRedirectJournalsActorAndChannelTargets() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+
+        byte[] actor = "Bob".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), actor, 0, actor.length);
+        ServiceResult toActor = hsr.invoke(ctx, HostServiceRegistry.ROUTE_REDIRECT,
+            ctx.outputBufferVAddr(), actor.length, HostServiceRegistry.REDIRECT_KIND_ACTOR);
+        assertEquals(ServiceResult.Status.OK, toActor.status());
+        assertEquals(HostServiceRegistry.REDIRECT_KIND_ACTOR, toActor.result());
+        ModificationJournal.Entry actorEntry = ctx.journal().entries().get(0);
+        assertEquals(ModificationJournal.OpType.REDIRECT_TARGET, actorEntry.type);
+        assertEquals("Bob", actorEntry.value);
+
+        byte[] chan = "lobby".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), chan, 0, chan.length);
+        ServiceResult toChannel = hsr.invoke(ctx, HostServiceRegistry.ROUTE_REDIRECT,
+            ctx.outputBufferVAddr(), chan.length, HostServiceRegistry.REDIRECT_KIND_CHANNEL);
+        assertEquals(ServiceResult.Status.OK, toChannel.status());
+        ModificationJournal.Entry chanEntry = ctx.journal().entries().get(1);
+        assertEquals(ModificationJournal.OpType.REDIRECT_CHANNEL, chanEntry.type);
+        assertEquals("lobby", chanEntry.value);
+    }
+
+    @Test
+    void routeRedirectRejectsEmptyTarget() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.ROUTE_REDIRECT, 0, 0,
+            HostServiceRegistry.REDIRECT_KIND_ACTOR);
+        assertEquals(ServiceResult.Status.INVALID_ARGUMENT, r.status());
+    }
+
+    @Test
+    void routeRateLimitRequiresLimiterAndJournalsBackoff() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+        byte[] key = "chat".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), key, 0, key.length);
+
+        // Without a limiter the host does not offer rate limiting.
+        ServiceResult noLimiter = hsr.invoke(ctx, HostServiceRegistry.ROUTE_RATE_LIMIT,
+            ctx.outputBufferVAddr(), key.length, 0);
+        assertEquals(ServiceResult.Status.UNSUPPORTED, noLimiter.status());
+
+        me.majhrs16.suite.iflow.channel.RateLimiter limiter =
+            new me.majhrs16.suite.iflow.channel.RateLimiter();
+        try {
+            HostServiceRegistry withLimiter = new HostServiceRegistry().rateLimiter(limiter);
+            limiter.tryAcquire("chat", 1); // exhaust the single ticket of the window
+            ServiceResult limited = withLimiter.invoke(ctx, HostServiceRegistry.ROUTE_RATE_LIMIT,
+                ctx.outputBufferVAddr(), key.length, 0);
+            assertEquals(ServiceResult.Status.OK, limited.status());
+            assertTrue(limited.result() > 0, "an exhausted window must yield a positive backoff");
+            ModificationJournal.Entry entry = ctx.journal().entries().get(0);
+            assertEquals(ModificationJournal.OpType.RATE_LIMIT_BACKOFF, entry.type);
+        } finally {
+            limiter.close();
+        }
+    }
+
+    @Test
+    void channelPolicyReadsNamedChannel() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "channel.resolve");
+        ctx.hostContext(new HostContext() {
+            @Override public String readChannelProperty(String channelName, int propId) {
+                if (!"lobby".equals(channelName)) {
+                    return null;
+                }
+                return propId == HostServiceRegistry.PROP_CHAN_SEND_POL ? "lobby.chat" : null;
+            }
+        });
+
+        // The name is a C string; R3 is the buffer capacity (also used for output).
+        byte[] name = "lobby".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), name, 0, name.length);
+        ServiceResult ok = hsr.invoke(ctx, HostServiceRegistry.CHANNEL_POLICY,
+            ctx.outputBufferVAddr(), 64, HostServiceRegistry.CHANNEL_POLICY_SEND);
+        assertEquals(ServiceResult.Status.OK, ok.status());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), ok.bytesTransferred());
+        assertEquals("lobby.chat", new String(out, StandardCharsets.UTF_8));
+
+        // Unknown channel -> NOT_FOUND.
+        byte[] unknown = "nope".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), unknown, 0, unknown.length);
+        ServiceResult miss = hsr.invoke(ctx, HostServiceRegistry.CHANNEL_POLICY,
+            ctx.outputBufferVAddr(), 64, HostServiceRegistry.CHANNEL_POLICY_SEND);
+        assertEquals(ServiceResult.Status.NOT_FOUND, miss.status());
+    }
+
+    @Test
+    void messageIdWritesCurrentMessageId() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+        ctx.messageId("msg-42");
+
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.MESSAGE_ID,
+            ctx.outputBufferVAddr(), 64, 0);
+        assertEquals(ServiceResult.Status.OK, r.status());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), r.bytesTransferred());
+        assertEquals("msg-42", new String(out, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void messageIdNotFoundWhenAbsent() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.MESSAGE_ID,
+            ctx.outputBufferVAddr(), 64, 0);
+        assertEquals(ServiceResult.Status.NOT_FOUND, r.status());
+    }
+
+    @Test
+    void messageCloneCopiesMessagePayloadThroughTheDma() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+        byte[] payload = "hola mundo".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.inputBufferVAddr(), payload, 0, payload.length);
+
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.MESSAGE_CLONE,
+            ctx.outputBufferVAddr(), payload.length, 0);
+        assertEquals(ServiceResult.Status.OK, r.status());
+        assertEquals(payload.length, r.bytesTransferred());
+        byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), payload.length);
+        assertEquals("hola mundo", new String(out, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void messageCloneRejectsOversizedRequest() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr);
+        ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.MESSAGE_CLONE,
+            ctx.outputBufferVAddr(), ctx.ioBufferSize() + 1, 0);
+        assertEquals(ServiceResult.Status.INVALID_ARGUMENT, r.status());
+    }
 }
