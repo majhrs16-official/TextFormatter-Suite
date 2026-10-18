@@ -106,6 +106,11 @@ public final class VmBus {
         memory.writeBlock(vaddr, src, srcOffset, length, privilege);
     }
 
+    /** Zeroes a block of VM memory as this bus master. */
+    public void clearBlock(int vaddr, int length) {
+        memory.clearBlock(vaddr, length, privilege);
+    }
+
     public byte[] getRegion(int vaddr, int length) {
         return memory.getRegion(vaddr, length);
     }

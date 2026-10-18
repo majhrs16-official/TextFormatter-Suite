@@ -92,8 +92,6 @@ public final class ExecutionContext {
     private static final int INPUT_BUFFER_VADDR = VmMemoryMap.INPUT_BASE;
     private static final int OUTPUT_BUFFER_VADDR = VmMemoryMap.OUTPUT_BASE;
     private static final int IO_BUFFER_SIZE = VmMemoryMap.IO_BUFFER_SIZE; // 4KB (one page)
-    /** Shared read-only zero page used to clear the I/O buffers through the DMA. */
-    private static final byte[] ZERO_IO_BUFFER = new byte[IO_BUFFER_SIZE];
 
     public ExecutionContext() {}
 
@@ -185,12 +183,14 @@ public final class ExecutionContext {
         registers.set(RegisterFile.SP, VmMemoryMap.STACK_TOP);
         registers.set(RegisterFile.FP, VmMemoryMap.STACK_TOP);
 
-        // Clear the I/O buffers through the DMA (D17): two block writes of the
-        // shared zero page instead of 8192 individual byte writes per message.
+        // Clear the I/O buffers through the DMA (D17): two block clears. Because
+        // the memory is copy-on-write and the I/O pages of the loaded image are
+        // zero, a fresh execution pays nothing here — no 8192 byte writes, no
+        // 8KB compare, no frame copy (IFLOW-AUD-029).
         if (softMMU != null) {
             VmDmaController dma = dma();
-            dma.writeBlock(INPUT_BUFFER_VADDR, ZERO_IO_BUFFER, 0, IO_BUFFER_SIZE);
-            dma.writeBlock(OUTPUT_BUFFER_VADDR, ZERO_IO_BUFFER, 0, IO_BUFFER_SIZE);
+            dma.clearBlock(INPUT_BUFFER_VADDR, IO_BUFFER_SIZE);
+            dma.clearBlock(OUTPUT_BUFFER_VADDR, IO_BUFFER_SIZE);
         }
     }
 

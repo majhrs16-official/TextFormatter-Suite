@@ -263,4 +263,48 @@ class SoftMMUTest {
         assertEquals(0x7F, mmu.getPhysicalMemory()[0x2000] & 0xFF);
         assertArrayEquals(mmu.getMemorySnapshot(), mmu.getPhysicalMemory());
     }
+
+    // ===== Copy-on-write forking (IFLOW-AUD-029) =====
+
+    @Test
+    void forkedMMUSharesSnapshotThenIsolatesOnWrite() {
+        SoftMMU template = createMappedMMU();
+        template.writeByte(0x2000, 0x55); // page 2 is R/W
+
+        SoftMMU a = new SoftMMU(template);
+        SoftMMU b = new SoftMMU(template);
+        // Both forks see the shared snapshot (no 64KB clone per fork).
+        assertEquals(0x55, a.readByte(0x2000));
+        assertEquals(0x55, b.readByte(0x2000));
+
+        // Writes are copy-on-write and isolated.
+        a.writeByte(0x2000, 0xAA);
+        assertEquals(0xAA, a.readByte(0x2000));
+        assertEquals(0x55, b.readByte(0x2000), "siblings must not see each other's writes");
+        assertEquals(0x55, template.readByte(0x2000), "the template must not be mutated");
+    }
+
+    @Test
+    void freezePublishesCurrentViewToForks() {
+        SoftMMU template = createMappedMMU();
+        template.writeWord(0x3000, 0x1234);
+        template.freeze();
+
+        SoftMMU fork = new SoftMMU(template);
+        assertEquals(0x1234, fork.readWord(0x3000), "the fork must inherit the frozen image");
+
+        fork.writeWord(0x3000, 0x4321);
+        assertEquals(0x1234, template.readWord(0x3000), "writing the fork must not touch the template");
+    }
+
+    @Test
+    void clearBlockZeroesRangeAndEnforcesPermissions() {
+        SoftMMU mmu = createMappedMMU();
+        mmu.writeWord(0x3000, 0xBEEF);
+        mmu.clearBlock(0x3000, 4096);
+        assertEquals(0, mmu.readWord(0x3000));
+
+        // A read-only page cannot be cleared (still a write transaction).
+        assertThrows(VmException.class, () -> mmu.clearBlock(0x1000, 16));
+    }
 }

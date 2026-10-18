@@ -163,7 +163,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                .programId(loaded.program.hashCode() + "")
                .messageId(message.id().toString())
                .actorId(recipient.name())
-               .softMMU(new SoftMMU(loaded.softMMU))  // Copy program's MMU (page tables + physical memory)
+               .softMMU(new SoftMMU(loaded.softMMU))  // COW fork: page table copied, physical memory shared
                .serviceRegistry(serviceRegistry)
                .allowedCapabilities(grantedCapabilities(
                    loaded.program.capabilities(), serviceRegistry.declaredCapabilities()));
@@ -499,6 +499,10 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // Create new SoftMMU with program mappings
         SoftMMU newMMU = new SoftMMU();
         setupProgramMappings(program, newMMU);
+        // Publish the loaded image as the immutable snapshot shared by every
+        // execution's forked MMU (copy-on-write): only frames an execution
+        // actually writes are ever copied.
+        newMMU.freeze();
         // The interpreter is stateless (bus/MMU come from the execution context) and
         // the program is immutable, so build it once per program, not per message.
         VmInterpreter interpreter = new VmInterpreter(program, serviceRegistry);

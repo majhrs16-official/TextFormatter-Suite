@@ -120,6 +120,17 @@ public final class VmDmaController {
         bus.writeBlock(vaddr, src, srcOffset, length);
     }
 
+    /**
+     * Zeroes a block of VM virtual memory. Prefer this over writing a zero buffer
+     * for resets: it skips frames that are already zero (no copy, no compare).
+     * @param vaddr Destination virtual address
+     * @param length Number of bytes to clear
+     * @throws VmException if range unmapped, no write permission, or out of bounds
+     */
+    public void clearBlock(int vaddr, int length) {
+        bus.clearBlock(vaddr, length);
+    }
+
     // ===== Block Transfer Operations =====
 
     /**

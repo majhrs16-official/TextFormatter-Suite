@@ -20,11 +20,43 @@ public final class PageTable {
     public static final int NUM_PAGES = 16;                       // 64KB / 4KB = 16
     public static final int ADDRESS_SPACE_SIZE = NUM_PAGES * PAGE_SIZE; // 64KB
 
-    private final PageEntry[] entries = new PageEntry[NUM_PAGES];
+    private PageEntry[] entries = new PageEntry[NUM_PAGES];
+    /**
+     * True when this table shares its entries with a parent ({@link #fork()}); the
+     * entries are deep-copied lazily on the first mutation (copy-on-write), so a
+     * forked execution that never remaps pays nothing.
+     */
+    private boolean shared;
 
     public PageTable() {
         // Initialize all entries as invalid
         Arrays.fill(entries, PageEntry.invalid());
+    }
+
+    private PageTable(PageEntry[] sharedEntries) {
+        this.entries = sharedEntries;
+        this.shared = true;
+    }
+
+    /**
+     * Forks a copy-on-write view sharing this table's entries. The child gets its
+     * own entries only if it mutates them ({@code mapPage}/{@code protect}/...).
+     */
+    public PageTable fork() {
+        return new PageTable(this.entries);
+    }
+
+    /** Deep-copies the entries before a mutation so a shared parent is untouched. */
+    private void ensurePrivate() {
+        if (!shared) {
+            return;
+        }
+        PageEntry[] copy = new PageEntry[NUM_PAGES];
+        for (int i = 0; i < NUM_PAGES; i++) {
+            copy[i] = entries[i].copy();
+        }
+        this.entries = copy;
+        this.shared = false;
     }
 
     /**
@@ -39,6 +71,7 @@ public final class PageTable {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Frame base not page-aligned: 0x" + Integer.toHexString(frameBase));
         }
+        ensurePrivate();
         entries[virtualPage] = PageEntry.mapped(frameBase, permissions);
     }
 
@@ -55,6 +88,7 @@ public final class PageTable {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Frame base not page-aligned: 0x" + Integer.toHexString(frameBase));
         }
+        ensurePrivate();
         entries[virtualPage] = PageEntry.mappedKernel(frameBase, permissions);
     }
 
@@ -69,17 +103,18 @@ public final class PageTable {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Invalid page index: " + virtualPage);
         }
-        PageEntry entry = entries[virtualPage];
-        if (!entry.isValid()) {
+        if (!entries[virtualPage].isValid()) {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Page not mapped: " + virtualPage);
         }
-        entry.setPermissions(permissions);
+        ensurePrivate();
+        entries[virtualPage].setPermissions(permissions);
     }
 
     /** Removes a page mapping. */
     public void unmapPage(int virtualPage) {
         if (virtualPage >= 0 && virtualPage < NUM_PAGES) {
+            ensurePrivate();
             entries[virtualPage] = PageEntry.invalid();
         }
     }
@@ -170,8 +205,8 @@ public final class PageTable {
         return entries[pageIndex];
     }
 
-    /** Copies this page table (for context cloning). Entries are copied too, since
-     * their protection bits are mutable (mprotect). */
+    /** Deep copy of this page table (independent, never shared). Entries are
+     * copied too, since their protection bits are mutable (mprotect). */
     public PageTable copy() {
         PageTable copy = new PageTable();
         for (int i = 0; i < NUM_PAGES; i++) {
@@ -182,6 +217,7 @@ public final class PageTable {
 
     /** Resets all mappings to invalid. */
     public void clear() {
+        ensurePrivate();
         Arrays.fill(entries, PageEntry.invalid());
     }
 

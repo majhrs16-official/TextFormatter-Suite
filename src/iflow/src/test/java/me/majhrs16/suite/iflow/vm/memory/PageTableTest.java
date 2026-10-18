@@ -216,4 +216,40 @@ class PageTableTest {
         PageTable table = new PageTable();
         assertThrows(VmException.class, () -> table.mapPage(0, 0x1234, PageEntry.PERM_READ));
     }
+
+    // ===== Copy-on-write forking (IFLOW-AUD-029) =====
+
+    @Test
+    void forkSharesEntriesAndIsolatesOnMutation() {
+        PageTable parent = new PageTable();
+        parent.mapPage(0, 0x0000, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        parent.mapPage(2, 0x2000, PageEntry.PERM_READ);
+
+        PageTable child = parent.fork();
+        // The child sees the parent's mappings without copying them.
+        assertEquals(0x0000, child.translateExecute(0x0000));
+        assertEquals(0x2000, child.translateRead(0x2000));
+
+        // mprotect in the child must not touch the parent (copy-on-write).
+        child.protect(2, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        assertTrue(child.getEntryByIndex(2).canWrite());
+        assertFalse(parent.getEntryByIndex(2).canWrite(), "the parent must stay read-only");
+
+        // Remapping in the child must not leak either.
+        child.mapPage(3, 0x3000, PageEntry.PERM_READ);
+        assertFalse(parent.getEntryByIndex(3).isValid());
+    }
+
+    @Test
+    void siblingForksAreIndependent() {
+        PageTable parent = new PageTable();
+        parent.mapPage(1, 0x1000, PageEntry.PERM_READ);
+        PageTable a = parent.fork();
+        PageTable b = parent.fork();
+
+        a.unmapPage(1);
+        assertFalse(a.getEntryByIndex(1).isValid());
+        assertTrue(b.getEntryByIndex(1).isValid(), "the sibling must keep the mapping");
+        assertTrue(parent.getEntryByIndex(1).isValid());
+    }
 }

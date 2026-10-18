@@ -21,17 +21,32 @@ public final class SoftMMU {
     public static final int ADDRESS_SPACE_SIZE = PageTable.ADDRESS_SPACE_SIZE; // 64KB
 
     private final PageTable pageTable;
-    private final byte[] physicalMemory;  // Flat physical memory backing store
+    private final PhysicalMemory memory;  // Copy-on-write physical backing store
 
     public SoftMMU() {
-        this.physicalMemory = new byte[PageTable.ADDRESS_SPACE_SIZE];
+        this.memory = PhysicalMemory.blank();
         this.pageTable = new PageTable();
     }
 
-    /** Creates an MMU with a copy of another MMU's state (for context cloning). */
+    /**
+     * Forks another MMU's state for a new execution. Both the physical memory and
+     * the page table are copy-on-write: the child shares the parent's immutable
+     * snapshot/mappings and only copies the frames or entries it actually changes,
+     * so forking no longer clones 64KB plus 16 page entries per execution
+     * (IFLOW-AUD-029).
+     */
     public SoftMMU(SoftMMU other) {
-        this.physicalMemory = other.physicalMemory.clone();
-        this.pageTable = other.pageTable.copy();
+        this.memory = other.memory.fork();
+        this.pageTable = other.pageTable.fork();
+    }
+
+    /**
+     * Publishes the current physical memory as the immutable snapshot shared by
+     * every future {@link #SoftMMU(SoftMMU) fork}. Call it once after the boot
+     * loader has written the image, before using this MMU as a template.
+     */
+    public void freeze() {
+        memory.freeze();
     }
 
     // ===== Page Table Management =====
@@ -85,7 +100,7 @@ public final class SoftMMU {
     /** Reads a byte from virtual address as the given master privilege. */
     public int readByte(int virtualAddr, Privilege privilege) {
         int physAddr = pageTable.translateRead(virtualAddr);
-        return physicalMemory[physAddr] & 0xFF;
+        return memory.readByte(physAddr);
     }
 
     /** Reads a 16-bit word (little-endian) from virtual address. */
@@ -103,8 +118,8 @@ public final class SoftMMU {
             int high = readByte(virtualAddr + 1);
             return low | (high << 8);
         } else {
-            return (physicalMemory[physAddr] & 0xFF) |
-                   ((physicalMemory[physAddr + 1] & 0xFF) << 8);
+            return memory.readByte(physAddr) |
+                   (memory.readByte(physAddr + 1) << 8);
         }
     }
 
@@ -124,7 +139,7 @@ public final class SoftMMU {
         // Fast path: if contiguous in physical memory, single copy
         int physAddr = pageTable.translateRead(virtualAddr);
         if (isContiguous(virtualAddr, length)) {
-            System.arraycopy(physicalMemory, physAddr, dest, destOffset, length);
+            memory.readBlock(physAddr, dest, destOffset, length);
         } else {
             // Non-contiguous: byte-by-byte (slow path)
             for (int i = 0; i < length; i++) {
@@ -141,7 +156,7 @@ public final class SoftMMU {
     /** Writes a byte to virtual address as the given master privilege. */
     public void writeByte(int virtualAddr, int value, Privilege privilege) {
         int physAddr = pageTable.translateWrite(virtualAddr, privilege);
-        physicalMemory[physAddr] = (byte) (value & 0xFF);
+        memory.writeByte(physAddr, value);
     }
 
     /** Writes a 16-bit word (little-endian) to virtual address (program domain). */
@@ -158,14 +173,40 @@ public final class SoftMMU {
             writeByte(virtualAddr, value & 0xFF, privilege);
             writeByte(virtualAddr + 1, (value >> 8) & 0xFF, privilege);
         } else {
-            physicalMemory[physAddr] = (byte) (value & 0xFF);
-            physicalMemory[physAddr + 1] = (byte) ((value >> 8) & 0xFF);
+            memory.writeByte(physAddr, value & 0xFF);
+            memory.writeByte(physAddr + 1, (value >> 8) & 0xFF);
         }
     }
 
     /** Writes a block of bytes to virtual address (program domain). */
     public void writeBlock(int virtualAddr, byte[] src, int srcOffset, int length) {
         writeBlock(virtualAddr, src, srcOffset, length, Privilege.PROGRAM);
+    }
+
+    /**
+     * Zeroes a block of virtual memory (program domain). Cheaper than writing a
+     * zero buffer: a shared frame that is already zero is left untouched.
+     */
+    public void clearBlock(int virtualAddr, int length) {
+        clearBlock(virtualAddr, length, Privilege.PROGRAM);
+    }
+
+    /** Zeroes a block of virtual memory as the given master privilege. */
+    public void clearBlock(int virtualAddr, int length, Privilege privilege) {
+        int endAddr = virtualAddr + length;
+        if (endAddr > PageTable.ADDRESS_SPACE_SIZE) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Clear beyond address space: 0x" + Integer.toHexString(virtualAddr) + "+" + length);
+        }
+        validateWriteRange(virtualAddr, length, privilege);
+        int physAddr = pageTable.translateWrite(virtualAddr, privilege);
+        if (isContiguous(virtualAddr, length)) {
+            memory.clearBlock(physAddr, length);
+        } else {
+            for (int i = 0; i < length; i++) {
+                memory.writeByte(pageTable.translateWrite(virtualAddr + i, privilege), 0);
+            }
+        }
     }
 
     /** Writes a block of bytes to virtual address as the given master privilege. */
@@ -181,7 +222,7 @@ public final class SoftMMU {
         
         int physAddr = pageTable.translateWrite(virtualAddr, privilege);
         if (isContiguous(virtualAddr, length)) {
-            System.arraycopy(src, srcOffset, physicalMemory, physAddr, length);
+            memory.writeBlock(physAddr, src, srcOffset, length);
         } else {
             for (int i = 0; i < length; i++) {
                 writeByte(virtualAddr + i, src[srcOffset + i] & 0xFF, privilege);
@@ -224,7 +265,7 @@ public final class SoftMMU {
      * through {@code readByte}, which re-translated it as a read.
      */
     public int fetchByte(int ip) {
-        return physicalMemory[pageTable.translateExecute(ip)] & 0xFF;
+        return memory.readByte(pageTable.translateExecute(ip));
     }
 
     /**
@@ -232,8 +273,8 @@ public final class SoftMMU {
      * with EXECUTE, so a word spanning two pages validates both of them.
      */
     public int fetchWord(int ip) {
-        int low = physicalMemory[pageTable.translateExecute(ip)] & 0xFF;
-        int high = physicalMemory[pageTable.translateExecute(ip + 1)] & 0xFF;
+        int low = memory.readByte(pageTable.translateExecute(ip));
+        int high = memory.readByte(pageTable.translateExecute(ip + 1));
         return low | (high << 8);
     }
 
@@ -246,24 +287,26 @@ public final class SoftMMU {
     public void fillCodeWindow(int virtualPageBase, byte[] dest) {
         int physBase = pageTable.translateExecute(virtualPageBase & PageTable.PAGE_MASK);
         int len = Math.min(dest.length, PageTable.PAGE_SIZE);
-        System.arraycopy(physicalMemory, physBase, dest, 0, len);
+        memory.readBlock(physBase, dest, 0, len);
     }
 
     // ===== Memory Inspection =====
 
     /**
-     * The raw physical backing store. This is the physical view used by the boot
-     * loader and by snapshots; virtual accesses must still go through the
-     * translating methods above. Callers that mutate it bypass all page checks,
-     * so it is reserved for the supervisor (loader/DMA/inspection).
+     * A flat snapshot of the physical memory (shared snapshot + private overlay).
+     * <p>
+     * The store is copy-on-write, so there is no single live backing array to
+     * return; this materializes the current view. It is used for inspection and
+     * snapshots; virtual accesses must still go through the translating methods.
+     * </p>
      */
     public byte[] getPhysicalMemory() {
-        return physicalMemory;
+        return memory.snapshot();
     }
 
     /** Gets a copy of the entire physical memory. */
     public byte[] getMemorySnapshot() {
-        return getPhysicalMemory().clone();
+        return memory.snapshot();
     }
 
     /** Gets a copy of a memory region. */
@@ -275,6 +318,6 @@ public final class SoftMMU {
 
     @Override
     public String toString() {
-        return "SoftMMU[memory=" + physicalMemory.length + "B, pages=" + pageTable.validCount() + "/16]";
+        return "SoftMMU[memory=" + memory.size() + "B, pages=" + pageTable.validCount() + "/16]";
     }
 }
