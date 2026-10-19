@@ -358,13 +358,13 @@ cd src/web-editor && npm run check
 
 No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orientaciones conservadoras compatibles con el repo:
 
-1. **Investigar**: Lee [`src/README.md`](src/README.md) para entender arquitectura, [`docs/PLAN.md`](docs/PLAN.md) para roadmap, [`docs/ADR.md`](docs/ADR.md) para decisiones previas
+1. **Investigar**: Lee [`src/README.md`](src/README.md) para entender arquitectura, [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) para roadmap, [`docs/workdir/ADR.md`](docs/workdir/ADR.md) para decisiones previas
 2. **Localizar módulo**: Usa el catálogo arriba o `src/README.md` §3 para encontrar el módulo responsable
 3. **Tests primero**: Añade test unitario/integración que falle antes de fix; ejecuta `./gradlew :src:<modulo>:test`
 4. **Verifica**: `./gradlew build test checkLocks --no-daemon` + `cd src/web-editor && npm run check`
 5. **Commits atómicos**: Un cambio lógico por commit; mensaje convencional (`fix:`, `feat:`, `docs:`, `refactor:`)
 6. **No rompas contratos**: `core-api` es inmutable para consumidores; cambios requieren ADR
-7. **Documenta**: Actualiza `src/<modulo>/README.md` y `docs/PLAN.md` si cambia estado/funcionalidad
+7. **Documenta**: Actualiza `src/<modulo>/README.md` y `docs/workdir/PLAN.md` si cambia estado/funcionalidad
 8. **PR**: Abre Pull Request contra `main`; CI ejecuta build + tests + javadoc + web-editor check
 
 ---
@@ -380,7 +380,7 @@ No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orie
 | **Gestión dependencias** | `implementation project(':src:...')` para módulos internos; `compileOnly` para APIs plataforma (Paper, Fabric); `testImplementation` para tests |
 | **Compatibilidad plataformas** | Código compartido en `core-api`/`host`/módulos funcionales; adaptadores en `spigot-host`/`fabric-host` implementan `ActorDirectory`, `ChatDelivery`, `PlaceholderResolver` |
 | **Tests** | JUnit 5; tests unitarios en `src/test/java`; tests integración donde aplica; `ModuleLoaderTest` requiere aislamiento classpath |
-| **Documentación APIs** | Javadoc en código; module READMEs en `src/<modulo>/README.md`; ADR en `docs/ADR.md` para decisiones arquitectónicas |
+| **Documentación APIs** | Javadoc en código; module READMEs en `src/<modulo>/README.md`; ADR en `docs/workdir/ADR.md` para decisiones arquitectónicas |
 | **Errores** | Excepciones checked para errores recuperables; `IllegalStateException`/`SecurityException` para violaciones de contrato; logging SLF4J vía `PluginLogger` SPI |
 | **Configuración** | YAML con snakeyaml `SafeConstructor`; `ConfigLoader` (enum `ConfigPath`) + `ConfigValidator`; defaults en `resources/defaults/` copiados en primer arranque |
 | **Nuevas funcionalidades** | 1) Definir SPI en `core-api` si es punto de extensión; 2) Implementar en módulo dedicado; 3) Registrar vía ServiceLoader; 4) Wiring en `host`/`spigot-host`/`fabric-host`; 5) Tests + docs |
@@ -393,19 +393,21 @@ No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orie
 |-----------|-----------------|--------|
 | **README.md** (este archivo) | Página principal: presentación, estado, instalación, contribución, enlaces | — |
 | **src/README.md** | Índice técnico: mapa módulos, dependencias, entry points, flows, discrepancias | [`src/README.md`](src/README.md) |
-| **docs/PLAN.md** | Plan vivo: fases, estado actual, próxima acción, deuda conocida | [`docs/PLAN.md`](docs/PLAN.md) |
-| **docs/ADR.md** | Architecture Decision Records: decisiones inmutables con contexto/fecha/consecuencias | [`docs/ADR.md`](docs/ADR.md) |
+| **docs/workdir/PLAN.md** | Plan vivo: fases, estado actual, próxima acción, deuda conocida | [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) |
+| **docs/workdir/ADR.md** | Architecture Decision Records: decisiones inmutables con contexto/fecha/consecuencias | [`docs/workdir/ADR.md`](docs/workdir/ADR.md) |
 | **docs/wiki/01-Introduction.md** | Entrada wiki usuario/dev: quick start, módulos, arquitectura, guías | [`docs/wiki/01-Introduction.md`](docs/wiki/01-Introduction.md) |
 | **docs/wiki/02-Configuration.md** | Guía configuración (config.yml, channels, rules, translators, sync) | [`docs/wiki/02-Configuration.md`](docs/wiki/02-Configuration.md) |
 | **docs/wiki/05-iFlow-Rules.md** | Motor de reglas iFlow: sintaxis, condiciones, actions, targets, grafo | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
 | **docs/wiki/08-Commands.md** | Referencia comandos `/suite` (dinámicos v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
-| **docs/commands-v2-spec.md** | Spec técnico `commands.yml` v2 (acciones atómicas, arg binding, permissions) | [`docs/commands-v2-spec.md`](docs/commands-v2-spec.md) |
-| **docs/extension-schema.md** | Schema `extension.yml` v1.0 (metadatos, capabilities, configSchema JSON) | [`docs/extension-schema.md`](docs/extension-schema.md) |
-| **docs/NEW-MANAGER.md** | Especificación reingeniería Module Manager (estilo APT/dpkg) | [`docs/NEW-MANAGER.md`](docs/NEW-MANAGER.md) |
-| **docs/AUDITORIA.md** | Auditoría técnica externa 2026-10-09 (TXF-ZIP-001..006 resueltos) | [`docs/AUDITORIA.md`](docs/AUDITORIA.md) |
+| **docs/prompts/commands/commands-v2-spec.md** | Spec técnico `commands.yml` v2 (acciones atómicas, arg binding, permissions) | [`docs/prompts/commands/commands-v2-spec.md`](docs/prompts/commands/commands-v2-spec.md) |
+| **docs/prompts/extension/extension-schema.md** | Schema `extension.yml` v1.0 (metadatos, capabilities, configSchema JSON) | [`docs/prompts/extension/extension-schema.md`](docs/prompts/extension/extension-schema.md) |
+| **docs/prompts/manager/manager.md** | Especificación reingeniería Module Manager (estilo APT/dpkg) | [`docs/prompts/manager/manager.md`](docs/prompts/manager/manager.md) |
+| **docs/workdir/AUDITORIA.md** | Auditoría técnica externa 2026-10-09 (TXF-ZIP-001..006 resueltos) | [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md) |
 | **tools/project-metrics/README.md** | Herramienta de métricas: ~30 métricas diarias, rúbrica de 12 familias, juez cualitativo | [`tools/project-metrics/README.md`](tools/project-metrics/README.md) |
 | **src/<modulo>/README.md** | Codeguide por módulo: responsabilidades, deps, data flow, entry points | Ver [`src/README.md`](src/README.md) §3 |
+
+> **Criterio de carpetas:** `docs/workdir/` guarda documentos de trabajo y `docs/prompts/` prompts reutilizables. Un prompt ya implementado que no se vaya a reutilizar se elimina; no se mantiene como histórico.
 
 ---
 
