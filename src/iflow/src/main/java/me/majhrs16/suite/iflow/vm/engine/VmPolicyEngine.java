@@ -245,9 +245,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 return validator.validate(ctx, message, recipient, emitter);
 
             } catch (VmException e) {
-                // VM execution error - reject
-                return RouteOutcome.of(new RouteDecision(PolicyTarget.REJECT,
-                    "VM error: " + e.getMessage(), 0, recipient, emitter), message);
+                // VM execution error (IFLOW-AUD-035): record it as fatal so the
+                // validator discards the partial journal and rejects through a single
+                // path, instead of leaving a dead "fatal" branch in the validator.
+                ctx.setFatalError(e);
+                return validator.validate(ctx, message, recipient, emitter);
             } catch (RuntimeException e) {
                 // Safety net for the message path: an unexpected runtime failure must
                 // never escape the router (it would propagate to the server's chat

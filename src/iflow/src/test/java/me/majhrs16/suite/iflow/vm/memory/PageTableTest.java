@@ -212,6 +212,17 @@ class PageTableTest {
     }
 
     @Test
+    void translateReadHonoursTheMasterPrivilege() {
+        // IFLOW-AUD-033: today reading does not distinguish privileges (a kernel page
+        // is program-readable by design), but the privilege must travel through the
+        // same ownership check so a future read rule cannot be silently ignored.
+        PageTable table = new PageTable();
+        table.mapPageKernel(1, 0x2000, PageEntry.PERM_READ);
+        assertEquals(0x2000, table.translateRead(0x1000, Privilege.PROGRAM));
+        assertEquals(0x2000, table.translateRead(0x1000, Privilege.SUPERVISOR));
+    }
+
+    @Test
     void frameAlignmentEnforced() {
         PageTable table = new PageTable();
         assertThrows(VmException.class, () -> table.mapPage(0, 0x1234, PageEntry.PERM_READ));

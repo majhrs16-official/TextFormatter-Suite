@@ -354,15 +354,20 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 | 0x01   | 1      | isaVersion |
 | 0x02   | 1      | minAbiVersion |
 | 0x03   | 1      | minFirmwareVersion |
-| 0x04   | 2      | entryPoint (u16 LE) |
-| 0x06   | 2      | codeLength (u16 LE) |
-| 0x08   | 2      | constantsLength (u16 LE) |
+| 0x04   | 2      | entryPoint (u16 big-endian) |
+| 0x06   | 2      | codeLength (u16 big-endian) |
+| 0x08   | 2      | constantsLength (u16 big-endian) |
 | 0x0A   | 1      | capabilitiesCount |
 | 0x0B   | 5      | padding (zeros) |
-| 0x10   | N      | code (codeLength bytes) |
-| ...    | 2×N    | constants (u16 LE each) |
+| 0x10   | N      | code (codeLength bytes; operandos inmediatos big-endian `[hi, lo]`) |
+| ...    | 2×N    | constants (u16 big-endian en el fichero) |
 | ...    | var    | capabilities (null-terminated strings) |
 | ...    | 32     | hash (SHA-256 of all preceding bytes) |
+
+> **Endianness mixto (deliberado).** La cabecera y los operandos inmediatos del *código* son
+> **big-endian**; las palabras de **datos** en memoria son **little-endian**, y por eso las
+> constantes se reescriben en little-endian al materializarse (para que `LDW` las lea bien). No es
+> una errata: el parser (`ProgramImageParser`) lee la cabecera y las constantes en big-endian.
 
 ---
 

@@ -161,7 +161,7 @@ public final class SoftMMU {
 
     /** Reads a byte from virtual address as the given master privilege. */
     public int readByte(int virtualAddr, Privilege privilege) {
-        int physAddr = pageTable.translateRead(virtualAddr);
+        int physAddr = pageTable.translateRead(virtualAddr, privilege);
         return memory.readByte(physAddr);
     }
 
@@ -172,12 +172,12 @@ public final class SoftMMU {
 
     /** Reads a 16-bit word (little-endian) as the given master privilege. */
     public int readWord(int virtualAddr, Privilege privilege) {
-        int physAddr = pageTable.translateRead(virtualAddr);
+        int physAddr = pageTable.translateRead(virtualAddr, privilege);
         // Check if word crosses page boundary
         if ((virtualAddr & PageTable.OFFSET_MASK) == PageTable.OFFSET_MASK) {
             // Crosses page boundary - read byte by byte
-            int low = readByte(virtualAddr);
-            int high = readByte(virtualAddr + 1);
+            int low = readByte(virtualAddr, privilege);
+            int high = readByte(virtualAddr + 1, privilege);
             return low | (high << 8);
         } else {
             return memory.readByte(physAddr) |
@@ -199,13 +199,13 @@ public final class SoftMMU {
                 "Read beyond address space: 0x" + Integer.toHexString(virtualAddr) + "+" + length);
         }
         // Fast path: if contiguous in physical memory, single copy
-        int physAddr = pageTable.translateRead(virtualAddr);
+        int physAddr = pageTable.translateRead(virtualAddr, privilege);
         if (isContiguous(virtualAddr, length)) {
             memory.readBlock(physAddr, dest, destOffset, length);
         } else {
             // Non-contiguous: byte-by-byte (slow path)
             for (int i = 0; i < length; i++) {
-                dest[destOffset + i] = (byte) readByte(virtualAddr + i);
+                dest[destOffset + i] = (byte) readByte(virtualAddr + i, privilege);
             }
         }
     }

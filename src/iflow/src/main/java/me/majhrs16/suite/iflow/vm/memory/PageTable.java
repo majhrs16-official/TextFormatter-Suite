@@ -175,7 +175,20 @@ public final class PageTable {
 
     /** Translates for read access. */
     public int translateRead(int virtualAddr) {
-        return translate(virtualAddr, PageEntry.PERM_READ);
+        return translateRead(virtualAddr, Privilege.PROGRAM);
+    }
+
+    /**
+     * Translates for read access from the given privilege level.
+     * <p>
+     * Reading does not today distinguish privileges — a kernel page is
+     * program-readable by design — but the parameter travels through the same
+     * ownership check as writes, so a future per-privilege read rule cannot be
+     * silently ignored (IFLOW-AUD-033).
+     * </p>
+     */
+    public int translateRead(int virtualAddr, Privilege privilege) {
+        return translate(virtualAddr, PageEntry.PERM_READ, privilege);
     }
 
     /** Translates for write access from the program domain. */

@@ -68,6 +68,15 @@ public final class VmMemoryMap {
     // ===== I/O buffers =====
 
     public static final int INPUT_BASE = 0x7000;
+
+    /**
+     * Output buffer: <em>reserved scratch</em> (IFLOW-AUD-041). It is mapped R/W and
+     * cleared on every execution, but no production path reads it — a policy's result
+     * travels exclusively through the modification journal. A program may use it as
+     * free scratch space; it stays mapped (and reachable from the host through
+     * {@code ExecutionContext.outputBufferVAddr}) as a stable region for diagnostics
+     * or a future custom sink.
+     */
     public static final int OUTPUT_BASE = 0x8000;
     public static final int IO_PAGES = 1;
     public static final int IO_BUFFER_SIZE = IO_PAGES * PAGE; // 4096

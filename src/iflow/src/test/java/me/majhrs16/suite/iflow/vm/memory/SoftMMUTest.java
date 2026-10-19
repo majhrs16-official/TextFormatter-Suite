@@ -232,6 +232,21 @@ class SoftMMUTest {
     }
 
     @Test
+    void readsAcceptKernelPagesForBothPrivileges() {
+        // IFLOW-AUD-033: the privilege of a read travels through the same ownership
+        // check as the write. Reading a kernel page succeeds for both domains today
+        // (it is program-readable by design); the point is that it is not dropped.
+        SoftMMU mmu = new SoftMMU();
+        mmu.mapPageKernel(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        mmu.writeByte(0x2000, 0x5A, Privilege.SUPERVISOR);
+        assertEquals(0x5A, mmu.readByte(0x2000, Privilege.PROGRAM));
+        assertEquals(0x5A, mmu.readByte(0x2000, Privilege.SUPERVISOR));
+        byte[] block = new byte[4];
+        mmu.readBlock(0x2000, block, 0, 4, Privilege.SUPERVISOR);
+        assertEquals(0x5A, block[0] & 0xFF);
+    }
+
+    @Test
     void busCarriesMasterPrivilege() {
         SoftMMU mmu = new SoftMMU();
         mmu.mapPageKernel(2, 0x2000, PageEntry.PERM_READ | PageEntry.PERM_WRITE);

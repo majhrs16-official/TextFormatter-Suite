@@ -1140,5 +1140,15 @@ aquí registrados:
   real de intervalo (`VmDevice.overlaps` / `SoftMMU.isDeviceRange`), no solo los extremos.
 - **`IFLOW-AUD-042`:** cerrado. `ColorMode.of()` parsea sin excepciones; `PROPERTY_WRITE` valida el color
   (`INVALID_ARGUMENT`) y se retiran del journal las cuatro operaciones sin emisor.
-- El resto de hallazgos (`033`, `035`–`039`, `041`, `043`) sigue abierto.
+- **`IFLOW-AUD-033`:** cerrado. `PageTable.translateRead(vaddr, privilege)` propaga el privilegio (mismo
+  contrato de propiedad que la escritura) y `SoftMMU` deja de descartarlo en `readByte`/`readWord`/
+  `readBlock` (incluidas las rutas de cruce de página y byte a byte).
+- **`IFLOW-AUD-035`:** cerrado. El `catch (VmException)` del motor marca el error como fatal y rechaza
+  por el validador (que descarta el journal parcial): la rama «error fatal» ya es alcanzable en producción.
+- **`IFLOW-AUD-039`:** cerrado. `README.md` de `src/iflow` y de `tools/iflow-compiler` describen el
+  **endianness mixto** (cabecera e inmediatos big-endian; datos y constantes en memoria little-endian).
+- **`IFLOW-AUD-041`:** cerrado como **reservado**. El buffer de salida se documenta sin consumidor en
+  producción (el resultado viaja por el journal) y utilizable como *scratch* por el programa.
+- Sigue abierto: `036` (cancelación/watchdog), `037` (`-d`), `038` (magic number) y `043` (compatibilidad
+  de versiones).
 

@@ -47,7 +47,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Páginas 3-4: Datos/Heap (R/W) (0x3000–0x4FFF)
   - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
-  - Página 8: Buffer salida I/O (R/W) (0x8000)
+  - Página 8: Buffer salida I/O (R/W) (0x8000) — **reservado**: no tiene consumidor en producción (el resultado viaja por el *modification journal*); el programa puede usarlo como *scratch* (AUD-041)
   - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia. La página 15 (0xF000–0xFFFF) es además la **página de pantalla**: con la pantalla activa su framebuffer sombrea los primeros `cols×rows×2` bytes; al deshabilitarla, toda la página vuelve a ser RAM
   - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — `0x0F00–0x0F0F` banco de registros de la pantalla (D31), `0x0F10–0x0FEF` NVRAM del BIOS (D32) y `0x0FF0–0x0FFF` controlador de interrupciones (D33); el *interconnect* lo decodifica antes que la ROM/RAM. Es **espacio de dispositivo**, no memoria: no lo gobiernan los permisos ni la propiedad de página, y el programa (dominio `PROGRAM`) puede gobernar sus periféricos por diseño (contrato de `VmMemoryMap.DEVICE_MMIO_BASE`, AUD-031). Reutiliza la cola libre del ROM (el firmware acaba en 0x029B), así no recorta RAM de usuario
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
@@ -142,7 +142,10 @@ usa para despachar. Además de la tabla hay **fuentes de interrupción por E/S**
 | Servicios | `HOST` |
 | Control | `HALT`, `TRAP` |
 
-**Formato instrucción**: little-endian, opcode 8-bit determina longitud (1-8 bytes)
+**Formato de instrucción**: opcode de 8 bits que determina la longitud (1-8 bytes). Los **operandos
+inmediatos de 16 bits van en big-endian** (`[hi, lo]`), igual que la cabecera del contenedor; el
+opcode y los campos de registro ocupan 1 byte. El *endianness* de los **datos en memoria** es otro:
+ver la cabecera y las instrucciones `LDW`/`STW`.
 
 ### Instrucción `HOST` (servicios genéricos) — ABI v2
 
@@ -231,17 +234,23 @@ Header (16 bytes):
   u8  isaVersion        = 2
   u8  minAbiVersion     = 2
   u8  minFirmwareVersion= 1
-  u16 entryPoint        (little-endian)
-  u16 codeLength
-  u16 constantsLength
+  u16 entryPoint        (big-endian)
+  u16 codeLength        (big-endian)
+  u16 constantsLength   (big-endian)
   u8  capabilitiesCount
   u8[5] padding
 
-Code section: codeLength bytes
-Constants: constantsLength × u16
+Code section: codeLength bytes (los operandos inmediatos son big-endian [hi, lo])
+Constants: constantsLength × u16 (big-endian en el fichero; se materializan
+           little-endian en memoria para que LDW las lea de forma natural)
 Capabilities: null-terminated strings
 Hash: 32 bytes (SHA-256 of everything before the hash field)
 ```
+
+> **Endianness mixto (deliberado).** La cabecera del contenedor y los operandos inmediatos de las
+> instrucciones son **big-endian**; las palabras de **datos** en memoria (RAM y constantes ya
+> materializadas) son **little-endian**. Quien escriba un ensamblador o un parser nuevo debe
+> respetarlo: asumir «todo little-endian» decodifica mal la cabecera y los inmediatos.
 
 El parser exige que `minAbiVersion` **coincida exactamente** con el ABI del runtime
 (hoy v2): un `.flow` construido para otra convención de llamada se rechaza al cargar.
