@@ -448,8 +448,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                         ModificationJournal.OpType.SET_LANG_SOURCE, value, "propWrite:" + propId);
                     case HostServiceRegistry.PROP_LANG_TARGET -> new ModificationJournal.Entry(
                         ModificationJournal.OpType.SET_LANG_TARGET, value, "propWrite:" + propId);
-                    case HostServiceRegistry.PROP_COLOR_MODE -> new ModificationJournal.Entry(
-                        ModificationJournal.OpType.SET_COLOR_MODE, value, "propWrite:" + propId);
+                    case HostServiceRegistry.PROP_COLOR_MODE -> me.majhrs16.suite.api.message.ColorMode
+                        .of(value).isPresent()
+                        ? new ModificationJournal.Entry(
+                            ModificationJournal.OpType.SET_COLOR_MODE, value, "propWrite:" + propId)
+                        : null;
                     default -> null;
                 };
                 case HostServiceRegistry.SCOPE_CHANNEL ->

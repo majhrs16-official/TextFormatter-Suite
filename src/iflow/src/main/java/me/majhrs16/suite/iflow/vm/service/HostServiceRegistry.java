@@ -4,6 +4,7 @@ import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
+import me.majhrs16.suite.api.message.ColorMode;
 import me.majhrs16.suite.logger.Logger;
 
 import java.util.HashMap;
@@ -519,6 +520,14 @@ public final class HostServiceRegistry {
 
         String value = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
 
+        // Enum-valued properties are validated before journaling (IFLOW-AUD-042):
+        // an unknown value is an explicit INVALID_ARGUMENT instead of an exception
+        // that surfaces later as an opaque "VM internal error" REJECT.
+        if (scope == SCOPE_MESSAGE && propId == PROP_COLOR_MODE
+                && ColorMode.of(value).isEmpty()) {
+            return ServiceResult.invalidArgument("unknown color mode: " + value);
+        }
+
         // The host decides how to apply the write (the reference engine defers it
         // through the modification journal, which is validated and committed after
         // execution). Unsupported (scope, propId) pairs are reported to the program.
@@ -558,6 +567,15 @@ public final class HostServiceRegistry {
         String redirectChannel = null;
         String redirectTarget = null;
         int bytesRead = 0;
+
+        if (decision < DECISION_LOG || decision > DECISION_CONTINUE) {
+            // Unknown routing code: fail closed (IFLOW-AUD-034). The journal
+            // records a rejection so the validator can never deliver the
+            // message, and R0 reports INVALID_ARGUMENT so the program learns why.
+            ctx.journal().record(new ModificationJournal.Entry(
+                ModificationJournal.OpType.CANCEL_MESSAGE, true, "route:REJECT"));
+            return ServiceResult.invalidArgument("unknown routing decision: " + decision);
+        }
 
         if (decision == DECISION_CHAN_REDIR && argLength > 0) {
             byte[] bytes;
@@ -606,7 +624,8 @@ public final class HostServiceRegistry {
             case DECISION_CHAN_REDIR -> new ModificationJournal.Entry(ModificationJournal.OpType.REDIRECT_CHANNEL, redirectChannel, "route:CHANNEL_REDIRECT");
             case DECISION_RATE_LIMIT -> new ModificationJournal.Entry(ModificationJournal.OpType.RATE_LIMIT_BACKOFF, rateLimitBackoff, "route:RATE_LIMIT");
             case DECISION_CONTINUE -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:CONTINUE");
-            default -> new ModificationJournal.Entry(ModificationJournal.OpType.SET_PROCESSED, true, "route:UNKNOWN");
+            // Unreachable after the range check above; kept fail-closed on purpose.
+            default -> new ModificationJournal.Entry(ModificationJournal.OpType.CANCEL_MESSAGE, true, "route:REJECT");
         };
         ctx.journal().record(entry);
 

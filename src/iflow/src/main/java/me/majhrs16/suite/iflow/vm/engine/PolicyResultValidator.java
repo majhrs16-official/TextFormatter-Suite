@@ -144,7 +144,9 @@ public final class PolicyResultValidator {
             case "CHANNEL_REDIRECT" -> PolicyTarget.CHANNEL_REDIRECT;
             case "RATE_LIMIT" -> PolicyTarget.RATE_LIMIT;
             case "CONTINUE" -> PolicyTarget.LOG; // Map to LOG
-            default -> PolicyTarget.LOG;
+            // An unrecognised decision must not deliver (IFLOW-AUD-034): fail
+            // closed with REJECT instead of silently degrading to LOG.
+            default -> PolicyTarget.REJECT;
         };
     }
 
@@ -164,12 +166,10 @@ public final class PolicyResultValidator {
                 me.majhrs16.suite.api.message.Language.of((String) entry.value).orElse(msg.langSource()));
             case SET_LANG_TARGET -> msg.withLangTarget(
                 me.majhrs16.suite.api.message.Language.of((String) entry.value).orElse(msg.langTarget()));
+            // Safe parse (IFLOW-AUD-042): an unknown colour mode keeps the current
+            // one instead of throwing and turning the message into an opaque REJECT.
             case SET_COLOR_MODE -> msg.withColorMode(
-                me.majhrs16.suite.api.message.ColorMode.valueOf(((String) entry.value).toUpperCase()));
-            case SET_FORMAT_PAPI -> msg.withFormatPapi((Boolean) entry.value);
-            case SET_SLEEP_MILLIS -> msg.withSleepMillis((Long) entry.value);
-            case ADD_SOUNDS -> msg.withSoundsAdd((java.util.List<String>) entry.value);
-            case REMOVE_SOUNDS -> msg.withSoundsRemove((java.util.List<String>) entry.value);
+                me.majhrs16.suite.api.message.ColorMode.of((String) entry.value).orElse(msg.colorMode()));
             case CANCEL_MESSAGE -> msg.withCancelled(true);
             case SET_PROCESSED -> msg.withProcessed(true);
             case REDIRECT_CHANNEL -> msg; // Handled separately

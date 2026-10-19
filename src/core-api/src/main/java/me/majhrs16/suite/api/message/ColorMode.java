@@ -16,5 +16,23 @@ public enum ColorMode {
 
     BY_PERMISSION,
 
-    FORCE,
+    FORCE;
+
+    /**
+     * Parses a colour-mode name (case-insensitive, surrounding blanks ignored).
+     *
+     * @return the matching mode, or empty when {@code raw} is null or unknown
+     */
+    public static java.util.Optional<ColorMode> of(String raw) {
+        if (raw == null) {
+            return java.util.Optional.empty();
+        }
+        String trimmed = raw.trim();
+        for (ColorMode mode : values()) {
+            if (mode.name().equalsIgnoreCase(trimmed)) {
+                return java.util.Optional.of(mode);
+            }
+        }
+        return java.util.Optional.empty();
+    }
 }

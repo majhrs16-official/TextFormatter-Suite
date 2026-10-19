@@ -25,6 +25,28 @@ public interface VmDevice {
     /** True if this device owns {@code vaddr} (its window or register bank). */
     boolean decodes(int vaddr);
 
+    /**
+     * True if <em>any</em> byte in {@code [vaddr, vaddr + length)} belongs to
+     * this device (IFLOW-AUD-032).
+     * <p>
+     * The interconnect uses it to decide whether a block transaction must be
+     * split against the device instead of going straight to RAM. The default
+     * walks the range asking {@link #decodes(int)}; a device that knows its
+     * window (the text screen) overrides it with range arithmetic.
+     * </p>
+     */
+    default boolean overlaps(int vaddr, int length) {
+        if (length <= 0) {
+            return false;
+        }
+        for (int i = 0; i < length; i++) {
+            if (decodes(vaddr + i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Reads one byte from the device at {@code vaddr}. */
     int readByte(int vaddr);
 

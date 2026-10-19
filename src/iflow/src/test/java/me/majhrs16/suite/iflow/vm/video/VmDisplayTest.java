@@ -158,4 +158,38 @@ class VmDisplayTest {
         assertFalse(d.isEnabled());
         assertEquals('R', bus.readByte(FB));
     }
+
+    @Test
+    void blockTransactionIsSplitWhenItStraddlesTheWindow() {
+        // IFLOW-AUD-032: a range that contains the window without touching it at
+        // either end must still be split, matching byte-wise access.
+        SoftMMU mmu = new SoftMMU();
+        mmu.mapPage(VmMemoryMap.pageOf(FB), FB,
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        VmDisplay d = new VmDisplay();
+        mmu.attach(d);
+        VmBus bus = new VmBus(mmu);
+        configure(d, FB + 0x800, 4, 1); // window 0xF800-0xF807
+
+        byte[] payload = new byte[24];
+        for (int i = 0; i < payload.length; i++) {
+            payload[i] = (byte) ('a' + i);
+        }
+        // 0xF7F8..0xF80F: neither end is a device, the window sits in the middle.
+        bus.writeBlock(FB + 0x7F8, payload, 0, payload.length);
+
+        // The eight in-window bytes reached the screen...
+        for (int i = 0; i < 8; i++) {
+            int expected = payload[8 + i] & 0xFF;
+            int actual = (i % 2 == 0) ? d.cellChar(i / 2) : d.cellAttribute(i / 2);
+            assertEquals(expected, actual, "in-window byte " + i + " must reach the screen");
+        }
+        // ...and the surrounding bytes went to RAM.
+        byte[] before = new byte[8];
+        bus.readBlock(FB + 0x7F8, before, 0, before.length);
+        assertArrayEquals(java.util.Arrays.copyOfRange(payload, 0, 8), before);
+        byte[] after = new byte[8];
+        bus.readBlock(FB + 0x808, after, 0, after.length);
+        assertArrayEquals(java.util.Arrays.copyOfRange(payload, 16, 24), after);
+    }
 }

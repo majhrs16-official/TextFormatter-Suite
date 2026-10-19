@@ -20,10 +20,6 @@ public final class ModificationJournal {
         SET_LANG_SOURCE,
         SET_LANG_TARGET,
         SET_COLOR_MODE,
-        SET_FORMAT_PAPI,
-        SET_SLEEP_MILLIS,
-        ADD_SOUNDS,
-        REMOVE_SOUNDS,
         CANCEL_MESSAGE,
         SET_PROCESSED,
         REDIRECT_CHANNEL,
@@ -33,7 +29,7 @@ public final class ModificationJournal {
 
     public static final class Entry {
         public final OpType type;
-        public final Object value; // String, Language, ColorMode, Boolean, Long, List<String>
+        public final Object value; // String, Language, ColorMode, Boolean, Long
         public final String detail; // Human-readable description
 
         public Entry(OpType type, Object value, String detail) {
@@ -77,22 +73,6 @@ public final class ModificationJournal {
 
     public void setColorMode(String mode) {
         record(new Entry(OpType.SET_COLOR_MODE, mode, "colorMode"));
-    }
-
-    public void setFormatPapi(boolean enabled) {
-        record(new Entry(OpType.SET_FORMAT_PAPI, enabled, "formatPapi"));
-    }
-
-    public void setSleepMillis(long millis) {
-        record(new Entry(OpType.SET_SLEEP_MILLIS, millis, "sleepMillis"));
-    }
-
-    public void addSounds(List<String> sounds) {
-        record(new Entry(OpType.ADD_SOUNDS, sounds, "addSounds"));
-    }
-
-    public void removeSounds(List<String> sounds) {
-        record(new Entry(OpType.REMOVE_SOUNDS, sounds, "removeSounds"));
     }
 
     public void cancelMessage() {

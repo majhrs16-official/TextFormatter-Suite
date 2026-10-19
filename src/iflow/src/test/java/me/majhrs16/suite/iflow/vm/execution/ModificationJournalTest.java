@@ -25,16 +25,12 @@ class ModificationJournalTest {
         journal.setChannel("chat");
         journal.setLangSource("en");
         journal.setLangTarget("es");
-        journal.setColorMode("GRADIENT");
-        journal.setFormatPapi(true);
-        journal.setSleepMillis(100);
-        journal.addSounds(java.util.List.of("a.mp3"));
-        journal.removeSounds(java.util.List.of("b.mp3"));
+        journal.setColorMode("FORCE");
         journal.cancelMessage();
         journal.setProcessed();
         journal.redirectChannel("private");
 
-        assertEquals(12, journal.size());
+        assertEquals(8, journal.size());
 
         ModificationJournal.Entry e = journal.entries().get(0);
         assertEquals(ModificationJournal.OpType.SET_TEXT, e.type);

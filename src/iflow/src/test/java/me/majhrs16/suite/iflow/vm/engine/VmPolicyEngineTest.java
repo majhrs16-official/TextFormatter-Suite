@@ -148,6 +148,30 @@ class VmPolicyEngineTest {
     }
 
     @Test
+    void unknownDecisionFromProgramRejectsInsteadOfDelivering() {
+        // IFLOW-AUD-034: an out-of-range decision code must fail closed.
+        VmPolicyEngine engine = createEngine();
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                Opcode.LI, 1, (byte)0x00, (byte)0xC8,   // options = 200 (out of range)
+                Opcode.HOST, (byte)0x00,
+                Opcode.HALT
+            })
+            .capabilities(new String[]{"routing.decide"})
+            .build();
+        engine.setProgram(program);
+
+        Actor sender = createActor("Alice");
+        Actor recipient = createActor("Bob");
+        Message msg = createMessage("hello world", "chat", sender);
+        RouteOutcome outcome = engine.route(msg, recipient);
+        assertEquals(PolicyTarget.REJECT, outcome.decision().target());
+        assertFalse(outcome.decision().delivered());
+    }
+
+    @Test
     void continueDecisionFromProgram() {
         VmPolicyEngine engine = createEngine();
         ProgramImage program = ProgramImage.builder()

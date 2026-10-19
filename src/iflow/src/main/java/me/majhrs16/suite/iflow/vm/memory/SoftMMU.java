@@ -88,6 +88,24 @@ public final class SoftMMU {
         return deviceFor(vaddr) != null;
     }
 
+    /**
+     * True if any byte in {@code [vaddr, vaddr + length)} lands on an attached
+     * peripheral (IFLOW-AUD-032). Block transactions use this so a range that
+     * <em>contains</em> a device window is split correctly even when neither
+     * end touches it.
+     */
+    public boolean isDeviceRange(int vaddr, int length) {
+        if (length <= 0) {
+            return false;
+        }
+        for (VmDevice d : devices) {
+            if (d.overlaps(vaddr, length)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The attached peripherals (a copy of the list). */
     public VmDevice[] devices() {
         return devices.clone();

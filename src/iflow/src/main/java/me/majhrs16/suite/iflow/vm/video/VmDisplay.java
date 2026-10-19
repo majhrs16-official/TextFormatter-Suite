@@ -92,6 +92,16 @@ public final class VmDisplay implements VmDevice {
     }
 
     @Override
+    public boolean overlaps(int vaddr, int length) {
+        return overlapsRange(vaddr, length, ctrlBase, REG_COUNT)
+            || (enabled && overlapsRange(vaddr, length, fbBase, cells.length));
+    }
+
+    private static boolean overlapsRange(int vaddr, int length, int base, int size) {
+        return length > 0 && size > 0 && vaddr < base + size && base < vaddr + length;
+    }
+
+    @Override
     public int readByte(int vaddr) {
         if (vaddr >= ctrlBase && vaddr < ctrlBase + REG_COUNT) {
             int off = vaddr - ctrlBase;

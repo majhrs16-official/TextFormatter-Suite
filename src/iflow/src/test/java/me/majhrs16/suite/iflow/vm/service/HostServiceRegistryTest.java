@@ -148,6 +148,21 @@ class HostServiceRegistryTest {
     }
 
     @Test
+    void unknownRouteDecisionFailsClosed() {
+        // IFLOW-AUD-034: an out-of-range decision code must reject, not deliver.
+        HostServiceRegistry hsr = createConfiguredHsr();
+        ExecutionContext ctx = createContext(hsr);
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.ROUTE_DECISION, 0, 0, 200);
+
+        assertEquals(ServiceResult.Status.INVALID_ARGUMENT, result.status());
+        ModificationJournal journal = ctx.journal();
+        assertEquals(1, journal.size());
+        assertEquals(ModificationJournal.OpType.CANCEL_MESSAGE, journal.entries().get(0).type);
+        assertEquals("route:REJECT", journal.entries().get(0).detail);
+    }
+
+    @Test
     void serviceResultStatuses() {
         assertTrue(ServiceResult.ok(1).isSuccess());
         assertTrue(ServiceResult.partial(1, 2).isSuccess());
@@ -391,6 +406,28 @@ class HostServiceRegistryTest {
             (HostServiceRegistry.SCOPE_EMITTER << 8) | HostServiceRegistry.PROP_ACTOR_NAME);
 
         assertEquals(ServiceResult.Status.UNSUPPORTED, result.status());
+    }
+
+    @Test
+    void propertyWriteRejectsUnknownColorMode() {
+        // IFLOW-AUD-042: an invalid enum value must be INVALID_ARGUMENT, not an
+        // exception that later surfaces as an opaque "VM internal error" REJECT.
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "property.write");
+        ctx.hostContext(new HostContext() {
+            @Override public boolean writeProperty(int scope, int propId, String value) {
+                fail("an invalid colour mode must not reach the host");
+                return false;
+            }
+        });
+
+        byte[] value = "banana".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(ctx.outputBufferVAddr(), value, 0, value.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.PROPERTY_WRITE,
+            ctx.outputBufferVAddr(), value.length,
+            (HostServiceRegistry.SCOPE_MESSAGE << 8) | HostServiceRegistry.PROP_COLOR_MODE);
+
+        assertEquals(ServiceResult.Status.INVALID_ARGUMENT, result.status());
     }
 
     @Test

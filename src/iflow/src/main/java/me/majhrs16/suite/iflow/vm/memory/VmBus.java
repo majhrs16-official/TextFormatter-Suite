@@ -153,12 +153,9 @@ public final class VmBus {
         return result;
     }
 
-    /** True if the range's first or last byte lands on a peripheral. */
+    /** True if any byte of the range lands on a peripheral (IFLOW-AUD-032). */
     private boolean touchesDevice(int vaddr, int length) {
-        if (length <= 0) {
-            return false;
-        }
-        return memory.isDeviceAddress(vaddr) || memory.isDeviceAddress(vaddr + length - 1);
+        return memory.isDeviceRange(vaddr, length);
     }
 
     @Override
