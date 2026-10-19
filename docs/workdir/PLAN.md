@@ -1045,7 +1045,7 @@ lote 4. Cualquier otro ID responde `status=5 (UNSUPPORTED)`.
 |---|---|
 | `src/iflow/README.md` | ✅ v2 |
 | `tools/iflow-compiler/README.md` | ✅ v2 |
-| `docs/prompts/iflow/implement.md` §11 | ✅ v2 |
+| `docs/prompts/diseno/iflow-cpu-implement.md` §11 | ✅ v2 |
 | `HostServiceRegistry` (impl) | ✅ v2 |
 
 ### Preguntas abiertas
@@ -1074,7 +1074,7 @@ Todas resueltas:
 | `tools/iflow-compiler/src/assembler.ts` | `RET` spec `min:0`; `emitConst` → valor; origin 0x1000 si firmware ON; `.firmware` re-base | ✅ hecho (`9743754`) |
 | `tools/iflow-compiler/src/cli.ts` | `--no-firmware` | ✅ hecho (`9743754`) |
 | `tools/iflow-compiler/test/*.flowasm` + `.flow`/`.lst` | quitar `.origin 0x0000`; HOST v2; regenerar artefactos | ✅ hecho (`9743754`) |
-| `src/iflow/README.md`, `tools/iflow-compiler/README.md`, `docs/prompts/iflow/implement.md` | ABI v2 (fuente única) | ✅ hecho (`da2a0cb`) |
+| `src/iflow/README.md`, `tools/iflow-compiler/README.md`, `docs/prompts/diseno/iflow-cpu-implement.md` | ABI v2 (fuente única) | ✅ hecho (`da2a0cb`) |
 | `src/iflow/build.gradle` | tarea `iflowAsm`/`iflowCompilerBuild` + `-Piflow.baremetal` | ✅ hecho (`65af8ce`) |
 | `tools/iflow-compiler/examples/policy.flowasm` | ejemplo de policy v2 (default de `iflowAsm`) | ✅ hecho (`65af8ce`) |
 

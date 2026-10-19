@@ -400,14 +400,13 @@ No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orie
 | **docs/wiki/05-iFlow-Rules.md** | Motor de reglas iFlow: sintaxis, condiciones, actions, targets, grafo | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
 | **docs/wiki/08-Commands.md** | Referencia comandos `/suite` (dinámicos v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
-| **docs/prompts/commands/commands-v2-spec.md** | Spec técnico `commands.yml` v2 (acciones atómicas, arg binding, permissions) | [`docs/prompts/commands/commands-v2-spec.md`](docs/prompts/commands/commands-v2-spec.md) |
-| **docs/prompts/extension/extension-schema.md** | Schema `extension.yml` v1.0 (metadatos, capabilities, configSchema JSON) | [`docs/prompts/extension/extension-schema.md`](docs/prompts/extension/extension-schema.md) |
-| **docs/prompts/manager/manager.md** | Especificación reingeniería Module Manager (estilo APT/dpkg) | [`docs/prompts/manager/manager.md`](docs/prompts/manager/manager.md) |
+| **docs/prompts/** | Material de referencia: contexto del proyecto, diseños de componentes y contratos de formato | [`docs/prompts/README.md`](docs/prompts/README.md) |
+| **.opencode/skills/** | Procedimientos que el agente ejecuta por sí mismo (auditar, generar documentación) | [`docs/prompts/README.md`](docs/prompts/README.md) § Prompt frente a skill |
 | **docs/workdir/AUDITORIA.md** | Auditoría técnica externa 2026-10-09 (TXF-ZIP-001..006 resueltos) | [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md) |
 | **tools/project-metrics/README.md** | Herramienta de métricas: ~30 métricas diarias, rúbrica de 12 familias, juez cualitativo | [`tools/project-metrics/README.md`](tools/project-metrics/README.md) |
 | **src/<modulo>/README.md** | Codeguide por módulo: responsabilidades, deps, data flow, entry points | Ver [`src/README.md`](src/README.md) §3 |
 
-> **Criterio de carpetas:** `docs/workdir/` guarda documentos de trabajo y `docs/prompts/` prompts reutilizables. Un prompt ya implementado que no se vaya a reutilizar se elimina; no se mantiene como histórico.
+> **Criterio de carpetas:** `docs/workdir/` guarda documentos de trabajo y `docs/prompts/` material de referencia (fuentes de verdad que se consultan). Los procedimientos —auditar, generar documentación— no son prompts: son skills en `.opencode/skills/`, y el criterio completo está en [`docs/prompts/README.md`](docs/prompts/README.md). Un prompt ya implementado que no se vaya a reutilizar se elimina; no se mantiene como histórico.
 
 ---
 

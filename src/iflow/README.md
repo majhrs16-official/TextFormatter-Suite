@@ -361,6 +361,6 @@ src/iflow/
 ## Referencias
 
 - [`HDL.md`](HDL.md) — mapeo a HDL: módulos, buses, señales, flujo de datos (D28)
-- [`docs/prompts/iflow/implement.md`](../../docs/prompts/iflow/implement.md) — Especificación técnica completa
+- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica completa (ABI v2)
 - [`tools/iflow-compiler/`](../../tools/iflow-compiler/) — Ensamblador TypeScript (.flowasm → .flow)
-- [`docs/prompts/iflow/`](../../docs/prompts/iflow/) — Prompts y decisiones de diseño
+- [`docs/prompts/diseno/iflow-cpu-design.md`](../../docs/prompts/diseno/iflow-cpu-design.md) — Diseño del CPU virtual (memoria, rings, privilegios)

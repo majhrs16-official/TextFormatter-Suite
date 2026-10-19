@@ -13,35 +13,31 @@ Archivo | Propósito | Audiencia |
 
 <Falta mencionar rapidamente de que trata la introduccion + referencia>
 
-## Especificaciones internas (`/docs/prompts/`)
+## Material de referencia (`/docs/prompts/`)
 
-**No son documentación de usuario.** Son specs, prompts de trabajo y contexto para desarrollo.
+**No son documentación de usuario.** Son fuentes de verdad que se consultan: contexto, diseños y contratos de formato. Los procedimientos (auditar, generar documentación) no viven aquí, sino como skills en `.opencode/skills/`.
 
-| Directorio/Archivo | Propósito |
-|--------------------|-----------|
-| `prompts/project.md` | Prompt primario contextual sobre objetivos primarios, reglas de proyecto, módulos principales. |
-| `prompts/codeguide/` | Prompt de generacion de una guía sobre el código |
-| `prompts/readme/` | Prompt de generacion de un README actualizado |
-| `prompts/commands/` | Spec del sistema de comandos dinámico v2 (`/suite`) |
-| `prompts/extension/` | Schema sobre el modulo para soporte de exntesiones nativas |
-| `prompts/manager/` | Prompt de generacion para el modulo Manager v2 (implementación actual) |
-| `prompts/web-editor/` | Prompt de generacion de la arquitectura + schema del Web Editor |
-| `prompts/auditoria/project.md` | Prompts con instrucciones detalladas para realizar auditorías externas |
-| `prompts/auditoria/modules/` | Focos específicos de auditoría por módulo |
+| Directorio | Propósito |
+|------------|-----------|
+| `prompts/contexto/` | Contexto del proyecto: objetivos, reglas, módulos. |
+| `prompts/diseno/` | Especificaciones de diseño y reingeniería de componentes (iflow, logger, Manager v2, Web Editor). |
+| `prompts/especificaciones/` | Contratos de formato que valida el código: `commands.yml` v2, `extension.yml` v1.0, config schema v2.2. |
+
+El criterio completo —qué es un prompt frente a una skill, cómo se nombran las carpetas y cuándo se elimina un documento— está en [`prompts/README.md`](prompts/README.md).
 
 ## Flujo de trabajo
 
 ```
-prompts/manager/manager.md   →  implementación en src/manager-*
-prompts/web-editor/*         →  implementación en src/web-editor/
-prompts/commands/*           →  implementación en src/host/config/CommandsConfig*
-prompts/extension/*          →  implementación en src/extension-api/
-prompts/auditoria/*          →  genera AUDITORIA.md en workdir/
-workdir/{PLAN,AUDITORIA,ADR} →  derivan wiki/ y RELEASE_NOTES.md
+prompts/diseno/manager-v2.md             →  implementación en src/manager-*
+prompts/diseno/web-editor.md             →  implementación en src/web-editor/
+prompts/especificaciones/commands-v2.md  →  implementación en src/host/config/CommandsConfig*
+prompts/especificaciones/extension-v1.md →  implementación en src/extension-api/
+skills auditar-*                         →  informes de auditoría (workdir/AUDITORIA.md)
+skills generar-*                         →  README raíz y CodeGuide (src/README.md)
+workdir/{PLAN,AUDITORIA,ADR}             →  derivan wiki/ y RELEASE_NOTES.md
 ```
 
 ### Regla de archivado
 
-Cuando un prompt en `prompts/<domain>/` se implementa completamente → mover a `prompts/already/` solo si es reutilizable en un futuro, de lo contrario es preferible eliminar el prompt
+Cuando un prompt se implementa por completo y **no se va a reutilizar, se elimina**: no se mantiene como histórico (lo histórico va a `workdir/`). Una especificación de referencia se conserva aunque ya esté implementada, porque sigue siendo el contrato que la implementación debe cumplir — y contra el que las skills de auditoría la evalúan.
 
-**Ejemplo actual**: `prompts/manager/manager.md` sigue activo (v2 en desarrollo). Cuando v2 esté completo → Eliminar.

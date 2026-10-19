@@ -3,7 +3,7 @@
 Fecha: 2026-10-16
 Fuentes: `firmware-cycles.txt` (158 ciclos, `test/firmware.flow`) y `tests-cycles.txt` (10 339 ciclos, suite `:src:iflow:test`).
 Método: desensamblado del binario `.flow` y cruce de cada ciclo contra los límites de instrucción reales
-(script `analyze.js` / `analyze2.js` en `/tmp/iflow-debug`), más verificación manual contra `docs/prompts/iflow/implement.md`.
+(script `analyze.js` / `analyze2.js` en `/tmp/iflow-debug`), más verificación manual contra `docs/prompts/diseno/iflow-cpu-implement.md`.
 
 ---
 

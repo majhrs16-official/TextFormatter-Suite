@@ -45,7 +45,7 @@
 | `./gradlew :src:iflow:test --offline --no-daemon --rerun-tasks` | `BUILD SUCCESSFUL` (15 tareas ejecutadas) |
 | XML de resultados | **tests=288, failures=0, errors=0, skipped=0** |
 | `README.md`, `build.gradle` | Leídos |
-| `docs/prompts/iflow/design.md`, `implement.md` | Leídos (mapa de memoria, ABI v2, rings, §5.3, §10, §11, §14) |
+| `docs/prompts/diseno/iflow-cpu-design.md`, `iflow-cpu-implement.md` | Leídos (mapa de memoria, ABI v2, rings, §5.3, §10, §11, §14) |
 
 ### 2.3 Contexto externo (solo uso real)
 
@@ -433,7 +433,7 @@ if (len > 0) {
 **Tipo:** Contradicción spec↔implementación (materialización de entrada)
 **Severidad:** Media
 **Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/engine/VmPolicyEngine.prepareInput` (líneas 284-325); spec `docs/prompts/iflow/implement.md:564-566` y `design.md:164-168`.
+**Ubicación:** `vm/engine/VmPolicyEngine.prepareInput` (líneas 284-325); spec `docs/prompts/diseno/iflow-cpu-implement.md:564-566` y `iflow-cpu-design.md:164-168`.
 
 **Descripción:** La spec dice literalmente «No hay regiones, no hay handles, **no hay búferes de entrada aislados**. El programa interactúa directamente con la memoria plana» y «No debe ser obligatorio copiar el objeto `Message` completo… antes de ejecutar cada programa». En cambio, `prepareInput` **copia** texto, canal, dirección, emisor y destinatario al buffer `0x7000` (con terminadores NUL) en **cada** mensaje, mediante `writeField`. Es una materialización *a priori* de los datos del mensaje, exactamente lo que la spec desaconseja.
 
@@ -546,7 +546,7 @@ int opcode = softMMU.fetchByte(ip);            // valida EXECUTE + bounds
 **Tipo:** Deuda técnica (deriva documental + feature no implementada)
 **Severidad:** Baja
 **Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/memory/VmMemoryMap.java` (líneas 22, 553 spec); `src/iflow/README.md:38`; `docs/prompts/iflow/implement.md:553,576`; `HostServiceRegistry` (constantes de servicio).
+**Ubicación:** `vm/memory/VmMemoryMap.java` (líneas 22, 553 spec); `src/iflow/README.md:38`; `docs/prompts/diseno/iflow-cpu-implement.md:553,576`; `HostServiceRegistry` (constantes de servicio).
 
 **Descripción:** Varias afirmaciones no respaldadas por el código:
 - **Páginas 9-15 «Estado persistente / datos privados»:** `setupProgramMappings` **no las mapea** y no existe la capability `memory.persist` que la spec menciona (`implement.md:576`). Son direcciones no accesibles.

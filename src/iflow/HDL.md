@@ -264,8 +264,8 @@ hardware previsto pendiente.
 ## Referencias
 
 - [`README.md`](README.md) — vista funcional (componentes, ISA, ABI, tests)
-- [`docs/prompts/iflow/design.md`](../../docs/prompts/iflow/design.md) — §4
+- [`docs/prompts/diseno/iflow-cpu-design.md`](../../docs/prompts/diseno/iflow-cpu-design.md) — §4
   (componentes) y §14 (privilegios/anillos)
-- [`docs/prompts/iflow/implement.md`](../../docs/prompts/iflow/implement.md) — §12
+- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — §12
   (privilegios, excepciones) y §13 (firmware)
 - [`docs/workdir/PLAN.md`](../../docs/workdir/PLAN.md) — decisiones D17–D33
