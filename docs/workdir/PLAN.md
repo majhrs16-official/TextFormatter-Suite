@@ -51,6 +51,51 @@
 
 ---
 
+## Entorno de trabajo: skills y MCP (2026-10-19)
+
+Herramientas disponibles para trabajar en este repo. Las **globales** viven en
+`~/.config/opencode/` y sirven para cualquier proyecto de esta máquina (no se
+versionan); las de **proyecto** viven en `.opencode/` y viajan con el repo.
+
+### Skills
+
+| Skill | Ámbito | Cuándo usarla |
+|---|---|---|
+| `juzgar-rubrica` | **proyecto** | Puntuar las familias cualitativas de la rúbrica de métricas (documentación e implementación real) y refrescar `judge_scores.csv` |
+| `architecture-decision-records` | global | Crear y mantener ADRs: contexto, alternativas, consecuencias |
+| `auditoria-seguridad-calidad` | global | Auditar C/C++/Java: memoria, concurrencia, OWASP, calidad estática |
+| `automated-test-engineer` | global | Diseñar suites de tests unitarios y de componente con alta cobertura |
+| `low-level-systems-debugger` | global | Kernels, emuladores, CPU virtuales, MMU/MMIO, NASM, volcados |
+| `release-notes` | global | Changelogs y notas de versión a partir de commits e hitos |
+| `opencode` | integrada | Dudas sobre OpenCode: configuración, agentes, skills, SDK, CLI |
+| `report` | integrada | Reportar un bug de OpenCode con diagnóstico |
+
+### MCP
+
+Declarados en `~/.config/opencode/opencode.jsonc` (ámbito global):
+
+| Servidor | Tipo | Endpoint / comando | Para qué |
+|---|---|---|---|
+| `github` | local | `npx -y @modelcontextprotocol/server-github` (token vía `GITHUB_TOKEN`) | Issues, PRs, commits, búsqueda en repos |
+| `puppeteer` | local | `npx -y @modelcontextprotocol/server-puppeteer` | Automatización de navegador |
+| `gh_grep` | remote | `https://mcp.grep.app` | Buscar código real en repos públicos de GitHub |
+| `context7` | remote | `https://mcp.context7.com/mcp` | Documentación actualizada de librerías y frameworks |
+
+> ⚠️ **`puppeteer` está declarado y habilitado pero no se expone**: no aparece
+> entre las herramientas de la sesión (solo `github`, `gh_grep` y `context7`).
+> Revisar si se necesita automatización de navegador.
+
+### Criterio de uso
+
+- `context7` **antes** de escribir contra una API de terceros (Gradle, Paper, Fabric, JUnit…).
+- `gh_grep` / `github` para ver cómo lo resuelven proyectos reales, no de memoria.
+- `auditoria-seguridad-calidad` + `automated-test-engineer` al revisar código Java propio.
+- `architecture-decision-records` cuando una decisión estructural merezca ADR.
+- `release-notes` al cerrar una tanda de trabajo.
+- `juzgar-rubrica` para refrescar la rúbrica de madurez (ver `tools/project-metrics/`).
+
+---
+
 ## RESUMEN DE LO HECHO (desde auditoría 2026-08-16)
 
 ### FASE 0 — SEGURIDAD Y GITHUB ✅
