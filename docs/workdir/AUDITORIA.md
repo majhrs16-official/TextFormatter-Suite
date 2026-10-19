@@ -1,866 +1,1112 @@
 # Auditoría técnica — iFlow (VM `src/iflow/` + compilador `tools/iflow-compiler/`)
 
-> **Documento de auditoría de solo lectura.** No se modificó código, artefactos ni configuración del repositorio. Los únicos archivos escritos durante esta auditoría fueron este informe y los artefactos de build/test regenerados por las herramientas de Gradle/Node. Las verificaciones experimentales se ejecutaron en el árbol de trabajo del propio repositorio.
+> **Documento de auditoría de solo lectura.** No se modificó código, artefactos ni
+> configuración del repositorio. Los únicos archivos escritos durante esta auditoría fueron
+> este informe y los artefactos regenerados por Gradle/Node en `build/` (no versionados).
 >
-> **Esquema de numeración (declaración obligatoria):** este es el **segundo** informe de auditoría sobre el alcance. El primero (commit `5ade855`, ya en `docs/workdir/AUDITORIA.md` antes de sobrescribirse, preservado en Git vía `7455c73`) usó el namespace `IFLOW-AUD-001…018`. Para no colisionar con esos IDs —que siguen referenciándose en `docs/workdir/PLAN.md`— **los hallazgos de este informe continúan la serie a partir de `IFLOW-AUD-019`**.
+> **Esquema de numeración (declaración obligatoria):** este es el **tercer** informe sobre el
+> alcance. El primero usó `IFLOW-AUD-001…018` y el segundo `IFLOW-AUD-019…030`. Para no
+> colisionar con esos IDs —que siguen referenciándose en `docs/workdir/PLAN.md` y en el
+> código (`IFLOW-AUD-023`, `IFLOW-AUD-027`, `IFLOW-AUD-028`, `IFLOW-AUD-029`)— **los hallazgos
+> de este informe continúan la serie a partir de `IFLOW-AUD-031`**.
 >
-> **Etiquetas de evidencia:** **HECHO** (demostrado por código/config/tests/binarios), **INFERENCIA** (conclusión razonable a partir del código) y **HIPÓTESIS** (requiere benchmark/ejecución para confirmarse). Se aplican a cada afirmación relevante.
+> **Etiquetas de evidencia:** **HECHO** (demostrado por código/config/tests/binarios),
+> **INFERENCIA** (conclusión razonable a partir del código) y **HIPÓTESIS** (requiere
+> benchmark o ejecución específica para confirmarse). Se aplican a cada afirmación relevante.
 
 ---
 
-## 1. Fecha, hora UTC y commit auditado
+## 1. Resumen ejecutivo
 
-- **Fecha/hora UTC de la auditoría:** inicio `2026-10-17T22:45:24Z` · cierre `2026-10-17T22:58Z`.
-- **Repositorio:** `/home/majhrs16/Documentos/textformatter-suite` (checkout local; no se clonó).
-- **Rama:** `main`.
-- **Commit (HEAD):** `dacf6c75606d08a0a10344b2f7245ecd8ded7ed8` — *docs(plan): confirm the handle-based memory model is obsolete after flat memory* — 2026-10-17 18:25:24 -0400.
-- **`git status`:** limpio antes y después de las verificaciones (solo se regeneraron artefactos de `build/`, no versionados).
-- **Alcance:** **solo** `src/iflow/` y `tools/iflow-compiler/`. El resto de módulos se consultó únicamente como contexto de consumo real (`src/host`, `src/loadtest`).
-- **Toolchain:** JDK 21 (`/opt/javac/x64/21`), Gradle wrapper (8.10), Node v24, `NODE_OPTIONS=--jitless`, versión de módulo `2.1.0-SNAPSHOT`.
+iFlow es un **intérprete de 16 bits con memoria plana de 64 KB, paginación por software
+(SoftMMU de 4 KB), bus de datos explícito, DMA, periféricos MMIO (pantalla, NVRAM, PIC) y un
+ABI `HOST` v2 tipo syscall**, más un **ensamblador TypeScript de dos pasadas** que genera una
+ROM de firmware real. La política que consume el servidor (`Router`) es un `.flow` binario.
 
-**HECHO:** `git log -1` confirma el commit y su árbol limpio; no se ejecutó `git push` ni se tocó ningún fuente.
+**Estado real, con evidencia:**
+
+- El **formato binario es correcto y está alineado entre compilador y runtime**: ensamblé
+  `examples/policy.flowasm` (4209 B), lo parseé a mano y verifiqué **campo a campo** que la
+  cabecera, las constantes, las capabilities y el **SHA-256** coinciden con lo que valida
+  `ProgramImageParser`. El compilador es **determinista** (los 5 `.flow` versionados se
+  reensamblan byte-idénticos). **HECHO.**
+- Las **pruebas pasan**: `383/383` en `src/iflow` (27 ficheros) y `13/13` validaciones del
+  compilador. Cobertura jacoco: **84 % instrucciones, 71 % líneas, 70 % ramas, 91 % métodos,
+  97 % clases**. **HECHO.**
+- Los defectos centrales del informe anterior (DMA muerto, fetch que evadía la MMU, privilegio
+  de página no aplicado, `writeProperty` incapaz de mapear `scope/propId`, clon por mensaje)
+  están **corregidos** y ahora tienen test y comentario que los referencian. Ver §17.0.
+
+**Los riesgos que permanecen** son de **aislamiento de E/S** y de **semántica de fallo**:
+
+1. **La MMIO de dispositivos no comprueba ni permisos de página ni privilegio**
+   (`IFLOW-AUD-031`, Media-Alta): el apéndice de E/S (`0x0F00–0x0FFF`) vive dentro de la página
+   de BIOS, marcada R/X, y el bus lo enruta al dispositivo *antes* de la MMU. Cualquier `.flow`
+   puede escribir la NVRAM (bandera de arranque) y los registros del PIC. El modelo «el dueño de
+   la página decide» sí se aplica a la RAM, pero no a los periféricos.
+2. **Las decisiones de ruta no válidas degradan a «entregar»** (`IFLOW-AUD-034`, Media): un
+   código de decisión fuera de rango termina en `PolicyTarget.LOG`, cuyo `delivered()` es
+   `true`. Los errores de *ejecución* sí caen en `REJECT` (fail-closed); los de *contenido de la
+   decisión* no.
+3. **Las lecturas descartan el privilegio** (`IFLOW-AUD-033`): el parámetro existe en la API y
+   no se usa; es coherente con «páginas kernel legibles por el programa», así que no es una fuga,
+   pero es una firma que promete algo que no hace.
+
+**Valoración global:** cimientos sólidos y **camino crítico funcional de extremo a extremo**,
+con una implementación claramente mejor que la que describe el informe anterior. La deuda que
+queda es **acotada y localizada**: E/S sin control de acceso, *fail-open* puntual, documentación
+de endianness incorrecta y algunos mecanismos nominales. **Madurez técnica estimada del alcance:
+~7,5/10** (§18).
 
 ---
 
-## 2. Cobertura de auditoría
+## 2. Alcance y limitaciones
 
-### 2.1 Compilador `tools/iflow-compiler/`
+### 2.1 Identificación del objeto auditado
 
-| Elemento | Estado |
+| Dato | Valor |
 |---|---|
-| `src/assembler.ts` (1226 líneas) | Leído íntegro (incl. `generateFirmware`, serializadores, `debugInfo`) |
-| `src/cli.ts` (115), `src/index.ts` (9), `src/types.ts` (289) | Leídos |
-| `package.json`, `tsconfig.json`, `README.md` | Leídos |
-| `test/validation/run.js` + `cases.json` + 14 fixtures `.flowasm` | Leídos y **ejecutados** |
-| `npm run build` (tsc) + `node test/validation/run.js` | **13/13 OK** |
-| `dist/` | Verificado **no versionado** en Git (`git ls-files dist` vacío) |
-| Reensamblado de `firmware.flowasm`, `simple.flowasm`, `main_only.flowasm` | **Byte-idéntico** a los `.flow` versionados (determinismo) |
+| Repositorio | `/home/majhrs16/Documentos/textformatter-suite` (checkout local) |
+| Rama | `main` |
+| Commit auditado | `84491c2` (*docs(adr): registra el descarte del modelo «CPU física»*) |
+| `git status` | Limpio antes y después de las verificaciones |
+| Fecha/hora UTC | 2026-10-19T07:41Z – 2026-10-19T08:05Z |
+| Toolchain | JDK 21.0.12 (`/opt/javac/x64/21`), Gradle 8.10 (wrapper, `--offline`), Node v24.15.0, `typescript` 5.x |
+| Alcance | `src/iflow/`, `tools/iflow-compiler/`, sus tests y la documentación que los describe |
+| Contexto (solo lectura) | `src/host` (`SuiteBootstrap`, `SuiteHost`, `VmConfigLoader`), `src/loadtest` |
 
-### 2.2 VM `src/iflow/`
+### 2.2 Qué se leyó íntegro y qué no
 
-| Elemento | Estado |
+**Leídos íntegros** (código de producción): `ProgramImage.java`, `ProgramImageParser.java`,
+`Opcode.java`, `VmMemoryMap.java`, `SoftMMU.java`, `PageTable.java`, `VmBus.java`,
+`HostServiceRegistry.java`, `PolicyResultValidator.java`, `RouteDecision.java`,
+`VmConfigLoader.java`, `PassThroughProgram.java`.
+**Leídos íntegros** (compilador): `types.ts`, `cli.ts`; de `assembler.ts` la generación de ROM,
+el emisor de instrucciones, los dos serializadores, el cálculo de hash y la resolución de
+`entryPoint`.
+**Leídos parcialmente** (regiones relevantes + `grep` dirigido): `VmPolicyEngine.java`
+(§134-333 y §420-549), `VmInterpreter.java` (bucle principal §57-140 y decodificación de
+`LI`/saltos), `ExecutionContext.java` (§183-265 y consultas puntuales).
+
+**No leídos íntegros:** `VmDmaController`, `PhysicalMemory`, `PageEntry`, `Privilege`,
+`VmDisplay`, `VmNvram`, `VmPic`, `IrqTable`, `Router`, `RouteOutcome`, `channel/*`,
+`target/*`, `ServiceResult`, `HostContext`, `VmException`, `RegisterFile`,
+`ModificationJournal`, `ExecutionContextPool` y el resto de `assembler.ts`. Sobre ellos solo se
+afirma lo que evidencia un `grep` o una llamada concreta.
+
+### 2.3 Límites declarados
+
+- **No ejecuté un arnés propio** que ensamble un `.flow` y lo ejecute en el JVM leyendo el
+  resultado. La ejecución se verificó **con las suites existentes** (que incluyen pruebas
+  end-to-end de firmware, BIOS e IRQ). El binario que ensamblé se validó **estáticamente**
+  (campos + SHA-256), no ejecutándolo.
+- **No medí rendimiento**: no hay JMH ni benchmark ejecutado. Todo juicio de coste es
+  **HECHO estructural** (complejidad de las rutas) + **HIPÓTESIS cuantitativa**.
+- **No ejecuté** el benchmark de carga ni una red Minecraft real.
+- Las líneas citadas corresponden al commit auditado; si el fichero cambia, dejan de ser válidas.
+
+---
+
+## 3. Inventario y mapa arquitectónico
+
+| Elemento | Medida |
 |---|---|
-| 26 clases Java de `src/main` (4657 líneas) | Leídas íntegras |
-| 21 clases Java de `src/test` (**288 tests**) | Leídas íntegras las clave; ejecutadas todas |
-| `./gradlew :src:iflow:test --offline --no-daemon --rerun-tasks` | `BUILD SUCCESSFUL` (15 tareas ejecutadas) |
-| XML de resultados | **tests=288, failures=0, errors=0, skipped=0** |
-| `README.md`, `build.gradle` | Leídos |
-| `docs/prompts/diseno/iflow-cpu-design.md`, `iflow-cpu-implement.md` | Leídos (mapa de memoria, ABI v2, rings, §5.3, §10, §11, §14) |
+| `src/iflow/src/main` | **35 clases Java, 6 937 líneas** |
+| `src/iflow/src/test` | **27 ficheros de test, 383 tests** |
+| `tools/iflow-compiler/src` | **1 798 líneas TS** (`assembler.ts` 1385, `types.ts` 289, `cli.ts` 115, `index.ts` 9) |
+| `.flow` versionados | `test/{firmware,simple,main_only,irq,bios_screen}.flow` + `examples/policy.flowasm` |
 
-### 2.3 Contexto externo (solo uso real)
-
-- `src/host/.../SuiteBootstrap.java` y `SuiteHost.java` — consumidores de producción de `VmConfigLoader.loadProgram` y `VmPolicyEngine`.
-- `src/loadtest/.../MessageProcessingBenchmark.java`, `EndToEndIntegrationTest.java`.
-- `docs/workdir/PLAN.md` (bitácora de remediación) y el informe anterior de `AUDITORIA.md` en Git.
-
-### 2.4 Límites declarados
-
-- **No** se ejecutó el benchmark de carga ni una red Minecraft real: toda afirmación de escalabilidad es **INFERENCIA/HIPÓTESIS**.
-- No se midió el coste real por mensaje (no hay `jmh`); los juicios de rendimiento son por traza de código → **HECHO estructural** + **HIPÓTESIS cuantitativa**.
-
----
-
-## 3. Resumen ejecutivo
-
-iFlow es un **intérprete de 16 bits con memoria plana de 64 KB, paginación por software (SoftMMU 4 KB) y un ABI `HOST` v2 estilo syscall**, más un **ensamblador TypeScript de dos pasadas** con firmware ROM real. Desde el informe anterior (commit `5ade855`) el estado ha mejorado de forma sustancial: los 18 hallazgos previos se atacaron y **17 están resueltos** (loader real con parser, inmediatos negativos, pool operativo con `journal.reset()`, `prepareInput` con acotado, `UNSUPPORTED`, ABI v2 exacta, `fetch*` física, ROM de firmware real, guard de pila, cota de pool, capabilities concedidas por el host con intersección, puerto `HostContext`, `ServiceResult.detail`, `dist/` no versionado, `npm test = validación`).
-
-Sin embargo, esta auditoría —centrada en el **eje memoria/ABI/DMA/parecido-a-hardware**— confirma un defecto central y varios asociados:
-
-1. **El `VmDmaController` es código muerto.** Se restauró en el commit `f9f96ad` (y se documentó en `README.md` y `PLAN.md`) afirmando que «el emulador lo usa para mapear y transferir memoria según la configuración del host». **Esa afirmación es falsa (HECHO):** en todo el repositorio, `VmDmaController` solo está referenciado por su propio test. La inyección de entrada y la extracción de resultados se hacen **directamente por `SoftMMU`** (`ctx.softMMU().writeBlock/getRegion/writeByte`), saltándose el DMA. **IFLOW-AUD-019 (Alta).**
-2. **El buffer de salida (`0x8000`) nunca se lee.** Se mapea R/W y se limpia en cada ejecución, pero **ninguna ruta de producción lo consume**; el resultado viaja solo por `ModificationJournal`. Es una feature de E/S muerta. **IFLOW-AUD-020 (Media).**
-3. **No hay bus ni encapsulación de memoria hacia el host:** el motor sostiene referencias directas al `SoftMMU` y el `byte[]` interno se expone mutable (`getPhysicalMemory()`), además de tres accesores de `PageTable` duplicados sin uso. **IFLOW-AUD-022 (Media/Baja).**
-4. **El fetch no pasa por la MMU:** el intérprete decodifica desde `program.code()` (heap Java), no desde la memoria paginada; el permiso `EXECUTE` de las páginas 0-1 es **nominal**. **IFLOW-AUD-023 (Media).**
-5. **El modelo de privilegios (`PageEntry.user`, `mapPageKernel`) no se aplica** y el ABI/R2-R3 se usa de forma consistente salvo en el formateo del host. **IFLOW-AUD-030 / hallazgo de ABI.**
-
-**Valoración global:** cimientos buenos y ahora **funcionales en el camino crítico** (el loader real y los servicios cableados hacen que la política compilada se ejecute de verdad). Pero el subsistema se presenta —en README y en el mensaje del commit `f9f96ad`— como más «hardware» de lo que es: **el DMA no está integrado**, no hay bus, la MMU no traduce de forma efectiva (mapeo identidad) y el fetch evade la protección. Madurez técnica estimada del alcance auditado: **~62 %** (sube desde el ~40 % del informe previo, por la remediación de 001–018, pero lastrada por el DMA/fachada falsa).
-
----
-
-## 4. Arquitectura real
-
-### 4.1 Arquitectura pretendida vs. implementada
-
-**Pretendida (README/PLAN/spec):** el host carga un `policy.flow` compilado, lo ejecuta por mensaje en la VM; la VM llama a servicios `HOST` (propiedades, estado, canales, permisos, enrutado) a través de un puerto; los cambios se registran en un journal atómico; hay una ROM de firmware con utilidades y wrappers; y el DMA centraliza el intercambio host↔VM.
-
-**Implementada (HECHO por lectura de código):**
+**Dirección de dependencias (HECHO):** `src/iflow` depende de `core-api`, `textformatter` y
+`logger` (`build.gradle`); no depende de `host` ni de `loadtest` (son consumidores). El
+compilador TS **no depende de nada de Java**: solo comparte el contrato del binario, replicado
+en `types.ts`. La única fuente de verdad en Java del mapa de memoria es `VmMemoryMap`, y el
+parser la usa para acotar secciones (`ProgramImageParser.java:65-68,85-88`), de modo que el mapa
+no puede derivar respecto al motor.
 
 ```
-                    tools/iflow-compiler (TS)
-  .flowasm ──► Assembler (2 pasadas) ──► ProgramImage ──► serializeProgramImage() ──► .flow
-                        │  (ROM firmware REAL: fw_strlen/strcpy/strcmp/memcpy/memset + wrappers HOST)
-                        ▼
-  src/host/SuiteBootstrap/SuiteHost ──► VmConfigLoader.loadProgram ──► ProgramImageParser.parse (real, SHA-256)
-                        ▼
-  new VmPolicyEngine(...) ──► setProgram(program) ──► setupProgramMappings (SoftMMU + PageTable)
-                        ▼
-  mensaje ──► VmPolicyEngine.route() ──► ExecutionContextPool.acquire()
-      │            │
-      │            ├── ctx.softMMU(new SoftMMU(loaded.softMMU))   ← clona 64 KB por mensaje
-      │            ├── ctx.hostContext(MessageHostContext)         ← puerto del host (IFLOW-AUD-016)
-      │            ├── prepareInput(): serializa texto/canal/dirección/actores en 0x7000 vía SoftMMU.writeBlock
-      │            ├── new VmInterpreter(program, ctx.softMMU(), registry)   ← clona program.code()
-      │            │        └── bucle decode desde codeCache (NO desde SoftMMU); HOST → HostServiceRegistry.invoke
-      │            │                 └── servicios leen/escriben en 0x7000 vía ctx.softMMU() (NO vía DMA)
-      │            └── PolicyResultValidator.validate() → journal.commit()/discard()
-      │
-      ▼
-  [VmDmaController]  ← NO INSTANCIADO EN PRODUCCIÓN (solo en VmDmaControllerTest)
-```
-
-### 4.2 Componentes y responsabilidades reales
-
-| Componente | Responsabilidad real |
-|---|---|
-| `Assembler` (TS) | Ensamblado 2 pasadas, firmware ROM real, serialización `.flow`, SHA-256, listing |
-| `cli.ts` | Envoltura `commander`; `-d` (solo `debugInfo` en memoria, no en el binario), `-l`, `--no-firmware` |
-| `VmConfigLoader` | **Real**: parsea el `.flow` con `ProgramImageParser`; fallback pass-through |
-| `ProgramImageParser` | Parser binario real con verificación SHA-256 y validación de versiones/límites |
-| `VmPolicyEngine` | Orquestador: permisos de canal, pool, `prepareInput`, ejecuta VM, valida, publica `LoadedProgram` atómico |
-| `VmInterpreter` | Bucle fetch/decode/execute; usa `codeCache = program.code()` (no SoftMMU) |
-| `SoftMMU` + `PageTable` + `PageEntry` | Traducción v→f y permisos R/W/X; mapeo **identidad**; `fetch*` solo usados por tests |
-| `HostServiceRegistry` | 7 servicios registrados; leen/escriben memoria vía `ctx.softMMU()`; puerto genérico `HostContext` |
-| `MessageHostContext` (inner de `VmPolicyEngine`) | Vista por mensaje: propiedades, canal, estado del host; **`writeProperty` siempre registra `SET_TEXT`** |
-| `ModificationJournal` | Journal con estados committed/discarded + `reset()` reutilizable |
-| `ExecutionContextPool` | Pool `ConcurrentLinkedQueue`, retención atómica; **ahora sí reutiliza** (`journal.reset()`) |
-| `VmDmaController` | **Código muerto en producción**: solo instanciado por `VmDmaControllerTest` |
-
-### 4.3 Dirección de dependencias
-
-`src/iflow` depende de `core-api`, `textformatter` y `logger`. `src/host` y `src/loadtest` dependen de `src/iflow`. Dirección coherente. Dentro de `vm`: `isa` (puro) ← `memory` ← `execution`/`service` ← `engine`. **HECHO.**
-
----
-
-## 5. Flujo completo del sistema (camino real observado)
-
-1. **Compilación (offline):** `node dist/cli.js prog.flowasm -o prog.flow` → `Assembler.assemble()` → 1.ª pasada (labels/directivas), 2.ª pasada (bytecode, padding, ROM de firmware con fixups) → `createResult()` (hash SHA-256) → `serializeProgramImage()`.
-2. **Arranque del host:** `SuiteBootstrap.java:99` / `SuiteHost.java:115` llaman `VmConfigLoader.loadProgram(configDir, logger)`.
-3. **Carga:** si existe `policy.flow`, se **parsea de verdad** (`ProgramImageParser.parse`), validando versión de formato, ISA ≤ 2, **ABI == 2 exacta**, límites de sección y SHA-256; si falla, cae al pass-through.
-4. **Motor:** `SuiteHost.java:121` crea `VmPolicyEngine` y `setProgram(...)`; `setupProgramMappings` puebla el `SoftMMU` (código R/X, constantes R, datos/pila/IO R/W) y publica `LoadedProgram` atómicamente.
-5. **Enrutado por mensaje (`route`):** verifica `send/receivePolicy`; adquiere contexto del pool; **clona el `SoftMMU`**; instala `MessageHostContext`; `prepareInput` (escribe el mensaje en `0x7000`); crea `VmInterpreter` y ejecuta; `PolicyResultValidator.validate`; `release`.
-6. **Resultado:** `RouteOutcome` (LOG/DROP/REJECT/REDIRECT/CHANNEL_REDIRECT/RATE_LIMIT).
-
-**Observación clave (HECHO):** ninguna etapa del intercambio host↔VM pasa por `VmDmaController`; todo va por `SoftMMU`. El DMA no aparece en el camino real.
-
----
-
-## 6. Evaluación por feature
-
-| Feature | Estado real | Evidencia |
-|---|---|---|
-| Ensamblado `.flowasm` → `.flow` | Funciona; determinista; 13/13 fixtures | Reensamblado byte-idéntico |
-| Firmware ROM por defecto | **Real y funcional** (utilidades + wrappers + fixups) | `generateFirmware`; `FirmwareIntegrationTest` |
-| Flag bare-metal (`--no-firmware`) | Funciona | `userOrigin()` |
-| Carga de `.flow` en runtime | **Real** (parser con hash y versiones) | `VmConfigLoader.loadNativeProgram` |
-| Ejecución ISA v2 | Implementada y probada (aritmética, memoria, indirecta, saltos, CALL/RET) | `VmInterpreter`, 288 tests |
-| Servicios `HOST`: permisos, routing, propiedad, estado, canal | **Cableados vía `HostContext`** | `VmPolicyEngine.createServiceRegistry` + `MessageHostContext` |
-| **Escritura de propiedad distinta de `content`** | **No soportada**: `writeProperty` siempre registra `SET_TEXT` | `MessageHostContext.writeProperty` |
-| Permisos de página R/W | Aplicados a load/store | `PageTable.translateRead/Write` |
-| **Permiso X aplicado al fetch** | **Nominal**: el intérprete lee `codeCache` | `VmInterpreter.codeCache` |
-| **DMA host↔VM** | **No integrado** (código muerto) | `grep` repo-wide; solo `VmDmaControllerTest` |
-| **Buffer de salida `0x8000`** | **Mapeado pero nunca consumido** | `grep` de `OUTPUT_BASE` solo en setup/init |
-| Modelo de anillos (ring 0/3) | **No implementado** (`PageEntry.user` ignorado) | `PageEntry.isUser` sin usos |
-| Páginas 9-15 (estado persistente) | **No mapeadas** | `setupProgramMappings` no las toca |
-| Journal atómico | Correcto; pool reutiliza | `ModificationJournal.reset()` + `ExecutionContextPool` |
-
-### 6.1 ABI v2 y uso de R2/R3 (punto secundario 3)
-
-**HECHO — consistente.** `VmInterpreter.executeHost` (líneas 503-525) expone `R0=serviceId`, `R1=options`, `R2=base`, `R3=length`, y devuelve `R0=status`, `R3=bytes`, `R4=result`; `HostServiceRegistry.invoke` recibe `argVAddr=R2`/`argLength=R3`; `ServiceResult` documenta y respeta ese contrato; el firmware (`fw_prop_read`, `fw_prop_write`, `fw_perm_check`, `fw_route_decide`, `fw_state_read/write`, `fw_channel_resolve`) coloca base en `R2` y longitud en `R3` antes de `HOST`. **La única desviación** es que `VmPolicyEngine.prepareInput` **no usa el ABI** (no es una llamada `HOST`): formatea el buffer del host directamente en `0x7000` con `writeField` (base fija, campos secuenciales). Es coherente internamente, pero implica que un programa debe conocer 0x7000 y el layout del framing fuera de banda (ver 6.3).
-
-### 6.2 Integridad de memoria (punto secundario 1)
-
-**HECHO:** el mapa de `VmMemoryMap` no presenta solapes: código 0x0000-0x1FFF (R/X), constantes 0x2000 (R), datos 0x3000-0x4FFF (R/W), pila 0x5000-0x6FFF (R/W), entrada 0x7000, salida 0x8000. La región de código reserva siempre 2 páginas, por lo que **nunca aliasa constantes** (corrección de `7e4cae5`). `SoftMMU.writeBlock` pre-valida todos los rangos antes de mutar (sin escrituras parciales ante fault). Aislamiento entre ejecuciones: el `SoftMMU` se **clona** del programa prístino en cada mensaje, y `initialize()` limpia registros, journal, `hostContext` y los 2 buffers de I/O → **no hay fuga** de datos entre mensajes. Puntos débiles: (a) `readBlock/writeBlock` no validan `length < 0` en la fachada `SoftMMU` (solo el `VmDmaController` —muerto— y el engine lo hacen); (b) no hay traducción real (mapeo identidad), luego la «protección» se limita a permisos por página; (c) el `byte[]` físico puede escaparse mutable.
-
-### 6.3 ¿Mapea 1:1 a un diseño HDL? (punto secundario 4)
-
-**Parcial (INFERENCIA sobre HECHO de código).** Se parecen a hardware: la CPU con bucle fetch/decode/execute, el banco de registros unificado (`RegisterFile`, 12 registros), la «ROM» (firmware en 0x0000), la «RAM» (datos/pila), el «IO» (0x7000/0x8000) y la tabla de páginas con permisos. **No** se parecen a hardware y serían difíciles de sintetizar:
-
-- **No hay bus**: el host tiene referencias directas al `SoftMMU` y a un `byte[]`; los servicios acceden por método, no por un bus de direcciones/datos con ciclos.
-- **El fetch no usa la MMU** (lee un array Java), así que no hay una «memoria de instrucciones» real.
-- **El DMA no está integrado** (sería el canal de E/S del hardware).
-- **La MMU no traduce** (frames = direcciones virtuales): no hay paginación efectiva ni TLB.
-- **No hay controlador de interrupciones**: `HOST` es una llamada síncrona, no un vector de IRQ.
-- **No hay anillos**: `PageEntry.user` y `mapPageKernel` existen pero nadie los consulta.
-
-### 6.4 Veredicto: DMA, «parecido a hardware» y cambios mínimos hacia HDL mapeable (punto secundario 5)
-
-- **DMA:** **NO integrado.** No es una hipótesis: no hay ni una referencia de producción. El commit `f9f96ad` y `PLAN.md` (líneas 1226-1237) documentan lo contrario (afirmación **falsa**). Debe decidirse: (a) integrarlo de verdad como la única puerta de E/S host↔VM (entrada del mensaje y extracción del buffer de salida), o (b) eliminarlo y corregir README/PLAN.
-- **Hardware-likeness:** ~media. La forma (CPU/memoria/paginación/firmware/IO) es la de un procesador; pero sin bus, sin DMA, sin traducción real y sin privilegios es todavía «una máquina virtual con forma de CPU», no un diseño sintetizable.
-- **Cambios mínimos hacia un diseño mapeable a HDL:** (1) introducir un **bus explícito** (una interfaz `Bus`/`MemoryPort` que sea la única vía de acceso host↔memoria, y hacer que el intérprete y los servicios la usen); (2) **integrar el DMA** como el adaptador de ese bus para E/S (o eliminarlo si se renuncia a la metáfora); (3) rutear el **fetch por la MMU** (`SoftMMU.fetchByte`/`fetchWord` ya existen y ya comprueban EXECUTE) en vez de `codeCache`; (4) hacer que la **MMU traduzca** de verdad (no identidad) para separar espacio virtual y físico; (5) aplicar **privilegios** (`PageEntry.user` + `mapPageKernel`) a un modelo de ring 0/3. Estos cinco cambios no requieren reescribir: reutilizan piezas ya presentes.
-
----
-
-## 7. Evaluación de código
-
-**Fortalezas (HECHO):**
-- `VmMemoryMap` como fuente única de direcciones, consumida por parser, engine y contexto.
-- `ProgramImage`/`ProgramImageParser` inmutables, con *defensive copies* y verificación SHA-256.
-- `SoftMMU.writeBlock` pre-valida rangos completos antes de mutar.
-- `fetch*` ya comprueba solo EXECUTE (corrección de AUD-007) — aunque el intérprete no los use.
-- Errores tipados (`VmException.Code`) con captura de IP.
-- ABI v2 bien documentada y coherente con `ServiceResult`; puerto `HostContext` formal (AUD-016); `grantedCapabilities` interseca solicitadas ∩ concedidas (AUD-015); `ServiceResult.detail` conserva el motivo (AUD-017).
-- Pool realmente operativo: `ExecutionContext.initialize()` usa `journal.reset()` (no `clear()`), por lo que la reutilización ya no lanza.
-
-**Debilidades (HECHO):**
-- **DMA muerto** documentado como vivo (`README.md:20,166,223`; `PLAN.md:1226-1237`; commit `f9f96ad`).
-- `SoftMMU` expone **cuatro** accesores equivalentes a la misma `PageTable` (`getPageTable`, `getPageTableDirect`, `getPageTableForInspection`, `getPageTableForMutation`) y los tres últimos **no se usan en ningún sitio**; además `getPhysicalMemory()` filtra el `byte[]` interno mutable.
-- Estado duplicado/muerto en `ExecutionContext`: `pageTable` (siempre `null` en producción; `setPageTable` solo en tests) y getters `programId/messageId/actorId` que se asignan pero nunca se leen.
-- `MessageHostContext.writeProperty` ignora `scope`/`propId` y siempre hace `SET_TEXT` → `PROPERTY_WRITE` no puede cambiar canal/idioma/color ni otras propiedades.
-- `HostServiceRegistry` mantiene campos inyectables muertos (`placeholderResolver`, `translationDetector`) y declara constantes de servicio no registradas (`PROPERTY_EXISTS`, `PERMISSION_QUERY`, `ROUTE_REDIRECT`, `ROUTE_RATE_LIMIT`, `TRANSFORM_APPLY`, `CHANNEL_POLICY`, `MESSAGE_CLONE`, `MESSAGE_ID`).
-- Duplicación de `createPassThroughProgram()` entre `VmConfigLoader` (con stubs `Opcode`/`HostServiceRegistry` internos) y `VmPolicyEngine`.
-- `-d` no emite sección de debug en el binario (documentado honestamente en el README del compilador, pero sigue siendo un no-op de salida).
-
-Complejidad: la clase mayor es `VmInterpreter` (627 líneas) seguida de `VmPolicyEngine` (524) y `HostServiceRegistry` (503). Legibilidad buena.
-
----
-
-## 8. Clean Architecture
-
-- **Capa ISA** (`Opcode`, `ProgramImage`, `RegisterFile`, `VmException`): dominio puro, sin infraestructura. **Bien.**
-- **Capa ejecución** (`VmInterpreter`, `ExecutionContext`, `ModificationJournal`, `ExecutionContextPool`): orquesta; `VmInterpreter` conoce `HostServiceRegistry` (acoplamiento aceptable).
-- **Capa engine**: `VmPolicyEngine` sigue mezclando composición, configuración de memoria, serialización de entrada y publicación atómica. Mayor infractor de SRP.
-- `PolicyResultValidator` (engine) construye `Message`/`Actor` de `core-api` y conoce `ChannelRegistry` concreto de `textformatter`.
-
-**Veredicto (INFERENCIA):** separación por paquetes razonable, pero **no hay puertos/adaptadores formales** salvo el recién añadido `HostContext` (que sí es un puerto de salida correcto). No se puede declarar «Clean Architecture correcta» solo por nombres de paquete (§26).
-
----
-
-## 9. Hexagonal Architecture
-
-- El núcleo es la VM; el **puerto de salida** ahora es `HostContext` (interfaz explícita implementada por `MessageHostContext` + `HostContext.NONE`): **mejora real** respecto al informe previo (lambdas sueltas).
-- `Router` (`core-api`) es el **puerto de entrada** formal: `VmPolicyEngine implements Router`. **Bien.**
-- Persisten acoplamientos concretos: `PolicyResultValidator`↔`ChannelRegistry` y el motor sostiene un `SoftMMU` concreto en lugar de un puerto de memoria/bus.
-
-**Veredicto (INFERENCIA):** hexagonal **parcial-buena**: puerto de entrada formal y puerto de salida ya formalizado; falta el puerto de **memoria/bus** (que es precisamente lo que permitiría el DMA y el mapeo HDL).
-
----
-
-## 10. Modularidad
-
-- Dos módulos separados por el formato `.flow`: compilador (TS) y VM (Java). Buena frontera.
-- `isa`/`execution`/`memory`/`service`/`engine` bien delimitados.
-- `memory` contiene la clase muerta `VmDmaController` sin marcarla como tal, lo que sigue confundiendo al lector.
-- `tools/iflow-compiler` ya tiene validación CLI (`npm test`) y un barrel real (`src/index.ts`).
-
----
-
-## 11. Separación de responsabilidades
-
-| Clase | SRP | Comentario |
-|---|---|---|
-| `Assembler` | Parcial | Parsing + codegen + firmware + hash + serialización |
-| `VmPolicyEngine` | Baja | Permisos de canal + pool + memoria + I/O + validación + host view |
-| `HostServiceRegistry` | Parcial | Registro + 7 servicios + inyección + campos muertos |
-| `VmInterpreter` | Alta | Fetch/decode/execute bien delimitado |
-| `SoftMMU`/`PageTable` | Alta | Traducción y permisos |
-| `PolicyResultValidator` | Alta | Validación de resultado |
-| `ExecutionContext` | Media | Configuración + estado + host port + memoria + journal |
-
----
-
-## 12. Seguridad
-
-- **Capabilities:** ahora `grantedCapabilities(requested, granted)` interseca lo que el programa **solicita** con lo que el host **concede** (AUD-015 resuelto). La allowlist del host es la unión de `declareCapability` + `requiredCapabilities` de los servicios registrados. **HECHO.**
-- **Fetch sin EXECUTE efectivo:** el intérprete lee `codeCache` (heap Java); la página de código está mapeada R/X pero el permiso no se consulta en el fetch. Mitigaciones de facto: `IP` acotado a `codeSize` y `checkGPR` impide `LI`/aritmética sobre IP/SP/FP. **HECHO/INFERENCIA.**
-- **Sin privilegios de kernel/user:** `PageEntry.user` y `mapPageKernel` existen pero **nadie los comprueba**; el modelo ring 0/3 de la spec §14 no está implementado. **HECHO.**
-- **Escritura de propiedades limitada pero mal tipada:** `PROPERTY_WRITE` solo puede reescribir el texto (siempre `SET_TEXT`), lo que de hecho **reduce** la superficie de ataque (no permite cambiar canal/idioma arbitrariamente), pero por accidente, no por diseño.
-- **Integridad binaria:** el parser verifica SHA-256 y ABI/ISA exactas: un `.flow` manipulado se rechaza al cargar. **HECHO.**
-
-**Veredicto:** seguridad **media**: el modelo de capabilities quedó correcto y el parser es estricto, pero la protección de ejecución y los privilegios son nominales.
-
----
-
-## 13. Rendimiento
-
-**HECHO estructural (por traza de código), HIPÓTESIS en magnitud:**
-
-- **Clonado de MMU por mensaje:** `VmPolicyEngine.route` hace `new SoftMMU(loaded.softMMU)` → `physicalMemory.clone()` (64 KB) + `pageTable.copy()` por cada `route()`.
-- **Clon de código por mensaje:** se crea `new VmInterpreter(loaded.program, ...)` en cada `route()`; su constructor hace `this.codeCache = program.code()` → `ProgramImage.code()` devuelve `code.clone()` (hasta 8 KB por mensaje). El intérprete podría reutilizarse con el programa (es inmutable).
-- **Limpieza de I/O por byte:** `ExecutionContext.initialize()` ejecuta **8192** `softMMU.writeByte` (4096 de entrada + 4096 de salida), cada uno con traducción + comprobación de permisos, por cada mensaje.
-- **Pool:** ya reutiliza el `ExecutionContext`, así que se evitan crear registros/journal nuevos, pero **no** el clon de MMU/clon de código/limpieza, que siguen siendo por mensaje.
-- **`UUID.randomUUID()` por ruta** seguía presente en informes previos; sigue (`ctx.executionId(UUID...)`).
-- `isContiguous` + `arraycopy` están bien; el *slow path* por byte es aceptable.
-
-**HIPÓTESIS:** bajo miles de mensajes/s, el clon de 64 KB + el clon de código + los 8192 `writeByte` dominarían el perfil. No se midió (sin benchmark).
-
----
-
-## 14. Concurrencia
-
-- `loadedProgramRef` es `AtomicReference<LoadedProgram>`: publicación coherente programa+memoria. **Bien.**
-- `ExecutionContextPool.release` decide retener/descartar bajo `synchronized(this)` con `AtomicInteger` para los contadores; ya **no** hay *check-then-act* en `available.size() < maxSize`. `created` se ajusta al descartar y al cerrar. **HECHO (AUD-010 resuelto).**
-- `hostState` es `ConcurrentHashMap` (estado persistente entre mensajes, por diseño). `RateLimiter` se comparte; se asume thread-safe (solo lectura).
-- Cada mensaje usa su propio `SoftMMU` clonado, por lo que no hay carrera sobre la memoria de ejecución.
-
-**Veredicto:** correcta para el camino actual; el punto débil ya no es la concurrencia del pool, sino la **copia de estado por mensaje**.
-
----
-
-## 15. Escalabilidad
-
-- `setProgram` es atómico y permite hot-reload: buena base.
-- Los cuellos reales son de implementación (clon de MMU 64 KB + clon de código + limpieza por byte), no de diseño.
-- El estado persistente entre mensajes existe (`hostState`) pero **no** hay estado persistente *en la memoria de la VM* (páginas 9-15 sin mapear, capability inexistente).
-
-**INFERENCIA:** para escala network-level, el coste por mensaje actual es un lastre; haría falta MMU compartida de solo lectura + COW, reutilizar el `VmInterpreter` por programa y evitar el clon de código.
-
----
-
-## 16. Testing
-
-- **288 tests, 0 fallos, 0 errores, 0 skipped** (leído del XML tras `--rerun-tasks`). El README declara 288 → **coincide (ya no hay drift en el recuento)**.
-- Cobertura amplia: ISA completa, memoria/paginación, permisos, `fetch*`, bloques, servicios, integración, pool, capa de config.
-- `VmDmaControllerTest` (24 tests) prueba un componente **que no se usa en producción**: da una falsa sensación de que el DMA forma parte del sistema. **HECHO.**
-- **Sin cobertura efectiva** de: la ruta DMA integrada (no existe), el consumo del buffer de salida (no existe), la escritura de propiedades distintas de `content`, `PageEntry.user`/`mapPageKernel`, y el fetch con permiso EXECUTE real.
-- `FirmwareIntegrationTest` ahora es portable y asertivo (AUD-014 resuelto).
-- `jacocoTestCoverageVerification` exige solo `LINE ≥ 0.25` (bajo).
-
----
-
-## 17. Mantenibilidad
-
-- Código legible, Javadoc de calidad en las clases clave (`VmMemoryMap`, `HostServiceRegistry`, `ServiceResult`).
-- La coexistencia de la clase muerta `VmDmaController` con documentación que la presenta como viva (README/PLAN/commit) es el principal foco de desinformación.
-- `HostServiceRegistry` acumula constantes de servicio no registradas y campos inyectables muertos.
-- Duplicación del pass-through en dos clases.
-
----
-
-## 18. Historial / evolución (Git)
-
-```
-dacf6c7 docs(plan): confirm the handle-based memory model is obsolete after flat memory  (HEAD)
-7455c73 docs(audit): add the iFlow technical audit report
-f9f96ad fix(iflow): restore VmDmaController removed by AUD-018     ← restauración + afirmación de uso NO respaldada
-49f225e docs(plan): close the P2/P3 remediation (AUD-010/011/012/013/017/018)
-afc9a77 chore(compiler): stop tracking dist/, add a real entry point and fix npm test (AUD-013)
-e9dabba docs(iflow): align the READMEs with the code (AUD-012)
-82668e9 refactor(iflow): remove the dead per-handle memory-region subsystem (AUD-018)
-1fbdb64 fix(iflow): make the context pool bound real and its counters consistent (AUD-010)
-e30a6a9 fix(iflow): keep host-service failure reasons instead of discarding them (AUD-017)
-f60b99c fix(iflow): ABI version is v2 and the parser requires an exact match (AUD-011)
-26a5985 refactor(iflow): formal HostContext port for HOST services (IFLOW-AUD-016)
-a410a31 iflow: ISA v2 (LDBI/LDWI/STBI/STWI) + real firmware ROM
-e446db2 fix(iflow): fetch* reads physical memory after translateExecute (AUD-007)
-```
-
-**Lectura (HECHO + INFERENCIA):** hubo una campaña de remediación real que resolvió 17 de los 18 hallazgos previos. La excepción es la «rectificación» de AUD-018: se restauró `VmDmaController` con la **suposición de que estaba en uso** (el propio mensaje del commit lo dice: «The AUD-018 cleanup inferred VmDmaController was dead because only its own test referenced it. That inference was wrong…»). Esta auditoría demuestra que **la suposición inversa también es falsa**: sigue sin usarse.
-
----
-
-## 19. Clasificación de hallazgos
-
-> IDs en el namespace `IFLOW-AUD-*`, **continuando desde `IFLOW-AUD-019`**. Etiquetas: **HECHO**, **INFERENCIA**, **HIPÓTESIS**. Clasificación obligatoria por hallazgo: ID, Tipo, Severidad, Confianza, Ubicación (`Archivo -> Clase -> Método`), Descripción, Causa, Impacto funcional, Impacto rendimiento/escalabilidad, Condiciones para reproducir, Evidencia, Solución sugerida, Código refactorizado.
-
----
-
-### [IFLOW-AUD-019]
-
-**Tipo:** Defecto de diseño (código muerto presentado como productivo) + desinformación documental
-**Severidad:** Alta
-**Confianza:** Confirmado (HECHO, `grep` repo-wide)
-**Ubicación:** `src/iflow/.../vm/memory/VmDmaController.java -> VmDmaController` (toda la clase, 230 líneas); consumidores **inexistentes** en `vm/engine/VmPolicyEngine.java`, `vm/execution/VmInterpreter.java`, `vm/service/HostServiceRegistry.java`; documentación en `src/iflow/README.md:20,166,223` y `docs/workdir/PLAN.md:1226-1237`; commit `f9f96ad`.
-
-**Descripción:** `VmDmaController` es la fachada de transferencia de memoria (read/write/copy/move/validateRange con permisos). **No se instancia ni se invoca en ninguna ruta de producción.** El intercambio host↔VM se hace por `SoftMMU` directamente: `VmPolicyEngine.prepareInput` → `ctx.softMMU().writeBlock(...)`; `HostServiceRegistry.doPropertyRead/doStateRead/doChannelResolve` → `ctx.softMMU().writeBlock(...)`; `doPropertyWrite/doStateWrite/doPermissionCheck/doRouteDecision` → `ctx.softMMU().getRegion(...)`; el intérprete → `mmu.readByte/writeWord/...`. El commit `f9f96ad` restauró la clase afirmando que «the emulator uses [it] to map and move memory according to the host configuration»; `PLAN.md` lo repite. **Ambas afirmaciones son falsas.**
-
-**Causa:** la determinación previa (AUD-018) de que era muerta era correcta; la rectificación se basó en la descripción de la clase, no en sus referencias reales. La restauración revirtió un borrado correcto sin reconectar la clase al motor.
-
-**Impacto funcional:** ninguno directo (el sistema funciona sin ella), pero **rompe el modelo mental documentado**: cualquier lector/ingeniero que intente razonar sobre el flujo de E/S creerá que pasa por el DMA y no lo hará. Es deuda activa y una falsa promesa de arquitectura.
-
-**Impacto en rendimiento/escalabilidad:** neutro hoy; si se «integrara» sin diseño, podría añadir una capa de copia extra.
-
-**Condiciones para reproducir:** `grep -rn "VmDmaController" --include=*.java` → solo la propia clase y `VmDmaControllerTest`; `grep -rn "new VmDmaController" src/iflow/src/main` → **vacío**.
-
-**Evidencia (HECHO):** salida del `grep` anterior; `f9f96ad` con su mensaje; ausencia de cualquier instanciación en `src/main`.
-
-**Solución sugerida (dos alternativas explícitas):**
-- **(A) Integrarlo de verdad** como única puerta de E/S: que `prepareInput`, la extracción del buffer de salida y los servicios de buffer usen un `VmDmaController` inyectado en `ExecutionContext` en vez de `softMMU()` directo. Es el paso coherente con «mapear a HDL» (el DMA pasa a ser el canal de E/S del bus).
-- **(B) Eliminarlo** (junto con su test) y corregir `README.md` y `PLAN.md` para no vender una feature inexistente. Es el camino mínimo y honesto si no se va a integrar.
-
-Recomendación: **(B) a corto plazo**, **(A)** solo si se aborda el rediseño de bus/DMA descrito en 6.4.
-
-**Código refactorizado (opción B, corrección documental):**
-```md
-<!-- src/iflow/README.md — sección Componentes -->
-- | `VmDmaController` | Transferencias de memoria validadas ... |
-+ (eliminar la fila; el modelo de E/S vigente es SoftMMU)
-```
-```md
-<!-- docs/workdir/PLAN.md -->
-- **Corrección:** ... **sí se usa** por el emulador ...
-+ **Corrección de la corrección:** `VmDmaController` NO está referenciado por
-+ ninguna ruta de producción (HECHO, IFLOW-AUD-019). Se elimina el 2026-10-17.
+ .flowasm ──(iflow-as / tsc)──▶ .flow (header+código+constantes+caps+SHA-256)
+                                    │
+                    VmConfigLoader.loadProgram  ──(ProgramImageParser.parse)──▶ ProgramImage
+                                    │
+                          VmPolicyEngine.setProgram ─▶ setupProgramMappings(SoftMMU)
+                                    │
+   mensaje ──▶ route() ─▶ [MachineLock] ─▶ ExecutionContext (pool) ─▶ VmInterpreter
+                                    │            │                        │
+                                    │        HostContext            VmBus ─▶ SoftMMU ─▶ PhysicalMemory
+                                    │     (propiedades/estado)      │  └─▶ VmDevice (display/NVRAM/PIC)
+                                    └──▶ PolicyResultValidator ─▶ RouteOutcome ─▶ SuiteHost
 ```
 
 ---
 
-### [IFLOW-AUD-020]
+## 4. Flujo completo compiler → runtime → host
 
-**Tipo:** Defecto de diseño (feature de I/O inerte)
-**Severidad:** Media
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/memory/VmMemoryMap.java:68` (`OUTPUT_BASE=0x8000`); `vm/engine/VmPolicyEngine.setupProgramMappings` (líneas 280-281, mapeo R/W); `vm/execution/ExecutionContext.initialize` (líneas 129-135, limpieza).
+1. **Compilación** (`cli.ts:56-74`): se lee el `.flowasm`, se ensambla (2 pasadas), se serializa
+   y se escribe el `.flow`. La ROM de firmware se antepone por defecto
+   (`assembler.ts:138-141`) y el `entryPoint` resultante es **`fw_reset`**, no el `main` del
+   usuario (`assembler.ts:1313-1321`).
+2. **Carga** (`VmConfigLoader.java:25-55`): se busca `policy.flow`; si existe, se parsea (que
+   valida versiones, cotas de sección y SHA-256) y si falla **cae a pass-through** con un
+   `warn`. Si no existe, `PassThroughProgram.INSTANCE`.
+3. **Boot** (`VmPolicyEngine.setProgram` → `setupProgramMappings`, §269-349): el código se
+   escribe por el bus **supervisor** y luego se **degrada a R/X** con `mprotect`; las constantes
+   pasan a R; datos/pila/E-S/usuario se mapean R/W; acto seguido `freeze()` y `attach()` de los
+   tres periféricos.
+4. **Ejecución** (`route()`, §177-263): bajo `machineLock`, se toma un contexto del *pool*, se
+   le instala la vista del mensaje (`MessageHostContext`), se serializa el mensaje en el buffer
+   de entrada y se levanta la IRQ 0; corre `interpreter.execute(ctx)`.
+5. **Resultado** (`PolicyResultValidator.validate`): si hubo error fatal → `REJECT`; si el
+   journal cancela → `REJECT`/`DROP`; en otro caso se aplica el journal al mensaje y se
+   **commitea**, produciendo un `RouteOutcome`.
 
-**Descripción:** El buffer de salida (`0x8000`) se mapea R/W y se pone a cero en cada ejecución, pero **ninguna ruta de producción lo lee**. Los resultados de la VM salen exclusivamente por `ModificationJournal` → `PolicyResultValidator`. No existe un mecanismo que extraiga `0x8000` de vuelta al host análogo a `prepareInput`.
-
-**Causa:** la «E/S» de este emulador es asimétrica: hay una entrada materializada por el host, pero no hay una salida consumida por el host; el canal de resultados es el journal.
-
-**Impacto funcional:** un programa que escriba resultados en `0x8000` (por ejemplo, para devolver una cadena transformada) **verá esos bytes ignorados**. La única forma de modificar el mensaje es por servicios (`PROPERTY_WRITE`→journal), lo que limita la expresividad del modelo de memoria.
-
-**Impacto en rendimiento/escalabilidad:** bajo, pero se paga la limpieza de 4096 bytes por mensaje por una página inútil.
-
-**Condiciones para reproducir:** programa que escribe en `0x8000` y `HALT`; inspeccionar `RouteOutcome`: el mensaje no refleja la escritura.
-
-**Evidencia (HECHO):** `grep -rn "OUTPUT_BASE\|outputBufferVAddr"` en `src/iflow/src/main` solo aparece en `setupProgramMappings`, `ExecutionContext` (constantes/getter) y tests; ninguna lectura en producción.
-
-**Solución sugerida:** o (a) definir y consumir el contrato del buffer de salida (el engine lee `0x8000` tras la ejecución y lo incorpora al resultado, p. ej. como texto), o (b) dejar de mapearlo/limpiarlo y documentar que la salida es el journal. La opción (a) es la que da sentido a la página 8.
-
-**Código refactorizado (opción a, esquema):**
-```java
-// Tras interpreter.execute(ctx), antes del validador:
-byte[] out = ctx.softMMU().getRegion(ctx.outputBufferVAddr(), ctx.ioBufferSize());
-int len = 0; while (len < out.length && out[len] != 0) len++;
-if (len > 0) {
-    ctx.journal().record(new ModificationJournal.Entry(
-        ModificationJournal.OpType.SET_TEXT,
-        new String(out, 0, len, StandardCharsets.UTF_8), "output-buffer"));
-}
-```
+**HECHO relevante de diseño:** existe **una sola máquina viva por programa**. `route()` no hace
+*fork* de la memoria: el `SoftMMU` cargado es la memoria de la máquina y las escrituras del
+programa persisten al siguiente mensaje (`VmPolicyEngine.java:193-198`, `VmMemoryMap.java:77-87`).
+Esto convierte la «persistencia implícita» en una **feature real**, no documental: el
+`ExecutionContext.initialize()` solo limpia los buffers de E/S (§218-226), nunca las páginas de
+datos ni la RAM de usuario.
 
 ---
 
-### [IFLOW-AUD-021]
+## 5. Especificación efectiva de la ISA
 
-**Tipo:** Contradicción spec↔implementación (materialización de entrada)
-**Severidad:** Media
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/engine/VmPolicyEngine.prepareInput` (líneas 284-325); spec `docs/prompts/diseno/iflow-cpu-implement.md:564-566` y `iflow-cpu-design.md:164-168`.
+**Codificación (HECHO, `Opcode.instructionSize`):** la longitud la determina el opcode.
 
-**Descripción:** La spec dice literalmente «No hay regiones, no hay handles, **no hay búferes de entrada aislados**. El programa interactúa directamente con la memoria plana» y «No debe ser obligatorio copiar el objeto `Message` completo… antes de ejecutar cada programa». En cambio, `prepareInput` **copia** texto, canal, dirección, emisor y destinatario al buffer `0x7000` (con terminadores NUL) en **cada** mensaje, mediante `writeField`. Es una materialización *a priori* de los datos del mensaje, exactamente lo que la spec desaconseja.
-
-**Causa:** `prepareInput` es anterior al puerto `HostContext`; cuando se añadió el puerto (AUD-016), las propiedades pasaron a consultarse bajo demanda por `HOST`, pero el framing de `0x7000` se mantuvo por compatibilidad con el firmware/`MessageHostContext`.
-
-**Impacto funcional:** duplica la fuente de verdad: los mismos datos están en el buffer (para los servicios de buffer) y en el `HostContext` (para los servicios de propiedad). Un cambio debe mantener ambos. Además fija un layout fuera de banda que el programa debe conocer, contradiciendo la genericidad perseguida.
-
-**Impacto en rendimiento/escalabilidad:** se copian y serializan los datos del mensaje por cada ruta (coste O(bytes)); evitable si solo se consulta lo necesario por `HOST`.
-
-**Condiciones para reproducir:** inspeccionar `0x7000` tras `route()` con cualquier mensaje.
-
-**Evidencia (HECHO):** código de `prepareInput`/`writeField`; texto de la spec citado.
-
-**Solución sugerida:** alinear spec e implementación. O bien (a) eliminar el framing y hacer que los servicios lean siempre de `HostContext` (lo que exige adaptar los servicios de buffer que hoy leen `ctx.softMMU()`), o (b) documentar `0x7000` como contrato estable del engine y ajustar la spec. Recomiendo (b) a corto plazo por coste/riesgo, con la nota de que los servicios de *buffer* deben convivir con los de *propiedad*.
-
----
-
-### [IFLOW-AUD-022]
-
-**Tipo:** Defecto de diseño (encapsulación/fuga de representación + API duplicada)
-**Severidad:** Media-Baja
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/memory/SoftMMU.java -> getPhysicalMemory` (líneas 213-216), `-> getPageTableDirect` (59), `-> getPageTableForInspection` (209), `-> getPageTableForMutation` (219), `-> getPageTable` (39).
-
-**Descripción:** `getPhysicalMemory()` devuelve el **mismo** `byte[]` interno (mutable), lo que permite a cualquier llamante mutar memoria saltándose permisos y bounds. Además hay **cuatro** accesores que devuelven la misma `PageTable`, y los tres «auxiliares» **no se usan en ninguna parte del repositorio**.
-
-**Causa:** residuo de una API preparada para «acceso directo del intérprete» que finalmente no se usó (el intérprete lee `codeCache`).
-
-**Impacto funcional:** hoy nulo (nadie lo llama), pero es una **fuga de encapsulación latente**: el primer consumidor que use `getPhysicalMemory()` romperá el modelo de protección sin darse cuenta.
-
-**Impacto en rendimiento/escalabilidad:** ninguno inherente; el peligro es de corrección/seguridad futura.
-
-**Condiciones para reproducir:** `grep -rn "getPhysicalMemory\|getPageTableDirect\|getPageTableForInspection\|getPageTableForMutation" --include=*.java src` → solo definiciones.
-
-**Evidencia (HECHO):** el `grep` anterior.
-
-**Solución sugerida:** eliminar `getPhysicalMemory()`, `getPageTableDirect`, `getPageTableForInspection` y `getPageTableForMutation` (dejar `getPageTable()` como única vía); si en el futuro se necesita acceso rápido, exponer un `MemoryPort`/bus explícito con métodos acotados y comprobados.
-
-**Código refactorizado (esquema):**
-```java
-// SoftMMU.java — mantener solo:
-public PageTable getPageTable() { return pageTable; }
-// y un puerto de memoria explícito si hiciera falta:
-public interface MemoryPort {
-    int readByte(int vaddr);
-    void writeByte(int vaddr, int value);
-    void readBlock(int vaddr, byte[] dst, int off, int len);
-    void writeBlock(int vaddr, byte[] src, int off, int len);
-}
-```
-
----
-
-### [IFLOW-AUD-023]
-
-**Tipo:** Defecto de diseño / Seguridad (protección de ejecución nominal)
-**Severidad:** Media
-**Confianza:** Confirmado (HECHO) para el bypass; explotación = INFERENCIA
-**Ubicación:** `vm/execution/VmInterpreter.java -> codeCache` (líneas 31, 37, 69-77); `vm/memory/SoftMMU.java -> fetchByte/fetchWord` (180-192).
-
-**Descripción:** El intérprete decodifica desde `codeCache = program.code()` (una copia del array Java del programa), **no** desde la memoria paginada. Por tanto el permiso `EXECUTE` de las páginas de código —que sí se comprueba en `SoftMMU.fetchByte/fetchWord`— **nunca se ejerce durante la ejecución**. Los métodos `fetch*` son, en la práctica, código de test. Además, como el mapeo es identidad y la página de código es R/X (sin W), un programa no puede autoparchear el `physicalMemory`… pero aunque pudiera, el fetch lo ignoraría.
-
-**Causa:** optimización (evitar traducción por instrucción) sin mantener la semántica de protección prometida; los `fetch*` se corrigieron (AUD-007) pero el intérprete nunca se cambió para usarlos.
-
-**Impacto funcional:** la separación R/X del código es decorativa; la protección real se limita a `IP < codeSize` y a `checkGPR`.
-
-**Impacto en rendimiento/escalabilidad:** el `codeCache` es rápido (bien); rutear el fetch por la MMU tendría coste, mitigable con la misma caché pero validando la página al entrar a un `ip` nuevo.
-
-**Condiciones para reproducir:** mapear la página de código sin EXECUTE (solo R/W) y ejecutar: el intérprete corre igual (los tests `fetchByteWithoutExecuteThrows` prueban el método `fetchByte`, no la ejecución).
-
-**Evidencia (HECHO):** líneas citadas; `grep` de `fetchByte/fetchWord` solo en `SoftMMU` y tests.
-
-**Solución sugerida:** usar `SoftMMU.fetchByte/fetchWord` en el bucle (validando la página al cambiar de `ip`), o documentar explícitamente que el fetch es de una «ROM inmutable en heap» y que la página de código no tiene por qué existir. Para el objetivo HDL, lo primero es lo correcto.
-
-**Código refactorizado (esquema):**
-```java
-// VmInterpreter.execute(), en lugar de codeCache[ip]:
-int opcode = softMMU.fetchByte(ip);            // valida EXECUTE + bounds
-// y para operandos multi-byte, fetchByte(ip+k) o fetchWord(ip+k).
-// Optimización: cachear la página de código validada mientras ip permanezca en ella.
-```
-
----
-
-### [IFLOW-AUD-024]
-
-**Tipo:** Deuda técnica (estado duplicado y muerto)
-**Severidad:** Baja
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/execution/ExecutionContext.java -> pageTable` (líneas 60-61), `-> pageTable()` (260), `-> setPageTable` (262-264).
-
-**Descripción:** `ExecutionContext` mantiene un campo `pageTable` «para esta ejecución», pero en producción **nunca se asigna** (siempre `null`); el `SoftMMU` clonado es quien tiene la tabla viva. `setPageTable` solo se llama desde tests. Existen por tanto **dos representaciones** de la tabla de páginas, una muerta.
-
-**Causa:** el `SoftMMU` absorbió la propiedad de la tabla; el campo del contexto quedó como residuo.
-
-**Impacto funcional:** ninguno hoy; confunde (un lector puede creer que el contexto posee la tabla) y arriesga una futura desincronización.
-
-**Impacto en rendimiento/escalabilidad:** ninguno.
-
-**Condiciones para reproducir:** `grep -rn "setPageTable\|\.pageTable()" src/iflow/src/main` → vacío salvo el propio contexto.
-
-**Evidencia (HECHO):** `setPageTable` solo en `ExecutionContextTest` y `FirmwareIntegrationTest`; `pageTable` nunca asignado en `src/main`.
-
-**Solución sugerida:** eliminar `pageTable`/`pageTable()`/`setPageTable` del contexto y exponer la tabla vía `ctx.softMMU().getPageTable()` en los tests.
-
----
-
-### [IFLOW-AUD-025]
-
-**Tipo:** Deuda técnica (deriva documental + feature no implementada)
-**Severidad:** Baja
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/memory/VmMemoryMap.java` (líneas 22, 553 spec); `src/iflow/README.md:38`; `docs/prompts/diseno/iflow-cpu-implement.md:553,576`; `HostServiceRegistry` (constantes de servicio).
-
-**Descripción:** Varias afirmaciones no respaldadas por el código:
-- **Páginas 9-15 «Estado persistente / datos privados»:** `setupProgramMappings` **no las mapea** y no existe la capability `memory.persist` que la spec menciona (`implement.md:576`). Son direcciones no accesibles.
-- **`README.md:85` «12 IDs»:** el código define más de 15 IDs de servicio (`TRANSFORM_APPLY 0x0400`, `MESSAGE_CLONE/ID 0x0700/0x0701`…), aunque muchos no estén registrados.
-- **`implement.md` ejemplos de ensamblador** siguen usando la convención v1 (`R2 = offset del buffer`, líneas 1237, 1331-1332) mientras el §11.1 documenta ABI v2 (`R2 = base`).
-- **`VmDmaController`** listado como componente (cubierto por IFLOW-AUD-019).
-
-**Causa:** la remediación de AUD-012 alineó el recuento de tests y quitó el DMA, pero luego `f9f96ad` re-añadió el DMA al README y la spec nunca se reconcilió con la ABI v2 ni con las páginas reservadas.
-
-**Impacto funcional:** desorientación; un programa que intente usar 0x9000+ obtendrá `MEMORY_FAULT`.
-
-**Impacto en rendimiento/escalabilidad:** la ausencia de estado persistente en memoria de VM limita políticas con memoria entre mensajes (el estado del host existe, pero no el de la VM).
-
-**Condiciones para reproducir:** `STW` a `0x9000` → `MEMORY_FAULT`.
-
-**Evidencia (HECHO):** `setupProgramMappings` sin páginas 9-15; `grep memory.persist` sin resultados; textos citados.
-
-**Solución sugerida:** o implementar el mapeo de 9-15 gated por una capability `memory.persist` (y su persistencia entre ejecuciones, hoy inexistente), o actualizar README/spec para declarar esas páginas reservadas y sin uso.
-
----
-
-### [IFLOW-AUD-026]
-
-**Tipo:** Deuda técnica (campos y constantes muertos)
-**Severidad:** Baja
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/service/HostServiceRegistry.java -> placeholderResolver` (482-485), `-> translationDetector` (487-490); constantes `PROPERTY_EXISTS` (52), `PERMISSION_QUERY` (56), `ROUTE_REDIRECT` (60), `ROUTE_RATE_LIMIT` (61), `TRANSFORM_APPLY` (64), `CHANNEL_POLICY` (72), `MESSAGE_CLONE` (75), `MESSAGE_ID` (76).
-
-**Descripción:** `placeholderResolver` y `translationDetector` son inyectables que **nunca se llaman** (ni siquiera en tests, a diferencia de lo que ocurría antes). Ocho constantes de servicio están **declaradas pero no registradas** (responden `UNSUPPORTED` por el diseño de AUD-006, lo cual es correcto, pero el nombre sugiere que existen).
-
-**Causa:** evolución del ABI sin limpieza de símbolos.
-
-**Impacto funcional:** ninguno (los IDs no registrados devuelven `UNSUPPORTED` correctamente). Confusión y ruido de API.
-
-**Impacto en rendimiento/escalabilidad:** nulo.
-
-**Condiciones para reproducir:** `grep -rn "placeholderResolver\|translationDetector"` → solo definiciones; `getService(0x0400)` → `null`.
-
-**Evidencia (HECHO):** `grep`s citados; `builtinServicesRegistered` solo registra 7.
-
-**Solución sugerida:** eliminar los dos inyectables muertos; agrupar las constantes no registradas bajo un comentario `// declared but not implemented` o eliminarlas si no hay plan de implementarlas.
-
----
-
-### [IFLOW-AUD-027]
-
-**Tipo:** Deuda técnica (duplicación)
-**Severidad:** Baja
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/VmConfigLoader.java -> createPassThroughProgram` (57-70) + stubs internos `Opcode` (73-77) y `HostServiceRegistry` (79-82); `vm/engine/VmPolicyEngine.java -> createPassThroughProgram` (126-140).
-
-**Descripción:** El bytecode del programa pass-through (`LI R0,0x0300; LI R1,6; HOST; HALT` + `capabilities={"routing.decide"}`) está **duplicado** literalmente en dos clases, y `VmConfigLoader` contiene además copias inline de las constantes `Opcode.LI/HOST/HALT` y `HostServiceRegistry.ROUTE_DECISION/DECISION_CONTINUE` «para evitar dependencia circular».
-
-**Causa:** dependencia circular evitada con copias en lugar de extraer el programa a una constante compartida.
-
-**Impacto funcional:** riesgo de divergencia (si cambia el ABI, hay que tocar dos sitios).
-
-**Impacto en rendimiento/escalabilidad:** nulo.
-
-**Condiciones para reproducir:** comparar ambas constantes.
-
-**Evidencia (HECHO):** los dos métodos citados, byte a byte iguales.
-
-**Solución sugerida:** extraer a `PassThroughProgram.INSTANCE` (o a `ProgramImage` estático) y que ambos lo referencien; eliminar los stubs internos.
-
----
-
-### [IFLOW-AUD-028]
-
-**Tipo:** Bug funcional (semántica del puerto host)
-**Severidad:** Media
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/engine/VmPolicyEngine.java -> MessageHostContext.writeProperty` (líneas 367-375); consumido por `vm/service/HostServiceRegistry.doPropertyWrite` (315-334).
-
-**Descripción:** `writeProperty(scope, propId, value)` **ignora `scope` y `propId`** y siempre registra un `ModificationJournal.Entry(SET_TEXT, value, "propWrite:"+propId)`. Por tanto `PROPERTY_WRITE` (0x0101) solo puede reescribir el **texto** del mensaje; escribir `PROP_CHANNEL`, `PROP_LANG_*`, `PROP_COLOR_MODE`, etc. cambia el texto, no la propiedad pedida.
-
-**Causa:** la implementación del puerto se hizo mínima (solo texto), pero el ABI expone `(scope << 8) | propId`.
-
-**Impacto funcional:** una política que quiera cambiar el canal o el idioma vía `PROPERTY_WRITE` no puede; el `ModificationJournal` ya tiene `SET_CHANNEL`/`SET_LANG_*`/`SET_COLOR_MODE`, así que el mapeo existe pero no se usa. Es una limitación funcional real del contrato de servicios.
-
-**Impacto en rendimiento/escalabilidad:** nulo.
-
-**Condiciones para reproducir:** programa que hace `PROPERTY_WRITE` con `scope=CHANNEL, propId=PROP_CHAN_NAME`; el mensaje cambia de texto, no de canal.
-
-**Evidencia (HECHO):** `MessageHostContext.writeProperty` sin `switch (scope/propId)`; `ModificationJournal.OpType` incluye los tipos necesarios.
-
-**Solución sugerida:** mapear `(scope, propId)` a la `OpType` correcta:
-```java
-@Override
-public void writeProperty(int scope, int propId, String value) {
-    if (value == null) return;
-    ModificationJournal.OpType op = switch (scope) {
-        case HostServiceRegistry.SCOPE_CHANNEL -> HostServiceRegistry.PROP_CHAN_NAME == propId
-            ? ModificationJournal.OpType.SET_CHANNEL : null;
-        case HostServiceRegistry.SCOPE_MESSAGE -> switch (propId) {
-            case HostServiceRegistry.PROP_CONTENT      -> ModificationJournal.OpType.SET_TEXT;
-            case HostServiceRegistry.PROP_LANG_SOURCE  -> ModificationJournal.OpType.SET_LANG_SOURCE;
-            case HostServiceRegistry.PROP_LANG_TARGET  -> ModificationJournal.OpType.SET_LANG_TARGET;
-            case HostServiceRegistry.PROP_COLOR_MODE   -> ModificationJournal.OpType.SET_COLOR_MODE;
-            default -> null;
-        };
-        default -> null;
-    };
-    if (op == null) return; // o ServiceResult.unsupported a nivel de servicio
-    ctx.journal().record(new ModificationJournal.Entry(op, value, "propWrite:" + propId));
-}
-```
-
----
-
-### [IFLOW-AUD-029]
-
-**Tipo:** Defecto de rendimiento (asignaciones en el camino caliente)
-**Severidad:** Media
-**Confianza:** HECHO estructural; HIPÓTESIS en magnitud
-**Ubicación:** `vm/engine/VmPolicyEngine.route` (líneas 173, 189); `vm/execution/ExecutionContext.initialize` (129-135); `vm/isa/ProgramImage.code` (68).
-
-**Descripción:** Por **cada** `route()`: (1) `new SoftMMU(loaded.softMMU)` clona 64 KB (`physicalMemory.clone()`) + copia la tabla; (2) `new VmInterpreter(...)` clona el código (`program.code()` → `code.clone()`, hasta 8 KB); (3) `initialize()` ejecuta **8192** `softMMU.writeByte` (bounds+permiso por byte) para limpiar I/O. El pool evita crear el `ExecutionContext`, pero **no** evita (1)(2)(3).
-
-**Causa:** el intérprete y el clon de MMU se tratan como por-ejecución cuando el programa es inmutable y el estado mutable ya se resetea.
-
-**Impacto funcional:** ninguno (correcto).
-
-**Impacto en rendimiento/escalabilidad:** alto en el camino caliente; **HIPÓTESIS**: a miles de msg/s dominaría CPUs y GC.
-
-**Condiciones para reproducir:** medir con `MessageProcessingBenchmark` (existe en `src/loadtest`); no ejecutado aquí.
-
-**Evidencia (HECHO):** líneas citadas.
-
-**Solución sugerida:** reutilizar un `VmInterpreter` por programa (es inmutable; solo apunta a `ctx` en `execute`), limpiar I/O con un `arraycopy` de ceros o `Arrays.fill` sobre el rango físico (una sola operación), y considerar MMU compartida de solo lectura + COW para datos.
-
-**Código refactorizado (esquema):**
-```java
-// limpieza de I/O en initialize(): un solo Arrays.fill por buffer en vez de 8192 writeByte.
-// (Requiere un método interno acotado en SoftMMU; NO usar un byte[] expuesto mutable al exterior.)
-if (softMMU != null) {
-    softMMU.clearRange(INPUT_BUFFER_VADDR,  IO_BUFFER_SIZE);  // traduce una vez y rellena el tramo físico
-    softMMU.clearRange(OUTPUT_BUFFER_VADDR, IO_BUFFER_SIZE);  // p. ej. physicalMemory[base..base+len] = 0
-}
-```
-
----
-
-### [IFLOW-AUD-030]
-
-**Tipo:** Defecto de diseño (modelo de privilegios no aplicado)
-**Severidad:** Baja
-**Confianza:** Confirmado (HECHO)
-**Ubicación:** `vm/memory/PageEntry.java -> user` (27, 33, 60-62), `-> mappedKernel` (44-46); `vm/memory/PageTable.java -> mapPageKernel` (46-52); `vm/memory/SoftMMU.java -> mapPageKernel` (49-51).
-
-**Descripción:** `PageEntry` distingue páginas *user* y *kernel* (`mapped` vs `mappedKernel`) y `PageTable`/`SoftMMU` exponen `mapPageKernel`, pero **ninguna traducción consulta `isUser()`**: `translate` solo comprueba validez y permisos. El modelo de anillos de la spec §14 (ring 0 firmware/servicios, ring 3 programas) **no está implementado**.
-
-**Causa:** se dejó el bit en la estructura pero no la comprobación; el firmware y el usuario comparten las mismas páginas R/X.
-
-**Impacto funcional:** un programa de usuario con permiso R/W sobre una página «kernel» podría escribirla (hoy ninguna se mapea como kernel, así que el efecto es latente).
-
-**Impacto en rendimiento/escalabilidad:** nulo.
-
-**Condiciones para reproducir:** mapear una página con `mapPageKernel(..., PERM_READ|PERM_WRITE)`, intentar escribir desde un programa: `translate` no la deniega.
-
-**Evidencia (HECHO):** `grep -rn "isUser\|mapPageKernel"` → sin usos de comprobación en `translate`.
-
-**Solución sugerida:** o bien aplicar el modo (una bandera `kernelMode` en el contexto que `translate` consulte; el firmware corre en kernel, el usuario en user), o bien eliminar `user`/`mapPageKernel` para no prometer un modelo inexistente.
-
----
-
-## 20. Defectos (síntesis)
-
-- **Diseño/E-S:** `VmDmaController` muerto presentado como vivo (IFLOW-AUD-019); buffer de salida inerte (IFLOW-AUD-020); sin bus ni encapsulación de memoria (IFLOW-AUD-022).
-- **Diseño/ejecución:** fetch fuera de la MMU (IFLOW-AUD-023); privilegios no aplicados (IFLOW-AUD-030).
-- **Contrato:** `PROPERTY_WRITE` no puede escribir propiedades distintas de texto (IFLOW-AUD-028); spec↔impl sobre materialización de entrada (IFLOW-AUD-021).
-- **Estado/API muertos:** `ExecutionContext.pageTable`, accesores duplicados de `PageTable`, campos inyectables y constantes sin registrar (IFLOW-AUD-024, -022, -026).
-- **Rendimiento:** clon de MMU/código + limpieza byte a byte por mensaje (IFLOW-AUD-029).
-
----
-
-## 21. Deuda técnica
-
-- Código muerto en producción: `VmDmaController` (+su test), `SoftMMU.getPhysicalMemory/getPageTableDirect/ForInspection/ForMutation`, `ExecutionContext.pageTable`, `HostServiceRegistry.placeholderResolver/translationDetector`, 8 constantes de servicio sin registrar.
-- Duplicación: `createPassThroughProgram` y constantes inline (IFLOW-AUD-027).
-- Deriva documental: páginas 9-15, «12 IDs», ejemplos de la spec con ABI v1, DMA en README/PLAN (IFLOW-AUD-025, -019).
-- `-d` sin sección de debug en el binario (documentado en el README del compilador).
-
----
-
-## 22. Mejoras opcionales (no defectos)
-
-- Unificar los cuatro accesores de `PageTable` de `SoftMMU`.
-- Añadir `@Nullable`/`Optional` donde se devuelve `null` (`readProperty`, `resolveChannel`).
-- Reutilizar el `VmInterpreter` por programa.
-- Definir un `MemoryPort`/bus explícito como preparación para el objetivo HDL.
-
----
-
-## 23. Roadmap priorizado
-
-### P0 — Crítico
-
-| # | Problema | Beneficio | Esfuerzo | Dependencia | Prioridad |
-|---|---|---|---|---|---|
-| IFLOW-AUD-019 | DMA muerto presentado como vivo (README/PLAN/commit) | Honestidad y coherencia arquitectónica | S (documental) / M (integrar) | Decisión de diseño | Máxima |
-| IFLOW-AUD-028 | `PROPERTY_WRITE` solo escribe texto | Habilita policies que cambian canal/idioma/color | S | Journal (ya tiene los tipos) | Máxima |
-
-### P1 — Alto
-
-| # | Problema | Beneficio | Esfuerzo | Dependencia | Prioridad |
-|---|---|---|---|---|---|
-| IFLOW-AUD-029 | Clon MMU + clon código + 8192 `writeByte`/msg | Rendimiento del camino caliente | S/M | — | Alta |
-| IFLOW-AUD-023 | Fetch por MMU (EXECUTE efectivo) | Seguridad de ejecución; paso a HDL | M | `fetch*` listos | Alta |
-| IFLOW-AUD-022 | Fuga de `byte[]` + API duplicada | Encapsulación; base para bus | S | — | Media-alta |
-| IFLOW-AUD-030 | Modelo de privilegios no aplicado | Seguridad/ring 0-3 | M | Decisión de modelo | Media-alta |
-
-### P2 — Medio
-
-| # | Problema | Beneficio | Esfuerzo | Dependencia | Prioridad |
-|---|---|---|---|---|---|
-| IFLOW-AUD-020 | Buffer de salida inerte | E/S de salida útil | S/M | Contrato de salida | Media |
-| IFLOW-AUD-021 | Spec↔impl de materialización de entrada | Coherencia | S (documentar) / M (eliminar) | Servicios de buffer | Media |
-| IFLOW-AUD-024 | `ExecutionContext.pageTable` muerto | Claridad | S | — | Media |
-| IFLOW-AUD-026 | Campos/constantes muertos | API honesta | S | — | Media |
-| IFLOW-AUD-025 | Deriva documental (páginas, IDs, ABI de ejemplos) | Onboarding | S | — | Media |
-
-### P3 — Bajo
-
-| # | Problema | Beneficio | Esfuerzo | Dependencia | Prioridad |
-|---|---|---|---|---|---|
-| IFLOW-AUD-027 | Duplicación del pass-through | DRY | S | — | Baja |
-
----
-
-## 24. Matriz de puntuaciones
-
-| Área | Puntuación /10 | Estado | Principales problemas |
+| Grupo | Mnemónicos | Codificación | Bytes |
 |---|---|---|---|
-| Código | 7/10 | Bueno | API/estado muertos, duplicaciones |
-| Arquitectura | 6/10 | Aceptable | Sin bus; DMA no integrado; engine sobrecargado |
-| Clean Architecture | 6/10 | Aceptable | Puerto `HostContext` correcto; sin puerto de memoria |
-| Hexagonal | 6/10 | Aceptable | Entrada formal; salida formal; falta puerto de memoria/bus |
-| Modularidad | 7/10 | Buena | `memory` con clase muerta no marcada |
-| Separación de responsabilidades | 6/10 | Aceptable | `VmPolicyEngine`/`Assembler` multi-responsabilidad |
-| Legibilidad | 7/10 | Buena | Javadoc de calidad; ruido por código muerto |
-| Features | 7/10 | Bueno | Loader/servicios/firmware reales; `PROPERTY_WRITE` limitado |
-| Personalización | 6/10 | Aceptable | Capabilities intersecadas (bien); sin `memory.persist` |
-| Seguridad | 5/10 | Débil | Fetch sin EXECUTE efectivo; sin anillos |
-| Rendimiento | 5/10 | Débil | Clon MMU/código + limpieza byte a byte por mensaje |
-| Escalabilidad | 5/10 | Débil | Coste por mensaje; sin persistencia en memoria de VM |
-| Concurrencia | 7/10 | Buena | Pool acotado y contadores consistentes |
-| Testing | 7/10 | Bueno | 288 tests; cubre un DMA no usado; huecos en salida/privilegios |
-| Mantenibilidad | 6/10 | Aceptable | Buena base; deriva documental y código muerto |
-| Documentación | 5/10 | Parcial | README/PLAN sobre el DMA; páginas 9-15; IDs |
+| Immediate | `LI` | op + rd + imm16 | 4 |
+| Registro-registro | `MOV`, `NOT`, `LDBI/LDWI`, `STBI/STWI`, `ADD/SUB/MUL/DIV/MOD`, `AND/OR/XOR`, `SHL/SHR/SAR`, `CMP/CMPU` | op + regs empaquetados | 2 |
+| Memoria | `LDB/LDW/STB/STW` | op + rd + vaddr16 | 4 |
+| Bloque | `COPY`, `MOVE` | op + src16 + dst16 + len16 + **1 B de relleno** | 8 |
+| Salto/call | `JMP/JZ/JNZ/JC/JV/CALL` | op + offset16 | 3 |
+| Servicio | `HOST` | op + relleno | 2 |
+| Control | `RET`, `HALT` | op | 1 |
+| Trap | `TRAP` | op + imm8 | 2 |
+
+`COPY`/`MOVE` emiten **8 bytes** incluyendo un relleno explícito
+(`assembler.ts:1024-1032`), que coincide exactamente con `Opcode.instructionSize` (§124). No
+hay desalineación.
+
+**Endianness (HECHO, y contradice la documentación):** los **operandos de instrucción** se
+codifican **big-endian** — el emisor escribe `(imm >> 8)` primero (`assembler.ts:978-980`) y el
+intérprete decodifica `(fetch(ip+2) << 8) | fetch(ip+3)`
+(`VmInterpreter.java:154`). En cambio, las **palabras de datos** de la SoftMMU son
+**little-endian** (`SoftMMU.java:150-168`), y las **constantes** del firmware se escriben
+little-endian (`fw[off]=lo; fw[off+1]=hi`, `assembler.ts:583-584`). Los **campos de cabecera**
+del `.flow` son **big-endian** (ver §7). Es un formato **mixto**; ver `IFLOW-AUD-039`.
+
+**Semántica y casos límite (HECHO, verificados en el intérprete):**
+
+| Caso | Comportamiento observado |
+|---|---|
+| Opcode inválido | `VmException.invalidOpcode` (`VmInterpreter.java:87-89`) |
+| Instrucción truncada | `invalidOperand` si `ip + instrSize > codeSize` (`:91-93`) |
+| `entryPoint` fuera de rango | `invalidJump` antes del bucle (`:64-66`) |
+| IP fuera de rango en cada iteración | `invalidJump` (`:77-79`) |
+| **Salto/PC que rebasa el final** | **Se detiene normalmente**: `if (newIp >= codeSize) break;` (`:135-138`) |
+| Fuel agotado | `OUT_OF_FUEL` con IP (`ExecutionContext.java:241-244`) |
+| Escribir página kernel desde el programa | `PRIVILEGE_FAULT` aunque el bit W esté puesto (`PageTable.java:166-171`) |
+
+El caso «salto que rebasa el final se detiene en silencio» está **documentado como intencional**
+(`:133-134`), así que no se registra como defecto, pero implica que un salto erróneo al final del
+código **no** produce fallo: es un modo de terminación indistinguible del `HALT` legítimo.
 
 ---
 
-## 25. Potencial
+## 6. Auditoría del compilador
 
-- **Potencial teórico (INFERENCIA):** alto. Una VM con ABI syscall, capabilities, memoria paginada, DMA/bus y firmware con wrappers es una base capaz de sostener políticas sandboxeadas y, con los cambios mínimos de 6.4, un diseño **mapeable a HDL**.
-- **Potencial arquitectónico (INFERENCIA):** alto. La forma «CPU + ROM/RAM + MMU + IO + firmware» ya está; solo falta el **bus/DMA** y hacer efectiva la MMU y los privilegios.
-- **Potencial alcanzado (INFERENCIA):** **~62 %**. El camino crítico ya funciona (loader real, servicios cableados, firmware real, pool operativo), pero la capa de E/S/bus y las protecciones efectivas están incompletas o son nominales.
+- **Determinismo: HECHO.** Reensamblé los 5 `.flow` versionados y todos salieron
+  **byte-idénticos** (Apéndice A). El SHA-256 se calcula sobre el prefijo y es estable.
+- **Vacíos de validación: HECHO.** `npx tsc` sin errores; `node test/validation/run.js` →
+  **13/13** (8 inválidos rechazados, 5 válidos aceptados, incl. indirectos, R7 como límite,
+  immediatos extremos y precisión).
+- **Directivas soportadas**: `.section/.seg`, `.entry`, `.origin/.org`, `.capability/.cap`,
+  `.firmware`, `.align`, `.const`, `.equ/.set`, `.end` (`assembler.ts:644-722`).
+- **`-d/--debug` es un no-op sobre el artefacto** (`IFLOW-AUD-037`): `generateDebugInfo()` se
+  guarda en el objeto `ProgramImage` (`assembler.ts:1191,1218`) pero **ninguno** de los dos
+  serializadores emite una sección de depuración (`:1234-1277` y `:1334-1373`). El `.flow`
+  resultante es idéntico con y sin `-d`. El listado `-l` sí funciona (`cli.ts:76-78`).
+- **Compatibilidad de versiones**: el parser exige `minAbiVersion == CURRENT_ABI_VERSION`
+  (`ProgramImageParser.java:42-46`) pero acepta `isaVersion`/`minFirmwareVersion` menores con
+  `>` (`:38-41,47-50`). Un `.flow` de ABI 1 se rechaza en bloque (`IFLOW-AUD-043`).
 
 ---
 
-## 26. Conclusión final
+## 7. Auditoría del formato binario
 
-1. **¿Qué tan bueno es realmente?** Bueno como arquitectura de máquina virtual embebida y ahora **funcional de extremo a extremo** (la política compilada se ejecuta de verdad). No es aún un «procesador mapeable a HDL» porque su E/S (DMA/bus) y su protección de ejecución son nominales.
-2. **¿Qué está excepcionalmente bien diseñado?** `VmMemoryMap` como fuente única; el ABI `HOST` v2 (documentado y coherente con `ServiceResult`); la inmutabilidad del `ProgramImage` con SHA-256; la pre-validación de rangos en `SoftMMU.writeBlock`; el puerto `HostContext`; y el pool con `journal.reset()`.
-3. **¿Qué es mediocre?** La capa de E/S/bus (DMA muerto, buffer de salida inerte), la protección de ejecución (fetch por `codeCache`), y la coherencia README/PLAN↔código (DMA, páginas 9-15, IDs).
-4. **¿Peores defectos?** IFLOW-AUD-019 (DMA muerto vendido como vivo) e IFLOW-AUD-028 (`PROPERTY_WRITE` incapaz de escribir propiedades distintas de texto), seguidos de IFLOW-AUD-023 (fetch sin EXECUTE) e IFLOW-AUD-029 (asignaciones por mensaje).
-5. **¿Mayor fortaleza arquitectónica?** La separación ISA/memoria/ejecución/servicios con mapa único y un puerto de host formal: el diseño no impide integrar bus/DMA ni hacer efectiva la MMU.
-6. **¿Mayor riesgo futuro?** Construir sobre lo documentado (DMA, estado persistente en 0x9000+) sin que exista; y creer que la protección R/X del código es real.
-7. **¿Cuán mantenible?** Media-buena: código legible y modular, con deuda localizada (código muerto + deriva documental).
-8. **¿Cuán extensible?** Alta: nuevo `serviceId` (el opcode `HOST` no cambia), nuevo opcode, `setProgram` atómico, puerto de host.
-9. **¿Preparado para múltiples plataformas?** El núcleo es agnóstico (bytecode + servicios inyectables): sí. El `HostContext` formaliza el adaptador por plataforma.
-10. **¿Preparado para una red Minecraft grande?** **Todavía no.** El clon de 64 KB + clon de código + 8192 `writeByte` por mensaje, y la ausencia de estado persistente efectivo, son lastres.
-11. **¿Qué cambiaría para escala network-level?** (a) reutilizar el intérprete por programa; (b) limpiar I/O en un solo `arraycopy`/`fill`; (c) MMU compartida de solo lectura + COW; (d) estado persistente real (páginas 9-15 o servicio de estado robusto); (e) eliminar el `UUID` por ruta.
-12. **¿Qué NO debería tocarse?** `VmMemoryMap`, el ABI `HOST` v2 y `ServiceResult`, la verificación de hash del parser, la pre-validación de `writeBlock` y el puerto `HostContext`. Están correctamente diseñados.
-13. **¿Qué debería hacerse primero?** Resolver IFLOW-AUD-019 (decidir integrar o eliminar el DMA y corregir la documentación) e IFLOW-AUD-028 (mapear `scope/propId` en `writeProperty`). Después IFLOW-AUD-029 y IFLOW-AUD-023.
-14. **¿Porcentaje técnicamente maduro?** **~62 %** del alcance auditado (cimientos y camino crítico maduros; capa de E/S/bus y protecciones efectivas incompletas).
+Verificado de extremo a extremo (HECHO). Cabecera de 16 B, todo **big-endian**:
+
+```
+off  0  u8  formatVersion        (1)
+off  1  u8  isaVersion           (2)
+off  2  u8  minAbiVersion        (2)
+off  3  u8  minFirmwareVersion   (1)
+off  4  u16 entryPoint           BE
+off  6  u16 codeLength           BE
+off  8  u16 constantsLength      BE
+off 10  u8  capabilitiesCount
+off 11  u8[5] padding            (no validado por el parser)
+off 16  code[codeLength]
+        constants[constantsLength]  (cada una u16 BE, plegada a int)
+        capabilities[n]             (cadenas NUL-terminadas)
+        hash[32]                    (SHA-256 de TODO lo anterior)
+```
+
+**Comprobación empírica** con `examples/policy.flowasm` → `policy.flow` (4209 B):
+
+```
+formato=1 isa=2 abi_min=2 fw_min=1
+entry=0x0202 code_len=4149 n_const=6 n_caps=0 pad=0000000000
+constantes (6): [256, 768, 0, 1, 1, 16]
+capacidades (0): []
+hash almacenado == sha256(prefijo): True
+bytes tras el hash: 0
+```
+
+El parser **exige** que no sobre ningún byte tras el hash
+(`ProgramImageParser.java:129-131`) y verifica el SHA-256 sobre `data[0, hashOffset)`
+(`:157-169`); el emisor calcula el hash sobre exactamente ese mismo prefijo
+(`assembler.ts:1221-1223`). **Coherencia perfecta.**
+
+**Debilidades (no defectos funcionales):**
+
+- **Sin magic number** (`IFLOW-AUD-038`): no hay firma; cualquier fichero cuyos primeros bytes
+  pasen las versiones y cotas llegará al SHA-256. El error será «Hash verification failed», no
+  «no es un .flow».
+- **`capabilitiesCount` es de 1 byte** (`:55` y `assembler.ts:1257`): tope duro de **255**
+  capabilities; `codeLength` es u16 pero está acotado a `CODE_MAX_SIZE` = 8192 (`:65-68`).
+- **Las cadenas de capability se leen byte a byte como `(char)`** (`:107`) y se escriben con
+  `charCodeAt(0)` (`assembler.ts:1271`): correcto para ASCII, **pérdida silenciosa** para
+  nombres no ASCII.
+- El campo `debugInfo` existe en `ProgramImage` pero **no se serializa** (sin sección debug).
+
+---
+
+## 8. Auditoría de la VM y la memoria
+
+### 8.1 Mapa de memoria (fuente única: `VmMemoryMap`)
+
+| Región | Rango | Páginas | Permisos | Propiedad |
+|---|---|---|---|---|
+| Código (ROM + usuario) | `0x0000–0x1FFF` | 0-1 | R/X (tras boot) | kernel |
+| Constantes | `0x2000–0x2FFF` | 2 | R | kernel |
+| Datos/Heap | `0x3000–0x4FFF` | 3-4 | R/W | usuario |
+| Pila | `0x5000–0x6FFF` | 5-6 | R/W | usuario |
+| Entrada | `0x7000–0x7FFF` | 7 | R/W | usuario |
+| Salida | `0x8000–0x8FFF` | 8 | R/W | usuario |
+| RAM de usuario | `0x9000–0xFFFF` | 9-15 | R/W | usuario |
+| **MMIO de dispositivos** | `0x0F00–0x0FFF` | (dentro de pág. 0) | — | dispositivo |
+
+El **mapeo es identidad** página→frame en el camino de producción
+(`VmPolicyEngine.java:292,315,325,332`). No hay solapamiento entre regiones mapeadas y no hay
+huecos en las 16 páginas. La MMIO **se solapa** con la página 0 (código) a propósito
+(`VmMemoryMap.java:91-101`); el bus la decodifica **antes** de la MMU.
+
+### 8.2 Permisos: lo que sí se aplica (HECHO)
+
+- `PageTable.translate` comprueba **límites**, **mapa** y **bits** (`:147-165`), y añade la
+  regla de **propiedad**: escribir una página kernel sin privilegio supervisor →
+  `PRIVILEGE_FAULT` **aunque el bit W esté presente** (`:166-171`). Esta es la pieza que el
+  informe anterior daba por ausente, y hoy está implementada y comentada.
+- `SoftMMU.writeBlock` **pre-valida todas las páginas** antes de escribir nada
+  (`validateWriteRange`, `:264-265,278-293`), así que una escritura a caballo entre una página
+  escribible y otra protegida **no** deja efectos parciales.
+- El **fetch pasa por la MMU** con `EXECUTE` (`fetchByte`/`fetchWord` →
+  `translateExecute`, `SoftMMU.java:311-323`), y la ventana de I-cache se rellena validando la
+  página (`fillCodeWindow`, `:331-335`). El permiso de ejecución es **efectivo**, no nominal.
+- El código se escribe por el bus **supervisor** y luego se **degrada** a R/X por `mprotect`
+  (`VmPolicyEngine.java:293-304`): el programa no puede escribir su propio código ni durante el
+  arranque.
+
+### 8.3 Debilidades de memoria y E/S
+
+- **`IFLOW-AUD-031` (Media-Alta) — la MMIO evade permisos y privilegio.** En `VmBus`, si la
+  dirección pertenece a un dispositivo se llama directamente al periférico
+  (`readByte/readWord/writeByte/writeWord`, `:85-117`) **sin consultar la `PageTable` ni el
+  `Privilege` del maestro**. Como el apéndice MMIO vive en la página 0 (marcada R/X) y contiene
+  la NVRAM del BIOS y el PIC, un `.flow` cualquiera (privilegio `PROGRAM`) puede:
+  reescribir la **bandera de arranque en frío** (NVRAM) y el **latch/máscara del PIC**
+  (`RAISE`/`ACK`), forzando y silenciando interrupciones. El comentario
+  (`VmMemoryMap.java:96-98`) justifica el bypass *para que el BIOS pueda* escribir sin permiso de
+  escritura en la página R/X, pero **no distingue emisor**: el mismo camino sirve a cualquier
+  programa. Es una grieta de aislamiento dentro de la máquina (no un escape al host).
+- **`IFLOW-AUD-032` (Media-Baja) — `touchesDevice` muestrea solo los extremos.**
+  `VmBus.touchesDevice` (`:157-162`) decide si un bloque toca un periférico mirando **solo** el
+  primer y el último byte. Un rango que *atraviese* la ventana MMIO sin empezar ni terminar en
+  ella no se enruta a los dispositivos y cae por la MMU (→ `PRIVILEGE_FAULT` en página R/X, o
+  escritura en RAM si el rango cae en zona R/W). Decodificación inconsistente con la de byte a
+  byte.
+- **`IFLOW-AUD-033` (Baja/Informativa) — las lecturas descartan el privilegio.**
+  `SoftMMU.readByte/readWord/readBlock(vaddr, …, Privilege)` reciben `privilege` y llaman
+  `translateRead(vaddr)`, que **no lo usa** (`:145-148,156-158,176-193`). Es coherente con
+  «páginas kernel legibles por el programa» (`PageTable.java:79-81`), por lo que **no hay fuga**,
+  pero la firma promete una comprobación inexistente y confunde.
+
+---
+
+## 9. Auditoría de servicios HOST y capacidades
+
+**ABI v2 (HECHO, `HostServiceRegistry.java:22-38`):** `R0=op`, `R1=options`, `R2=base`,
+`R3=length` (bidireccional), `R4=resultado`; retorno `R0=status`, `R3=bytes`, `R4=escalar`. Los
+15 IDs declarados están **registrados** (`:184-336`); cualquier otro devuelve
+`UNSUPPORTED` (`:375-383`).
+
+**Capacidades (HECHO):**
+
+- Cada servicio declara `requiredCapabilities()` (`:190-334`) y `invoke()` las comprueba contra
+  el contexto **antes** de ejecutar (`:386-390`); si falta, lanza `hostServiceDenied`.
+- Las capacidades del contexto son **la intersección** entre las que **pide el programa** (su
+  `.capability` → `ProgramImage.capabilities()`) y las que **concede el host**
+  (`grantedCapabilities`, `VmPolicyEngine.java:220-221,546-…`). Un programa **no puede ampliar**
+  sus privilegios. `PassThroughProgram` declara `routing.decide` y llama a `ROUTE_DECISION`;
+  funciona sin configuración.
+- **Matiz:** `register()` auto-declara las capacidades de cada servicio en el *allowlist* del
+  host (`:338-344`), de modo que el allowlist por defecto contiene **todas**; la restricción
+  efectiva la ejerce la intersección con lo que pide el programa. Es el diseño correcto
+  (deny-by-default efectivo), pero conviene saber que el allowlist no recorta nada por sí solo.
+- `MESSAGE_CLONE` y `MESSAGE_ID` declaran `new String[0]` (`:324,334`): **no requieren
+  capability**. Leer el contenido del mensaje (potencialmente privado) y su id no exige
+  autorización; es una decisión de diseño, no un fallo, pero es la única pareja de servicios sin
+  puerta.
+
+**Integración real (HECHO):** los servicios transfieren por el **DMA del contexto**
+(`ctx.dma()`, p. ej. `:454,482,502,628`), no por `SoftMMU` directo — exactamente como documenta
+el ABI (`:44-49`). Los errores de servicio **no abortan** la VM: viajan como `status` en `R0`
+(`:406-411`), y el fuel se cobra por coste base + variable por byte (`:392-401`).
+
+**Servicios condicionados a inyección:** `PERMISSION_CHECK/QUERY` requieren `permissionChecker`
+(si no, `HOST_FAILURE`, `:534-536`); `TRANSFORM_APPLY` requiere el hook del `kind` (si no,
+`UNSUPPORTED`, `:476-478`); `ROUTE_RATE_LIMIT` requiere `rateLimiter` (si no, `UNSUPPORTED`,
+`:729-731`). El motor los inyecta por defecto (`VmPolicyEngine.java:141-168`).
+
+---
+
+## 10. Auditoría de políticas y resultados
+
+**Camino (HECHO):** el programa registra intenciones en el `ModificationJournal` (p. ej.
+`ROUTE_DECISION` → `SET_PROCESSED`/`CANCEL_MESSAGE`/`REDIRECT_*`/`RATE_LIMIT_BACKOFF`,
+`HostServiceRegistry.java:599-611`); `PolicyResultValidator.validate` las traduce a
+`PolicyTarget` y aplica el journal al mensaje (`:76-135`).
+
+**Fallos bien resueltos (fail-closed):**
+
+- Error fatal de VM o `RuntimeException` → `REJECT` (`PolicyResultValidator.java:43-52`;
+  `VmPolicyEngine.java:247-256`). El `catch (RuntimeException)` es una **red de seguridad
+  explícita** para que ninguna excepción escape al pipeline del servidor.
+- Canal de redirección inexistente → `REJECT` (`:113-124`).
+- Cancelación → `REJECT` si el detalle es `route:REJECT`, si no `DROP` (`:56-68`).
+
+**Debilidad:**
+
+- **`IFLOW-AUD-034` (Media) — decisión fuera de rango degrada a LOG (fail-open).**
+  `doRouteDecision` tiene un `default` que registra `SET_PROCESSED("route:UNKNOWN")`
+  (`HostServiceRegistry.java:609`), y `parseRouteDecision` mapea cualquier cadena desconocida a
+  `PolicyTarget.LOG` (`PolicyResultValidator.java:138-149`), cuyo `delivered()` es `true`
+  (`RouteDecision.java:32-36`). Además el `target` **arranca** en `LOG` (`:71`). Resultado: un
+  programa que emplace un código de decisión inválido (o ninguno) **entrega** el mensaje. Lo
+  correcto para una política por defecto sería `REJECT`.
+- **`IFLOW-AUD-042` (Baja) — operaciones del journal sin emisor y validación ausente.**
+  `applyEntry` sabe aplicar `SET_SLEEP_MILLIS`, `SET_FORMAT_PAPI`, `ADD_SOUNDS`, `REMOVE_SOUNDS`
+  y `SET_LANG_*`, pero **ninguna** de ellas la emite el código de producción (solo
+  `SET_TEXT`/`SET_CHANNEL`/`SET_LANG_*`/`SET_COLOR_MODE` desde `writeProperty`
+  (`VmPolicyEngine.java:441-459`) y las de routing). Y `SET_COLOR_MODE` aplica
+  `ColorMode.valueOf(...toUpperCase())` (`PolicyResultValidator.java:167-168`) **sin validar**:
+  un valor no válido lanza `IllegalArgumentException`, que la red de seguridad de `route()`
+  convierte en `REJECT`. No escapa, pero se usa una excepción como control de flujo y **se pierde
+  el motivo** (el mensaje se rechaza con «VM internal error»).
+
+---
+
+## 11. Estado, aislamiento y concurrencia
+
+- **Serialización (HECHO):** `route()` toma `machineLock` para **toda** la ejecución
+  (`VmPolicyEngine.java:198-262`), de modo que las escrituras sobre la memoria compartida de la
+  máquina no necesitan sincronización interna. El `SoftMMU` no lleva *locks*, y es correcto **por
+  este contrato**. Con el lock tomado durante la ejecución, el coste por mensaje es
+  **secuencial** (HIPÓTESIS cuantitativa; no medido).
+- **Estado persistente real (HECHO):** (a) `hostState` es un `ConcurrentHashMap` **del motor**
+  (`:68`), consultado por `STATE_READ`/`STATE_WRITE` → persiste entre mensajes; (b) la RAM
+  `0x9000+` y las páginas de datos nunca se limpian → persistencia implícita del programa. Es la
+  base de la feature «una sola máquina viva» (D30).
+- **Ciclo de vida del contexto (HECHO, `ExecutionContext.initialize`):** se limpian registros y
+  flags, el journal se **`reset()`** (no `clear()`, para no romper el *pool*, `:197-199`), el
+  fuel se restaura, el host port vuelve a `HostContext.NONE` y la ventana de I-cache se invalida
+  (`codeWindowBase = -1`). **No** se limpian datos ni RAM de usuario (intencional).
+- **`IFLOW-AUD-036` (Baja) — sin cancelación ni watchdog en producción.**
+  `ExecutionContext.cancel()`/`checkCancelled` existen (`:416-421`) pero **nadie** activa
+  `cancelled = true` fuera de los tests. La única cota de ejecución es el **fuel**, que sí es
+  efectivo (ver §5). No hay cancelación por tiempo ni por apagado del servidor: si el servidor
+  se detiene con un programa en bucle, la ejecución termina por fuel (100 000 unidades), no por
+  señal.
+- **`IFLOW-AUD-035` (Baja) — la rama de «error fatal» del validador es inalcanzable.**
+  `setFatalError` solo lo invoca `ExecutionContextTest` (repo entero, `grep`); en producción los
+  fallos llegan por excepción, no por `context.fatalError()`. La comprobación
+  `context.hasFatalError()` (`PolicyResultValidator.java:43-52`) nunca se cumple en el camino
+  real. No hace daño, pero es código muerto que aparenta una capacidad inexistente.
+
+---
+
+## 12. Tests ejecutados y pruebas nuevas
+
+| Suite | Comando | Resultado |
+|---|---|---|
+| VM `src/iflow` | `JAVA_HOME=/opt/javac/x64/21 ./gradlew :src:iflow:test --offline --rerun-tasks` | **383 PASSED, 0 FAILED, 0 SKIPPED** (27 ficheros) |
+| Cobertura | `jacocoTestReport` | **84 % instr · 71 % líneas · 70 % ramas · 91 % métodos · 97 % clases** |
+| Compilador (build) | `npx tsc` | Sin errores |
+| Compilador (validación) | `node test/validation/run.js` | **13/13** |
+| Determinismo | reensamblado + `cmp` | **5/5 byte-idénticos** |
+
+**Pruebas que añadiría** (no ejecutadas aquí; propuestas en §19): escribir en la NVRAM/PIC desde
+un programa no-BIOS debe fallar; decisión de ruta fuera de rango debe dar `REJECT`; `SET_COLOR_MODE`
+inválido debe dar `REJECT` **con motivo**, no «VM internal error»; bloque que atraviesa la MMIO
+sin tocar extremos debe decodificarse igual que byte a byte; `-d` debe o bien emitir sección de
+depuración o bien retirarse.
+
+**Cobertura no verificada:** las suites existentes no incluyen un test que use un `.flow`
+**ensamblado por el compilador real** y ejecutado en el JVM; los tests construyen los programas
+en Java (`PassThroughProgram` o `byte[]` literales). Hay, por tanto, una **prueba de integración
+compilador→VM ausente** (TEST). *No lo registro como defecto porque no he demostrado que el
+camino falle, solo que no está cubierto.*
+
+---
+
+## 13. Capacidad funcional combinatoria
+
+¿Puede un `.flow` expresar una política útil **sin** tocar nada que no exista? **Sí (HECHO por
+inventario de ISA + servicios):** dispone de aritmética/lógica/shifts, comparación con
+saltos condicionales (`JZ/JNZ/JC/JV`), subrutinas (`CALL/RET`), memoria indirecta
+(`LDBI/LDWI/STBI/STWI`) para tablas, bloque (`COPY/MOVE`) y **15 servicios** que cubren
+propiedades (leer/escribir/existe) de 5 ámbitos, permisos, enrutado (decidir/redirigir/limitar),
+transformación (placeholders, detección de idioma), estado, canales, clon y id del mensaje.
+
+**Lo que la ISA no ofrece** (y hay que resolver a mano con esos recursos): multiplicación/división
+**sin signo** (no hay `MULU/DIVU`; `DIV/MOD` son con signo), comparación con inmediato (hay que
+`LI` a un registro y `CMP`), punteros de 16 bits solo (no hay 32), y **no hay `IRET`** (la IRQ es
+transparente, gestionada por el runtime, lo que se documenta como decisión de diseño).
+
+**Conclusión:** la capacidad expresiva está **alineada con lo documentado**
+(`src/iflow/README.md`), salvo la endianness (§15). No detecté servicios prometidos e
+inexistentes: los 15 IDs del README están registrados.
+
+---
+
+## 14. Seguridad y rendimiento
+
+### 14.1 Modelo de amenazas
+
+**¿Qué protege el sistema hoy, y de qué?**
+
+| Propiedad | Estado | Evidencia |
+|---|---|---|
+| El programa no puede escribir su código ni las constantes | **SÍ** | `mprotect` a R/X y R; `PageTable.java:166-171` |
+| El programa no puede saltar a memoria sin `EXECUTE` | **SÍ** | `SoftMMU.fetch*` con `translateExecute` (`:311-323`) |
+| El programa no puede ampliar sus capacidades | **SÍ** | intersección host∩programa (`VmPolicyEngine.java:546-…`) |
+| El programa no puede invocar un servicio sin su capability | **SÍ** | `HostServiceRegistry.java:386-390` |
+| El programa **no** puede escribir periféricos (NVRAM/PIC) | **NO** | `VmBus.java:101-117` (`IFLOW-AUD-031`) |
+| Una decisión inválida no acaba en entrega | **NO** | `IFLOW-AUD-034` |
+
+**Alcance de la amenaza:** los `.flow` los instala el administrador del servidor, así que
+`IFLOW-AUD-031` **no** es un escape de sandbox frente a un tercero no confiable; es una **frontera
+interna** (el BIOS usa el bypass a propósito). Su severidad es Media-Alta porque rompe la promesa
+del modelo declarado («el dueño de la página decide») y porque un programa puede enmascarar la
+IRQ de mensaje (silenciar la política) o disparar líneas espurias. **No** se verificó si la IRQ
+espuria puede producir una recursión de manejador (sería HIPÓTESIS): el PIC marca la línea *en
+servicio* sin reentrada y el intérprete guarda el estado completo, lo que sugiere que no.
+
+### 14.2 Rendimiento
+
+**No medido.** Cualitativamente (INFERENCIA): (a) el mapa es identidad → traducción O(1) sin
+TLB, coste trivial; (b) la memoria es *copy-on-write* con snapshot congelado y `clearBlock` que
+omite frames ya nulos (`ExecutionContext.java:218-226`), así que el arranque por mensaje evita
+los 8 KB de escritura del modelo anterior; (c) la persistencia de la máquina elimina el *fork*
+por mensaje. El punto débil es la **serialización** de toda la ejecución bajo `machineLock`.
+
+---
+
+## 15. Contradicciones entre documentación e implementación
+
+| # | Documento | Afirma | Código | Estado |
+|---|---|---|---|---|
+| 1 | `src/iflow/README.md` («Formato instrucción: little-endian») y la tabla del `.flow` («`u16 entryPoint (little-endian)`») | Formato little-endian | Operandos de instrucción **big-endian** (`VmInterpreter.java:154`, `assembler.ts:978-980`); cabecera **big-endian** (`ProgramImageParser.java:52-55`) | **Contradicción** — `IFLOW-AUD-039` |
+| 2 | `src/iflow/README.md` («el firmware acaba en 0x029B») | Fin del firmware en `0x029B` | `VmMemoryMap.java:95` dice «currently at 0x0204» | **Contradicción entre dos documentos** — `IFLOW-AUD-040` (cuál es el valor real: no verificado) |
+| 3 | Informe anterior (`IFLOW-AUD-019/023/028/029/030`) | DMA muerto, fetch sin MMU, `writeProperty` limitado, privilegio no aplicado, clon por mensaje | Todo **corregido** (§17.0) | **Resuelto** (la doc antigua quedó superada) |
+| 4 | `src/iflow/README.md` («buffer salida I/O (R/W) 0x8000») | Buffer de salida como E/S | Se mapea y se limpia, pero **ninguna** ruta de producción lo lee (§17.41) | **Implementado sin consumidor** — `IFLOW-AUD-041` |
+
+No encontré contradicciones en lo esencial: el mapa de memoria, el ABI v2, los 15 servicios y
+sus capabilities, los permisos R/W/X y la propiedad kernel **coinciden** entre README, `HDL.md`,
+los prompts de diseño y el código, salvo las dos filas anteriores.
+
+---
+
+## 16. Aciertos de arquitectura
+
+Cada uno con **dónde está**, **qué ventaja da** y **qué lo neutralizaría**:
+
+1. **`VmMemoryMap` como fuente única de verdad.** Parser, motor y contexto derivan de él; el
+   parser acota las secciones con `CODE_MAX_SIZE`/`CONSTANTS_MAX_SIZE` (`ProgramImageParser.java:65-68,85-88`).
+   *Ventaja:* el mapa no puede derivar entre el binario y la máquina. *Límite:* el apéndice MMIO
+   vive dentro de la página de código, que es justo el origen de `IFLOW-AUD-031`.
+2. **`ProgramImage` inmutable con SHA-256 de prefijo.** Verificado byte a byte por ambos lados
+   (§7). *Ventaja:* integridad y versionado del artefacto de despliegue. *Límite:* sin magic
+   number (`IFLOW-AUD-038`).
+3. **Privilegio de página efectivo en escritura** (`PageTable.java:166-171`): la propiedad manda
+   sobre el bit. *Ventaja:* un bug de mapeo no abre el código a escritura. *Neutralizado por:*
+   la MMIO, que no pasa por la `PageTable` (`IFLOW-AUD-031`).
+4. **Bus explícito + master con privilegio** (`VmBus`): un único punto por el que transaccionan
+   CPU y DMA, con el privilegio del emisor. *Ventaja:* modela la interconexión y da un punto de
+   observación/sustitución. *Límite:* enruta los dispositivos **antes** de la MMU, lo que rompe
+   la uniformidad del control de acceso.
+5. **Fetch por la MMU con `EXECUTE`** (`SoftMMU.fetch*`): el permiso de ejecución es real y la
+   ventana de 4 KB se valida al entrar. *Ventaja:* protecciones no nominales. *Evidencia:* tests
+   `VmInterpreterTest`/`SoftMMUTest` y el comentario que documenta el fallo previo corregido.
+6. **Memoria copy-on-write** (`PhysicalMemory`/`PageTable.fork` + `freeze`): *fork* barato para
+   snapshots/tests; el camino por mensaje ya no forka. *Límite:* el `SoftMMU` no lleva *locks*;
+   solo es seguro **porque** `machineLock` serializa (acoplamiento implícito que un futuro uso
+   concurrente rompería).
+7. **Capacidades con intersección host∩programa** (`grantedCapabilities`): el programa no puede
+   ampliar privilegios; deny-by-default efectivo. *Límite:* `MESSAGE_CLONE`/`MESSAGE_ID` sin
+   capability.
+8. **Fuel con `OUT_OF_FUEL`** (`ExecutionContext.java:241-247`) y coste por servicio
+   (`HostServiceRegistry.java:392-401`): cota de ejecución real, con IP en la excepción.
+   *Límite:* no hay cancelación por tiempo ni watchdog (`IFLOW-AUD-036`).
+9. **Errores de servicio como `status` en `R0`**, no como excepción
+   (`ServiceResult.Status`, `:375-383`): la VM puede negociar capacidades y degradar sin morir.
+10. **Pool de contextos con `journal.reset()`** y aislamiento entre ejecuciones
+    (`initialize()`): reutilización sin fugas de estado entre mensajes. *Evidencia:* el
+    `reset()` explícito está comentado como corrección de un fallo de pooling anterior.
+11. **Estado persistente real** (`hostState` del motor + RAM `0x9000+`): la feature «una sola
+    máquina viva» está implementada y probada (`VmPolicyEngineTest`), no solo documentada.
+12. **Red de seguridad en `route()`** (`catch (RuntimeException)` → `REJECT`): ninguna excepción
+    escapa al pipeline del servidor.
+13. **Firmware ROM real y BIOS activo** (POST, pantalla, tabla de IRQ): el `entryPoint` es
+    `fw_reset` y el hardware queda listo sin que el programa lo configure; hay pruebas end-to-end
+    (`BiosBootTest`, `IrqDeliveryTest`, `FirmwareIntegrationTest`).
+
+---
+
+## 17. Registro completo de hallazgos
+
+### 17.0 Estado de los hallazgos del informe anterior (AUD-019…030)
+
+| ID previo | Tema | Estado hoy | Evidencia |
+|---|---|---|---|
+| AUD-019 | `VmDmaController` código muerto | **Resuelto** | `ctx.dma()` es la vía de todos los servicios (`HostServiceRegistry.java:454,482,502,628…`) |
+| AUD-020 | Buffer de salida sin consumidor | **Persiste** | `IFLOW-AUD-041` (§17.41) |
+| AUD-022 | Memoria cruda mutable expuesta | **Resuelto** | `getPhysicalMemory()` devuelve un **snapshot** (`SoftMMU.java:347-349`) |
+| AUD-023 | Fetch sin MMU (`codeCache`) | **Resuelto** | `fetch*` con `translateExecute` + ventana de I-cache (`SoftMMU.java:311-335`) |
+| AUD-028 | `writeProperty` no mapeaba `scope/propId` | **Resuelto** | `VmPolicyEngine.java:441-459` |
+| AUD-029 | Clon de memoria por mensaje | **Resuelto** | «una sola máquina viva» + COW (`VmPolicyEngine.java:193-198`) |
+| AUD-030 | Privilegio de página no aplicado | **Resuelto** | `PageTable.java:166-171` |
+| AUD-024/025/026/027 | API duplicada, campos muertos, pass-through | **Parcial**: `PassThroughProgram` es hoy fuente única (AUD-027, OK); persisten accesores poco usados (`getPageTableForInspection` solo en test) | `grep` (§Apéndice A) |
+
+*Los IDs previos no se reabren; se deja constancia del estado.*
+
+---
+
+### [IFLOW-AUD-031] La MMIO de periféricos no comprueba permisos de página ni privilegio del maestro
+
+**Estado epistemológico:** HECHO VERIFICADO.
+**Severidad:** Media-Alta (aislamiento interno).
+**Confianza:** Alta (código leído íntegro y flujo seguido).
+**Ubicación principal:** `src/iflow/.../vm/memory/VmBus.java:101-117` (escrituras), `:85-99` (lecturas).
+**Ubicaciones relacionadas:** `VmMemoryMap.java:91-121` (apéndice MMIO dentro de la página 0);
+`VmPolicyEngine.java:290-304` (página 0 marcada R/X); `PageTable.java:166-171` (la regla que *sí*
+se aplica a RAM); `assembler.ts:523,540` (el BIOS escribe NVRAM con `STWI`).
+**Componente afectado:** bus de datos / MMU / periféricos.
+**Comportamiento esperado:** el maestro `PROGRAM` (CPU del programa) no puede escribir el
+apéndice MMIO de control (NVRAM/PIC), o solo con capability explícita; el modelo «el dueño de la
+página decide» (`PageTable.java:137-141`) debería gobernar también la E/S.
+**Comportamiento observado:** `VmBus.writeByte/writeWord` deciden el destino con
+`deviceFor(vaddr)` y, si es un dispositivo, llaman `d.writeByte(...)`/`d.writeWord(...)`
+**sin** consultar la `PageTable` ni el `Privilege`. Ninguna ruta de E/S pasa por `translate`.
+**Evidencia:**
+
+```java
+// VmBus.java:101-108
+public void writeByte(int vaddr, int value) {
+    VmDevice d = memory.deviceFor(vaddr);
+    if (d != null) {
+        d.writeByte(vaddr, value);
+        return;
+    }
+    memory.writeByte(vaddr, value, privilege);   // ← solo la RAM comprueba permiso/privilegio
+}
+```
+
+```java
+// VmMemoryMap.java:96-98 — el bypass es intencional para el BIOS…
+// "El interconnect lo decodifica *antes* de ROM/RAM, así que el BIOS puede manejar
+//  dispositivos con stores normales sin permiso de escritura en la página (R/X) de código."
+```
+
+**Razonamiento:** la ventana MMIO (`0x0F00–0x0FFF`) está contenida en la página 0, que el cargador
+marca R/X (`VmPolicyEngine.java:303`). Si la E/S pasara por la `PageTable`, el BIOS —que corre en
+la misma página— no podría escribirla; para evitar eso, el bus la decodifica antes. La
+consecuencia no prevista es que **tampoco** distingue cuándo el emisor es el programa de usuario:
+el mismo camino sirve a cualquiera, y la página R/X deja de proteger la NVRAM y el PIC.
+**Impacto:** un `.flow` puede reescribir la bandera de arranque del BIOS (alterando el POST del
+siguiente arranque), el `ENABLE`/`RAISE`/`ACK` del PIC (enmascarar la IRQ de mensaje o disparar
+líneas espurias) y el banco de registros de la pantalla. No hay escape al host (el periférico
+está en el contenedor del programa), pero se rompe la frontera declarada.
+**Condiciones necesarias:** cualquier `.flow` presente en el directorio de configuración.
+**Reproducción:** `asm: STWI` a `DEVICE_NVRAM_BASE` (`0x0F10`) desde el programa de usuario y
+leer la bandera de arranque en el mensaje siguiente (no ejecutado aquí; la ruta es la que usa el
+propio BIOS en `assembler.ts:523,540`).
+**Corrección recomendada:** que el bus consulte la `PageTable`/`Privilege` antes de enrutar al
+dispositivo (p. ej. exigir presencia de mapeo y, para escrituras de control, privilegio
+`SUPERVISOR` o una capability `device.write`), o sacar el apéndice MMIO de la página R/X a una
+página propia con permisos explícitos.
+**Regresión que debe añadirse:** test que ejecute un `STWI` a `0x0F10` desde un contexto
+`PROGRAM` y espere fallo (hoy escribiría).
+**Limitaciones:** no he ejecutado el `STWI`; la conclusión es de lectura del código y del mismo
+patrón que usa el firmware.
+
+---
+
+### [IFLOW-AUD-032] `touchesDevice` decide por los extremos del rango
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Media-Baja. **Confianza:** Alta.
+**Ubicación principal:** `src/iflow/.../vm/memory/VmBus.java:157-162`.
+**Ubicaciones relacionadas:** `:119-148` (`readBlock`/`writeBlock`/`clearBlock`).
+**Comportamiento esperado:** un bloque se enruta a los dispositivos si **algún** byte cae en una
+ventana MMIO; la decodificación de bloque y la de byte a byte deben coincidir.
+**Comportamiento observado:** solo se comprueba el **primer** y el **último** byte
+(`isDeviceAddress(vaddr) || isDeviceAddress(vaddr + length - 1)`).
+**Evidencia:**
+
+```java
+// VmBus.java:157-162
+private boolean touchesDevice(int vaddr, int length) {
+    if (length <= 0) return false;
+    return memory.isDeviceAddress(vaddr) || memory.isDeviceAddress(vaddr + length - 1);
+}
+```
+
+**Razonamiento:** para un rango como `0x0EF0…0x1000`, ni el primer byte (`0x0EF0`) ni el último
+(`0x1000`) son dispositivos, pero **dentro** está toda la ventana `0x0F00–0x0FFF`. El bloque va
+por el camino de RAM/`SoftMMU` en vez de por los periféricos. Como la página 0 es R/X, una
+escritura así dará `PRIVILEGE_FAULT` (no corrompe), pero una lectura obtendrá la ROM en vez del
+registro del dispositivo: **resultado distinto** del de leer byte a byte.
+**Impacto:** inconsistencia de decodificación; lecturas/escrituras de bloque que solapan la MMIO
+sin tocar extremos dan un resultado diferente a las equivalentes byte a byte.
+**Condiciones necesarias:** bloques (`LDW/STW` sobre ventana o DMA) que crucen `0x0F00–0x0FFF`
+por los bordes.
+**Reproducción:** comparar `writeBlock(vaddr, src, 0, n)` con `n` escrituras `writeByte` sobre un
+rango que contenga la ventana sin tocarla en los extremos (no ejecutado aquí).
+**Corrección recomendada:** comprobar solapamiento de intervalo contra los rangos de cada
+dispositivo, no solo los extremos.
+**Regresión que debe añadirse:** test de equivalencia bloque↔byte sobre un rango que cruce la
+MMIO.
+**Limitaciones:** no he ejecutado el caso; el análisis es de lectura.
+
+---
+
+### [IFLOW-AUD-033] Las lecturas de la SoftMMU descartan el privilegio
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Baja/Informativa. **Confianza:** Alta.
+**Ubicación principal:** `src/iflow/.../vm/memory/SoftMMU.java:145-148,156-158,176-193`.
+**Ubicaciones relacionadas:** `PageTable.java:177-179` (`translateRead` sin privilegio).
+**Comportamiento esperado:** o bien las lecturas no dependen del privilegio (y entonces el
+parámetro sobra), o bien lo aplican.
+**Comportamiento observado:** `readByte(vaddr, privilege)`, `readWord(vaddr, privilege)` y
+`readBlock(vaddr, …, privilege)` reciben el privilegio y llaman `translateRead`, que **no lo
+usa**. Es el único `translate*` que no lo propaga.
+**Evidencia:**
+
+```java
+// SoftMMU.java:145-148
+public int readByte(int virtualAddr, Privilege privilege) {
+    int physAddr = pageTable.translateRead(virtualAddr);   // ← ignora 'privilege'
+    return memory.readByte(physAddr);
+}
+```
+
+**Razonamiento:** la `PageTable` documenta que las páginas kernel son *program-readable*
+(`PageTable.java:79-81`), así que para `READ` el privilegio **no cambia el resultado** y no hay
+fuga. El defecto es de **claridad y contrato de API**: la firma sugiere una comprobación
+inexistente.
+**Impacto:** riesgo de que un futuro permiso de lectura por privilegio se implemente solo en la
+`PageTable` y las lecturas lo ignoren silenciosamente.
+**Condiciones necesarias:** ninguna hoy (no hay efecto observable).
+**Corrección recomendada:** propagar `privilege` a `translateRead` (aunque hoy no cambie el
+resultado) o retirar el parámetro.
+**Regresión que debe añadirse:** test que fije el contrato elegido.
+**Limitaciones:** ninguna; código leído íntegro.
+
+---
+
+### [IFLOW-AUD-034] Una decisión de ruta fuera de rango degrada a LOG (fail-open)
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Media. **Confianza:** Alta.
+**Ubicación principal:** `src/iflow/.../vm/engine/PolicyResultValidator.java:138-149` (default →
+`LOG`), `:71` (`target` inicial `LOG`).
+**Ubicaciones relacionadas:** `HostServiceRegistry.java:599-611` (`default` → `SET_PROCESSED`
+`"route:UNKNOWN"`); `RouteDecision.java:32-36` (`LOG.delivered() == true`).
+**Comportamiento esperado:** una política que produce un resultado inválido no debería **entregar**
+el mensaje; el contrato de fallo del validador es `REJECT` (`:43-52`, `:113-124`).
+**Comportamiento observado:** el `default` del `switch` en el servicio registra
+`SET_PROCESSED(true)`, y `parseRouteDecision` traduce cualquier cadena desconocida a
+`PolicyTarget.LOG`, que **se entrega**.
+**Evidencia:**
+
+```java
+// PolicyResultValidator.java:138-149
+private PolicyTarget parseRouteDecision(String route) {
+    return switch (route.toUpperCase()) {
+        case "LOG" -> PolicyTarget.LOG;
+        …
+        case "CONTINUE" -> PolicyTarget.LOG;
+        default -> PolicyTarget.LOG;   // ← desconocido ⇒ LOG (entregable)
+    };
+}
+```
+
+**Razonamiento:** hay una asimetría entre el tratamiento de los **errores de ejecución**
+(fail-closed → `REJECT`) y el de los **valores de decisión** inválidos (fail-open → `LOG`). Un
+programa con un código de decisión erróneo termina entregando el mensaje, que es justo lo que una
+política por defecto suele querer evitar.
+**Impacto:** una política mal compilada o un código fuera de rango puede provocar entrega en vez
+de rechazo, silenciosamente.
+**Condiciones necesarias:** el programa emite `ROUTE_DECISION` con un `options` fuera de
+`DECISION_LOG…DECISION_CONTINUE` (`0…6`), o termina sin decisión.
+**Reproducción:** llamar a `ROUTE_DECISION` con `options=200` y comprobar que
+`RouteOutcome.decision().delivered()` es `true` (no ejecutado aquí; verificado por código).
+**Corrección recomendada:** que el `default` del servicio y de `parseRouteDecision` produzcan
+`REJECT`, o que el servicio valide el rango y devuelva `INVALID_ARGUMENT`.
+**Regresión que debe añadirse:** test `options` fuera de rango ⇒ `REJECT`.
+**Limitaciones:** ninguna; las tres ubicaciones están leídas.
+
+---
+
+### [IFLOW-AUD-035] `setFatalError` nunca se invoca: rama de error fatal inalcanzable
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Baja (código muerto). **Confianza:** Alta.
+**Ubicación principal:** `src/iflow/.../vm/execution/ExecutionContext.java:423-425`;
+`PolicyResultValidator.java:43-52`.
+**Comportamiento esperado:** o la rama se usa, o no existe.
+**Comportamiento observado:** el único llamador de `setFatalError` en todo el repositorio es
+`ExecutionContextTest`; la comprobación `context.hasFatalError()` del validador nunca se cumple
+en producción (los fallos llegan como excepción capturada en `VmPolicyEngine.java:247-256`).
+**Evidencia:** `grep -rn "setFatalError" --include=*.java src/` → definición + test.
+**Impacto:** mantenibilidad; sugiere una capacidad de diagnóstico que no existe. No hay efecto
+funcional.
+**Corrección recomendada:** eliminar la rama y el campo, o cablearlos desde la captura de
+excepciones del motor.
+**Limitaciones:** ninguna.
+
+---
+
+### [IFLOW-AUD-036] No hay cancelación ni watchdog en producción
+
+**Estado epistemológico:** HECHO VERIFICADO (ausencia) + INFERENCIA (impacto).
+**Severidad:** Baja. **Confianza:** Media-Alta.
+**Ubicación principal:** `ExecutionContext.java:416-421` (`cancel`/`checkCancelled`).
+**Comportamiento observado:** `cancel()` solo se invoca en tests; no hay temporizador ni vía de
+cancelación desde el host. La única cota es el fuel (efectiva).
+**Impacto:** con `machineLock` tomado durante toda la ejecución, un programa que no consuma fuel
+(no puede: cada instrucción consume 1) no puede colgarse indefinidamente; pero **sí** puede
+consumir las 100 000 unidades de fuel en cada mensaje, y no hay forma de abortar una ejecución en
+curso si el servidor se está apagando.
+**Condiciones necesarias:** escenario de apagado con `policy.flow` activo.
+**Corrección recomendada:** exponer una cancelación cooperativa (p. ej. `cancel()` desde el
+`close()` del motor) y/o un presupuesto de tiempo además del de fuel.
+**Limitaciones:** no he medido cuánto tarda en agotarse el fuel (HIPÓTESIS cuantitativa).
+
+---
+
+### [IFLOW-AUD-037] `-d/--debug` no altera el artefacto
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Baja. **Confianza:** Alta.
+**Ubicación principal:** `tools/iflow-compiler/src/cli.ts:19` (opción), `assembler.ts:1191,1218`
+(se guarda en `ProgramImage`), `:1234-1273` y `:1334-1373` (serializadores).
+**Comportamiento esperado:** `-d` debería producir información de depuración en la salida (o no
+existir).
+**Comportamiento observado:** ninguno de los dos serializadores emite sección de depuración; el
+`.flow` es idéntico con y sin `-d`. (El listado `-l/--list` sí genera el `.lst`.)
+**Impacto:** opción engañosa; quien la use creerá que el binario lleva símbolos.
+**Corrección recomendada:** implementar una sección `debug` versionada o retirar la opción.
+**Limitaciones:** ninguna; verificado en el código de los dos serializadores.
+
+---
+
+### [IFLOW-AUD-038] El formato `.flow` carece de magic number
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Informativa. **Confianza:** Alta.
+**Ubicación principal:** `ProgramImageParser.java:22-56`.
+**Comportamiento esperado (endurecimiento):** un formato binario propio suele llevar firma para
+rechazar rápido un fichero ajeno.
+**Comportamiento observado:** no hay magic; cualquier fichero cuyos primeros bytes pasen las
+versiones y cotas llegará al SHA-256. El error es «Hash verification failed», no «no es un .flow».
+**Impacto:** diagnóstico; el fallo es igualmente seguro (la carga cae a pass-through).
+**Corrección recomendada:** añadir `u32 magic` (p. ej. `0x464C4F57` «FLOW») como primera palabra
+y versionar el formato.
+**Limitaciones:** cambiaría el formato (requiere subir `formatVersion`).
+
+---
+
+### [IFLOW-AUD-039] La documentación declara little-endian; los operandos y la cabecera son big-endian
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Media (documental; trampa real).
+**Confianza:** Alta.
+**Ubicación principal:** `src/iflow/README.md` (tabla «Formato instrucción» y bloque del header).
+**Ubicaciones relacionadas:** `VmInterpreter.java:154`; `assembler.ts:978-980,1251-1256`;
+`ProgramImageParser.java:52-55`; `SoftMMU.java:150-168` (datos, little-endian).
+**Comportamiento esperado según el documento:** todo little-endian.
+**Comportamiento observado:** **mixto**: operandos de instrucción y cabecera **big-endian**;
+palabras de datos (MMU) y constantes de la ROM **little-endian**.
+**Evidencia:**
+
+```java
+// VmInterpreter.java:154 — inmediato big-endian
+int imm = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
+```
+
+```ts
+// assembler.ts:1251-1253 — entrada big-endian
+parts.push((image.entryPoint >> 8) & 0xFF);
+parts.push(image.entryPoint & 0xFF);
+```
+
+**Impacto:** cualquiera que escriba un ensamblador o un parser nuevo siguiendo el README
+codificará mal la cabecera y los inmediatos. Es el mayor riesgo de mantenimiento del formato.
+**Corrección recomendada:** corregir el README (y `HDL.md` si procede) para describir el formato
+mixto y etiquetar cada campo por su endianness.
+**Regresión que debe añadirse:** un test del compilador que fije el layout byte a byte (golden
+file) — el reensamblado determinista ya protege la estabilidad, pero no documenta la intención.
+**Limitaciones:** el valor real es el del código (verificado por ambos lados).
+
+---
+
+### [IFLOW-AUD-040] Dos documentos discrepan sobre dónde acaba el firmware
+
+**Estado epistemológico:** CONTRADICCIÓN (entre documentos). **Severidad:** Informativa.
+**Confianza:** Alta (sobre la discrepancia), Baja (sobre cuál es el valor correcto).
+**Ubicaciones:** `src/iflow/README.md` («el firmware acaba en `0x029B`») vs
+`VmMemoryMap.java:95` («currently at `0x0204`»).
+**Impacto:** documental. Ninguno funcional: la MMIO usa la cola libre de la ROM y el valor exacto
+no participa en ninguna comprobación.
+**Corrección recomendada:** dejar una sola cifra (derivarla de la ROM ensamblada).
+**Limitaciones:** no verifiqué cuál es la correcta (requeriría medir la ROM generada).
+
+---
+
+### [IFLOW-AUD-041] El buffer de salida (`0x8000`) sigue sin consumidor en producción
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Baja. **Confianza:** Alta.
+**Ubicación principal:** `VmMemoryMap.java:71`, `VmPolicyEngine.java:339`,
+`ExecutionContext.java:112,498-499`.
+**Comportamiento esperado:** si el mapa declara un buffer de salida, algún consumidor lo lee.
+**Comportamiento observado:** el buffer se mapea R/W, se limpia en cada ejecución
+(`initialize`) y tiene un getter (`outputBufferVAddr()`), pero **ninguna** ruta de producción lo
+lee; el resultado viaja exclusivamente por el `ModificationJournal`. Es el único hallazgo del
+informe anterior que **persiste**.
+**Impacto:** superficie de E/S muerta; un programa puede escribir en `0x8000` sin que nadie lo use.
+**Corrección recomendada:** o bien exponer una lectura (p. ej. para depuración/telemetría), o
+documentarlo como reservado y quitar el getter.
+**Limitaciones:** `grep` sobre producción; si un periférico lo decodificara, aparecería en
+`deviceFor`.
+
+---
+
+### [IFLOW-AUD-042] Operaciones del journal inalcanzables y `SET_COLOR_MODE` sin validar
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Baja. **Confianza:** Alta.
+**Ubicación principal:** `PolicyResultValidator.java:159-178`;
+`VmPolicyEngine.java:441-459`.
+**Comportamiento observado:** (a) el validador sabe aplicar `SET_SLEEP_MILLIS` (`Long`),
+`SET_FORMAT_PAPI` (`Boolean`), `ADD_SOUNDS`/`REMOVE_SOUNDS` (`List`) y `SET_LANG_*`, pero **ningún**
+emisor de producción los crea (solo lo hacen `writeProperty` y los servicios de routing);
+(b) `SET_COLOR_MODE` aplica `ColorMode.valueOf(value.toUpperCase())` (`:167-168`) sin validar el
+valor.
+**Evidencia:**
+
+```java
+// PolicyResultValidator.java:167-168
+case SET_COLOR_MODE -> msg.withColorMode(
+    ColorMode.valueOf(((String) entry.value).toUpperCase()));
+```
+
+**Razonamiento:** un valor de color no válido (p. ej. `"banana"`) lanza
+`IllegalArgumentException` dentro de `validate()`. No escapa —la red de seguridad de `route()`
+lo convierte en `REJECT`— pero se usa una **excepción como control de flujo**, y el mensaje se
+rechaza con «VM internal error» (motivo perdido).
+**Impacto:** rechazos inexplicables ante un valor inválido del programa; ramas muertas que
+confunden sobre qué puede emitirse.
+**Corrección recomendada:** validar el valor antes de journalar (devolver `INVALID_ARGUMENT` en
+`PROPERTY_WRITE`) y eliminar del validador las operaciones sin emisor.
+**Regresión que debe añadirse:** `PROPERTY_WRITE` de color inválido ⇒ status de error, sin
+`REJECT` opaco.
+**Limitaciones:** ninguna sobre lo leído.
+
+---
+
+### [IFLOW-AUD-043] Asimetría de compatibilidad de versiones en el parser
+
+**Estado epistemológico:** HECHO VERIFICADO. **Severidad:** Baja. **Confianza:** Alta.
+**Ubicación principal:** `ProgramImageParser.java:38-50`.
+**Comportamiento observado:** `isaVersion` y `minFirmwareVersion` se aceptan si son **menores o
+iguales** (`>`), pero `minAbiVersion` exige **igualdad exacta** (`!=`). Un programa construido
+para un ABI anterior se rechaza en bloque.
+**Impacto:** documentado como intencional en el README («un `.flow` de otra convención de llamada
+se rechaza»), pero la asimetría no está justificada en el código y complica la evolución del
+ABI.
+**Corrección recomendada:** hacer explícito el contrato (comentario y, si se quiere compatibilidad
+hacia atrás, `minAbiVersion <= CURRENT`), o mantener la igualdad y documentarla como decisión
+deliberada en el formato.
+**Limitaciones:** ninguna.
+
+---
+
+## 18. Tabla de puntuaciones justificadas
+
+| Dimensión | Nota | Justificación |
+|---|---|---|
+| Calidad de la arquitectura | **8,0** | Separación limpia ISA/memoria/ejecución/servicios, bus explícito, `VmMemoryMap` única |
+| Diseño y coherencia de la ISA | **8,0** | Codificación completa y coherente; falta `MULU/DIVU` y CMP con inmediato (documentado) |
+| Corrección del intérprete | **7,5** | Bucle correcto, errores tipados, fuel efectivo; terminación por desbordamiento de PC silenciosa |
+| Corrección y robustez del modelo de memoria | **6,5** | COW, pre-validación y privilegio de escritura correctos; la MMIO evade el control |
+| Aislamiento y aplicación de permisos | **6,0** | Excelente en RAM/código; **no** en periféricos (`IFLOW-AUD-031`) |
+| Calidad del formato binario | **7,0** | Correcto y con integridad SHA-256; sin magic y con endianness mal documentada |
+| Corrección del compilador | **8,0** | Determinista, 13/13 validaciones, ROM real; `-d` es no-op |
+| Coherencia compilador↔runtime | **9,0** | Formato verificado byte a byte por ambos lados, hash alineado |
+| Funcionalidad de los servicios HOST | **8,0** | 15/15 registrados, DMA como vía, errores por status; dos sin capability |
+| Corrección de decisiones y efectos de las políticas | **6,0** | Journal y conversión sólidos; `default → LOG` fail-open |
+| Robustez ante entradas malformadas | **7,5** | Cotas, hash, truncados y `fallback` pass-through; sin magic |
+| Rendimiento | **7,0** | Estructura O(1) y sin fork por mensaje; serialización global (no medido → HIPÓTESIS) |
+| Tests y cobertura | **8,5** | 383/383, 13/13; falta integración compilador→VM real |
+| Documentación y coherencia con el código | **6,5** | Muy completa; endianness y fin del firmware mal |
+| Mantenibilidad | **8,0** | Modular y legible; código muerto localizado (fatal error, cancel, journal ops) |
+| Concurrencia | **7,0** | Serialización y pool correctos; acoplamiento implícito MMU↔lock, sin watchdog |
+
+**Global ponderada: ~7,5/10** — subsistema maduro y funcional, con deuda localizada y dos
+defectos que conviene cerrar antes de ampliarlo (E/S sin control de acceso y fail-open de
+decisiones). **No** se rebaja la valoración global por ellos, ni se eleva por encima de lo que la
+evidencia permite.
+
+> **Comparación con el informe anterior (~62 %):** la subida no es cosmética: se debe a la
+> corrección **verificada** de AUD-019/023/028/029/030 y al refuerzo de tests (288 → 383).
+
+---
+
+## 19. Plan de corrección priorizado
+
+### P0 — Integridad y corrección fundamental
+*Ninguno.* No he encontrado corrupción de memoria ni incumplimiento de la integridad del binario.
+
+### P1 — Corrección funcional
+1. **IFLOW-AUD-031** — control de acceso en la MMIO de periféricos (exigir privilegio o
+   capability; o sacar el apéndice de la página R/X).
+2. **IFLOW-AUD-034** — `default` de decisión de ruta ⇒ `REJECT` (cerrar el fail-open).
+
+### P2 — Robustez
+3. **IFLOW-AUD-042** — validar `SET_COLOR_MODE` en `PROPERTY_WRITE`; retirar las operaciones del
+   journal sin emisor.
+4. **IFLOW-AUD-032** — decodificación de bloques por solapamiento de intervalo.
+5. **IFLOW-AUD-036** — cancelación cooperativa (y, opcionalmente, presupuesto de tiempo).
+
+### P3 — Rendimiento y mantenibilidad
+6. **IFLOW-AUD-039 / 040** — corregir la documentación de endianness y unificar la cifra del
+   firmware.
+7. **IFLOW-AUD-035 / 041 / 037** — retirar código/mecanismos muertos (`fatalError`,
+   buffer de salida o su getter, opción `-d`).
+8. **IFLOW-AUD-033** — decidir y fijar el contrato de privilegio en lectura.
+
+### P4 — Mejoras de diseño
+9. **IFLOW-AUD-038 / 043** — añadir magic number (subiendo `formatVersion`) y hacer explícito el
+   contrato de versiones.
+10. Capacidad para `MESSAGE_CLONE`/`MESSAGE_ID`; y **test de integración compilador→VM** que
+    ensamble con el CLI real y ejecute en el JVM.
+
+---
+
+## 20. Registro de dudas abiertas y verificaciones pendientes
+
+- **¿Cuánto tarda en agotarse el fuel** en una política típica? Sin benchmark no puedo afirmar
+  si 100 000 unidades son holgadas o escasas (HIPÓTESIS).
+- **¿Puede una IRQ espuria disparada por el programa producir recursión o inanición?** El PIC
+  marca la línea en servicio y el intérprete guarda el estado completo, lo que sugiere que no,
+  pero **no lo he ejecutado** (HIPÓTESIS).
+- **¿Es `0x0204` o `0x029B` el fin real del firmware?** No medido (`IFLOW-AUD-040`).
+- **¿`MSGP`/servicios con `new String[0]` de capabilities** deben exigir alguna? Decisión
+  del diseño, no comprobada con el autor.
+- **¿El display sombrea RAM de usuario (`0xE000`)?** El README dice que el *interconnect*
+  decodifica la ventana por defecto `0xE000`, que cae dentro de la RAM de usuario
+  (`0x9000–0xFFFF`). **No verifiqué** si eso reduce el espacio realmente utilizable ni si está
+  documentado como reservado (pendiente).
+- **Rendimiento por mensaje** y comportamiento bajo carga concurrente (la ejecución es
+  secuencial): **no medido**.
+
+---
+
+## 21. Registro de errores cometidos por el propio auditor
+
+- **Hipótesis retirada (fuel):** sospeché que el *fuel* no se aplicaba porque el bucle principal
+  solo hace `consumeFuel(1)` y el `grep` inicial no mostró comparaciones contra cero. Al leer
+  `ExecutionContext.consumeFuel` (`:241-247`) comprobé que **lanza `OUT_OF_FUEL`** cuando es
+  insuficiente: la cota **sí** es efectiva. La sospecha queda **descartada**; no figura como
+  hallazgo.
+- **Afirmación matizada (privilegios de lectura):** empecé considerando `IFLOW-AUD-033` una fuga
+  de aislamiento; al verificar que las páginas kernel son *program-readable* por diseño
+  (`PageTable.java:79-81`), la rebajé a Baja/Informativa. **Rebajada.**
+- **Severidad corregida (color inválido):** contemplé que `ColorMode.valueOf` pudiera escapar al
+  pipeline del servidor; al leer la red de seguridad `catch (RuntimeException) → REJECT`
+  (`VmPolicyEngine.java:251-256`) comprobé que **no escapa**. Reclasificado de «Alta» a «Baja».
+- **Sin arnés E2E:** no escribí un programa Java que ejecute el `.flow` que ensamblé. Declarado
+  como limitación (§2.3) y compensado con la suite existente; **no** afirmo haber ejecutado el
+  binario.
+
+**Afirmaciones descartadas / no sostenidas:** (a) fuel no aplicado; (b) fuga de lectura por
+privilegio; (c) crash del servidor por color inválido; (d) desalineación de longitud en
+`COPY`/`MOVE` (verificado: 8 B por ambos lados).
 
 ---
 
 ## Apéndice A — Reproducción de las verificaciones
 
 ```bash
-# Toolchain / tests
-JAVA_HOME=/opt/javac/x64/21 ./gradlew :src:iflow:test --offline --no-daemon --rerun-tasks
-#   -> BUILD SUCCESSFUL ; test-results: tests=288 failures=0 errors=0 skipped=0 (21 ficheros XML)
+# Toolchain (no hay java en el PATH): JDK 21 real en /opt/javac/x64/21
+export JAVA_HOME=/opt/javac/x64/21
 
+# Suite de la VM (offline, todo desde ~/.gradle)
+./gradlew :src:iflow:test --offline --rerun-tasks
+#   -> BUILD SUCCESSFUL ; 383 PASSED, 0 FAILED, 0 SKIPPED
+
+# Cobertura jacoco
+#   -> 84 % instrucciones · 71 % líneas · 70 % ramas · 91 % métodos · 97 % clases
+
+# Compilador (offline, node_modules ya presentes)
 cd tools/iflow-compiler
-NODE_OPTIONS=--jitless npm run build        # tsc OK
+npx tsc                                     # sin errores
 node test/validation/run.js                 # 13/13 cases passed
+node dist/cli.js examples/policy.flowasm -o /tmp/opencode/iflow-e2e/policy.flow
+#   -> ✓ Assembled … (4209 bytes)
 
-# Determinismo del ensamblador (byte-idéntico)
-node dist/cli.js test/firmware.flowasm  -o /tmp/fw.flow   && cmp /tmp/fw.flow test/firmware.flow
-node dist/cli.js test/simple.flowasm    -o /tmp/s.flow    && cmp /tmp/s.flow  test/simple.flow
-node dist/cli.js test/main_only.flowasm -o /tmp/m.flow    && cmp /tmp/m.flow  test/main_only.flow
+# Verificación del binario por ambos lados (campos + SHA-256)
+python3 - <<'PY'
+import hashlib
+d=open('/tmp/opencode/iflow-e2e/policy.flow','rb').read()
+clen=(d[6]<<8)|d[7]; nconst=(d[8]<<8)|d[9]; ncaps=d[10]
+off=16+clen+2*nconst
+for _ in range(ncaps): off=d.index(0,off)+1
+print("hash OK:", hashlib.sha256(d[:off]).digest()==d[off:off+32],
+      "| extra:", len(d)-off-32)
+PY
+#   -> hash OK: True | extra: 0
 
-# IFLOW-AUD-019: VmDmaController es código muerto (solo su test lo referencia)
-grep -rn "VmDmaController" --include=*.java . | grep -v /build/
-#   -> solo VmDmaController.java y VmDmaControllerTest.java
-grep -rn "new VmDmaController" src/iflow/src/main          # -> (vacío)
+# Determinismo del ensamblador (5/5 byte-idénticos)
+for f in test/firmware test/simple test/main_only test/irq test/bios_screen; do
+  node dist/cli.js "$f.flowasm" -o "/tmp/opencode/e2e_$(basename $f).flow" >/dev/null
+  cmp -s "/tmp/opencode/e2e_$(basename $f).flow" "$f.flow" && echo "$f OK" || echo "$f DIFIERE"
+done
 
-# IFLOW-AUD-020: el buffer de salida nunca se lee en producción
-grep -rn "OUTPUT_BASE\|outputBufferVAddr" src/iflow/src/main   # -> setup/init/getter, sin lecturas
-
-# IFLOW-AUD-022: fugas y API duplicada sin uso
-grep -rn "getPhysicalMemory\|getPageTableDirect\|getPageTableForInspection\|getPageTableForMutation" --include=*.java src
-#   -> solo definiciones en SoftMMU.java
-
-# IFLOW-AUD-024: pageTable del contexto solo lo tocan los tests
-grep -rn "setPageTable\|\.pageTable()" --include=*.java src
-#   -> solo ExecutionContextTest y FirmwareIntegrationTest
-
-# IFLOW-AUD-026: campos muertos y constantes no registradas
-grep -rn "placeholderResolver\|translationDetector" --include=*.java src    # -> solo definiciones
+# IFLOW-AUD-035: setFatalError solo definido + usado en un test
+grep -rn "setFatalError" --include=*.java src/
+# IFLOW-AUD-036: cancel() solo desde tests
+grep -rn "cancelled = true\|\.cancel()" --include=*.java src/
+# IFLOW-AUD-031/032: la E/S no consulta la PageTable
+grep -n "deviceFor\|d.writeByte\|touchesDevice" src/iflow/src/main/java/.../vm/memory/VmBus.java
+# IFLOW-AUD-039: inmediato big-endian en el intérprete
+grep -n "fetch(ctx, ip + 2) << 8" src/iflow/src/main/java/.../vm/execution/VmInterpreter.java
 ```
 
 *Fin del informe.*
