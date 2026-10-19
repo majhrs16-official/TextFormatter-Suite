@@ -111,7 +111,9 @@ def bars_first_last(dates, g, path, title):
         data.append((m, a[0], a[-1], max(a) or 1))
     dirty = [t + s for t, s in zip(g["todo"], g["stubs"])]
     md = max(dirty) or 1
-    data.append(("limpieza", md - dirty[0], md - dirty[-1], md))
+    # Se muestra la deuda tal cual (no "max - deuda", que daria 0 en cualquier
+    # corte que sea el mas sucio y un factor sin sentido). Menos es mejor.
+    data.append(("deuda (todo+stubs)", dirty[0], dirty[-1], md))
 
     row_h, th, bh, lw = 62, 104, 54, 190
     W = 1240
@@ -119,8 +121,8 @@ def bars_first_last(dates, g, path, title):
     img = Image.new("RGB", (W, H), C.BG)
     d = ImageDraw.Draw(img, "RGBA")
     d.text((16, 14), title, font=C.font(17, True), fill=C.FG)
-    d.text((16, 40), f"del {dates[0]} al {dates[-1]}   (barra = valor / maximo historico del eje)",
-           font=C.font(11), fill=C.MUTED)
+    d.text((16, 40), f"del {dates[0]} al {dates[-1]}   (barra = valor / maximo historico del eje; "
+                     "en 'deuda', menos es mejor)", font=C.font(11), fill=C.MUTED)
     track = W - lw - 250
     for i, (m, first, last, mx) in enumerate(data):
         y = th + i * row_h
