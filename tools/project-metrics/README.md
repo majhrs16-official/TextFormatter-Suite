@@ -31,11 +31,12 @@ Eso ejecuta, en orden:
 | 1 | `extract_git.py` | Un snapshot por día con commit (días vacíos rellenados). Métricas de estado y de actividad, por módulo y total. |
 | 2 | `extract_chat.py` | Parsea `chat.log` y produce la tabla de eventos y las métricas diarias de la narrativa. |
 | 3 | `join_commits.py` | Resuelve los `git commit` vistos en el chat contra el histórico real. |
-| 4 | `scan_tools.py` | *(opcional)* Analizadores reales (semgrep/gitleaks) → `data/tools/<fecha>.json`. |
-| 5 | `maturity.py` | Rúbrica de madurez: 12 familias, 0–100, por módulo y por corte. |
-| 6 | `render_pil.py` | Paneles `panel_git`, `panel_chat`, `panel_actividad` y gráficas por módulo. |
-| 7 | `render_extra.py` | `heatmap_modulos` (módulo × tiempo) y `crecimiento` (primer vs último corte). |
-| 8 | `render_maturity.py` | `rubrica_familias` (evolución por familia) y `rubrica_matriz` (módulo × familia). |
+| 4 | `scan_tools.py` | *(opcional)* Analizadores reales (semgrep/gitleaks/PMD/ESLint) → `data/tools/<fecha>.json`. |
+| 5 | `judge.py` | Evidencia y veredictos de las familias 3 y 11: genera `data/evidence/` e importa `judge_scores.csv` → `data/judge/<fecha>.json`. |
+| 6 | `maturity.py` | Rúbrica de madurez: 12 familias, 0–100, por módulo y por corte. |
+| 7 | `render_pil.py` | Paneles `panel_git`, `panel_chat`, `panel_actividad` y gráficas por módulo. |
+| 8 | `render_extra.py` | `heatmap_modulos` (módulo × tiempo) y `crecimiento` (primer vs último corte). |
+| 9 | `render_maturity.py` | `rubrica_familias` (evolución por familia) y `rubrica_matriz` (módulo × familia). |
 
 ## La capa narrativa: `chat.log`
 
@@ -136,14 +137,93 @@ reales y `maturity.py` sustituye su proxy:
 | `eslint` | 1 · Calidad | errores/avisos JS del propio `web-editor` (su `eslint.config.js`); avisos ×0.25 |
 
 Rutas por entorno o autodetección: `PM_GITLEAKS`, `PM_SEMGREP`, `PM_PMD`,
-`PM_ESLINT`, `PM_ESLINT_MODULES`, `PM_JAVA_HOME`. Son **opcionales**: sin ellas la
-rúbrica usa los proxies y el resto del pipeline no cambia.
+`PM_ESLINT`, `PM_ESLINT_MODULES`, `PM_JAVA_HOME`. La raíz del toolchain (y de los
+temporales) se cambia con `PM_TOOLS` (por defecto `/tmp/opencode`). Son
+**opcionales**: sin ellas la rúbrica usa los proxies y el resto del pipeline no
+cambia.
 
 ```bash
 PM_SCAN=1 ./run_all.sh                 # con analizadores si están
 python3 scan_tools.py --only semgrep   # solo semgrep
 python3 scan_tools.py --dates 2026-10-18
 ```
+
+## Juez (familias 3 y 11)
+
+Las familias **3 (documentación)** y **11 (implementación real)** son
+cualitativas y difíciles de capturar con un proxy: lo que importa es la
+*sincronía* de la documentación con el código y el *realismo* de lo implementado,
+no una cifra. El resto de familias sí son deterministas.
+
+El juicio lo hace el agente de OpenCode, no el programa. `judge.py` aporta solo
+las dos mitades reproducibles:
+
+```
+data/evidence/<fecha>.<familia>.md   # evidencia (determinista, ~10 líneas)
+judge_scores.csv                     # veredicto, commiteado (2 por corte)
+data/judge/<fecha>.json              # veredicto materializado, lo que lee maturity.py
+```
+
+La evidencia se construye desde `git_long.csv` y el histórico de commits, **sin
+usar nunca el `chat.log`**. Ejemplo real (familia 3, corte 2026-09-06) — la línea
+`modulos con doc=0` es la que más discrimina:
+
+```
+CORTE 2026-09-06 - proyecto TextFormatter Suite
+EVIDENCIA:
+doc_loc=2664 doc_files=14 src_loc=20076 doc/src=0.13
+comment_lines=1665 comment/src=0.08
+modulos con doc=0: 46 de 48
+ficheros .md tocados hoy (2): docs/PLAN.md, docs/historial/research-A5-...md
+doc por modulo (top): docs=2336.0, (root)=328.0
+commits de hoy: docs: actualiza PLAN.md con resultados Fase 2 (A1-A5)
+```
+
+La familia 11 añade además el análisis estático (`semgrep=N hallazgos`,
+`pmd=N violaciones`), que sí varía entre cortes (PMD: 95 → 1536).
+
+### Cómo se lanza
+
+El paso de puntuar está empaquetado como **skill de OpenCode**
+(`.opencode/skills/juzgar-rubrica/`). Un humano lo pide cuando quiere —
+`@juzgar-rubrica` — y el agente hace el resto: genera la evidencia, lee los 70
+paquetes, puntúa con la escala obligatoria, valida el CSV con
+`scripts/validate_scores.py` e importa.
+
+Equivalentemente, a mano:
+
+```bash
+python3 judge.py                                     # 1. genera data/evidence/
+#  2. puntuar los paquetes y escribir judge_scores.csv
+python3 judge.py --import-scores judge_scores.csv     # 3. -> data/judge/<fecha>.json
+```
+
+Formato de `judge_scores.csv` (commiteado, 2 líneas por corte):
+
+```
+date,family,score,reason,juez
+2026-08-14,documentacion,15,doc/src=0.03 y 47 de 48 modulos con doc=0,opencode-agent
+```
+
+El inverso existe por si hay que regenerar el CSV desde una matriz ya
+materializada: `python3 judge.py --export-scores judge_scores.csv`. El round-trip
+es estable (importar y exportar devuelve el mismo fichero).
+
+### Decisiones de diseño
+
+- **El veredicto es de nivel proyecto.** En la matriz módulo × familia, la fila
+  `(total)` es la única que lo lleva; las filas de módulo mantienen el proxy
+  determinista. Puntuar cada módulo y corte no es tratable, y estas dos
+  cualidades son propiedades de conjunto.
+- **El veredicto se commitea como dato**, así que el pipeline es
+  **determinista**: `run_all.sh` importa `judge_scores.csv` si existe y las
+  imágenes se reproducen bit a bit. Recalcular los veredictos es el único paso no
+  reproducible, y la columna `source` lo deja a la vista:
+  `juez:opencode-agent`.
+- **Sin `judge_scores.csv` no se rompe nada**: las familias 3 y 11 caen al proxy
+  determinista. El juicio es una mejora, no un requisito.
+
+Resultado sobre los 35 cortes: documentación 15→72, implementación 53→76.
 
 ## Salidas
 

@@ -1,0 +1,71 @@
+date,family,score,reason,juez
+2026-08-14,documentacion,15,doc/src=0.03 y 47 de 48 modulos con doc=0 - documentacion practicamente inexistente pese a los commits docs(ADR),opencode-agent
+2026-08-14,implementacion_real,55,8440 LOC y public_api=494 con stubs=0 y bare_catch=0 - pero solo 41 test_annotations y los commits del dia son docs(ADR) y baseline,opencode-agent
+2026-08-15,documentacion,16,doc/src=0.04 y 47 de 48 modulos sin doc; solo se toca ADR.md,opencode-agent
+2026-08-15,implementacion_real,53,mismo codigo que el corte previo (src_loc=8440 stubs=0) sin cambios reales - el unico commit es docs de estado F0-F5,opencode-agent
+2026-08-16,documentacion,34,salto a doc/src=0.07 con 9 .md tocados y 6 ficheros en docs/ pero 46 de 48 modulos siguen con doc=0,opencode-agent
+2026-08-16,implementacion_real,68,salto a 22708 LOC y 252 ficheros con stubs=0 bare_catch=0 y 212 tests - commits fix(web-editor) P0 y mono-repo de 17 modulos,opencode-agent
+2026-08-25,documentacion,40,doc/src=0.12 con 9 ficheros doc y 5 .md tocados aunque 46 de 48 modulos carecen de doc,opencode-agent
+2026-08-25,implementacion_real,62,17039 LOC con stubs=0 y todo/fixme=0 pero retrocede en tamano - los commits del dia son solo docs(FASE C/T/5),opencode-agent
+2026-08-26,documentacion,41,doc/src=0.12 con 11 ficheros doc e historial de sesiones; persisten 46 de 48 modulos sin doc,opencode-agent
+2026-08-26,implementacion_real,63,17315 LOC con stubs=0 y 214 tests - commit real test(FASE T) de cobertura con umbrales,opencode-agent
+2026-08-29,documentacion,32,0 ficheros .md tocados hoy mientras src crece a 18583 - documentacion desincronizada con 46 de 48 modulos sin doc,opencode-agent
+2026-08-29,implementacion_real,63,18583 LOC con 1 stub en 18395 LOC (despreciable) - commit feat de refactor de transport y fabric host,opencode-agent
+2026-09-01,documentacion,38,doc/src=0.11 con 12 ficheros y PLAN/NEW-FEATURES actualizados pero 46 de 48 modulos sin doc,opencode-agent
+2026-09-01,implementacion_real,64,20076 LOC con 1 stub y bare_catch=2 - feat real de channel type system y modulo tester,opencode-agent
+2026-09-02,documentacion,45,9 .md tocados y reorganizacion en historial elevan doc a 13 ficheros aunque 46 de 48 modulos siguen con doc=0,opencode-agent
+2026-09-02,implementacion_real,62,mismo codigo (20076 LOC stubs=1) - los 6 commits del dia son docs de limpieza de README/PLAN,opencode-agent
+2026-09-06,documentacion,42,doc/src sube a 0.13 con 14 ficheros pero solo 2 .md tocados y 46 de 48 modulos sin doc,opencode-agent
+2026-09-06,implementacion_real,61,codigo congelado (20076 LOC stubs=1) - un unico commit docs de PLAN con resultados Fase 2 A1-A5,opencode-agent
+2026-09-07,documentacion,43,doc/src=0.13 con 14 ficheros y PROMPT_NOW actualizado en varios commits pero 46 de 48 modulos con doc=0,opencode-agent
+2026-09-07,implementacion_real,65,20296 LOC con 1 stub - feat(iflow) motor de reglas F6 y feat(fabric-host) F4 funcional,opencode-agent
+2026-09-10,documentacion,44,doc/src=0.13 y comment/src sube a 0.09; 46 de 48 modulos siguen sin doc,opencode-agent
+2026-09-10,implementacion_real,66,21236 LOC con 1 stub y error_handling=183 - feat(iflow) transform real F7+ y Permisos/PAPI en SpEL,opencode-agent
+2026-09-11,documentacion,52,doc/src=0.16 con 20 ficheros y 7 .md tocados (specs y research) pero 46 de 48 modulos con doc=0,opencode-agent
+2026-09-11,implementacion_real,70,salto a 25854 LOC y public_api=1013 con 1 stub - feat(web-editor) y feat(extension) F11 con ExtensionManager,opencode-agent
+2026-09-12,documentacion,46,doc/src baja a 0.14 con un solo .md tocado (PROMPT_NOW) y 46 de 48 modulos sin doc,opencode-agent
+2026-09-12,implementacion_real,72,29096 LOC con 1 stub pero todo/fixme sube a 11 y bare_catch=6 - 4 feats F12-F15 (manager/presets/sync/inworld),opencode-agent
+2026-09-13,documentacion,62,doc/src salta a 0.41 con 38 ficheros wiki y 21 .md tocados pero 45 de 48 modulos siguen con doc=0,opencode-agent
+2026-09-13,implementacion_real,71,32399 LOC con 4 stubs y semgrep ERROR=1 - el dia es de fix de auditoria C1-C5 mas que de features,opencode-agent
+2026-09-14,documentacion,61,doc/src=0.41 con 38 ficheros doc; solo 2 .md tocados y 45 de 48 modulos con doc=0,opencode-agent
+2026-09-14,implementacion_real,74,32749 LOC con stubs=1 - feat(manager) SHA256 real y Dependency/Version Resolver mas fix(security) SpEL sandbox,opencode-agent
+2026-09-15,documentacion,64,doc/src=0.49 (maximo del periodo) con 40 ficheros pero 45 de 48 modulos siguen sin doc,opencode-agent
+2026-09-15,implementacion_real,74,32793 LOC estable con stubs=1 y 299 tests - feat(manager) M5 manifest validation y compile fixes,opencode-agent
+2026-09-16,documentacion,62,doc/src=0.49 estable con 40 ficheros; un unico .md tocado y 45 de 48 modulos con doc=0,opencode-agent
+2026-09-16,implementacion_real,72,codigo casi congelado (32845 LOC stubs=1) - los dos commits del dia son el mismo compile fix,opencode-agent
+2026-09-24,documentacion,58,237 .md tocados pero doc_loc cae a 13138 (doc/src=0.37) y 45 de 48 modulos siguen sin doc,opencode-agent
+2026-09-24,implementacion_real,76,35270 LOC con stubs=1 pero pmd sube a 845 en 28 modulos y semgrep ERROR=1 - feat de cache/dedup de traduccion,opencode-agent
+2026-09-25,documentacion,55,doc/src baja a 0.36 con 30 ficheros y solo 4 .md tocados; 45 de 48 modulos con doc=0,opencode-agent
+2026-09-25,implementacion_real,74,mismo codigo (35270 LOC stubs=1) - commits docs de merge PLAN y revert de CHANGELOG sin release,opencode-agent
+2026-09-26,documentacion,76,gran avance - modulos con doc=0 bajan a 16 de 48 con 60 ficheros y CodeGuide para todos los modulos (doc/src=0.44),opencode-agent
+2026-09-26,implementacion_real,76,37998 LOC con 1 stub y 376 tests - feat Rules Graph Editor real pese a pmd=1035,opencode-agent
+2026-09-28,documentacion,77,doc/src=0.45 con 59 ficheros y 24 .md tocados; modulos sin doc bajan a 17 de 48,opencode-agent
+2026-09-28,implementacion_real,77,41172 LOC con 1 stub y error_handling=407 - commit de resolucion de todos los hallazgos de auditoria P0-P3,opencode-agent
+2026-10-02,documentacion,72,doc/src=0.43 con 59 ficheros pero solo 2 .md tocados y 17 de 48 modulos sin doc,opencode-agent
+2026-10-02,implementacion_real,78,42533 LOC con 1 stub y 22 interfaces - feat fabric-host complete junto a fixes de auditoria,opencode-agent
+2026-10-03,documentacion,66,0 .md tocados hoy mientras src crece a 43325 - doc estancada con 17 de 48 modulos sin doc,opencode-agent
+2026-10-03,implementacion_real,80,43325 LOC con 1 stub y error_handling=452 - feat Telegram sink y fixes reales de SSRF/SpEL sandbox,opencode-agent
+2026-10-04,documentacion,72,6 .md sincronizados con el estado fabric-host; doc/src=0.42 con 17 de 48 modulos sin doc,opencode-agent
+2026-10-04,implementacion_real,78,mismo codigo (43325 LOC stubs=1) - el dia es solo docs que afirman fabric-host COMPILA,opencode-agent
+2026-10-05,documentacion,73,6 .md sync con estado production-ready y doc/src=0.42 pero 17 de 48 modulos siguen sin doc,opencode-agent
+2026-10-05,implementacion_real,80,43687 LOC con 1 stub y 387 tests - fix real de todos los hallazgos AUDITORIA B-01 y TXF-001..008,opencode-agent
+2026-10-08,documentacion,67,sin .md tocados hoy (solo 1 commit de auditoria) con 17 de 48 modulos sin doc y doc/src=0.42,opencode-agent
+2026-10-08,implementacion_real,79,43710 LOC con 1 stub - cierra items M-07 de AUDITORIA pero sin features nuevas,opencode-agent
+2026-10-09,documentacion,70,README reescrito y 6 .md sincronizados; doc/src cae a 0.38 con 17 de 48 modulos sin doc,opencode-agent
+2026-10-09,implementacion_real,80,44081 LOC con todo/fixme bajando a 3 y 1 stub - fix de hallazgos TXF-ZIP y reescritura de README,opencode-agent
+2026-10-10,documentacion,65,modulos sin doc empeoran a 19 de 48 pese a 5 .md tocados y src creciendo a 47344,opencode-agent
+2026-10-10,implementacion_real,76,crecimiento a 47344 LOC pero stubs suben a 7 (manager-apt 6/1889) - reimplementacion del Manager en curso,opencode-agent
+2026-10-11,documentacion,62,solo auditoria tocada (2 .md) y 19 de 48 modulos sin doc - la doc no acompana los fixes,opencode-agent
+2026-10-11,implementacion_real,78,47718 LOC con stubs bajando a 2 (manager-apt 1/2070) - fix TXF-AUD-001..006 reales (SSRF/TransactionLog/fat-jar),opencode-agent
+2026-10-12,documentacion,64,3 .md sincronizados (README; RELEASE_NOTES; wiki) pero 19 de 48 modulos siguen sin doc,opencode-agent
+2026-10-12,implementacion_real,79,48297 LOC y 453 tests con stubs=2 - feat T5 reproducible builds y S6 verificacion de dependencias SHA256,opencode-agent
+2026-10-13,documentacion,68,reorganizacion con 18 .md tocados eleva doc/src a 0.43 aunque 19 de 48 modulos carecen de doc,opencode-agent
+2026-10-13,implementacion_real,78,mismo codigo (48297 LOC stubs=2) - un unico commit docs de reorganizacion de directorios,opencode-agent
+2026-10-15,documentacion,69,doc/src=0.40 con 66 ficheros y 8 .md tocados; modulos sin doc 18 de 48,opencode-agent
+2026-10-15,implementacion_real,74,salto a 55707 LOC y 684 tests pero stubs suben a 11 (iflow 9/7943) por reescritura de VM en curso,opencode-agent
+2026-10-16,documentacion,70,69 ficheros doc y 8 .md tocados (READMEs de iflow) con doc/src=0.40 y 18 de 48 modulos sin doc,opencode-agent
+2026-10-16,implementacion_real,74,56734 LOC con 11 stubs (iflow 9/8355) - el dia mezcla toolchain iflow y docs de HOST ABI v2,opencode-agent
+2026-10-17,documentacion,71,doc/src=0.40 con 7 .md tocados y comment/src=0.11; persisten 18 de 48 modulos sin doc,opencode-agent
+2026-10-17,implementacion_real,75,59887 LOC con stubs bajando a 9 (iflow 7/11276) - feat servicios HOST y perf de pagina copy-on-write,opencode-agent
+2026-10-18,documentacion,72,71 ficheros doc con 7 .md tocados y modulos sin doc bajan a 17 de 48 (doc/src=0.39),opencode-agent
+2026-10-18,implementacion_real,76,63787 LOC y 892 tests con 10 stubs y semgrep ERROR=2 - feat de BIOS iflow y analizadores reales de metrics,opencode-agent

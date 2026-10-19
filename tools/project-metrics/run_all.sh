@@ -8,32 +8,41 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "== 1/8  metricas del repositorio (git) =="
+echo "== 1/9  metricas del repositorio (git) =="
 python3 extract_git.py
 
-echo "== 2/8  metricas del chat (narrativa) =="
+echo "== 2/9  metricas del chat (narrativa) =="
 python3 extract_chat.py
 
-echo "== 3/8  union commit <-> chat =="
+echo "== 3/9  union commit <-> chat =="
 python3 join_commits.py
 
-echo "== 4/8  analizadores reales (semgrep/gitleaks) [opcional] =="
+echo "== 4/9  analizadores reales (semgrep/gitleaks) [opcional] =="
 if [ "${PM_SCAN:-0}" = "1" ]; then
   python3 scan_tools.py
 else
   echo "   (omitido; usa PM_SCAN=1 o 'python3 scan_tools.py' para activarlo)"
 fi
 
-echo "== 5/8  rubrica de madurez (12 familias) =="
+echo "== 5/9  evidencia y veredictos del juez =="
+python3 judge.py                          # regenera data/evidence/ (determinista)
+if [ -f judge_scores.csv ]; then
+  python3 judge.py --import-scores judge_scores.csv   # aplica los veredictos commiteados
+else
+  echo "   (sin judge_scores.csv: familias 3 y 11 usan el proxy determinista;"
+  echo "    pidelo al agente con el skill @juzgar-rubrica)"
+fi
+
+echo "== 6/9  rubrica de madurez (12 familias) =="
 python3 maturity.py
 
-echo "== 6/8  paneles (PIL) =="
+echo "== 7/9  paneles (PIL) =="
 python3 render_pil.py
 
-echo "== 7/8  heatmap y crecimiento =="
+echo "== 8/9  heatmap y crecimiento =="
 python3 render_extra.py
 
-echo "== 8/8  rubrica (matriz + evolucion) =="
+echo "== 9/9  rubrica (matriz + evolucion) =="
 python3 render_maturity.py
 
 echo

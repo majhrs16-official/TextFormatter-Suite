@@ -116,6 +116,9 @@ def matrix():
     mods = [m for m in sc if m != "(total)" and size.get(m, 0) > 0]
     mods.sort(key=lambda m: -size.get(m, 0))
     mods = [m for m in mods if not m.startswith("tools:")][:20]
+    if "(total)" in sc:
+        # La fila del proyecto es la unica que lleva el veredicto del juez (familias 3 y 11).
+        mods = ["(total)"] + mods
 
     lw, th, bh, rh = 210, 118, 74, 30
     cw = 92
@@ -147,7 +150,8 @@ def matrix():
 
     for i, m in enumerate(mods):
         y = th + i * rh
-        d.text((12, y + rh // 2 - 7), m[:26], font=C.font(11, True), fill=C.FG)
+        label = "TOTAL (proyecto)" if m == "(total)" else m[:26]
+        d.text((12, y + rh // 2 - 7), label, font=C.font(11, True), fill=C.FG)
         for j, f in enumerate(FAMILIES):
             v = sc[m].get(f, 0.0)
             x = lw + j * cw
@@ -164,8 +168,9 @@ def matrix():
         d.rectangle([lx + k * 6, ly, lx + 5 + k * 6, ly + 13], fill=score_color(k / 47 * 100))
     d.text((lx, ly - 18), "0", font=C.font(9), fill=C.MUTED)
     d.text((lx + 48 * 6 + 8, ly - 18), "100 (madurez)", font=C.font(9), fill=C.MUTED)
-    d.text((lx, ly + 24), "Familias 5 (secretos) y 6 (dependencias) son de nivel proyecto: "
-                          "mismo valor en todos los modulos.", font=C.font(10), fill=C.MUTED)
+    d.text((lx, ly + 24), "Familias 5 (secretos) y 6 (dependencias) son de nivel proyecto. "
+                          "La fila TOTAL es la que lleva el veredicto del juez (familias 3 y 11).",
+           font=C.font(10), fill=C.MUTED)
     p = os.path.join(OUT, "rubrica_matriz.png")
     img.save(p)
     print("escrito:", p, img.size)

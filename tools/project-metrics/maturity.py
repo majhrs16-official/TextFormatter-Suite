@@ -62,12 +62,22 @@ def git(*args):
 
 
 def load_tools(date):
-    """Salida de herramientas reales para esa fecha, si existe."""
+    """Salida de herramientas reales (y veredictos del juez) para esa fecha."""
+    out = {}
     p = os.path.join(DATA, "tools", f"{date}.json")
     if os.path.exists(p):
         with open(p) as f:
-            return json.load(f)
-    return {}
+            out = json.load(f)
+    j = os.path.join(DATA, "judge", f"{date}.json")
+    if os.path.exists(j):
+        try:
+            with open(j) as f:
+                fam = json.load(f).get("families", {})
+            if fam:
+                out["judge"] = fam
+        except Exception:
+            pass
+    return out
 
 
 def dep_score(files):
@@ -177,6 +187,15 @@ def score_scope(m, dep=0.0, tools=None, module="(total)"):
     s = (0.40 * sat(d("public_api"), 40) + 0.30 * sat(d("ports"), 5)
          + 0.30 * sat(test_ratio, 0.30))
     out["integracion"] = (clamp(s), D)
+
+    # Capa opcional: veredictos del juez sobre las familias cualitativas, solo en
+    # ambito total. Solo sobreescribe si existe data/judge/<fecha>.json.
+    if module == "(total)" and tools and tools.get("judge"):
+        for fam, ref in (("documentacion", "documentacion"),
+                         ("implementacion_real", "implementacion_real")):
+            v = tools["judge"].get(ref)
+            if v and isinstance(v.get("score"), (int, float)):
+                out[fam] = (clamp(v["score"]), f"juez:{v.get('juez', 'agente')}")
 
     return out
 
