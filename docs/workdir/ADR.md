@@ -381,3 +381,51 @@ Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `cor
 **Implementación (2026-10-05).**
 Módulos afectados: `core-api` (TranslationService, TranslationExecutor), `transport` (HttpTransport), `sync-bus` (DefaultSyncBus), `sync-velocity` (VelocitySink), `sync-websocket` (WebSocketSyncSink), `textformatter` (TemplateRenderer), `gtranslate` (GTranslate), `host` (MessageDispatcher, SuiteHost), `spigot-host` (TextFormatterSuitePlugin), `fabric-host` (TextFormatterSuiteMod), `observability` (MetricsEndpoint), `docs` (README, PLAN, ADR, Wiki).
 
+---
+
+## Decisión 2026-10-14 — Modelo «CPU física» descartado en la VM de iFlow
+
+*(Registrado retrospectivamente el 2026-10-19, al reaparecer el boceto original en una copia de trabajo fuera del repositorio.)*
+
+**Contexto.** La especificación de diseño de iFlow propone un modelo mental de máquina con «CPU, memoria, bus y firmware» (`docs/prompts/diseno/iflow-cpu-design.md` §4, líneas 100-112), con siete componentes conceptuales: CPU Core, banco de registros, espacio de direcciones, interfaz de E/S, bus lógico de servicios, firmware y controlador de interrupciones. El 2026-10-14 ese modelo se bocetó como **estructura de paquetes**: `vm/cpu/ControlUnit.java` (367 líneas: ciclo fetch/decode/execute y el `switch` completo de la ISA) y `vm/cpu/Cpu.java` (integración de subcomponentes), apoyados en `RegisterFile`, `Alu` y `SystemBus` como clases independientes.
+
+El boceto nunca entró en el repositorio: quedó en una copia suelta sin control de versiones y no existe en ninguna revisión (`git log --all -- '*ControlUnit.java' '*Cpu.java'` no devuelve nada). En su lugar se consolidó la implementación actual: `vm/execution/VmInterpreter` + `ExecutionContext` (con *fuel budget* y pooling) + `vm/engine/VmPolicyEngine` + `vm/irq/{VmPic,IrqTable}` + `vm/memory/VmBus`.
+
+Hechos verificados (2026-10-19):
+
+- El boceto no compila contra el repo: importa `vm.bus.SystemBus`, `vm.cpu.RegisterFile` y `vm.cpu.Alu`, que no existen; `Cpu.java` además instancia componentes duplicados y pasa `null` como memoria y programa al `ControlUnit`.
+- `Cpu.setProgram()`, `Cpu.step()` y `Cpu.reset()` eran `TODO` sin implementación.
+- La ISA del boceto es la actual **menos** las variantes inmediatas `LDBI`, `LDWI`, `STBI` y `STWI`.
+- `ControlUnit.executeHost()` no recibía `HostServiceRegistry`, así que los servicios del host no podían resolverse.
+- Ninguna clase del módulo iFlow lleva contabilidad de ciclos ni CPI (`grep` sobre `src/iflow/src/main/java/`); el límite de ejecución es el *fuel budget* de `vm/execution/ExecutionContext` (líneas 36, 93, 133).
+- El boceto es anterior al ABI de `HOST` v2 (2026-10-16/17) y al despacho de interrupciones en frontera de instrucción (D33).
+
+**Decisión.** El modelo «CPU física» **no se implementa como estructura de paquetes**. El «CPU / banco de registros / bus / firmware» de la especificación es un **modelo mental**, no un mapa de clases: la CPU se materializa como intérprete con contexto de ejecución reutilizable y el bus como `vm/memory/VmBus`. El boceto se descarta; no se importa.
+
+**Alternativas consideradas.**
+
+1. **Importar e integrar el boceto** (`vm/cpu/ControlUnit` + `vm/cpu/Cpu` + `RegisterFile` + `Alu` + `SystemBus`).
+   - Ventajas: refleja §4 con componentes explícitos y separa el ciclo de ejecución del motor de políticas.
+   - Limitaciones: no compila (faltan tres clases), su ISA es anterior a las variantes inmediatas, ignora el despacho de IRQ en frontera de instrucción (D33) y no usa el journal de persistencia.
+   - Evaluación: **descartada**. No aporta nada que el intérprete actual no cubra, y `Cpu.java` introduciría `TODO` y stubs en el recuento de deuda del propio proyecto (`tools/project-metrics`), además de contradecir el ABI v2.
+
+2. **Mantener la implementación actual** (`VmInterpreter` + `ExecutionContext` + PIC).
+   - Ventajas: un único lugar para el ciclo y el despacho de IRQ; contexto pooled sin asignaciones por ejecución; el *fuel budget* acota la ejecución; el journal persiste modificaciones selectivas.
+   - Limitaciones: sin contabilidad de ciclos/CPI no se puede instrumentar coste por instrucción sin añadirla; §4 no tiene correspondencia 1:1 con paquetes.
+   - Evaluación: **aceptada** (es lo implementado y lo que consolidaron la auditoría de iFlow y el ABI v2).
+
+3. **Archivar el boceto dentro del repositorio** (como `.java` o como documento en `docs/workdir/`).
+   - Ventajas: conserva el rastro de la evolución del diseño.
+   - Limitaciones: no compila; como `.java` contaría en las métricas; como documento duplicaría lo que ya explica este ADR.
+   - Evaluación: **descartada**. El registro de la decisión es este ADR, no el código muerto.
+
+**Consecuencias.**
+
+- El boceto, que vivía fuera del repositorio en una copia de trabajo sin git, se elimina tras registrar esta decisión (2026-10-19).
+- Queda documentado por qué `vm/` no tiene `cpu/`, `bus/` ni `alu/` pese a lo que sugiere §4 de la especificación.
+- La separación «CPU Core» / «banco de registros» / «controlador de interrupciones» se lee como responsabilidades dentro del intérprete, no como paquetes.
+- Si en el futuro se quiere instrumentar coste por instrucción (ciclos/CPI), habrá que añadirlo: hoy no existe en ninguna clase del módulo.
+
+**Implementación (2026-10-19).**
+`docs/workdir/ADR.md` (esta entrada). Sin cambios de código: la implementación vigente no se toca.
+
