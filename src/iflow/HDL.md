@@ -54,7 +54,8 @@ pantalla `VmDisplay`, la NVRAM `VmNvram` y el controlador de interrupciones
 `VmPic`). La CPU **no** accede a la memoria física directamente:
 emite transacciones por el bus. Lo mismo hace el DMA. El *interconnect* decodifica
 la dirección: si pertenece a un periférico, enruta la transacción al dispositivo
-(MMIO, sin traducción ni permisos); si no, la MMU traduce virtual→físico,
+(MMIO, sin traducción ni permisos — contrato de acceso en
+`VmMemoryMap.DEVICE_MMIO_BASE`); si no, la MMU traduce virtual→físico,
 comprueba permisos y *propiedad* (privilegio) y sirve el dato desde
 `PhysicalMemory`.
 

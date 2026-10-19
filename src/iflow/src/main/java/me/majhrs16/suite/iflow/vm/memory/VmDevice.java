@@ -10,7 +10,10 @@ package me.majhrs16.suite.iflow.vm.memory;
  * permission-checked by the MMU (the device is addressed in the flat bus space).
  * This is what lets a peripheral (the text screen, {@code VmDisplay}) be mapped
  * into the program's address space and see every write the CPU or the DMA makes
- * to its window.
+ * to its window. It is a deliberate part of the access contract, not a bypass:
+ * the program domain may drive its own peripherals through the MMIO aperture
+ * ({@link VmMemoryMap#DEVICE_MMIO_BASE}), while page ownership keeps governing
+ * <em>memory</em> (ROM, constants).
  * </p>
  * <p>
  * Only {@link #decodes(int)}, {@link #readByte(int)} and

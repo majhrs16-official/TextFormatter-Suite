@@ -96,12 +96,27 @@ public final class VmMemoryMap {
 
     /**
      * Base of the 256-byte MMIO aperture where peripherals expose their register
-     * banks (today the text screen of D31). It lives <em>inside the BIOS ROM page</em>
-     * (0x0000-0x0FFF): the firmware functions end well before it (currently at
-     * 0x029B), so the unused tail of the ROM page is reused for the device control
-     * block instead of carving a hole out of user RAM. The interconnect decodes it
-     * <em>before</em> ROM/RAM, so the BIOS can drive devices with plain stores
-     * without write permission on the (R/X) code page.
+     * banks (the text screen of D31, the BIOS NVRAM of D32 and the PIC of D33). It
+     * lives <em>inside the BIOS ROM page</em> (0x0000-0x0FFF): the firmware
+     * functions end well before it (currently at 0x029B), so the unused tail of the
+     * ROM page is reused for the device control block instead of carving a hole out
+     * of user RAM.
+     * <p>
+     * <b>Access contract (IFLOW-AUD-031, decided 2026-10-19).</b> The aperture is
+     * <em>device space</em>, not memory: the interconnect ({@link VmBus}) decodes it
+     * <em>before</em> the MMU, so neither page ownership nor per-page permissions
+     * govern it — a device transaction is never translated nor privilege-checked,
+     * exactly like real memory-mapped I/O (see {@link VmDevice}). This is deliberate:
+     * the program domain drives its own peripherals (the screen of D31, and the PIC
+     * of D33 whose lines the program enables and raises; the IRQ table in NVRAM is
+     * meant to be rewritten by it), so a privilege gate here would also break the
+     * BIOS, which runs in the {@link Privilege#PROGRAM} domain. Page ownership keeps
+     * protecting <em>memory</em>: a program still cannot write kernel-owned RAM
+     * (ROM, constants). The only BIOS-private datum in the aperture is the NVRAM
+     * cold-boot flag; a program overwriting it can only force a cold boot of its own
+     * machine (clearing its volatile RAM), never reach beyond it. The behaviour is
+     * pinned by {@code VmDisplayTest#programMayDriveDeviceRegistersInsideTheKernelPage}.
+     * </p>
      */
     public static final int DEVICE_MMIO_BASE = 0x0F00;
     public static final int DEVICE_MMIO_SIZE = 0x0100; // 256 bytes

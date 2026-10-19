@@ -1,5 +1,6 @@
 package me.majhrs16.suite.iflow.vm.video;
 
+import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmBus;
@@ -191,5 +192,37 @@ class VmDisplayTest {
         byte[] after = new byte[8];
         bus.readBlock(FB + 0x808, after, 0, after.length);
         assertArrayEquals(java.util.Arrays.copyOfRange(payload, 16, 24), after);
+    }
+
+    @Test
+    void programMayDriveDeviceRegistersInsideTheKernelPage() {
+        // IFLOW-AUD-031 (fijado el 2026-10-19): la apertura MMIO vive dentro de la
+        // página del BIOS (kernel, R/X) y el interconnect la decodifica antes de la
+        // MMU, así que el programa puede gobernar sus periféricos por contrato. La
+        // propiedad de página sigue protegiendo la *memoria*: escribir RAM en esa
+        // misma página sí es falta de privilegio.
+        SoftMMU mmu = new SoftMMU();
+        mmu.getPageTable().mapPageKernel(0, 0x0000,
+            PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
+        VmDisplay d = new VmDisplay();
+        mmu.attach(d);
+        VmBus program = new VmBus(mmu); // maestro PROGRAM, como la CPU
+
+        // RAM dentro de la página R/X: la escritura del programa es falta de privilegio...
+        VmException fault = assertThrows(VmException.class,
+            () -> program.writeByte(0x0100, 0x11));
+        assertEquals(VmException.Code.PRIVILEGE_FAULT, fault.code());
+
+        // ...pero la apertura es espacio de dispositivo, no RAM: el programa
+        // configura la pantalla a través de ella, igual que el BIOS en el POST.
+        assertFalse(d.isEnabled());
+        program.writeWord(CTRL + VmDisplay.REG_BASE, FB);
+        program.writeWord(CTRL + VmDisplay.REG_COLS, 80);
+        program.writeWord(CTRL + VmDisplay.REG_ROWS, 25);
+        program.writeWord(CTRL + VmDisplay.REG_CTRL, VmDisplay.CTRL_ENABLE);
+        assertTrue(d.isEnabled());
+
+        program.writeByte(FB, 'K');
+        assertEquals('K', d.cellChar(0));
     }
 }

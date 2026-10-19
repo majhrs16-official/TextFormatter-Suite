@@ -429,3 +429,60 @@ Hechos verificados (2026-10-19):
 **Implementación (2026-10-19).**
 `docs/workdir/ADR.md` (esta entrada). Sin cambios de código: la implementación vigente no se toca.
 
+---
+
+## Decisión 2026-10-19 — La MMIO de dispositivos no la gobierna la PageTable (AUD-031)
+
+**Contexto.** La tercera auditoría forense de iFlow registró `IFLOW-AUD-031` (Media-Alta, «aislamiento
+interno»): la apertura MMIO de 256 B (`0x0F00–0x0FFF`) vive dentro de la página del BIOS, declarada
+kernel R/X (`VmPolicyEngine` mapea la página 0 con `perm=R|X`), pero `VmBus` la decodifica **antes** de
+la MMU (`VmBus.java`, `readByte`/`writeByte`). Consecuencia: ni la propiedad de página ni el privilegio
+del maestro la gobiernan. Un programa puede reescribir la NVRAM del BIOS (bandera de arranque en frío,
+tabla de IRQ), el PIC y los registros de la pantalla.
+
+**Decisión.** **Aceptar el diseño y documentarlo explícitamente como contrato**, en lugar de añadir un
+portero de acceso. La apertura es **espacio de dispositivo**, no memoria: como la MMIO real, no se
+traduce ni se comprueba por privilegio. La protección por propiedad de página se mantiene para la
+**memoria** (ROM, constantes): un programa sigue sin poder escribir RAM de propiedad del kernel.
+
+Hechos que sostienen la decisión (verificados):
+
+- D31/D33 **requieren** que el programa escriba los registros de la pantalla y del PIC — el programa
+  habilita sus líneas (`ENABLE`), las dispara (`RAISE`) y las confirma (`ACK`) —, y la tabla de IRQ de
+  la NVRAM está pensada para ser reescrita por el programa.
+- El BIOS corre en el dominio `PROGRAM`, igual que el usuario: un portero por privilegio rompería
+  también el POST.
+- Lo único realmente privado del BIOS en la apertura es la **bandera de arranque en frío** de la NVRAM;
+  su impacto se limita a forzar el cold-boot de la propia máquina del programa (limpia su RAM volátil
+  `0x3000–0x4FFF`). **No hay escape al host**: el periférico vive en el contenedor del programa.
+
+**Alternativas consideradas.**
+
+1. **Mover los 256 B a una página propia** (segundo camino que propone el auditor: «sacar el apéndice
+   de la página R/X»). Ventajas: la `PageTable` pasa a ser la autoridad única y desaparece el
+   «bypass». Limitaciones: **no añade aislamiento** —la página tendría que seguir siendo escribible por
+   el programa, por D31/D33— y cuesta RAM de usuario (28 KB → 24 KB) o geometría de pantalla (80×24).
+   Evaluación: **descartada** para hoy (coste sin ganancia).
+2. **Pasar la bandera de arranque de la NVRAM al dominio supervisor** (servicio HOST o gestión por el
+   runtime), dejando el resto en el dominio del programa. Ventajas: es lo único que añadiría
+   aislamiento real (un `.flow` no podría alterar el próximo arranque). Limitaciones: coste alto en
+   firmware + motor + ABI. Evaluación: **no descartada para el futuro**; el riesgo actual es bajo.
+3. **Aceptar y documentar.** Ventajas: coste cero, coherente con D31/D33 y con el javadoc de `VmDevice`
+   (que ya describía la MMIO «como la MMIO real», sin traducción ni permisos). Limitaciones: un
+   programa puede seguir alterando su propia NVRAM/PIC/pantalla. Evaluación: **aceptada**.
+
+**Consecuencias.**
+
+- El contrato queda escrito en `VmMemoryMap.DEVICE_MMIO_BASE` (y referenciado desde `VmBus` y
+  `VmDevice`); deja de leerse como un «bypass accidental».
+- Se fija con un test: `VmDisplayTest.programMayDriveDeviceRegistersInsideTheKernelPage` comprueba que
+  un maestro `PROGRAM` recibe `PRIVILEGE_FAULT` al escribir **RAM** en la página kernel R/X pero **sí**
+  configura la pantalla a través de la apertura.
+- Si en el futuro se adopta la alternativa 2, este ADR se enmienda y se implementa el dominio supervisor
+  para la NVRAM.
+
+**Implementación (2026-10-19).**
+`VmMemoryMap.java` (javadoc del contrato), `VmBus.java`, `VmDevice.java` (referencias), `VmDisplayTest.java`
+(test que lo fija), `docs/workdir/PLAN.md` (D35), `src/iflow/README.md` y `src/iflow/HDL.md`. Sin cambios
+de comportamiento: el código ya se comportaba así; ahora está declarado y probado.
+

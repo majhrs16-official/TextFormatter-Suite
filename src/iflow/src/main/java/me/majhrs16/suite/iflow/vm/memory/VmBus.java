@@ -19,6 +19,13 @@ import java.util.Objects;
  * bug left them writable.
  * </p>
  * <p>
+ * Every transaction is checked against the peripherals first
+ * ({@link SoftMMU#deviceFor(int)}): a device access is memory-mapped I/O and, like
+ * real MMIO, it is neither translated nor permission-checked by the MMU. Only RAM
+ * transactions go through the page table with this master's {@link Privilege}. The
+ * full contract is stated in {@link VmMemoryMap#DEVICE_MMIO_BASE}.
+ * </p>
+ * <p>
  * Modeling the interconnection explicitly is what makes the wiring mappable to an
  * HDL and gives a single point to observe or substitute: a test can wire the bus
  * over a different MMU and assert that the masters transact through it. It is

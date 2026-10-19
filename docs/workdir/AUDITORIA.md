@@ -1129,5 +1129,16 @@ aquí registrados:
   base a `0x7000`/`0x3000` y sombrear la E/S o los datos propios.
 - **`IFLOW-AUD-040`:** medido el `.flow` ensamblado, el firmware termina en `0x029B` (668 B). El
   README era correcto y el comentario de `VmMemoryMap` (`0x0204`) se corrigió.
-- **`IFLOW-AUD-031`, `034` y el resto siguen abiertos**; su estado no cambia con este addendum.
+- **`IFLOW-AUD-031`:** decidido (opción 1 del usuario) **aceptar el contrato y hacerlo explícito** en
+  lugar de añadir un portero. La apertura MMIO es espacio de dispositivo y no la gobierna la
+  `PageTable`; la propiedad de página sigue protegiendo la memoria. Queda escrito en el javadoc de
+  `VmMemoryMap.DEVICE_MMIO_BASE`, `VmBus` y `VmDevice`, y fijado con
+  `VmDisplayTest.programMayDriveDeviceRegistersInsideTheKernelPage`. Ver ADR 2026-10-19 y `PLAN.md` D35.
+- **`IFLOW-AUD-034`:** cerrado. Un código de decisión fuera de rango devuelve `INVALID_ARGUMENT` y
+  journaliza un `REJECT`; `PolicyResultValidator.parseRouteDecision` mapea lo desconocido a `REJECT`.
+- **`IFLOW-AUD-032`:** cerrado. La detección de dispositivo en transacciones de bloque usa solapamiento
+  real de intervalo (`VmDevice.overlaps` / `SoftMMU.isDeviceRange`), no solo los extremos.
+- **`IFLOW-AUD-042`:** cerrado. `ColorMode.of()` parsea sin excepciones; `PROPERTY_WRITE` valida el color
+  (`INVALID_ARGUMENT`) y se retiran del journal las cuatro operaciones sin emisor.
+- El resto de hallazgos (`033`, `035`–`039`, `041`, `043`) sigue abierto.
 

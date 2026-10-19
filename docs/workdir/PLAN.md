@@ -1903,3 +1903,44 @@ el README era correcto y el comentario de `VmMemoryMap` estaba obsoleto (corregi
 libres hasta el banco MMIO (`0x0F00`): un framebuffer 80×25×2 = 4000 B **no cabe** en la cola del BIOS,
 y uno de 80×20×2 = 3200 B tampoco (por 28 B), así que la idea de meter la pantalla en la memoria del
 BIOS no es viable para la geometría actual.
+
+### D35 — Contrato de acceso a la MMIO de dispositivos (AUD-031) ✅ aplicado
+
+**Contexto.** La auditoría forense de iFlow registró `IFLOW-AUD-031` (Media-Alta): la apertura MMIO de
+256 B (`0x0F00–0x0FFF`) vive dentro de la página del BIOS, declarada kernel R/X, pero `VmBus` la
+decodifica antes de la MMU, así que ni la propiedad de página ni el privilegio del maestro la
+gobiernan. Un programa puede reescribir la NVRAM (bandera de arranque, tabla de IRQ), el PIC y los
+registros de la pantalla.
+
+**Decisión (usuario, opción 1).** **Aceptar el diseño y hacerlo explícito**, no añadir un portero.
+Razones verificadas: (a) D31/D33 exigen que el programa escriba los registros de la pantalla y del PIC
+(el programa habilita, dispara y confirma sus líneas), y la tabla de IRQ de la NVRAM está pensada para
+ser reescrita por él; (b) el BIOS corre en el dominio `PROGRAM`, así que un portero por privilegio
+también rompería el POST; (c) lo único realmente privado del BIOS es la bandera de arranque en frío,
+cuyo impacto se limita a forzar el cold-boot de la propia máquina del programa (limpia su RAM volátil
+`0x3000–0x4FFF`), sin escape al host.
+
+**Aplicado.**
+
+- `VmMemoryMap.DEVICE_MMIO_BASE`: javadoc con el **contrato de acceso** — la apertura es espacio de
+  dispositivo, se decodifica antes de la MMU y no la gobiernan permisos ni privilegio (como la MMIO
+  real); la propiedad de página sigue protegiendo la memoria (ROM/constantes).
+- `VmBus` y `VmDevice`: javadoc alineado con el contrato (referencia cruzada; deja de leerse como
+  «bypass»).
+- Test que lo fija: `VmDisplayTest.programMayDriveDeviceRegistersInsideTheKernelPage`. Comprueba las
+  dos caras: un maestro `PROGRAM` recibe `PRIVILEGE_FAULT` al escribir **RAM** en la página kernel R/X,
+  pero **sí** configura la pantalla a través de la apertura.
+- Documentación: `src/iflow/README.md` (mapa de memoria) y `src/iflow/HDL.md` (§1, *interconnect*).
+
+**Alternativas descartadas.**
+
+1. **Mover los 256 B a una página propia** (segundo camino del auditor). Quita la inconsistencia pero
+   **no añade aislamiento**: la página tendría que seguir siendo escribible por el programa (D31/D33).
+   Coste: RAM de usuario a 24 KB o geometría de pantalla a 80×24.
+2. **Pasar la bandera de arranque de la NVRAM al dominio supervisor.** Es lo único que añadiría
+   aislamiento real (un `.flow` no podría alterar el próximo arranque), a costa de firmware + motor +
+   ABI. No se descarta para el futuro; hoy el riesgo es bajo (sin escape al host).
+
+⚠️ **Aviso para un futuro cambio de layout:** si algún día se mueve la apertura a una página propia,
+hay que revisar a la vez `VmMemoryMap`, `VmBus`, el firmware (`DISPLAY_BASE`/`DEVICE_*` en
+`assembler.ts`), los 5 fixtures `.flow` y este contrato.
