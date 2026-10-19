@@ -51,7 +51,7 @@
 
 ---
 
-## Entorno de trabajo: skills y MCP (2026-10-19)
+## Entorno de trabajo: skills, MCP y toolchain (2026-10-19)
 
 Herramientas disponibles para trabajar en este repo. Las **globales** viven en
 `~/.config/opencode/` y sirven para cualquier proyecto de esta máquina (no se
@@ -84,6 +84,35 @@ Declarados en `~/.config/opencode/opencode.jsonc` (ámbito global):
 > ⚠️ **`puppeteer` está declarado y habilitado pero no se expone**: no aparece
 > entre las herramientas de la sesión (solo `github`, `gh_grep` y `context7`).
 > Revisar si se necesita automatización de navegador.
+
+### Toolchain: JDKs disponibles
+
+**No hay `java` ni `javac` en el `PATH` de la sesión.** Hay que exportar `JAVA_HOME`
+(o usar rutas absolutas). Conviven varias instalaciones en `/opt`, y **no todas son
+JDK**: las de `/opt/java` son JRE, sin `javac`.
+
+| Ruta | Versión real | `javac` | Notas |
+|---|---|---|---|
+| `/opt/javac/x64/21` | OpenJDK **21.0.12** LTS | **Sí** | La correcta para este repo (target Java 17) |
+| `/opt/javac/x64/8` | OpenJDK 1.8.0_492 | Sí | Solo para proyectos Java 8 |
+| `/opt/javac/arm64/` | — | — | Vacío |
+| `/opt/java/x64/21` | OpenJDK **25.0.2** LTS | No (JRE) | ⚠️ La carpeta dice 21 pero es 25 |
+| `/opt/java/x64/11` | OpenJDK 11.0.29 | No (JRE) | |
+| `/opt/java/x64/8` | OpenJDK 1.8.0_482 | No (JRE) | |
+| `/opt/idea/jbr` | JBR **25.0.3** | Sí | Runtime de IntelliJ, no para el build |
+
+Si se le pasa un JRE como toolchain, Gradle falla con
+`Toolchain installation '...' does not provide the required capabilities: [JAVA_COMPILER]`.
+
+Verificado el 2026-10-19 (compila sin red, todo desde `~/.gradle`):
+
+```bash
+export JAVA_HOME=/opt/javac/x64/21
+./gradlew --offline :src:iflow:test
+```
+
+El compilador de iFlow (TypeScript) sí está listo para usarse: `tools/iflow-compiler/`
+tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no necesita red.
 
 ### Criterio de uso
 
