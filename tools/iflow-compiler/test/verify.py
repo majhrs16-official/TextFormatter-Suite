@@ -97,25 +97,30 @@ def disassemble(buf, start=0, length=None):
         
         ip += size
 
-# Read firmware binary
-with open("/home/majhrs16/Documentos/textformatter-suite/tools/iflow-compiler/test/firmware.flow", "rb") as f:
+# Read firmware binary (path relative to this script)
+import os
+here = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(here, "firmware.flow"), "rb") as f:
     data = f.read()
 
-# Parse header
+# Parse header (format 2: magic + versions + sizes + debug length)
 print("=== HEADER ===")
-print(f"formatVersion: {data[0]}")
-print(f"isaVersion: {data[1]}")
-print(f"minAbiVersion: {data[2]}")
-print(f"minFirmwareVersion: {data[3]}")
-entryPoint = (data[4] << 8) | data[5]
-codeLength = (data[6] << 8) | data[7]
-constantsLength = (data[8] << 8) | data[9]
-capabilitiesLength = data[10]
+print(f"magic: 0x{int.from_bytes(data[0:4], 'big'):08x} (\"FLOW\")")
+print(f"formatVersion: {data[4]}")
+print(f"isaVersion: {data[5]}")
+print(f"minAbiVersion: {data[6]}")
+print(f"minFirmwareVersion: {data[7]}")
+entryPoint = (data[8] << 8) | data[9]
+codeLength = (data[10] << 8) | data[11]
+constantsLength = (data[12] << 8) | data[13]
+capabilitiesLength = data[14]
+debugLength = (data[16] << 8) | data[17]
 print(f"entryPoint: 0x{entryPoint:04x}")
 print(f"codeLength: {codeLength}")
 print(f"constantsLength: {constantsLength}")
 print(f"capabilitiesLength: {capabilitiesLength}")
+print(f"debugLength: {debugLength}")
 
 print("\n=== CODE ===")
-disassemble(data, 16, codeLength)
+disassemble(data, 20, codeLength)
 

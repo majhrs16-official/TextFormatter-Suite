@@ -96,13 +96,15 @@ class VmConfigLoaderTest {
     }
 
     /**
-     * Serializes a minimal valid .flow image: 16-byte header + code (no constants)
-     * + capabilities + SHA-256 trailer, matching {@code ProgramImageParser.parse}.
+     * Serializes a minimal valid .flow image: format-2 header (magic + versions +
+     * sizes + debug length) + code (no constants, no debug) + capabilities +
+     * SHA-256 trailer, matching {@code ProgramImageParser.parse}.
      */
     private static byte[] buildFlow(byte[] code, int entryPoint, String... capabilities) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            out.write(1); // format version
+            out.write(new byte[]{0x46, 0x4C, 0x4F, 0x57}); // magic "FLOW"
+            out.write(2); // format version
             out.write(2); // ISA version
             out.write(2); // minimum ABI version
             out.write(1); // minimum firmware version
@@ -113,7 +115,11 @@ class VmConfigLoaderTest {
             out.write(0); // constants length (high)
             out.write(0); // constants length (low)
             out.write(capabilities.length);
-            for (int i = 0; i < 5; i++) out.write(0); // padding
+            out.write(0); // reserved
+            out.write(0); // debug length (high)
+            out.write(0); // debug length (low)
+            out.write(0); // reserved
+            out.write(0); // reserved
             out.write(code);
             for (String cap : capabilities) {
                 out.write(cap.getBytes(StandardCharsets.US_ASCII));

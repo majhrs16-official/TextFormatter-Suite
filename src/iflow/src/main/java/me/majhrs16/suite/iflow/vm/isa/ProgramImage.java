@@ -15,7 +15,9 @@ import java.util.Objects;
  */
 public final class ProgramImage {
 
-    public static final int CURRENT_FORMAT_VERSION = 1;
+    // format 2 (2026-10-19): adds the 4-byte magic number and the optional,
+    // length-prefixed debug section to the header (IFLOW-AUD-037/038).
+    public static final int CURRENT_FORMAT_VERSION = 2;
     public static final int CURRENT_ISA_VERSION = 2;
     public static final int CURRENT_ABI_VERSION = 2;
     public static final int CURRENT_FIRMWARE_VERSION = 1;

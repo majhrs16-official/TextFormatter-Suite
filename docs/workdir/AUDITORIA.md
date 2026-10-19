@@ -1160,5 +1160,11 @@ aquí registrados:
   `message.id` (deny-by-default, como el resto), y `tools/iflow-compiler/test/determinism/run.js`
   (enganchado a `npm test`) reensambla los 5 fixtures con el CLI real y exige byte-identidad con los
   `.flow` que ejecutan los tests del JVM.
-- Sigue abierto: `037` (sección `debug` versionada) y `038` (magic number).
+- **`IFLOW-AUD-037` y `IFLOW-AUD-038`:** cerrados juntos en el **formato 2** (2026-10-19). La cabecera
+  pasa de 16 a 20 bytes con un `u32 magic` `0x464C4F57` («FLOW») y un `u16 debugLength`; `-d/--debug`
+  emite ahora una sección `debug` versionada (UTF-8, cubierta por el hash, nunca ejecutada). Un fichero
+  ajeno se rechaza como «not a .flow» al instante. Los 5 fixtures se regeneraron; `ProgramImageParser`,
+  los dos serializadores del ensamblador, `test/validation/run.js` y `test/verify.py` se actualizaron, y
+  el guardián de deriva fija el contenedor (magic, versión, sección debug y hash). Los `.flow` de
+  formato 1 hay que recompilarlos.
 

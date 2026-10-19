@@ -1978,3 +1978,36 @@ cargar. **Aplicado.** Comentario en `ProgramImageParser` + addéndum de `AUDITOR
   con los `.flow` commiteados. Cierra el eslabón que faltaba: los tests del JVM (`BiosBootTest`,
   `IrqDeliveryTest`, `FirmwareIntegrationTest`) ya ejecutaban esos bytes, pero nada garantizaba que
   siguieran siendo la salida actual del ensamblador.
+
+### D39 — Formato `.flow` v2: magic + sección `debug` (AUD-037 / AUD-038) ✅ aplicado
+
+**Decisión.** Un único cambio de formato que cierra los dos hallazgos a la vez, en lugar de subir la
+versión dos veces. La cabecera pasa de 16 a **20 bytes**:
+
+```
+u32 magic = 0x464C4F57 ("FLOW")   // rechaza al instante lo que no es un .flow
+u8  formatVersion = 2
+u8  isaVersion / minAbiVersion / minFirmwareVersion
+u16 entryPoint / codeLength / constantsLength
+u8  capabilitiesCount
+u8  reserved
+u16 debugLength                    // 0 = sin sección debug
+u16 reserved
+[code][constants][capabilities][debug UTF-8][hash 32]
+```
+
+El hash cubre toda la carga (magic incluido) y también la sección `debug`, de modo que esta no puede
+alterar el programa sin romper la integridad. `-d/--debug` deja de ser un no-op: emite la sección con
+dirección + fuente de cada instrucción y la tabla de símbolos. El parser exige el magic antes de leer
+nada más: un fichero ajeno falla como «not a .flow» y no con un error de versión o de hash confuso.
+
+**Aplicado.** `types.ts` (`PROGRAM_MAGIC`, `PROGRAM_VERSIONS.format = 2`), `assembler.ts`
+(`serializePayload` compartido por los dos serializadores), `ProgramImageParser` (magic + `debugLength`
++ lectura UTF-8 → `ProgramImage.debugInfo()`), `ProgramImage.CURRENT_FORMAT_VERSION = 2`,
+`ProgramImageParserTest` (+3 casos: magic, debug, ausencia de debug), `VmConfigLoaderTest`,
+`test/validation/run.js` y `test/verify.py` (offsets), `test/determinism/run.js` (comprueba magic,
+versión, sección debug y hash), los 5 fixtures regenerados y los dos README.
+
+**Coste asumido.** Los `.flow` de formato 1 dejan de cargar (el cargador cae a pass-through): hay que
+recompilarlos con el ensamblador actual. Es el precio de un formato auto-descriptivo y de una sección
+`debug` que un lector antiguo no sabría saltarse.

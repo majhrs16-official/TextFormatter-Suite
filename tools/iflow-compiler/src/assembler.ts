@@ -16,6 +16,7 @@ import {
   AssemblerResult,
   Diagnostic,
   ProgramImage,
+  PROGRAM_MAGIC,
   PROGRAM_VERSIONS,
   Symbol as SymbolType,
   isGPR,
@@ -1240,10 +1241,47 @@ class Assembler {
     };
   }
 
-  private serializeProgramImageNoHash(image: ProgramImage): Uint8Array {
+  /**
+   * Serializes the header and every payload section, i.e. everything the SHA-256
+   * hash covers (all bytes before the trailing 32-byte hash field).
+   *
+   * Layout (format 2, IFLOW-AUD-037/038), big-endian:
+   * <pre>
+   *   +0   u32  magic 0x464C4F57 ("FLOW")
+   *   +4   u8   formatVersion
+   *   +5   u8   isaVersion
+   *   +6   u8   minAbiVersion
+   *   +7   u8   minFirmwareVersion
+   *   +8   u16  entryPoint
+   *   +10  u16  codeLength
+   *   +12  u16  constantsLength
+   *   +14  u8   capabilitiesCount
+   *   +15  u8   reserved (0)
+   *   +16  u16  debugLength        (bytes of the debug section; 0 = absent)
+   *   +18  u16  reserved (0)
+   *   +20        code
+   *              constants (u16 each)
+   *              capabilities (NUL-terminated strings)
+   *              debug section (UTF-8, debugLength bytes, optional)
+   * </pre>
+   */
+  private serializePayload(image: ProgramImage): number[] {
+    const debugBytes = image.debugInfo
+      ? new TextEncoder().encode(image.debugInfo)
+      : new Uint8Array(0);
+    if (debugBytes.length > 0xFFFF) {
+      throw new Error(`debug info too large: ${debugBytes.length} bytes (max 65535)`);
+    }
+
     const parts: number[] = [];
 
-    // Header (16 bytes)
+    // Header (20 bytes)
+    parts.push(
+      (PROGRAM_MAGIC >>> 24) & 0xFF,
+      (PROGRAM_MAGIC >>> 16) & 0xFF,
+      (PROGRAM_MAGIC >>> 8) & 0xFF,
+      PROGRAM_MAGIC & 0xFF,
+    );
     parts.push(image.formatVersion & 0xFF);
     parts.push(image.isaVersion & 0xFF);
     parts.push(image.minAbiVersion & 0xFF);
@@ -1255,7 +1293,10 @@ class Assembler {
     parts.push((image.constants.length >> 8) & 0xFF);
     parts.push(image.constants.length & 0xFF);
     parts.push(image.capabilities.length & 0xFF);
-    parts.push(0, 0, 0, 0, 0);
+    parts.push(0); // reserved
+    parts.push((debugBytes.length >> 8) & 0xFF);
+    parts.push(debugBytes.length & 0xFF);
+    parts.push(0, 0); // reserved
 
     // Code
     parts.push(...Array.from(image.code));
@@ -1273,7 +1314,14 @@ class Assembler {
       parts.push(0);
     }
 
-    return new Uint8Array(parts);
+    // Debug section (optional)
+    parts.push(...Array.from(debugBytes));
+
+    return parts;
+  }
+
+  private serializeProgramImageNoHash(image: ProgramImage): Uint8Array {
+    return new Uint8Array(this.serializePayload(image));
   }
 
   private async computeSHA256(data: Uint8Array): Promise<Uint8Array> {
@@ -1332,41 +1380,9 @@ class Assembler {
   }
 
   public serializeProgramImage(image: ProgramImage): Uint8Array {
-    // Simple serialization: header + code + constants + capabilities
-    const parts: number[] = [];
-
-    // Header (16 bytes)
-    parts.push(image.formatVersion & 0xFF);
-    parts.push(image.isaVersion & 0xFF);
-    parts.push(image.minAbiVersion & 0xFF);
-    parts.push(image.minFirmwareVersion & 0xFF);
-    parts.push((image.entryPoint >> 8) & 0xFF);
-    parts.push(image.entryPoint & 0xFF);
-    parts.push((image.code.length >> 8) & 0xFF);
-    parts.push(image.code.length & 0xFF);
-    parts.push((image.constants.length >> 8) & 0xFF);
-    parts.push(image.constants.length & 0xFF);
-    parts.push(image.capabilities.length & 0xFF);
-    // 5 bytes padding
-    parts.push(0, 0, 0, 0, 0);
-
-    // Code
-    parts.push(...Array.from(image.code));
-
-    // Constants
-    for (const c of image.constants) {
-      parts.push((c >> 8) & 0xFF, c & 0xFF);
-    }
-
-    // Capabilities (null-terminated strings)
-    for (const cap of image.capabilities) {
-      for (const ch of cap) {
-        parts.push(ch.charCodeAt(0));
-      }
-      parts.push(0);
-    }
-
-    // Hash (32 bytes)
+    // Header + code + constants + capabilities + debug (the hashed payload),
+    // then the 32-byte SHA-256 hash.
+    const parts = this.serializePayload(image);
     parts.push(...Array.from(image.hash));
 
     return new Uint8Array(parts);

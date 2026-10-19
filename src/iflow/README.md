@@ -229,8 +229,9 @@ Servicios añadidos en el lote 6 (D26):
 ### Formato binario `.flow`
 
 ```
-Header (16 bytes):
-  u8  formatVersion     = 1
+Header (20 bytes):
+  u32 magic             = 0x464C4F57 ("FLOW", big-endian)
+  u8  formatVersion     = 2
   u8  isaVersion        = 2
   u8  minAbiVersion     = 2
   u8  minFirmwareVersion= 1
@@ -238,14 +239,26 @@ Header (16 bytes):
   u16 codeLength        (big-endian)
   u16 constantsLength   (big-endian)
   u8  capabilitiesCount
-  u8[5] padding
+  u8  reserved          (0)
+  u16 debugLength       (big-endian; 0 = sin sección debug)
+  u16 reserved          (0)
 
 Code section: codeLength bytes (los operandos inmediatos son big-endian [hi, lo])
 Constants: constantsLength × u16 (big-endian en el fichero; se materializan
            little-endian en memoria para que LDW las lea de forma natural)
 Capabilities: null-terminated strings
+Debug section: debugLength bytes UTF-8 (opcional, solo con `-d`; nunca se ejecuta)
 Hash: 32 bytes (SHA-256 of everything before the hash field)
 ```
+
+> **El magic existe para rechazar pronto** (auditoría `IFLOW-AUD-038`): un fichero que no empieza
+> por `FLOW` se descarta como «not a .flow» al instante, en lugar de fallar más tarde con un error
+> de versión o de hash confuso. El cargador sigue siendo tolerante: si el `policy.flow` está
+> corrupto o no es del formato, arranca con el programa pass-through.
+>
+> **Formato 2 (2026-10-19).** Añade el magic y la sección `debug` versionada. Los `.flow` de formato
+> 1 empiezan directamente por las versiones, así que se rechazan: **hay que recompilar** con el
+> ensamblador actual.
 
 > **Endianness mixto (deliberado).** La cabecera del contenedor y los operandos inmediatos de las
 > instrucciones son **big-endian**; las palabras de **datos** en memoria (RAM y constantes ya

@@ -350,19 +350,31 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 
 | Offset | Tamaño | Campo |
 |--------|--------|-------|
-| 0x00   | 1      | formatVersion |
-| 0x01   | 1      | isaVersion |
-| 0x02   | 1      | minAbiVersion |
-| 0x03   | 1      | minFirmwareVersion |
-| 0x04   | 2      | entryPoint (u16 big-endian) |
-| 0x06   | 2      | codeLength (u16 big-endian) |
-| 0x08   | 2      | constantsLength (u16 big-endian) |
-| 0x0A   | 1      | capabilitiesCount |
-| 0x0B   | 5      | padding (zeros) |
-| 0x10   | N      | code (codeLength bytes; operandos inmediatos big-endian `[hi, lo]`) |
+| 0x00   | 4      | magic = 0x464C4F57 ("FLOW", u32 big-endian) |
+| 0x04   | 1      | formatVersion = 2 |
+| 0x05   | 1      | isaVersion |
+| 0x06   | 1      | minAbiVersion |
+| 0x07   | 1      | minFirmwareVersion |
+| 0x08   | 2      | entryPoint (u16 big-endian) |
+| 0x0A   | 2      | codeLength (u16 big-endian) |
+| 0x0C   | 2      | constantsLength (u16 big-endian) |
+| 0x0E   | 1      | capabilitiesCount |
+| 0x0F   | 1      | reserved (0) |
+| 0x10   | 2      | debugLength (u16 big-endian; 0 = sin sección debug) |
+| 0x12   | 2      | reserved (0) |
+| 0x14   | N      | code (codeLength bytes; operandos inmediatos big-endian `[hi, lo]`) |
 | ...    | 2×N    | constants (u16 big-endian en el fichero) |
 | ...    | var    | capabilities (null-terminated strings) |
+| ...    | debugLength | debug (UTF-8, opcional; solo con `-d`) |
 | ...    | 32     | hash (SHA-256 of all preceding bytes) |
+
+> **El magic rechaza pronto.** Un fichero que no empieza por `FLOW` se descarta como «not a .flow»
+> antes de leer versiones o hash. **Formato 2 (2026-10-19):** añade el magic y la sección `debug`;
+> los `.flow` de formato 1 hay que recompilarlos.
+>
+> **`-d/--debug`.** Emite la sección `debug` (dirección + fuente de cada instrucción y tabla de
+> símbolos `SYM nombre = 0x…`). Es informativa: el runtime nunca la ejecuta, y queda cubierta por el
+> hash, así que no puede alterar el programa sin romper la integridad.
 
 > **Endianness mixto (deliberado).** La cabecera y los operandos inmediatos del *código* son
 > **big-endian**; las palabras de **datos** en memoria son **little-endian**, y por eso las

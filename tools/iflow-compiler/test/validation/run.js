@@ -32,14 +32,14 @@ for (const c of cases) {
   const matchOk = !c.match || output.includes(c.match);
 
   // Optional byte-level assertion over the code section of the produced .flow.
-  // Header: [6..7] = codeLength, code starts at offset 16.
+  // Format 2 header: [10..11] = codeLength, code starts at offset 20.
   let bytesOk = true;
   let actualCodeHex = '';
   if (c.codeHex) {
     if (res.status === 0) {
       const buf = fs.readFileSync(outFile);
-      const codeLength = (buf[6] << 8) | buf[7];
-      actualCodeHex = buf.subarray(16, 16 + codeLength).toString('hex');
+      const codeLength = (buf[10] << 8) | buf[11];
+      actualCodeHex = buf.subarray(20, 20 + codeLength).toString('hex');
       bytesOk = actualCodeHex === c.codeHex;
     } else {
       bytesOk = false;

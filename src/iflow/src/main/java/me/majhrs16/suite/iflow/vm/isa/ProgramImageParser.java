@@ -10,9 +10,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parser for .flow binary format.
+ * Parser for the .flow binary format (format version 2).
+ * <p>
+ * The file starts with a 4-byte magic number ("FLOW") so a foreign or truncated
+ * file is rejected as "not a .flow" instead of failing later with a confusing
+ * version or hash error (IFLOW-AUD-038). Format 2 also carries an optional,
+ * length-prefixed debug section (IFLOW-AUD-037) that older readers did not have.
+ * </p>
  */
 public final class ProgramImageParser {
+
+    /** Magic number at the start of every .flow file: ASCII "FLOW". */
+    public static final int MAGIC = 0x464C4F57;
+
+    /** Fixed header size of format 2 (bytes before the code section). */
+    public static final int HEADER_SIZE = 20;
 
     public static final int CURRENT_FORMAT_VERSION = ProgramImage.CURRENT_FORMAT_VERSION;
     public static final int CURRENT_ISA_VERSION = ProgramImage.CURRENT_ISA_VERSION;
@@ -20,11 +32,23 @@ public final class ProgramImageParser {
     public static final int CURRENT_FIRMWARE_VERSION = ProgramImage.CURRENT_FIRMWARE_VERSION;
 
     public static ProgramImage parse(byte[] data) {
-        if (data.length < 16) {
+        if (data.length < HEADER_SIZE) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Data too short for header");
         }
 
         int offset = 0;
+
+        // Magic number: reject anything that is not a .flow file outright.
+        int magic = ((data[offset++] & 0xFF) << 24)
+            | ((data[offset++] & 0xFF) << 16)
+            | ((data[offset++] & 0xFF) << 8)
+            | (data[offset++] & 0xFF);
+        if (magic != MAGIC) {
+            throw new VmException(VmException.Code.INVALID_PROGRAM,
+                "Not a .flow file (bad magic: 0x" + Integer.toHexString(magic)
+                    + ", expected 0x" + Integer.toHexString(MAGIC) + ")");
+        }
+
         int formatVersion = data[offset++] & 0xFF;
         int isaVersion = data[offset++] & 0xFF;
         int minAbiVersion = data[offset++] & 0xFF;
@@ -59,7 +83,9 @@ public final class ProgramImageParser {
         int codeLength = ((data[offset++] & 0xFF) << 8) | (data[offset++] & 0xFF);
         int constantsLength = ((data[offset++] & 0xFF) << 8) | (data[offset++] & 0xFF);
         int capabilitiesLength = data[offset++] & 0xFF;
-        offset += 5; // padding
+        offset++; // reserved
+        int debugLength = ((data[offset++] & 0xFF) << 8) | (data[offset++] & 0xFF);
+        offset += 2; // reserved
 
         // Validate code length
         if (codeLength < 0 || codeLength > 0xFFFF) {
@@ -123,6 +149,19 @@ public final class ProgramImageParser {
             capabilities.add(cap);
         }
 
+        // Read the optional debug section (format 2). It is part of the hashed
+        // payload (it sits before the hash field) and is purely informational:
+        // the runtime never executes it. A reader that does not understand it can
+        // still use the file, but the size is declared so nothing is misread.
+        String debugInfo = "";
+        if (debugLength > 0) {
+            if (offset + debugLength > data.length) {
+                throw new VmException(VmException.Code.INVALID_PROGRAM, "Debug section truncated");
+            }
+            debugInfo = new String(data, offset, debugLength, StandardCharsets.UTF_8);
+            offset += debugLength;
+        }
+
         // Read hash (32 bytes)
         if (offset + 32 > data.length) {
             throw new VmException(VmException.Code.INVALID_PROGRAM, "Hash section truncated");
@@ -156,6 +195,7 @@ public final class ProgramImageParser {
             .code(code)
             .constants(constants)
             .capabilities(capabilities.toArray(new String[0]))
+            .debugInfo(debugInfo)
             .hash(hash)
             .build();
     }
