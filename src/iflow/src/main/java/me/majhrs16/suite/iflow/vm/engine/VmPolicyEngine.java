@@ -157,6 +157,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         registry.declareCapability("state.read");
         registry.declareCapability("state.write");
         registry.declareCapability("channel.resolve");
+        registry.declareCapability("message.clone");
+        registry.declareCapability("message.id");
 
         // Inject host dependencies. The message/property/state/channel views are
         // supplied per execution through the HostContext port (see route()),

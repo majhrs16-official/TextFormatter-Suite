@@ -40,6 +40,12 @@ public final class ProgramImageParser {
                 "ISA version too new: " + isaVersion + " (max " + CURRENT_ISA_VERSION + ")");
         }
         if (minAbiVersion != CURRENT_ABI_VERSION) {
+            // Deliberate exact-match (IFLOW-AUD-043): the ABI is the calling
+            // convention of the HOST services (register roles, status codes, buffer
+            // semantics). Accepting an older/newer ABI would risk decoding a call
+            // that looks right but is not, i.e. an unexpected failure at run time.
+            // Requiring total equality guarantees the program was built for exactly
+            // this runtime; the loader's documented contract is all-or-nothing.
             throw new VmException(VmException.Code.INVALID_PROGRAM,
                 "Incompatible ABI version: program requires ABI " + minAbiVersion
                     + ", runtime implements " + CURRENT_ABI_VERSION);

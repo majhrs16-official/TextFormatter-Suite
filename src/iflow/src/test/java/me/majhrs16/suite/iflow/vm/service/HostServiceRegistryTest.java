@@ -19,7 +19,8 @@ class HostServiceRegistryTest {
     private ExecutionContext createContext(HostServiceRegistry hsr) {
         return createContext(hsr,
             "property.read", "property.write", "permission.check",
-            "routing.decide", "state.read", "state.write", "channel.resolve");
+            "routing.decide", "state.read", "state.write", "channel.resolve",
+            "message.clone", "message.id");
     }
 
     private ExecutionContext createContext(HostServiceRegistry hsr, String... caps) {
@@ -719,5 +720,21 @@ class HostServiceRegistryTest {
         ServiceResult r = hsr.invoke(ctx, HostServiceRegistry.MESSAGE_CLONE,
             ctx.outputBufferVAddr(), ctx.ioBufferSize() + 1, 0);
         assertEquals(ServiceResult.Status.INVALID_ARGUMENT, r.status());
+    }
+
+    @Test
+    void messageServicesRequireTheirCapability() {
+        // The message services are deny-by-default like the rest: without the
+        // declared capability the registry denies the call (IRQ_HOST to the program).
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "property.read"); // sin message.*
+
+        VmException id = assertThrows(VmException.class, () -> hsr.invoke(ctx,
+            HostServiceRegistry.MESSAGE_ID, ctx.outputBufferVAddr(), 64, 0));
+        assertEquals(VmException.Code.HOST_SERVICE_DENIED, id.code());
+
+        VmException clone = assertThrows(VmException.class, () -> hsr.invoke(ctx,
+            HostServiceRegistry.MESSAGE_CLONE, ctx.outputBufferVAddr(), 4, 0));
+        assertEquals(VmException.Code.HOST_SERVICE_DENIED, clone.code());
     }
 }

@@ -412,6 +412,18 @@ public final class ExecutionContext {
 
     // ===== Cancellation =====
 
+    /**
+     * Cooperative cancellation flag (IFLOW-AUD-036).
+     * <p>
+     * It is intentionally <em>not</em> driven by a watchdog or a wall-clock budget:
+     * a policy may legitimately run long — sleeping/delegating work, driving the
+     * RTC, waiting on an interrupt — and cutting it off would remove those features.
+     * The execution is bounded only by the {@link #fuelBudget(int) fuel budget}
+     * (instructions), which is deterministic and host-independent. What must stay
+     * short is the delivery of the message, not the life of the machine. The flag
+     * remains available for a caller that does need to abort an execution.
+     * </p>
+     */
     public boolean isCancelled() { return cancelled; }
     public void cancel() { cancelled = true; }
     public void checkCancelled() {

@@ -322,7 +322,7 @@ public final class HostServiceRegistry {
             }
             @Override public int baseCost() { return 15; }
             @Override public int varCostPerByte() { return 1; }
-            @Override public String[] requiredCapabilities() { return new String[0]; }
+            @Override public String[] requiredCapabilities() { return new String[]{"message.clone"}; }
         });
 
         // Message id: materialize the current message id.
@@ -332,7 +332,7 @@ public final class HostServiceRegistry {
             }
             @Override public int baseCost() { return 10; }
             @Override public int varCostPerByte() { return 1; }
-            @Override public String[] requiredCapabilities() { return new String[0]; }
+            @Override public String[] requiredCapabilities() { return new String[]{"message.id"}; }
         });
     }
 

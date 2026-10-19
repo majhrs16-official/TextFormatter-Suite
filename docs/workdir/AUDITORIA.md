@@ -1149,6 +1149,16 @@ aquí registrados:
   **endianness mixto** (cabecera e inmediatos big-endian; datos y constantes en memoria little-endian).
 - **`IFLOW-AUD-041`:** cerrado como **reservado**. El buffer de salida se documenta sin consumidor en
   producción (el resultado viaja por el journal) y utilizable como *scratch* por el programa.
-- Sigue abierto: `036` (cancelación/watchdog), `037` (`-d`), `038` (magic number) y `043` (compatibilidad
-  de versiones).
+- **`IFLOW-AUD-036`:** resuelto por **decisión**. No se añade vigilante ni presupuesto de tiempo: una
+  política puede ejecutarse legítimamente largo (sleep, RTC, espera de una IRQ) y el *fuel* sigue siendo
+  el único límite (determinista y ajeno al host). Lo que debe entregarse rápido es el **mensaje**, no la
+  vida de la máquina. Documentado en `ExecutionContext` (sección *Cancellation*).
+- **`IFLOW-AUD-043`:** resuelto por **decisión**. La igualdad exacta de `minAbiVersion` es deliberada:
+  garantiza que el programa se construyó para esta ABI y descarta fallos inesperados en tiempo de
+  ejecución. Documentado en `ProgramImageParser`.
+- **Punto 10 (P4):** cerrado. `MESSAGE_CLONE`/`MESSAGE_ID` exigen las capabilities `message.clone`/
+  `message.id` (deny-by-default, como el resto), y `tools/iflow-compiler/test/determinism/run.js`
+  (enganchado a `npm test`) reensambla los 5 fixtures con el CLI real y exige byte-identidad con los
+  `.flow` que ejecutan los tests del JVM.
+- Sigue abierto: `037` (sección `debug` versionada) y `038` (magic number).
 

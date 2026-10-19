@@ -193,8 +193,8 @@ Servicios estándar (15 IDs; **todos registrados** — cualquier otro responde `
 | 0x0501 | STATE_WRITE | `state.write` |
 | 0x0600 | CHANNEL_RESOLVE | `channel.resolve` |
 | 0x0601 | CHANNEL_POLICY | `channel.resolve` |
-| 0x0700 | MESSAGE_CLONE | — |
-| 0x0701 | MESSAGE_ID | — |
+| 0x0700 | MESSAGE_CLONE | `message.clone` |
+| 0x0701 | MESSAGE_ID | `message.id` |
 
 `TRANSFORM_APPLY` (0x0400): el byte bajo de `options` elige el tipo — `0` resuelve
 placeholders (hook `placeholderResolver`) y `1` detecta el idioma (hook `translationDetector`);

@@ -1944,3 +1944,37 @@ cuyo impacto se limita a forzar el cold-boot de la propia máquina del programa 
 ⚠️ **Aviso para un futuro cambio de layout:** si algún día se mueve la apertura a una página propia,
 hay que revisar a la vez `VmMemoryMap`, `VmBus`, el firmware (`DISPLAY_BASE`/`DEVICE_*` en
 `assembler.ts`), los 5 fixtures `.flow` y este contrato.
+
+### D36 — Sin vigilante de ejecución; el fuel es el único límite (AUD-036) ✅ aplicado
+
+**Decisión (usuario).** **No** añadir *watchdog* ni presupuesto de tiempo de pared. Una política puede
+ejecutarse legítimamente largo (sleep, RTC, delegar trabajo, esperar una IRQ) y cortarla eliminaría esas
+capacidades. Lo que debe entregarse en poco tiempo es **el mensaje**, no la ejecución de la máquina. El
+`fuel` sigue siendo el único límite: determinista, ajeno al host y suficiente para acotar un programa que
+no avanza. La cancelación cooperativa (`ExecutionContext.cancel()`) se mantiene disponible para quien
+necesite abortar, pero no se cablea a ningún temporizador.
+
+**Aplicado.** Javadoc de `ExecutionContext` (sección *Cancellation*) + este registro + addéndum de
+`AUDITORIA.md`.
+
+### D37 — La ABI se exige por igualdad exacta (AUD-043) ✅ aplicado (documentado)
+
+**Decisión.** Mantener `minAbiVersion != CURRENT_ABI_VERSION` como comparación **exacta**, no como cota.
+La ABI es la convención de llamada de los servicios HOST (roles de registro, códigos de estado,
+semántica de buffers): aceptar una ABI distinta arriesga decodificar una llamada que parece correcta y
+falla en tiempo de ejecución. La igualdad garantiza compatibilidad total y falla pronto y claro al
+cargar. **Aplicado.** Comentario en `ProgramImageParser` + addéndum de `AUDITORIA.md`.
+
+### D38 — Capabilities de mensaje y guardián de deriva compilador→VM (punto 10) ✅ aplicado
+
+**Aplicado.**
+
+- `MESSAGE_CLONE`/`MESSAGE_ID` pasan a exigir `message.clone`/`message.id`: eran los dos únicos
+  servicios con `requiredCapabilities()` vacío. Con esto todos son *deny-by-default*; el motor declara
+  las dos capabilities y el README las refleja. Test: `messageServicesRequireTheirCapability` (sin la
+  capability, `HOST_SERVICE_DENIED`).
+- **Guardián de deriva:** `tools/iflow-compiler/test/determinism/run.js`, enganchado a `npm test`,
+  reensambla `firmware`/`simple`/`main_only`/`irq`/`bios_screen` con el CLI real y exige byte-identidad
+  con los `.flow` commiteados. Cierra el eslabón que faltaba: los tests del JVM (`BiosBootTest`,
+  `IrqDeliveryTest`, `FirmwareIntegrationTest`) ya ejecutaban esos bytes, pero nada garantizaba que
+  siguieran siendo la salida actual del ensamblador.
