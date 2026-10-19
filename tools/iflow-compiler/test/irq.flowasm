@@ -29,7 +29,7 @@ main:
     STWI R2, [R1]
 
     ; If R5 survived, draw 'S'; otherwise draw 'C'.
-    LI R1, 0xE000
+    LI R1, 0xF000
     LI R2, 0x0043      ; 'C'
     LI R3, 0x1234
     CMP R5, R3
@@ -46,7 +46,7 @@ handler:
     LI R3, 0x1111
 
     ; Draw 'I' in cell 1, proving the handler ran.
-    LI R1, 0xE002
+    LI R1, 0xF002
     LI R2, 0x0049      ; 'I'
     STBI R2, [R1]
 

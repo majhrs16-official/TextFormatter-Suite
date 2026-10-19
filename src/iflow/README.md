@@ -48,7 +48,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
   - Página 7: Buffer entrada I/O (R/W) (0x7000)
   - Página 8: Buffer salida I/O (R/W) (0x8000)
-  - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia
+  - Páginas 9-15: RAM de usuario de propósito general (R/W) (0x9000–0xFFFF) — almacenamiento libre del programa; el runtime nunca la limpia. La página 15 (0xF000–0xFFFF) es además la **página de pantalla**: con la pantalla activa su framebuffer sombrea los primeros `cols×rows×2` bytes; al deshabilitarla, toda la página vuelve a ser RAM
   - Bloque de control MMIO de dispositivos: 256 B (0x0F00–0x0FFF) **dentro de la página del BIOS** — `0x0F00–0x0F0F` banco de registros de la pantalla (D31), `0x0F10–0x0FEF` NVRAM del BIOS (D32) y `0x0FF0–0x0FFF` controlador de interrupciones (D33); el *interconnect* lo decodifica antes que la ROM/RAM. Reutiliza la cola libre del ROM (el firmware acaba en 0x029B), así no recorta RAM de usuario
 - **Contrato de entrada (engine)**: antes de ejecutar, el engine materializa el mensaje en
   `0x7000` (campos con longitud explícita) para los servicios de buffer; las propiedades
@@ -71,13 +71,15 @@ framebuffer aparece en pantalla.
 
 - **Celda (2 bytes)**: byte bajo = **carácter** (8 bits); byte alto = **atributo**
   `[letra:4][fondo:4]` (nibble alto = color de letra, nibble bajo = color de fondo), estilo VERA/X16.
-- **Ventana**: `cols × rows × 2` bytes en una base elegida por el BIOS (por defecto `0xE000`).
-  El *interconnect* (`VmBus`) decodifica la ventana y enruta las escrituras al dispositivo, sombreando
-  la RAM que hubiera debajo.
+- **Ventana**: `cols × rows × 2` bytes en una base elegida por el BIOS (por defecto `0xF000`).
+  Debe caber entera en la **página de pantalla** (`0xF000–0xFFFF`, 4 KB); el *interconnect* (`VmBus`)
+  decodifica la ventana y enruta las escrituras al dispositivo, sombreando la RAM que hubiera debajo.
+  Esa página sigue mapeada R/W como RAM de usuario: si el programa deshabilita la pantalla, recupera
+  los 4 KB completos como almacenamiento normal.
 - **Registros MMIO** (banco de 16 B en `0x0F00`, dentro de la memoria del BIOS): `BASE` (0x00), `COLS` (0x02), `ROWS` (0x04),
   `CTRL` (0x06: bit0 = habilitar, bit1 = limpiar), `CURSOR` (0x08), `STATUS` (0x0A, solo lectura). El
-  BIOS los escribe al arrancar (D32); reconfigurable en caliente. Una ventana que solapara el banco de
-  registros se rechaza (la pantalla queda deshabilitada).
+  BIOS los escribe al arrancar (D32); reconfigurable en caliente. Una ventana que no quepa entera en
+  la página de pantalla se rechaza (la pantalla queda deshabilitada).
 - **Consumo por el host**: `VmPolicyEngine.display()` expone el framebuffer (`renderText()`,
   `renderTextTrimmed()`, `renderAnsi()`, `cellChar(...)`, `cellAttribute(...)`) para datos de
   producción y tests. En builds de **debug** (`logger.debug=true`) se vuelca la pantalla al log tras
@@ -92,7 +94,7 @@ que el programa tenga que configurarlo.
 
 - **POST**: `fw_reset` detecta arranque **en frío vs. caliente** con una bandera persistente en la
   NVRAM. En frío limpia la **RAM volátil de datos** (0x3000–0x4FFF) y **configura la pantalla** por
-  MMIO (`BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`); después marca el arranque y encadena con
+  MMIO (`BASE=0xF000`, `COLS=80`, `ROWS=25`, `CTRL=enable`); después marca el arranque y encadena con
   `main`. En caliente salta directo a `main`.
 - **«Limpiar memoria» sin romper D30**: el BIOS **nunca** toca la RAM de propósito general
   (0x9000+) ni la memoria del programa en el camino caliente, así que la persistencia implícita de D30

@@ -600,7 +600,7 @@ class VmPolicyEngineTest {
     @Test
     void programDrawsOnTheMemoryMappedScreen() {
         // The program configures the screen through its MMIO registers (base
-        // 0xE000, 2x2 cells, enable) and then writes "HI" straight into the
+        // 0xF000, 2x2 cells, enable) and then writes "HI" straight into the
         // framebuffer window. The interconnect routes those stores to the video
         // peripheral, so the host can read them back from the engine's screen.
         VmPolicyEngine engine = createEngine();
@@ -608,8 +608,8 @@ class VmPolicyEngineTest {
             .entryPoint(0)
             .code(new byte[]{
                 Opcode.LI, 1, 0x0F, 0x00,
-                Opcode.LI, 2, (byte)0xE0, 0x00,
-                Opcode.STWI, (2 << 4) | 1,          // REG_BASE  = 0xE000
+                Opcode.LI, 2, (byte)0xF0, 0x00,
+                Opcode.STWI, (2 << 4) | 1,          // REG_BASE  = 0xF000
                 Opcode.LI, 1, 0x0F, 0x02,
                 Opcode.LI, 2, 0x00, 0x02,
                 Opcode.STWI, (2 << 4) | 1,          // REG_COLS  = 2
@@ -619,10 +619,10 @@ class VmPolicyEngineTest {
                 Opcode.LI, 1, 0x0F, 0x06,
                 Opcode.LI, 2, 0x00, 0x01,
                 Opcode.STWI, (2 << 4) | 1,          // REG_CTRL  = ENABLE
-                Opcode.LI, 1, (byte)0xE0, 0x00,
+                Opcode.LI, 1, (byte)0xF0, 0x00,
                 Opcode.LI, 2, 0x00, 0x48,
                 Opcode.STBI, (2 << 4) | 1,          // cell[0] char = 'H'
-                Opcode.LI, 1, (byte)0xE0, 0x02,
+                Opcode.LI, 1, (byte)0xF0, 0x02,
                 Opcode.LI, 2, 0x00, 0x49,
                 Opcode.STBI, (2 << 4) | 1,          // cell[1] char = 'I'
                 Opcode.HALT

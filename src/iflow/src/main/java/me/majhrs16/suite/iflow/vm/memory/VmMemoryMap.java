@@ -81,6 +81,12 @@ public final class VmMemoryMap {
      * the VM keeps a single long-lived machine (see {@code VmPolicyEngine}), what
      * the program leaves here is simply still there on the next message; the
      * program, not the runtime, decides when to clear or reuse it.
+     * <p>
+     * The last page (see {@link #DISPLAY_WINDOW_BASE}) is shared with the text
+     * screen: while the screen is enabled its framebuffer shadows the first
+     * {@code cols × rows × 2} bytes of that page, and the rest stays RAM. When
+     * the program disables the screen, the whole page is ordinary RAM again.
+     * </p>
      */
     public static final int USER_BASE = 0x9000;
     public static final int USER_PAGES = 7;
@@ -92,7 +98,7 @@ public final class VmMemoryMap {
      * Base of the 256-byte MMIO aperture where peripherals expose their register
      * banks (today the text screen of D31). It lives <em>inside the BIOS ROM page</em>
      * (0x0000-0x0FFF): the firmware functions end well before it (currently at
-     * 0x0204), so the unused tail of the ROM page is reused for the device control
+     * 0x029B), so the unused tail of the ROM page is reused for the device control
      * block instead of carving a hole out of user RAM. The interconnect decodes it
      * <em>before</em> ROM/RAM, so the BIOS can drive devices with plain stores
      * without write permission on the (R/X) code page.
@@ -120,10 +126,20 @@ public final class VmMemoryMap {
     public static final int DEVICE_PIC_BASE = DEVICE_MMIO_BASE + 0xF0;     // 0x0FF0
     public static final int DEVICE_PIC_SIZE = 0x10;                        // 0x0FF0-0x0FFF
 
-    // ===== Text screen defaults (the BIOS may reconfigure them at runtime) =====
+    // ===== Text screen (the BIOS may reconfigure it at runtime) =====
 
-    /** Default framebuffer base for the screen window (below the MMIO aperture). */
-    public static final int DISPLAY_DEFAULT_BASE = 0xE000;
+    /**
+     * Dedicated page for the text screen window: the last page of user RAM. The
+     * framebuffer must live entirely inside it, so the shadowing is aligned to a
+     * page boundary instead of splitting another page in half. The page stays
+     * mapped R/W as user RAM: when the screen is disabled, programs get all
+     * 4 KB back as ordinary storage.
+     */
+    public static final int DISPLAY_WINDOW_BASE = 0xF000;
+    public static final int DISPLAY_WINDOW_SIZE = PAGE; // 4096
+
+    /** Default framebuffer base for the screen window (start of its page). */
+    public static final int DISPLAY_DEFAULT_BASE = DISPLAY_WINDOW_BASE;
     public static final int DISPLAY_DEFAULT_COLS = 80;
     public static final int DISPLAY_DEFAULT_ROWS = 25;
 

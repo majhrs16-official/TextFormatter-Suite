@@ -1866,3 +1866,40 @@ fuente HOST), `VmPolicyEngine` (adjunta el PIC, lo cablea y levanta la IRQ de me
    no se limpia la memoria). Ya aplicado en D30.
 4. **Orden**: D27/D28/D29/D30/D31 aplicados; **D32 aplicado** (BIOS activo + NVRAM); **D33 aplicado**
    (tabla de IRQ configurable por el BIOS + fuentes de interrupción por E/S).
+
+---
+
+## REVISIÓN 2026-10-19 — Pantalla en página propia (hallazgo de la auditoría iFlow)
+
+### D34 — La ventana de pantalla vive en una página dedicada (✅ aplicado)
+
+**Contexto.** La auditoría forense de iFlow (2026-10-19) dejó abierta la duda de si el framebuffer en
+`0xE000` recortaba la RAM de usuario `0x9000–0xFFFF`. Verificado: sí. La ventana por defecto
+80×25×2 = 4000 B sombreaba el 14 % de las 28 KB declaradas, dejando 24,1 KB útiles **mientras la
+pantalla está activa**; la RAM de debajo no se perdía (el `byte[]` de celdas vive en el heap del host),
+pero quedaba inaccesible.
+
+**Decisión (usuario).** Mover la ventana a la **última página** (`0xF000–0xFFFF`) para que el
+sombreado quede alineado a frontera de página, y documentar que **esa página vuelve a ser RAM
+completa si se deshabilita la pantalla**.
+
+**Aplicado.**
+
+- `VmMemoryMap`: nuevas constantes `DISPLAY_WINDOW_BASE = 0xF000` y `DISPLAY_WINDOW_SIZE = PAGE`;
+  `DISPLAY_DEFAULT_BASE` pasa a ser un alias de la primera. La página 15 sigue en `USER_PAGES`, así que
+  sigue mapeada R/W como RAM de usuario.
+- `VmDisplay.reconfigure()`: la ventana debe **caber entera en la página de pantalla**. Esto sustituye
+  la comprobación anterior (cota de 64 KB + no solapar el banco de registros) y cierra de paso la
+  grieta por la que un programa podía poner la base en `0x7000` (buffer de entrada) o `0x3000` y
+  sombrear su propia E/S o sus datos: la base ya solo puede caer en `0xF000–0xFFFF`.
+- Firmware (`tools/iflow-compiler/src/assembler.ts`): `DISPLAY_BASE = 0xF000`.
+- Tests: `VmDisplayTest` reescrito para la regla de página, con un caso de **reutilización**
+  (`pageIsPlainRamWhileTheScreenIsDisabled`: RAM → framebuffer → RAM al deshabilitar);
+  `VmPolicyEngineTest.programDrawsOnTheMemoryMappedScreen` reubicado a `0xF000`.
+- Documentación: `src/iflow/README.md`, `src/iflow/HDL.md` y `tools/iflow-compiler/README.md`.
+
+**Dato verificado de paso.** El firmware ensamblado termina en **`0x029B`** (668 B), no en `0x0204`:
+el README era correcto y el comentario de `VmMemoryMap` estaba obsoleto (corregido). Quedan **3172 B**
+libres hasta el banco MMIO (`0x0F00`): un framebuffer 80×25×2 = 4000 B **no cabe** en la cola del BIOS,
+y uno de 80×20×2 = 3200 B tampoco (por 28 B), así que la idea de meter la pantalla en la memoria del
+BIOS no es viable para la geometría actual.

@@ -1026,13 +1026,16 @@ evidencia permite.
 - **¿Puede una IRQ espuria disparada por el programa producir recursión o inanición?** El PIC
   marca la línea en servicio y el intérprete guarda el estado completo, lo que sugiere que no,
   pero **no lo he ejecutado** (HIPÓTESIS).
-- **¿Es `0x0204` o `0x029B` el fin real del firmware?** No medido (`IFLOW-AUD-040`).
+- **¿Es `0x0204` o `0x029B` el fin real del firmware?** **RESUELTO (2026-10-19):** medido sobre el
+  `.flow` ensamblado, el último byte no-cero de la página 0 está en `0x029B` (668 B). El README es
+  correcto; el comentario de `VmMemoryMap` (`0x0204`) estaba obsoleto y se corrigió (`IFLOW-AUD-040`).
 - **¿`MSGP`/servicios con `new String[0]` de capabilities** deben exigir alguna? Decisión
   del diseño, no comprobada con el autor.
-- **¿El display sombrea RAM de usuario (`0xE000`)?** El README dice que el *interconnect*
-  decodifica la ventana por defecto `0xE000`, que cae dentro de la RAM de usuario
-  (`0x9000–0xFFFF`). **No verifiqué** si eso reduce el espacio realmente utilizable ni si está
-  documentado como reservado (pendiente).
+- ~~**¿El display sombrea RAM de usuario (`0xE000`)?**~~ **RESUELTO (2026-10-19):** sí. La ventana por
+  defecto 80×25×2 = 4000 B sombreaba el 14 % de las 28 KB declaradas (`0x9000–0xFFFF`), dejando
+  24,1 KB útiles con la pantalla activa. Resuelto por decisión de diseño **D34**: la ventana pasa a la
+  página dedicada `0xF000–0xFFFF` (sombreado alineado a página) y esa página vuelve a ser RAM completa
+  al deshabilitar la pantalla; `VmDisplay.reconfigure()` ahora exige que la ventana quepa entera en ella.
 - **Rendimiento por mensaje** y comportamiento bajo carga concurrente (la ejecución es
   secuencial): **no medido**.
 
@@ -1110,3 +1113,21 @@ grep -n "fetch(ctx, ip + 2) << 8" src/iflow/src/main/java/.../vm/execution/VmInt
 ```
 
 *Fin del informe.*
+
+---
+
+## Addendum — 2026-10-19 (posterior al commit auditado)
+
+Este informe describe el árbol en el commit `84491c2`. Cambios posteriores que **resuelven** puntos
+aquí registrados:
+
+- **§20 · solapamiento de la pantalla (`0xE000`):** verificado y resuelto. La ventana por defecto
+  80×25×2 = 4000 B sombreaba el 14 % de la RAM de usuario declarada (28 KB → 24,1 KB útiles con la
+  pantalla activa). Decisión **D34** (ver `PLAN.md`): la ventana pasa a la página dedicada
+  `0xF000–0xFFFF` y `VmDisplay.reconfigure()` exige que quepa entera en ella; la página vuelve a ser
+  RAM completa cuando la pantalla está deshabilitada. De paso se cierra la posibilidad de apuntar la
+  base a `0x7000`/`0x3000` y sombrear la E/S o los datos propios.
+- **`IFLOW-AUD-040`:** medido el `.flow` ensamblado, el firmware termina en `0x029B` (668 B). El
+  README era correcto y el comentario de `VmMemoryMap` (`0x0204`) se corrigió.
+- **`IFLOW-AUD-031`, `034` y el resto siguen abiertos**; su estado no cambia con este addendum.
+

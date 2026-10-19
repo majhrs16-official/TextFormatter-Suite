@@ -203,7 +203,7 @@ Las utilidades de cadena/memoria usan el direccionamiento indirecto de la ISA v2
 **BIOS activo (D32).** Con firmware activado, el `entryPoint` de la imagen es
 `fw_reset`, **no** el `main`: la máquina resetea en el BIOS. En el primer arranque
 (frío) `fw_reset` limpia la RAM volátil de datos (0x3000–0x4FFF), configura la
-pantalla por MMIO (`BASE=0xE000`, `COLS=80`, `ROWS=25`, `CTRL=enable`), publica la
+pantalla por MMIO (`BASE=0xF000`, `COLS=80`, `ROWS=25`, `CTRL=enable`), publica la
 tabla de interrupciones en la NVRAM, marca el arranque y encadena con el `main`; en
 los siguientes arranques (caliente) salta directo al `main`. La cola de la página
 del BIOS (0x0F00–0x0FFF) está reservada para el bloque de control MMIO (pantalla

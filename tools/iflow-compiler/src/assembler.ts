@@ -193,7 +193,7 @@ class Assembler {
     const IRQ_TABLE_OFF     = 0x06;    // NVRAM offset of entry 0 (magic@0x02, count@0x04)
     const DATA_BASE         = 0x3000;  // volatile data/heap region
     const DATA_WORDS        = 4096;    // 2 pages / 2 bytes per word
-    const DISPLAY_BASE      = 0xE000;  // default framebuffer window
+    const DISPLAY_BASE      = 0xF000;  // default framebuffer window (dedicated screen page)
     const DISPLAY_COLS      = 80;
     const DISPLAY_ROWS      = 25;
 

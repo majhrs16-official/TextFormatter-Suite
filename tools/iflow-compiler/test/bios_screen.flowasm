@@ -9,7 +9,7 @@
 .section code
 
 main:
-    LI R1, 0xE000
+    LI R1, 0xF000
     LI R2, 0x0042      ; 'B'
     STBI R2, [R1]      ; cell 0 of the BIOS-configured framebuffer
     HALT

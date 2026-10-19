@@ -1,5 +1,8 @@
 package me.majhrs16.suite.iflow.vm.video;
 
+import me.majhrs16.suite.iflow.vm.memory.PageEntry;
+import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
+import me.majhrs16.suite.iflow.vm.memory.VmBus;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class VmDisplayTest {
 
     private static final int CTRL = VmMemoryMap.DEVICE_MMIO_BASE;
+    private static final int FB = VmMemoryMap.DISPLAY_WINDOW_BASE;
 
     private void configure(VmDisplay d, int base, int cols, int rows) {
         d.writeWord(CTRL + VmDisplay.REG_BASE, base);
@@ -20,7 +24,7 @@ class VmDisplayTest {
     void startsDisabledAndDecodesNothing() {
         VmDisplay d = new VmDisplay();
         assertFalse(d.isEnabled());
-        assertFalse(d.decodes(0xE000));
+        assertFalse(d.decodes(FB));
         // The register bank is always decoded so it can be programmed.
         assertTrue(d.decodes(CTRL));
     }
@@ -28,35 +32,42 @@ class VmDisplayTest {
     @Test
     void decodesTheConfiguredWindowOnceEnabled() {
         VmDisplay d = new VmDisplay();
-        configure(d, 0xE000, 8, 2); // 8*2*2 = 32 bytes
+        configure(d, FB, 8, 2); // 8*2*2 = 32 bytes
         assertTrue(d.isEnabled());
-        assertTrue(d.decodes(0xE000));
-        assertTrue(d.decodes(0xE01F));
-        assertFalse(d.decodes(0xE020)); // one past the window
+        assertTrue(d.decodes(FB));
+        assertTrue(d.decodes(FB + 0x1F));
+        assertFalse(d.decodes(FB + 0x20)); // one past the window
     }
 
     @Test
-    void rejectsAWindowThatWouldOverlapTheRegisterBank() {
+    void rejectsTheRegisterBankAsFramebuffer() {
         VmDisplay d = new VmDisplay();
-        // The bank lives at 0x0F00 (inside the BIOS page): a window starting
-        // there would shadow the device's own registers.
+        // The bank lives at 0x0F00 (inside the BIOS page), outside the screen
+        // page: a window starting there would shadow the device's own registers.
         configure(d, CTRL, 80, 25);
         assertFalse(d.isEnabled());
     }
 
     @Test
-    void acceptsAWindowBelowTheRegisterBank() {
-        // Since the bank sits inside the BIOS page (not at the top of memory),
-        // a framebuffer below it is now legal.
+    void acceptsAWindowInsideTheDisplayPage() {
+        // The screen page is the only legal home for the framebuffer; a smaller
+        // window may start anywhere inside it.
         VmDisplay d = new VmDisplay();
-        configure(d, 0x0010, 2, 2); // 8 bytes at 0x0010-0x0017, bank starts at 0x0F00
+        configure(d, FB + 0x800, 2, 2); // 8 bytes at 0xF800-0xF807
         assertTrue(d.isEnabled());
-        d.writeByte(0x0010, 'Y');
+        d.writeByte(FB + 0x800, 'Y');
         assertEquals('Y', d.cellChar(0));
     }
 
     @Test
-    void rejectsAWindowThatRunsPastTheAddressSpace() {
+    void rejectsAWindowBelowTheDisplayPage() {
+        VmDisplay d = new VmDisplay();
+        configure(d, 0x0010, 2, 2);
+        assertFalse(d.isEnabled());
+    }
+
+    @Test
+    void rejectsAWindowThatRunsPastTheDisplayPage() {
         VmDisplay d = new VmDisplay();
         // 80*25*2 = 4000 bytes at 0xFF00 would end at 0x10FA0 > 0xFFFF.
         configure(d, 0xFF00, 80, 25);
@@ -64,30 +75,38 @@ class VmDisplayTest {
     }
 
     @Test
+    void rejectsGeometryThatDoesNotFitTheDisplayPage() {
+        VmDisplay d = new VmDisplay();
+        // 80*26*2 = 4160 bytes do not fit in the 4096-byte screen page.
+        configure(d, FB, 80, 26);
+        assertFalse(d.isEnabled());
+    }
+
+    @Test
     void writesAndReadsCharacterAndAttribute() {
         VmDisplay d = new VmDisplay();
-        configure(d, 0xE000, 4, 1);
-        d.writeByte(0xE000, 'A');
-        d.writeByte(0xE001, 0x1E); // ink 1, paper 14
-        d.writeByte(0xE002, 'B');
-        d.writeByte(0xE003, 0x00);
+        configure(d, FB, 4, 1);
+        d.writeByte(FB, 'A');
+        d.writeByte(FB + 1, 0x1E); // ink 1, paper 14
+        d.writeByte(FB + 2, 'B');
+        d.writeByte(FB + 3, 0x00);
 
         assertEquals('A', d.cellChar(0));
         assertEquals(0x1E, d.cellAttribute(0));
         assertEquals('B', d.cellChar(1));
-        assertEquals('A', d.readByte(0xE000));
+        assertEquals('A', d.readByte(FB));
         assertEquals("AB  ", d.renderText());
     }
 
     @Test
     void blockWriteFillsTheWindow() {
         VmDisplay d = new VmDisplay();
-        configure(d, 0xE000, 4, 1);
+        configure(d, FB, 4, 1);
         byte[] cells = {'O', 0x0F, 'K', 0x0F, '!', 0x00, ' ', 0x00};
-        d.writeBlock(0xE000, cells, 0, cells.length);
+        d.writeBlock(FB, cells, 0, cells.length);
 
         byte[] read = new byte[cells.length];
-        d.readBlock(0xE000, read, 0, read.length);
+        d.readBlock(FB, read, 0, read.length);
         assertArrayEquals(cells, read);
         assertEquals("OK! ", d.renderText());
     }
@@ -95,8 +114,8 @@ class VmDisplayTest {
     @Test
     void clearBitErasesTheScreen() {
         VmDisplay d = new VmDisplay();
-        configure(d, 0xE000, 4, 1);
-        d.writeByte(0xE000, 'X');
+        configure(d, FB, 4, 1);
+        d.writeByte(FB, 'X');
         assertEquals('X', d.cellChar(0));
 
         d.writeWord(CTRL + VmDisplay.REG_CTRL, VmDisplay.CTRL_ENABLE | VmDisplay.CTRL_CLEAR);
@@ -107,10 +126,36 @@ class VmDisplayTest {
     @Test
     void renderAnsiCarriesInkAndPaperColors() {
         VmDisplay d = new VmDisplay();
-        configure(d, 0xE000, 1, 1);
-        d.writeByte(0xE000, 'Z');
-        d.writeByte(0xE001, 0x21); // ink 2, paper 1
+        configure(d, FB, 1, 1);
+        d.writeByte(FB, 'Z');
+        d.writeByte(FB + 1, 0x21); // ink 2, paper 1
         String ansi = d.renderAnsi();
         assertTrue(ansi.contains("32;41mZ"), "expected 2/1 colors, got: " + ansi);
+    }
+
+    @Test
+    void pageIsPlainRamWhileTheScreenIsDisabled() {
+        // The screen page stays mapped as user RAM: disabling the screen gives
+        // the whole page back to the program.
+        SoftMMU mmu = new SoftMMU();
+        mmu.mapPage(VmMemoryMap.pageOf(FB), FB,
+            PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        VmDisplay d = new VmDisplay();
+        mmu.attach(d);
+        VmBus bus = new VmBus(mmu);
+
+        // Disabled: the address is ordinary RAM.
+        bus.writeByte(FB, 'R');
+        assertEquals('R', bus.readByte(FB));
+
+        // Enabled: the framebuffer shadows the same address.
+        configure(d, FB, 80, 25);
+        assertTrue(d.isEnabled());
+        assertEquals(' ', bus.readByte(FB));
+
+        // Disabled again: the RAM underneath is back.
+        d.writeWord(CTRL + VmDisplay.REG_CTRL, 0);
+        assertFalse(d.isEnabled());
+        assertEquals('R', bus.readByte(FB));
     }
 }

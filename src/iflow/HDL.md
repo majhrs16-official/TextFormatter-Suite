@@ -204,7 +204,7 @@ firmware está activa** (el código siempre reserva dos páginas):
 | Pila | `0x5000-0x6FFF` | R/W | user | Crece hacia abajo desde `STACK_TOP` |
 | Entrada | `0x7000-0x7FFF` | R/W | user | Buffer de entrada |
 | Salida | `0x8000-0x8FFF` | R/W | user | Buffer de salida |
-| RAM de usuario | `0x9000-0xFFFF` | R/W | user | Almacenamiento libre del programa; persiste entre mensajes (el runtime no la limpia) |
+| RAM de usuario | `0x9000-0xFFFF` | R/W | user | Almacenamiento libre del programa; persiste entre mensajes (el runtime no la limpia). La última página (`0xF000-0xFFFF`) es la página de pantalla: con la pantalla activa su framebuffer sombrea los primeros `cols×rows×2` bytes; al deshabilitarla vuelve a ser RAM completa |
 | MMIO de dispositivo (pantalla) | `0x0F00-0x0F0F` | I/O | — | Banco de registros de la pantalla, **dentro de la página del BIOS** (reutiliza la cola libre del ROM); el *interconnect* lo decodifica antes que la ROM/RAM (D31) |
 | MMIO de dispositivo (NVRAM) | `0x0F10-0x0FEF` | I/O | — | NVRAM del BIOS (D32): almacenamiento persistente entre mensajes dentro de la apertura MMIO |
 | MMIO de dispositivo (PIC) | `0x0FF0-0x0FFF` | I/O | — | Controlador de interrupciones (D33): latch/máscara de 16 líneas, disparo software y confirmación |
