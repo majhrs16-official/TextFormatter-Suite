@@ -57,6 +57,77 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 
 ---
 
+## Métricas del proyecto (evolución real)
+
+El repositorio **se mide a sí mismo**. [`tools/project-metrics/`](tools/project-metrics/README.md)
+genera ~30 métricas a lo largo del tiempo —cortes diarios, no por commit— cruzando
+el histórico de git con la narrativa de las sesiones de chat, más una **rúbrica de
+madurez de 12 familias** (0–100). El renderizado es PNG estático (Pillow) y todo se
+reproduce en local desde el código:
+
+```bash
+cd tools/project-metrics && ./run_all.sh   # regenera las 9 imágenes de docs/metrics/
+```
+
+Las gráficas de abajo corresponden al último corte medido (**2026-10-18**: 35 cortes
+con commit sobre 66 días naturales). Métricas, filtros, rúbrica y juez, en
+[`tools/project-metrics/README.md`](tools/project-metrics/README.md).
+
+### Rúbrica de madurez (12 familias)
+
+![Las 12 familias de madurez en el tiempo](docs/metrics/rubrica_familias.png)
+
+*Un panel por familia, en corte diario y con escala fija 0–100. Los días sin commit
+arrastran el último valor conocido (la madurez es un estado, no actividad). Las
+familias de **documentación** e **implementación real** llevan veredicto cualitativo,
+producido por el agente de OpenCode mediante el skill
+[`juzgar-rubrica`](.opencode/skills/juzgar-rubrica/SKILL.md); el resto son proxies
+deterministas.*
+
+![Matriz módulo × familia](docs/metrics/rubrica_matriz.png)
+
+*Matriz módulo × familia en el último corte. La fila `TOTAL (proyecto)` es la única
+que lleva el veredicto cualitativo.*
+
+### Actividad: repositorio y conversación
+
+![15 métricas del repositorio](docs/metrics/panel_git.png)
+
+*15 métricas del repositorio: commits, líneas, LOC, tests, API pública, deuda.*
+
+![15 métricas de la narrativa](docs/metrics/panel_chat.png)
+
+*15 métricas de la narrativa: mensajes, razonamiento, llamadas a herramientas, tokens.*
+
+![Correlación git ↔ chat](docs/metrics/panel_actividad.png)
+
+*Cruce de las dos capas: qué parte del código viene de trabajo conversado.*
+
+> Los paneles marcan 8 **hitos** (inicio, chats base, auditorías, split modular…) y
+> sombrean dos **eras**: el monolito `src/suite` y el endurecimiento de iFlow.
+
+### Código por módulo
+
+![LOC de fuente por módulo](docs/metrics/modules_src_loc.png)
+
+*LOC de fuente por módulo (top 15) a lo largo del tiempo. El acantilado de `suite`
+hasta el 15-sep es la reorganización de monolito a módulos.*
+
+![LOC de test por módulo](docs/metrics/modules_test_loc.png)
+
+*LOC de test por módulo (top 12): qué módulos tienen pruebas propias.*
+
+![LOC por módulo y semana](docs/metrics/heatmap_modulos.png)
+
+*LOC por módulo y semana.*
+
+![Primer corte frente al último](docs/metrics/crecimiento.png)
+
+*Primer corte (2026-08-14) frente al último (2026-10-18), con factor de crecimiento por
+eje. En la fila `deuda (todo+stubs)` menos es mejor.*
+
+---
+
 ## Enfoque, alcance y objetivos
 
 | Objetivo | Descripción |
@@ -333,6 +404,7 @@ No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orie
 | **docs/extension-schema.md** | Schema `extension.yml` v1.0 (metadatos, capabilities, configSchema JSON) | [`docs/extension-schema.md`](docs/extension-schema.md) |
 | **docs/NEW-MANAGER.md** | Especificación reingeniería Module Manager (estilo APT/dpkg) | [`docs/NEW-MANAGER.md`](docs/NEW-MANAGER.md) |
 | **docs/AUDITORIA.md** | Auditoría técnica externa 2026-10-09 (TXF-ZIP-001..006 resueltos) | [`docs/AUDITORIA.md`](docs/AUDITORIA.md) |
+| **tools/project-metrics/README.md** | Herramienta de métricas: ~30 métricas diarias, rúbrica de 12 familias, juez cualitativo | [`tools/project-metrics/README.md`](tools/project-metrics/README.md) |
 | **src/<modulo>/README.md** | Codeguide por módulo: responsabilidades, deps, data flow, entry points | Ver [`src/README.md`](src/README.md) §3 |
 
 ---
