@@ -3,11 +3,12 @@
 scan_tools.py - ejecuta analizadores REALES y vuelca sus resultados por fecha
 en data/tools/<fecha>.json, de modo que maturity.py sustituya sus proxies.
 
-Herramientas (ruta por variable de entorno, o autodeteccion en PATH y /tmp/opencode):
+Herramientas (ruta por variable de entorno, o autodeteccion en PATH y $PM_TOOLS):
     PM_GITLEAKS   -> fugas de secretos (escaneo de TODO el historico git)
     PM_SEMGREP    -> hallazgos de seguridad (arbol de cada snapshot)
     PM_PMD        -> violaciones Java (opcional; requiere java)
     PM_ESLINT     -> errores JS/TS (opcional; requiere node)
+    PM_TOOLS      -> raiz del toolchain y de los temporales (def. /tmp/opencode)
 
 Estrategia:
   - gitleaks : una sola pasada sobre la historia; cada fuga se asigna a la fecha
@@ -35,6 +36,8 @@ import paths
 REPO = os.environ.get("PM_REPO") or paths.REPO
 DATA = paths.DATA
 TOOLS_DIR = os.path.join(DATA, "tools")
+# Raiz donde viven los analizadores (binarios, venv, node_modules) y temporales.
+TOOLS = os.environ.get("PM_TOOLS", "/tmp/opencode")
 WEIGHT = {"ERROR": 4.0, "WARNING": 1.0, "INFO": 0.5}
 PMD_WEIGHT = {1: 3.0, 2: 2.0, 3: 1.0, 4: 0.5, 5: 0.5}
 
@@ -48,7 +51,7 @@ def find_tool(env, names):
         if p:
             return p
     for n in names:
-        for d in ("/tmp/opencode/bin", "/tmp/opencode/venv/bin"):
+        for d in (os.path.join(TOOLS, "bin"), os.path.join(TOOLS, "venv", "bin")):
             p = os.path.join(d, n)
             if os.path.exists(p):
                 return p
@@ -58,12 +61,12 @@ def find_tool(env, names):
 GITLEAKS = find_tool("PM_GITLEAKS", ["gitleaks"])
 SEMGREP = find_tool("PM_SEMGREP", ["semgrep"])
 PMD = os.environ.get("PM_PMD") or (
-    "/tmp/opencode/bin/pmd/bin/pmd"
-    if os.path.exists("/tmp/opencode/bin/pmd/bin/pmd") else None)
+    os.path.join(TOOLS, "bin", "pmd", "bin", "pmd")
+    if os.path.exists(os.path.join(TOOLS, "bin", "pmd", "bin", "pmd")) else None)
 ESLINT_BIN = os.environ.get("PM_ESLINT") or (
-    "/tmp/opencode/eslint/node_modules/.bin/eslint"
-    if os.path.exists("/tmp/opencode/eslint/node_modules/.bin/eslint") else None)
-ESLINT_MODULES = os.environ.get("PM_ESLINT_MODULES") or "/tmp/opencode/eslint/node_modules"
+    os.path.join(TOOLS, "eslint", "node_modules", ".bin", "eslint")
+    if os.path.exists(os.path.join(TOOLS, "eslint", "node_modules", ".bin", "eslint")) else None)
+ESLINT_MODULES = os.environ.get("PM_ESLINT_MODULES") or os.path.join(TOOLS, "eslint", "node_modules")
 JAVA_HOME = os.environ.get("PM_JAVA_HOME") or os.environ.get("JAVA_HOME") \
     or ("/opt/javac/x64/21" if os.path.exists("/opt/javac/x64/21/bin/java") else None)
 
@@ -118,7 +121,7 @@ def run_gitleaks(dates):
     if not GITLEAKS:
         print("  gitleaks: no disponible, se omite")
         return
-    rp = "/tmp/opencode/gitleaks.json"
+    rp = os.path.join(TOOLS, "gitleaks.json")
     subprocess.run([GITLEAKS, "detect", "--source", REPO, "-f", "json",
                     "-r", rp, "--no-banner", "--redact"],
                    capture_output=True, text=True)
@@ -277,7 +280,7 @@ def main():
         run_gitleaks(all_dates)
 
     if a.only in ("all", "semgrep"):
-        work = tempfile.mkdtemp(dir="/tmp/opencode", prefix="scan-")
+        work = tempfile.mkdtemp(dir=TOOLS, prefix="scan-")
         for i, d in enumerate(dates):
             commit = de.get(d)
             if not commit:
@@ -290,7 +293,7 @@ def main():
         shutil.rmtree(work, ignore_errors=True)
 
     if a.only in ("all", "pmd"):
-        work = tempfile.mkdtemp(dir="/tmp/opencode", prefix="pmd-")
+        work = tempfile.mkdtemp(dir=TOOLS, prefix="pmd-")
         for i, d in enumerate(dates):
             commit = de.get(d)
             if not commit:
@@ -303,7 +306,7 @@ def main():
         shutil.rmtree(work, ignore_errors=True)
 
     if a.only in ("all", "eslint"):
-        work = tempfile.mkdtemp(dir="/tmp/opencode", prefix="eslint-")
+        work = tempfile.mkdtemp(dir=TOOLS, prefix="eslint-")
         for i, d in enumerate(dates):
             commit = de.get(d)
             if not commit:
