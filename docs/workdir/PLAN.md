@@ -672,7 +672,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | # | ID | Problema | Archivos Afectados | Estado |
 |---|---|---|---|---|
 | A1 | **TF-SEC-01** | HMAC de HttpSink no cubre el body (solo nonce+timestamp) | `sync-http/HttpSink.java` | ✅ **DONE** |
-| A2 | **TF-BUILD-01** | CI rojo (javadoc, build-and-test, web-editor) | `.github/workflows/ci.yml`, `javadocAll`, tests de módulos | ✅ **DONE** localmente; CI pendiente de ejecutarse en GitHub |
+| A2 | **TF-BUILD-01** | CI rojo (javadoc, build-and-test, web-editor) | `.github/workflows/ci.yml`, `javadocAll`, tests de módulos | ✅ **DONE** localmente; el primer run (#65) detectó metadata incompleta, corregida y validada con `--refresh-dependencies`; pendiente confirmar run verde |
 
 ### 🟠 P1 — Alto
 
@@ -712,7 +712,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 6. S6 — gradle.lockfile + dependencyVerification ✅ **DONE**
 7. T4 — Config Schema single-source generation ✅ **DONE**
 8. **A1 — TF-SEC-01: HMAC HttpSink cubre body** (leer body una vez → HMAC + JSON parser) ✅ **DONE**
-9. **A2 — TF-BUILD-01: CI corregido localmente** ✅ **DONE** (Javadoc fixes aplicados; ejecución en GitHub pendiente)
+9. **A2 — TF-BUILD-01: CI corregido localmente** ✅ **DONE** (Javadoc fixes aplicados; primer run #65 detectó metadata incompleta, corregida y validada con `--refresh-dependencies`; pendiente confirmar run verde)
 
 ### Semana 3: Module Manager — Consolidación Interna + P1 Lifecycle/Module Manager
 10. M2 — Version Resolver (rangos semver + env compat) ✅

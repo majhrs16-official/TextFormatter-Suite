@@ -630,7 +630,7 @@ Los límites de profundidad y de manifiesto no tienen un test de comportamiento 
 
 **Decisión del proyecto (2026-10-20):** la historia de git **no se reescribe**. Los commits antiguos con otro nombre comparten email con `majhrs16-official` y GitHub ya los atribuye a la misma cuenta; reescribirlos cambiaría todos los hashes sin mejorar la atribución.
 
-**Decisión del proyecto (2026-10-20):** **no se publicarán releases ni tags** mientras el proyecto siga en desarrollo. `release.yml` queda corregido y reproducible para el día en que se decida publicar, pero no se ejecutará ahora; `PLAN.md` registra la decisión. El CI está configurado para validar el repositorio, aunque su ejecución en GitHub no se ha realizado.
+**Decisión del proyecto (2026-10-20):** **no se publicarán releases ni tags** mientras el proyecto siga en desarrollo. `release.yml` queda corregido y reproducible para el día en que se decida publicar, pero no se ejecutará ahora; `PLAN.md` registra la decisión. El primer run de CI (#65) se ejecutó y detectó metadata de verificación incompleta para un checkout limpio; se añadieron las entradas faltantes y se validó localmente con `--refresh-dependencies`. Pendiente confirmar el run verde tras el push.
 
 **Pendiente de remediación:** deuda P1 restante (editor web inestable, `CHANGELOG` mantenido a mano, tests de `fabric-host`, `common-legacy` sin fuentes, etc.). El release y el CI ya no tienen los defectos P0 descritos.
 

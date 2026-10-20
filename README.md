@@ -431,7 +431,7 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 - [x] Documentación técnica extensa en archivos especializados (wiki, ADR, module READMEs)
 - [x] Enlaces internos válidos y rutas relativas correctas desde GitHub
 - [x] No se han inventado capacidades, releases, comandos ni requisitos
-- [x] Verificación local: `buildAll` completo, `javadocAll`, `checkLocks` (32/32), `:src:host:verifySchema`, 766 tests JVM en 28 módulos (0 fallos, 11 skipped) y 108 tests JS; el workflow de CI está actualizado pero **pendiente de ejecutarse en GitHub**
+- [x] Verificación local: `buildAll` completo, `javadocAll`, `checkLocks` (32/32), `:src:host:verifySchema`, 766 tests JVM en 28 módulos (0 fallos, 11 skipped) y 108 tests JS; el primer run de CI (#65) detectó metadata de verificación incompleta en un checkout limpio, ya corregida y validada con `--refresh-dependencies`; **pendiente confirmar el run verde tras el push**
 
 ---
 
@@ -441,4 +441,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-20 — P0 de código, limpieza material, eliminación de SpEL en todo el repositorio, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto; el CI está configurado pero no se ha ejecutado en GitHub. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*
+*Última actualización: 2026-10-20 — P0 de código, limpieza material, eliminación de SpEL en todo el repositorio, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto. El primer run de CI (#65) reveló metadata de verificación incompleta para un checkout limpio; la corrección está validada localmente y pendiente de confirmación en GitHub. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*

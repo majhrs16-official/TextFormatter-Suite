@@ -48,6 +48,7 @@ Todos los cambios relevantes de TextFormatter Suite se documentan aquí.
   local de JSDOM, en lugar de caer silenciosamente al fallback; el test de
   `bind` ya no reporta switches de rutas de array (`[]`) sin instancia.
 - Schema del editor regenerado y `verifySchema` ejecutado en CI.
+- Metadata de verificación completada para los artefactos de BOM y del classpath de Loom que el primer run de CI detectó como ausentes (`guava-parent`, `junit-bom`, `spring-framework-bom`, `adventure-bom`); `buildAll`, `javadocAll` y la verificación `strict` pasan con caché refrescada.
 
 ### Security
 
