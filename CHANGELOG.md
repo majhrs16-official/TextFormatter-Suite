@@ -50,7 +50,9 @@ Todos los cambios relevantes de TextFormatter Suite se documentan aquí.
 
 ### Security
 
-- Verificación de dependencias real (626 componentes) y lockfiles completos.
+- Verificación de dependencias real (626 componentes) y lockfiles completos;
+  excepción documentada para los classpaths de `fabric-host` (Loom remapea
+  artefactos localmente).
 - Límites de tamaño/profundidad en índices, manifiestos y paquetes del manager.
 - SSRF: rechazo de `user:pass@host` y resolución validada.
 - Secretos en `char[]` y comparaciones de tokens pendientes de migrar a
