@@ -614,9 +614,25 @@ Los límites de profundidad y de manifiesto no tienen un test de comportamiento 
 
 **Verificación:** 93 tests en los módulos tocados, 0 fallos, 0 errores, con `--offline`, `--no-daemon` y `JAVA_HOME=/opt/javac/x64/21`. `extension-api` no tiene tests.
 
+### 10.2. P0 de release, CI y README corregidos
+
+| ID | Corrección | Evidencia |
+|---|---|---|
+| PROJ-AUD-002 | `release.yml` usa `manager-spi/core/apt`, incluye `logger` y `common-legacy`, aplica `-Pversion` del tag, fija `BUILD_TIMESTAMP`, genera notas de release y ya no referencia `CHANGELOG.md`; publica Spigot y Fabric | `build.gradle` propaga la versión; `:src:core-api:properties -Pversion=9.9.9` devuelve `9.9.9` |
+| PROJ-AUD-009 | CI construye `logger` y `common-legacy`, ejecuta `checkLocks` bloqueante y `:src:host:verifySchema`, y sustituye el job no-op por verificación estricta de metadata | `ci.yml`; `checkLocks` falla si falta un lockfile |
+| PROJ-AUD-012 | Eliminadas 30 overrides locales de `version = '2.1.0-SNAPSHOT'`; solo `example-extension` conserva su `1.0.0` | `grep '^version' src/*/build.gradle` |
+| PROJ-AUD-013 | Añadidos `src/logger/gradle.lockfile` y `src/iflow/gradle.lockfile`; total **32** lockfiles (root + 31 subproyectos), 0 missing | `./gradlew checkLocks` |
+| PROJ-AUD-028 | Regenerado el schema y sincronizadas las copias de `src/host/resources` y `src/web-editor`; `paths.json` es semánticamente idéntico | `./gradlew :src:host:verifySchema` |
+| PROJ-AUD-010 | README corregido: 31 módulos, estados reales, 510 tests, enlace histórico de iFlow, auditoría actual y comandos existentes; sin “CI verde” falso | `README.md`; 0 enlaces relativos rotos |
+| Web editor | `Suite.utils.esc` escapa `& < > " '`; el guard `max-steps` limita el total de pasos, no solo la profundidad; integración y unitarios verdes | `npm run check` (99 tests JS) y `npm run test:integration` |
+
+**Verificación:** 510 tests en 7 módulos (`host`, `iflow`, `logger`, `sync-discord`, `transport`, `manager-core`, `manager-apt`), 0 fallos, 0 errores, 3 skipped; `checkLocks` 32/32; `:src:host:verifySchema`; `:src:logger:compileJava` y `:src:iflow:compileJava` con `--dependency-verification=strict`; web editor `npm run check` y `npm run test:integration`.
+
+**Pendiente de ejecución real:** el CI y el release no se han ejecutado en GitHub; no hay tags. `release.yml` está corregido pero su primera ejecución real queda por validar.
+
 **Pendiente de decisión:** reescribir la historia para expulsar `node_modules` y unificar el nombre de autor. No se recomienda solo por estética: cambia los 267 hashes y exige force-push. Los 12 commits con `Majhrs16` comparten email con `majhrs16-official`, así que GitHub ya los atribuye a la misma cuenta.
 
-**Pendiente de remediación:** PROJ-AUD-002 (release), PROJ-AUD-009 (CI) y PROJ-AUD-010 (honestidad del README), además de la deuda P1.
+**Pendiente de remediación:** deuda P1 (comunidad/CHANGELOG, documentación histórica, tests ausentes en 11 módulos, `javadoc` agregado, etc.). El release y el CI ya no tienen los defectos P0 descritos.
 
 ---
 
