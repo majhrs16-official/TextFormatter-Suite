@@ -3,6 +3,10 @@
 build/
 out/
 
+# Node
+node_modules/
+dist/
+
 # Local extensions directory (project-relative tmp, not system /tmp)
 tmp/
 
@@ -18,13 +22,17 @@ tmp/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and JVM crash dumps
 *.log
 debug.log
+hs_err_pid*
+replay_pid*
 
 # Python
 __pycache__/
 *.pyc
 
-# Suite modules (independent repos)
-src/web-editor/node_modules/
+# Patch leftovers
+*.orig
+*.rej
+*.tmp
