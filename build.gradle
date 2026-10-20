@@ -75,6 +75,14 @@ tasks.register('buildAll') {
     dependsOn subprojects.collect { "${it.path}:build" }
 }
 
+// Aggregate Javadoc for every subproject. The root `javadoc` task alone
+// only documents the root project.
+tasks.register('javadocAll') {
+    description = 'Generate Javadoc for every subproject'
+    group = 'documentation'
+    dependsOn subprojects.collect { "${it.path}:javadoc" }
+}
+
 // ============================================================
 // extpush: Publish extensions to local directory (tmp/extensions/)
 // ============================================================

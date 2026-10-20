@@ -67,6 +67,18 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 21
 }
 
+// Fabric Loom generates local remapped mods (LoomLocalRemappedMods) whose
+// checksums cannot exist in the remote verification metadata. Verification is
+// therefore disabled only for this module's classpaths, not for the rest of
+// the suite. The remote dependencies pulled by Loom are still locked.
+configurations.configureEach {
+    if (name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
+        }
+    }
+}
+
 test {
     useJUnitPlatform()
 }
