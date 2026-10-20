@@ -32,6 +32,7 @@ jobs:
         run: |
           ./gradlew :src:core-api:build \
             :src:kernel:build \
+            :src:logger:build \
             :src:iflow:build \
             :src:host:build \
             :src:textformatter:build \
@@ -57,7 +58,14 @@ jobs:
             :src:transport:build \
             :src:messages:build \
             :src:tester:build \
+            :src:common-legacy:build \
             --no-daemon
+
+      - name: Verify dependency lockfiles
+        run: ./gradlew checkLocks --no-daemon
+
+      - name: Verify generated schema
+        run: ./gradlew :src:host:verifySchema --no-daemon
 
       - name: Build Spigot plugin
         run: |
@@ -81,7 +89,7 @@ jobs:
           path: src/fabric-host/build/libs/*.jar
           retention-days: 7
 
-  dependency-check:
+  supply-chain:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -92,11 +100,13 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Verify dependency locks
-        run: |
-          ./gradlew dependencies --write-locks --no-daemon
-        continue-on-error: true
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify dependency metadata
+        run: ./gradlew :src:logger:compileJava --dependency-verification=strict --no-daemon
 
   web-editor:
     runs-on: ubuntu-latest
