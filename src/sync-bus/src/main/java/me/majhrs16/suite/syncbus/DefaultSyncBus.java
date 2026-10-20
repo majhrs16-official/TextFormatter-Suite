@@ -112,7 +112,7 @@ public final class DefaultSyncBus implements SyncBus {
 
     private void startGlobalProcessor() {
         globalExecutor.submit(() -> {
-            while (state.get() == LifecycleState.RUNNING || state.get() == LifecycleState.STOPPING) {
+            while (state.get() == LifecycleState.RUNNING) {
                 try {
                     Runnable task = globalQueue.take();
                     task.run();
@@ -378,6 +378,7 @@ public final class DefaultSyncBus implements SyncBus {
         for (SinkContext ctx : sinks.values()) {
             try {
                 ctx.shutdown();
+                ctx.sink.stop();
                 logger.info("SyncBus: stopped sink '" + ctx.sink.name() + "'");
             } catch (Exception e) {
                 logger.warn("SyncBus: error stopping sink '" + ctx.sink.name() + "': " + e.getMessage());
@@ -389,7 +390,13 @@ public final class DefaultSyncBus implements SyncBus {
     }
 
     private void cleanupResources() {
-        // Stop global processor (will exit loop when state is not RUNNING/STOPPING)
+        // Wake the global worker if it is blocked in take(); stop() has already
+        // moved the state out of RUNNING, so it exits after this sentinel. In
+        // NEW state there is no worker, and a queued sentinel would only make
+        // shutdown wait for the termination timeout.
+        if (state.get() != LifecycleState.NEW) {
+            globalQueue.offer(() -> {});
+        }
         globalExecutor.shutdown();
         try {
             if (!globalExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
