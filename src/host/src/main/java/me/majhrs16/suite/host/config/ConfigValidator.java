@@ -21,6 +21,15 @@ public final class ConfigValidator {
     private ConfigValidator() {}
 
     /**
+     * SnakeYAML must not instantiate arbitrary classes from config files.
+     */
+    private static org.yaml.snakeyaml.Yaml safeYaml() {
+        return new org.yaml.snakeyaml.Yaml(
+            new org.yaml.snakeyaml.constructor.SafeConstructor(
+                new org.yaml.snakeyaml.LoaderOptions()));
+    }
+
+    /**
      * Validates the entire configuration layout.
      *
      * @param config the parsed HostConfig
@@ -162,7 +171,7 @@ public final class ConfigValidator {
         String basePath = "channels/" + channelName;
 
         try {
-            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+            org.yaml.snakeyaml.Yaml yaml = safeYaml();
             String content = java.nio.file.Files.readString(file);
             Object root = yaml.load(content);
 
@@ -344,7 +353,7 @@ public final class ConfigValidator {
         }
 
         try {
-            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+            org.yaml.snakeyaml.Yaml yaml = safeYaml();
             String content = java.nio.file.Files.readString(file);
             Object root = yaml.load(content);
 
@@ -528,7 +537,7 @@ public final class ConfigValidator {
             stream.filter(p -> p.toString().endsWith(".yml"))
                 .forEach(p -> {
                     try {
-                        org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                        org.yaml.snakeyaml.Yaml yaml = safeYaml();
                         String content = java.nio.file.Files.readString(p);
                         Object root = yaml.load(content);
                         if (root instanceof Map) {
@@ -607,7 +616,7 @@ public final class ConfigValidator {
             Path f = syncDir.resolve(req);
             if (f.toFile().exists()) {
                 try {
-                    org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                    org.yaml.snakeyaml.Yaml yaml = safeYaml();
                     String content = java.nio.file.Files.readString(f);
                     Object root = yaml.load(content);
                     if (root instanceof Map) {

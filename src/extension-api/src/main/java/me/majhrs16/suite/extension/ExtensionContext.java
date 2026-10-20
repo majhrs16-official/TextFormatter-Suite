@@ -10,7 +10,9 @@ import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -168,6 +170,13 @@ public final class ExtensionContext {
     // ============================================================
 
     /**
+     * SnakeYAML must not instantiate arbitrary classes from extension files.
+     */
+    private static Yaml safeYaml() {
+        return new Yaml(new SafeConstructor(new LoaderOptions()));
+    }
+
+    /**
      * Loads extension configuration from disk (YAML).
      */
     public ExtensionConfig loadConfig() {
@@ -176,7 +185,7 @@ public final class ExtensionContext {
             return ExtensionConfig.empty();
         }
         try {
-            Yaml yaml = new Yaml();
+            Yaml yaml = safeYaml();
             String content = java.nio.file.Files.readString(configFile);
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) yaml.load(content);
@@ -193,7 +202,7 @@ public final class ExtensionContext {
     public void saveConfig(ExtensionConfig config) {
         Path configFile = dataDirectory().resolve("config.yml");
         try {
-            Yaml yaml = new Yaml();
+            Yaml yaml = safeYaml();
             String yamlStr = yaml.dump(config.asMap());
             java.nio.file.Files.writeString(configFile, yamlStr);
         } catch (Exception e) {
