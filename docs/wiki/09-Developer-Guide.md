@@ -30,7 +30,7 @@ TextFormatter Suite follows **Hexagonal Architecture** (Ports & Adapters) with a
 
 1. **Create module directory:**
 ```bash
-mkdir -p suite/my-module/src/main/java/me/majhrs16/suite/mymodule
+mkdir -p src/my-module/src/main/java/me/majhrs16/suite/mymodule
 ```
 
 2. **build.gradle:**

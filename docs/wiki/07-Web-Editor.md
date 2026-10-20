@@ -8,17 +8,17 @@ The Web Editor is a browser-based configuration tool for TextFormatter Suite. It
 
 ### Local Development
 ```bash
-cd suite/web-editor
+cd src/web-editor
 npm install
-npm run dev
-# Open http://localhost:5173
+npm run check        # lint + format + unit tests
+npm run test:integration
 ```
+Then open `index.html` directly in a browser. The editor is a static app: there is no dev server or build step.
 
 ### Production Deployment
 ```bash
-cd suite/web-editor
-npm run build
-# Deploy dist/ to GitHub Pages or any static host
+# No build step: deploy the static files as-is
+# index.html, js/, styles.css, paths.json
 ```
 
 ### GitHub Pages
@@ -588,37 +588,26 @@ Suite.editor.exporters.register('custom-format', {
 ### Static Hosting
 
 ```bash
-# Build
-npm run build
-
-# Deploy to any static host
-# Netlify, Vercel, GitHub Pages, Cloudflare Pages, etc.
+# No build step. Deploy these files as-is:
+# index.html, js/, styles.css, paths.json
 ```
 
 ### Docker
 
 ```dockerfile
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
 FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /usr/share/nginx/html
+COPY index.html styles.css paths.json ./
+COPY js/ ./js/
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
-### Environment Variables
+### Configuration
 
-```bash
-# Build-time
-VITE_API_URL=https://api.example.com
-VITE_DEFAULT_LANG=en
-VITE_THEME=dark
-```
+The editor reads `paths.json` at runtime (it is the single source of truth for
+`data-bind` paths). There are no build-time environment variables: changing the
+configuration means editing `paths.json`, not rebuilding.
 
 ## Updates & Maintenance
 
@@ -626,8 +615,8 @@ VITE_THEME=dark
 
 ```bash
 git pull origin main
-npm ci
-npm run build
+npm ci          # dev tooling: lint, format, tests
+npm run check
 ```
 
 ### Backup

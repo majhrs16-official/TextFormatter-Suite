@@ -301,15 +301,16 @@ sealed interface ResolutionResult permits Success, Failure {
 
 ## Testing
 
-### Local HTTP Repository Tests
+### Repository & Index Tests
 
 ```bash
-./gradlew :src:manager-impl:test --tests LocalHttpRepositoryTest --offline --no-daemon
+./gradlew :src:manager-apt:test --tests RepositoryManagerTest --offline --no-daemon
 ```
 
 Tests cover:
-- Local `file://` repository resolution
-- HTTP repository resolution
+- `repo.yml` parsing (single and multiple repositories, priority ordering)
+- Remote index parsing
+- Missing `url` validation
 - Repository fallback ordering
 - `discoverAvailableModules()` with local/HTTP repos
 

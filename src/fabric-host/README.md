@@ -43,7 +43,9 @@
 | `ltranslate` | Compile | LibreTranslate |
 | `messages` | Compile | Message catalog |
 | `observability` | Compile | Metrics |
-| `manager-impl` | Compile | Module manager |
+| `manager-spi` | Compile | Module manager SPI |
+| `manager-core` | Compile | Package installer & local database |
+| `manager-apt` | Compile | Repository manager & dependency resolver |
 | `presets` | Compile | Preset management |
 | `inworld` | Compile | In-world integration |
 | `extension-api` | Compile | Extension system |
@@ -191,5 +193,4 @@ Adventure component → Fabric component → player.sendMessage()
 - [iflow](../iflow/README.md) — Routing
 - [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation
 - [sync-discord](../sync-discord/README.md) / [sync-velocity](../sync-velocity/README.md) / [sync-websocket](../sync-websocket/README.md) — Sync
-- [manager-impl](../manager-impl/README.md) — Remote module loading
 - [spigot-host](../spigot-host/README.md) — Bukkit equivalent

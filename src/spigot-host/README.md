@@ -48,8 +48,9 @@
 | `ltranslate` | Compile | LibreTranslate (ServiceLoader at runtime, excluded from shadow JAR) |
 | `messages` | Compile | Message catalog |
 | `observability` | Compile | Metrics |
-| `manager-impl` | Compile | Module manager |
-| `manager-api` | Compile | Manager API |
+| `manager-spi` | Compile | Module manager SPI |
+| `manager-core` | Compile | Package installer & local database |
+| `manager-apt` | Compile | Repository manager & dependency resolver |
 | `inworld` | Compile | In-world integration |
 | `extension-api` | Compile | Extension system |
 | `tester` | Compile | Testing utilities (with Spigot exclusion) |
@@ -185,7 +186,7 @@ Adventure component → Bukkit component → player.sendMessage()
 - **Shadow JAR** — produces `textformatter-suite-spigot.jar` with only plugin classes (no dependencies)
 - **Dependencies excluded** — all `me.majhrs16:suite-*` and external deps excluded from shadow JAR
 - **Translation providers** — `gtranslate`/`ltranslate` are compile deps for ServiceLoader discovery at runtime; excluded from shadow JAR
-- **Modules loaded remotely** — `manager-impl` loads modules from GitHub at runtime (when GitHub releases exist)
+- **Modules loaded remotely** — `manager-apt` loads packages from the configured repositories at runtime
 - **Java 21** — requires Java 21 toolchain
 - **Paper API 1.21.4** — compiles against Paper 1.21.4-R0.1-SNAPSHOT
 
@@ -200,7 +201,6 @@ Adventure component → Bukkit component → player.sendMessage()
 - [iflow](../iflow/README.md) — Routing
 - [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation
 - [sync-http](../sync-http/README.md) / [sync-tcpudp](../sync-tcpudp/README.md) / [sync-discord](../sync-discord/README.md) / etc. — Sync
-- [manager-impl](../manager-impl/README.md) — Remote module loading
 - [fabric-host](../fabric-host/README.md) — **Fabric equivalent (excluded from build)**
 
 ---

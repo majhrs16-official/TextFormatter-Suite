@@ -52,7 +52,7 @@
 | `fabric-host` | **Excluded** — extends `SuiteBootstrap` but not in build |
 | `observability` | Uses `host` services for metrics |
 | `presets` | Uses `host` config & services |
-| `manager-impl` | Uses `host` for module management |
+| `manager-apt` | Module management facade wired by the platform hosts |
 
 ---
 

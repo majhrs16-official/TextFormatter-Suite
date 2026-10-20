@@ -68,7 +68,7 @@ Esta release consolida el núcleo de TextFormatter Suite tras las auditorías de
 | `core-api`, `kernel`, `textformatter`, `iflow`, `host` | ✅ |
 | `gtranslate`, `ltranslate`, `transport` | ✅ |
 | `sync-discord`, `sync-telegram`, `sync-http`, `sync-tcpudp`, `sync-websocket` | ✅ |
-| `manager-api`, `manager-impl`, `presets`, `inworld` | ✅ |
+| `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld` | ✅ |
 | `observability`, `extension-api`, `example-extension` | ✅ |
 | `messages`, `tester`, `loadtest`, `performance` | ✅ |
 | `spigot-host` | ✅ Compila (fat-jar) |
@@ -110,24 +110,22 @@ Esta release consolida el núcleo de TextFormatter Suite tras las auditorías de
 
 ```bash
 # Core modules
-./gradlew :suite:core-api:test :suite:host:test :suite:manager-impl:test --offline --no-daemon
+./gradlew :src:core-api:test :src:host:test :src:manager-apt:test --offline --no-daemon
 
 # Transport + translators + sync
-./gradlew :suite:transport:test :suite:gtranslate:test :suite:ltranslate:test :suite:sync-*:test --offline --no-daemon
+./gradlew :src:transport:test :src:gtranslate:test :src:ltranslate:test :src:sync-bus:test :src:sync-discord:test :src:sync-http:test :src:sync-tcpudp:test :src:sync-telegram:test :src:sync-websocket:test --offline --no-daemon
 
 # Web editor
-cd suite/web-editor && npm run check && npm run test:integration
+cd src/web-editor && npm run check && npm run test:integration
 ```
 
 ---
 
 ## 📄 Documentación Relacionada
 
-- **PLAN.md** — Estado actualizado 2026-09-18
-- **PLAN.md** — Estado actualizado 2026-09-18
-- **AUDITORIA-14-09-2026.md** — Auditoría 14 sep
-- **AUDITORIA-16-09-2026.md** — Auditoría 16 sep
-- **ADR.md** — Decisiones de arquitectura
+- **PLAN.md** — Estado y bitácora en [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md)
+- **AUDITORIA.md** — Última auditoría en [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md)
+- **ADR.md** — Decisiones de arquitectura en [`docs/workdir/ADR.md`](docs/workdir/ADR.md)
 - **verification-metadata.xml** — SHA256/SHA512 de dependencias (en `gradle/` y raíz)
 
 ---

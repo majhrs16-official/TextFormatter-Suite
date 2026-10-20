@@ -124,32 +124,33 @@ chat:
 
 | Module | Java | Role |
 |--------|------|------|
-| `suite/core-api` | 17 | SPI + model (JDK-only): `Module`, `Message`, `Translator`, `SyncSink`, `ActorDirectory`, `TranslationService` |
-| `suite/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (Tarjan, self-cycle detection, semver) |
-| `suite/textformatter` | 17 | MiniMessage engine, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` translation |
-| `suite/iflow` | 17 | `DefaultRouter`, `Rule`, `RateLimiter` (per-key, `ReentrantReadWriteLock`) |
-| `suite/gtranslate` | 17 | Google Translate provider (web scraping, UA rotation, rate limit) |
-| `suite/ltranslate` | 17 | LibreTranslate provider (self-hosted/public) |
-| `suite/sync-discord` | 17 | Discord v10 (WebSocket + REST), `char[]` tokens |
-| `suite/sync-telegram` | 17 | Telegram Bot, long-poll + watermark, `char[]` tokens |
-| `suite/sync-http` | 17 | Webhook + REST (`HttpServer`), inbound/outbound |
-| `suite/sync-tcpudp` | 17 | TCP/UDP raw, JSON line/datagram |
-| `suite/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, metrics, health, dynamic discovery, mapping avanzado |
-| `suite/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, subscriptions, log streaming) |
-| `suite/sync-bus` | 17 | **Nuevo**: Pipeline unificado (deduplicación global, aislamiento por sink, retry/backoff, métricas) |
-| `suite/host` | 17 | Composition root: `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`) |
-| `suite/messages` | 17 | i18n EN/ES, `MessagesCatalog` singleton |
-| `suite/tester` | 17 | 25 runtime tests + `PerformanceProfiler` |
-| `suite/transport` | 17 | `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`) |
-| `suite/manager-api` | 17 | Module Manager SPI: `ModuleCoordinate`, `ModuleLifecycle`, `Environment` |
-| `suite/manager-impl` | 17 | **Núcleo completado**: GitHub/local/HTTP downloader, version resolver, dependency resolver, SHA256, relocator, isolated ClassLoader, register SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation |
-| `suite/presets` | 17 | Presets (standard, rpg, staff, minimal) + `TransformEngine` (SpEL sandboxed) |
-| `suite/inworld` | 17 | Signs, chests, books (WORLD/RADIUS), click/hover, glossary/cache |
-| `suite/observability` | 17 | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks |
-| `suite/extension-api` | 17 | Extension SPI: `Extension`, `ExtensionContext`, Capability system |
-| `suite/example-extension` | 17 | Demo extension |
-| `suite/loadtest` | 17 | JMH benchmarks + Gatling |
-| `suite/performance` | 17 | Profiling: `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer` |
+| `src/core-api` | 17 | SPI + model (JDK-only): `Module`, `Message`, `Translator`, `SyncSink`, `ActorDirectory`, `TranslationService` |
+| `src/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (Tarjan, self-cycle detection, semver) |
+| `src/textformatter` | 17 | MiniMessage engine, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` translation |
+| `src/iflow` | 17 | `DefaultRouter`, `Rule`, `RateLimiter` (per-key, `ReentrantReadWriteLock`) |
+| `src/gtranslate` | 17 | Google Translate provider (web scraping, UA rotation, rate limit) |
+| `src/ltranslate` | 17 | LibreTranslate provider (self-hosted/public) |
+| `src/sync-discord` | 17 | Discord v10 (WebSocket + REST), `char[]` tokens |
+| `src/sync-telegram` | 17 | Telegram Bot, long-poll + watermark, `char[]` tokens |
+| `src/sync-http` | 17 | Webhook + REST (`HttpServer`), inbound/outbound |
+| `src/sync-tcpudp` | 17 | TCP/UDP raw, JSON line/datagram |
+| `src/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, metrics, health, dynamic discovery, mapping avanzado |
+| `src/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, subscriptions, log streaming) |
+| `src/sync-bus` | 17 | **Nuevo**: Pipeline unificado (deduplicación global, aislamiento por sink, retry/backoff, métricas) |
+| `src/host` | 17 | Composition root: `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`) |
+| `src/messages` | 17 | i18n EN/ES, `MessagesCatalog` singleton |
+| `src/tester` | 17 | 25 runtime tests + `PerformanceProfiler` |
+| `src/transport` | 17 | `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`) |
+| `src/manager-spi` | 17 | Module Manager SPI: `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Environment`, manifest/version parsing |
+| `src/manager-core` | 17 | Package installer, local package database, transaction log |
+| `src/manager-apt` | 17 | Repository manager, dependency resolver, APT facade/installer |
+| `src/presets` | 17 | Presets (standard, rpg, staff, minimal) + `TransformEngine` (SpEL sandboxed) |
+| `src/inworld` | 17 | Signs, chests, books (WORLD/RADIUS), click/hover, glossary/cache |
+| `src/observability` | 17 | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks |
+| `src/extension-api` | 17 | Extension SPI: `Extension`, `ExtensionContext`, Capability system |
+| `src/example-extension` | 17 | Demo extension |
+| `src/loadtest` | 17 | JMH benchmarks + Gatling |
+| `src/performance` | 17 | Profiling: `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer` |
 
 ## Next Steps
 
@@ -162,5 +163,5 @@ chat:
 - [Commands Reference](08-Commands.md)
 - [Developer Guide](09-Developer-Guide.md)
 - [Module Manager](10-Module-Manager.md)
-- [In-World Features](11-In-World.md)
-- [Observability](12-Observability.md)
+- [Release Notes](11-Release-Notes.md)
+- [Migration Guide](12-Migration-Guide.md)

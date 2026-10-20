@@ -21,10 +21,10 @@ TextFormatter Suite
 │   ├── ltranslate        → LibreTranslate provider
 │   ├── observability     → Metrics, health checks, debug endpoints
 │   ├── presets           → Preset management for transformations
-│   ├── manager-api       → Module manager API (remote loading)
-│   ├── manager-impl      → Module manager implementation
+│   ├── manager-spi       → Module manager SPI (coordinates, descriptors, lifecycle)
+│   ├── manager-core      → Package installer + local package database
+│   ├── manager-apt       → Repositories, dependency resolver, APT installer
 │   ├── extension-api     → Extension system API
-│   ├── coretranslator    → Legacy translation bridge
 │   ├── inworld           → In-world integration
 │   ├── performance       → Profiling & optimization
 │   └── common-legacy     → Legacy shared code
@@ -60,17 +60,17 @@ TextFormatter Suite
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), SpEL expressions, channel registry | `core-api` | `host`, `iflow`, `presets`, `spigot-host`, `fabric-host` |
 | `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
-| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets`, `manager-impl` |
+| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `ltranslate` | LibreTranslate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
 | `presets` | Preset management (YAML-based transform presets) | `core-api`, `textformatter`, `iflow`, `host` | `spigot-host`, `fabric-host` |
-| `manager-api` | Module manager API (coordinates, lifecycle, descriptors) | `core-api` | `manager-impl`, `spigot-host`, `fabric-host` |
-| `manager-impl` | Module manager implementation (GitHub-based remote loading) | `core-api`, `manager-api`, `kernel`, `host` | `spigot-host`, `fabric-host` |
+| `manager-spi` | Module manager SPI (coordinates, descriptors, lifecycle, manifest/version parsing) | `core-api` | `manager-core`, `manager-apt`, `spigot-host`, `fabric-host` |
+| `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `spigot-host`, `fabric-host` |
+| `manager-apt` | Repository manager, dependency resolver, APT installer/facade | `core-api`, `kernel`, `manager-spi`, `manager-core` | `spigot-host`, `fabric-host` |
 | `extension-api` | Extension system API (Extension, ExtensionContext, ExtensionManager) | `core-api` | `example-extension`, `spigot-host`, `fabric-host` |
-| `coretranslator` | Legacy translation bridge | `core-api`, `kernel` | `host` (via LegacyBridge) |
 | `inworld` | In-world integration module | `core-api` | `spigot-host`, `fabric-host` |
 | `performance` | Hotspot detection, profiling, cache/memory optimization | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-http` | HTTP webhook sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
@@ -79,8 +79,8 @@ TextFormatter Suite
 | `sync-telegram` | Telegram sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-websocket` | WebSocket sync sink | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-velocity` | Velocity proxy sync sink | `core-api` | `fabric-host` |
-| `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-impl`, `manager-api`, `inworld`, `extension-api`, `tester` | — (leaf) |
-| `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-impl`, `manager-api`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
+| `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
+| `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |
 | `loadtest` | Load testing utilities | — | `fabric-host` |
 | `tester` | Testing utilities (Spigot-dependent) | `core-api` | `spigot-host` |
@@ -101,8 +101,9 @@ TextFormatter Suite
 | `transport` | Transport layer | HTTP transport, codecs | `HttpTransport`, `Transport`, `MessageCodec` | — | [transport/README.md](transport/README.md) |
 | `observability` | Metrics & health | Prometheus, health checks, endpoints | `Observability`, `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint` | `ObservabilityModule` | [observability/README.md](observability/README.md) |
 | `presets` | Transform presets | YAML preset loading/management | `PresetManager`, `TransformEngine`, `PresetsModule` | `PresetsModule` | [presets/README.md](presets/README.md) |
-| `manager-api` | Manager contracts | Remote module management API | `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle` | — | [manager-api/README.md](manager-api/README.md) |
-| `manager-impl` | Manager impl | GitHub-based module loading | `ModuleManager`, `GitHubModuleResolver` | — | [manager-impl/README.md](manager-impl/README.md) |
+| `manager-spi` | Manager SPI | Coordinates, descriptors, lifecycle, manifest/version parsing | `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Version` | — | [manager-spi/README.md](manager-spi/README.md) |
+| `manager-core` | Package installer | Local ZIP installation, package database, transactions | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` | — | [manager-core/README.md](manager-core/README.md) |
+| `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` | — | [manager-apt/README.md](manager-apt/README.md) |
 | `extension-api` | Extension system | Extension lifecycle & context | `Extension`, `ExtensionContext`, `ExtensionManager` | — | [extension-api/README.md](extension-api/README.md) |
 | `spigot-host` | Bukkit/Paper plugin | Platform adapter for Bukkit | `TextFormatterSuitePlugin`, `SpigotActorDirectory`, `DynamicCommandRegistrar` | `TextFormatterSuitePlugin.onEnable()` | [spigot-host/README.md](spigot-host/README.md) |
 | `fabric-host` | Fabric mod | Platform adapter for Fabric | `TextFormatterSuiteMod`, `FabricActorDirectory`, `FabricChatDelivery` | `TextFormatterSuiteMod.onInitialize()` | [fabric-host/README.md](fabric-host/README.md) |
@@ -237,7 +238,7 @@ TextFormatter Suite
 | `host` → core modules | `host` integrates `textformatter`, `iflow`, translations, transports | Core modules must not depend on `host` | `host` is the integration hub |
 | Platform adapters → `host` | `spigot-host`/`fabric-host` depend on `host` | `host` must not depend on platform adapters | Platform-agnostic core |
 | Sync modules → `core-api` + `transport` | Sync modules implement `SyncSink` SPI | `core-api` must not depend on sync modules | Transport abstraction |
-| `manager-impl` → `manager-api` | Implementation depends on API | API must not depend on impl | Standard API/impl separation |
+| `manager-apt`/`manager-core` → `manager-spi` | Implementations depend on the SPI | SPI must not depend on implementations | Standard API/impl separation |
 
 > ⚠️ **Observed architectural issue**: `host` depends on `kernel` for `ModuleLoader` during bootstrap. This is intentional — `host` drives module loading. However, `kernel` tests use `host` classes (`SuiteBootstrapTest` doesn't exist but `kernel` tests exist in isolation).
 
@@ -325,7 +326,7 @@ Module.initialize() called in order
 | **Presets** | `presets` | `PresetManager`, `TransformEngine` |
 | **Platform: Bukkit** | `spigot-host` | `TextFormatterSuitePlugin`, `SpigotActorDirectory`, `SpigotChatDelivery`, `DynamicCommandRegistrar` |
 | **Platform: Fabric** | `fabric-host` | `TextFormatterSuiteMod`, `FabricActorDirectory`, `FabricChatDelivery` |
-| **Module Manager** | `manager-impl` | `ModuleManager`, `GitHubModuleResolver` |
+| **Module Manager** | `manager-apt` | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` |
 | **Extensions** | `extension-api` | `Extension`, `ExtensionManager`, `ExtensionContext` |
 
 ---
@@ -340,7 +341,7 @@ Module.initialize() called in order
 
 > ⚠️ **Duplicate MessageCodec**: Both `transport` and `sync-http`/`sync-tcpudp`/`sync-discord` have `MessageCodec` classes. The `transport` one is the base abstraction; sync modules have their own (possibly for historical reasons).
 
-> ⚠️ **Legacy code**: `coretranslator` and `common-legacy` exist but appear minimally used. `coretranslator.LegacyBridge` is referenced from `host` but may be transitional.
+> ⚠️ **Legacy code**: `common-legacy` remains as a historical reference. `coretranslator` was removed from the build on 2026-09-28 and no longer exists in `src/`.
 
 > ⚠️ **Incomplete migration**: `fabric-host` uses Maven coordinates for dependencies (e.g., `me.majhrs16:suite-core-api:2.1.0-SNAPSHOT`) while `spigot-host` uses Gradle project dependencies. This suggests `fabric-host` may be built/published separately.
 

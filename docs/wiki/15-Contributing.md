@@ -7,7 +7,7 @@ Thank you for your interest in contributing to TextFormatter Suite! This guide w
 ## Code of Conduct
 
 - Be respectful and inclusive
-- Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
+- Follow the code of conduct
 - Help others learn
 - No harassment, discrimination, or toxic behavior
 

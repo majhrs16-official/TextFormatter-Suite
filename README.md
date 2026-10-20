@@ -12,7 +12,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 
 **Problema que resuelve:** Los plugins de chat tradicionales mezclan formateo, traducción, permisos, sincronización cross-server y lógica de negocio en una única base de código acoplada a la plataforma (Bukkit/Fabric). TextFormatter Suite separa estas responsabilidades en módulos reemplazables, testeables en aislamiento y desplegables selectivamente.
 
-**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-impl`, etc.) dependen **solo** de `core-api`.
+**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen **solo** de `core-api`.
 
 **Lo que NO es:**
 - Un plugin único "todo en uno" listo para descargar y usar
@@ -186,8 +186,9 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Operación y extensibilidad
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `manager-api` | SPI del Module Manager: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle` | ✅ Probado |
-| `manager-impl` | Implementación: GitHub/local/HTTP downloader, version resolver, dependency resolver, SHA256, relocator, ClassLoader aislado, `register()` SPI-only, manifest validation | ⚠️ Núcleo completado |
+| `manager-spi` | SPI del Module Manager: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`, manifiestos y versiones | ✅ Probado |
+| `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado |
+| `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo completado |
 | `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado |
 | `example-extension` | Demo de extensión funcional | ✅ Probado |
 | `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ✅ Probado |
@@ -205,7 +206,6 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Legacy / referencial
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `coretranslator` | Puente deprecated para retrocompatibilidad ChatTranslator v4 (PAPI `%cot_*`, captura mensajes, SpEL) | ⚠️ Deprecated, mantener |
 | `common-legacy` | Referencia histórica del trío monolítico eliminado | 📚 Solo referencia |
 
 > **Documentación por módulo:** Cada módulo en `src/*/README.md` detalla responsabilidades, dependencias, data flow y entry points. Ver [`src/README.md`](src/README.md) para mapa completo y discrepancias conocidas.

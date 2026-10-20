@@ -51,7 +51,7 @@
 - Sync modules — implement `SyncSink`
 - `observability` — uses `Message`, `Channel`
 - `presets` — uses `Message`, `Channel`
-- `manager-api`/`manager-impl` — use `ModuleDescriptor`, `ModuleCoordinate`
+- `manager-spi`/`manager-core`/`manager-apt` — use `ModuleDescriptor`, `ModuleCoordinate`
 - `extension-api` — uses `Module` concepts
 - `spigot-host` — implements all SPIs
 - `fabric-host` — **excluded from build** (42 compile errors, Spigot APIs)

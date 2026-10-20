@@ -53,4 +53,4 @@
 ## 7. Related Modules
 
 - [host](../host/README.md) — May reference legacy code
-- [coretranslator](../coretranslator/README.md) — Related legacy bridge
+- [core-api](../core-api/README.md) — Translation SPI, including the deprecated `TranslationService`

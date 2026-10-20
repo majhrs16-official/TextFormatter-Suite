@@ -20,7 +20,7 @@ Como mínimo, revisa:
 
 - El `/README.md` actual.
 - `/src/README.md`, respetando su función actual.
-- `/docs/PLAN.md`.
+- `/docs/workdir/PLAN.md`.
 - Los archivos Markdown principales de `/docs/wiki/`, identificando el documento que deba funcionar como entrada principal de la wiki.
 - La estructura general de módulos y subproyectos.
 - Los archivos de construcción y configuración de Gradle.
@@ -282,7 +282,7 @@ Revisa la documentación existente y convierte el README raíz en el punto de en
 Como mínimo, evalúa los siguientes destinos:
 
 - `/src/README.md`
-- `/docs/PLAN.md`
+- `/docs/workdir/PLAN.md`
 - El documento principal o de entrada de `/docs/wiki/`
 - La documentación de arquitectura.
 - Las guías de instalación o desarrollo existentes.
@@ -408,7 +408,7 @@ El trabajo se considera terminado cuando:
 8. Se explica cómo contribuir y dónde consultar las convenciones.
 9. `/src/README.md` conserva su responsabilidad y puede enlazarse desde el README raíz.
 10. La documentación técnica extensa se encuentra en archivos especializados cuando corresponda.
-11. Los enlaces a `docs/PLAN.md`, la wiki y otros documentos son válidos y útiles.
+11. Los enlaces a `docs/workdir/PLAN.md`, la wiki y otros documentos son válidos y útiles.
 12. No existen duplicaciones documentales innecesarias ni enlaces rotos introducidos por los cambios.
 13. No se han inventado capacidades, resultados de pruebas, requisitos ni procedimientos.
 14. El diff final se limita a la reorganización y mejora documental solicitada, salvo las correcciones justificadas expresamente.
