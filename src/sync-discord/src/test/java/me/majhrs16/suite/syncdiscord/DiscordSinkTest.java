@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DiscordSinkTest {
@@ -129,5 +130,44 @@ class DiscordSinkTest {
 
         sink.stop();
         server.close();
+    }
+
+    @Test
+    void startKeepsTokenAvailableForOutboundSend() throws Exception {
+        WsServer server = new WsServer();
+        server.start();
+
+        StubTransport transport = new StubTransport();
+        DiscordSink sink = new DiscordSink(
+            "https://discord.com/api/v10",
+            "ws://127.0.0.1:" + server.port() + "/?v=10&encoding=json",
+            "tok", 42,
+            DiscordSink.INTENT_GUILD_MESSAGES | DiscordSink.INTENT_MESSAGE_CONTENT,
+            transport);
+        sink.setListener(new SyncListener() {
+            @Override public void onMessage(SyncSink s, Message message) { }
+            @Override public void onDisconnect(SyncSink s, String reason) { }
+        });
+
+        try {
+            sink.start();
+            sink.send(message("hola"));
+            assertEquals("Bot tok", transport.headers.get(0).get("Authorization"));
+        } finally {
+            sink.stop();
+            server.close();
+        }
+    }
+
+    @Test
+    void sendAfterStopFailsInsteadOfSendingAnEmptyToken() throws Exception {
+        StubTransport transport = new StubTransport();
+        DiscordSink sink = new DiscordSink("https://discord.com/api/v10", "wss://gateway.invalid",
+            "tok", 42, 0, transport);
+
+        sink.stop();
+
+        assertThrows(IllegalStateException.class, () -> sink.send(message("x")));
+        assertTrue(transport.urls.isEmpty(), "the request must not reach the transport");
     }
 }

@@ -41,7 +41,11 @@ public final class DiscordSink implements SyncSink {
                 int intents, Transport transport) {
         this.apiBase = apiBase;
         this.gatewayUrl = gatewayUrl;
-        this.token = Objects.requireNonNull(token, "token").toCharArray();
+        String tokenValue = Objects.requireNonNull(token, "token");
+        if (tokenValue.isBlank()) {
+            throw new IllegalArgumentException("token must not be blank");
+        }
+        this.token = tokenValue.toCharArray();
         this.channelId = channelId;
         this.intents = intents;
         this.transport = Objects.requireNonNull(transport, "transport");
@@ -66,11 +70,22 @@ public final class DiscordSink implements SyncSink {
     public void start() {
         SyncListener current = listener;
         if (current != null) {
-            String tokenStr = new String(token);
-            gateway = new DiscordGateway(gatewayUrl, tokenStr, intents, this, current);
-            Arrays.fill(token, '\0');
+            gateway = new DiscordGateway(gatewayUrl, tokenString(), intents, this, current);
             gateway.connect();
         }
+    }
+
+    /**
+     * Returns the token as a String for the HTTP/WebSocket APIs.
+     * The token is only wiped by {@link #stop()}, never while the sink is running.
+     */
+    private String tokenString() {
+        for (char c : token) {
+            if (c != '\0') {
+                return new String(token);
+            }
+        }
+        throw new IllegalStateException("Discord token is no longer available; the sink was stopped");
     }
 
     @Override
@@ -80,19 +95,15 @@ public final class DiscordSink implements SyncSink {
             current.close();
         }
         gateway = null;
-        // Clear token if not already cleared
-        if (token != null) {
-            Arrays.fill(token, '\0');
-        }
+        Arrays.fill(token, '\0');
     }
 
     @Override
     public void send(Message message) throws Exception {
         String body = new JSONObject().put("content", message.text()).toString();
-        String tokenStr = new String(token);
         String response = transport.post(
             apiBase + "/channels/" + channelId + "/messages",
-            Map.of("Authorization", "Bot " + tokenStr,
+            Map.of("Authorization", "Bot " + tokenString(),
                 "Content-Type", "application/json; charset=utf-8"),
             body);
         JSONObject created = new JSONObject(response);
