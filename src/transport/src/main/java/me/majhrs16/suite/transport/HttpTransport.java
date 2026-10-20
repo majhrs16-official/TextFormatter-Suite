@@ -131,6 +131,9 @@ public final class HttpTransport implements Transport {
 
     private HttpURLConnection createConnection(String urlString, RequestState state) throws IOException {
         URL url = new URL(urlString);
+        if (url.getUserInfo() != null) {
+            throw new IOException("URL userinfo is not allowed");
+        }
         String originalHost = url.getHost();
         int port = url.getPort() != -1 ? url.getPort() : (url.getProtocol().equals("https") ? 443 : 80);
 
