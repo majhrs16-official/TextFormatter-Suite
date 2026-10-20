@@ -612,7 +612,7 @@ Estas acciones se ejecutaron después de cerrar el diagnóstico. No cambian los 
 
 Los límites de profundidad y de manifiesto no tienen un test de comportamiento dedicado; quedan cubiertos por compilación y revisión. El resto sí tiene prueba directa.
 
-**Verificación:** 93 tests en los módulos tocados, 0 fallos, 0 errores, con `--offline`, `--no-daemon` y `JAVA_HOME=/opt/javac/x64/21`. `extension-api` no tiene tests.
+**Verificación:** 93 tests en los módulos tocados, 0 fallos, 0 errores, con `--offline`, `--no-daemon` y `JAVA_HOME=/opt/javac/x64/21`. `extension-api` no tenía tests en esa fase; ahora tiene 6 (ver 10.3).
 
 ### 10.2. P0 de release, CI y README corregidos
 
@@ -623,16 +623,31 @@ Los límites de profundidad y de manifiesto no tienen un test de comportamiento 
 | PROJ-AUD-012 | Eliminadas 30 overrides locales de `version = '2.1.0-SNAPSHOT'`; solo `example-extension` conserva su `1.0.0` | `grep '^version' src/*/build.gradle` |
 | PROJ-AUD-013 | Añadidos `src/logger/gradle.lockfile` y `src/iflow/gradle.lockfile`; total **32** lockfiles (root + 31 subproyectos), 0 missing | `./gradlew checkLocks` |
 | PROJ-AUD-028 | Regenerado el schema y sincronizadas las copias de `src/host/resources` y `src/web-editor`; `paths.json` es semánticamente idéntico | `./gradlew :src:host:verifySchema` |
-| PROJ-AUD-010 | README corregido: 31 módulos, estados reales, 510 tests, enlace histórico de iFlow, auditoría actual y comandos existentes; sin “CI verde” falso | `README.md`; 0 enlaces relativos rotos |
+| PROJ-AUD-010 | README corregido: 31 módulos, estados reales, recuento de tests sincronizado (782), enlace histórico de iFlow, auditoría actual y comandos existentes; sin “CI verde” falso | `README.md`; 0 enlaces relativos rotos |
 | Web editor | `Suite.utils.esc` escapa `& < > " '`; el guard `max-steps` limita el total de pasos, no solo la profundidad; integración y unitarios verdes | `npm run check` (99 tests JS) y `npm run test:integration` |
 
-**Verificación:** 510 tests en 7 módulos (`host`, `iflow`, `logger`, `sync-discord`, `transport`, `manager-core`, `manager-apt`), 0 fallos, 0 errores, 3 skipped; `checkLocks` 32/32; `:src:host:verifySchema`; `:src:logger:compileJava` y `:src:iflow:compileJava` con `--dependency-verification=strict`; web editor `npm run check` y `npm run test:integration`.
+**Verificación (P0, focalizada):** 93 tests en los módulos de código tocados, 0 fallos, 0 errores, con `--offline`, `--no-daemon` y `JAVA_HOME=/opt/javac/x64/21`; `checkLocks` 32/32; `:src:host:verifySchema`; `:src:logger:compileJava` y `:src:iflow:compileJava` con `--dependency-verification=strict`; web editor `npm run check` (99 tests JS) y `npm run test:integration`.
 
-**Pendiente de ejecución real:** el CI y el release no se han ejecutado en GitHub; no hay tags. `release.yml` está corregido pero su primera ejecución real queda por validar.
+**Decisión del proyecto (2026-10-20):** la historia de git **no se reescribe**. Los commits antiguos con otro nombre comparten email con `majhrs16-official` y GitHub ya los atribuye a la misma cuenta; reescribirlos cambiaría todos los hashes sin mejorar la atribución.
 
-**Pendiente de decisión:** reescribir la historia para expulsar `node_modules` y unificar el nombre de autor. No se recomienda solo por estética: cambia los 267 hashes y exige force-push. Los 12 commits con `Majhrs16` comparten email con `majhrs16-official`, así que GitHub ya los atribuye a la misma cuenta.
+**Decisión del proyecto (2026-10-20):** **no se publicarán releases ni tags** mientras el proyecto siga en desarrollo. `release.yml` queda corregido y reproducible para el día en que se decida publicar, pero no se ejecutará ahora; `PLAN.md` registra la decisión. El CI está configurado para validar el repositorio, aunque su ejecución en GitHub no se ha realizado.
 
-**Pendiente de remediación:** deuda P1 (comunidad/CHANGELOG, documentación histórica, tests ausentes en 11 módulos, `javadoc` agregado, etc.). El release y el CI ya no tienen los defectos P0 descritos.
+**Pendiente de remediación:** deuda P1 restante (editor web inestable, `CHANGELOG` mantenido a mano, tests de `fabric-host`, `common-legacy` sin fuentes, etc.). El release y el CI ya no tienen los defectos P0 descritos.
+
+### 10.3. Deuda P1 remediada (parcial, 2026-10-20)
+
+| Área | Cambio | Evidencia |
+|---|---|---|
+| Comunidad | `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `.github/CODEOWNERS`, plantillas de issue y PR | ficheros nuevos; README los enlaza |
+| Javadoc | Tarea agregada `javadocAll`; CI la usa; README la documenta | `./gradlew javadocAll` completo en local |
+| Tests | 9 módulos que no tenían `src/test` ganan pruebas de contrato/que cubren API real: `messages`, `observability`, `performance`, `presets`, `extension-api`, `example-extension`, `sync-bus`, `sync-websocket`, `inworld` | 38 tests nuevos; `buildAll` 782 tests, 0 fallos |
+| Bugs reales | `TransformEngine` usaba `ConcurrentHashMap` para bindings con `sender`/`recipient` nulos (NPE silenciosa) y no registraba variables en el `EvaluationContext`; `DefaultSyncBus.stop()` no llamaba a `SyncSink.stop()` y podía tardar 10 s en terminar | `TransformEngineTest` y `DefaultSyncBusTest` (entrega real + parada < 2 s) |
+| Fabric | Loom genera artefactos remapeados locales (`LoomLocalRemappedMods`) sin hash remoto; verificación deshabilitada **solo** para los classpaths de `fabric-host`, documentado en el build | `:src:fabric-host:compileJava` compila; el resto sigue en metadata estricta |
+| Documentación histórica | `docs/wiki/05-iFlow-Rules.md` reescrito para la VM `.flow` actual (nota sobre el motor SpEL eliminado); placeholder de `docs/README.md` y línea corrupta de `ADR.md` corregidos | enlaces y contenido actualizados |
+| Editor web | Escape HTML y límite de pasos ya corregidos; los harnesses cargan `paths.json` con un polyfill de `fetch` y no renderizan switches genéricos para rutas `[]`; `bind` pasa de 1 mismatch a 0 | `npm run check` (99 tests) y `npm run test:integration` (todos los harnesses, 0 fallos) |
+| Conteos | README y `src/iflow/README.md` sincronizados con 782 tests JVM / 397 de iFlow | `buildAll`, parseo de `TEST-*.xml` |
+
+**Verificación P1:** `./gradlew buildAll` (782 tests JVM en 28 módulos, 0 fallos, 11 skipped), `javadocAll`, `checkLocks` 32/32 y `:src:host:verifySchema`, todo con `--offline --no-daemon`; web editor `npm run check` (99 tests) y `npm run test:integration` (0 fallos). El editor web sigue sin considerarse estable: se corrigieron el escapado, el límite de pasos y los harnesses, pero su deuda funcional/visual permanece.
 
 ---
 

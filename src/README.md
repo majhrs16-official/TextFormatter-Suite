@@ -35,7 +35,8 @@ TextFormatter Suite
 │   ├── sync-discord      → Discord sink (JDA)
 │   ├── sync-telegram     → Telegram sink
 │   ├── sync-websocket    → WebSocket sink
-│   └── sync-velocity     → Velocity proxy sink
+│   ├── sync-velocity     → Velocity proxy sink
+│   └── sync-bus          → Unified fan-out/lifecycle bus
 │
 └── Platform Adapters
     ├── spigot-host       → Bukkit/Paper plugin (Java 21)
@@ -79,6 +80,7 @@ TextFormatter Suite
 | `sync-telegram` | Telegram sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-websocket` | WebSocket sync sink | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-velocity` | Velocity proxy sync sink | `core-api` | `fabric-host` |
+| `sync-bus` | Unified fan-out, deduplication, retries and sink lifecycle | `core-api` | `spigot-host`, `fabric-host` |
 | `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
 | `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |

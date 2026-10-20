@@ -636,7 +636,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | S3 | **MiniEscape Completo** — Escapar `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@` además de `<`, `\` | `textformatter/template/MiniEscape.java` | Inyección MiniMessage | ✅ Done |
 | S4 | **Tokens en `char[]`** — Discord/Telegram/LibreTranslate tokens en `String` permanente → `char[]` + `Arrays.fill()` | `sync-discord/JdaDiscordSink.java`, `sync-telegram/TelegramSink.java`, `gtranslate/GTranslate.java`, `ltranslate/LTranslate.java` | Fuga secretos | ✅ Done |
 | S5 | **Bounded Executors** — `HttpServer` executor unbounded; `MessageDispatcher` paralelo (no secuencial en async) | `sync-http/HttpSink.java`, `host/MessageDispatcher.java`, `observability/endpoint/MetricsEndpoint.java` | DoS thread exhaustion | ✅ Done |
-| S6 | **gradle.lockfile + dependencyVerification** — Configurar en `settings.gradle` con claves SHA256 | `settings.gradle`, `build.gradle` (root) | Supply chain | ⏳ |
+| S6 | **gradle.lockfile + dependencyVerification** — 32 lockfiles + `verification-metadata.xml`; `checkLocks` bloqueante. Excepción documentada: classpaths de `fabric-host` (Loom remapea localmente) | `settings.gradle`, `build.gradle` (root), `gradle/verification-metadata.xml` | Supply chain | ✅ Done |
 
 ### 🔴 Module Manager (F12) — Release-Ready (orden: consolidación interna → releases)
 
@@ -658,7 +658,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | T1 | **Tests E2E Pipeline Completo** | Spigot + Fabric: chat → iFlow → format → delivery; assertions sobre efectos | ⏳ |
 | T2 | **Docs Sincronización** | README, PLAN, Release Notes, Wiki, ADR → un mismo estado | 🔄 En progreso |
 | T3 | **sync-velocity Estado Real** | Confirmar implementación real vs stub; actualizar README/PLAN | ✅ Production-ready |
-| T4 | **Config Schema Single-Source** | Generar `paths.json`, `js/paths.js`, `js/model.js` desde `ConfigPath` enum | ⏳ |
+| T4 | **Config Schema Single-Source** | `paths.json` generado desde `ConfigPath`; `verifySchema` en CI compara la copia del host y del editor | ✅ Done |
 | T5 | **Reproducible Builds** | `gradle.lockfile` + timestamps deterministas + versiones release en JARs | ⏳ |
 | T6 | **TranslatorProvider SPI** | Fix Clean Architecture V1-V3: host no debe instanciar GTranslate/LTranslate directo | ⏳ |
 
@@ -671,7 +671,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | # | ID | Problema | Archivos Afectados | Estado |
 |---|---|---|---|---|
 | A1 | **TF-SEC-01** | HMAC de HttpSink no cubre el body (solo nonce+timestamp) | `sync-http/HttpSink.java` | ✅ **DONE** |
-| A2 | **TF-BUILD-01** | CI rojo (javadoc, build-and-test, web-editor) | `.github/workflows/ci.yml`, javadoc fixes | ✅ **DONE** (Javadoc fixed) |
+| A2 | **TF-BUILD-01** | CI rojo (javadoc, build-and-test, web-editor) | `.github/workflows/ci.yml`, `javadocAll`, tests de módulos | ✅ **DONE** localmente; CI pendiente de ejecutarse en GitHub |
 
 ### 🟠 P1 — Alto
 
@@ -708,10 +708,10 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 ### Semana 2: Security Sprint 2 + P0 Auditoría 2026-09-28
 5. S5 — Bounded Executors + MessageDispatcher paralelo ✅
-6. S6 — gradle.lockfile + dependencyVerification ⏳
+6. S6 — gradle.lockfile + dependencyVerification ✅ **DONE**
 7. T4 — Config Schema single-source generation ✅ **DONE**
 8. **A1 — TF-SEC-01: HMAC HttpSink cubre body** (leer body una vez → HMAC + JSON parser) ✅ **DONE**
-9. **A2 — TF-BUILD-01: CI verde** ✅ **DONE** (Javadoc fixes aplicados)
+9. **A2 — TF-BUILD-01: CI corregido localmente** ✅ **DONE** (Javadoc fixes aplicados; ejecución en GitHub pendiente)
 
 ### Semana 3: Module Manager — Consolidación Interna + P1 Lifecycle/Module Manager
 10. M2 — Version Resolver (rangos semver + env compat) ✅

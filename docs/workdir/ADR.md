@@ -180,8 +180,6 @@ renderizada y directorio de jugadores.
 - `ConfigLoaderTest.parsesEditorExportedDefaultConfig` dejó de depender del
   CWD (resuelve el fixture vía classpath); antes fallaba fuera de Gradle.
 
-(End of file - total 193 lines)
-
 ## Decisión 2026-09-18 — Post-Auditoría: Module Manager F12, Security Sprint 3, Dependency Verification
 
 **Contexto.** Auditorías del 14 y 16 de septiembre revelaron: Module Manager (F12) con stubs en resolver/dependency/SHA256/register(); Security Sprint 3 pendiente (tokens, MiniEscape, SpEL cache, SSRF, DependencyVerification); bugs críticos (CT-01, OBS-01, CFG-01, MGR-02, SEC-01, SEC-02); dependency verification ausente.

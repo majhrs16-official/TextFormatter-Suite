@@ -1,7 +1,8 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Estado**: ✅ Implementada y probada (383 tests)  
-> **Tipo**: Módulo funcional (VM interpreted)  
+> **Estado**: ✅ Implementada y probada (397 tests)
+>
+> **Tipo**: Módulo funcional (VM interpreted)
 > **Contrato**: Implementa `Router` SPI (`core-api`)
 
 ---
@@ -315,7 +316,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `BiosBootTest` | End-to-end del BIOS activo: resetea en `fw_reset`, configura la pantalla, encadena a `main` y toma el camino caliente en el segundo mensaje (D32) |
 | `IrqDeliveryTest` | End-to-end de IRQ: el BIOS publica la tabla, `main` instala su manejador, habilita y dispara la línea; el manejador corre y la interrupción es transparente (registros restaurados) (D33) |
 
-**Total: 383 tests passing**
+**Total: 397 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -376,7 +377,7 @@ src/iflow/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 383 tests
+├── src/test/java/...                  # 397 tests
 └── build.gradle
 ```
 

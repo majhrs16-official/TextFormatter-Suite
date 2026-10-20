@@ -35,22 +35,22 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Sync Telegram** | ✅ Implementada y probada | Bot long-poll con watermark offset; tokens `char[]`; 7 tests |
 | **Sync HTTP (webhook + REST)** | ✅ Implementada y probada | `HttpServer` JDK, inbound/outbound; 7 tests |
 | **Sync TCP/UDP** | ✅ Implementada y probada | Raw sockets, JSON línea/datagrama, `MessageCodec`; 7 tests |
-| **Sync WebSocket** | ⚠️ Compila (sin tests) | SO_REUSEADDR, auth token, subscripciones, log streaming; build |
+| **Sync WebSocket** | ✅ Implementada y probada | SO_REUSEADDR, auth token, subscripciones, log streaming; 1 test de contrato del módulo |
 | **Sync Velocity (proxy)** | ✅ Implementada y probada | **Production-ready**: async queue, retry/backoff exponencial, métricas, health, dynamic discovery, mapping avanzado (regex, per-type); compila, tests pasan |
-| **Sync Bus (pipeline unificado)** | ⚠️ Compila (sin tests) | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; build |
+| **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; 4 tests de ciclo y entrega |
 | **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: `AsyncPlayerChatEvent` (claim modes), join/quit/death/advancement channels, `/suite` commands, fat-jar shadow; **compila con Paper API 1.21.4**; probado en servidor real Paper 1.20.6 |
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
-| **Module Manager (runtime)** | ⚠️ Núcleo completado, releases pendientes | GitHub/local/HTTP downloader, version resolver (semver ranges + env compat), dependency resolver (module.yml), relocator (fixed), ClassLoader aislado parent-last, SHA256 obligatorio, `register()` SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation obligatoria; **no hay GitHub Releases públicos** |
-| **Observabilidad** | ⚠️ Compila (sin tests) | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); build |
-| **Presets** | ⚠️ Compila (sin tests) | Standard/RPG/Staff/Minimal, `TransformEngine` (SpEL sandboxed), import/export YAML; build |
-| **In-world (signs, chests, books)** | ✅ Compila | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, no probado en servidor |
-| **Extensiones (SDK)** | ⚠️ Compila (sin tests) | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; build |
-| **Web Editor** | ✅ Implementada y probada | 99 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde |
+| **Module Manager (runtime)** | ⚠️ Núcleo completado, releases descartados | GitHub/local/HTTP downloader, version resolver (semver ranges + env compat), dependency resolver (module.yml), relocator (fixed), ClassLoader aislado parent-last, SHA256 obligatorio, `register()` SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation obligatoria; **decisión: no habrá GitHub Releases públicos** (ver `PLAN.md`) |
+| **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
+| **Presets** | ✅ Implementada y probada | Standard/RPG/Staff/Minimal, `TransformEngine` (SpEL sandboxed), import/export YAML; 5 tests |
+| **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
+| **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 9 tests |
+| **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 99 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
 | **Config schema v2.2 (single-source)** | ✅ Sincronizado | `ConfigPath` enum → `paths.json`/`js/paths.js`/`js/model.js` via `ConfigSchemaGenerator`; `verifySchema` en CI (56 paths) |
-| **Dependency Verification** | ✅ Activa | 32 lockfiles (root + 31 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante |
+| **Dependency Verification** | ✅ Activa con excepción documentada | 32 lockfiles (root + 31 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante; los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
 | **Security Sprint 3** | ⚠️ P0 corregidos, P1 pendiente | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SpEL LRU cache 1024, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos |
 | **Tests E2E pipeline completo** | ❌ Pendiente | Chat → iFlow → format → delivery en servidor real; 12 tests E2E unitarios existen pero requieren servidor real para validación completa |
-| **GitHub Releases / publicación** | ❌ Pendiente | Workflow `release.yml` existe pero no se han publicado releases oficiales; distribución vía source/build local |
+| **GitHub Releases / publicación** | ❌ Denegado por decisión | No se publicarán releases ni tags mientras el proyecto siga en desarrollo; distribución vía source/build local. Ver [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) |
 | **gradle.lockfile portable** | ⚠️ Parcial | Lockfiles existen pero reproducibilidad cross-platform no verificada exhaustivamente |
 
 **Criterio usado:** "Implementada y probada" = código integrado + tests automatizados pasando (unit + integración donde aplica). "Compila" = build exitoso, sin tests de integración en entorno real. "Pendiente" = identificado en plan/docs pero sin implementación verificable.
@@ -135,7 +135,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | **Separación real de responsabilidades** | Cada capacidad (formateo, routing, traducción, sync, observabilidad) es un módulo independiente con contrato SPI propio |
 | **Independencia de plataforma** | `core-api` y módulos funcionales son JDK-puro; solo `spigot-host`/`fabric-host` dependen de APIs de Minecraft |
 | **Extensibilidad sin fork** | Nuevos proveedores de traducción, sinks de sync, formateadores, reglas = implementar SPI + registrar en META-INF/services |
-| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 510 tests en 7 módulos (verificación local 2026-10-20) + 99 tests JS |
+| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 782 tests JVM en 28 módulos y 99 tests JS (verificación local 2026-10-20) |
 | **Seguridad por defecto** | Tokens en `char[]`, MiniEscape completo, SpEL sandbox (`SimpleEvaluationContext`), SSRF protection, SafeConstructor YAML |
 | **Reproducibilidad** | Gradle lockfiles + verification metadata para supply chain integrity |
 
@@ -157,14 +157,14 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | `kernel` | Module loading, dependency graph (Tarjan), SPI resolution, `Environment` | ✅ Probado (13 tests) |
 | `logger` | Logger centralizado (niveles, flags DEBUG, integración con `PluginLogger`) | ✅ Probado (20 tests) |
 | `host` | Composition root: `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`), `ConfigValidator` | ✅ Probado |
-| `messages` | i18n centralizado EN/ES, `MessagesCatalog` singleton | ⚠️ Compila (sin tests) |
+| `messages` | i18n centralizado EN/ES, `MessagesCatalog` singleton | ✅ Probado (5 tests) |
 
 ### Formateo y routing
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
 | `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | ✅ Probado (397 tests) |
-| `presets` | Presets predefinidos (standard, rpg, staff, minimal), `TransformEngine` (SpEL sandboxed), import/export YAML | ⚠️ Compila (sin tests) |
+| `presets` | Presets predefinidos (standard, rpg, staff, minimal), `TransformEngine` (SpEL sandboxed), import/export YAML | ✅ Probado (5 tests) |
 
 ### Traducción
 | Módulo | Propósito | Estado |
@@ -176,12 +176,12 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `transport` | `Transport` abstraction, `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`, RFC 1918/3927/6598) | ✅ Probado |
-| `sync-bus` | **Nuevo**: Pipeline unificado — deduplicación global, aislamiento por sink, retry/backoff, métricas, health | ⚠️ Compila (sin tests) |
+| `sync-bus` | **Nuevo**: Pipeline unificado — deduplicación global, aislamiento por sink, retry/backoff, métricas, health | ✅ Probado (4 tests) |
 | `sync-discord` | Discord Gateway v10 (WebSocket JDK + REST), intents, embeds, tokens `char[]` | ✅ Probado (8 tests) |
 | `sync-telegram` | Telegram Bot long-poll, watermark offset, tokens `char[]` | ✅ Probado (7 tests) |
 | `sync-http` | Webhook + REST (`HttpServer` JDK), inbound/outbound | ✅ Probado (7 tests) |
 | `sync-tcpudp` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (7 tests) |
-| `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ⚠️ Compila (sin tests) |
+| `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ✅ Probado (1 test de contrato) |
 | `sync-velocity` | Velocity proxy sink — **production-ready**: async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado |
 
 ### Operación y extensibilidad
@@ -190,11 +190,11 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | `manager-spi` | SPI del Module Manager: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`, manifiestos y versiones | ✅ Probado |
 | `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado (19 tests) |
 | `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo probado (13 tests) |
-| `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ⚠️ Compila (sin tests) |
-| `example-extension` | Demo de extensión funcional | ⚠️ Compila (sin tests) |
-| `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ⚠️ Compila (sin tests) |
-| `inworld` | Signs, chests, books (WORLD/RADIUS), click/hover, caché + glosario | ⚠️ Compila (sin tests) |
-| `performance` | `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer`, `MemoryOptimizer` | ⚠️ Compila (sin tests) |
+| `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado (6 tests) |
+| `example-extension` | Demo de extensión funcional | ✅ Probado (3 tests) |
+| `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ✅ Probado (6 tests) |
+| `inworld` | Signs, chests, books (WORLD/RADIUS), click/hover, caché + glosario | ✅ Probado (1 test de contrato) |
+| `performance` | `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer`, `MemoryOptimizer` | ✅ Probado (7 tests) |
 | `loadtest` | JMH benchmarks + Gatling | ✅ Compila |
 | `tester` | 25 tests runtime automatizados (`/suite test full|stress|concurrency`), `PerformanceProfiler` | ✅ Probado |
 
@@ -202,7 +202,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap, `/suite` commands, fat-jar shadow | ✅ Probado en servidor real Paper 1.20.6 |
-| `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ⚠️ Compila (sin tests; no probado en servidor real) |
+| `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ⚠️ Compila (sin tests Java; verificación Loom local; no probado en servidor real) |
 
 ### Legacy / referencial
 | Módulo | Propósito | Estado |
@@ -216,7 +216,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ## Instalación y primeros pasos
 
 ### ⚠️ No hay releases oficiales ni binarios publicados
-El proyecto **no publica JARs en Maven Central, GitHub Releases ni ningún repositorio de artefactos**. La única forma verificada de obtener el plugin/mod es **compilar desde fuente**.
+El proyecto **no publica JARs en Maven Central, GitHub Releases ni ningún repositorio de artefactos**. La única forma verificada de obtener el plugin/mod es **compilar desde fuente**. Esta no es una limitación temporal: la publicación de releases está **descartada por decisión del proyecto** mientras siga en desarrollo; ver [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md).
 
 ### Requisitos previos
 - **JDK 17 y 21** (toolchain Gradle; bytecode target 17)
@@ -238,10 +238,10 @@ export JAVA_HOME=/opt/javac/x64/21
 # En gradle.properties declarar org.gradle.java.installations.paths para JDK 17 y 21
 
 # Compilar suite completa (tests + build)
-./gradlew build test checkLocks --no-daemon
+./gradlew buildAll checkLocks --no-daemon
 
 # Generar Javadoc
-./gradlew javadoc --no-daemon
+./gradlew javadocAll --no-daemon
 
 # Plugin Spigot (fat-jar en src/spigot-host/build/libs/)
 ./gradlew :src:spigot-host:build --no-daemon
@@ -255,6 +255,8 @@ npm ci
 npm run check          # format:check + lint + test (99 unit)
 npm run test:integration
 ```
+
+> **Estado del editor web:** la suite de tests JS pasa, pero la UI tiene deuda funcional y visual conocida; no se considera estable ni se usa como fuente de verdad de la configuración. El YAML y los tests son la referencia.
 
 ### Instalar en servidor (tras compilar)
 
@@ -326,7 +328,7 @@ export JAVA_HOME=/opt/javac/x64/21
 ./gradlew checkLocks --no-daemon
 
 # Javadoc
-./gradlew javadoc --no-daemon
+./gradlew javadocAll --no-daemon
 
 # Web editor
 cd src/web-editor && npm run check
@@ -341,13 +343,13 @@ cd src/web-editor && npm run check
 | Objetivo | Comando | Notas |
 |----------|---------|-------|
 | Build completo + tests | `./gradlew buildAll --no-daemon` | Incluye tests de todos los subproyectos |
-| Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 510 tests en 7 módulos (verificación local 2026-10-20) |
+| Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 782 tests JVM en 28 módulos y 99 tests JS (verificación local 2026-10-20) |
 | Solo build (sin tests) | `./gradlew build -x test --no-daemon` | Solo el proyecto raíz |
 | Plugin Spigot (fat-jar) | `./gradlew :src:spigot-host:build --no-daemon` | En `src/spigot-host/build/libs/` |
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
-| Javadoc | `./gradlew javadoc --no-daemon` | En `build/docs/javadoc/` |
+| Javadoc | `./gradlew javadocAll --no-daemon` | En `**/build/docs/javadoc/` |
 | Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 32 lockfiles, 0 missing; falla si falta alguno |
-| Verificación dependencias | `gradle/verification-metadata.xml` + `--dependency-verification=strict` en CI | Activa; 626 componentes |
+| Verificación dependencias | `gradle/verification-metadata.xml` + `--dependency-verification=strict` en CI | Activa; 626 componentes; excepción documentada solo para los classpaths de `fabric-host` (artefactos remapeados por Loom) |
 | Web editor check | `cd src/web-editor && npm run check` | Format + lint + tests unitarios |
 | Web editor tests integración | `cd src/web-editor && npm run test:integration` | Harnesses func/interact/click/chain/undo/diffing/bind |
 | **Build reproducible (release)** | `BUILD_TIMESTAMP=1728000000000 ./gradlew build -Pversion=2.1.0` | JAR con `Build-Timestamp` fijo |
@@ -357,16 +359,20 @@ cd src/web-editor && npm run check
 
 ## Cómo contribuir
 
-No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orientaciones conservadoras compatibles con el repo:
+La política de contribución está en [`CONTRIBUTING.md`](CONTRIBUTING.md); el trato esperado, en [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). Para vulnerabilidades, usa [`SECURITY.md`](SECURITY.md) y **no abras un issue público**.
+
+Resumen del flujo:
 
 1. **Investigar**: Lee [`src/README.md`](src/README.md) para entender arquitectura, [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) para roadmap, [`docs/workdir/ADR.md`](docs/workdir/ADR.md) para decisiones previas
 2. **Localizar módulo**: Usa el catálogo arriba o `src/README.md` §3 para encontrar el módulo responsable
 3. **Tests primero**: Añade test unitario/integración que falle antes de fix; ejecuta `./gradlew :src:<modulo>:test`
-4. **Verifica**: `./gradlew buildAll --no-daemon` + `./gradlew checkLocks --no-daemon` + `cd src/web-editor && npm run check`
+4. **Verifica**: `./gradlew buildAll --no-daemon` + `./gradlew checkLocks --no-daemon` + `cd src/web-editor && npm run check && npm run test:integration`
 5. **Commits atómicos**: Un cambio lógico por commit; mensaje convencional (`fix:`, `feat:`, `docs:`, `refactor:`)
 6. **No rompas contratos**: `core-api` es inmutable para consumidores; cambios requieren ADR
 7. **Documenta**: Actualiza `src/<modulo>/README.md` y `docs/workdir/PLAN.md` si cambia estado/funcionalidad
-8. **PR**: Abre Pull Request contra `main`; CI ejecuta build + tests + javadoc + web-editor check
+8. **PR**: Abre Pull Request contra `main`; el CI está configurado para build + tests + lockfiles + schema + javadoc + web-editor. No crees tags ni ejecutes el release: la publicación está descartada.
+
+El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -425,7 +431,7 @@ No existe política formal de contribuciones (`CONTRIBUTING.md` no existe). Orie
 - [x] Documentación técnica extensa en archivos especializados (wiki, ADR, module READMEs)
 - [x] Enlaces internos válidos y rutas relativas correctas desde GitHub
 - [x] No se han inventado capacidades, releases, comandos ni requisitos
-- [x] Verificación local: `checkLocks` (32/32), `:src:host:verifySchema`, 510 tests en 7 módulos, `npm run check` y `npm run test:integration`; el workflow de CI está actualizado pero **pendiente de ejecutarse en GitHub**
+- [x] Verificación local: `buildAll` completo, `javadocAll`, `checkLocks` (32/32), `:src:host:verifySchema`, 782 tests JVM en 28 módulos (0 fallos, 11 skipped) y 99 tests JS; el workflow de CI está actualizado pero **pendiente de ejecutarse en GitHub**
 
 ---
 
@@ -435,4 +441,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-20 — P0 de código, limpieza material, lockfiles, schema y workflows de release/CI remediados. Quedan deuda P1 y la ejecución real del CI en GitHub.*
+*Última actualización: 2026-10-20 — P0 de código, limpieza material, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto; el CI está configurado pero no se ha ejecutado en GitHub. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*

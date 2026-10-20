@@ -5,13 +5,16 @@
 Archivo | Propósito | Audiencia |
 |---------|-----------|-----------|
 | `workdir/PLAN.md` | Plan de ejecución: estado actual, fases completadas, próximos pasos, deuda técnica | Equipo / Mantenedores |
-| `workdir/AUDITORIA.md` | Auditoría técnica externa (2026-10-09): hallazgos, puntuaciones, roadmap priorizado | Equipo / Auditores |
+| `workdir/AUDITORIA.md` | Auditoría técnica integral (2026-10-20): hallazgos, estado material, remediación P0 y deuda P1 | Equipo / Auditores |
 | `workdir/ADR.md` | Decisiones de arquitectura (fuente de verdad) | Arquitectos / Equipo |
 | `RELEASE_NOTES.md` | Notas de versión por fase (FASE 0-17), breaking changes, comandos CI | Equipo / Auditores |
+| `../CHANGELOG.md` | Cambios relevantes desde la última revisión; **no implica releases públicos** | Usuarios / Contribuidores |
+| `../SECURITY.md` | Reporte privado de vulnerabilidades y alcance de seguridad | Usuarios / Auditores |
+| `../CONTRIBUTING.md` | Entorno, build, tests, estilo de commits y Pull Requests | Contribuidores |
 
 ## Documentación usuario (`/docs/wiki/`)
 
-<Falta mencionar rapidamente de que trata la introduccion + referencia>
+La wiki cubre introducción, configuración, canales, traducción, iFlow (VM actual y nota histórica), sincronización, editor web, comandos, guía de desarrollo, API, Module Manager, notas de versión, migración, FAQ, ADR, contribución y glosario. Empieza por [`wiki/01-Introduction.md`](wiki/01-Introduction.md).
 
 ## Material de referencia (`/docs/prompts/`)
 

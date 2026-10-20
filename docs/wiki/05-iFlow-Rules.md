@@ -1,485 +1,90 @@
-# iFlow Rules Engine
+# iFlow VM (current)
 
-## Overview
+> **This page describes the current iFlow virtual machine.**
+>
+> The old `DefaultRouter` / `Rule` / SpEL-based rule engine was removed. Its
+> documentation is preserved only in git history; it does **not** describe the
+> code in `src/iflow`. The current implementation is a 16-bit interpreted VM
+> with a binary `.flow` image.
 
-iFlow is TextFormatter Suite's powerful rule engine for message routing, filtering, and transformation. It replaces traditional plugin-based conditional logic with a flexible, declarative rule system.
+## What it is
 
-## Core Concepts
+`iflow` is the routing and policy module of TextFormatter Suite. It implements
+the `Router` SPI and decides what happens to a message (deliver, drop, reject or
+redirect) by executing a program on a small virtual machine.
 
-### Rule Structure
+The VM is deliberately small and deterministic:
 
-```yaml
-# rules.yml
-guard:
-  max-steps: 512              # Max steps per message (prevent infinite loops)
-filter:
-  dedup-fanout: true          # Deduplicate fan-out messages
-priority: batch-first         # Evaluation order: batch-first | depth-first
+- 16-bit address space, flat 64 KB.
+- 16 pages of 4 KB with read/write/execute permissions and page ownership.
+- Software MMU (`SoftMMU`) with copy-on-write support for isolated snapshots.
+- Binary program images (`.flow`), not YAML rule lists or SpEL expressions.
+- A fuel budget (default 100,000 instructions) to bound execution.
+- A `HOST` instruction/ABI for controlled access to host services.
+- Memory-mapped devices: text display, NVRAM and interrupt controller.
 
-nodes:
-  - id: n_input_chat
-    kind: input
-    label: chat.global
-    matcher:
-      channel: chat.global
-  
-  - id: n_anti_spam
-    kind: cond
-    label: Anti-spam
-    matcher:
-      channel: chat.global
-    condition: "'spam' in #msg.texts[0]"
-    actions:
-      - cancel()
-      - skipTranslate()
-    target: DROP
+## Main components
 
-edges:
-  - from: n_input_chat
-    to: n_anti_spam
-  - from: n_anti_spam
-    to: n_output_chat
-```
+| Component | Responsibility |
+|---|---|
+| `VmPolicyEngine` | `Router` implementation; loads a program and executes it per message |
+| `VmInterpreter` | Fetch/decode/execute loop, ISA v2, fuel accounting and privilege checks |
+| `SoftMMU` | Virtual-to-physical translation, page permissions and ownership |
+| `PhysicalMemory` | 64 KB backing store split into 4 KB frames |
+| `VmBus` | Single transaction bus for CPU/DMA; decodes MMIO before RAM |
+| `VmDmaController` | Validated bulk transfers between host and VM |
+| `VmDisplay` | Text framebuffer mapped through MMIO; returns to plain RAM when disabled |
+| `VmNvram` | Persistent BIOS state across messages |
+| `VmPic` | 16-line interrupt controller with mask/raise/ack |
+| `VmConfigLoader` | Loads binary `.flow` images; pass-through fallback |
+| `ProgramImage` | Immutable bytecode + constants + capabilities + hash |
 
-### Node Types
+## Memory model
 
-| Kind | Description | Use Case |
-|------|-------------|----------|
-| `input` | Message entry point | Channel, event entry |
-| `cond` | Condition (SpEL) | Filter messages |
-| `transform` | Transform message | Rewrite, sounds, sleep |
-| `loop` | Loop back | Retry, retry logic |
-| `sleep` | Delay | Rate limiting, delays |
-| `output` | Message exit | Deliver to channel |
-| `redirect` | Redirect | Forward to another channel |
-| `channel_redirect` | Change channel | CHANNEL_REDIRECT target |
+- Pages 0–1: code (read/execute, kernel-owned).
+- Page 2: constants (read, kernel-owned).
+- Pages 3–4: data/heap (read/write).
+- Pages 5–6: stack (grows down from `0x7000`).
+- Page 7: input buffer.
+- Page 8: output/scratch buffer.
+- Pages 9–15: user RAM; page 15 also hosts the text framebuffer when the
+  display is enabled. Disabling the display returns the page to normal RAM.
 
-### Node Properties
+Kernel pages are readable/executable by the program but writable only by the
+supervisor. The program cannot write its own code or constants through normal
+stores.
 
-```yaml
-- id: unique_node_id
-  kind: input|cond|transform|loop|sleep|output|redirect
-  label: "Human readable label"
-  matcher:                    # For cond nodes
-    channel: chat.global      # Match channel
-    sender: "PlayerName"      # Match sender
-    receiver: "PlayerName"    # Match recipient
-    direction: OTHERS         # Match direction: INITIATOR|OTHERS|ALL|CONSOLE|WORLD|RADIUS|PERMISSION|SPECIFIC
-  condition: "'spam' in #msg.texts[0]"  # SpEL condition
-  actions:                    # For transform/cond nodes
-    - rewrite(template)       # Rewrite message text
-    - sounds(add, remove)     # Add/remove sounds
-    - sleep(ms)               # Delay
-    - setLangSource(lang)     # Set source language
-    - setLangTarget(lang)     # Set target language
-    - setFormatPapi(true)     # Enable PAPI
-    - cancel()                # Cancel message
-    - skipTranslate()         # Skip translation
-  target:                     # For redirect
-    channel: staff.alert
-    # Or for CHANNEL_REDIRECT:
-    # target: CHANNEL_REDIRECT
-    # redirectChannel: staff.alert
-  transform:                  # For transform nodes
-    - op: rewrite
-      template: "<green>%content%</green>"
-    - op: sounds
-      add: [sound1, sound2]
-      remove: [sound3]
-    - op: sleep
-      millis: 1500
-  priority: 100               # Lower = higher priority
-```
+## Execution model
 
-## Matchers
+Each program has one live machine. Executions are serialized, so data left in
+general-purpose RAM persists between messages; the runtime only clears the I/O
+buffers. The BIOS runs on cold start, configures the display and publishes the
+interrupt table, then jumps to the program entry point.
 
-### Matcher Types
+Host services are invoked through `HOST`. The ABI carries a service id and
+arguments in registers; errors can raise IRQ 1. The host can read the display
+through `VmPolicyEngine.display()` for diagnostics and tests.
 
-```yaml
-matcher:
-  channel: chat.global           # Exact channel match
-  channel: "staff.*"            # Glob pattern (future)
-  sender: "PlayerName"          # Exact sender name
-  sender: "Staff*"              # Glob pattern (future)
-  receiver: "PlayerName"        # Exact receiver
-  direction: OTHERS             # INITIATOR, OTHERS, ALL, CONSOLE, WORLD, RADIUS, PERMISSION, SPECIFIC
-  type: CHAT                    # Message type filter
-  permission: "staff.chat"      # Permission check
-```
+## ISA and ABI
 
-### Combining Matchers
+The ISA includes data transfer, indirect memory access, arithmetic, logic,
+shifts, comparisons, branches, calls, stack operations, `HOST`, `RAISE`, `ACK`,
+`RET` and `HALT`. See the full tables and examples in
+[`src/iflow/README.md`](../../src/iflow/README.md) and the hardware-oriented
+mapping in [`src/iflow/HDL.md`](../../src/iflow/HDL.md).
 
-```yaml
-matcher:
-  channel: chat.global
-  direction: OTHERS
-  permission: "chat.global"
-  # All conditions must match (AND logic)
-```
-
-## Conditions (SpEL)
-
-### SpEL Expression Language
-
-Conditions use Spring Expression Language (SpEL):
-
-```yaml
-condition: "'spam' in #msg.texts[0]"
-condition: "#msg.sender.name == 'Admin'"
-condition: "#msg.channel == 'staff.chat' and #msg.sender.hasPermission('admin')"
-condition: "T(java.time.LocalTime).now().getHour() > 22"
-```
-
-### Available Variables
-
-| Variable | Type | Description |
-|----------|------|-------------|
-| `#msg` | `Message` | The message object |
-| `#msg.texts` | `List<String>` | Message text parts |
-| `#msg.sender` | `Actor` | Message sender |
-| `#msg.channel` | `String` | Channel name |
-| `#msg.direction` | `Direction` | Message direction |
-| `#msg.type` | `MessageType` | Message type |
-| `#msg.langSource` | `Language` | Source language |
-| `#msg.langTarget` | `Language` | Target language |
-
-### Actor Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `#msg.sender.name` | String | Player name |
-| `#msg.sender.uuid` | UUID | Player UUID |
-| `#msg.sender.kind` | ActorKind | PLAYER, CONSOLE, SYSTEM |
-| `#msg.sender.language` | Language | Player language |
-| `#msg.sender.hasPermission('perm')` | Boolean | Permission check |
-
-### Helper Functions
-
-```yaml
-# String operations
-condition: "'hello' in #msg.texts[0]"
-condition: "#msg.texts[0].startsWith('!')"
-condition: "#msg.texts[0].contains('spam')"
-condition: "#msg.texts[0].matches('.*\\d+.*')"
-
-# Language checks
-condition: "#msg.langSource == 'en'"
-condition: "#msg.langTarget == 'es'"
-
-# Permission checks
-condition: "#msg.sender.hasPermission('staff.chat')"
-condition: "!#msg.sender.hasPermission('bypass.antispam')"
-
-# Time-based
-condition: "T(java.time.LocalTime).now().getHour() >= 22"
-condition: "T(java.time.DayOfWeek).from(#msg.timestamp).name() == 'SATURDAY'"
-```
-
-## Actions
-
-### Available Actions
-
-```yaml
-actions:
-  - cancel()                    # Cancel message delivery
-  - skipTranslate()             # Skip translation
-  - setLangSource(en)           # Force source language
-  - setLangTarget(es)           # Force target language
-  - setFormatPapi(true)         # Enable/disable PAPI placeholders
-  - setColorMode(GRADIENT)      # Set color mode
-  - setFormat(path)             # Set format path
-  - cancel()                    # Cancel message
-  - skipTranslate()             # Skip translation
-  - redirect(channel)           # Redirect to channel
-  - setFormat(path)             # Set format path
-```
-
-### Transform Actions
-
-```yaml
-transform:
-  - op: rewrite
-    template: "<green>💬 %content%</green>"
-  - op: sounds
-    add: [entity.experience_orb.pickup, block.note_block.pling]
-    remove: [block.note_block.bell]
-  - op: sleep
-    millis: 1500
-  - op: setLangSource
-    lang: en
-  - op: setLangTarget
-    lang: es
-  - op: setFormatPapi
-    enabled: true
-  - op: setChannel
-    channel: staff.alert
-```
-
-### Targets
-
-```yaml
-target: LOG              # Allow delivery (default)
-target: DROP             # Silent drop
-target: REJECT           # Reject with feedback to sender
-target: REDIRECT         # Redirect to console
-target: CHANNEL_REDIRECT # Redirect to another channel
-redirectChannel: staff.alert  # Required for CHANNEL_REDIRECT
-```
-
-## Rule Examples
-
-### Anti-Spam Rule
-
-```yaml
-- id: anti_spam
-  kind: cond
-  label: Anti-spam
-  matcher:
-    channel: chat.global
-  condition: "'spam' in #msg.texts[0] or 'SPAM' in #msg.texts[0]"
-  actions:
-    - cancel()
-    - skipTranslate()
-  target: DROP
-```
-
-### Staff-Only Channel
-
-```yaml
-- id: staff_only
-  kind: cond
-  label: Staff Only
-  matcher:
-    channel: staff.chat
-  condition: "!#msg.sender.hasPermission('staff.chat')"
-  actions:
-    - cancel()
-  target: REJECT
-```
-
-### Language-Based Routing
-
-```yaml
-- id: spanish_redirect
-  kind: cond
-  label: Spanish Chat
-  matcher:
-    channel: chat.global
-  condition: "#msg.langSource == 'es' or #msg.langSource == 'es-ES'"
-  actions:
-    - setFormat("chat.spanish")
-    - setLangTarget(es)
-  target: CHANNEL_REDIRECT
-  redirectChannel: chat.spanish
-```
-
-### Time-Based Muting
-
-```yaml
-- id: night_mute
-  kind: cond
-  label: Night Mute
-  matcher:
-    channel: chat.global
-  condition: "T(java.time.LocalTime).now().getHour() >= 23 or T(java.time.LocalTime).now().getHour() < 6"
-  actions:
-    - cancel()
-  target: DROP
-```
-
-### Role-Based Routing
-
-```yaml
-- id: vip_chat
-  kind: cond
-  label: VIP Chat
-  matcher:
-    channel: chat.vip
-  condition: "#msg.sender.hasPermission('vip.chat')"
-  actions:
-    - setFormat("chat.vip.premium")
-  target: LOG
-```
-
-### Channel Redirect
-
-```yaml
-- id: redirect_to_staff
-  kind: cond
-  label: Redirect to Staff
-  matcher:
-    channel: chat.global
-  condition: "#msg.sender.hasPermission('staff.alert')"
-  target: CHANNEL_REDIRECT
-  redirectChannel: staff.alert
-```
-
-```yaml
-- id: anti_caps
-  kind: transform
-  label: Anti Caps
-  matcher:
-    channel: chat.global
-  transforms:
-    - op: rewrite
-      template: "#msg.texts[0].toLowerCase()"
-  condition: "#msg.texts[0] == #msg.texts[0].toUpperCase() and #msg.texts[0].length() > 5"
-```
-
-## Testing
-
-### Test Commands
+## Build and test
 
 ```bash
-# Run all iFlow tests
 ./gradlew :src:iflow:test --offline --no-daemon
-
-# Run specific test
-./gradlew :src:iflow:test --tests DefaultRouterTest --offline --no-daemon
-
-# Run iFlow module tests
-./gradlew :src:iflow:test --tests IflowModuleTest --offline --no-daemon
 ```
 
-### Test Coverage
+The module currently has 397 tests, including interpreter, MMU, host services,
+policy engine and firmware integration.
 
-The iFlow module includes comprehensive tests:
-- **DefaultRouterTest**: Priority, permissions, rate limits, redirects, conditions
-- **RateLimiterTest**: Token bucket, per-key isolation, refill, purge race fix (`ReentrantReadWriteLock`)
-- **RuleTest**: Matcher patterns, wildcards, direction kinds
-- **IflowModuleTest**: Module descriptor, capabilities, ServiceLoader registration
+## Historical note
 
-### Debug Commands
-
-```bash
-# Enable debug logging
--Dtextformattersuite.debug=true
-
-# Or in-game
-/suite debug rules on
-/suite debug rules trace PlayerName
-/suite debug rules reload
-/suite debug rules test <player> <message>
-```
-
-## Graph Structure
-
-### Edges
-
-```yaml
-edges:
-  - from: n_input_chat
-    to: n_anti_spam
-  - from: n_anti_spam
-    to: n_transform
-  - from: n_transform
-    to: n_output_chat
-  - from: n_anti_spam
-    to: n_redirect_staff
-    condition: "#msg.sender.hasPermission('staff.alerts')"
-```
-
-### Graph Concepts
-
-- **Mux (Fan-in)**: Multiple inputs → single node
-- **Fan-out**: Single node → multiple outputs
-- **Cycles**: Allowed with `guard.max-steps` protection
-- **Priority**: Lower number = higher priority
-
-## Rule Evaluation Order
-
-1. **Input nodes** - Entry points (channel, event)
-2. **Condition nodes** - Evaluated in priority order
-3. **Transform nodes** - Modify message
-3. **Output nodes** - Deliver to destination
-4. **Redirect** - Forward to another channel
-
-## Debugging Rules
-
-### Debug Commands
-
-```
-/suite debug rules                    # Show rule graph
-/suite debug rules trace <player>     # Trace message through rules
-/suite debug rules reload             # Reload rules.yml
-```
-
-### Debug Output
-
-```
-[DEBUG] Rule 'anti_spam' matched for Player123
-[DEBUG] Action 'cancel()' executed
-[DEBUG] Message dropped: spam detected
-```
-
-## Best Practices
-
-1. **Order rules by priority** - Lower number = higher priority
-2. **Use specific matchers** - Avoid overly broad conditions
-2. **Test conditions** - Use `/suite debug rules test` 
-3. **Limit transforms** - Too many transforms impact performance
-4. **Use priorities** - Lower number = higher priority
-5. **Test thoroughly** - Test with `/suite debug rules test`
-
-## Performance Tips
-
-1. **Use specific matchers** - Avoid broad conditions
-2. **Limit transforms** - Each transform adds latency
-3. **Use priorities** - Order rules by priority
-4. **Avoid complex SpEL** - Simple conditions are faster
-5. **Cache results** - Cache permission checks
-
-## Debugging
-
-```bash
-# Enable debug logging
--Dtextformattersuite.debug=true
-
-# Or in-game
-/suite debug rules on
-/suite debug rules trace PlayerName
-```
-
-## Migration from ConditionalEvents
-
-| ConditionalEvents | iFlow |
-|-------------------|-------|
-| Events | Input nodes (kind: input) |
-| Conditions | cond nodes with SpEL |
-| Actions | Transform/Action nodes |
-| Variables | SpEL bindings (`#msg.*`) |
-| Placeholders | `#msg.texts[0]`, `#msg.sender.name` |
-
-## Migration Example
-
-### ConditionalEvents
-```yaml
-# Old ConditionalEvents
-events:
-  on_chat:
-    conditions:
-      - "'spam' in message"
-    actions:
-      - cancel
-      - message: "&cNo spam allowed!"
-```
-
-### iFlow
-```yaml
-# rules.yml
-nodes:
-  - id: n_anti_spam
-    kind: cond
-    label: Anti-spam
-    matcher:
-      channel: chat.global
-    condition: "'spam' in #msg.texts[0]"
-    actions:
-      - cancel()
-      - skipTranslate()
-    target: DROP
-
-edges:
-  - from: n_input_chat
-    to: n_anti_spam
-```
+If you are looking for the old declarative `rules.yml` syntax with `cond`,
+`action`, `target` and SpEL conditions, that engine no longer exists in the
+current code. Do not use old wiki revisions or external snippets as a reference
+for `src/iflow`; use the module README and the tests instead.
