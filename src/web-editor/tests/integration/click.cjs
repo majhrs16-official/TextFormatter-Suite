@@ -1,11 +1,13 @@
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
+const { installFetch } = require('./_fetch.cjs');
 
 const dir = path.join(__dirname, '..', '..');
 const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
 const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://localhost/' });
 const { window } = dom;
+installFetch(window, dir);
 for (const g of ['window', 'document', 'navigator', 'TextEncoder', 'Blob', 'URL', 'console'])
   if (!(g in global)) global[g] = window[g];
 for (const g of ['TextEncoder', 'TextDecoder']) if (!(g in window)) window[g] = globalThis[g];

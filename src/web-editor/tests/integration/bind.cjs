@@ -1,12 +1,14 @@
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
+const { installFetch } = require('./_fetch.cjs');
 const dir = path.join(__dirname, '..', '..');
 const dom = new JSDOM(fs.readFileSync(path.join(dir, 'index.html'), 'utf8'), {
   runScripts: 'outside-only',
   url: 'https://localhost/',
 });
 const { window } = dom;
+installFetch(window, dir);
 for (const g of [
   'window',
   'document',

@@ -79,7 +79,7 @@
     const CONFIG_SCOPE = p => p.startsWith('config.') || p.startsWith('graph.');
     container.innerHTML = global.Suite.paths
       .getAllSwitchPaths()
-      .filter(({ path }) => CONFIG_SCOPE(path))
+      .filter(({ path }) => CONFIG_SCOPE(path) && !path.includes('[]'))
       .map(({ path, label, desc }) => {
         const meta = global.Suite.paths.getPathMeta(path);
         const value = Suite.utils.getPath(StateStore.getState(), path);
