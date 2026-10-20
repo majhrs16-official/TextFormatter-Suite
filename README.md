@@ -409,7 +409,7 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
 | **docs/prompts/** | Material de referencia: contexto del proyecto, diseños de componentes y contratos de formato | [`docs/prompts/README.md`](docs/prompts/README.md) |
 | **.opencode/skills/** | Procedimientos que el agente ejecuta por sí mismo (auditar, generar documentación) | [`docs/prompts/README.md`](docs/prompts/README.md) § Prompt frente a skill |
-| **docs/workdir/AUDITORIA.md** | Auditoría técnica integral 2026-10-20 (PROJ-AUD-001..034; incluye estado material del repositorio) | [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md) |
+| **docs/workdir/AUDITORIA.md** | Auditoría manual de iFlow 2026-10-20 (IFLOW-MAN-01..15; en curso, solo lectura) | [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md) |
 | **tools/project-metrics/README.md** | Herramienta de métricas: ~30 métricas diarias, rúbrica de 12 familias, juez cualitativo | [`tools/project-metrics/README.md`](tools/project-metrics/README.md) |
 | **src/<modulo>/README.md** | Codeguide por módulo: responsabilidades, deps, data flow, entry points | Ver [`src/README.md`](src/README.md) §3 |
 
