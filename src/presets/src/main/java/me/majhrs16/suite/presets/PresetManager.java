@@ -74,7 +74,6 @@ public final class PresetManager {
                     List.of("<yellow>%player_name% has made the advancement [%content%]</yellow>"),
                     List.of(), List.of())
             ),
-            List.of(),
             List.of(
                 new Preset.PresetTranslator("google", true, "", "", 6),
                 new Preset.PresetTranslator("libre", false, "https://libretranslate.example", "", 6)
@@ -137,14 +136,6 @@ public final class PresetManager {
                     List.of(), List.of(new Preset.PresetSound("entity.generic.death", 0.7f, 0.9f)))
             ),
             List.of(
-                new Preset.PresetRule("anti-spam", 10,
-                    "'spam' in #msg.texts[0] or 'SPAM' in #msg.texts[0]",
-                    "cancel()", "chat.global"),
-                new Preset.PresetRule("rp-format", 20,
-                    "#msg.channel == 'chat.rp'",
-                    "setText('<italic><dark_purple>* ' + #msg.sender.name + ' ' + #msg.texts[0] + '</dark_purple></italic>')", "chat.rp")
-            ),
-            List.of(
                 new Preset.PresetTranslator("google", true, "", "", 6),
                 new Preset.PresetTranslator("libre", false, "https://libretranslate.example", "", 6)
             ),
@@ -182,14 +173,6 @@ public final class PresetManager {
                     List.of())
             ),
             List.of(
-                new Preset.PresetRule("anti-spam", 10,
-                    "'spam' in #msg.texts[0].lower() or 'hack' in #msg.texts[0].lower()",
-                    "cancel(); log('spam attempt by ' + #msg.sender.name)", "chat.global"),
-                new Preset.PresetRule("staff-alert", 5,
-                    "#msg.sender.hasPermission('staff.alerts')",
-                    "redirect('staff.alerts')", "chat.global")
-            ),
-            List.of(
                 new Preset.PresetTranslator("google", true, "", "", 6)
             ),
             List.of(
@@ -222,7 +205,6 @@ public final class PresetManager {
                     List.of("<white>%player_name%: %content%</white>"),
                     List.of(), List.of())
             ),
-            List.of(),
             List.of(
                 new Preset.PresetTranslator("google", true, "", "", 6)
             ),
@@ -318,20 +300,6 @@ public final class PresetManager {
                 ));
             }
 
-            // Parse rules
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> rulesList = (List<Map<String, Object>>) map.getOrDefault("rules", List.of());
-            List<Preset.PresetRule> rules = new ArrayList<>();
-            for (Map<String, Object> r : rulesList) {
-                rules.add(new Preset.PresetRule(
-                    (String) r.get("id"),
-                    ((Number) r.getOrDefault("priority", 100)).intValue(),
-                    (String) r.getOrDefault("condition", ""),
-                    (String) r.getOrDefault("action", ""),
-                    (String) r.getOrDefault("targetChannel", "")
-                ));
-            }
-
             // Parse translators
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> translatorsList = (List<Map<String, Object>>) map.getOrDefault("translators", List.of());
@@ -360,7 +328,7 @@ public final class PresetManager {
                 ));
             }
 
-            return new Preset(id, name, description, author, version, minSuiteVersion, tags, config, channels, rules, translators, sync);
+            return new Preset(id, name, description, author, version, minSuiteVersion, tags, config, channels, translators, sync);
         } catch (Exception e) {
             return null;
         }
@@ -460,19 +428,6 @@ public final class PresetManager {
             channelsList.add(cMap);
         }
         map.put("channels", channelsList);
-
-        // Rules
-        List<Map<String, Object>> rulesList = new ArrayList<>();
-        for (Preset.PresetRule r : preset.rules()) {
-            Map<String, Object> rMap = new LinkedHashMap<>();
-            rMap.put("id", r.id());
-            rMap.put("priority", r.priority());
-            rMap.put("condition", r.condition());
-            rMap.put("action", r.action());
-            rMap.put("targetChannel", r.targetChannel());
-            rulesList.add(rMap);
-        }
-        map.put("rules", rulesList);
 
         // Translators
         List<Map<String, Object>> translatorsList = new ArrayList<>();

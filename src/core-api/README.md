@@ -14,7 +14,6 @@
   - `TranslationService` — **legacy** high-level entry point (deprecated; use `TranslatorManager`)
   - `SyncSink` / `SyncListener` — cross-server message synchronization
   - `PlaceholderResolver` — resolve placeholders in messages
-  - `ExpressionEvaluator` — evaluate expressions (SpEL) in templates
   - `PluginLogger` — abstract logging
   - `UserLanguageStore` — persist user language preferences
 - Define **event types** (`MessageEvent`)
@@ -43,7 +42,7 @@
 
 **All modules** depend on `core-api`:
 - `kernel` — uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
-- `textformatter` — uses `Message`, `Channel`, `ExpressionEvaluator` SPI
+- `textformatter` — uses `Message`, `Channel`, `TranslationService`, `PlaceholderResolver`
 - `iflow` — uses `Message`, `Channel`, `ActorDirectory` SPI
 - `host` — uses nearly all SPIs and domain types (**Clean Architecture: no compile deps on translators**)
 - `gtranslate`/`ltranslate` — implement `TranslatorProvider` SPI (runtime discovery via ServiceLoader)
@@ -54,7 +53,7 @@
 - `manager-spi`/`manager-core`/`manager-apt` — use `ModuleDescriptor`, `ModuleCoordinate`
 - `extension-api` — uses `Module` concepts
 - `spigot-host` — implements all SPIs
-- `fabric-host` — **excluded from build** (42 compile errors, Spigot APIs)
+- `fabric-host` — implements platform SPIs (compila; no probado en servidor real)
 
 ---
 
@@ -74,7 +73,6 @@
 | `SyncSink` | SPI: send messages to remote servers (HTTP, Discord, TCP, etc.) |
 | `SyncListener` | SPI: receive messages from remote servers |
 | `PlaceholderResolver` | SPI: resolve `{placeholder}` in messages |
-| `ExpressionEvaluator` | SPI: evaluate expressions (e.g., SpEL) in templates |
 | `PluginLogger` | SPI: abstract logging for platform adapters |
 | `UserLanguageStore` | SPI: persist/load user language preferences |
 | `Message` / `ChatMessage` | Core message domain model |
@@ -95,7 +93,6 @@ ActorDirectory ←──────────────────
 TranslationService ←────────────── gtranslate / ltranslate
 SyncSink ←──────────────────────── sync-http, sync-discord, sync-tcpudp, etc.
 PlaceholderResolver ←───────────── Platform adapter
-ExpressionEvaluator ←───────────── textformatter (SpelExpressionEvaluator)
 ```
 
 ---
@@ -117,7 +114,6 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `TranslationService` / `TranslatorProvider` | Implement in translation module (see `GTranslateProvider`, `LTranslateProvider`) |
 | `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`) |
 | `PlaceholderResolver` | Implement in platform adapter (see `SpigotPlaceholderResolver`, `FabricPlaceholderResolver`) |
-| `ExpressionEvaluator` | Implement in formatting module (see `SpelExpressionEvaluator`) |
 | `UserLanguageStore` | Implement in `host` (see `YamlUserLanguageStore`) |
 
 ---
@@ -132,8 +128,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 5. api/spi/TranslationService.java → Translation SPI hierarchy
 6. api/spi/SyncSink.java          → Cross-server sync SPI
 7. api/spi/PlaceholderResolver.java → Placeholder resolution SPI
-8. api/spi/ExpressionEvaluator.java → Expression evaluation SPI
-9. api/event/MessageEvent.java    → Message event type
+8. api/event/MessageEvent.java    → Message event type
 ```
 
 ---
@@ -141,10 +136,10 @@ None — this is a contract library. Entry points are in modules that **implemen
 ## 10. Related Modules
 
 - [kernel](../kernel/README.md) — Loads `Module` implementations
-- [textformatter](../textformatter/README.md) — Implements `ExpressionEvaluator`
+- [textformatter](../textformatter/README.md) — Consumes `Message`, `Channel`, `TranslationService` and `PlaceholderResolver`
 - [host](../host/README.md) — Wires all SPI implementations (**Clean Architecture: runtime SPI discovery**)
 - [gtranslate](../gtranslate/README.md) — Implements `TranslatorProvider` (SPI)
 - [ltranslate](../ltranslate/README.md) — Implements `TranslatorProvider` (SPI)
 - [sync-http](../sync-http/README.md) — Implements `SyncSink`
 - [spigot-host](../spigot-host/README.md) — Implements platform SPIs
-- [fabric-host](../fabric-host/README.md) — **Implements platform SPIs (excluded from build)**
+- [fabric-host](../fabric-host/README.md) — Implements platform SPIs (compila; no probado en servidor real)

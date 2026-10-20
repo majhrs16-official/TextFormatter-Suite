@@ -42,13 +42,13 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
 | **Module Manager (runtime)** | ⚠️ Núcleo completado, releases descartados | GitHub/local/HTTP downloader, version resolver (semver ranges + env compat), dependency resolver (module.yml), relocator (fixed), ClassLoader aislado parent-last, SHA256 obligatorio, `register()` SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation obligatoria; **decisión: no habrá GitHub Releases públicos** (ver `PLAN.md`) |
 | **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
-| **Presets** | ✅ Implementada y probada | Standard/RPG/Staff/Minimal, `TransformEngine` (SpEL sandboxed), import/export YAML; 5 tests |
+| **Presets** | ✅ Catálogo probado | Standard/RPG/Staff/Minimal, import/export YAML; 2 tests; sin motor de ejecución (placeholder) |
 | **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
 | **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 9 tests |
-| **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 99 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
+| **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 108 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
 | **Config schema v2.2 (single-source)** | ✅ Sincronizado | `ConfigPath` enum → `paths.json`/`js/paths.js`/`js/model.js` via `ConfigSchemaGenerator`; `verifySchema` en CI (56 paths) |
 | **Dependency Verification** | ✅ Activa con excepción documentada | 32 lockfiles (root + 31 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante; los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
-| **Security Sprint 3** | ⚠️ P0 corregidos, P1 pendiente | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SpEL LRU cache 1024, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos |
+| **Security Sprint 3** | ⚠️ P0 corregidos, P1 pendiente | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos; SpEL eliminado del repositorio |
 | **Tests E2E pipeline completo** | ❌ Pendiente | Chat → iFlow → format → delivery en servidor real; 12 tests E2E unitarios existen pero requieren servidor real para validación completa |
 | **GitHub Releases / publicación** | ❌ Denegado por decisión | No se publicarán releases ni tags mientras el proyecto siga en desarrollo; distribución vía source/build local. Ver [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) |
 | **gradle.lockfile portable** | ⚠️ Parcial | Lockfiles existen pero reproducibilidad cross-platform no verificada exhaustivamente |
@@ -135,8 +135,8 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | **Separación real de responsabilidades** | Cada capacidad (formateo, routing, traducción, sync, observabilidad) es un módulo independiente con contrato SPI propio |
 | **Independencia de plataforma** | `core-api` y módulos funcionales son JDK-puro; solo `spigot-host`/`fabric-host` dependen de APIs de Minecraft |
 | **Extensibilidad sin fork** | Nuevos proveedores de traducción, sinks de sync, formateadores, reglas = implementar SPI + registrar en META-INF/services |
-| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 782 tests JVM en 28 módulos y 99 tests JS (verificación local 2026-10-20) |
-| **Seguridad por defecto** | Tokens en `char[]`, MiniEscape completo, SpEL sandbox (`SimpleEvaluationContext`), SSRF protection, SafeConstructor YAML |
+| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 766 tests JVM en 28 módulos y 108 tests JS (verificación local 2026-10-20) |
+| **Seguridad por defecto** | Tokens en `char[]`, MiniEscape completo, sin motor de expresiones inline, SSRF protection, SafeConstructor YAML |
 | **Reproducibilidad** | Gradle lockfiles + verification metadata para supply chain integrity |
 
 **Fuera de alcance (explícitamente):**
@@ -162,9 +162,9 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Formateo y routing
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `textformatter` | MiniMessage engine, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
+| `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
 | `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | ✅ Probado (397 tests) |
-| `presets` | Presets predefinidos (standard, rpg, staff, minimal), `TransformEngine` (SpEL sandboxed), import/export YAML | ✅ Probado (5 tests) |
+| `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML; sin motor de ejecución | ✅ Catálogo probado (2 tests) |
 
 ### Traducción
 | Módulo | Propósito | Estado |
@@ -252,7 +252,7 @@ export JAVA_HOME=/opt/javac/x64/21
 # Web Editor (validación + tests)
 cd src/web-editor
 npm ci
-npm run check          # format:check + lint + test (99 unit)
+npm run check          # format:check + lint + test (108 unit)
 npm run test:integration
 ```
 
@@ -343,7 +343,7 @@ cd src/web-editor && npm run check
 | Objetivo | Comando | Notas |
 |----------|---------|-------|
 | Build completo + tests | `./gradlew buildAll --no-daemon` | Incluye tests de todos los subproyectos |
-| Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 782 tests JVM en 28 módulos y 99 tests JS (verificación local 2026-10-20) |
+| Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 766 tests JVM en 28 módulos y 108 tests JS (verificación local 2026-10-20) |
 | Solo build (sin tests) | `./gradlew build -x test --no-daemon` | Solo el proyecto raíz |
 | Plugin Spigot (fat-jar) | `./gradlew :src:spigot-host:build --no-daemon` | En `src/spigot-host/build/libs/` |
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
@@ -431,7 +431,7 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 - [x] Documentación técnica extensa en archivos especializados (wiki, ADR, module READMEs)
 - [x] Enlaces internos válidos y rutas relativas correctas desde GitHub
 - [x] No se han inventado capacidades, releases, comandos ni requisitos
-- [x] Verificación local: `buildAll` completo, `javadocAll`, `checkLocks` (32/32), `:src:host:verifySchema`, 782 tests JVM en 28 módulos (0 fallos, 11 skipped) y 99 tests JS; el workflow de CI está actualizado pero **pendiente de ejecutarse en GitHub**
+- [x] Verificación local: `buildAll` completo, `javadocAll`, `checkLocks` (32/32), `:src:host:verifySchema`, 766 tests JVM en 28 módulos (0 fallos, 11 skipped) y 108 tests JS; el workflow de CI está actualizado pero **pendiente de ejecutarse en GitHub**
 
 ---
 
@@ -441,4 +441,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-20 — P0 de código, limpieza material, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto; el CI está configurado pero no se ha ejecutado en GitHub. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*
+*Última actualización: 2026-10-20 — P0 de código, limpieza material, eliminación de SpEL en todo el repositorio, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto; el CI está configurado pero no se ha ejecutado en GitHub. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*

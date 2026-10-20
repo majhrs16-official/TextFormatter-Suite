@@ -19,7 +19,7 @@ class PresetTest {
         Preset.PresetConfig config = new Preset.PresetConfig(true, "es", false, true, "auto");
         Preset preset = new Preset(
             "id", "Name", "Description", "Author", "1.0.0", "2.1.0",
-            List.of("chat"), config, List.of(channel), List.of(), List.of(), List.of()
+            List.of("chat"), config, List.of(channel), List.of(), List.of()
         );
 
         assertEquals("id", preset.id());
@@ -49,7 +49,7 @@ class PresetTest {
     void applyIsSafeForAnEmptyPreset() {
         Preset preset = new Preset(
             "empty", "Empty", "", "", "1.0.0", "2.1.0",
-            List.of(), null, List.of(), List.of(), List.of(), List.of()
+            List.of(), null, List.of(), List.of(), List.of()
         );
 
         preset.apply(null, null, null);

@@ -1,6 +1,5 @@
 package me.majhrs16.suite.textformatter.template;
 
-import me.majhrs16.suite.api.spi.ExpressionEvaluator;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
@@ -12,9 +11,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,7 +25,6 @@ import static java.util.Locale.ROOT;
  * <ol>
  *   <li>built-in variables ({@code %player_name%}, {@code %lang_source%}, ...)
  *       are replaced with MiniMessage-escaped values;</li>
- *   <li>optional {@code <expr>} scripting tags are evaluated;</li>
  *   <li>external placeholders are resolved token by token through
  *       {@link PlaceholderResolver} and their values escaped;</li>
  *   <li>{@code %content%} / {@code %ct_messages%} markers are replaced with the
@@ -38,6 +34,9 @@ import static java.util.Locale.ROOT;
  *       escaped;</li>
  *   <li>the resulting string is parsed with MiniMessage.</li>
  * </ol>
+ *
+ * <p>Dynamic policy logic belongs to the iFlow VM; templates are deliberately
+ * limited to placeholders and MiniMessage markup.</p>
  */
 public final class TemplateRenderer {
 
@@ -45,30 +44,18 @@ public final class TemplateRenderer {
 
     private static final String OPEN_TR = "<tr>";
     private static final String CLOSE_TR = "</tr>";
-    private static final String OPEN_EXPR = "<expr>";
-    private static final String CLOSE_EXPR = "</expr>";
 
     private final TranslationService translation;
     private final PlaceholderResolver placeholders;
-    private final ExpressionEvaluator expressions;
-    private final PluginLogger logger;
     private final MiniMessage miniMessage;
     private final PlainTextComponentSerializer plainText;
 
     public TemplateRenderer(TranslationService translation,
                             PlaceholderResolver placeholders,
                             PluginLogger logger) {
-        this(translation, placeholders, null, logger);
-    }
-
-    public TemplateRenderer(TranslationService translation,
-                            PlaceholderResolver placeholders,
-                            ExpressionEvaluator expressions,
-                            PluginLogger logger) {
         this.translation = Objects.requireNonNull(translation, "translation");
         this.placeholders = placeholders;
-        this.expressions = expressions;
-        this.logger = Objects.requireNonNull(logger, "logger");
+        Objects.requireNonNull(logger, "logger");
         this.miniMessage = MiniMessage.miniMessage();
         this.plainText = PlainTextComponentSerializer.plainText();
     }
@@ -92,7 +79,6 @@ public final class TemplateRenderer {
 
     private String renderString(String source, TemplateContext context) {
         String resolved = replaceBuiltins(source, context);
-        resolved = evaluateExpressions(resolved, context);
         resolved = resolveExternalTokens(resolved, context);
         resolved = replaceContent(resolved, context);
         return translateSpans(resolved, context);
@@ -112,48 +98,7 @@ public final class TemplateRenderer {
         return result;
     }
 
-    // -- step 2: scripting (optional) ---------------------------------------
-
-    private String evaluateExpressions(String source, TemplateContext context) {
-        if (expressions == null) {
-            return source;
-        }
-        StringBuilder result = new StringBuilder(source.length());
-        int index = 0;
-        while (index < source.length()) {
-            int open = source.indexOf(OPEN_EXPR, index);
-            if (open < 0) {
-                break;
-            }
-            int close = source.indexOf(CLOSE_EXPR, open + OPEN_EXPR.length());
-            if (close < 0) {
-                break;
-            }
-            String expression = source.substring(open + OPEN_EXPR.length(), close);
-            result.append(source, index, open);
-            result.append(evaluate(expression, context));
-            index = close + CLOSE_EXPR.length();
-        }
-        result.append(source, index, source.length());
-        return result.toString();
-    }
-
-    private String evaluate(String expression, TemplateContext context) {
-        try {
-            Map<String, Object> bindings = new HashMap<>();
-            bindings.put("name", context.sender().name());
-            bindings.put("uuid", safeUuid(context.sender()));
-            bindings.put("content", context.content());
-            bindings.put("langSource", context.sourceLanguage().code());
-            bindings.put("langTarget", context.targetLanguage().code());
-            return MiniEscape.escape(expressions.evaluate(expression, bindings));
-        } catch (RuntimeException e) {
-            logger.warn("Scripting error: %s", e.getMessage());
-            return OPEN_EXPR + expression + CLOSE_EXPR;
-        }
-    }
-
-    // -- step 3: external placeholders --------------------------------------
+    // -- step 2: external placeholders --------------------------------------
 
     private String resolveExternalTokens(String source, TemplateContext context) {
         if (placeholders == null || !placeholders.available()) {
@@ -176,7 +121,7 @@ public final class TemplateRenderer {
         return resolved.toString();
     }
 
-    // -- step 4: content ---------------------------------------------------
+    // -- step 3: content ---------------------------------------------------
 
     private String replaceContent(String source, TemplateContext context) {
         return source
@@ -184,7 +129,7 @@ public final class TemplateRenderer {
             .replace("%ct_messages%", MiniEscape.escape(context.content()));
     }
 
-    // -- step 5: translatable spans ----------------------------------------
+    // -- step 4: translatable spans ----------------------------------------
 
     private String translateSpans(String source, TemplateContext context) {
         List<Span> spans = findSpans(source);

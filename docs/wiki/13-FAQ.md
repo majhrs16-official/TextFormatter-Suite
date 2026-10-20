@@ -106,20 +106,23 @@ When `lang-source: auto` is set, the system detects the message language automat
 
 Yes, implement `TranslationService` SPI and register via `Module` or `Extension`.
 
-## iFlow Rules
+## iFlow Policies
 
-### How do I create a rule?
+### How do I create a policy?
 
-1. Edit `rules.yml`
-2. Define nodes and edges
-3. Run `/suite reload`
+1. Compile a VM program to binary `.flow` (external `iflow-compiler`).
+2. Place it as `policy.flow` in the suite config directory.
+3. Restart the server; `VmConfigLoader` loads it at startup.
+4. If `policy.flow` is missing or invalid, the VM falls back to a pass-through program.
 
-### What are the node types?
+`rules.yml` is a legacy graph used only by the web editor. It is **not** compiled or evaluated by the runtime.
+
+### What are the legacy editor node types?
 
 | Type | Description |
 |------|-------------|
 | `input` | Entry point |
-| `cond` | Condition (SpEL) |
+| `cond` | Matcher/filter (no inline expression) |
 | `transform` | Transform message |
 | `loop` | Loop/retry |
 | `sleep` | Delay |
@@ -128,24 +131,9 @@ Yes, implement `TranslationService` SPI and register via `Module` or `Extension`
 
 ### How do I write conditions?
 
-Use SpEL (Spring Expression Language):
-
-```yaml
-condition: "'spam' in #msg.texts[0]"
-condition: "#msg.sender.hasPermission('staff.chat')"
-condition: "T(java.time.LocalTime).now().getHour() > 22"
-```
-
-### Available variables in conditions
-
-| Variable | Type | Description |
-|----------|------|-------------|
-| `#msg` | Message | The message object |
-| `#msg.texts` | List<String> | Message text parts |
-| `#msg.sender` | Actor | Sender actor |
-| `#msg.channel` | String | Channel name |
-| `#msg.direction` | Direction | Message direction |
-| `#msg.sender.hasPermission('perm')` | Boolean | Permission check |
+There is no inline condition language or SpEL. Conditions and actions are bytecode in the `.flow`
+program, executed by `VmPolicyEngine`/`VmInterpreter`. The legacy `condition` key in `rules.yml` is
+ignored by the editor and by the runtime.
 
 ## Sync
 

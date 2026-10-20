@@ -513,12 +513,6 @@
     `;
     h += `
       <div class="pf-rule-field">
-        <label>${global.Suite.i18n.t('condition')} (SpEL)</label>
-        <textarea class="pf-condition" rows="3" placeholder="'spam' in #msg.texts[0]">${Suite.utils.esc(n.condition || '')}</textarea>
-      </div>
-    `;
-    h += `
-      <div class="pf-rule-field">
         <label>${global.Suite.i18n.t('actions')}</label>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button type="button" class="btn btn-sm pf-add-action" data-action="cancel">${global.Suite.i18n.t('action_cancel')}</button>
@@ -691,17 +685,6 @@
             node.matcher = node.matcher || {};
             node.matcher.direction = e.target.value || undefined;
           }
-        });
-      });
-    }
-
-    // Condition
-    const conditionArea = form.querySelector('.pf-condition');
-    if (conditionArea) {
-      conditionArea.addEventListener('change', e => {
-        StateStore.mutate('condition', st => {
-          const node = st.graph.nodes.find(x => x.id === n.id);
-          if (node) node.condition = e.target.value || undefined;
         });
       });
     }

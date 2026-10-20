@@ -89,7 +89,6 @@ return ModuleDescriptor.builder("my-module")
 | Interface | Change |
 |-----------|--------|
 | `Translator` | Added `translateAsync` |
-| `ExpressionEvaluator` | New interface |
 | `PlaceholderResolver` | Added `available()` |
 | `SyncSink` | Added `setListener` |
 | `ChatDelivery` | Added `original` param to `deliver()` |

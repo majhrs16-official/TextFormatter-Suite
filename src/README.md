@@ -12,7 +12,7 @@ TextFormatter Suite
 ├── Core (platform-agnostic)
 │   ├── core-api          → Core interfaces, SPI, domain types
 │   ├── kernel            → Module loading & dependency resolution
-│   ├── textformatter     → Template engine, expression evaluation, channels
+│   ├── textformatter     → Template engine, placeholders, channels
 │   ├── iflow             → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
@@ -20,7 +20,7 @@ TextFormatter Suite
 │   ├── gtranslate        → Google Translate provider
 │   ├── ltranslate        → LibreTranslate provider
 │   ├── observability     → Metrics, health checks, debug endpoints
-│   ├── presets           → Preset management for transformations
+│   ├── presets           → Preset catalog and YAML import/export
 │   ├── manager-spi       → Module manager SPI (coordinates, descriptors, lifecycle)
 │   ├── manager-core      → Package installer + local package database
 │   ├── manager-apt       → Repositories, dependency resolver, APT installer
@@ -59,7 +59,7 @@ TextFormatter Suite
 |-----------|----------------|------------|---------|
 | `core-api` | Core interfaces, SPI, domain types (Module, Actor, Channel, TranslationService, SyncSink, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
-| `textformatter` | Template rendering (MiniMessage), SpEL expressions, channel registry | `core-api` | `host`, `iflow`, `presets`, `spigot-host`, `fabric-host` |
+| `textformatter` | Template rendering (MiniMessage), placeholders, channel registry | `core-api` | `host`, `iflow`, `presets`, `spigot-host`, `fabric-host` |
 | `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
 | `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
@@ -67,7 +67,7 @@ TextFormatter Suite
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `ltranslate` | LibreTranslate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
-| `presets` | Preset management (YAML-based transform presets) | `core-api`, `textformatter`, `iflow`, `host` | `spigot-host`, `fabric-host` |
+| `presets` | Preset catalog and YAML import/export (no execution engine) | `core-api`, `textformatter`, `host` | — (sin consumidor cableado) |
 | `manager-spi` | Module manager SPI (coordinates, descriptors, lifecycle, manifest/version parsing) | `core-api` | `manager-core`, `manager-apt`, `spigot-host`, `fabric-host` |
 | `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `spigot-host`, `fabric-host` |
 | `manager-apt` | Repository manager, dependency resolver, APT installer/facade | `core-api`, `kernel`, `manager-spi`, `manager-core` | `spigot-host`, `fabric-host` |
@@ -95,14 +95,14 @@ TextFormatter Suite
 |--------|---------|---------------------|-------------|--------------|--------|
 | `core-api` | Contracts & SPI | Define all platform-agnostic interfaces | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
-| `textformatter` | Formatting engine | Templates, expressions, channels | `DefaultTextFormatter`, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
+| `textformatter` | Formatting engine | Templates, placeholders, channels | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
 | `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowModule` | [iflow/README.md](iflow/README.md) |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateModule` | [ltranslate/README.md](ltranslate/README.md) |
 | `transport` | Transport layer | HTTP transport, codecs | `HttpTransport`, `Transport`, `MessageCodec` | — | [transport/README.md](transport/README.md) |
 | `observability` | Metrics & health | Prometheus, health checks, endpoints | `Observability`, `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint` | `ObservabilityModule` | [observability/README.md](observability/README.md) |
-| `presets` | Transform presets | YAML preset loading/management | `PresetManager`, `TransformEngine`, `PresetsModule` | `PresetsModule` | [presets/README.md](presets/README.md) |
+| `presets` | Preset catalog | YAML preset import/export and built-in definitions | `PresetManager`, `Preset`, `PresetsModule` | `PresetsModule` | [presets/README.md](presets/README.md) |
 | `manager-spi` | Manager SPI | Coordinates, descriptors, lifecycle, manifest/version parsing | `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Version` | — | [manager-spi/README.md](manager-spi/README.md) |
 | `manager-core` | Package installer | Local ZIP installation, package database, transactions | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` | — | [manager-core/README.md](manager-core/README.md) |
 | `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` | — | [manager-apt/README.md](manager-apt/README.md) |
@@ -128,16 +128,15 @@ TextFormatter Suite
 → src/textformatter/README.md#data-flow
   → DefaultTextFormatter.java
   → TemplateRenderer.java
-  → SpelExpressionEvaluator.java
   → ChannelRegistry.java
 ```
 
 ### Understand Message Routing (iflow)
 ```
 → src/iflow/README.md#data-flow
-  → Router.java / DefaultRouter.java
-  → Rule.java / TransformOp.java
-  → RateLimiter.java / PermissionChecker.java
+  → VmPolicyEngine.java
+  → VmInterpreter.java / SoftMMU.java
+  → VmConfigLoader.java (policy.flow)
 ```
 
 ### Understand Translation
@@ -212,8 +211,7 @@ TextFormatter Suite
 | `ActorDirectory` | `SuiteBootstrap` → platform adapter provides (`SpigotActorDirectory`, `FabricActorDirectory`) |
 | `TranslationService` | `SuiteBootstrap` → `GTranslateProvider` / `LTranslateProvider` registered via modules |
 | `SyncSink` | `SuiteBootstrap` → each sync module registers its `SyncSink` implementation |
-| `ExpressionEvaluator` | `TextFormatterModule` → `SpelExpressionEvaluator` |
-| `Router` | `IflowModule` → `DefaultRouter` |
+| `Router` | `SuiteBootstrap` → `VmPolicyEngine` |
 | `MessageDispatcher` | `SuiteBootstrap` → `MessageDispatcher` |
 | `ConfigValidator` | Platform-specific: `SpigotConfigValidator` / `ConfigValidator` |
 
@@ -277,7 +275,7 @@ MessageDispatcher.dispatch()
          ↓
 Router.route() [iflow] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
          ↓
-TextFormatter.format() → MiniMessage + SpEL evaluation
+TextFormatter.format() → MiniMessage + placeholder substitution
          ↓
 TranslationService.translate() [if needed] → gtranslate/ltranslate
          ↓
@@ -320,12 +318,12 @@ Module.initialize() called in order
 |------|----------------|-----------|
 | **Configuration** | `host` | `ConfigLoader`, `HostConfig`, `ConfigValidator`, `ConfigSchemaGenerator` |
 | **Module System** | `kernel` | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` |
-| **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer`, `SpelExpressionEvaluator`, `ChannelRegistry` |
+| **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` |
 | **Routing/Rules (VM)** | `iflow` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` |
 | **Translation** | `gtranslate`/`ltranslate` | `GTranslateProvider`, `LTranslateProvider` (implement `TranslationService`) |
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
 | **Observability** | `observability` | `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint`, `DebugEndpoint` |
-| **Presets** | `presets` | `PresetManager`, `TransformEngine` |
+| **Presets** | `presets` | `PresetManager`, `Preset` |
 | **Platform: Bukkit** | `spigot-host` | `TextFormatterSuitePlugin`, `SpigotActorDirectory`, `SpigotChatDelivery`, `DynamicCommandRegistrar` |
 | **Platform: Fabric** | `fabric-host` | `TextFormatterSuiteMod`, `FabricActorDirectory`, `FabricChatDelivery` |
 | **Module Manager** | `manager-apt` | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` |
@@ -378,4 +376,4 @@ Module.initialize() called in order
 
 ---
 
-*Generated from actual repository state. Last updated: 2026-09-26*
+*Generated from actual repository state. Last updated: 2026-10-20 (inline SpEL engine removed; iFlow VM is the only policy surface).*

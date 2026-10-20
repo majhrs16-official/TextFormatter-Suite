@@ -1,24 +1,25 @@
 # textformatter — Template Engine & Formatting Pipeline
 
-> **Purpose**: Core text formatting engine. Handles MiniMessage template rendering, Spring Expression Language (SpEL) evaluation, and channel-based formatting configuration.
+> **Purpose**: Core text formatting engine. Renders MiniMessage templates with placeholders and channel-based formatting configuration. It does **not** evaluate inline scripting expressions: policy logic belongs to the iFlow VM.
 
 ---
 
 ## 1. Responsibilities
 
-- **Template rendering** — parse and render MiniMessage templates with placeholders
-- **Expression evaluation** — evaluate SpEL expressions in templates (via `ExpressionEvaluator` SPI)
+- **Template rendering** — parse and render MiniMessage templates with built-in and external placeholders
 - **Channel registry** — manage named channels with per-channel format configuration
-- **Formatting pipeline** — `TextFormatter` interface orchestrating template + expression + channel
-- **Module registration** — `TextFormatterModule` registers `ExpressionEvaluator` and `TextFormatter` implementations
+- **Formatting pipeline** — `TextFormatter` interface orchestrating template + channel lookup
+- **Translation spans** — translate `<tr>...</tr>` content through `TranslationService`
+- **Module registration** — `TextFormatterModule` registers the module descriptor for the kernel
 
 ---
 
 ## 2. Non-Responsibilities
 
-- **No message routing** — that's `iflow`
-- **No translation** — that's `gtranslate`/`ltranslate` implementing `TranslationService`
-- **No platform-specific code** — pure Java, uses Adventure/MinMessage library
+- **No message routing or policy evaluation** — that's `iflow` (VM bytecode `.flow`)
+- **No inline scripts/SpEL** — templates are data, not executable expressions
+- **No translation providers** — `gtranslate`/`ltranslate` implement `TranslationService`
+- **No platform-specific code** — pure Java, uses Adventure/MinMessage
 - **No configuration loading** — formats come from `host` config via `ChannelRegistry`
 
 ---
@@ -27,10 +28,9 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `ExpressionEvaluator` SPI, `Channel`, `Message` types |
+| `core-api` | Compile | `Channel`, `Message`, `TranslationService`, SPI types |
 | `net.kyori:adventure-text-minimessage` | Compile | MiniMessage parsing/rendering |
 | `net.kyori:adventure-text-serializer-plain` | Compile | Plain text serialization |
-| `org.springframework:spring-expression` | Compile | SpEL evaluation |
 | `kernel` | Test | Test fixtures |
 
 ---
@@ -39,11 +39,11 @@
 
 | Consumer | Usage |
 |----------|-------|
-| `host` | Uses `TextFormatter` via `TextFormatterModule` |
-| `iflow` | Uses `TextFormatter` for transform operations |
-| `presets` | Uses `TextFormatter` and `ChannelRegistry` for preset transforms |
-| `spigot-host` | Uses formatting pipeline via `host` |
-| `fabric-host` | Uses formatting pipeline via `host` |
+| `host` | Uses `TextFormatter` during dispatch/rendering |
+| `iflow` | Uses `TextFormatter` for VM transform operations |
+| `presets` | Uses `TextFormatter` and `ChannelRegistry` for preset channels |
+| `spigot-host` | Uses the formatting pipeline via `host` |
+| `fabric-host` | Uses the formatting pipeline via `host` |
 
 ---
 
@@ -52,15 +52,14 @@
 | Component | Role |
 |-----------|------|
 | `TextFormatter` | Interface: `format(message, channel, context) → formatted message` |
-| `DefaultTextFormatter` | Default implementation: template → expressions → channel format |
+| `DefaultTextFormatter` | Default implementation: template → channel format |
 | `TextFormatters` | Factory/utilities for creating formatters |
 | `Template` | Parsed MiniMessage template (immutable) |
-| `TemplateRenderer` | Renders `Template` with `TemplateContext` (placeholders + expressions) |
+| `TemplateRenderer` | Renders `Template` with `TemplateContext` (placeholders + variables) |
 | `TemplateContext` | Context for rendering: placeholders, variables, actor info |
-| `SpelExpressionEvaluator` | Implements `ExpressionEvaluator` SPI using Spring SpEL |
 | `Channel` | Channel definition (name, format template, color mode, etc.) |
 | `ChannelRegistry` | Registry of channels; loads from config; `getChannel(name)` |
-| `TextFormatterModule` | `Module` implementation; registers `SpelExpressionEvaluator` and `DefaultTextFormatter` |
+| `TextFormatterModule` | `Module` implementation; registers the module descriptor |
 | `MiniEscape` | Utility for escaping MiniMessage tags |
 
 ---
@@ -73,17 +72,17 @@ Message + Channel + Context
 DefaultTextFormatter.format()
          ↓
 TemplateRenderer.render(Template, TemplateContext)
-         ↓  (MiniMessage parsing)
-MiniMessage template with {placeholders} and ${expressions}
          ↓
-SpelExpressionEvaluator.evaluate() for each ${...}
+MiniMessage template with %placeholders% and <tr> spans
          ↓
-PlaceholderResolver.resolve() for each {...}  (from core-api SPI)
+PlaceholderResolver.resolve() for external tokens
          ↓
-Channel format applied (from ChannelRegistry)
+TranslationService.translate() for <tr> spans (when enabled)
          ↓
 Formatted message (Adventure Component)
 ```
+
+Templates intentionally have no `<expr>` or `${...}` scripting step. Policy decisions are executed by the iFlow VM; the formatter only substitutes values.
 
 ---
 
@@ -92,7 +91,7 @@ Formatted message (Adventure Component)
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
 | `TextFormatterModule` | `TextFormatterModule.java` | `ModuleLoader` (kernel) → `SuiteBootstrap` (host) |
-| `DefaultTextFormatter` | `DefaultTextFormatter.java` | `MessageDispatcher` (host) → `Router` (iflow) |
+| `DefaultTextFormatter` | `DefaultTextFormatter.java` | `MessageDispatcher` (host) / `SuiteHost` rendering |
 
 ---
 
@@ -100,10 +99,10 @@ Formatted message (Adventure Component)
 
 | Extension Point | How to Extend |
 |-----------------|---------------|
-| Custom `TextFormatter` | Implement `TextFormatter` interface, register via custom `Module` |
-| Custom `ExpressionEvaluator` | Implement `ExpressionEvaluator` SPI (core-api), register via `Module` |
+| Custom `TextFormatter` | Implement `TextFormatter` interface, register via a custom `Module` |
 | Custom channel formats | Configure via `ChannelRegistry` (YAML config in `host`) |
-| Custom template functions | Extend `TemplateContext` with additional variables/functions |
+| Custom template variables | Add entries to `TemplateContext.variables()` |
+| Custom placeholders | Implement `PlaceholderResolver` in the platform adapter |
 
 ---
 
@@ -114,29 +113,28 @@ Formatted message (Adventure Component)
 2. DefaultTextFormatter.java      → Default implementation, formatting pipeline
 3. TemplateRenderer.java          → Template rendering logic
 4. Template.java / TemplateContext.java → Template model & rendering context
-5. SpelExpressionEvaluator.java   → SpEL expression evaluation (implements SPI)
-6. Channel.java / ChannelRegistry.java → Channel model & registry
-7. TextFormatterModule.java       → Module registration
-8. TextFormatters.java            → Factory utilities
+5. Channel.java / ChannelRegistry.java → Channel model & registry
+6. TextFormatterModule.java       → Module registration
+7. TextFormatters.java            → Factory utilities
 ```
 
 ---
 
 ## 10. Related Modules
 
-- [core-api](../core-api/README.md) — Defines `ExpressionEvaluator`, `Channel`, `Message` SPI
+- [core-api](../core-api/README.md) — Defines `Channel`, `Message`, translation and placeholder SPI
 - [kernel](../kernel/README.md) — Loads `TextFormatterModule`
 - [host](../host/README.md) — Wires `TextFormatter`, loads channel config
-- [iflow](../iflow/README.md) — Uses `TextFormatter` for transform rules
+- [iflow](../iflow/README.md) — VM policies and transform operations
 - [presets](../presets/README.md) — Uses `TextFormatter` and `ChannelRegistry` for presets
 
 ---
 
-## 11. Security Fixes (Audit 2026-09-28)
+## 11. Security Notes (Audit 2026-09-28)
 
 | Fix | Issue | Location |
 |-----|-------|----------|
 | **B-04** | İ (U+0130) corruption in `<tr>` span search | `TemplateRenderer.findSpans()` — uses `Pattern.CASE_INSENSITIVE` instead of `toLowerCase()` |
 | **B-05** | Translation output not re-escaped | `TemplateRenderer.translateSpan()` — applies `MiniEscape.escape()` to translated text |
 | **SEC** | `MiniEscape` complete (10 chars: `< > \ { } [ ] ( ) # @`) | `MiniEscape.escape()` — prevents MiniMessage injection |
-| **SEC** | `SpelExpressionEvaluator` sandboxed | Uses `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU cache (1024) |
+| **SEC** | No inline expression evaluator | Removed legacy SpEL path; the only executable policy surface is the iFlow VM |

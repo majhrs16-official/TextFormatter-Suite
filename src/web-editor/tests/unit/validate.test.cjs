@@ -128,12 +128,12 @@ assert(
   'error path includes duplicate id'
 );
 
-console.log('\n--- graph: condition without matcher ---');
+console.log('\n--- graph: cond node without matcher ---');
 const s8 = baseState();
 const condNode = s8.graph.nodes.find(n => n.kind === 'cond');
 condNode.matcher = {};
 let v8 = Suite.validate.validate(s8);
-assert(v8.warnings > 0, 'warns on condition without matcher');
+assert(v8.warnings > 0, 'warns on cond node without matcher');
 
 console.log('\n--- graph: redirect without target ---');
 const s9 = baseState();

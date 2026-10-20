@@ -1,5 +1,7 @@
 # Release Notes
 
+> **Estado actual (2026-10-20):** SpEL y `TransformEngine` fueron eliminados. Las entradas de las fases 6 y 14 se actualizan abajo para reflejar la VM `.flow` y el catálogo de presets; no queda ningún motor de expresiones inline.
+
 ## Version 2.1.0 (Current Development)
 
 ### Major Features
@@ -19,11 +21,11 @@
 - ✅ EN/ES translations
 - ✅ MessageCatalog singleton
 
-#### FASE 6: iFlow Rule Engine
-- ✅ SpEL-based conditions
+#### FASE 6: iFlow VM
+- ✅ Binary `.flow` programs (`VmPolicyEngine`/`VmInterpreter`)
 - ✅ CHANNEL_REDIRECT target
 - ✅ Transform operations (rewrite, sounds, sleep, etc.)
-- ✅ SpEL condition/action evaluation
+- ✅ `HOST` services, fuel budget and permission checks (no inline expressions)
 
 #### FASE 7: ConfigValidator
 - ✅ Structural validation
@@ -83,13 +85,12 @@
 - ✅ Integration in spigot-host/fabric-host
 - ✅ SO_REUSEADDR fix
 
-#### FASE 14: Presets & TransformEngine
+#### FASE 14: Presets catalog
 - ✅ Presets module (standard, rpg, staff, minimal)
-- ✅ TransformEngine with SpEL sandboxed
-- ✅ TransformOps: rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel
-- ✅ PresetManager with YAML import/export
-- ✅ TransformOp hierarchy with Jackson polymorphic serialization
-- ✅ engine.parallel knob
+- ✅ `PresetManager` with YAML import/export
+- ✅ Preset data model (`PresetConfig`, `PresetChannel`, `PresetTranslator`, `PresetSync`)
+- ✅ `engine.parallel` knob
+- ⚠️ No execution engine: `Preset.apply(...)` is a placeholder
 
 #### FASE 15: F8 In-World
 - ✅ InWorldHandler for signs, chests, books
@@ -107,7 +108,7 @@
 | Tokens en `char[]` | `JdaDiscordSink`, `DiscordSink`, `TelegramSink`, `LTranslate` usan `char[]` + `Arrays.fill('\0')` |
 | MiniEscape completo | Escapa `< > \ { } [ ] ( ) # @` (10 chars) |
 | PAPI dynamic check | `SpigotPlaceholderResolver.available()` |
-| SpEL LRU cache | `LruExpressionCache` (1024 entradas) en `SpelExpressionEvaluator` |
+| SpEL elimination | Inline evaluator removed; policies run in the iFlow VM (`.flow`) |
 | SSRF protection | `HttpTransport` valida IPs contra RFC 1918/3927/6598, loopback, multicast, deny patterns configurables |
 | DependencyVerification | `verification-metadata.xml` con SHA256/SHA512; `dependencyLocking` en build.gradle |
 
@@ -116,7 +117,7 @@
 - **OBS-01**: `DebugEndpoint` executor shutdown en `stop()`
 - **CFG-01**: `ConfigLoader.LoadResult` con errores explícitos, logging ERROR level
 - **MGR-02**: `register()` SPI-only + `discoverAll()` para kernel
-- **SEC-01**: SpEL LRU cache (1024) implementado
+- **SEC-01**: SpEL eliminado; motor inline retirado del repositorio
 - **SEC-02**: SSRF protection en `HttpTransport` (deny patterns RFC 1918/3927/6598)
 - **ModuleGraph self-cycle**: Detecta self-edges en Tarjan (A→A)
 - **RateLimiter race**: `ReentrantReadWriteLock` entre `tryAcquire` y `purgeIdle`
@@ -138,7 +139,7 @@
 
 ### Testing — Completado/Mejorado
 - ✅ 12 tests E2E pipeline en `E2EPipelineTest.java` (chat → iFlow → format → delivery)
-- ✅ 14 tests SpEL security en `SpelExpressionEvaluatorSecurityTest.java`
+- ✅ Tests de seguridad de la VM y del sandbox de servicios HOST
 - ✅ 15 tests Translation cache/dedup en `TranslationServiceCacheTest.java`
 - ✅ 4 tests Module Manager HTTP repo en `LocalHttpRepositoryTest.java`
 - ✅ 19 tests extendidos GTranslate (edge cases, malformed, unicode, rate limit)
@@ -148,7 +149,7 @@
 ### Web Editor — Rules Graph Editor (Nuevo en 2.1.0)
 - ✅ **8 tipos de nodo**: input, cond, transform, loop, sleep, output, redirect, channel_redirect
 - ✅ **Matcher completo**: channel, sender, receiver, direction (8 tipos)
-- ✅ **Condition (SpEL)**: textarea con syntax highlighting, ejemplos integrados
+- ✅ Campo de condición eliminado con SpEL; el grafo legacy no evalúa expresiones
 - ✅ **10 Actions**: cancel(), skipTranslate(), rewrite(), sounds(), sleep(), setLangSource(), setLangTarget(), setFormatPapi(), setChannel()
 - ✅ **Target selector**: DROP, REJECT, LOG, REDIRECT, CHANNEL_REDIRECT
 - ✅ **Priority**: 0-10000 (lower = higher priority)

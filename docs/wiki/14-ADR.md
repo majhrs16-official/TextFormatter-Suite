@@ -91,39 +91,32 @@ Monolithic jar vs modular architecture.
 
 ---
 
-## ADR-004: SpEL for Rule Conditions
+## ADR-004: SpEL for Rule Conditions (superseded)
 
-**Status**: Accepted
+**Status**: Superseded (2026-10-20)
 **Date**: 2023-04-10
 
 ### Context
 
-Need a flexible, expressive language for iFlow rule conditions.
+The original iFlow rule engine needed a flexible language for conditions and actions.
 
-### Decision
+### Original Decision
 
 Use **Spring Expression Language (SpEL)** for rule conditions and actions.
 
+### Current Decision
+
+SpEL has been removed from the entire repository. iFlow v2 executes binary `.flow` programs in
+`VmPolicyEngine`/`VmInterpreter`; templates only substitute placeholders. The old `ExpressionEvaluator`
+SPI, `SpelExpressionEvaluator`, `<expr>` step, preset rule expressions and the web-editor condition
+field no longer exist.
+
 ### Consequences
 
-**Positive:**
-- Rich expression language
-- Type-safe evaluation
-- Property accessors, method calls, operators
-- Standard library, well-documented
-- Sandboxable via `SimpleEvaluationContext`
-
-**Negative:**
-- Learning curve
-- Performance overhead vs simple DSL
-- Security concerns (sandboxing required)
-- Spring dependency in core (mitigated: only in `iflow` module)
-
-### Mitigations
-
-- `SimpleEvaluationContext.forReadOnlyDataBinding()`
-- Custom `PropertyAccessor` whitelist
-- No `T()`, `new`, `class`, `getClass()` access
+- One executable policy surface (the VM), with no Spring Expression dependency.
+- No inline expression sandbox to maintain.
+- Legacy `rules.yml` graphs remain editor-only and are not evaluated.
+- Historical records may still mention SpEL; they do not describe the current runtime.
 
 ---
 
@@ -327,14 +320,14 @@ Tests use `testImplementation` to make providers available to ServiceLoader duri
 
 ### Context
 
-Need automated build, test, and release process for 29-module monorepo with dependency verification.
+Need automated build, test, and release process for 31-module monorepo with dependency verification.
 
 ### Decision
 
 Two GitHub Actions workflows:
 
 **`.github/workflows/ci.yml`** — Runs on every push/PR:
-- Build all 29 modules (`./gradlew build`)
+- Build all 31 modules (`./gradlew build`)
 - Run all tests (`./gradlew test`)
 - Build Spigot plugin fat-jar (`spigot-host:build`)
 - Dependency verification (lockfiles + verification-metadata.xml)
@@ -369,11 +362,11 @@ Two GitHub Actions workflows:
 
 ### Context
 
-Supply chain security: need reproducible builds and verified dependencies across 29 modules.
+Supply chain security: need reproducible builds and verified dependencies across 31 modules.
 
 ### Decision
 
-1. **`dependencyLocking`** in root + all subprojects `build.gradle` → 29 `gradle.lockfile` files (root + 28 subprojects)
+1. **`dependencyLocking`** in root + all subprojects `build.gradle` → 32 `gradle.lockfile` files (root + 31 subprojects)
 2. **`verification-metadata.xml`** in `gradle/` with SHA256/SHA512 for ALL transitive dependencies
 3. **`checkLocks` task** to audit missing lockfiles (handles intermediate `:src` project)
 4. **Lenient verification** for modules with external plugins/deps: `tester`, `inworld`, `spigot-host`, `host`, `textformatter`, `loadtest`

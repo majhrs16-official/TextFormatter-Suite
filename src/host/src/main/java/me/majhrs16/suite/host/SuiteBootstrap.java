@@ -95,7 +95,7 @@ public final class SuiteBootstrap {
         }
 
         // 4. Wire core components (these are the actual services, not Module descriptors)
-        // Load VM policy program (compiles rules.yml to bytecode or loads native .flow)
+        // Load the VM policy program (policy.flow or the pass-through fallback)
         me.majhrs16.suite.iflow.vm.isa.ProgramImage program = me.majhrs16.suite.iflow.vm.VmConfigLoader.loadProgram(configDir, logger);
 
         // Create rate limiter (shared with VM engine)
@@ -105,10 +105,7 @@ public final class SuiteBootstrap {
         me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine router = new me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine(channels, permissions, rateLimit);
         router.setProgram(program);
 
-        // Create separate evaluator for template rendering (sandboxed)
-        me.majhrs16.suite.api.spi.ExpressionEvaluator templateEvaluator = new me.majhrs16.suite.textformatter.scripting.SpelExpressionEvaluator(
-            placeholders, translation, logger);
-        me.majhrs16.suite.textformatter.TextFormatter formatter = me.majhrs16.suite.textformatter.TextFormatters.create(channels, translation, placeholders, logger, templateEvaluator);
+        me.majhrs16.suite.textformatter.TextFormatter formatter = me.majhrs16.suite.textformatter.TextFormatters.create(channels, translation, placeholders, logger);
 
         // 5. Create SuiteHost with core components
         ChatDelivery chatDelivery = ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null);

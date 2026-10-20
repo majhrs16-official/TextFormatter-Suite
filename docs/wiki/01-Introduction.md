@@ -9,13 +9,13 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 ### 🎯 Core Capabilities
 - **Chat Formatting** - Advanced MiniMessage-based formatting with placeholders, gradients, and hover events
 - **Translation** - Multi-provider translation (Google, LibreTranslate) with auto-detection
-- **Message Routing** - iFlow rule engine with SpEL conditions and actions
+- **Message Routing** - iFlow VM with binary `.flow` policies and `HOST` services
 - **Cross-platform** - Spigot/Paper (1.20.6+) — Fabric 1.21+ **production-ready** (fabric-host compiles: Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 - **Real-time Sync** - Discord, Telegram, HTTP, TCP/UDP, WebSocket, Velocity (production-ready)
 
 ### 🏗️ Architecture
 - **Hexagonal Architecture** - Clean separation of core logic from platform adapters
-- **Modular Design** - 29 independent Gradle modules with composite build
+- **Modular Design** - 31 independent Gradle modules with composite build
 - **SPI-based** - ServiceLoader discovery for extensions and modules
 - **Zero-dependency Core** - Core API has zero external dependencies (JDK only)
 - **Clean Architecture** - `host` module has zero compile-time dependencies on `gtranslate`/`ltranslate`; `TranslatorProvider` SPI via ServiceLoader
@@ -30,7 +30,7 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 ### 🔒 Security
 - **Tokens in `char[]`** - Discord, Telegram, LibreTranslate tokens zeroed after use (`Arrays.fill('\0')`)
 - **MiniEscape Complete** - Escapes 10 chars: `< > \ { } [ ] ( ) # @`
-- **SpEL Sandbox** - `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU cache (1024)
+- **No Inline Expression Engine** - SpEL removed; templates only substitute placeholders, and policies run in the iFlow VM
 - **SSRF Protection** - `HttpTransport` validates IPs via `getAllByName()` (RFC 1918/3927/6598)
 - **SafeConstructor** - All YAML loaders use `SafeConstructor` (no arbitrary deserialization)
 - **Signature Verification** - Module Manager supports cosign/gpg verification (mandatory for production)
@@ -144,7 +144,7 @@ chat:
 | `src/manager-spi` | 17 | Module Manager SPI: `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Environment`, manifest/version parsing |
 | `src/manager-core` | 17 | Package installer, local package database, transaction log |
 | `src/manager-apt` | 17 | Repository manager, dependency resolver, APT facade/installer |
-| `src/presets` | 17 | Presets (standard, rpg, staff, minimal) + `TransformEngine` (SpEL sandboxed) |
+| `src/presets` | 17 | Preset catalog (standard, rpg, staff, minimal) + YAML import/export; no execution engine |
 | `src/inworld` | 17 | Signs, chests, books (WORLD/RADIUS), click/hover, glossary/cache |
 | `src/observability` | 17 | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks |
 | `src/extension-api` | 17 | Extension SPI: `Extension`, `ExtensionContext`, Capability system |

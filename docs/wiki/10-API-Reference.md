@@ -240,20 +240,6 @@ final class SemVer implements Comparable<SemVer> {
 }
 ```
 
-#### ExpressionEvaluator
-
-```java
-interface ExpressionEvaluator {
-    String evaluate(String expression, Map<String, Object> bindings)
-        throws ExpressionEvaluationException;
-    
-    Object evaluateObject(String expression, Map<String, Object> bindings)
-        throws ExpressionEvaluationException;
-}
-
-class ExpressionEvaluationException extends Exception {}
-```
-
 #### Channel
 
 ```java

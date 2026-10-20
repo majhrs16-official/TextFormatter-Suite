@@ -26,7 +26,7 @@ config/
     tcp-udp.yml        # TCP/UDP sync config
     velocity.yml       # Velocity proxy config
     websocket.yml      # WebSocket config
-  rules.yml            # iFlow rules (F7+)
+  rules.yml            # legacy editor graph (not evaluated by the runtime)
   manifest.json        # Version & validation info
 ```
 
@@ -232,34 +232,20 @@ token: "your-auth-token"              # Auth token for connections
 port: 9092                            # WebSocket server port
 ```
 
-## iFlow Rules (rules.yml)
+## iFlow Policy (policy.flow)
 
-```yaml
-# rules.yml
-guard:
-  max-steps: 512                      # Max rule steps per message
-filter:
-  dedup-fanout: true                  # Deduplicate fan-out messages
-priority: batch-first                 # BFS from inputs
-nodes:
-  - id: n_chat.global
-    kind: input
-    label: chat.global
-    matcher: {}
-  - id: n_anti_spam
-    kind: cond
-    label: Anti-spam
-    matcher:
-      channel: chat.global
-    condition: "'spam' in #msg.texts[0]"
-    actions:
-      - cancel()
-      - skipTranslate()
-    target: DROP
-edges:
-  - from: n_chat.global
-    to: n_anti_spam
+iFlow v2 executes **binary VM programs** (`.flow`), not YAML rule expressions. At startup
+`VmConfigLoader` tries `policy.flow`; if it is absent or invalid, it falls back to a
+pass-through program. There is no SpEL, no inline condition language and no YAML compilation.
+
+```text
+config-dir/
+├── policy.flow     # binary VM program loaded by VmConfigLoader
+└── rules.yml       # legacy graph used by the web editor; ignored by the runtime
 ```
+
+The legacy `rules.yml` graph may still be imported/exported by the web editor for reference,
+but its `cond` nodes are not evaluated. Policy logic must be compiled into a `.flow` program.
 
 ## Message Configuration (messages.yml)
 
@@ -327,7 +313,7 @@ All configuration files support hot reload. Use `/suite reload` to apply changes
 | `channels/*.yml` | Channel registry rebuild |
 | `translators/*.yml` | Translator reload |
 | `sync/*.yml` | Sink reconnect |
-| `rules.yml` | Rule engine rebuild |
+| `rules.yml` | Legacy editor graph reload; the VM reads `policy.flow` at startup |
 | `messages.yml` | Message catalog reload |
 
 ### Repository Hot Reload

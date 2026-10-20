@@ -1,5 +1,8 @@
 # Diseño arquitectónico integral del CPU virtual de iflow
 
+> **Nota de estado (2026-10-20):** documento histórico de diseño. La migración descrita ya se completó: SpEL fue eliminado del repositorio y la VM `.flow` es la única superficie de políticas ejecutables. Las menciones a SpEL son contexto de partida, no estado actual.
+
+
 Especificación técnica de referencia · Versión 1.0-draft · 13 de octubre de 2026
 
 ## Dictamen técnico previo: viabilidad de la arquitectura

@@ -151,7 +151,6 @@
         "matcher": {
           "channel": "chat.global"
         },
-        "condition": "\u0027spam\u0027 in #msg.texts[0]",
         "actions": [
           "cancel()",
           "skipTranslate()"

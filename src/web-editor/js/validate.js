@@ -101,7 +101,7 @@
         }
         ids.add(n.id);
         if (n.kind === 'cond' && (!n.matcher || Object.keys(n.matcher).length === 0)) {
-          warn('iflow', 'nodes/' + n.id, 'Condición sin matcher (siempre pasa)');
+          warn('iflow', 'nodes/' + n.id, 'Nodo cond sin matcher (siempre pasa)');
         }
         if (n.kind === 'transform') {
           warn('iflow', 'nodes/' + n.id, 'transform requiere motor F7+ (capability transforms=false)');

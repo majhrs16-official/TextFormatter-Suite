@@ -66,8 +66,8 @@ assertEq(typeof d.sync, 'object', 'has sync');
 assertEq(typeof d.perms, 'object', 'has perms');
 assertEq(typeof d.extra, 'object', 'has extra');
 assertEq(Object.keys(d.channels).length, 4, 'defaults has 4 channels');
-assertEq(d.graph.nodes.length, 7, 'defaults has 7 nodes');
-assertEq(d.graph.edges.length, 7, 'defaults has 7 edges');
+assertEq(d.graph.nodes.length, 8, 'defaults has 8 nodes');
+assertEq(d.graph.edges.length, 8, 'defaults has 8 edges');
 
 console.log('\n--- clone ---');
 const orig = { a: 1, b: { c: 2 } };
@@ -78,7 +78,7 @@ assertEq(orig.b.c, 2, 'clone is deep (orig unchanged)');
 console.log('\n--- addNode ---');
 const s1 = Suite.model.defaults();
 const node = Suite.model.addNode(s1, 'input', 'test.channel', 100, 200);
-assertEq(s1.graph.nodes.length, 8, 'addNode increases node count');
+assertEq(s1.graph.nodes.length, 9, 'addNode increases node count');
 assertEq(node.kind, 'input', 'node kind');
 assertEq(node.label, 'test.channel', 'node label');
 assertEq(node.x, 100, 'node x');
@@ -90,7 +90,7 @@ const s2 = Suite.model.defaults();
 const beforeCount = s2.graph.nodes.length;
 Suite.model.removeNode(s2, s2.graph.nodes[0].id);
 assertEq(s2.graph.nodes.length, beforeCount - 1, 'removeNode decreases count');
-assertEq(s2.graph.edges.length, 6, 'removeNode removes connected edges');
+assertEq(s2.graph.edges.length, 7, 'removeNode removes connected edges');
 
 console.log('\n--- addChannel ---');
 const s3 = Suite.model.defaults();
@@ -98,7 +98,7 @@ const beforeCh = Object.keys(s3.channels).length;
 Suite.model.addChannel(s3, 'new.channel', ['msg1']);
 assertEq(Object.keys(s3.channels).length, beforeCh + 1, 'addChannel adds channel');
 assertEq(s3.channels['new.channel'].messages, ['msg1'], 'channel has seed messages');
-assertEq(s3.graph.nodes.length, 8, 'addChannel adds input node');
+assertEq(s3.graph.nodes.length, 9, 'addChannel adds input node');
 
 console.log('\n--- renameChannel ---');
 const s4 = Suite.model.defaults();
@@ -137,9 +137,10 @@ assert(
 );
 const imported = Suite.model.importFromFiles(Suite.model.defaults(), files);
 assertEq(imported.channels['chat.global'].name, 'chat.global', 'import restores channel');
-assertEq(imported.graph.nodes.length, 7, 'import restores nodes');
-assertEq(imported.graph.edges.length, 7, 'import restores edges');
+assertEq(imported.graph.nodes.length, 8, 'import restores nodes');
+assertEq(imported.graph.edges.length, 8, 'import restores edges');
 
 console.log('\n=== SUMMARY ===');
-console.log('All model tests completed');
-process.exit(0);
+console.log(`Passed: ${passed}`);
+console.log(`Failed: ${failed}`);
+process.exit(failed === 0 ? 0 : 1);

@@ -1,6 +1,6 @@
 # host — Shared Bootstrap, Dispatch & Configuration
 
-> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapter (`spigot-host`) extends this; `fabric-host` is **excluded from build** (42 compile errors, Spigot APIs).
+> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapters (`spigot-host`, `fabric-host`) extend this.
 
 ---
 
@@ -22,6 +22,7 @@
 - **No command registration** — platform adapters handle that
 - **No event listening** — platform adapters handle that
 - **No module implementations** — only wires modules loaded by `kernel`
+- **No expression engine** — policy logic lives in iFlow VM programs (`.flow`); templates only substitute placeholders
 
 ---
 
@@ -49,7 +50,7 @@
 | Consumer | Usage |
 |----------|-------|
 | `spigot-host` | Extends `SuiteBootstrap`, provides platform SPIs |
-| `fabric-host` | **Excluded** — extends `SuiteBootstrap` but not in build |
+| `fabric-host` | Extends `SuiteBootstrap`; compila, no probado en servidor real |
 | `observability` | Uses `host` services for metrics |
 | `presets` | Uses `host` config & services |
 | `manager-apt` | Module management facade wired by the platform hosts |
@@ -99,7 +100,6 @@ Services registered:
   - TextFormatter (from textformatter module)
   - PlaceholderResolver (from platform adapter)
   - UserLanguageStore (YamlUserLanguageStore)
-  - ExpressionEvaluator (from textformatter module)
          ↓
 ConfigLoader.load() → HostConfig + validators
          ↓
@@ -189,6 +189,6 @@ ConfigSchemaGenerator.generate() → web-editor schema files
 - [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation (SPI providers, runtime discovery)
 - [transport](../transport/README.md) — HTTP transport for sync
 - [spigot-host](../spigot-host/README.md) — Bukkit platform adapter
-- [fabric-host](../fabric-host/README.md) — **Fabric platform adapter (excluded from build)**
+- [fabric-host](../fabric-host/README.md) — Fabric platform adapter (compila; no probado en servidor real)
 - [observability](../observability/README.md) — Metrics on host services
 - [presets](../presets/README.md) — Preset management using host config

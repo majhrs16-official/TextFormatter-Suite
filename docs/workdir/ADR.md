@@ -484,3 +484,65 @@ Hechos que sostienen la decisión (verificados):
 (test que lo fija), `docs/workdir/PLAN.md` (D35), `src/iflow/README.md` y `src/iflow/HDL.md`. Sin cambios
 de comportamiento: el código ya se comportaba así; ahora está declarado y probado.
 
+
+---
+
+## Decisión 2026-10-20 — SpEL fuera del repositorio; la VM es la única superficie de políticas
+
+**Contexto.** iFlow v2 ya había sustituido el motor de reglas basado en SpEL/regiones por una VM de
+16 bits con bytecode `.flow`. Sin embargo, quedaban restos activos o documentados como actuales:
+
+- el SPI `ExpressionEvaluator` y su implementación `SpelExpressionEvaluator` en `textformatter`;
+- el paso `<expr>` de `TemplateRenderer`;
+- `TransformEngine` y las condiciones/acciones SpEL del modelo de presets;
+- el campo “Condition (SpEL)” del editor web;
+- las dependencias `spring-expression` y `spring-beans`;
+- documentación de módulos y wiki que seguía presentando SpEL como una capacidad vigente.
+
+`TransformEngine` no tenía consumidores de producción y `Preset.apply(...)` ya era un placeholder. El
+arreglo de sus bindings registrado en el changelog anterior era mantenimiento de código muerto, **no**
+la corrección de un bug de producción.
+
+**Decisión.** Eliminar SpEL de todo el repositorio. La única superficie de políticas ejecutables es la
+VM de iFlow: programas binarios `.flow` cargados por `VmConfigLoader` y ejecutados por
+`VmPolicyEngine`/`VmInterpreter`, con servicios `HOST` y *fuel budget*. Las plantillas de
+`textformatter` quedan limitadas a placeholders, MiniMessage y traducción `<tr>`.
+
+Cambios aplicados:
+
+1. Retirar `ExpressionEvaluator`, `ExpressionEvaluationException`, `SpelExpressionEvaluator` y el paso
+   `<expr>`.
+2. Retirar `TransformEngine`, su test, `PresetRule` y las condiciones/acciones SpEL de presets.
+3. Retirar el campo de condición del editor web; el grafo `rules.yml` queda como material legacy y no
+   se evalúa en runtime.
+4. Retirar `spring-expression`/`spring-beans`, actualizar lockfiles y metadata de verificación.
+5. Actualizar README, módulos, wiki, AUDITORIA, PLAN y CHANGELOG; dejar las menciones históricas
+   marcadas como tales.
+
+**Alternativas consideradas.**
+
+1. **Mantener SpEL solo en plantillas, con sandbox.** Ventajas: conserva una función existente.
+   Limitaciones: mantiene dos lenguajes de política, una dependencia Spring y una superficie de RCE que
+   la VM ya no necesita. Evaluación: **descartada**.
+2. **Migrar las condiciones SpEL de presets a `.flow`.** Ventajas: conserva la intención funcional.
+   Limitaciones: no hay consumidor de presets ni compilador integrado; sería diseñar una función nueva
+   sobre código muerto. Evaluación: **descartada**; si se necesita, se implementará como programa de la
+   VM, no como expresión inline.
+3. **Eliminación completa.** Ventajas: una sola superficie ejecutable, menos dependencias, documentación
+   coherente. Limitaciones: rompe APIs internas (`ExpressionEvaluator`, constructor de `Preset`) sin
+   consumidores de producción. Evaluación: **aceptada**.
+
+**Consecuencias.**
+
+- `textformatter` ya no depende de Spring; los lockfiles de los módulos que lo consumían dejan de
+  arrastrar `spring-core`, `spring-expression`, `spring-beans` y `spring-jcl`.
+- La metadata de verificación conserva los componentes Spring que usa el classpath de build de
+  Fabric Loom; no aparecen en ningún lockfile de runtime ni son dependencias de la aplicación.
+- El editor web no ofrece edición de condiciones; un `rules.yml` importado puede conservar la clave,
+  pero no se evalúa ni se vuelve a mostrar.
+- Las menciones a SpEL en documentos históricos (release notes antiguas, prompts de diseño, auditorías)
+  se conservan como registro, no como estado actual.
+- Cualquier política nueva debe implementarse en la VM y documentarse en `src/iflow/README.md`.
+
+**Implementación (2026-10-20).** Código, build, lockfiles, metadata, schema del editor y documentación
+actualizados; `buildAll` pasa con 766 tests JVM (0 fallos, 11 skipped).

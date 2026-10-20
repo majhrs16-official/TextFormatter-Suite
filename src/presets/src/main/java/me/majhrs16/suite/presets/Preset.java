@@ -22,15 +22,13 @@ public final class Preset {
     private final List<String> tags;
     private final PresetConfig config;
     private final List<PresetChannel> channels;
-    private final List<PresetRule> rules;
     private final List<PresetTranslator> translators;
     private final List<PresetSync> sync;
 
     public Preset(String id, String name, String description, String author,
                   String version, String minSuiteVersion, List<String> tags,
                   PresetConfig config, List<PresetChannel> channels,
-                  List<PresetRule> rules, List<PresetTranslator> translators,
-                  List<PresetSync> sync) {
+                  List<PresetTranslator> translators, List<PresetSync> sync) {
         this.id = id;
         this.name = name;
         this.description = description;
@@ -40,7 +38,6 @@ public final class Preset {
         this.tags = tags;
         this.config = config;
         this.channels = channels;
-        this.rules = rules;
         this.translators = translators;
         this.sync = sync;
     }
@@ -55,7 +52,6 @@ public final class Preset {
     public List<String> tags() { return tags; }
     public PresetConfig config() { return config; }
     public List<PresetChannel> channels() { return channels; }
-    public List<PresetRule> rules() { return rules; }
     public List<PresetTranslator> translators() { return translators; }
     public List<PresetSync> sync() { return sync; }
 
@@ -66,7 +62,6 @@ public final class Preset {
                       List<Channel> channelList) {
         // Apply config
         // Apply channels
-        // Apply rules
         // Apply translators
         // Apply sync
     }
@@ -161,30 +156,6 @@ public final class Preset {
         public String name() { return name; }
         public float volume() { return volume; }
         public float pitch() { return pitch; }
-    }
-
-    public static final class PresetRule {
-        private final String id;
-        private final int priority;
-        private final String condition;
-        private final String action;
-        private final String targetChannel;
-
-        public PresetRule(String id, int priority, String condition,
-                         String action, String targetChannel) {
-            this.id = id;
-            this.priority = priority;
-            this.condition = condition;
-            this.action = action;
-            this.targetChannel = targetChannel;
-        }
-
-        // Getters
-        public String id() { return id; }
-        public int priority() { return priority; }
-        public String condition() { return condition; }
-        public String action() { return action; }
-        public String targetChannel() { return targetChannel; }
     }
 
     public static final class PresetTranslator {

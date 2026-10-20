@@ -6,8 +6,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 
 /**
- * SPI provider for the Presets module: provides preset configurations
- * and the transform engine.
+ * SPI provider for the Presets module: provides preset configurations.
  */
 public final class PresetsModule implements Module {
 
@@ -18,7 +17,6 @@ public final class PresetsModule implements Module {
             .contractVersion(SemVer.of(2, 1, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("presets", SemVer.of(2, 1, 0)))
-            .provide(Capability.of("transform-engine", SemVer.of(2, 1, 0)))
             .build();
     }
 }

@@ -6,7 +6,6 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.spi.ExpressionEvaluator;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
@@ -19,7 +18,6 @@ import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.textformatter.scripting.SpelExpressionEvaluator;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
@@ -111,7 +109,7 @@ public final class SuiteHost {
         HostConfig config = configResult.config();
         ChannelRegistry channels = channelsResult.config();
 
-        // Load VM policy program (compiles rules.yml to bytecode or loads native .flow)
+        // Load the VM policy program (policy.flow or the pass-through fallback)
         me.majhrs16.suite.iflow.vm.isa.ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
 
         // Create rate limiter (shared with VM engine)
@@ -121,10 +119,7 @@ public final class SuiteHost {
         VmPolicyEngine router = new VmPolicyEngine(channels, permissions, rateLimit);
         router.setProgram(program);
 
-        // Create separate evaluator for template rendering (sandboxed)
-        ExpressionEvaluator templateEvaluator = new SpelExpressionEvaluator(
-            placeholders, translation, logger);
-        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger, templateEvaluator);
+        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
         return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
     }
 

@@ -27,7 +27,7 @@ Esta release consolida el núcleo de TextFormatter Suite tras las auditorías de
 | Tokens en `char[]` | `JdaDiscordSink`, `DiscordSink`, `TelegramSink`, `LTranslate` usan `char[]` + `Arrays.fill('\0')` |
 | MiniEscape completo | Escapa `< > \ { } [ ] ( ) # @` |
 | PAPI dynamic check | `SpigotPlaceholderResolver.available()` ya existía |
-| SpEL LRU cache | `LruExpressionCache` (1024 entradas) en `SpelExpressionEvaluator` |
+| SpEL elimination | Inline evaluator removed; policies run in the iFlow VM (`.flow`) |
 | SSRF protection | `HttpTransport` valida IPs contra RFC 1918/3927/6598, loopback, multicast, deny patterns configurables |
 | DependencyVerification | `verification-metadata.xml` con SHA256/SHA512 generado; `dependencyLocking` en build.gradle |
 
@@ -36,7 +36,7 @@ Esta release consolida el núcleo de TextFormatter Suite tras las auditorías de
 - **OBS-01**: `DebugEndpoint` executor shutdown en `stop()`
 - **CFG-01**: `ConfigLoader.LoadResult` con errores explícitos, logging ERROR level
 - **MGR-02**: `register()` SPI-only + `discoverAll()` para kernel
-- **SEC-01**: SpEL LRU cache (1024) implementado
+- **SEC-01**: SpEL eliminado; motor inline retirado del repositorio
 - **SEC-02**: SSRF protection en `HttpTransport` (deny patterns RFC 1918/3927/6598)
 
 ---
@@ -80,7 +80,7 @@ Esta release consolida el núcleo de TextFormatter Suite tras las auditorías de
 
 | Vector | Estado | Mitigación |
 |--------|--------|------------|
-| SpEL RCE (CWE-94) | ✅ | `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU 1024 |
+| SpEL RCE (CWE-94) | ✅ | SpEL eliminado; única superficie ejecutable: VM `.flow` |
 | YAML deserialization (CWE-502) | ✅ | `SafeConstructor` en 4 loaders |
 | MiniMessage injection | ✅ | MiniEscape completo (10 chars) |
 | Token leakage | ✅ | `char[]` + `Arrays.fill('\0')` |

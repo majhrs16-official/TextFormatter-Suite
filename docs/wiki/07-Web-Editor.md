@@ -76,7 +76,7 @@ The editor is automatically deployed to: `https://majhrs16-official.github.io/Te
 1. Select **iFlow** in rail
 2. Drag nodes from palette to canvas:
    - **Input** - Message entry point
-   - **Condition** - SpEL filter
+   - **Condition** - Legacy matcher/filter (no expression evaluation)
    - **Transform** - Rewrite, sounds, sleep
    - **Loop** - Retry logic
    - **Sleep** - Delay
@@ -196,7 +196,7 @@ The editor is automatically deployed to: `https://majhrs16-official.github.io/Te
 | Node | Icon | Description |
 |------|------|-------------|
 | Input | 📥 | Message entry point |
-| Condition | ⬢ | SpEL filter |
+| Condition | ⬢ | Legacy matcher/filter (no inline expressions) |
 | Transform | 🔄 | Rewrite, sounds, sleep |
 | Loop | 🔄 | Retry/loop logic |
 | Sleep | 😴 | Delay |
@@ -239,7 +239,7 @@ The **Rules** view provides a dedicated visual editor for complex iFlow rules.ym
 | Node | Icon | Description | Key Properties |
 |------|------|-------------|----------------|
 | Input | 📥 | Message entry point | Channel |
-| Condition | ⬢ | SpEL filter + actions | Matcher (channel/sender/receiver/direction), Condition (SpEL), Actions (10), Target, Priority |
+| Condition | ⬢ | Legacy matcher/filter + actions | Matcher (channel/sender/receiver/direction), Actions (10), Target, Priority; expression field removed |
 | Transform | 🔄 | Rewrite, sounds, sleep | Transforms[] (8 ops) |
 | Loop | 🔄 | Retry/loop logic | Loop back to (cond node) |
 | Sleep | 😴 | Delay | Milliseconds |
@@ -257,9 +257,7 @@ The Condition node has the most comprehensive properties panel:
 - **Receiver** — recipient name pattern
 - **Direction** — INITIATOR, OTHERS, ALL, CONSOLE, WORLD, RADIUS, PERMISSION, SPECIFIC
 
-**Condition (SpEL)**:
-- Spring Expression Language with context: `#msg.texts[0]`, `#msg.sender`, `#msg.channel`, etc.
-- Example: `'spam' in #msg.texts[0]` or `#msg.sender.hasPermission('admin')`
+> **Legacy graph only:** the condition expression field was removed with SpEL. `rules.yml` is not evaluated by the iFlow VM; policy logic lives in `policy.flow`. A previously imported `condition` key may be preserved on round-trip but is not shown or executed.
 
 **Actions** (10 available):
 | Action | Description |
@@ -307,7 +305,7 @@ Uses the existing Transform Operations panel (8 ops):
 
 #### Round-trip YAML
 - Rules graph ↔ `rules.yml` with zero data loss
-- All properties preserved: matcher, condition, actions, target, priority, loopBack, redirects
+- All properties preserved: matcher, actions, target, priority, loopBack, redirects; unknown legacy keys are ignored by the editor
 - Schema v2.2 manifest validation
 
 ## Import/Export Details

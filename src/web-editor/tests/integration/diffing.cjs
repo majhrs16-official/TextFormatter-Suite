@@ -107,7 +107,7 @@ setTimeout(() => {
   out.push('label updated: ' + firstNow.querySelector('.n-label').textContent);
 
   for (let i = 0; i < 20; i++) window.StateStore.mutate('noop' + i, () => {});
-  out.push('nodes after 20 renders: ' + nodes().length + ' (expect 7)');
+  out.push('nodes after 20 renders: ' + nodes().length + ' (expect 16)');
   out.push('first element still same ref: ' + (nodes().find(el => el.dataset.id === firstId) === firstRef));
 
   // graph integrity: edges match state, no orphans

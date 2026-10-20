@@ -109,8 +109,8 @@ public final class CommandExecutor {
      * Retorna true si la acción se ejecutó correctamente.
      */
     public boolean execute(String actionName, Context ctx) {
-        // TODO: Implementar evaluación de scripts (SpEL o simple template)
-        // Por ahora, delega a implementaciones hardcodeadas en hosts
+        // TODO: implementar las acciones de comandos. La lógica de políticas
+        // pertenece a los programas .flow de la VM, no a expresiones inline.
         return false;
     }
 }

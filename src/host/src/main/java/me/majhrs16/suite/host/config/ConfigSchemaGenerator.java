@@ -461,7 +461,9 @@ public final class ConfigSchemaGenerator {
         cg.put("lang-target", "auto");
         cg.put("messages", List.of("&7👉 &f%player_name%&7: %content%", "<green>💬 %content%</green>"));
         cg.put("tooltips", List.of("Hover: %lang_source% → %lang_target%"));
-        cg.put("sounds", List.of(Map.of("name", "entity.experience_orb.pickup", "volume", 1.0, "pitch", 1.0)));
+        Map<String, Object> cgSound = new LinkedHashMap<>();
+        cgSound.put("volume", 1.0); cgSound.put("name", "entity.experience_orb.pickup"); cgSound.put("pitch", 1.0);
+        cg.put("sounds", List.of(cgSound));
         cg.put("type", "chat");
         channels.put("chat.global", cg);
 
@@ -493,7 +495,9 @@ public final class ConfigSchemaGenerator {
         sa.put("lang-target", "auto");
         sa.put("messages", List.of("<red>⚠ %content%</red>"));
         sa.put("tooltips", new ArrayList<>());
-        sa.put("sounds", List.of(Map.of("name", "block.note_block.pling", "volume", 0.8, "pitch", 1.2)));
+        Map<String, Object> saSound = new LinkedHashMap<>();
+        saSound.put("volume", 0.8); saSound.put("name", "block.note_block.pling"); saSound.put("pitch", 1.2);
+        sa.put("sounds", List.of(saSound));
         sa.put("type", "chat");
         channels.put("staff.alert", sa);
 
@@ -550,8 +554,10 @@ public final class ConfigSchemaGenerator {
 
     private static Map<String, Object> buildDefaultGraph() {
         Map<String, Object> graph = new LinkedHashMap<>();
-        graph.put("guard", Map.of("max-steps", 512));
-        graph.put("filter", Map.of("dedup-fanout", true, "priority", "batch-first"));
+        Map<String, Object> guard = new LinkedHashMap<>(); guard.put("max-steps", 512);
+        graph.put("guard", guard);
+        Map<String, Object> filter = new LinkedHashMap<>(); filter.put("priority", "batch-first"); filter.put("dedup-fanout", true);
+        graph.put("filter", filter);
         graph.put("priority", "batch-first");
 
         List<Map<String, Object>> nodes = new ArrayList<>();
@@ -563,7 +569,6 @@ public final class ConfigSchemaGenerator {
         Map<String, Object> n2 = new LinkedHashMap<>();
         n2.put("id", "n_cond"); n2.put("kind", "cond"); n2.put("label", "filtro anti-silencio");
         n2.put("matcher", Map.of("channel", "chat.global"));
-        n2.put("condition", "'spam' in #msg.texts[0]");
         n2.put("actions", List.of("cancel()", "skipTranslate()"));
         n2.put("target", "DROP"); n2.put("priority", 100); n2.put("x", 340); n2.put("y", 70); n2.put("w", 150);
         nodes.add(n2);

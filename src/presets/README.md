@@ -1,20 +1,23 @@
-# presets — Transform Preset Management
+# presets — Transform Preset Catalog
 
-> **Purpose**: Manages YAML-based transform presets that define formatting rules, channel mappings, and transform pipelines.
+> **Purpose**: Catalogs built-in transform presets, imports/exports preset YAML, and exposes the preset data model (`Preset`, `PresetChannel`, `PresetConfig`, `PresetTranslator`, `PresetSync`).
 
 ---
 
 ## 1. Responsibilities
 
-- **Preset loading** — loads presets from YAML files
-- **Preset management** — `PresetManager` registers, retrieves, applies presets
-- **Transform engine** — `TransformEngine` executes preset transforms
-- **Module registration** — `PresetsModule` registers manager/engine
+- **Built-in catalog** — Standard, RPG, Staff and Minimal preset definitions
+- **Preset management** — `PresetManager` registers, retrieves and exports presets
+- **YAML import/export** — reads/writes preset files with SnakeYAML `SafeConstructor`
+- **Module descriptor** — `PresetsModule` declares the `presets` capability
 
 ---
 
 ## 2. Non-Responsibilities
 
+- **No transform execution** — there is no `TransformEngine`; `Preset.apply(...)` is an empty placeholder
+- **No policy evaluation** — routing, conditions and actions belong to the iFlow VM (`.flow`)
+- **No inline expressions** — SpEL and `PresetRule` conditions were removed from the repository
 - **No message routing** — `iflow` handles routing
 - **No formatting** — delegates to `textformatter`
 - **No platform-specific code** — pure Java/YAML
@@ -25,23 +28,18 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `Module`, `Message`, `Channel` |
-| `textformatter` | Compile | `TextFormatter`, `ChannelRegistry` |
-| `iflow` | Compile | `Router`, `Rule` for preset transforms |
-| `host` | Compile | `HostConfig` for preset config |
-| `spring-expression` | Compile | SpEL in preset definitions |
-| `spring-beans` | Compile | Bean utilities |
-| `snakeyaml` | Compile | YAML parsing |
+| `core-api` | Compile | `Module`, `Capability`, `SemVer` |
+| `textformatter` | Compile | `Channel` model used by preset channels |
+| `host` | Compile | `HostConfig` model for preset config |
+| `snakeyaml` | Compile | YAML parsing with `SafeConstructor` |
 | `kernel` | Test | Test fixtures |
+| `junit-jupiter` | Test | Unit tests |
 
 ---
 
 ## 4. Consumers
 
-| Consumer | Usage |
-|----------|-------|
-| `spigot-host` | Preset-based formatting |
-| `fabric-host` | Preset-based formatting |
+No production consumer is wired yet. `host`, `spigot-host` and `fabric-host` do not load presets at runtime; the module is built and tested in isolation.
 
 ---
 
@@ -49,40 +47,21 @@
 
 | Component | Role |
 |-----------|------|
-| `Preset` | Preset model: id, name, format, transforms, conditions |
-| `PresetManager` | Registry: `loadPresets()`, `getPreset(id)`, `applyPreset(message, preset)` |
-| `TransformEngine` | Executes preset transforms using `TextFormatter` and `Router` |
-| `PresetsModule` | `Module` registering manager and engine |
+| `PresetManager` | Registry, built-in definitions, YAML import/export |
+| `Preset` | Root preset model + nested `PresetConfig`, `PresetChannel`, `PresetTranslator`, `PresetSync` |
+| `PresetsModule` | `Module` descriptor; provides the `presets` capability |
 
 ---
 
 ## 6. Data Flow
 
 ```text
-PresetManager.loadPresets() → reads YAML from config directory
-         ↓
-Preset objects registered by ID
-         ↓
-TransformEngine.applyPreset(message, presetId)
-         ↓
-For each transform in preset:
-  - TextFormatter.format() for format changes
-  - Router.route() for routing transforms
-  - TranslationService for translation transforms
-         ↓
-Transformed message returned
+Preset YAML ──→ PresetManager.importFromYaml() ──→ Preset model
+Preset model ──→ PresetManager.exportToYaml() ──→ Preset YAML
+Built-in definitions ──→ PresetManager.getPreset(id)
 ```
 
-**Config** (`HostConfig.presets`):
-```yaml
-presets:
-  - id: "default"
-    name: "Default Format"
-    format: "<gold>[<channel>] <white><message>"
-    transforms:
-      - type: "UPPERCASE"
-        condition: "message.contains('urgent')"
-```
+There is no `Preset → message` execution path. Any future execution must be implemented through iFlow VM programs, not by reintroducing an inline expression engine.
 
 ---
 
@@ -90,37 +69,32 @@ presets:
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| `PresetsModule` | `PresetsModule.java` | `ModuleLoader` → `SuiteBootstrap` |
-| `PresetManager.applyPreset()` | `PresetManager.java` | `MessageDispatcher` or commands |
+| `PresetManager.importFromYaml()` | `PresetManager.java` | Tests / future host integration |
+| `PresetManager.exportToYaml()` | `PresetManager.java` | Tests / future host integration |
+| `PresetsModule.descriptor()` | `PresetsModule.java` | Kernel (when registered) |
 
 ---
 
-## 8. Extension Points
+## 8. Limitations
 
-| Extension Point | How to Extend |
-|-----------------|---------------|
-| Custom transform types | Extend `TransformEngine` with new transform handlers |
-| Preset storage | Replace YAML loading with DB/API in `PresetManager` |
-| Preset conditions | Add SpEL functions in `ScriptSurface` (iflow) |
+- `Preset.apply(...)` does nothing; presets are currently data/catalog only.
+- The `PresetsModule` descriptor exists, but the module has no `META-INF/services` registration and is not loaded by `SuiteBootstrap`.
+- Preset rules with SpEL conditions/actions were removed with the rest of the inline expression engine.
 
 ---
 
 ## 9. Exploration Path
 
 ```
-1. PresetsModule.java             → Module registration
-2. PresetManager.java             → Preset registry & loading
-3. Preset.java                    → Preset model
-4. TransformEngine.java           → Transform execution
-5. host/HostConfig.java           → Preset config structure
+1. PresetManager.java   → Built-in presets, import/export
+2. Preset.java          → Data model and nested value objects
+3. PresetsModule.java   → Module descriptor/capability
 ```
 
 ---
 
 ## 10. Related Modules
 
-- [core-api](../core-api/README.md) — Module SPI, Message, Channel
-- [textformatter](../textformatter/README.md) — Formatting engine
-- [iflow](../iflow/README.md) — Routing for transforms
-- [host](../host/README.md) — Config loading
-- [kernel](../kernel/README.md) — Loads module
+- [textformatter](../textformatter/README.md) — Channel model and formatting pipeline
+- [host](../host/README.md) — Shared configuration types
+- [iflow](../iflow/README.md) — VM policies and routing

@@ -1,4 +1,7 @@
 # DISEÑO ARQUITECTÓNICO INTEGRAL DEL CPU VIRTUAL DE IFLOW
+
+> **Nota de estado (2026-10-20):** documento histórico de diseño. La migración descrita ya se completó: SpEL fue eliminado del repositorio y la VM `.flow` es la única superficie de políticas ejecutables. Las menciones a SpEL son contexto de partida, no estado actual.
+
 ## Especificación técnica de la ISA, el modelo de ejecución, la memoria, el firmware y la integración con el motor de enrutamiento de mensajes
 
 ### 1. Objetivo y rol

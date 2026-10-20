@@ -31,6 +31,8 @@ Todos los cambios relevantes de TextFormatter Suite se documentan aquí.
 - README y documentación de módulos sincronizados con 31 módulos y estados
   verificables; la wiki de iFlow se marca como histórica y enlaza a la VM actual.
 - Javadoc agregado para todos los subproyectos (`javadocAll`).
+- SpEL eliminado de todo el repositorio: se retiraron el SPI `ExpressionEvaluator`, `SpelExpressionEvaluator`, el paso `<expr>` de `TemplateRenderer`, las reglas SpEL de presets, el campo de condición del editor web y las dependencias `spring-expression`/`spring-beans`. La única superficie de políticas ejecutables es la VM de iFlow (`.flow`).
+- `TransformEngine` eliminado por ser código legado sin consumidores de producción; su test también se retiró.
 
 ### Fixed
 
@@ -39,7 +41,6 @@ Todos los cambios relevantes de TextFormatter Suite se documentan aquí.
 - Rechazo de `userinfo` en `HttpTransport` antes de validar la URL.
 - `TransactionLog` tolera nulos, separadores y líneas corruptas.
 - Validación de nombres/versiones y límites de recursos en el Module Manager.
-- `TransformEngine`: los bindings con `sender`/`recipient` nulos ya no lanzan NPE silenciosa y las variables SpEL se registran en el contexto de evaluación; antes las condiciones y transformaciones nunca se aplicaban.
 - `DefaultSyncBus.stop()` ahora detiene cada `SyncSink` (no solo su worker) y despierta al procesador global para no esperar el timeout de 10 s.
 - `Suite.utils.esc` del editor web escapa correctamente HTML; el guard
   `max-steps` acota el total de pasos de la simulación.

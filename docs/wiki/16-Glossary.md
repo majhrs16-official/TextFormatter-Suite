@@ -8,9 +8,6 @@ An entity that can send or receive messages. Types: `PLAYER`, `CONSOLE`, `SYSTEM
 **ADR**
 Architecture Decision Record - documents important architectural decisions.
 
-**ADR** (SpEL)
-Spring Expression Language - used for iFlow conditions and actions.
-
 ## B
 
 **Built-in Preset**
@@ -63,9 +60,6 @@ Manages extension lifecycle: discovery, loading, unloading, reloading.
 
 **ExtensionConfig**
 Immutable configuration holder for extensions.
-
-**ExpressionEvaluator**
-SPI for evaluating expressions (SpEL) in templates and rules.
 
 ## F
 
@@ -222,15 +216,12 @@ Result of routing a message for one recipient.
 Interface for message routing (iFlow).
 
 **Router (iFlow)**
-See `DefaultRouter`.
+See `VmPolicyEngine` and `VmInterpreter`.
 
 ## S
 
 **ScriptSurface**
-Exposed to SpEL expressions in rules, provides atomic operations.
-
-**ScriptSurface**
-Interface exposed to SpEL scripts in iFlow rules.
+Service surface exposed to VM programs for atomic message operations.
 
 **SemVer**
 Semantic Versioning (major.minor.patch).
@@ -240,9 +231,6 @@ Java SPI mechanism for module discovery.
 
 **SPI**
 Service Provider Interface - Java's extension mechanism.
-
-**SpEL**
-Spring Expression Language - used for iFlow conditions/actions.
 
 **SuiteHost**
 Composition root: assembles channels, dispatcher, translators, modules.
@@ -273,23 +261,11 @@ Renders templates to Adventure Components.
 **TextFormatter**
 Module for MiniMessage rendering and channel formatting.
 
-**TransformEngine**
-Executes `TransformOp` operations on messages.
-
-**TransformEngine**
-Engine for executing transform operations on messages.
-
 **TransformOp**
 Atomic transform operation: `rewrite`, `sounds`, `sleep`, `setLangSource`, `setLangTarget`, `setColorMode`, `setFormatPapi`, `setChannel`.
 
-**TransformOp**
-See `TransformOp`.
-
 **Translator**
 Interface for translation providers (Google, LibreTranslate).
-
-**Translator**
-Interface for translation providers.
 
 **TranslationService**
 Manages translation providers, caching, fallback.

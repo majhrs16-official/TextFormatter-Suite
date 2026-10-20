@@ -1,7 +1,9 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-17 (**ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`) ✅ — ver sección final**; antes: fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, SpEL allowlist, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
+> Última actualización: 2026-10-20 (**SpEL eliminado de todo el repositorio; la única superficie de políticas es la VM de iFlow `.flow`**; antes: ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all AUDITORIA.md P0/P1/P2 fixed).
+
+> **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
 
 ---
 
@@ -39,12 +41,12 @@
 
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
 - ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents, **completo y funcional**).
-- ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 99 tests unitarios + integración (`npm run check` verde).
+- ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 108 tests unitarios + integración (`npm run check` verde).
 - ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
 - ✅ **Suite corriendo en Fabric** (mod `TextFormatterSuite` instalable, thin-jar construido, Fabric 1.21 + Fabric API 0.100.5).
 - ✅ **Módulos core compilando + tests pasando**: core-api, kernel, textformatter, iflow, gtranslate, ltranslate, sync-*, host, messages, tester, transport, manager-api, manager-impl, presets, inworld, observability, extension-api, example-extension, loadtest, performance, sync-websocket.
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
-- ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL LRU cache (1024), SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
+- ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL eliminado, SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
 - ✅ **Clean Architecture (Translator SPI)**: `host` ya no depende de `gtranslate`/`ltranslate` en compile-time. Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`). Proveedores se descubren via `ServiceLoader` en runtime. Tests usan `testImplementation` para translators.
 - ✅ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
 - ✅ **sync-telegram, sync-http, sync-tcpudp**: ✅ **SyncBus registered** - full SyncBus integration with per-sink isolation, retry/backoff
@@ -189,7 +191,7 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 
 ### FASE 6 — Motor de reglas iFlow enriquecido ✅
 - Destino "channel" en reglas (CHANNEL_REDIRECT).
-- Permisos/PAPI dentro de SpEL.
+- Permisos/PAPI dentro de la VM.
 - `MessageEventBus` → `MessageEvent` en `core-api/event/` (C2 arreglado: `cancelled` no final).
 - `transform` real (F7+): rewrite, sounds, sleep, setLangSource, setLangTarget, setColorMode, setFormatPapi, setChannel.
 
@@ -265,8 +267,7 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 
 ### FASE 14 — Presets, `transform` real, `engine.parallel` knob ✅
 - Presets module con configuraciones predefinidas (standard, rpg, staff, minimal).
-- TransformEngine con SpEL sandboxed para transformaciones reales.
-- PresetManager para cargar/aplicar presets.
+- La VM ejecuta las transformaciones; `PresetManager` mantiene el catálogo y el import/export YAML (sin motor propio).
 - `engine.parallel` knob para procesamiento paralelo de mensajes.
 - Integración en spigot-host/fabric-host.
 - Web-editor UI para presets.
@@ -302,7 +303,7 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 | **OBS-01** | 🟡 Media | DebugEndpoint executor sin shutdown | `executor.shutdown()` en `stop()` |
 | **CFG-01** | 🟡 Media | ConfigLoader degradaba silenciosamente a defaults | `LoadResult` con errores, logging ERROR level |
 | **MGR-02** | 🟠 Alta | `register()` no integraba con kernel | `register()` SPI-only + `discoverAll()` |
-| **SEC-01** | 🟡 Media | SpEL cache ilimitado | LRU cache 1024 en `LruExpressionCache` |
+| **SEC-01** | 🟡 Media | SpEL cache ilimitado (histórico) | SpEL eliminado; VM `.flow` |
 | **SEC-02** | 🟡 Media | SSRF en HttpTransport | Validación IPs privadas (RFC 1918, 3927, 6598) + deny patterns |
 
 ---
@@ -311,8 +312,8 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 
 ### ✅ COMPLETADO (2026-09-26)
 - Module Manager (F12) núcleo: version resolver, dependency resolver (module.yml), SHA256, register() SPI, discoverAll(), discoverAvailableModules(), manifest validation
-- Security Sprint 3: char[] tokens, MiniEscape completo, PAPI check, SpEL LRU cache (1024), SSRF protection, DependencyVerification (verification-metadata.xml)
-- Fixes críticos: Message.toJson(), DebugEndpoint executor shutdown, ConfigLoader LoadResult, register() SPI-only, SpEL cache, SSRF
+- Security Sprint 3: char[] tokens, MiniEscape completo, PAPI check, SpEL eliminado, SSRF protection, DependencyVerification (verification-metadata.xml)
+- Fixes críticos: Message.toJson(), DebugEndpoint executor shutdown, ConfigLoader LoadResult, register() SPI-only, SpEL eliminado, SSRF
 - Repository Abstraction (F12-14): config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
 - sync-velocity: Production-ready (async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping)
 - Spigot build: Fix aplicado (Paper API 1.21.4)
@@ -325,9 +326,9 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 - Translation cache/dedup tests (15 tests)
 - gtranslate/ltranslate extended tests (edge cases, malformed, unicode, rate limit)
 - E2E pipeline tests (12 tests)
-- SpEL security tests (14 tests)
+- Tests de seguridad de la VM y del sandbox de servicios HOST
 - Module Manager local HTTP repository tests (4 tests)
-- **Web Editor Rules Graph Editor**: 8 tipos nodo (input/cond/transform/loop/sleep/output/redirect/channel_redirect), matcher (channel/sender/receiver/direction), condition (SpEL), 10 actions (cancel/skipTranslate/rewrite/sounds/sleep/setLangSource/setLangTarget/setFormatPapi/setChannel), target (DROP/REJECT/LOG/REDIRECT/CHANNEL_REDIRECT), priority, loopBack, round-trip YAML, i18n EN/ES
+- **Web Editor Rules Graph Editor**: 8 tipos nodo (input/cond/transform/loop/sleep/output/redirect/channel_redirect), matcher (channel/sender/receiver/direction), campo de condición legacy retirado, 10 actions (cancel/skipTranslate/rewrite/sounds/sleep/setLangSource/setLangTarget/setFormatPapi/setChannel), target (DROP/REJECT/LOG/REDIRECT/CHANNEL_REDIRECT), priority, loopBack, round-trip YAML, i18n EN/ES
 - **Gradle dependency locking**: 28 proyectos con gradle.lockfile (root + 27 subproyectos), task `checkLocks` para auditoría
 - **Config schema centralization**: ConfigSchemaGenerator genera paths.json desde ConfigPath enum; generateSchema/verifySchema tasks
 
@@ -409,14 +410,14 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 - `spigot-api 1.16.5-R0.1-SNAPSHOT` unavailable → ✅ **Fix aplicado: Paper API 1.21.4**.
 
 **Seguridad (de auditoría A4 2026-09-06):**
-- **INJ-3 (CWE-94)**: `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usa `StandardEvaluationContext`. ✅ **ARREGLADO** — `SimpleEvaluationContext.forReadOnlyDataBinding()` + LRU cache 1024.
+- **INJ-3 (CWE-94)**: `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usaba `StandardEvaluationContext`. ✅ **RESUELTO POR ELIMINACIÓN** — SpEL retirado; la VM `.flow` es la única superficie de políticas.
 - **INJ-4 (CWE-502)**: 4 loaders YAML usan `new Yaml()` (unsafe constructor) → **deserialización arbitraria**. ✅ **ARREGLADO** — `SafeConstructor` en todos los loaders (ConfigLoader, ConfigValidator, CommandsConfigLoader, DefaultModuleLifecycle).
 - **INJ-1**: `MiniEscape` solo escapa `<` y `\` — faltan `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@`. ✅ **ARREGLADO** — MiniEscape completo implementado (10 chars).
 - **SEC-1..4**: Tokens Discord, Telegram, LibreTranslate en `String` permanente en heap. ✅ **ARREGLADO** — `char[]` + `Arrays.fill('\0')` en JdaDiscordSink, DiscordSink, TelegramSink, LTranslate.
 - **DOS-1**: `HttpServer` executor unbounded → thread exhaustion. ✅ **ARREGLADO** — Bounded executors con `CallerRunsPolicy`.
 - **DOS-2**: `MessageDispatcher` secuencial en async chat event → lag servidor 200+ jugadores. ✅ **ARREGLADO** — Parallel dispatcher con bounded executor.
 - **TF-SEC-01 (AUDITORIA 2026-09-28)**: HMAC de HttpSink no cubre el body. ✅ **ARREGLADO** — HMAC cubre body completo.
-- **SpEL sandbox strict allowlist**: Denylist → allowlist explícito en `RuleExpressionEvaluator.DomainMethodResolver`.
+- **SpEL sandbox strict allowlist** (histórico): denylist → allowlist en `RuleExpressionEvaluator`; código eliminado con SpEL.
 - **HttpTransport SSRF TOCTOU**: IP pinning en `HttpTransport.validateUrlAndGetAddress()` para prevenir DNS rebinding.
 
 **Supply Chain (A5 2026-09-06):**
@@ -438,7 +439,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | **core-api** (SPI + Modelo) | Module/ModuleDescriptor registration, Semver parsing & compatibility, Message/Builder inmutabilidad, Direction expansion (8 kinds), Actor equality & serialization | SPI configs, Message builders, Direction enums | Valid ModuleDescriptors, correct semver ranges, immutable Messages, expanded receiver lists |
 | **kernel** (ModuleLoader + Graph) | Tarjan cycle detection, CONTRACT_MISMATCH / JVM_MISMATCH handling, Environment bootstrap order, ServiceLoader discovery | Module JARs with varying semver/JVM reqs | Correct load order, proper mismatch degradation, no cycles |
 | **textformatter** (MiniMessage) | TemplateRenderer with `<tr>` tags, MiniEscape injection safety, PlaceholderResolver (PAPI/identity), ChannelRegistry load/save, Format groups per event type | MiniMessage templates, raw text, PAPI placeholders | Escaped output, translated segments, correct channel formats |
-| **iflow** (Router + Rules) | DefaultRouter BFS priority, RateLimiter token bucket per-key, PermissionChecker (base + send/receive), Rule SpEL conditions/actions, Graph cycles with max-steps guard | Rules YAML, message streams, permission maps | Correct routing decisions, rate-limited drops, permission-gated delivery |
+| **iflow** (VM + policies) | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `HOST` services, RateLimiter per-key, PermissionChecker (base + send/receive), fuel budget and max-steps guard | `.flow` programs, message streams, permission maps | Correct routing decisions, rate-limited drops, permission-gated delivery |
 | **gtranslate / ltranslate** | Provider selection & fallback, HttpTransport pool & rate-limit, Translation cache TTL, Error handling (429, 5xx, timeout) | Text batches, provider configs, mock HTTP | Translated text, proper fallback, metrics recorded |
 | **sync-* (discord/telegram/http/tcpudp/velocity/websocket)** | Sink start/stop idempotency, MessageCodec encode/decode, Discord gateway reconnect, Telegram watermark offset, TCP/UDP raw framing, WebSocket subscription | Events, config YAML, mock sockets | Delivered payloads, acknowledged receipts, no leaks |
 | **host** (SuiteHost + Dispatcher) | ConfigLoader round-trip, MessageDispatcher Direction→receivers, ChatDelivery port contract, ActorDirectory snapshot anti-CME, Reload atomicity | Config files, Actor sets, Direction enums | Parsed config, delivered messages, thread-safe snapshots |
@@ -501,7 +502,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | **Tests E2E pipeline completo** | ⏳ | Spigot + Fabric: chat → iFlow → format → delivery |
 | **Docs sincronización** | ⏳ | README, PLAN, Release Notes, Wiki, ADR → un mismo estado |
 | **Module Manager release-ready** | ⏳ | GitHub releases, version resolver, dep resolver, SHA256 |
-| **Security hardening (A4)** | ⏳ | SpEL sandbox, YAML SafeConstructor, MiniEscape, char[] tokens, bounded executors |
+| **Security hardening (A4)** | ⏳ | SpEL eliminado, YAML SafeConstructor, MiniEscape, char[] tokens, bounded executors |
 | **sync-velocity real test** | ⏳ | Proxy Velocity real |
 
 ### 📋 BACKLOG ARQUITECTURAL
@@ -588,7 +589,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 **30 hallazgos totales:** 1 Crítico, 7 Alto, 11 Medio, 11 Bajo
 
 **Crítico (P0 — Fix inmediato):**
-- **INJ-3 (CWE-94):** `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usa `StandardEvaluationContext`.
+- **INJ-3 (CWE-94):** `ExpressionEvaluator` SPI sin sandbox por defecto → **RCE vía SpEL** si host usaba `StandardEvaluationContext`; resuelto al eliminar SpEL.
 - **INJ-4 (CWE-502):** 4 loaders YAML usan `new Yaml()` (unsafe constructor) → **deserialización arbitraria** si atacante escribe en config files.
 
 **Alto (P1-P3):**
@@ -599,7 +600,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 - DOS-3: `RateLimiter` capacity hardcodeado a `1` — **ARREGLADO** (per-key capacity).
 
 **Plan de fixes (4 sprints):**
-- Sprint 1: SpEL sandbox + SafeConstructor YAML + MiniEscape completo + char[] tokens.
+- Sprint 1: eliminación de SpEL + SafeConstructor YAML + MiniEscape completo + char[] tokens.
 - Sprint 2: Bounded executors, dispatcher paralelo, cache eviction.
 - Sprint 3: Race conditions, socket timeouts, executor reuse.
 - Sprint 4: Template validation, env vars, weak refs, PAPI dynamic check.
@@ -631,7 +632,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 | # | Item | Archivos Afectados | Severidad | Estado |
 |---|---|---|---|---|
-| S1 | **SpEL Sandbox** — `ExpressionEvaluator` sin sandbox, usar `SimpleEvaluationContext` o contexto restringido | `textformatter/scripting/SpelExpressionEvaluator.java`, `iflow/DefaultRouter.java` | CWE-94 RCE | ✅ Done |
+| S1 | **SpEL eliminado** — se retiraron el evaluador inline y el sandbox; las políticas pasan a la VM `.flow` | `textformatter`, `presets`, `host`, editor web | CWE-94 RCE | ✅ Done |
 | S2 | **YAML SafeConstructor** — 4 loaders usan `new Yaml()` unsafe → `new Yaml(new SafeConstructor())` | `host/config/ConfigLoader.java`, `host/config/ConfigValidator.java`, `host/config/CommandsConfigLoader.java`, `manager-impl/DefaultModuleLifecycle.java` | CWE-502 Deserialización | ✅ Done |
 | S3 | **MiniEscape Completo** — Escapar `>`, `{`, `}`, `[`, `]`, `(`, `)`, `#`, `@` además de `<`, `\` | `textformatter/template/MiniEscape.java` | Inyección MiniMessage | ✅ Done |
 | S4 | **Tokens en `char[]`** — Discord/Telegram/LibreTranslate tokens en `String` permanente → `char[]` + `Arrays.fill()` | `sync-discord/JdaDiscordSink.java`, `sync-telegram/TelegramSink.java`, `gtranslate/GTranslate.java`, `ltranslate/LTranslate.java` | Fuga secretos | ✅ Done |
@@ -701,7 +702,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 ## PLAN DE ACCIÓN INMEDIATO (Orden Sugerido)
 
 ### Semana 1: Security Sprint 1
-1. S1 — SpEL Sandbox (`SpelExpressionEvaluator`) ✅
+1. S1 — SpEL eliminado; políticas en VM `.flow` ✅
 2. S2 — YAML SafeConstructor (4 loaders) ✅
 3. S3 — MiniEscape completo ✅
 4. S4 — Tokens en `char[]` ✅
@@ -782,7 +783,7 @@ cd src/spigot-host && ./gradlew build --offline --no-daemon
 
 # Web editor
 cd src/web-editor
-npm run check                        # format:check + lint + test (99 unit)
+npm run check                        # format:check + lint + test (108 unit)
 npm run test:integration             # harnesses func/interact/click/chain/undo/diffing/bind
 ```
 
@@ -871,9 +872,9 @@ Todos los items P1 resueltos:
 | **Core modules** | ✅ Compilan + tests pasan | core-api, iflow, host, textformatter, manager-impl, observability, extension-api, inworld, sync-velocity, sync-websocket |
 | **Bugs críticos (C1-C5)** | ✅ Arreglados | Message contract, MessageEvent, Module Manager, DebugEndpoint, Compilación |
 | **Bugs altos (H1-H5)** | ✅ Arreglados | RateLimiter, Discord bypass, Language cache, ConfigValidator, Channel/Direction |
-| **Security Sprint 1** | ✅ Done | SpEL sandbox, YAML SafeConstructor, MiniEscape, SafeConstructor args |
+| **Security Sprint 1** | ✅ Done | SpEL eliminado, YAML SafeConstructor, MiniEscape, SafeConstructor args |
 | **Security Sprint 2** | ✅ Done | Bounded executors, CallerRunsPolicy, observability fixes |
-| **Bugs auditoría 14/16 sep** | ✅ Arreglados | Transform propagation, Message.toJson(), Direction.specific(), MiniEscape, SpEL LRU cache, ConfigLoader logging |
+| **Bugs auditoría 14/16 sep** | ✅ Arreglados | Transform propagation, Message.toJson(), Direction.specific(), MiniEscape, ConfigLoader logging |
 | **Clean Architecture (Translator SPI)** | ✅ **Completado** | host sin deps compile-time a translators; ServiceLoader runtime discovery |
 | **Release Pipeline / Dependency Verification** | ✅ **Completado** | GitHub Actions CI/CD, gradle.lockfile (29 proyectos), verification-metadata.xml |
 | **Spigot-host** | ✅ COMPILA | DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry |
@@ -943,7 +944,7 @@ Todos los items P1 resueltos:
 | **V-02** | ✅ **ARREGLADO** | Cache key usa texto completo (`source + "|" + to.code() + "|" + text` L49, `"detect|" + text` L89), no `hashCode()` |
 | **B-02** | ✅ **ARREGLADO** | Rate limit se chequea **una vez** en `MessageDispatcher.dispatch()` L89-92 ANTES del fan-out (`checkEmissionRateLimit`) |
 | **M-06** | ❌ **INCORRECTO** | `HttpSink` SÍ tiene auth: Bearer token (L210-216), HMAC (L220-241), fallback localhost-only (L205-207) |
-| **Rules/SpEL** | ⚠️ **PARCIAL** | `<expr>` en templates **NO conectado** (TemplateRenderer recibe null ExpressionEvaluator L51), pero iFlow rules SÍ usan `RuleExpressionEvaluator` con `#msg`, `#sender`, etc. (L100-102) |
+| **Rules/SpEL** | ✅ **RESUELTO** | SpEL eliminado de templates, presets y editor; iFlow ejecuta políticas en VM `.flow` (`VmPolicyEngine` + `VmInterpreter`) |
 | **parallel: false** | ⚠️ **IGNORADO** | `engineParallel` en config.yml L6 y `HostConfig` L22 existe pero `MessageDispatcher` **siempre usa executor** (L56-65) |
 | **fabric-host** | ✅ **COMPILA** | Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents; en `settings.gradle` |
 | **coretranslator** | ✅ **CONFIRMADO** | NO en `settings.gradle`; `common-legacy` SÍ está (L32) |
