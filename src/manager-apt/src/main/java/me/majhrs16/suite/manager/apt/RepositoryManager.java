@@ -15,8 +15,11 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Instant;
 import java.util.*;
@@ -38,6 +41,11 @@ public final class RepositoryManager {
     private final PluginLogger logger;
 
     private final Map<String, List<ManifestParser.RemoteIndexEntry>> cachedIndexes = new ConcurrentHashMap<>();
+
+    /** Repository indexes are small text/JSON files; refuse oversized responses. */
+    static final long MAX_INDEX_BYTES = 8L * 1024 * 1024;
+    /** Absolute ceiling for a package, independent of index metadata. */
+    static final long MAX_PACKAGE_BYTES = 512L * 1024 * 1024;
 
     public RepositoryManager(LocalPackageDatabase database, List<RepositoryConfig> repositories, PluginLogger logger) {
         this.database = database;
@@ -121,6 +129,9 @@ public final class RepositoryManager {
             if (entry.size() < 0) {
                 throw new IOException("Invalid index entry: negative size for " + entry.name());
             }
+            if (entry.size() > MAX_PACKAGE_BYTES) {
+                throw new IOException("Invalid index entry: package too large for " + entry.name());
+            }
             if (!isValidSha256(entry.sha256())) {
                 throw new IOException("Invalid SHA256 for " + entry.name() + ": " + entry.sha256());
             }
@@ -147,7 +158,7 @@ public final class RepositoryManager {
             if (!response.isSuccessful()) {
                 throw new IOException("HTTP " + response.code() + " for " + url);
             }
-            return response.body().string();
+            return readBounded(response.body().byteStream(), MAX_INDEX_BYTES, url);
         }
     }
 
@@ -160,7 +171,27 @@ public final class RepositoryManager {
         if (!Files.exists(indexPath)) {
             throw new IOException("Local index not found: " + indexPath);
         }
-        return Files.readString(indexPath);
+        if (Files.size(indexPath) > MAX_INDEX_BYTES) {
+            throw new IOException("Local index too large: " + indexPath);
+        }
+        try (InputStream in = Files.newInputStream(indexPath)) {
+            return readBounded(in, MAX_INDEX_BYTES, indexPath.toString());
+        }
+    }
+
+    private static String readBounded(InputStream in, long maxBytes, String source) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Response exceeds " + maxBytes + " bytes: " + source);
+            }
+            out.write(buffer, 0, read);
+        }
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     private List<ManifestParser.RemoteIndexEntry> parseGitHubReleases(String content) {

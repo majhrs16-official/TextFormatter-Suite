@@ -8,8 +8,10 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -103,5 +105,23 @@ class RepositoryManagerTest {
         assertEquals("iflow", entries.get(0).name());
         assertEquals("https://example.com/iflow-1.0.0.zip", entries.get(0).url());
         assertEquals(48213, entries.get(0).size());
+    }
+
+    @Test
+    void rejectsOversizedLocalIndex() throws Exception {
+        LocalPackageDatabase database = new LocalPackageDatabase(tempDir.resolve("manager"));
+        Path repoDir = tempDir.resolve("repo");
+        Files.createDirectories(repoDir);
+        Files.writeString(repoDir.resolve("packages.list"),
+            "x".repeat((int) RepositoryManager.MAX_INDEX_BYTES + 1));
+
+        RepositoryConfig repo = new RepositoryConfig(
+            "big", repoDir.toUri().toString(), RepositoryConfig.RepositoryType.LOCAL,
+            true, 0, Map.of());
+        RepositoryManager manager = new RepositoryManager(database, List.of(repo), createLogger());
+
+        RepositoryManager.UpdateResult result = manager.updateAll();
+
+        assertTrue(result.failed.containsKey("big"), result.failed.toString());
     }
 }

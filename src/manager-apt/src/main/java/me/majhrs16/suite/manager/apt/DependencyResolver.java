@@ -42,6 +42,12 @@ public final class DependencyResolver {
     // Cache for package manifests to avoid repeated downloads
     private final Map<String, PackageManifest> manifestCache = new ConcurrentHashMap<>();
 
+    /** Hard limits so a hostile repository cannot exhaust the resolver. */
+    static final int MAX_DEPENDENCY_DEPTH = 64;
+    static final int MAX_RESOLVED_PACKAGES = 1024;
+    static final long MAX_MANIFEST_BYTES = 2L * 1024 * 1024;
+    static final long MAX_PACKAGE_BYTES = 512L * 1024 * 1024;
+
     public DependencyResolver(RepositoryManager repoManager, LocalPackageDatabase localDb, 
                               PackageInstaller installer, PluginLogger logger,
                               String currentPlatform, String currentArch, String currentOs, int currentJavaVersion) {
@@ -71,7 +77,7 @@ public final class DependencyResolver {
         Set<String> resolved = new HashSet<>();
         
         for (String pkgName : packageNames) {
-            resolvePackage(pkgName, versionConstraint, channel, force, selected, processing, resolved);
+            resolvePackage(pkgName, versionConstraint, channel, force, selected, processing, resolved, 0);
         }
         
         // Build plan with topological sort
@@ -98,7 +104,7 @@ public final class DependencyResolver {
             if (!candidates.isEmpty()) {
                 PackageCandidate best = candidates.get(0);
                 if (Version.parse(best.version()).compareTo(Version.parse(installedPkg.version())) > 0) {
-                    resolvePackage(best.name(), best.version(), best.channel(), false, selected, processing, resolved);
+                    resolvePackage(best.name(), best.version(), best.channel(), false, selected, processing, resolved, 0);
                 }
             }
         }
@@ -124,7 +130,7 @@ public final class DependencyResolver {
         
         for (ResolutionIssue issue : issues) {
             if (issue.type().equals("MISSING_DEPENDENCY")) {
-                resolvePackage(issue.packageName(), "*", null, false, selected, processing, resolved);
+                resolvePackage(issue.packageName(), "*", null, false, selected, processing, resolved, 0);
             }
         }
         
@@ -133,8 +139,17 @@ public final class DependencyResolver {
     }
 
     private void resolvePackage(String pkgName, String versionConstraint, String channel, boolean force,
-                                Map<String, ResolvedPackage> selected, Set<String> processing, Set<String> resolved) {
+                                Map<String, ResolvedPackage> selected, Set<String> processing, Set<String> resolved,
+                                int depth) {
         if (resolved.contains(pkgName)) return;
+        if (depth > MAX_DEPENDENCY_DEPTH) {
+            throw new ResolutionException("Dependency graph exceeds maximum depth: " + MAX_DEPENDENCY_DEPTH);
+        }
+        if (selected.size() >= MAX_RESOLVED_PACKAGES
+                || resolved.size() >= MAX_RESOLVED_PACKAGES
+                || processing.size() >= MAX_RESOLVED_PACKAGES) {
+            throw new ResolutionException("Dependency graph exceeds maximum package count: " + MAX_RESOLVED_PACKAGES);
+        }
         if (processing.contains(pkgName)) {
             throw new ResolutionException("Dependency cycle detected involving: " + pkgName);
         }
@@ -182,7 +197,7 @@ public final class DependencyResolver {
                 // Recursively resolve dependencies
                 for (String depName : manifest.dependencies()) {
                     String depConstraint = getDependencyConstraint(manifest, depName);
-                    resolvePackage(depName, depConstraint, channel, false, selected, processing, resolved);
+                    resolvePackage(depName, depConstraint, channel, false, selected, processing, resolved, depth + 1);
                 }
                 
                 // Success - return
@@ -255,10 +270,16 @@ public final class DependencyResolver {
                 if (manifestEntry == null) {
                     throw new IOException("Missing METADATA/package.list in ZIP");
                 }
+                if (manifestEntry.getSize() > MAX_MANIFEST_BYTES) {
+                    throw new IOException("Manifest too large: " + manifestEntry.getSize() + " bytes");
+                }
                 
                 try (var is = zip.getInputStream(manifestEntry)) {
-                    String content = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-                    return parseManifest(content);
+                    byte[] bytes = is.readNBytes((int) MAX_MANIFEST_BYTES + 1);
+                    if (bytes.length > MAX_MANIFEST_BYTES) {
+                        throw new IOException("Manifest exceeds " + MAX_MANIFEST_BYTES + " bytes");
+                    }
+                    return parseManifest(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
                 }
             }
         } finally {
@@ -267,6 +288,10 @@ public final class DependencyResolver {
     }
 
     private Path downloadPackageToTemp(PackageCandidate candidate, Path dest) throws IOException, InterruptedException {
+        if (candidate.size() <= 0 || candidate.size() > MAX_PACKAGE_BYTES) {
+            throw new IOException("Invalid package size: " + candidate.size());
+        }
+
         String url = candidate.downloadUrl();
         
         Request request = new Request.Builder().url(url).build();
