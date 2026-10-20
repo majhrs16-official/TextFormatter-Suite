@@ -2025,7 +2025,7 @@ La auditoría detallada de iFlow vive en `docs/workdir/AUDITORIA.md` (documento 
 
 - **Estado:** solo lectura; sin cambios de código.
 - **Base:** `476c942` (commit local, no publicado).
-- **Alcance de esta pasada:** contratos de entrada, enlace host↔iFlow, `PolicyTarget`, carga de `.flow`, transformación vs canal, `HALT`/IRQ y cuentas de la cola de rate limit.
-- **Resultado:** 15 hallazgos `IFLOW-MAN-01…15` y 13 propuestas `IFLOW-MAN-D01…D13`.
-- **Pendiente:** `SoftMMU`, `VmBus`, parser, intérprete completo, servicios `HOST`, arranque/BIOS, tests y compilador.
+- **Alcance de esta pasada:** contratos de entrada, enlace host↔iFlow, `PolicyTarget`, carga de `.flow`, transformación vs canal, `HALT`/IRQ, MMU base y cuentas de la cola de rate limit.
+- **Resultado:** 15 hallazgos `IFLOW-MAN-01…15`, 13 propuestas `IFLOW-MAN-D01…D13` y la arquitectura objetivo de la sección 8 (ROM/BIOS/kernel/32 bits).
+- **Pendiente:** `VmBus`, `PageEntry`, parser, intérprete completo, servicios `HOST`, arranque/BIOS, tests y compilador.
 - **Regla:** no se remedia código hasta ratificar las propuestas.

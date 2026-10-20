@@ -5,7 +5,7 @@
 Archivo | Propósito | Audiencia |
 |---------|-----------|-----------|
 | `workdir/PLAN.md` | Plan de ejecución: estado actual, fases completadas, próximos pasos, deuda técnica | Equipo / Mantenedores |
-| `workdir/AUDITORIA.md` | Auditoría manual de iFlow (2026-10-20, en curso): hallazgos `IFLOW-MAN-*`, propuestas y ruta pendiente | Equipo / Auditores |
+| `workdir/AUDITORIA.md` | Auditoría manual de iFlow (2026-10-20, en curso): hallazgos `IFLOW-MAN-*`, propuestas, arquitectura objetivo ROM/BIOS/kernel/32 bits y ruta pendiente | Equipo / Auditores |
 | `workdir/ADR.md` | Decisiones de arquitectura (fuente de verdad) | Arquitectos / Equipo |
 | `RELEASE_NOTES.md` | Notas de versión por fase (FASE 0-17), breaking changes, comandos CI | Equipo / Auditores |
 | `../CHANGELOG.md` | Cambios relevantes desde la última revisión; **no implica releases públicos** | Usuarios / Contribuidores |

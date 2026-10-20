@@ -2,6 +2,7 @@
 
 **Estado:** en curso, solo lectura.
 **Commit base:** `476c942` (local, no publicado).
+**Base de la discusión de arquitectura:** `4857997` (local, no publicado).
 **Modo:** lectura estática; no se ejecutó build ni tests en esta pasada.
 **Nota de reemplazo:** este documento sustituye la auditoría integral anterior. El contenido previo
 queda en el historial de git; la historia no se reescribe.
@@ -9,9 +10,10 @@ queda en el historial de git; la historia no se reescribe.
 ---
 
 > **Alcance de esta pasada:** contratos de entrada, enlace host↔iFlow, `PolicyTarget`, carga de
-> `.flow`, camino de transformación/canal, `HALT`/IRQ y primeras cuentas de la cola de rate limit.
-> Quedan pendientes la MMU, el bus, el parser completo, el intérprete completo, todos los servicios
-> `HOST`, el arranque/BIOS y los tests.
+> `.flow`, camino de transformación/canal, `HALT`/IRQ, MMU base y primeras cuentas de la cola de
+> rate limit. Quedan pendientes el bus/MMIO, el parser completo, el intérprete completo, todos los
+> servicios `HOST`, el arranque/BIOS, los tests y el compilador. La sección 8 registra la dirección
+> de arquitectura ratificada durante la revisión; no está implementada.
 
 ## 1. Mapa de lectura
 
@@ -20,8 +22,9 @@ queda en el historial de git; la historia no se reescribe.
 | Contratos de entrada | `Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, `PassThroughProgram`, `VmConfigLoader` | contrato, semántica de targets, fallback, carga inicial | ✅ leído |
 | Enlace host↔iFlow | `DefaultTextFormatter`, `SuiteHost.deliver`, `MessageDispatcher`, `PolicyResultValidator`, `HostServiceRegistry` (routing/DMA/property) | cómo se transforma, rutea, formatea y entrega; `SET_CHANNEL` vs `CHANNEL_REDIRECT` | ✅ leído |
 | Ejecución / IRQ | `VmInterpreter` (HALT e IRQ), `ExecutionContext` (cancelación/`irqHandler`), `VmPic`, `IrqTable`, `VmMemoryMap` | despacho de IRQ, estado de CPU, mapa de memoria, límites de 16 bits | 🟡 parcial |
+| MMU / memoria | `SoftMMU`, `PageTable`, `PhysicalMemory`, `VmMemoryMap` | 64 KB, 16 páginas de 4 KB, copy-on-write, permisos, ownership; límites para 32 bits | 🟡 parcial |
 | Cola / rate limit | `RateLimiter`, `VmPolicyEngine` (rate limit de emisión), `MessageDispatcher` (rate limit por target) | dónde se aplica el límite, si hay cola o reintento | ✅ leído |
-| Pendiente | `SoftMMU`, `VmBus`, `ProgramImageParser` completo, `VmInterpreter` completo, `HostServiceRegistry` completo, `VmPolicyEngine` completo, `VmDisplay`/`VmNvram`, tests, compilador `.flowasm` | paginación, permisos, MMIO, ISA, ABI, arranque, cobertura | ⏳ pendiente |
+| Pendiente | `VmBus`, `PageEntry`, `ProgramImageParser` completo, `VmInterpreter` completo, `HostServiceRegistry` completo, `VmPolicyEngine` completo, `VmDisplay`/`VmNvram`, tests, compilador `.flowasm` | MMIO, ISA, ABI, arranque, cobertura | ⏳ pendiente |
 
 ## 2. Definiciones para no confundir transformación con canal
 
@@ -86,13 +89,17 @@ una segunda fase de routing acotada, no una re-entrega recursiva.
 | `IFLOW-MAN-D06` | **Fallback configurable:** `policy.flow` + `fallback-program` + `on-load-error` (`fallback`/`fail-closed`). Dos firmwares: allow-all y deny-all. Si el fallback también falla, deny-all + error visible o negarse a arrancar. | Distingue “no configurado” de “política rota” y permite lógica compleja por defecto. |
 | `IFLOW-MAN-D07` | **`HLT` real** (estado `HALTED`, flag global de interrupciones, `IRQ` de timer, reanudación tras handler, timeout). Mantener `HALT` como terminación o renombrarlo a `EXIT`. | `HALT` actual no puede esperar ni despertar. |
 | `IFLOW-MAN-D08` | **IRQ de mensaje configurable** hacia el entry point del programa de usuario; enmascarar las demás líneas durante la espera. | Evita despertar por cualquier IRQ. |
-| `IFLOW-MAN-D09` | **Separar bootloader, firmware/BIOS y kernel.** El bootloader carga el kernel de ROM a RAM; el kernel gestiona scheduler/cola/tiempo; el firmware hace POST y publica la tabla. | No convertir el BIOS en kernel por accidente. |
+| `IFLOW-MAN-D09` | **Separar firmware/BIOS, bootloader y kernel.** El reset vector entra al firmware/BIOS; el BIOS hace POST e inicializa memoria, page tables, stack e interrupciones. El bootloader no inicializa hardware: solo carga el kernel de ROM a RAM y salta. El kernel gestiona scheduler/cola/tiempo y carga los programas. | No convertir el BIOS en kernel por accidente ni darle al bootloader responsabilidades del BIOS. |
 | `IFLOW-MAN-D10` | **Nombres genéricos de hardware** en la CPU: `InterruptController`, `InterruptVectorTable`, `DisplayDevice`, `NvramDevice`, `Mmu`, `Bus`. | La CPU no debe depender de la estructura interna del BIOS. |
-| `IFLOW-MAN-D11` | **Cola con handles, no con mensajes completos.** El host conserva los objetos; la VM guarda índices de 16 bits + generación/epoch y, si hace falta, deadline/estado en arrays separados. | Evita serializar todo el mensaje y permite 12.288 handles en 24 KB. |
+| `IFLOW-MAN-D11` | **Cola con handles, no con mensajes completos.** El host conserva los objetos; la VM guarda handles con generación/epoch y arrays separados de deadline/estado/prioridad. El ancho del handle (16 o 32 bits) se decide con el ABI; la dirección y la memoria son de 32 bits. En 32 bits la capacidad la fija el límite de RAM, no los 12.288 del VM actual. | Evita serializar el mensaje y convierte la cola en un recurso del kernel, no en un array gigante de objetos. |
 | `IFLOW-MAN-D12` | **Firmwares de rate limit como producto:** `drop-on-saturation.flow`, `queue-on-saturation.flow`, `adaptive.flow` (decide según carga/prioridad). | Es la misión de iFlow: lógica compleja de chat. |
 | `IFLOW-MAN-D13` | **Array de destinatarios null-separated** en un buffer acotado, con contrato explícito: UTF-8, contador de elementos = nulos (o nulos+1), máximo de bytes, comportamiento ante overflow. | Es viable, pero la fórmula de longitud debe corregirse y el buffer no es infinito. |
 
 ## 6. Matemática de la cola: correcciones y límites
+
+> **Nota (2026-10-20):** estas cuentas describen el VM actual de 16 bits y 64 KB. La dirección
+> ratificada es 32 bits de memoria física y virtual, hasta 4 GiB. En ese modelo la cola se limita por
+> el cap de RAM por VM y las cifras de 12.288 dejan de ser el techo. Ver sección 8.
 
 - RAM de usuario actual: **28 KB** (7 páginas de 4 KB). Si la pantalla está activa, ocupa 4 KB; quedan
   **24 KB** utilizables.
@@ -110,8 +117,10 @@ una segunda fase de routing acotada, no una re-entrega recursiva.
 - **Destinatarios:** el buffer de entrada es de 4 KB. Con nombres de ~16 bytes + NUL, caben ~240, no
   12.000. Los 12.000 son handles de cola, no destinatarios.
 - **32 bits no es gratis:** duplica punteros y slots de pila; una cola de índices de 32 bits reduce
-  la densidad. Si se migra, conviene mantener handles de 16 bits y usar 32 bits solo para direcciones
-  y tamaños. Toca ISA, ABI, parser, MMU y tests.
+  la densidad. Pero la dirección ratificada es **32 bits de memoria física y virtual**, no solo de
+  direccionamiento. Los handles pueden seguir siendo de 16 bits con generación si el ABI lo permite,
+  pero el espacio de direcciones, los frames y la page table son de 32 bits. Toca ISA, ABI, parser,
+  MMU y tests.
 
 ## 7. Ruta de auditoría pendiente
 
@@ -128,10 +137,205 @@ una segunda fase de routing acotada, no una re-entrega recursiva.
 | 9 | Compilador `.flowasm` | ABI, firmware, IRQ, determinismo, ejemplos |
 | 10 | Integración host/TextFormatter | transformación vs canal, entrega, cancelación de evento |
 
-## 8. Criterio de cierre de esta auditoría
+## 8. Arquitectura objetivo ratificada: ROM, BIOS, kernel y 32 bits
 
-- No se modifica código hasta ratificar `IFLOW-MAN-D01…D13`.
+Nada de esta sección está implementado. El VM actual sigue siendo de 16 bits y 64 KB. Esta sección
+registra la dirección ratificada durante la revisión manual del 2026-10-20 para la próxima generación
+de iFlow. Separa las decisiones de máquina de las decisiones de contrato de políticas
+(`IFLOW-MAN-D01…D13`).
+
+### 8.1. Correcciones ratificadas
+
+| Tema | Decisión |
+|---|---|
+| `.flow` | Es la **ROM completa**, no un programa ejecutable. |
+| Reset vector | Entra al **firmware/BIOS**. No entra al bootloader. |
+| BIOS | Hace POST e inicializa memoria, page tables, stack e interrupciones. Publica las tablas que necesita el resto del sistema. |
+| Bootloader | **No inicializa hardware**: no hace POST, no configura page tables, no cambia el stack y no enciende interrupciones. Solo carga el kernel de ROM a RAM y salta. |
+| Entry point | Solo existe **un entry point arquitectónico**: el reset vector del BIOS. |
+| Entry points de programas | Los administra el kernel al cargar cada programa. No son entry points de arranque de la ROM. |
+| Memoria | **32 bits de memoria física y virtual**, no solo 32 bits de direccionamiento. |
+| Máximo | 4 GiB de espacio físico. ROM, RAM y MMIO comparten ese espacio; el máximo de RAM útil es menor que 4 GiB. |
+| Asignación | Física dispersa: frames de 4 KB asignados bajo demanda. No se reservan 4 GiB por VM. |
+| Compresión | Se estudiará compresión de memoria en el emulador, a nivel de frame. Es una propuesta abierta, no una decisión cerrada. |
+| Tipo de dirección | `long` con máscara o un tipo propio (`Address32`/bitset) si `long` complica el modelo. |
+| Almacenamiento físico | `byte[][]` de frames de 4096 bytes; no un `byte[]` de 4 GiB. |
+| Objetivo | VM de networking empresarial con kernel real, no un plugin de políticas. La competitividad es un objetivo de diseño; esta auditoría no aporta benchmarks. |
+
+Roles separados:
+
+- **Firmware/BIOS:** reset vector, POST, memoria, page tables, stack, interrupciones, enumeración de
+  hardware y tablas del sistema.
+- **Bootloader:** cargar y verificar el kernel; no inicializar hardware.
+- **Kernel:** scheduler, cola, tiempo, syscalls, aislamiento, carga de programas.
+- **Programas:** lógica de políticas; entry point de proceso administrado por el kernel.
+
+### 8.2. `.flow` como ROM
+
+El formato v2 actual describe un ejecutable: `entryPoint`, `codeLength`, `constantsLength` y una
+sección de código. Para BIOS + kernel + programas eso es insuficiente. El contenedor debe describir
+la ROM entera.
+
+Header propuesto:
+
+```text
+magic           "FLOWROM"
+formatVersion   3
+isaVersion      32
+romSize
+resetVector
+tocOffset
+tocCount
+flags
+hash            cubre toda la ROM
+signature       opcional
+```
+
+Tabla de contenidos propuesta:
+
+```text
+type            BIOS | BOOT | KERNEL | PROGRAM | DATA | FONT | CONFIG
+offset
+size
+loadAddress
+flags           R / W / X / privilegios
+hash            por segmento
+```
+
+Puntos importantes:
+
+- El header de la ROM tiene **un solo** `resetVector`. La TOC no define puntos de entrada de arranque.
+- Cada segmento ejecutable (`BOOT`, `KERNEL`, `PROGRAM`) puede llevar su entry interno en su propio
+  header de segmento. Lo consumen el BIOS, el bootloader o el kernel; no la CPU al reset.
+- Un programa de usuario no tiene entry point de ROM: tiene entry point de proceso, y el kernel decide
+  cuándo y cómo saltar a él.
+- El host solo carga la ROM y la mapea. No cablea programas ni conoce su lógica.
+- La ROM se mapea R/X; la RAM es R/W; el MMIO se decodifica como dispositivo.
+- El hash cubre toda la imagen y cada segmento puede tener su propio hash.
+- `ProgramImage` deja de ser el contenedor principal y pasa a ser un segmento. Hacen falta
+  `RomImage`/`RomParser` y un formato v3. Los `.flow` v2 se rechazan o se migran explícitamente.
+
+### 8.3. Secuencia de arranque
+
+1. El host carga el `.flow` como ROM y lo mapea en el espacio físico.
+2. La CPU arranca en `resetVector`.
+3. El reset vector entra al **firmware/BIOS**, nunca al bootloader.
+4. El BIOS hace POST: memoria, page tables, stack, controlador de interrupciones, timer, display,
+   NVRAM y tablas del sistema.
+5. El BIOS localiza el segmento `BOOT` y salta al bootloader.
+6. El bootloader carga el segmento `KERNEL` de ROM a RAM, verifica su hash y salta.
+7. El kernel inicializa scheduler, cola, syscalls y carga los segmentos `PROGRAM` cuando corresponda.
+8. Cada programa corre en un contexto de proceso con su entry point administrado por el kernel.
+
+El bootloader no repite la inicialización del BIOS. Si el BIOS ya dejó page tables y stack listos, el
+bootloader los usa; no los reconstruye.
+
+### 8.4. Modelo de memoria de 32 bits
+
+| Concepto | Decisión |
+|---|---|
+| Espacio virtual | 32 bits, hasta 4 GiB |
+| Espacio físico | 32 bits, hasta 4 GiB; ROM/RAM/MMIO comparten el rango |
+| Página | 4 KB |
+| Frames | 1.048.576 máximos (`4 GiB / 4 KB`) |
+| Page table | Dos niveles, 10 + 10 + 12 bits; PDE y PTE de 4 bytes |
+| Backing store | `byte[][] frames = new byte[1 << 20][]`; frames de 4096 bytes bajo demanda |
+| Direcciones | `long` con máscara `0xFFFF_FFFFL`, o `Address32` si se quiere un tipo propio |
+| Límite práctico | Cap por VM configurable (por ejemplo 64 MB, 256 MB, 1 GB); 4 GiB es el máximo arquitectónico |
+| Traducción | TLB/caché de página; no hacer page walk byte a byte |
+| COW/snapshots | Por frame; nunca clonar 4 GiB completos |
+
+Detalles de implementación:
+
+- Java no permite un `byte[]` de 4 GiB. El array de frames es la solución; el índice de frame y el
+  offset caben en `int`, pero la aritmética de direcciones debe usar `long` o un tipo sin signo.
+- La page table completa de 4 GiB ocuparía unos 4 MB de PTEs más el directorio. Debe ser dispersa:
+  solo se asignan las tablas de las regiones mapeadas.
+- El array de 1.048.576 referencias ya ocupa varios MB en la JVM. Si eso es demasiado, se puede
+  usar un array de arrays por niveles o una estructura sparse; el contrato visible sigue siendo
+  “frames de 4 KB bajo demanda”.
+- `PhysicalMemory.freeze()` actual clona la memoria plana. En 32 bits eso es inviable; el snapshot
+  debe ser por frame y acotado.
+- `getMemorySnapshot()` no puede devolver 4 GiB. Debe ser una operación acotada o por regiones.
+- El MMIO se decodifica antes de la MMU, como hoy. Los registros de dispositivo también pasan a
+  direcciones de 32 bits.
+- La ISA debe ser de 32 bits: registros, opcodes, modos de direccionamiento, assembler, compilador,
+  ABI y tests. Un ISA de 16 bits no puede direccionar 4 GiB de forma plana.
+
+### 8.5. Compresión de memoria (propuesta abierta)
+
+El emulador podría comprimir frames fríos para aumentar la capacidad efectiva sin reservar 4 GiB.
+Diseño posible:
+
+- Compresión **a nivel de frame** (4 KB), transparente al guest.
+- Zero-page deduplicación: todos los frames cero comparten una página inmutable.
+- COW sobre frames comprimidos: al escribir, se descomprime y se copia.
+- Frames calientes sin comprimir; frames fríos comprimidos (LZ4, zstd o RLE simple).
+- El guest sigue viendo 4 GiB; la compresión no cambia page tables ni permisos.
+- Límite de descompresión por frame para evitar bombas y picos de latencia.
+- La compresión no sustituye la asignación dispersa; es una capa adicional.
+
+Costes: CPU, latencia de acceso, complejidad de TLB/COW y necesidad de métricas. Debe decidirse
+después de medir cargas reales, no antes.
+
+### 8.6. Capacidad de cola con 32 bits
+
+La cola ya no está limitada por los 12.288 handles del VM de 64 KB. Está limitada por el cap de RAM
+por VM y por el tamaño de cada entrada.
+
+| Bytes por entrada | 64 MB | 256 MB | 1 GB |
+|---:|---:|---:|---:|
+| 8 | 8.388.608 | 33.554.432 | 134.217.728 |
+| 12 | 5.592.405 | 22.369.621 | 89.478.485 |
+| 16 | 4.194.304 | 16.777.216 | 67.108.864 |
+
+- 12.000 mensajes dejan de ser un problema incluso con 64 MB.
+- Con 4 GiB teóricos: ~536 millones de entradas de 8 bytes o ~268 millones de 16 bytes, pero no se
+  asignan de golpe.
+- Los handles pueden ser de 16 bits con generación o de 32 bits; el ancho se decide con el ABI.
+- La cola vive en el kernel. El host conserva los objetos `Message` y ejecuta `DELIVER(handle)`.
+- El estado de la entrada puede ser implícito (`cli` → pop → `DELIVER` → `sti`); solo hace falta un
+  campo explícito si hay entrega asíncrona, reintentos, cancelación o reentrancia.
+
+### 8.7. Impacto en el código actual
+
+| Componente | Impacto |
+|---|---|
+| ISA / CPU | Registros y direcciones de 32 bits; opcodes, decoder, intérprete, flags, pila, CALL/RET, fuel. |
+| `SoftMMU` / `PageTable` / `PageEntry` | Traducción de 32 bits, page table de dos niveles, TLB, permisos, ownership. |
+| `PhysicalMemory` | Frames de 4 KB bajo demanda, snapshots por frame, COW, compresión opcional. |
+| `VmMemoryMap` | Mapa de 32 bits: ROM, RAM, MMIO, stack, kernel, programas. |
+| `.flow` / parser | Formato ROM v3 con header, TOC, segmentos y hash; `RomImage`/`RomParser`. |
+| Arranque | BIOS, bootloader y kernel separados; reset vector al BIOS. |
+| ABI `HOST` | Direcciones y tamaños de 32 bits; DMA, capabilities y servicios. |
+| IRQ | Timer IRQ, PIC, `HLT` real, máscara, scheduler. |
+| Tests / compilador | Recompilar fixtures, assembler y compiler; tests de 32 bits, ROM, arranque y memoria. |
+| Documentación | README, `src/iflow/README.md`, wiki histórica y esta auditoría. |
+
+Esto no es un parche de `SoftMMU`: es una VM nueva o un modo 32 bits separado. El VM de 16 bits y el
+de 32 bits no deberían compartir el mismo intérprete sin una separación clara de ISA y formato.
+
+### 8.8. Decisiones abiertas
+
+1. ¿El VM de 16 bits se reemplaza por el de 32 bits o conviven como targets distintos?
+2. ¿Dónde se mapea la ROM y cuál es la dirección exacta del reset vector?
+3. ¿Cuál es el cap de RAM por VM por defecto: 64 MB, 256 MB, 1 GB?
+4. ¿Páginas de 4 KB, 4 MB o mixtas para el kernel?
+5. ¿La compresión de memoria entra en la primera versión o queda para una fase posterior?
+6. ¿Handles de 16 bits con generación o de 32 bits?
+7. ¿El timer es un dispositivo del host, un contador virtual de ciclos o ambos?
+8. ¿Cómo carga el kernel los programas: TOC directa, filesystem mínimo o imagen en RAM?
+9. ¿Qué capacidades/privilegios tiene un programa de usuario?
+10. ¿Cómo se migran los `.flow` v2 y el compilador `.flowasm`?
+11. ¿La ROM se mapea como memoria R/X o se expone como dispositivo de bloque?
+12. ¿Qué benchmarks definen “competitivo en networking empresarial”?
+
+## 9. Criterio de cierre de esta auditoría
+
+- No se modifica código hasta ratificar `IFLOW-MAN-D01…D13` y cerrar las decisiones abiertas de la
+  sección 8.8.
 - Cada hallazgo debe tener evidencia en código y, cuando se remedie, un test de regresión.
-- Este documento es el registro definitivo de los hallazgos `IFLOW-MAN-*`; al cerrar la pasada se
-  actualizará su estado (confirmado, descartado o remediado).
-- No se publica nada sin autorización explícita. `476c942` sigue siendo un commit local.
+- Este documento es el registro definitivo de los hallazgos `IFLOW-MAN-*` y de la arquitectura
+  objetivo; al cerrar la pasada se actualizará el estado de cada punto (confirmado, descartado,
+  ratificado o remediado).
+- No se publica nada sin autorización explícita. `476c942` y `4857997` siguen siendo commits locales.
