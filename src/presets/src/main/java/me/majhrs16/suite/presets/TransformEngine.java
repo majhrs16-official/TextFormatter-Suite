@@ -17,6 +17,7 @@ import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.SimpleEvaluationContext;
 import org.springframework.expression.AccessException;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,8 +58,13 @@ public final class TransformEngine {
                                   Actor recipient, Function<Actor, Boolean> permissionChecker) {
         try {
             Expression exp = getOrCompile(expression);
-            Map<String, Object> bindings = createBindings(message, null, null);
-            Object result = exp.getValue(createContext(message, null, null), bindings);
+            SimpleEvaluationContext context = createContext(message, sender, recipient);
+            createBindings(message, sender, recipient).forEach((name, value) -> {
+                if (value != null) {
+                    context.setVariable(name, value);
+                }
+            });
+            Object result = exp.getValue(context);
 
             // If result is a String, update message text (Message is immutable, return new instance)
             if (result instanceof String str) {
@@ -78,8 +84,13 @@ public final class TransformEngine {
                                      Function<Actor, Boolean> permissionChecker) {
         try {
             Expression exp = getOrCompile(expression);
-            Map<String, Object> bindings = createBindings(message, null, null);
-            Object result = exp.getValue(createContext(message, null, null), bindings);
+            SimpleEvaluationContext context = createContext(message, sender, recipient);
+            createBindings(message, sender, recipient).forEach((name, value) -> {
+                if (value != null) {
+                    context.setVariable(name, value);
+                }
+            });
+            Object result = exp.getValue(context);
             return Boolean.TRUE.equals(result);
         } catch (Exception e) {
             return false;
@@ -91,7 +102,9 @@ public final class TransformEngine {
     }
 
     private Map<String, Object> createBindings(Message message, Actor sender, Actor recipient) {
-        Map<String, Object> bindings = new ConcurrentHashMap<>();
+        // HashMap, not ConcurrentHashMap: sender/recipient are nullable and this map
+        // is local to a single expression evaluation.
+        Map<String, Object> bindings = new HashMap<>();
         bindings.put("msg", message);
         bindings.put("sender", sender);
         bindings.put("recipient", recipient);
