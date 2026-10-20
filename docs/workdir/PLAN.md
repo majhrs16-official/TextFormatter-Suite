@@ -5,6 +5,8 @@
 
 > **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
 
+> **Alcance vigente (2026-10-20):** las pruebas reales/E2E están descartadas y el editor web queda diferido a una auditoría separada. La sección «Decisiones de alcance vigentes» es la fuente de verdad para ambas.
+
 ---
 
 ## Estado real del proyecto (2026-10-04)
@@ -24,7 +26,7 @@
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
 | spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, TCP/UDP/Telegram, HealthCheckRegistry) | compile |
 | fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents) | compile |
-| web-editor | ✅ gates verdes | check+integración |
+| web-editor | ⚠️ gates verdes; UI inestable; auditoría separada diferida | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
 | presets | ✅ standard/rpg/staff/minimal | tests |
@@ -41,7 +43,7 @@
 
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
 - ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents, **completo y funcional**).
-- ✅ **Web editor** funcional (StateStore, diffing, validación incremental, paths.json) con 108 tests unitarios + integración (`npm run check` verde).
+- ⚠️ **Web editor**: gates verdes (StateStore, diffing, validación incremental, paths.json; 108 tests unitarios + integración), pero la UI no se considera estable; queda diferido a una auditoría separada (ver «Decisiones de alcance vigentes»).
 - ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
 - ✅ **Suite corriendo en Fabric** (mod `TextFormatterSuite` instalable, thin-jar construido, Fabric 1.21 + Fabric API 0.100.5).
 - ✅ **Módulos core compilando + tests pasando**: core-api, kernel, textformatter, iflow, gtranslate, ltranslate, sync-*, host, messages, tester, transport, manager-api, manager-impl, presets, inworld, observability, extension-api, example-extension, loadtest, performance, sync-websocket.
@@ -210,7 +212,7 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 ### FASE 9 — sync-velocity ✅ **Production-ready**
 - `VelocitySink`: plugin messaging channel, secret auth, mapping.
 - `VelocityPlugin`: Module SPI, velocity-plugin.json.
-- Test en proxy Velocity real ⏳ (pendiente proxy Velocity).
+- Test en proxy Velocity real ⏸️ descartado por decisión (2026-10-20).
 - **Implementación completa**: async queue, retry/backoff exponencial, métricas, health checks, dynamic discovery, advanced mapping (regex, per-type), config validation, graceful shutdown con queue drain.
 
 ### FASE 10 — Observabilidad ✅
@@ -340,9 +342,10 @@ tiene `node_modules` (211 paquetes) y `dist/`, así que `npm run build` no neces
 ### 📋 OBLIGATORIO CONTINUO
 1. **Docs sincronización completa** → **SIEMPRE** (README, PLAN, Release Notes, Wiki, ADR — un mismo estado, independientemente de estabilidad del proyecto)
 
-### ⏸️ DESCARTADO TEMPORALMENTE HASTA PRÓXIMO AVISO
-- **Tests E2E** → no se harán (inestabilidad servidor real)
-- **GitHub Releases** → no se publicarán (distribución vía source/build local)
+### ⏸️ DECISIONES DE ALCANCE VIGENTES (2026-10-20)
+- **Pruebas reales y E2E** → **descartadas**. No se validará en servidores reales Spigot/Paper, Fabric ni proxies Velocity; la validación de plataformas se limita a compilación y tests automatizados que no requieran un servidor real. Las menciones históricas a «tests E2E pendientes», «probar en servidor real» o «proxy Velocity real» quedan cerradas por esta decisión.
+- **Editor web** → **diferido a una auditoría separada y al último lugar**. No forma parte de la deuda P1 activa ni se sustituye con parches parciales; la auditoría cubrirá funcionalidad, UI/UX, modelo, tests y deuda estructural.
+- **GitHub Releases** → no se publicarán (distribución vía source/build local).
 
 ---
 
@@ -499,11 +502,11 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 | Feature | Estado | Detalles |
 |---|---|---|
-| **Tests E2E pipeline completo** | ⏳ | Spigot + Fabric: chat → iFlow → format → delivery |
+| **Tests E2E pipeline completo** | ⏸️ Descartado (ver Decisiones de alcance) | Spigot + Fabric: chat → iFlow → format → delivery |
 | **Docs sincronización** | ⏳ | README, PLAN, Release Notes, Wiki, ADR → un mismo estado |
 | **Module Manager release-ready** | ⏳ | GitHub releases, version resolver, dep resolver, SHA256 |
 | **Security hardening (A4)** | ⏳ | SpEL eliminado, YAML SafeConstructor, MiniEscape, char[] tokens, bounded executors |
-| **sync-velocity real test** | ⏳ | Proxy Velocity real |
+| **sync-velocity real test** | ⏸️ Descartado (ver Decisiones de alcance) | Proxy Velocity real |
 
 ### 📋 BACKLOG ARQUITECTURAL
 
@@ -656,7 +659,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 
 | # | Item | Detalle | Estado |
 |---|---|---|---|
-| T1 | **Tests E2E Pipeline Completo** | Spigot + Fabric: chat → iFlow → format → delivery; assertions sobre efectos | ⏳ |
+| T1 | **Tests E2E Pipeline Completo** | Spigot + Fabric: chat → iFlow → format → delivery; assertions sobre efectos | ⏸️ Descartado (ver Decisiones de alcance) |
 | T2 | **Docs Sincronización** | README, PLAN, Release Notes, Wiki, ADR → un mismo estado | 🔄 En progreso |
 | T3 | **sync-velocity Estado Real** | Confirmar implementación real vs stub; actualizar README/PLAN | ✅ Production-ready |
 | T4 | **Config Schema Single-Source** | `paths.json` generado desde `ConfigPath`; `verifySchema` en CI compara la copia del host y del editor | ✅ Done |
@@ -735,7 +738,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 23. **C1 — TranslationExecutor** dedicado (bounded, queue, timeout, cancellation) ✅ **DONE**
 24. **C3 — VelocitySink queueSize** accounting fix ✅ **DONE**
 25. **C5 — Coverage gates** elevar (host 23%, iflow 24%, textformatter 59%) ✅ **DONE**
-26. T1 — Tests E2E pipeline completo ⏳
+26. T1 — Tests E2E pipeline completo ⏸️ descartado por decisión (2026-10-20)
 27. T2 — Docs sincronización completa ⏳
 27. T6 — TranslatorProvider SPI (Clean Arch fix) ⏳
 28. Release pipeline + versionado semántico ⏳
@@ -751,7 +754,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 ```
 F17-1  Security hardening completo (S1-S6) ✅
 F17-2  Module Manager release-ready (M1-M6) ✅
-F17-3  Tests E2E Spigot + Fabric ⏸️ (descartado temporalmente)
+F17-3  Tests E2E Spigot + Fabric ⏸️ (descartado por decisión 2026-10-20)
 F17-4  Docs 100% sincronizadas 🔄 (en progreso)
 F17-5  Release pipeline + semver + lockfile ✅
 F17-6  TranslatorProvider SPI + Clean Arch fixes ⏸️
@@ -844,7 +847,7 @@ Todos los items P1 resueltos:
 - **fabric-host** ✅ COMPILA (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents)
 
 ### 🟢 OTROS
-9. Tests E2E pipeline completo (Spigot real)
+9. ~~Tests E2E pipeline completo (Spigot real)~~ ⏸️ descartado por decisión (2026-10-20)
 10. GitHub Releases para Module Manager (F12-2) + sync-velocity
 11. Docs sincronización completa → README, PLAN, Release Notes, Wiki, ADR
 
@@ -961,12 +964,12 @@ Todos los items P1 resueltos:
 | **Semana 1: P0 Críticos** | B-01, B-03, V-01 | ✅ **COMPLETADO** |
 | **Semana 2: P1 Altos** | B-04, B-05, B-06, M-01, M-02, M-03 | ✅ **COMPLETADO** |
 | **Semana 3: P2 Medios** | M-04, M-05, M-08, M-09, M-10, M-11 | ✅ **COMPLETADO** |
-| **Semana 4: P3 + Tests + Docs** | M-07 (parcial), Tests E2E (pendiente), Docs sync | ✅ **Docs COMPLETADO**, Tests E2E pendiente, M-07 parcial |
+| **Semana 4: P3 + Tests + Docs** | M-07 (parcial), Tests E2E (descartados), Docs sync | ✅ **Docs COMPLETADO**, Tests E2E descartados, M-07 parcial |
 
 ---
 
 ### Próximos pasos pendientes (post-auditoría)
-1. **Tests E2E**: Pipeline completo en Spigot real (chat → iFlow → format → delivery)
+1. **Tests E2E**: ⏸️ descartados por decisión (2026-10-20); no se validará en servidores reales.
 2. **GitHub Releases**: Para Module Manager (F12-2) + sync-velocity
 3. **M-07**: ModuleLifecycle firma JAR separada (cosign/gpg); `getCurrentEnvironment()` dinámico
 
