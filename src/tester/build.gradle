@@ -5,7 +5,6 @@ plugins {
 }
 
 group = 'me.majhrs16'
-version = '2.1.0-SNAPSHOT'
 
 java {
     toolchain {

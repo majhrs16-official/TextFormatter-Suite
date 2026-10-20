@@ -1,5 +1,5 @@
 group = 'me.majhrs16'
-version = '2.1.0-SNAPSHOT'
+version = providers.gradleProperty('version').getOrElse('2.1.0-SNAPSHOT')
 
 allprojects {
     group = rootProject.group
@@ -66,6 +66,13 @@ subprojects {
     dependencyLocking {
         lockAllConfigurations()
     }
+}
+
+// Aggregate task used by README/CI: builds every subproject, including tests.
+tasks.register('buildAll') {
+    description = 'Build all subprojects (includes tests)'
+    group = 'build'
+    dependsOn subprojects.collect { "${it.path}:build" }
 }
 
 // ============================================================
@@ -209,7 +216,7 @@ tasks.register('checkLocks') {
         missing.each { logger.lifecycle("  ${it}") }
         
         if (missing.size() > 0) {
-            logger.warn("Run './gradlew :<project>:dependencies --write-locks' for missing projects")
+            throw new GradleException("Missing dependency lockfiles: ${missing.join(', ')}. Run './gradlew :<project>:dependencies --write-locks'.")
         }
     }
 }
