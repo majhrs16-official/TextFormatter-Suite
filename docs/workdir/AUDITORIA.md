@@ -2,7 +2,7 @@
 
 **Fecha UTC:** 2026-10-20 01:31
 **Commit auditado:** `71f23187a2f73cb61eda327ff56f699c2b93f064`
-**Modo:** auditoría en solo lectura. La limpieza derivada se detalla en la sección 10 y no altera el diagnóstico.
+**Modo:** auditoría en solo lectura. La remediación derivada (material y P0 de código) se detalla en la sección 10 y no altera el diagnóstico.
 **Fuentes:** las dos auditorías de `$HOME/AUDITORIA.md` (en adelante *A1* y *A2*), releídas y verificadas contra el árbol de trabajo.
 
 ---
@@ -599,7 +599,24 @@ Estas acciones se ejecutaron después de cerrar el diagnóstico. No cambian los 
 | Limpiar artefactos regenerables | **361 MB → 177 MB**; se conservan `data/`, `node_modules/`, `.idea/` y `vm-logs/` |
 | No tocado | historia (267 commits, 0 tags), `prototype.html`, los 12 wrappers, `common-legacy`, `node_modules` históricos |
 
+### 10.1. P0 de código corregidos
+
+| ID | Corrección | Evidencia |
+|---|---|---|
+| PROJ-AUD-003 | `DiscordSink` conserva el token hasta `stop()`; `send()` falla si el sink está detenido en vez de enviar ceros | `sync-discord`: 8/8 |
+| PROJ-AUD-004 | `SafeConstructor` en las 4 cargas de `ConfigValidator` y en `ExtensionContext` | `host`: 52/52; `extension-api` compila |
+| PROJ-AUD-005 | `HttpTransport` rechaza `userinfo` antes de validar o abrir la conexión | `transport`: 1/1 |
+| PROJ-AUD-006 | `TransactionLog` serializa nulos como vacío, sanea separadores y omite líneas corruptas sin perder las válidas | `manager-core`: 19/19 |
+| PROJ-AUD-007 | `AptInstaller` valida nombre/versión y normaliza el destino contra el directorio temporal | `manager-apt`: 13/13 |
+| PROJ-AUD-008 | índices ≤ 8 MiB, manifiestos ≤ 2 MiB, paquetes ≤ 512 MiB, profundidad ≤ 64 y ≤ 1024 paquetes resueltos | `manager-apt`: 13/13 |
+
+Los límites de profundidad y de manifiesto no tienen un test de comportamiento dedicado; quedan cubiertos por compilación y revisión. El resto sí tiene prueba directa.
+
+**Verificación:** 93 tests en los módulos tocados, 0 fallos, 0 errores, con `--offline`, `--no-daemon` y `JAVA_HOME=/opt/javac/x64/21`. `extension-api` no tiene tests.
+
 **Pendiente de decisión:** reescribir la historia para expulsar `node_modules` y unificar el nombre de autor. No se recomienda solo por estética: cambia los 267 hashes y exige force-push. Los 12 commits con `Majhrs16` comparten email con `majhrs16-official`, así que GitHub ya los atribuye a la misma cuenta.
+
+**Pendiente de remediación:** PROJ-AUD-002 (release), PROJ-AUD-009 (CI) y PROJ-AUD-010 (honestidad del README), además de la deuda P1.
 
 ---
 
