@@ -65,8 +65,8 @@
       "sounds": [
         {
           "volume": 1.0,
-          "pitch": 1.0,
-          "name": "entity.experience_orb.pickup"
+          "name": "entity.experience_orb.pickup",
+          "pitch": 1.0
         }
       ],
       "type": "chat"
@@ -103,8 +103,8 @@
       "sounds": [
         {
           "volume": 0.8,
-          "pitch": 1.2,
-          "name": "block.note_block.pling"
+          "name": "block.note_block.pling",
+          "pitch": 1.2
         }
       ],
       "type": "chat"
