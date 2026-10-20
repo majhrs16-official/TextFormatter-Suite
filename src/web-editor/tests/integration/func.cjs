@@ -57,7 +57,7 @@ const st = S.model.defaults();
 const res = S.preview.simulate(st, 'chat.global', 'hola mundo');
 ok(res.ok, 'simulate returns ok');
 ok(res.outputs.length >= 1, 'has outputs (' + res.outputs.length + ')');
-ok(res.steps > 0 && res.steps < 512, 'steps bounded (' + res.steps + ')');
+ok(res.steps > 0 && res.steps <= 512, 'steps bounded (' + res.steps + ')');
 const rr = S.preview.renderMini('<green>%content%</green>', { content: 'hola' });
 ok(rr.includes('hola') && rr.includes('color'), 'renderMini works');
 

@@ -123,7 +123,9 @@
     const results = [];
     const order = [];
 
-    while (queue.length) {
+    // BFS simulation. max-steps is a global budget, not only a per-path depth:
+    // a deterministic cycle can keep producing new output texts.
+    while (queue.length && order.length < maxSteps) {
       const cur = queue.shift();
       if (!cur) continue;
 
