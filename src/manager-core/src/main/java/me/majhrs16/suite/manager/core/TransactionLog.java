@@ -2,7 +2,9 @@ package me.majhrs16.suite.manager.core;
 
 import me.majhrs16.suite.api.spi.PluginLogger;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Instant;
 import java.util.*;
@@ -66,14 +68,50 @@ public final class TransactionLog {
      */
     public synchronized void log(String operationId, OperationType type, String packageName, 
                                  String version, String channel, OperationState state, String details) {
+        if (operationId == null || operationId.isBlank()) {
+            logger.warn("Refusing to write transaction log entry without operationId");
+            return;
+        }
         try {
-            LogEntry entry = new LogEntry(operationId, type, packageName, version, channel, state, Instant.now(), details);
-            String line = String.format("%s|%s|%s|%s|%s|%s|%s|%s%n",
-                    operationId, type, packageName, version, channel, state, entry.timestamp(), details);
+            String line = String.join("|",
+                    sanitize(operationId),
+                    type == null ? "" : type.name(),
+                    sanitize(packageName),
+                    sanitize(version),
+                    sanitize(channel),
+                    state == null ? "" : state.name(),
+                    Instant.now().toString(),
+                    sanitize(details)) + System.lineSeparator();
             Files.writeString(logFile, line, StandardOpenOption.APPEND);
         } catch (IOException e) {
             logger.warn("Failed to write transaction log: " + e.getMessage());
         }
+    }
+
+    /**
+     * Single-line fields cannot contain the separator or line breaks; otherwise
+     * one entry could corrupt the whole log.
+     */
+    private static String sanitize(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return value.replace('|', '/').replace('\r', ' ').replace('\n', ' ');
+    }
+
+    private static <E extends Enum<E>> E parseEnum(Class<E> type, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Enum.valueOf(type, value.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
     }
     
     /**
@@ -84,22 +122,45 @@ public final class TransactionLog {
         Map<String, LogEntry> latestByOperation = new LinkedHashMap<>();
         try {
             if (!Files.exists(logFile)) return Collections.emptyList();
-            
-            String content = Files.readString(logFile);
-            for (String line : content.split("\n")) {
-                if (line.isBlank()) continue;
-                String[] parts = line.split("\\|", 8);
-                if (parts.length >= 8) {
+
+            try (BufferedReader reader = Files.newBufferedReader(logFile, StandardCharsets.UTF_8)) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isBlank()) continue;
+                    String[] parts = line.split("\\|", 8);
+                    if (parts.length < 8) {
+                        logger.warn("Ignoring malformed transaction log line");
+                        continue;
+                    }
+
                     String operationId = parts[0];
-                    OperationState state = OperationState.valueOf(parts[5]);
+                    if (operationId.isBlank()) {
+                        logger.warn("Ignoring transaction log line without operationId");
+                        continue;
+                    }
+
+                    OperationState state = parseEnum(OperationState.class, parts[5]);
+                    if (state == null) {
+                        logger.warn("Ignoring transaction log line with unknown state: " + parts[5]);
+                        continue;
+                    }
+
+                    Instant timestamp;
+                    try {
+                        timestamp = Instant.parse(parts[6]);
+                    } catch (java.time.format.DateTimeParseException e) {
+                        logger.warn("Ignoring transaction log line with invalid timestamp: " + parts[6]);
+                        continue;
+                    }
+
                     LogEntry entry = new LogEntry(
                             operationId,
-                            OperationType.valueOf(parts[1]),
-                            parts[2],
-                            parts[3],
-                            parts[4],
+                            parseEnum(OperationType.class, parts[1]),
+                            emptyToNull(parts[2]),
+                            emptyToNull(parts[3]),
+                            emptyToNull(parts[4]),
                             state,
-                            Instant.parse(parts[6]),
+                            timestamp,
                             parts[7]
                     );
                     // Keep the latest entry for each operationId (log is append-only, so last wins)
