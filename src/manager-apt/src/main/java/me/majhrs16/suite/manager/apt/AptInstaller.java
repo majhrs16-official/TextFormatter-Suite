@@ -21,6 +21,9 @@ import java.util.stream.Collectors;
  */
 public final class AptInstaller {
 
+    /** Absolute ceiling for a package download, independent of index metadata. */
+    static final long MAX_PACKAGE_BYTES = 512L * 1024 * 1024;
+
     private final RepositoryManager repoManager;
     private final DependencyResolver resolver;
     private final PackageInstaller installer;
@@ -183,9 +186,13 @@ public final class AptInstaller {
      * Downloads a package ZIP to the temporary directory.
      */
     private Path downloadPackage(RepositoryManager.PackageCandidate candidate) throws IOException {
+        if (candidate.size() <= 0 || candidate.size() > MAX_PACKAGE_BYTES) {
+            throw new IOException("Invalid package size: " + candidate.size());
+        }
+
         String url = candidate.downloadUrl();
-        String fileName = candidate.name() + "-" + candidate.version() + ".zip";
-        Path dest = tmpDir.resolve(fileName);
+        String fileName = packageFileName(candidate.name(), candidate.version());
+        Path dest = safeDestination(tmpDir, fileName);
         
         logger.debug("Downloading " + candidate.name() + " from " + url);
         
@@ -240,6 +247,33 @@ public final class AptInstaller {
         }
         
         return dest;
+    }
+
+    /**
+     * Builds the cache file name, rejecting separators and traversal segments.
+     */
+    static String packageFileName(String name, String version) throws IOException {
+        if (!isSafeComponent(name) || !isSafeComponent(version)) {
+            throw new IOException("Invalid package name or version");
+        }
+        return name + "-" + version + ".zip";
+    }
+
+    private static boolean isSafeComponent(String value) {
+        return value != null && !value.isBlank()
+                && !value.equals(".") && !value.equals("..")
+                && value.indexOf('/') < 0
+                && value.indexOf('\\') < 0
+                && value.indexOf('\0') < 0;
+    }
+
+    private static Path safeDestination(Path baseDir, String fileName) throws IOException {
+        Path base = baseDir.toAbsolutePath().normalize();
+        Path destination = base.resolve(fileName).normalize();
+        if (destination.equals(base) || !destination.startsWith(base)) {
+            throw new IOException("Invalid package destination");
+        }
+        return destination;
     }
 
     private boolean verifyChecksum(Path file, String expectedSha256) {
