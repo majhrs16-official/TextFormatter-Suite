@@ -5,7 +5,7 @@
 
 > **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
 
-> **Nota de estado (2026-10-23):** **iFlow v2 queda abandonado.** La VM de 16 bits, el ISA `.flow`, el compilador `tools/iflow-compiler/`, el firmware embebido y todas las decisiones de la auditoría `IFLOW-MAN-*` dejan de ser la dirección del proyecto. Se conservan únicamente como registro histórico. El motor de políticas objetivo es **WebAssembly**, ejecutado en la JVM con **Chicory**. Las secciones de este plan que describen iFlow son históricas y no deben tomarse como trabajo pendiente.
+> **Nota de estado (2026-10-23):** **iFlow v2 queda abandonado como motor activo.** La VM de 16 bits, el ISA `.flow`, el compilador `tools/iflow-compiler/`, el firmware embebido y todas las decisiones de la auditoría `IFLOW-MAN-*` dejan de ser la dirección del proyecto. **iFlow v2 no se elimina:** se conserva como módulo legacy **`iflow-vm`**, fuera del camino activo y sin remediación. El motor de políticas objetivo es **WebAssembly**, ejecutado en la JVM con **Chicory**. Las secciones de este plan que describen iFlow son históricas y no deben tomarse como trabajo pendiente.
 
 > **Alcance vigente (2026-10-23):** las pruebas reales/E2E siguen descartadas y el editor web sigue diferido a una auditoría separada. La sección «Decisiones de alcance vigentes» es la fuente de verdad para ambas. La auditoría de iFlow v2 se archiva en git y el archivo `docs/workdir/AUDITORIA.md` queda vacío.
 
@@ -35,16 +35,19 @@ migra a 32 bits. En su lugar, la superficie de políticas pasa a ser **WebAssemb
 - La configuración por módulo y el editor web como superficies de autoría.
 - Las decisiones de seguridad que no dependen de iFlow: sandbox, capabilities, límites duros de
   memoria/tiempo/tamaño, validación de artefactos y verificación de integridad.
+- **iFlow v2 como módulo legacy `iflow-vm`**: código, tests, fixtures y compilador se conservan
+  para referencia, compatibilidad y arqueología. No se mejora, no se remedia y no es el camino
+  activo, pero **no se borra**.
 
-### Qué queda obsoleto
+### Qué queda obsoleto como motor activo (sin borrar el legado)
 
-- `src/iflow/` (VM, ISA, MMU, bus, dispositivos, servicios `HOST`, firmware).
-- `tools/iflow-compiler/` y todos los `.flowasm` / `.flow`.
+- El uso de `src/iflow/` como motor por defecto. Se conserva y se renombra a **`iflow-vm`**.
+- `tools/iflow-compiler/` y los `.flowasm` / `.flow`: se conservan asociados a `iflow-vm`.
 - El modelo BIOS → bootloader → kernel → userspace, el mapa de 64 KB, los frames de 4 KB y el
-  contador de ciclos/fuel.
+  contador de ciclos/fuel como arquitectura objetivo.
 - Los hallazgos `IFLOW-MAN-01…54`, las propuestas `IFLOW-MAN-D01…D13` y las decisiones `D14…D43`.
   **No se remedian**: se archivan con la auditoría y no se usan como base del nuevo motor.
-- Los tests, fixtures y documentación que describen el ISA o el ABI `HOST` v2 de iFlow.
+- La documentación que presenta iFlow v2 como motor vigente; se marca como legado.
 
 ### Arquitectura objetivo (borrador, sujeta a ADR)
 
@@ -85,11 +88,12 @@ Reglas de diseño:
 | **W3 — Integración** | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher`; reemplazo progresivo del camino iFlow | Un mensaje real atraviesa el pipeline con una política `.wasm` |
 | **W4 — Herramientas** | Ejemplos en al menos dos lenguajes, validador de artefactos y guía de autoría | Build reproducible de los ejemplos + tests |
 | **W5 — Editor** | Soporte del panel web para editar/compilar/subir `.wasm` | Flujo de autoría de extremo a extremo |
-| **W6 — Retirada** | Eliminar `src/iflow/`, `tools/iflow-compiler/` y documentación obsoleta | El build no contiene referencias a iFlow v2 |
+| **W6 — Aislamiento legacy** | Renombrar `src/iflow/` a `src/iflow-vm/`, actualizar `settings.gradle` y dependencias, marcar el módulo como legacy. **No se elimina** el código, los tests ni el compilador. | `:src:iflow-vm:test` sigue compilando; el host no lo usa por defecto; el camino activo es Wasm |
 
 ### Decisiones pendientes (ADR)
 
 - Nombre y ubicación del módulo Java (`wasm-policy`, `engine-wasm` u otro).
+- Renombre definitivo de `src/iflow` a `src/iflow-vm`, artifactId y reglas de aislamiento del legado.
 - Versión de Chicory y módulos exactos (`runtime`, compilador, WASI) fijados en lockfile.
 - ABI de imports: nombres, tipos, semántica de `deliver`, propiedades, estado, canales y reloj.
 - Modelo de capabilities y su relación con `PermissionChecker`.
@@ -100,8 +104,9 @@ Reglas de diseño:
 ### Próxima acción inmediata (W0/W1)
 
 1. Archivar la auditoría de iFlow v2 en git y vaciar `docs/workdir/AUDITORIA.md`.
-2. Escribir el ADR del motor Wasm con el contrato de imports/exports y capabilities.
-3. Crear un spike mínimo con Chicory que cargue e invoque un `.wasm` sin integrarlo aún al host.
+2. Preservar iFlow v2 como módulo legacy `iflow-vm` (sin borrar código, tests ni compilador).
+3. Escribir el ADR del motor Wasm con el contrato de imports/exports y capabilities.
+4. Crear un spike mínimo con Chicory que cargue e invoque un `.wasm` sin integrarlo aún al host.
 
 ---
 
@@ -112,7 +117,7 @@ Reglas de diseño:
 | core-api (modelo atómico + SPI) | ✅ estable, JDK-puro | tests |
 | kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
 | textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
-| iflow (router/reglas/rate-limit per-key) | ⛔ abandonado (v2, 2026-10-23); reemplazo Wasm/Chicory en W1 | histórico |
+| iflow (router/reglas/rate-limit per-key) | 🗄️ legacy: se conserva como `iflow-vm` (congelado 2026-10-23); reemplazo Wasm/Chicory en W1 | histórico |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
@@ -211,9 +216,9 @@ export JAVA_HOME=/opt/javac/x64/21
 ./gradlew --offline build
 ```
 
-> ⛔ **Toolchain de iFlow v2 obsoleto (2026-10-23).** `tools/iflow-compiler/` y
-> `:src:iflow:test` se conservan solo hasta la fase W6 de retirada; no son parte del nuevo
-> motor. El runtime objetivo es Chicory y los artefactos son `.wasm`, no `.flow`.
+> ⛔ **Toolchain de iFlow v2 obsoleto como motor activo (2026-10-23).** `tools/iflow-compiler/` y
+> `:src:iflow:test` se conservan con el módulo legacy; en W6 pasan a `:src:iflow-vm:test`, sin
+> borrar código. El runtime objetivo es Chicory y los artefactos son `.wasm`, no `.flow`.
 
 ### Criterio de uso
 
@@ -445,7 +450,7 @@ export JAVA_HOME=/opt/javac/x64/21
 ### ⏸️ DECISIONES DE ALCANCE VIGENTES (2026-10-20)
 - **Pruebas reales y E2E** → **descartadas**. No se validará en servidores reales Spigot/Paper, Fabric ni proxies Velocity; la validación de plataformas se limita a compilación y tests automatizados que no requieran un servidor real. Las menciones históricas a «tests E2E pendientes», «probar en servidor real» o «proxy Velocity real» quedan cerradas por esta decisión.
 - **Editor web** → **diferido a una auditoría separada y al último lugar**. No forma parte de la deuda P1 activa ni se sustituye con parches parciales; la auditoría cubrirá funcionalidad, UI/UX, modelo, tests y deuda estructural.
-- **iFlow v2 y su auditoría** → **abandonados y archivados (2026-10-23)**. No se remedia código de iFlow ni se ratifica su modelo de decisión. La auditoría se conserva en el historial de git; `docs/workdir/AUDITORIA.md` queda vacío. El reemplazo es WebAssembly + Chicory (ver «CAMBIO DE DIRECCIÓN» al inicio del plan).
+- **iFlow v2 y su auditoría** → **iFlow v2 se conserva como módulo legacy `iflow-vm` (2026-10-23)**. No se elimina el código, no se remedia ni se ratifica su modelo de decisión. La auditoría se conserva en el historial de git; `docs/workdir/AUDITORIA.md` queda vacío. El reemplazo activo es WebAssembly + Chicory (ver «CAMBIO DE DIRECCIÓN» al inicio del plan).
 - **GitHub Releases** → no se publicarán (distribución vía source/build local).
 
 ---
@@ -1080,8 +1085,8 @@ Todos los items P1 resueltos:
 
 ## REDISEÑO DEL ABI DE `HOST` (iflow) + TOOLCHAIN `.flowasm` — 2026-10-16 (⛔ HISTÓRICO; iFLOW V2 ABANDONADO 2026-10-23)
 
-> **Documento histórico.** iFlow v2 fue abandonado; no se toca `iflow` (VM) ni el compilador.
-> Se conserva solo como registro de decisiones pasadas.
+> **Documento histórico.** iFlow v2 fue abandonado como motor activo; se conserva como módulo
+> legacy `iflow-vm`. No se modifica su lógica ni se borra el compilador; solo se renombra y aísla.
 > Nace de la revisión del firmware `Sentinel-1` y del compilador `.flowasm`.
 
 ### Contexto — qué destapó la revisión
@@ -2133,7 +2138,7 @@ recompilarlos con el ensamblador actual. Es el precio de un formato auto-descrip
 La auditoría detallada de iFlow fue archivada en el commit `4e0b901` antes de vaciar
 `docs/workdir/AUDITORIA.md`. **No es documentación vigente ni base de remediación.**
 
-- **Estado:** archivada; iFlow v2 abandonado. No se modifica código de iFlow.
+- **Estado:** archivada; iFlow v2 abandonado como motor activo y conservado como módulo legacy `iflow-vm`. No se elimina ni se remedia su código.
 - **Base:** `2f0b217` (commit local, no publicado).
 - **Alcance de la pasada:** contratos de entrada, enlace host↔iFlow, `PolicyTarget`, carga de `.flow`, transformación vs canal, `HALT`/IRQ, MMU/bus/MMIO, parser, intérprete, servicios `HOST`, firmware del compilador y cuentas de la cola de rate limit.
 - **Resultado histórico:** 41 hallazgos `IFLOW-MAN-01…41`, 9 hallazgos arquitecturales transversales `IFLOW-MAN-46…54`, 4 hallazgos diferidos `IFLOW-MAN-42…45`, 13 propuestas `IFLOW-MAN-D01…D13` y las decisiones `D14…D16`, `D36R` y `D40…D43`. Todos quedan **descartados** con el abandono de iFlow v2.
