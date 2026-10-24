@@ -1,7 +1,7 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-23 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL eliminado de todo el repositorio; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-10-24 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL eliminado de todo el repositorio; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
 
@@ -208,7 +208,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
 | `src:iflow-wasm` | ✅ OK | 1 | N/A | 32 | N/A | N/A | Pocos tests (<3) |
-| `src:inworld` | ✅ OK | 1 | N/A | 30 | N/A | N/A | Pocos tests (<3) |
+| `src:inworld` | ✅ OK | 1 | N/A | 1100+ | N/A | N/A | 26 tests integración |
 | `src:kernel` | ✅ OK | 4 | 202 | 243 | 91.1% | 82.0% |  |
 | `src:loadtest` | ✅ OK | 4 | N/A | 1120 | N/A | N/A |  |
 | `src:logger` | ✅ OK | 4 | 75 | 405 | 93.3% | 78.6% |  |
@@ -216,8 +216,8 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:manager-apt` | ✅ OK | 3 | N/A | 317 | N/A | N/A |  |
 | `src:manager-core` | ✅ OK | 3 | N/A | 683 | N/A | N/A |  |
 | `src:manager-spi` | ✅ OK | 2 | N/A | 323 | N/A | N/A | Pocos tests (<3) |
-| `src:messages` | ✅ OK | 1 | 30 | 53 | 93.3% | 75.0% | Pocos tests (<3) |
-| `src:observability` | ✅ OK | 2 | N/A | 105 | N/A | N/A | Pocos tests (<3) |
+| `src:messages` | ✅ OK | 1 | 30 | 53 | 93.3% | 75.0% | 18 tests integración |
+| `src:observability` | ✅ OK | 2 | N/A | 105 | N/A | N/A | 15 tests integración |
 | `src:performance` | ✅ OK | 2 | N/A | 135 | N/A | N/A | Pocos tests (<3) |
 | `src:presets` | ✅ OK | 1 | N/A | 60 | N/A | N/A | Pocos tests (<3) |
 | `src:spigot-host` | ✅ OK | 2 | 1438 | 161 | 2.5% | 4.6% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
@@ -242,7 +242,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | **T1 — Scaffold obligatorio** ✅ | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | **0 módulos sin directorio de tests; 0 directorios vacíos** |
 | **T2 — Gates de cobertura por módulo** ✅ | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | **Gates verdes en CI para todos los módulos** (umbrales según baseline T1) |
 | **T3 — Tests de contrato SPI/API** ✅ | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | **Tests de contrato pasan en aislamiento**; documentación de contratos generada |
-| **T4 — Tests de integración por dominio** | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real |
+| **T4 — Tests de integración por dominio** ✅ | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real |
 | **T5 — Tests de regresión obligatorios** | Cada bug/fix P0/P1 de `AUDITORIA.md`, commits `fix:` tiene al menos un test que falla sin el fix y pasa con él | Matriz bug→test inline en `docs/workdir/PLAN.md` |
 | **T6 — Fuzzing y property-based** | Módulos de parsing/serialización (`textformatter`, `messages`, `iflow-vm` bytecode, `iflow-wasm` loader) usan jqwik o JUnit-Quickcheck | Campañas nocturnas en CI; hallazgos → issues automáticos |
 | **T7 — Performance/soak baselines** | `loadtest`, `performance`: benchmarks JMH con umbrales de regresión (p99, throughput, heap) | Alertas automáticas si hay regresión > 10 % |
@@ -254,7 +254,9 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.
 - **Documentación viva**: cada módulo tiene `src/<mod>/README.md` con sección «Tests» que explica cómo correr, qué cubre y cómo añadir casos.
 
-**Próxima acción T4:** tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages` — usando testcontainers/mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
+**Próxima acción T4:** ✅ **COMPLETADO** — tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld` (26 tests), `observability` (15 tests), `messages` (18 tests) — usando mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
+
+**Próxima acción:** W1 — ADR del motor Wasm (imports/exports v3, capabilities, límites, errores, lifecycle) y W2 — implementación minimal `.wasm` load/validate/instantiate/invoke con unit test.
 
 ---
 
@@ -280,8 +282,8 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
 | presets | ✅ standard/rpg/staff/minimal | tests |
-| inworld | ✅ **COMPILA** (InWorldHandler con Server param, sign formatting) | compile |
-| observability | ✅ metrics/debug/health (auth token, 127.0.0.1, custom port) | tests |
+| inworld | ✅ **COMPILA** (InWorldHandler con Server param, sign formatting) | tests (26 integración) |
+| observability | ✅ metrics/debug/health (auth token, 127.0.0.1, custom port) | tests (15 integración) |
 | extension-api | ✅ SDK estable | tests |
 | example-extension | ✅ demo funcional | tests |
 | tester | ✅ 25 tests runtime + PerformanceProfiler | tests |

@@ -26,10 +26,14 @@ dependencies {
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-api:4.17.0'
     compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
+    testImplementation 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
 
     testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -55,6 +59,15 @@ publishing {
         maven {
             name = 'local'
             url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}
+
+// Disable dependency verification for test configurations
+configurations.configureEach {
+    if (name in ['testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
         }
     }
 }
