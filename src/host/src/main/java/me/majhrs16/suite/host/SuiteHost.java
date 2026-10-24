@@ -85,7 +85,7 @@ public final class SuiteHost {
     }
 
     /**
-     * Bootstraps with a explicitly provided {@link ChatDelivery} implementation.
+     * Bootstraps with an explicitly provided {@link ChatDelivery} implementation.
      * Use {@link #bootstrap(Path, PermissionChecker, TranslationService, PluginLogger)}
      * for ServiceLoader-auto-discovery.
      */

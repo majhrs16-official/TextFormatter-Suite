@@ -97,6 +97,33 @@ Reglas de diseño:
 | **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
 | **V5 — Herramientas** | Compilador `.flowasm`, firmware, ejemplos y validador | Build reproducible + tests |
 
+### Fases de `chattranslator` (Facade de traducción unificada)
+
+| Fase | Entregable | Criterio de cierre |
+|---|---|---|
+| **CT0 — Scaffold** | Módulo `src/chattranslator/` creado, `ChatTranslator` facade, `Module` SPI, tests unitarios (12 tests) | ✅ Módulo Gradle incluido; `:src:chattranslator:build` y tests pasan |
+| **CT1 — Config & Default Backend** | Soporte para `translator.default-backend` en `config.yml`; lectura al arranque | Config schema extendido; test de integración con config real |
+| **CT2 — Context Flags Runtime** | API `setContextBackend(key, backend)` funcional; prioridad contexto > config > auto | Tests de prioridad pasando; sin regresiones en `gtranslate`/`ltranslate` |
+| **CT3 — Backend Re-registration** | Backends (`gtranslate`, `ltranslate`) declaran requerimiento `chattranslator` en `ModuleDescriptor`; `manager` respeta orden de carga | Grafo de dependencias válido; backends se cargan después del frontend |
+| **CT4 — Integración Host** | `SuiteHost`/`TranslationService` usan `ChatTranslator` como fachada principal; Spigot/Fabric hooks actualizados | Mensaje real traducido via `ChatTranslator` en pipeline E2E |
+| **CT5 — Editor & Autoría** | Panel web para configurar backend default y ver backends registrados | UI funcional + tests de integración |
+
+### Decisiones pendientes (ADR) — ChatTranslator
+
+- **Schema de config:** ¿`translator.default-backend` en `config.yml` raíz o en `translators/*.yml`?
+- **Backward compat:** ¿Mantener `TranslationService.active()` como fallback automático o forzar uso de `ChatTranslator`?
+- **Capability versioning:** ¿`chattranslator` capability versionada independientemente o atada a suite version?
+
+### Paridad funcional `TranslationService` ↔ `ChatTranslator`
+
+| Área | `TranslationService` (actual) | `ChatTranslator` (objetivo) |
+|---|---|---|
+| Selección backend | Primer `isAvailable()` en orden de registro | Contexto > Config > Auto (primer `isAvailable()`) |
+| Configuración | `translators/*.yml` (por proveedor) | `config.yml` (default-backend) + `translators/*.yml` |
+| Override runtime | No soportado | `setContextBackend(key, backend)` |
+| Caché/detección | Interno en `TranslationService` | Delegado a `TranslationService` (sin cambios) |
+| API pública | `translate(text, from, to)`, `detect(text)` | Mismos métodos + overloads con `contextKey` |
+
 ### Fases de `iflow-wasm` (Chicory)
 
 | Fase | Entregable | Criterio de cierre |
@@ -176,24 +203,26 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Convivencia:** selección de motor por configuración, formato de configuración común, migración
   de políticas y criterio para declarar un motor como predeterminado.
 
-### Próxima acción inmediata (V0/W0/W1 y cierre de paridad)
+### Próxima acción inmediata (V0/W0/W1, CT1–CT2 y cierre de paridad)
 
 1. Mantener `docs/prompts/diseno/iflow-cpu-implement.md` como especificación técnica de referencia v3 de la VM de 32 bits.
 2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
 3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. Escribir el ADR del motor Wasm y el ADR de la VM de 32 bits antes de implementar núcleos.
 5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5); no se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
+6. **ChatTranslator CT1:** Extender schema de config (`config.yml` → `translator.default-backend`) y leerlo en `ChatTranslatorModule.onLoad()` (o equivalente en host).
+7. **ChatTranslator CT2:** Validar prioridad contexto > config > auto con tests de integración; actualizar `gtranslate`/`ltranslate` para declarar `requires(Capability.of("chattranslator", ...))` en sus `ModuleDescriptor`.
 
 ---
 
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
-> **Situación actual (2026-10-24):** inventario real generado con `./gradlew testInventory` — **32 módulos Java** en `src/`:
+> **Situación actual (2026-10-24):** inventario real generado con `./gradlew testInventory` — **33 módulos Java** en `src/`:
 > - **0 sin directorio de tests** (antes: `common-legacy`)
 > - **0 directorios vacíos** (antes: `fabric-host`, `tester`)
-> - **32 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (9), `textformatter` (6) superan 5 archivos
+> - **33 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (9), `textformatter` (6), `chattranslator` (12) superan 5 archivos
 > - **10 módulos con reporte JaCoCo**: `iflow-vm` (86.2%/71.3%), `kernel` (91.1%/82.0%), `logger` (93.3%/78.6%), `messages` (93.3%/75.0%), `textformatter` (81.6%/66.7%), `host` (30.9%/23.8%), `spigot-host` (2.5%/4.6%), `transport` (6.0%/1.0%), `fabric-host` (0.0%/0.0%), `tester` (0.0%/0.0%)
-> - **22 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
+> - **23 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
 
 **Inventario detallado (baseline T0 → T1 actualizado 2026-10-24):**
 
@@ -208,6 +237,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
 | `src:iflow-wasm` | ✅ OK | 1 | N/A | 32 | N/A | N/A | Pocos tests (<3) |
+| `src:chattranslator` | ✅ OK | 1 | N/A | 350+ | N/A | N/A | 12 tests unitarios |
 | `src:inworld` | ✅ OK | 1 | N/A | 1100+ | N/A | N/A | 26 tests integración |
 | `src:kernel` | ✅ OK | 4 | 202 | 243 | 91.1% | 82.0% |  |
 | `src:loadtest` | ✅ OK | 4 | N/A | 1120 | N/A | N/A |  |
@@ -232,7 +262,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:textformatter` | ✅ OK | 6 | 282 | 512 | 81.6% | 66.7% |  |
 | `src:transport` | ✅ OK | 1 | 351 | 22 | 6.0% | 1.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 
-**Resumen:** 32 módulos totales · **32 con tests** · **0 sin test dir** · **0 vacíos** · 10 con cobertura real · 22 con tests pero sin reporte JaCoCo.
+**Resumen:** 33 módulos totales · **33 con tests** · **0 sin test dir** · **0 vacíos** · 10 con cobertura real · 23 con tests pero sin reporte JaCoCo.
 
 **Objetivo:** que **cada módulo** tenga una suite de tests unitarios y de componente con **cobertura significativa** (líneas/branches ≥ 70 % en código de producción, ≥ 90 % en SPI/API pública) y tests de regresión para cada bug/fix documentado.
 
@@ -288,6 +318,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | example-extension | ✅ demo funcional | tests |
 | tester | ✅ 25 tests runtime + PerformanceProfiler | tests |
 | messages | ✅ i18n centralizado EN/ES | tests |
+| chattranslator | 🧪 scaffold + facade + 12 unit tests; backends (gtranslate/ltranslate) dependen de core-api SPI | build + tests |
 | i18n (FASE 5) | ✅ strings hardcodeados → MessagesCatalog | 98% |
 | transport | ✅ HttpURLConnection + MessageCodec único (IP pinning SSRF, 307/308 body preserve) | tests |
 | loadtest | ✅ JMH benchmarks | build |
