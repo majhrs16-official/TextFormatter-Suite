@@ -228,3 +228,139 @@ tasks.register('checkLocks') {
         }
     }
 }
+
+// ============================================================
+// Test Inventory (T0) — genera docs/workdir/TEST-INVENTORY.md
+// ============================================================
+tasks.register('testInventory') {
+    description 'Genera inventario de tests y cobertura por módulo en docs/workdir/TEST-INVENTORY.md'
+    group 'verification'
+    doLast {
+        def reportFile = file("docs/workdir/TEST-INVENTORY.md")
+        reportFile.parentFile.mkdirs()
+        
+        def lines = []
+        lines << "# Inventario de Tests y Cobertura — ${new Date().format('yyyy-MM-dd')}"
+        lines << ""
+        lines << "Generado automáticamente con ./gradlew testInventory."
+        lines << ""
+        lines << "| Módulo | Test Dir | Archivos Test | Líneas Prod | Líneas Test | Cobertura Línea | Cobertura Rama | Gaps Críticos |"
+        lines << "|---|---|---:|---:|---:|---:|---:|---|"
+        
+        def totalModules = 0
+        def modulesWithTests = 0
+        def modulesWithoutTestDir = 0
+        def modulesEmptyTestDir = 0
+        
+        subprojects.each { project ->
+            // Skip intermediate :src project (no build.gradle)
+            if (project.path == ':src') return
+            
+            def testDir = file("${project.projectDir}/src/test")
+            def testFiles = []
+            def hasTestDir = testDir.exists() && testDir.isDirectory()
+            
+            if (hasTestDir) {
+                testFiles = fileTree(testDir).include("**/*.java", "**/*.kt", "**/*.groovy", "**/*.scala").files
+            }
+            
+            def testFileCount = testFiles.size()
+            def hasEmptyTestDir = hasTestDir && testFileCount == 0
+            
+            if (!hasTestDir) modulesWithoutTestDir++
+            else if (hasEmptyTestDir) modulesEmptyTestDir++
+            else modulesWithTests++
+            totalModules++
+            
+            // Ejecutar test y JaCoCo para este módulo si tiene tests
+            def lineCoverage = "N/A"
+            def branchCoverage = "N/A"
+            def prodLines = "N/A"
+            def testLines = "N/A"
+            def gaps = []
+            
+            if (testFileCount > 0) {
+                // Intentar obtener cobertura de reporte JaCoCo existente
+                def jacocoReport = file("${project.buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+                if (jacocoReport.exists()) {
+                    def content = jacocoReport.text
+                    // Extraer cobertura global (último match de cada tipo = agregado)
+                    def lineMatcher = (content =~ /<counter type="LINE" missed="(\d+)" covered="(\d+)"\/>/)
+                    def branchMatcher = (content =~ /<counter type="BRANCH" missed="(\d+)" covered="(\d+)"\/>/)
+                    
+                    def lineMatches = []
+                    while (lineMatcher.find()) {
+                        lineMatches << [lineMatcher.group(1), lineMatcher.group(2)]
+                    }
+                    def branchMatches = []
+                    while (branchMatcher.find()) {
+                        branchMatches << [branchMatcher.group(1), branchMatcher.group(2)]
+                    }
+                    
+                    if (lineMatches) {
+                        def last = lineMatches[lineMatches.size() - 1]
+                        try {
+                            def missed = last[0] as long
+                            def covered = last[1] as long
+                            def total = covered + missed
+                            prodLines = total
+                            lineCoverage = total > 0 ? String.format(java.util.Locale.US, "%.1f%%", (covered * 100.0 / total)) : "0%"
+                        } catch (e) {
+                            logger.warn("Module ${project.path}: Failed to parse LINE coverage from: ${last}")
+                        }
+                    }
+                    if (branchMatches) {
+                        def last = branchMatches[branchMatches.size() - 1]
+                        try {
+                            def missed = last[0] as long
+                            def covered = last[1] as long
+                            def total = covered + missed
+                            branchCoverage = total > 0 ? String.format(java.util.Locale.US, "%.1f%%", (covered * 100.0 / total)) : "0%"
+                        } catch (e) {
+                            logger.warn("Module ${project.path}: Failed to parse BRANCH coverage from: ${last}")
+                        }
+                    }
+                }
+                
+                // Contar líneas de test aprox
+                def testLineCount = 0
+                testFiles.each { f ->
+                    testLineCount += f.readLines().size()
+                }
+                testLines = testLineCount
+                
+                // Detectar gaps críticos
+                if (testFileCount < 3) gaps << "Pocos tests (<3)"
+                if (lineCoverage != "N/A" && lineCoverage.endsWith("%")) {
+                    def cov = lineCoverage.replace("%", "") as double
+                    if (cov < 70) gaps << "Cobertura línea <70%"
+                }
+                if (branchCoverage != "N/A" && branchCoverage.endsWith("%")) {
+                    def cov = branchCoverage.replace("%", "") as double
+                    if (cov < 50) gaps << "Cobertura rama <50%"
+                }
+            } else {
+                gaps << "SIN TESTS"
+            }
+            
+            def testDirStatus = !hasTestDir ? "❌ FALTA" : (hasEmptyTestDir ? "⚠️ VACÍO" : "✅ OK")
+            
+            lines << "| ${project.path} | ${testDirStatus} | ${testFileCount} | ${prodLines} | ${testLines} | ${lineCoverage} | ${branchCoverage} | ${gaps.join("; ")} |"
+        }
+        
+        lines << ""
+        lines << "---"
+        lines << ""
+        lines << "## Resumen"
+        lines << ""
+        lines << "- **Total módulos Java**: ${totalModules}"
+        lines << "- **Con tests**: ${modulesWithTests}"
+        lines << "- **Sin directorio de tests**: ${modulesWithoutTestDir}"
+        lines << "- **Directorio de tests vacío**: ${modulesEmptyTestDir}"
+        lines << ""
+        lines << "> **Nota**: Cobertura N/A = módulo sin tests o sin reporte JaCoCo. Ejecuta ./gradlew jacocoTestReport antes para datos frescos."
+        
+        reportFile.write(lines.join("\n"))
+        logger.lifecycle("Inventario escrito en: ${reportFile.absolutePath}")
+    }
+}
