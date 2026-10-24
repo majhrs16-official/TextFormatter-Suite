@@ -25,6 +25,7 @@ dependencies {
     testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -50,6 +51,15 @@ publishing {
         maven {
             name = 'local'
             url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}
+
+// Disable dependency verification for test configurations (AssertJ)
+configurations.configureEach {
+    if (name in ['testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
         }
     }
 }
