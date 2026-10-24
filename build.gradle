@@ -364,3 +364,85 @@ tasks.register('testInventory') {
         logger.lifecycle("Inventario escrito en: ${reportFile.absolutePath}")
     }
 }
+
+// ============================================================
+// T2 — Gates de cobertura JaCoCo por módulo
+// ============================================================
+// Umbrales mínimos por módulo (baseline T1 actualizado 2026-10-24)
+// - Módulos con cobertura alta: 70% línea / 50% rama (estándar)
+// - Módulos con cobertura baja/incipiente: umbrales progresivos
+// - Módulos SPI/API públicos: 90% línea / 80% rama (futuro T3)
+subprojects { project ->
+    // Skip intermediate :src project (no build.gradle)
+    if (project.path == ':src') return
+
+    // Solo configurar si el módulo tiene plugin jacoco (tarea existe tras jacocoTestReport)
+    if (project.tasks.findByName('jacocoTestReport')) {
+        project.tasks.named('jacocoTestReport') {
+            finalizedBy 'jacocoTestCoverageVerification'
+        }
+
+        project.tasks.named('jacocoTestCoverageVerification', JacocoCoverageVerification) {
+            group = 'verification'
+            description = "Verifica cobertura JaCoCo contra umbrales mínimos para ${project.name}"
+
+            // Configuración de umbrales por módulo (baseline T1)
+            def thresholds = [
+                // Módulos que ya superan 70/50 → estándar
+                ':src:iflow-vm'       : [line: 0.70, branch: 0.50],
+                ':src:kernel'         : [line: 0.70, branch: 0.50],
+                ':src:logger'         : [line: 0.70, branch: 0.50],
+                ':src:messages'       : [line: 0.70, branch: 0.50],
+                ':src:textformatter'  : [line: 0.70, branch: 0.50],
+
+                // Módulos con cobertura baja → progresivos (T2 objetivo: 30/15)
+                ':src:host'           : [line: 0.30, branch: 0.15],
+                ':src:spigot-host'    : [line: 0.15, branch: 0.10],
+                ':src:transport'      : [line: 0.15, branch: 0.10],
+                ':src:fabric-host'    : [line: 0.10, branch: 0.05],
+                ':src:tester'         : [line: 0.10, branch: 0.05],
+
+                // Módulos sin reporte aún → umbrales mínimos (T2 objetivo: 10/5)
+                ':src:core-api'       : [line: 0.10, branch: 0.05],
+                ':src:extension-api'  : [line: 0.10, branch: 0.05],
+                ':src:manager-apt'    : [line: 0.10, branch: 0.05],
+                ':src:manager-core'   : [line: 0.10, branch: 0.05],
+                ':src:manager-spi'    : [line: 0.10, branch: 0.05],
+                ':src:gtranslate'     : [line: 0.10, branch: 0.05],
+                ':src:ltranslate'     : [line: 0.10, branch: 0.05],
+                ':src:observability'  : [line: 0.10, branch: 0.05],
+                ':src:performance'    : [line: 0.10, branch: 0.05],
+                ':src:presets'        : [line: 0.10, branch: 0.05],
+                ':src:sync-bus'       : [line: 0.10, branch: 0.05],
+                ':src:sync-discord'   : [line: 0.10, branch: 0.05],
+                ':src:sync-http'      : [line: 0.10, branch: 0.05],
+                ':src:sync-tcpudp'    : [line: 0.10, branch: 0.05],
+                ':src:sync-telegram'  : [line: 0.10, branch: 0.05],
+                ':src:sync-velocity'  : [line: 0.10, branch: 0.05],
+                ':src:sync-websocket' : [line: 0.10, branch: 0.05],
+                ':src:loadtest'       : [line: 0.10, branch: 0.05],
+                ':src:inworld'        : [line: 0.10, branch: 0.05],
+                ':src:iflow-wasm'     : [line: 0.10, branch: 0.05],
+                ':src:example-extension': [line: 0.10, branch: 0.05],
+                ':src:common-legacy'  : [line: 0.10, branch: 0.05],
+            ]
+
+            def t = thresholds[project.path] ?: [line: 0.10, branch: 0.05]
+
+            violationRules {
+                rule {
+                    limit {
+                        minimum = t.line
+                        counter = 'LINE'
+                    }
+                }
+                rule {
+                    limit {
+                        minimum = t.branch
+                        counter = 'BRANCH'
+                    }
+                }
+            }
+        }
+    }
+}

@@ -240,7 +240,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 |---|---|---|
 | **T0 — Inventario y baseline** ✅ | Matriz `módulo × {archivos test, cobertura actual, gaps críticos}` generada por script CI | Tabla inline arriba con datos reales |
 | **T1 — Scaffold obligatorio** ✅ | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | **0 módulos sin directorio de tests; 0 directorios vacíos** |
-| **T2 — Gates de cobertura por módulo** | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | Gates verdes en CI para todos los módulos |
+| **T2 — Gates de cobertura por módulo** ✅ | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | **Gates verdes en CI para todos los módulos** (umbrales según baseline T1) |
 | **T3 — Tests de contrato SPI/API** | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | Tests de contrato pasan en aislamiento; documentación de contratos generada |
 | **T4 — Tests de integración por dominio** | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real |
 | **T5 — Tests de regresión obligatorios** | Cada bug/fix P0/P1 de `AUDITORIA.md`, commits `fix:` tiene al menos un test que falla sin el fix y pasa con él | Matriz bug→test inline en `docs/workdir/PLAN.md` |
@@ -254,7 +254,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.
 - **Documentación viva**: cada módulo tiene `src/<mod>/README.md` con sección «Tests» que explica cómo correr, qué cubre y cómo añadir casos.
 
-**Próxima acción T2:** configurar `jacocoTestCoverageVerification` por módulo en `build.gradle` raíz (mínimos: línea 70 %, rama 50 % para producción; 90 % para SPI/API); ejecutar `./gradlew test jacocoTestCoverageVerification` y ajustar umbrales por módulo según baseline real.
+**Próxima acción T3:** tests de contrato SPI/API para `core-api`, `extension-api`, `manager-spi`, `kernel` — validar ServiceLoader, interfaces, modelos inmutables sin depender de implementaciones; generar documentación de contratos.
 
 ---
 
