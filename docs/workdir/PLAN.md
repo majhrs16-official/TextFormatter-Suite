@@ -184,6 +184,34 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 ---
 
+### Cobertura de tests exhaustiva — Iniciativa transversal
+
+> **Situación actual (2026-10-23):** de 30 módulos Java en `src/`, **12 no tienen directorio de tests**, **2 lo tienen vacío** (`fabric-host`, `tester`) y **16 tienen entre 1 y 9 archivos de test**. Solo `iflow-vm` (27), `host` (9) y `textformatter` (6) superan los 5 archivos. No hay gates de cobertura mínimos por módulo ni presupuesto de tests en el CI.
+
+**Objetivo:** que **cada módulo** tenga una suite de tests unitarios y de componente con **cobertura significativa** (líneas/branches ≥ 70 % en código de producción, ≥ 90 % en SPI/API pública) y tests de regresión para cada bug/fix documentado.
+
+| Fase | Entregable | Criterio de cierre |
+|---|---|---|
+| **T0 — Inventario y baseline** | Matriz `módulo × {archivos test, cobertura actual, gaps críticos}` generada por script CI | Tabla en `docs/workdir/TEST-INVENTORY.md` con datos reales |
+| **T1 — Scaffold obligatorio** | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | 0 módulos sin directorio de tests; 0 directorios vacíos |
+| **T2 — Gates de cobertura por módulo** | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | Gates verdes en CI para todos los módulos |
+| **T3 — Tests de contrato SPI/API** | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | Tests de contrato pasan en aislamiento; documentación de contratos generada |
+| **T4 — Tests de integración por dominio** | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real |
+| **T5 — Tests de regresión obligatorios** | Cada bug/fix P0/P1 de `AUDITORIA.md`, `CHANGELOG.md` y commits `fix:` tiene al menos un test que falla sin el fix y pasa con él | Matriz bug→test en `docs/workdir/REGRESSION-TESTS.md` |
+| **T6 — Fuzzing y property-based** | Módulos de parsing/serialización (`textformatter`, `messages`, `iflow-vm` bytecode, `iflow-wasm` loader) usan jqwik o JUnit-Quickcheck | Campañas nocturnas en CI; hallazgos → issues automáticos |
+| **T7 — Performance/soak baselines** | `loadtest`, `performance`: benchmarks JMH con umbrales de regresión (p99, throughput, heap) | Alertas automáticas si hay regresión > 10 % |
+
+**Reglas de diseño:**
+- **No tests de integración con servidor real** (Spigot/Paper/Fabric/Velocity): decisión de alcance vigente. Usar mocks, testcontainers o harnesses in-process.
+- **Tests deterministas**: sin `Thread.sleep`, sin orden no determinista, sin estado global mutable entre tests.
+- **Fixtures compartidas** en `src/fixtures/` (ya existe) para mensajes, canales, políticas, configs; versionadas con el código.
+- **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.
+- **Documentación viva**: cada módulo tiene `src/<mod>/README.md` con sección «Tests» que explica cómo correr, qué cubre y cómo añadir casos.
+
+**Próxima acción T0:** script Gradle `./gradlew testInventory` que recorre `src/*/src/test`, cuenta archivos, ejecuta JaCoCo en modo reporte y escribe `docs/workdir/TEST-INVENTORY.md`.
+
+---
+
 ## Estado real del proyecto (2026-10-04; actualizado 2026-10-23)
 
 | Pieza | Estado | Verificación |
