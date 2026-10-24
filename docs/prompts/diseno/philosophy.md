@@ -21,7 +21,7 @@ Sin un sistema de instalación remota, soportar motores opuestos para una misma 
 
 ## 3. La Regla de Oro: Derivación Paralela sobre Versiones Monolíticas (`v3`, `v4`...)
 
-Bajo esta filosofía, si mañana surge una idea para un nuevo motor (por ejemplo, para el módulo *Text Formatter*), **no se destruye lo anterior ni se crea una dolorosa versión `v3**`.
+Bajo esta filosofía, si mañana surge una idea para un nuevo motor (por ejemplo, para el módulo *Text Formatter*), no se destruye lo anterior ni se crea una dolorosa versión **v3**.
 
 En su lugar:
 
