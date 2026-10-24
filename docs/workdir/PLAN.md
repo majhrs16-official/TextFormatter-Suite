@@ -6,6 +6,8 @@
 > **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
 
 > **Nota de estado (2026-10-23):** **iFlow no se abandona ni se elimina.** Se divide en dos líneas paralelas: **`iflow-vm`** (VM propia de 32 bits, con las mejoras de la auditoría) e **`iflow-wasm`** (motor WebAssembly sobre Chicory). La especificación técnica de referencia v3 queda en `docs/prompts/diseno/iflow-cpu-implement.md` y recoge los hallazgos `IFLOW-MAN-*` como requisitos de la línea de 32 bits; **no se hereda** al motor Wasm. Las secciones históricas de este plan se conservan, pero la fuente de verdad es este bloque y el estado real.
+>
+> **Nota de estado (2026-10-24):** **Primer release (v2.1.0-SNAPSHOT).** No hay versiones previas, ni changelog, ni release notes históricos que acumular. `CHANGELOG.md` y `RELEASE_NOTES.md` fueron eliminados; la trazabilidad comienza ahora con commits convencionales y este `PLAN.md` como fuente única de verdad.
 
 > **Alcance vigente (2026-10-23):** las pruebas reales/E2E siguen descartadas y el editor web sigue diferido a una auditoría separada. La sección «Decisiones de alcance vigentes» es la fuente de verdad para ambas. La auditoría de iFlow se ratifica como especificación técnica de referencia v3 en `docs/prompts/diseno/iflow-cpu-implement.md`; `docs/workdir/AUDITORIA.md` queda vacío como marcador histórico.
 
@@ -186,22 +188,22 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
-> **Situación actual (2026-10-23):** inventario real generado con `./gradlew testInventory` — **32 módulos Java** en `src/`:
-> - **1 sin directorio de tests**: `common-legacy`
-> - **2 con directorio vacío**: `fabric-host`, `tester`
-> - **29 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (9), `textformatter` (6) superan 5 archivos
-> - **8 módulos con reporte JaCoCo**: `iflow-vm` (86.2% línea / 71.3% rama), `kernel` (91.1%/82.0%), `logger` (93.3%/78.6%), `messages` (93.3%/75.0%), `textformatter` (81.6%/66.7%), `host` (30.9%/23.8%), `spigot-host` (2.5%/4.6%), `transport` (6.0%/1.0%)
-> - **21 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
+> **Situación actual (2026-10-24):** inventario real generado con `./gradlew testInventory` — **32 módulos Java** en `src/`:
+> - **0 sin directorio de tests** (antes: `common-legacy`)
+> - **0 directorios vacíos** (antes: `fabric-host`, `tester`)
+> - **32 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (9), `textformatter` (6) superan 5 archivos
+> - **10 módulos con reporte JaCoCo**: `iflow-vm` (86.2%/71.3%), `kernel` (91.1%/82.0%), `logger` (93.3%/78.6%), `messages` (93.3%/75.0%), `textformatter` (81.6%/66.7%), `host` (30.9%/23.8%), `spigot-host` (2.5%/4.6%), `transport` (6.0%/1.0%), `fabric-host` (0.0%/0.0%), `tester` (0.0%/0.0%)
+> - **22 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
 
-**Inventario detallado (baseline T0):**
+**Inventario detallado (baseline T0 → T1 actualizado 2026-10-24):**
 
 | Módulo | Test Dir | Archivos Test | Líneas Prod | Líneas Test | Cobertura Línea | Cobertura Rama | Gaps Críticos |
 |---|---|---:|---:|---:|---:|---:|---|
-| `src:common-legacy` | ❌ FALTA | 0 | N/A | N/A | N/A | N/A | SIN TESTS |
+| `src:common-legacy` | ✅ OK | 1 | N/A | 30 | N/A | N/A | Pocos tests (<3) |
 | `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
 | `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
 | `src:extension-api` | ✅ OK | 2 | N/A | 132 | N/A | N/A | Pocos tests (<3) |
-| `src:fabric-host` | ⚠️ VACÍO | 0 | N/A | N/A | N/A | N/A | SIN TESTS |
+| `src:fabric-host` | ✅ OK | 1 | 840 | 30 | 0.0% | 0.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:gtranslate` | ✅ OK | 3 | N/A | 229 | N/A | N/A |  |
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
@@ -226,18 +228,18 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:sync-telegram` | ✅ OK | 2 | N/A | 173 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-velocity` | ✅ OK | 1 | N/A | 305 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-websocket` | ✅ OK | 1 | N/A | 26 | N/A | N/A | Pocos tests (<3) |
-| `src:tester` | ⚠️ VACÍO | 0 | N/A | N/A | N/A | N/A | SIN TESTS |
+| `src:tester` | ✅ OK | 1 | 570 | 29 | 0.0% | 0.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:textformatter` | ✅ OK | 6 | 282 | 512 | 81.6% | 66.7% |  |
 | `src:transport` | ✅ OK | 1 | 351 | 22 | 6.0% | 1.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 
-**Resumen:** 32 módulos totales · 29 con tests · 1 sin test dir · 2 vacíos · 8 con cobertura real · 21 con tests pero sin reporte JaCoCo.
+**Resumen:** 32 módulos totales · **32 con tests** · **0 sin test dir** · **0 vacíos** · 10 con cobertura real · 22 con tests pero sin reporte JaCoCo.
 
 **Objetivo:** que **cada módulo** tenga una suite de tests unitarios y de componente con **cobertura significativa** (líneas/branches ≥ 70 % en código de producción, ≥ 90 % en SPI/API pública) y tests de regresión para cada bug/fix documentado.
 
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **T0 — Inventario y baseline** ✅ | Matriz `módulo × {archivos test, cobertura actual, gaps críticos}` generada por script CI | Tabla inline arriba con datos reales |
-| **T1 — Scaffold obligatorio** | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | 0 módulos sin directorio de tests; 0 directorios vacíos |
+| **T1 — Scaffold obligatorio** ✅ | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | **0 módulos sin directorio de tests; 0 directorios vacíos** |
 | **T2 — Gates de cobertura por módulo** | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | Gates verdes en CI para todos los módulos |
 | **T3 — Tests de contrato SPI/API** | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | Tests de contrato pasan en aislamiento; documentación de contratos generada |
 | **T4 — Tests de integración por dominio** | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real |
@@ -252,7 +254,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.
 - **Documentación viva**: cada módulo tiene `src/<mod>/README.md` con sección «Tests» que explica cómo correr, qué cubre y cómo añadir casos.
 
-**Próxima acción T1:** crear `src/test` en `common-legacy`, `fabric-host`, `tester`; añadir `testImplementation` JUnit5/AssertJ/Mockito a todos los `build.gradle`; verificar `./gradlew test` pasa en todos los módulos.
+**Próxima acción T2:** configurar `jacocoTestCoverageVerification` por módulo en `build.gradle` raíz (mínimos: línea 70 %, rama 50 % para producción; 90 % para SPI/API); ejecutar `./gradlew test jacocoTestCoverageVerification` y ajustar umbrales por módulo según baseline real.
 
 ---
 
