@@ -13,7 +13,8 @@ TextFormatter Suite
 │   ├── core-api          → Core interfaces, SPI, domain types
 │   ├── kernel            → Module loading & dependency resolution
 │   ├── textformatter     → Template engine, placeholders, channels
-│   ├── iflow             → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget
+│   ├── iflow             → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de `iflow-vm` 32 bits)
+│   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; scaffold W0, sin integración aún
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
 │   ├── transport         → Transport abstraction (HTTP, codecs)
@@ -60,7 +61,8 @@ TextFormatter Suite
 | `core-api` | Core interfaces, SPI, domain types (Module, Actor, Channel, TranslationService, SyncSink, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), placeholders, channel registry | `core-api` | `host`, `iflow`, `presets`, `spigot-host`, `fabric-host` |
-| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
+| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de `iflow-vm` 32 bits | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; scaffold W0: carga e instancia módulos, sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
 | `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
@@ -96,7 +98,8 @@ TextFormatter Suite
 | `core-api` | Contracts & SPI | Define all platform-agnostic interfaces | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, placeholders, channels | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
-| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowModule` | [iflow/README.md](iflow/README.md) |
+| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de `iflow-vm` 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowModule` | [iflow/README.md](iflow/README.md) |
+| `iflow-wasm` | Motor WebAssembly con Chicory; scaffold W0 | `WasmModuleLoader`, parse/instantiate | — (sin `Module` aún) | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateModule` | [ltranslate/README.md](ltranslate/README.md) |
@@ -137,6 +140,14 @@ TextFormatter Suite
   → VmPolicyEngine.java
   → VmInterpreter.java / SoftMMU.java
   → VmConfigLoader.java (policy.flow)
+```
+
+### Understand Wasm Policy Engine (iflow-wasm)
+```
+→ src/iflow-wasm/README.md
+  → WasmModuleLoader.java (Chicory parse/instantiate)
+  → W1: ADR de imports/exports y capabilities
+  → W3: WasmPolicyEngine + Router/MessageDispatcher
 ```
 
 ### Understand Translation

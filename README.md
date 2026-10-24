@@ -12,7 +12,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 
 **Problema que resuelve:** Los plugins de chat tradicionales mezclan formateo, traducción, permisos, sincronización cross-server y lógica de negocio en una única base de código acoplada a la plataforma (Bukkit/Fabric). TextFormatter Suite separa estas responsabilidades en módulos reemplazables, testeables en aislamiento y desplegables selectivamente.
 
-**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen de `core-api` y, cuando aplica, de contratos compartidos (`transport`, `messages`).
+**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow`/`iflow-vm`, `iflow-wasm`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen de `core-api` y, cuando aplica, de contratos compartidos (`transport`, `messages`).
 
 **Lo que NO es:**
 - Un plugin único "todo en uno" listo para descargar y usar
@@ -163,7 +163,8 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
-| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | ✅ Probado (397 tests) |
+| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de `iflow-vm` 32 bits | ✅ Probado (397 tests) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; scaffold W0: carga e instancia módulos, sin ABI de host ni integración | 🧪 Scaffold |
 | `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML; sin motor de ejecución | ✅ Catálogo probado (2 tests) |
 
 ### Traducción
@@ -320,6 +321,7 @@ export JAVA_HOME=/opt/javac/x64/21
 
 # Tests solo módulo específico
 ./gradlew :src:iflow:test --no-daemon
+./gradlew :src:iflow-wasm:test --no-daemon
 
 # Tests suite completa
 ./gradlew test --no-daemon
@@ -404,12 +406,12 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 | **docs/workdir/ADR.md** | Architecture Decision Records: decisiones inmutables con contexto/fecha/consecuencias | [`docs/workdir/ADR.md`](docs/workdir/ADR.md) |
 | **docs/wiki/01-Introduction.md** | Entrada wiki usuario/dev: quick start, módulos, arquitectura, guías | [`docs/wiki/01-Introduction.md`](docs/wiki/01-Introduction.md) |
 | **docs/wiki/02-Configuration.md** | Guía configuración (config.yml, channels, rules, translators, sync) | [`docs/wiki/02-Configuration.md`](docs/wiki/02-Configuration.md) |
-| **docs/wiki/05-iFlow-Rules.md** | ⚠️ Histórico: describe el iFlow antiguo (`DefaultRouter`, SpEL), no la VM `.flow` actual. Para la VM, ver [`src/iflow/README.md`](src/iflow/README.md) | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
+| **docs/wiki/05-iFlow-Rules.md** | ⚠️ Histórico: describe el iFlow antiguo (`DefaultRouter`, SpEL), no la VM `.flow` actual. Para la VM, ver [`src/iflow/README.md`](src/iflow/README.md); para WebAssembly, [`src/iflow-wasm/README.md`](src/iflow-wasm/README.md) | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
 | **docs/wiki/08-Commands.md** | Referencia comandos `/suite` (dinámicos v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
 | **docs/prompts/** | Material de referencia: contexto del proyecto, diseños de componentes y contratos de formato | [`docs/prompts/README.md`](docs/prompts/README.md) |
 | **.opencode/skills/** | Procedimientos que el agente ejecuta por sí mismo (auditar, generar documentación) | [`docs/prompts/README.md`](docs/prompts/README.md) § Prompt frente a skill |
-| **docs/workdir/AUDITORIA.md** | Auditoría manual de iFlow 2026-10-20 (IFLOW-MAN-01..15 + arquitectura ROM/BIOS/kernel/32 bits; en curso, solo lectura) | [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md) |
+| **docs/prompts/diseno/iflow-cpu-implement.md** | Especificación técnica de referencia v3 de iFlow VM (32 bits), derivada de la auditoría manual 2026-10-20 (41 hallazgos `IFLOW-MAN-01..41` + 9 arquitecturales `IFLOW-MAN-46..54`: capas BIOS/kernel/router, `ExecutionContext` mutable, `MessageHostContext` acoplado, sin kernel/scheduler, `VmBus` subutilizado, `machineLock` global, mensaje como IRQ, multi-núcleo 32 bits; 4 diferidos `IFLOW-MAN-42..45`: idioma de render, `Formats` multi-entrada, redirect y `Direction.channel`; fallback neutral, little-endian único, decode jerárquico `MOV`, máquina persistente sin fuel, rate limit como política de userspace, routing tipado, contador de ciclos y journal limitado al mensaje; arquitectura ROM/BIOS/kernel/32 bits) | [`docs/prompts/diseno/iflow-cpu-implement.md`](docs/prompts/diseno/iflow-cpu-implement.md) |
 | **tools/project-metrics/README.md** | Herramienta de métricas: ~30 métricas diarias, rúbrica de 12 familias, juez cualitativo | [`tools/project-metrics/README.md`](tools/project-metrics/README.md) |
 | **src/<modulo>/README.md** | Codeguide por módulo: responsabilidades, deps, data flow, entry points | Ver [`src/README.md`](src/README.md) §3 |
 

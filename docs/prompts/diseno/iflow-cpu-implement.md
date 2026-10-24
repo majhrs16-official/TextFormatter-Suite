@@ -1,1879 +1,646 @@
-# Diseño arquitectónico integral del CPU virtual de iflow
-
-> **Nota de estado (2026-10-20):** documento histórico de diseño. La migración descrita ya se completó: SpEL fue eliminado del repositorio y la VM `.flow` es la única superficie de políticas ejecutables. Las menciones a SpEL son contexto de partida, no estado actual.
-
-
-Especificación técnica de referencia · Versión 1.0-draft · 13 de octubre de 2026
-
-## Dictamen técnico previo: viabilidad de la arquitectura
-
-La arquitectura es viable, pero no conviene implementarla literalmente como una computadora física reproducida en Java. La solución adecuada es una máquina virtual interpretada, con una ISA propia, memoria virtual protegida mediante paginación por software (SoftMMU), servicios genéricos hacia el host y un modelo explícito de persistencia.
-
-La principal dificultad no es ejecutar instrucciones aritméticas. Es conseguir que la VM sea simultáneamente expresiva, eficiente, segura, reutilizable y compatible con las semánticas actuales de iflow.
-
-El diseño debe resolver primero cinco problemas:
-
-1. Cómo representar direcciones y datos en un espacio plano de 64 KB sin limitar la expresividad.
-2. Cómo mantener el estado de una ejecución aislado sin perder la posibilidad de conservar estado deliberadamente entre mensajes.
-3. Cómo consultar objetos Java bajo demanda sin convertir cada consulta en una operación insegura ni cada acceso en una copia completa.
-4. Cómo ejecutar lógica arbitraria sin permitir que un bucle o una expresión regular bloquee el servidor.
-5. Cómo permitir persistencia cruzada entre mensajes sin crear canales de información no deseados.
-
-La propuesta siguiente resuelve estos problemas mediante decisiones concretas.
-
-## Auditoría inicial: contradicciones y correcciones necesarias
-
-1\. Una ISA de 16 bits **sí puede** trabajar con 64 KiB de espacio plano lineal.
-
-Se propone un espacio de direcciones plano de 16 bits ($0x0000$–$0xFFFF$, **64 KB totales**) con **paginación de 4 KB (16 páginas)** gestionada por un **SoftMMU** (Memory Management Unit por software). Esto elimina la complejidad de *handles*, regiones y offsets compuestos, mientras que la paginación proporciona aislamiento y protección por página (permisos R/W/X por página). No hay regiones, no hay handles, no hay búferes de entrada aislados.
-
-2\. Reutilizar la VM no debe equivaler a reutilizar accidentalmente un contexto.
-
-El programa compilado (`.flow`), el firmware y las bibliotecas pueden persistir. Los registros, la pila, el presupuesto y la tabla de páginas pertenecen a una ejecución. La persistencia de memoria o registros entre mensajes debe ser una capacidad explícita, aislada y desactivada por defecto.
-
-3\. Una instrucción genérica de acceso al host es preferible a una ISA específica del dominio.
-
-La instrucción `HOST` es la única puerta al exterior. Todo lo que el programa necesita —leer/escribir propiedades, comprobar permisos, tomar decisiones de enrutamiento, leer/escribir estado persistente, resolver canales— se hace mediante `HOST` con un *service ID* de 16 bits. Las capacidades (strings) gating cada servicio.
-
-4\. El presupuesto de *fuel* es obligatorio, no opcional.
-
-Cada instrucción consume 1 unidad base + coste variable. Servicios `HOST` consumen coste base + coste por byte. Se lanza excepción `OUT_OF_FUEL` si se agota. Límite por defecto: 100 000 unidades/evaluación.
-
-5\. La persistencia de memoria/registros entre ejecuciones es una *capability*, no un derecho.
-
-El host puede conceder o denegar `memory.persist` y `registers.persist`. Sin ellas, cada ejecución empieza con memoria y registros a cero (salvo I/O buffers y página de código). Con ellas, se conserva el estado del *frame* o páginas marcadas.
-
-6\. No hay bytecode SpEL ni compilación JIT en caliente. Los programas se entregan como binarios `.flow` pre-compilados.
-
-La herramienta externa `iflow-compiler` (TypeScript/JS) ensambla `.flowasm` → `.flow` y calcula hashes. El runtime Java **solo carga y ejecuta**. No hay `VmProgramCompiler`, no hay `RuleExpressionEvaluator`, no hay `VmConfigLoader` de YAML.
-
-7\. **No hay búferes de entrada externos.** Al ser un modelo de memoria completamente plano, el host no "inyecta" datos en búferes especiales. El programa en la VM interactúa directamente con la memoria plana mediante llamadas `HOST`, pasando direcciones virtuales absolutas (ej.: "escribe la propiedad en el buffer de entrada `0x7000`"). El programa manipula los datos in-place usando punteros, bucles y condiciones estándar.
-
-### Decisión central
-
-La arquitectura recomendada es una **VM de 16 bits con espacio plano de 64 KB y paginación SoftMMU de 4 KB**, de un solo flujo de ejecución por contexto, interpretada y con servicios explícitos del host.
-
-No se recomienda empezar con un procesador multinúcleo virtual, un JIT, microcódigo, una tabla de interrupciones física ni una implementación de todo el mensaje como memoria precargada.
-
-El paralelismo entre mensajes será responsabilidad del runtime Java. El procesador VM es secuencial; la concurrencia se logra instanciando múltiples contextos de ejecución (pools) y dejando que el scheduler Java los distribuya.
-
-## Programas iflow
-
-Bytecode versionado (`.flow`) · Bibliotecas · Políticas
-
-Validador y cargador (solo binario, sin YAML/SpEL)
-
-Formato, opcodes, capacidades, límites y control de flujo
-
-## CPU virtual (arquitectura hardware-style)
-
-Fetch · Decode · Execute
-
-Contexto
-
-Registros · Pila · Fuel · SoftMMU (PageTable)
-
-Memoria plana 64 KB
-
-16 páginas · 4 KB c/u · Permisos R/W/X por página
-
-Supervisor
-
-# 2. Requisitos funcionales y no funcionales
-
-## 2.1. Requisitos funcionales
-
-La máquina debe:
-
-- Ejecutar bytecode portable sin depender de instrucciones del procesador físico.
-- Realizar operaciones aritméticas, lógicas, de memoria y de control de flujo.
-- Ejecutar subrutinas, bucles y bibliotecas.
-- Leer y escribir propiedades del mensaje bajo demanda.
-- Consultar permisos y solicitar operaciones del host sin acceder directamente a objetos Java.
-- Generar decisiones de routing verificables.
-- Ejecutar transformaciones mediante una interfaz controlada.
-- Mantener estado persistente cuando la política lo autorice.
-- Abortarse de manera acotada ante errores o agotamiento de recursos.
-- Permitir inspección, desensamblado y diagnóstico de programas.
-- Admitir nuevas propiedades y servicios sin modificar la ISA para cada incorporación.
-
-## 2.2. Requisitos no funcionales
-
-| Propiedad      | Requisito                                                      |
-| -------------- | -------------------------------------------------------------- |
-| Seguridad      | Ningún acceso arbitrario a JVM, archivos, red o APIs del host  |
-| Aislamiento    | Una ejecución no puede escribir en el contexto privado de otra |
-| Portabilidad   | Semántica independiente de la plataforma                       |
-| Determinismo   | Instrucciones puras y costes básicos reproducibles             |
-| Rendimiento    | Medición de latencia, throughput y asignaciones                |
-| Compatibilidad | Versionado explícito de ISA, ABI y programas                   |
-| Extensibilidad | Nuevos servicios sin ampliar el repertorio fundamental         |
-| Recuperación   | Los errores de una política no deben derribar el servidor      |
-| Observabilidad | Trazas opcionales y errores reproducibles                      |
-| Mantenibilidad | Intérprete de referencia simple antes de optimizar             |
-
-## 2.3. Fuera de alcance de la primera versión
-
-- Compilación JIT.
-- Ejecución de código nativo.
-- Hilos creados por programas de usuario.
-- Operaciones atómicas compartidas dentro de la ISA.
-- Interrupciones asíncronas de estilo hardware.
-- Un sistema operativo invitado.
-- Un lenguaje de alto nivel propio.
-- Paralelismo interno a una única ejecución.
-- Compatibilidad binaria automática con reglas que tengan semánticas diferentes.
-
-# 3. Modelo de amenazas
-
-La VM debe asumir que un programa puede estar mal escrito, ser excesivamente costoso o haber sido creado deliberadamente para abusar de los recursos disponibles.
-
-| Amenaza                   | Ejemplo                                                           | Defensa                                                  |
-| ------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
-| Bucle infinito            | Salto hacia sí mismo                                              | Fuel por instrucción                                     |
-| Operación costosa         | Regex patológica                                                  | Límites de entrada y algoritmo seguro                    |
-| Lectura fuera de límites  | Cargar un offset inválido                                         | Comprobación en cada acceso                              |
-| Corrupción de privilegios | Sobrescribir una tabla de servicios                               | Memoria privilegiada inaccesible                         |
-| Fuga entre mensajes       | Leer el registro que dejó otra ejecución                          | Contextos privados y reinicialización                    |
-| Abuso de persistencia     | Crecimiento ilimitado de un contador o buffer                     | Cuotas y esquema persistente                             |
-| Confusión de permisos     | Usar autorización del administrador como autorización del jugador | Identidades y capacidades separadas                      |
-| Servicio malicioso        | Solicitar una escritura no autorizada                             | Validación dentro del servicio                           |
-| Bloqueo del servidor      | Servicio host que espera indefinidamente                          | Servicios acotados y prohibición de bloqueos arbitrarios |
-| Fallo de transacción      | Error después de modificar texto                                  | Escritura diferida y descarte del journal                |
-| Condición de carrera      | Dos mensajes modifican el mismo estado                            | Exclusión por instancia o versionado                     |
-| Bytecode corrupto         | Opcode truncado o salto inválido                                  | Validación de formato y decodificación segura            |
-
-La validación estática no reemplaza las comprobaciones en tiempo de ejecución. Un programa válido puede recibir una dirección inválida desde un cálculo, agotar su presupuesto o solicitar una propiedad cuyo acceso haya sido revocado.
-
-La JVM y las APIs del host permanecen fuera de la memoria de la VM. El límite de confianza está en el intérprete, el validador y los servicios Java autorizados.
-
-# 4. Diagrama de componentes y responsabilidades
-
-## 4.1. Componentes lógicos
-
-| Componente           | Responsabilidad                               | ¿Debe existir como subsistema separado?                   |
-| -------------------- | --------------------------------------------- | --------------------------------------------------------- |
-| Decoder/interpreter  | Ejecutar instrucciones                        | Sí, componente central                                    |
-| RegisterFile         | Estado visible de CPU                         | Sí, puede ser una estructura de datos                     |
-| SoftMMU / PageTable | Memoria paginada, permisos y límites         | Sí (`SoftMMU` sobre `PageTable`)                          |
-| ExecutionContext     | Registros, pila, fuel, estado de la ejecución | Sí                                                        |
-| ProgramImage         | Bytecode y constantes inmutables              | Sí                                                        |
-| HostServiceRegistry  | Resolver servicios y validar argumentos       | Sí                                                        |
-| Supervisor           | Límites, capacidades y aborto                 | Lógico; puede integrarse con el intérprete                |
-| Firmware             | Rutinas y ABI estándar                        | Biblioteca y convenciones; no necesita un arranque físico |
-| Interrupt Controller | Interrupciones virtuales                      | No en la versión inicial                                  |
-| Scheduler de la VM   | Distribuir tareas                             | No; utilizar el runtime Java                              |
-| Runtime iflow        | Integración con mensajes y router             | Sí                                                        |
-| MessageDispatcher    | Entrega efectiva                              | Se mantiene fuera de la VM                                |
-
-La separación es conceptual y contractual, no una obligación de crear una clase Java por componente.
-
-## 4.2. Regla de autoridad
-
-La VM puede solicitar una operación. El runtime determina si está permitida, la ejecuta de acuerdo con el contrato del host y devuelve un resultado estructurado.
-
-El bytecode nunca recibe una referencia Java a `Message`, `Player`, `Channel`, `PermissionChecker` ni a otros objetos del host.
-
-# 5. Modelo de ejecución y ciclo de vida
-
-## 5.1. Separación de los objetos persistentes y temporales
-
-La VM no se crea ni se destruye necesariamente por cada mensaje. Su unidad de reutilización es el runtime, mientras que su unidad de aislamiento es el contexto de ejecución.
-
-| Objeto                    | Vida útil                                 | Compartido                      |
-| ------------------------- | ----------------------------------------- | ------------------------------- |
-| `ProgramImage`            | Hasta descargar o sustituir el programa   | Sí, inmutable                   |
-| Firmware y bibliotecas    | Vida del runtime o del cargador           | Sí, inmutables una vez cargados |
-| Tabla de servicios        | Vida del runtime                          | Sí, protegida                   |
-| Código y constantes       | Vida del programa                         | Sí, solo lectura                |
-| Memoria persistente       | Vida de la instancia lógica de programa   | Solo bajo reglas explícitas     |
-| Registros generales       | Una ejecución                             | No                              |
-| Pila de llamadas          | Una ejecución                             | No                              |
-| Presupuesto               | Una ejecución                             | No                              |
-| Journal de modificaciones | Una evaluación de mensaje                 | No                              |
-| Caché de propiedades      | Una ejecución                             | No                              |
-| Resultado de routing      | Una evaluación                            | No                              |
-| Rate limiter              | Según su ámbito de configuración          | Estado del host                 |
-| Contexto de mensaje       | Una evaluación o unidad lógica de routing | No                              |
-
-## 5.2. Comparación de los modelos de ejecución
-
-| Modelo                                  | Ventajas                     | Inconvenientes                           | Dictamen                 |
-| --------------------------------------- | ---------------------------- | ---------------------------------------- | ------------------------ |
-| A. VM por mensaje                       | Aislamiento sencillo         | Inicialización y asignaciones excesivas  | No recomendado           |
-| B. VM compartida                        | Reutiliza código y servicios | Riesgo si se comparte el estado mutable  | Insuficiente por sí solo |
-| C. CPU compartida con pool de contextos | Reutilización y aislamiento  | Necesita gestionar el pool y sus límites | Recomendado              |
-| D. Varios trabajadores o instancias     | Mayor concurrencia potencial | Sincronización y orden más complejos     | Extensión del runtime    |
-
-La implementación inicial debe mantener un `ProgramImage` compartido y reutilizar `ExecutionContext` privados mediante un pool acotado.
-
-Un contexto devuelto al pool debe quedar limpio de estado transitorio. Si una ejecución termina por un error de integridad, se descarta el contexto en lugar de reutilizarlo a ciegas.
-
-## 5.3. Ciclo de vida
-
-1. El módulo inicializa el runtime y registra servicios.
-2. El cargador valida y publica el programa.
-3. El router recibe el mensaje y crea su contexto lógico.
-4. Se adquiere un contexto de ejecución limpio.
-5. Se asocian las capacidades autorizadas y el presupuesto.
-6. Se ejecuta el punto de entrada del programa.
-7. La VM devuelve una decisión y las modificaciones pendientes.
-8. El runtime valida el resultado.
-9. Se confirma o descarta el journal.
-10. Se actualiza el estado persistente autorizado.
-11. Se libera el contexto para su reutilización.
-12. El dispatcher realiza la entrega cuando corresponda.
-
-La actualización persistente y la confirmación de las modificaciones del mensaje deben tener un orden definido. Si ambas se confirman como una sola operación lógica, el runtime debe poder revertir las modificaciones preparadas cuando falle la actualización del estado. Si no puede garantizarlo, debe documentar que la atomicidad es por recurso y no global.
-
-# 6. Decisión sobre el ancho de palabra y direccionamiento
-
-## 6.1. Comparación de alternativas
-
-| Alternativa                                 | Ventajas                                         | Costes y limitaciones                                    |
-| ------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------- |
-| 16 bits con direcciones de 16 bits planas   | Bytecode sencillo, operandos compactos           | Límite global de 64 KiB                                  |
-| 16 bits con segmentación convencional       | Amplía direcciones                               | Segmentos y registros especiales aumentan la complejidad |
-| 16 bits con registros auxiliares de 32 bits | Amplía los valores y las direcciones             | Semántica desigual entre registros                       |
-| 32 bits con memoria dinámica                | Direcciones y longitudes cómodas                 | Instrucciones y estado algo mayores                      |
-| 16 bits con paginación SoftMMU 4 KB         | Espacio plano 64 KB, aislamiento por página R/W/X | Requiere tabla de páginas, ligera overhead               |
-
-Recomendación: **16 bits con espacio plano de 64 KB y paginación SoftMMU de 4 KB**.
-
-El espacio de direcciones plano de 16 bits ($0x0000$–$0xFFFF$, **64 KB totales**) con **paginación de 4 KB (16 páginas)** gestionada por un **SoftMMU** elimina la complejidad de *handles*, regiones y offsets compuestos, mientras que la paginación proporciona aislamiento y protección por página (permisos R/W/X por página). No hay regiones, no hay handles, no hay búferes de entrada aislados.
-
-El diseño deberá revisarse si los benchmarks demuestran que la paginación por software introduce overhead significativo.
-
-## 6.2. Semántica numérica
-
-- Registro general: entero sin signo de 16 bits como representación física.
-- Rango modular: \\(0\\) a \\(65535\\).
-- Interpretación con signo: complemento a dos, rango \\(-32768\\) a \\(32767\\).
-- Desbordamiento: módulo \\(2^{16}\\) en las operaciones ordinarias.
-- División por cero: excepción aritmética.
-- Desplazamientos: se valida que el conteo esté entre 0 y 15.
-- Dirección: dirección virtual absoluta de 16 bits (traducida por SoftMMU).
-- Longitudes mayores de 65535 bytes: no se expresan en una única operación ordinaria; se procesan por fragmentos o mediante una extensión explícita.
-
-Una dirección no es un número arbitrario que pueda convertirse en una referencia Java. Es una dirección virtual validada por el SoftMMU.
-
-# 7. Banco de registros completo
-
-## 7.1. Registros visibles para los programas
-
-La versión 1 tendrá ocho registros generales de 16 bits.
-
-| Registro | Función                            | Inicialización              | Persistencia  |
-| -------- | ---------------------------------- | --------------------------- | ------------- |
-| `R0`     | General; resultado por convención  | Cero                        | Por ejecución |
-| `R1`     | General                            | Cero                        | Por ejecución |
-| `R2`     | General                            | Cero                        | Por ejecución |
-| `R3`     | General                            | Cero                        | Por ejecución |
-| `R4`     | General                            | Cero                        | Por ejecución |
-| `R5`     | General                            | Cero                        | Por ejecución |
-| `R6`     | General                            | Cero                        | Por ejecución |
-| `R7`     | General                            | Cero                        | Por ejecución |
-| `IP`     | Offset de la siguiente instrucción | Punto de entrada            | Por ejecución |
-| `SP`     | Offset de la pila de llamadas      | Pila inicial                | Por ejecución |
-| `FP`     | Base del frame actual              | Inicializado por el runtime | Por ejecución |
-| `FL`     | Flags aritméticos                  | Cero                        | Por ejecución |
-
-`IP`, `SP` y `FP` no son registros generales. Sus modificaciones se controlan por las instrucciones de flujo, las llamadas y el retorno. No pueden apuntar arbitrariamente a regiones privilegiadas.
-
-Los registros generales no tienen alias de byte alto o bajo. Las operaciones sobre bytes utilizan instrucciones de carga y almacenamiento de byte, evitando los problemas de aliasado parcial que aparecen en arquitecturas antiguas.
-
-## 7.2. Flags
-
-`FL` contiene:
-
-| Bit  | Nombre     | Significado                         |
-| ---- | ---------- | ----------------------------------- |
-| 0    | `Z`        | Resultado igual a cero              |
-| 1    | `N`        | Bit más significativo del resultado |
-| 2    | `C`        | Carry o borrow según la operación   |
-| 3    | `V`        | Desbordamiento con signo            |
-| 4–15 | Reservados | Deben permanecer en cero            |
-
-Las instrucciones que no modifican flags dejan su valor intacto. Las instrucciones aritméticas y las comparaciones documentadas actualizan los flags.
-
-La comparación calcula internamente una resta, actualiza los flags y descarta el resultado numérico. No requiere un registro dedicado al resultado de comparación.
-
-## 7.3. Registros y estado privilegiado
-
-El runtime mantiene fuera del banco visible:
-
-- Identidad del programa.
-- Versión de ISA.
-- Identidad de la ejecución.
-- Identidad del mensaje.
-- Tabla de regiones y permisos.
-- Presupuesto restante.
-- Capacidades concedidas.
-- Referencia al journal de modificaciones.
-- Estado de cancelación.
-- Profundidad máxima de llamadas.
-- Último error fatal.
-
-Estos valores no pueden leerse ni modificarse directamente mediante bytecode ordinario.
-
-## 7.4. Convención de llamadas
-
-- `R0`–`R3`: argumentos y resultados primarios.
-- `R4`–`R7`: registros que una subrutina debe preservar si los modifica.
-- `SP`: pila de llamadas privada.
-- `FP`: base del frame actual.
-- `CALL`: guarda la dirección de retorno.
-- `RET`: restaura la dirección y el frame.
-- Los servicios `HOST` tienen una convención de argumentos propia, especificada en el apartado 11.
-
-La convención es una ABI, no una obligación del hardware físico. Puede evolucionar mediante versionado de la ABI.
-
-# 8. Especificación formal de la ISA
-
-## 8.1. Modelo de ejecución
-
-El intérprete ejecuta el siguiente ciclo:
-
-1. Verificar que `IP` apunte a una instrucción válida.
-2. Comprobar el presupuesto mínimo para comenzar la instrucción.
-3. Decodificar el opcode y sus operandos.
-4. Validar los registros y los operandos codificados.
-5. Calcular el coste de la operación.
-6. Verificar memoria y privilegios cuando corresponda.
-7. Ejecutar la instrucción.
-8. Actualizar los flags, registros y memoria según su semántica.
-9. Avanzar `IP`, salvo que la instrucción cambie el flujo.
-10. Comprobar cancelación y límites de ejecución.
-
-El decodificador trabaja con bytes sin signo. La conversión a un valor Java `byte` con signo nunca determina la semántica de una instrucción.
-
-## 8.2. Conjunto inicial de instrucciones
-
-La ISA v1 se divide en las siguientes familias. La tabla es normativa en cuanto al repertorio inicial; los opcodes concretos se fijan en el apartado 9.
-
-| Familia                | Instrucciones                     | Semántica                                       |
-| ---------------------- | --------------------------------- | ----------------------------------------------- |
-| Constantes y registros | `LI`, `MOV`                       | Cargar constante y copiar registro              |
-| Memoria                | `LDB`, `LDW`, `STB`, `STW`        | Cargar y almacenar bytes y palabras             |
-| Memoria indirecta      | `LDBI`, `LDWI`, `STBI`, `STWI`    | Acceso a memoria usando la dirección de un registro (ISA v2) |
-| Bloques                | `COPY`, `MOVE`                    | Copia no solapada y movimiento con solapamiento |
-| Aritmética             | `ADD`, `SUB`, `MUL`, `DIV`, `MOD` | Operaciones enteras                             |
-| Lógica                 | `AND`, `OR`, `XOR`, `NOT`         | Operaciones bit a bit                           |
-| Desplazamiento         | `SHL`, `SHR`, `SAR`               | Desplazamientos lógico y aritmético             |
-| Comparación            | `CMP`                             | Comparación y actualización de flags            |
-| Flujo                  | `JMP`, `JZ`, `JNZ`, `JC`, `JV`    | Saltos condicionales e incondicionales          |
-| Subrutinas             | `CALL`, `RET`                     | Llamada y retorno                               |
-| Servicios              | `HOST`                            | Solicitud genérica al runtime                   |
-| Control                | `HALT`, `TRAP`                    | Finalización y generación de excepción          |
-
-`INC`, `DEC`, `SWAP`, `ROT`, `NOP` y las instrucciones atómicas no forman parte de la ISA inicial. Se pueden implementar mediante instrucciones existentes o reservarse para extensiones.
-
-No existe una instrucción específica para cambiar el canal, consultar un permiso o escribir el nombre del jugador.
-
-## 8.3. Tipos de operandos
-
-- `REG`: índice de registro general, de 0 a 7.
-- `IMM8`: constante de 8 bits.
-- `IMM16`: constante de 16 bits.
-- `TARGET`: destino de control de flujo dentro del programa.
-- `REGION`: handle de una región autorizada.
-- `OFFSET`: desplazamiento dentro de una región.
-
-Las direcciones de memoria ordinarias se codifican como un handle y un offset, o se preparan mediante operandos de registro y convenciones de biblioteca. El handle no otorga permisos: cada acceso verifica el propietario y los permisos actuales.
-
-## 8.4. Semántica aritmética
-
-Sea \\(u\\) un entero de 16 bits. Las operaciones aritméticas de resultado de 16 bits producen el resultado modular.
-
-\\[ \operatorname{wrap}\_{16}(x)=x\bmod 65536 \\]
-
-Para `ADD`, `SUB` y `MUL`:
-
-- El resultado se reduce a 16 bits.
-- `Z` indica resultado cero.
-- `N` indica el bit 15.
-- `C` registra carry en suma y borrow en resta.
-- `V` registra overflow con signo.
-
-Para `DIV` y `MOD` se utiliza división entera con signo, con truncamiento hacia cero. La operación falla si el divisor es cero. El caso \\(-32768 / -1\\) produce overflow aritmético y una excepción definida, en lugar de depender del comportamiento de Java.
-
-Para `SHL`, `SHR` y `SAR`, los desplazamientos de 0 a 15 son válidos. Un valor de desplazamiento fuera de ese intervalo genera una excepción de operando. No se aplicará silenciosamente una máscara al conteo.
-
-`CMP` tiene modos de comparación con signo y sin signo. Estos modos se codifican mediante un campo del opcode extendido o una forma específica de instrucción; no se infieren del tipo Java del registro.
-
-## 8.5. Semántica de memoria
-
-`LDB` carga un byte y lo extiende con cero a 16 bits.
-
-`LDW` carga una palabra de 16 bits en orden de bytes little-endian, independientemente del host.
-
-`STB` escribe los ocho bits inferiores de un registro. `STW` escribe los 16 bits completos.
-
-Las formas indirectas `LDBI`, `LDWI`, `STBI` y `STWI` (incorporadas en la ISA v2) toman
-la dirección de memoria del valor de un registro general de 16 bits en lugar de un
-offset constante: `LDBI Rd, [Rs]` carga desde la dirección contenida en `Rs` y
-`STBI Rv, [Ra]` almacena en la dirección contenida en `Ra`. La carga de un byte o
-palabra actualiza `Z` y `N`. Estas operaciones pasan por las mismas verificaciones de
-permisos y límites que las formas directas.
-
-Toda operación valida:
-
-1. Existencia del handle.
-2. Propiedad de la región.
-3. Permiso de lectura o escritura.
-4. Offset y longitud.
-5. Ausencia de desbordamiento en `offset + length`.
-6. Límite máximo de la región.
-
-No se permiten lecturas parciales implícitas cuando una palabra cruza el final de una región. La operación falla sin modificar memoria.
-
-## 8.6. Semántica de bloques
-
-`COPY` exige que origen y destino no se solapen; si se solapan, produce una excepción de rango.
-
-`MOVE` permite solapamiento y conserva la semántica de `memmove`: el resultado equivale a copiar desde una instantánea lógica del origen.
-
-Ambas operaciones validan el rango completo antes de escribir. No producen escrituras parciales ante un error de validación.
-
-Las operaciones se dividen en fragmentos internos para no monopolizar el intérprete. Su coste depende del número de bytes procesados y se carga al presupuesto antes de iniciar cada fragmento.
-
-## 8.7. Saltos y subrutinas
-
-Los saltos solo pueden dirigirse a límites válidos de instrucción dentro de la sección ejecutable del programa.
-
-- `JMP`: siempre salta.
-- `JZ`: salta si `Z = 1`.
-- `JNZ`: salta si `Z = 0`.
-- `JC`: salta si `C = 1`.
-- `JV`: salta si `V = 1`.
-- `CALL`: apila el retorno y transfiere el control.
-- `RET`: restaura el retorno del frame actual.
-
-Una dirección de salto inválida produce una excepción de ejecución. El validador también debe detectar saltos fuera del código y destinos que caigan dentro de los operandos de otra instrucción.
-
-`HALT` termina la ejecución normal. No implica automáticamente confirmar los cambios del mensaje; esa decisión corresponde al contrato de terminación del programa y al runtime.
-
-`TRAP` genera una excepción de programa con un código controlado. No permite saltar a direcciones arbitrarias de memoria.
-
-## 8.8. Semántica de servicios
-
-`HOST` solicita una operación registrada en el runtime. Sus argumentos se validan antes de invocar código Java.
-
-El servicio devuelve un código de estado, un número de bytes transferidos cuando corresponda y un resultado definido por la ABI. Una operación rechazada no modifica el mensaje.
-
-Los servicios que puedan modificar el mensaje deben escribir en el journal de la ejecución, no directamente en el objeto original, salvo que el contrato del host documente una operación no transaccional.
-
-## 8.9. Excepciones de instrucciones
-
-| Excepción          | Causa                                    | Recuperación                         |
-| ------------------ | ---------------------------------------- | ------------------------------------ |
-| `INVALID_OPCODE`   | Opcode desconocido                       | Abortar                              |
-| `INVALID_OPERAND`  | Registro o modo inválido                 | Abortar                              |
-| `MEMORY_FAULT`     | Acceso inválido                          | Abortar                              |
-| `ARITHMETIC_FAULT` | División por cero u overflow excepcional | Abortar por defecto                  |
-| `PRIVILEGE_FAULT`  | Operación no autorizada                  | Abortar                              |
-| `HOST_ERROR`       | Servicio rechazado o fallido             | Recuperable solo si la ABI lo define |
-| `OUT_OF_FUEL`      | Presupuesto agotado                      | Abortar obligatoriamente             |
-| `STACK_LIMIT`      | Pila excedida                            | Abortar                              |
-| `CANCELLED`        | Cancelación solicitada                   | Abortar                              |
-
-La VM no captura automáticamente las excepciones de ejecución como si fueran condiciones normales. Una futura ISA podría incorporar manejadores de excepciones de usuario, pero no son necesarios para la primera versión.
-
-# 9. Codificación del bytecode
-
-## 9.1. Formato de instrucciones
-
-Se recomienda una codificación mixta: instrucciones cortas para operaciones frecuentes y formas extendidas para operandos o constantes más grandes.
-
-Todas las instrucciones comienzan con un opcode de 8 bits. El opcode determina exactamente la longitud y el formato del resto de la instrucción.
-
-| Formato | Tamaño     | Uso                                          |
-| ------- | ---------- | -------------------------------------------- |
-| `RR`    | 2 bytes    | Operaciones entre registros                  |
-| `R`     | 2 bytes    | Instrucciones con un registro                |
-| `RI8`   | 3 bytes    | Registro y constante de 8 bits               |
-| `RI16`  | 4 bytes    | Registro y constante de 16 bits              |
-| `BR16`  | 3 bytes    | Salto relativo con desplazamiento de 16 bits |
-| `HOST`  | 2 bytes    | Invocación genérica                          |
-| `MEM`   | 4–6 bytes  | Handle, offset y registro, según operación   |
-| `BLOCK` | 6–10 bytes | Regiones, offsets y longitud de bloque       |
-
-Los desplazamientos de salto son relativos al final de la instrucción, con signo de 16 bits. El ensamblador debe rechazar destinos que no quepan en el rango representable; puede generar un salto largo mediante una secuencia válida de instrucciones.
-
-El tamaño de una instrucción es determinado por su opcode, no por buscar un delimitador ni por inspeccionar sus bytes hasta encontrar una terminación.
-
-## 9.2. Mapa de opcodes
-
-Se reserva un espacio de 256 opcodes:
-
-| Rango       | Uso                                                       |
-| ----------- | --------------------------------------------------------- |
-| `0x00–0x1F` | Transferencia de datos y memoria                          |
-| `0x20–0x3F` | Aritmética y lógica                                       |
-| `0x40–0x5F` | Comparación y flujo de control                            |
-| `0x60–0x6F` | Servicios y terminación                                   |
-| `0x70–0x7F` | Reservado para extensiones de control                     |
-| `0x80–0xEF` | Reservado para extensiones versionadas                    |
-| `0xF0–0xFF` | Inválidos en ISA v1, salvo definición explícita posterior |
-
-Dentro de cada rango, el ensamblador y la especificación normativa asignarán identificadores concretos a los mnemónicos definidos. Los opcodes desconocidos deben rechazarse durante la validación.
-
-No se permite reinterpretar silenciosamente un opcode reservado en un programa que declara una versión anterior.
-
-## 9.3. Cabecera del programa
-
-Cada archivo binario contiene, como mínimo:
-
-- Firma del formato.
-- Versión del formato binario.
-- Versión de la ISA.
-- Versión mínima de la ABI del host.
-- Versión mínima del firmware estándar.
-- Longitudes de las secciones.
-- Punto de entrada.
-- Tabla de símbolos opcional.
-- Declaración de capacidades requeridas.
-- Metadatos de depuración opcionales.
-- Hash de integridad del contenido.
-
-La cabecera y las secciones se validan antes de publicar el programa en el runtime. El hash garantiza integridad del artefacto según el mecanismo elegido; no demuestra que el programa sea seguro.
-
-# 10. Modelo de memoria y representación de datos
-
-## 10.1. Modelo de memoria plana con SoftMMU
-
-El espacio de direcciones es plano de 16 bits (64 KB totales: $0x0000$–$0xFFFF$) con **paginación de 4 KB (16 páginas)** gestionada por un **SoftMMU** (Memory Management Unit por software).
-
-| Página | Rango        | Uso típico                           | Permisos base          |
-| ------ | ------------ | ------------------------------------ | ---------------------- |
-| 0      | 0x0000–0x0FFF | Código: ROM de firmware (o código de usuario en bare-metal) | R / X |
-| 1      | 0x1000–0x1FFF | Código: usuario (con firmware activado) | R / X               |
-| 2      | 0x2000–0x2FFF | Constantes / datos de solo lectura   | R                      |
-| 3–4    | 0x3000–0x4FFF | Datos privados / heap                | R / W                  |
-| 5–6    | 0x5000–0x6FFF | Pila (crece hacia abajo desde 0x7000)| R / W                  |
-| 7      | 0x7000–0x7FFF | Buffer de entrada (I/O)              | R / W                  |
-| 8      | 0x8000–0x8FFF | Buffer de salida (I/O)               | R / W                  |
-| 9–15   | 0x9000–0xFFFF | Datos privados / estado persistente  | Según capacidad        |
-
-> **Actualización (D30–D32).** Las páginas 9–15 (0x9000–0xFFFF) son **RAM de usuario de propósito
-> general** (R/W) que el runtime **nunca** limpia: la persistencia entre mensajes es implícita y es el
-> programa quien decide cuándo reutilizarla. Además, la apertura MMIO de dispositivos vive en
-> `0x0F00–0x0FFF`, **dentro de la página del BIOS**: `0x0F00–0x0F0F` es el banco de la pantalla (D31)
-> y `0x0F10–0x0FFF` la NVRAM del BIOS (D32); el *interconnect* la decodifica antes que ROM/RAM. Fuente
-> única: `VmMemoryMap`.
-
-> El mapa es independiente del modo: la región de código reserva siempre dos
-> páginas (ROM + usuario), y en bare-metal la página 1 queda sin usar. Así el
-> código nunca solapa la página de constantes. Fuente única: `VmMemoryMap`.
-
-- **PageTable**: 16 entradas, cada una = `frame_base` (16-bit) + `perms` (3-bit R/W/X) + `valid` + `user`
-- **Traducción**: `virt_page = vaddr >> 12`, `offset = vaddr & 0xFFF`, `phys = frame_base + offset`
-- **Permisos por página**: `READ` (0x1), `WRITE` (0x2), `EXECUTE` (0x4)
-- **Métodos SoftMMU**: `readByte/Word`, `writeByte/Word`, `fetchByte/Word`, `mapPage`, `unmapPage`, `copy` (validación + copia)
-
-No hay regiones, no hay handles, no hay búferes de entrada aislados. El programa interactúa directamente con la memoria plana mediante direcciones virtuales absolutas.
-
-Los datos del mensaje, emisor, destinatario, canal y servidor no necesitan tener regiones permanentes. La interfaz del host materializa el valor solicitado en la dirección virtual indicada por el programa (ej.: "escribe la propiedad en el buffer de entrada `0x7000`").
-
-## 10.2. Tamaños y límites
-
-Los tamaños máximos deben configurarse por política y por runtime. Como valores iniciales de referencia para pruebas, no como límites universales:
-
-- Espacio plano total: 64 KiB (16 páginas × 4 KB)
-- Pila: 8 KiB (páginas 5–6, crece hacia abajo desde 0x7000)
-- Buffer I/O individual: 4 KiB (1 página c/u: entrada en 0x7000, salida en 0x8000)
-- Código: límite configurable por artefacto, con un perfil inicial de 256 KiB (requiere carga por fragmentos si supera 64 KB)
-- Estado persistente: 64 KiB por instancia lógica (páginas 8–15, según capacidad `memory.persist`)
-
-Estos valores son hipótesis operativas que deben validarse con programas representativos. Un mensaje más grande puede procesarse por fragmentos si el contrato del servicio lo permite.
-
-El runtime debe imponer también un límite total agregado para todos los contextos y programas, de modo que multiplicar el límite por ejecución no permita agotar la memoria del servidor.
-
-## 10.3. Cadenas y Unicode
-
-La representación principal de cadenas dentro de los buffers será UTF-8, con longitud explícita y sin terminador obligatorio.
-
-Cada cadena se representa mediante una secuencia de bytes y una longitud. No se presupone que un carácter ocupe un byte.
-
-- Las operaciones de memoria cuentan bytes.
-- Las operaciones de texto deben respetar límites de secuencias UTF-8.
-- Una operación que necesita texto Unicode válido rechaza secuencias inválidas.
-- Una operación puramente binaria puede manipular cualquier byte.
-- La longitud máxima depende del servicio y de la región.
-- La indexación por puntos de código requiere una rutina de biblioteca; no se confunde con el offset de bytes.
-
-Java utiliza cadenas UTF-16 internamente, por lo que la conversión UTF-8/UTF-16 ocurre en el adaptador del host. Las conversiones deben tener límites de tamaño y no deben exponer referencias internas del objeto Java.
-
-Las transformaciones de texto deben declarar si operan sobre bytes, puntos de código o unidades de texto. Esto evita resultados ambiguos con emojis, caracteres combinados y secuencias multibyte.
-
-## 10.4. Copia y asignación
-
-El gestor de memoria debe:
-
-- Rechazar desbordamientos en `offset + length`.
-- Validar el rango completo antes de escribir.
-- Cobrar por los bytes procesados.
-- Limitar el tamaño de una única operación.
-- Permitir dividir operaciones grandes en fragmentos.
-- Evitar que los buffers de una ejecución se conviertan en referencias a datos de otra.
-
-No se requiere compactar la memoria como un heap físico. Las regiones se asignan y liberan de forma explícita y pueden respaldarse mediante arrays Java u otras estructuras internas sin alterar la semántica visible.
-
-## 10.5. Caché de propiedades del host
-
-La caché es local a la ejecución y está asociada al contexto del mensaje.
-
-Puede evitar consultar varias veces una propiedad inmutable durante una misma evaluación. No debe asumirse que una propiedad modificable conserva su valor inicial después de una escritura en el journal.
-
-La caché se invalida cuando cambia una propiedad afectada. Se descarta al finalizar la ejecución.
-
-# 11. Interfaz de E/S y servicios del host
-
-## 11.1. Contrato general de `HOST`
-
-La ISA no contiene instrucciones para leer nombres, cambiar canales o consultar permisos. Contiene una instrucción que solicita servicios mediante una ABI genérica.
-
-**Convención de registros `HOST` (ABI v2, estilo syscall):**
-
-Entrada:
-- `R0` = `op` (service ID, 16-bit)
-- `R1` = `options` (parámetro del servicio: `(scope << 8) | propId`, decisión, key…)
-- `R2` = `base` (vaddr del buffer de argumentos — dirección **completa**)
-- `R3` = `length` (bytes; entrada: pedidos · salida: transferidos)
-- `R4` reservado para el resultado escalar (extras, si los hubiera, desde `R5`)
-
-Retorno:
-- `R0` = `status` (código numérico, ver §11.2)
-- `R1`, `R2` sin cambios
-- `R3` = bytes transferidos (lecturas: bytes escritos por el emulador; escrituras: bytes consumidos)
-- `R4` = resultado escalar del servicio (p. ej. `0|1` en PERMISSION_CHECK, la decisión en ROUTE_DECISION)
-
-`length` es **bidireccional**. No existe operando `offset`: la base es la dirección completa. Para servicios de propiedad, `options` empaqueta `(scope << 8) | propId`, con `propId` en los 8 bits bajos (namespaceado por `scope`).
-
-El opcode `HOST` (0x60) es de 2 bytes (opcode + padding). El service ID se pasa en R0, no en el bytecode.
-
-El contrato concreto de cada servicio determina el significado de los campos. El opcode no cambia cuando se incorporan nuevos servicios.
-
-### Servicios estándar implementados
-
-| Service ID | Nombre | Capability requerida | Estado |
-|------------|--------|----------------------|--------|
-| 0x0100 | PROPERTY_READ | `property.read` | registrado |
-| 0x0101 | PROPERTY_WRITE | `property.write` | registrado |
-| 0x0102 | PROPERTY_EXISTS | `property.read` | declarado, no registrado |
-| 0x0200 | PERMISSION_CHECK | `permission.check` | registrado |
-| 0x0201 | PERMISSION_QUERY | `permission.check` | declarado, no registrado |
-| 0x0300 | ROUTE_DECISION | `routing.decide` | registrado |
-| 0x0301 | ROUTE_REDIRECT | `routing.decide` | declarado, no registrado |
-| 0x0302 | ROUTE_RATE_LIMIT | `routing.decide` | declarado, no registrado |
-| 0x0500 | STATE_READ | `state.read` | registrado |
-| 0x0501 | STATE_WRITE | `state.write` | registrado |
-| 0x0600 | CHANNEL_RESOLVE | `channel.resolve` | registrado |
-| 0x0601 | CHANNEL_POLICY | `channel.resolve` | declarado, no registrado |
-
-Un service ID no registrado produce `status = UNSUPPORTED`.
-
-## 11.2. Estados de servicio
-
-Los códigos de estado son parte de la ABI:
-
-Los códigos se escriben en `R0` al retornar de `HOST`.
-
-| Código | Estado             | Significado                                 |
-| ------ | ------------------ | ------------------------------------------- |
-| `0`    | `OK`               | Operación completada                        |
-| `1`    | `NOT_FOUND`        | Propiedad o recurso inexistente             |
-| `2`    | `DENIED`           | Operación no autorizada                     |
-| `3`    | `INVALID_ARGUMENT` | Argumentos inválidos                        |
-| `4`    | `BUFFER_TOO_SMALL` | Capacidad insuficiente (`R3` = bytes requeridos) |
-| `5`    | `UNSUPPORTED`      | Operación no disponible                     |
-| `6`    | `CONFLICT`         | Conflicto de versión o de estado            |
-| `7`    | `HOST_FAILURE`     | Error controlado del host                   |
-| `8`    | `PARTIAL`          | Resultado parcial permitido por el contrato |
-
-La distinción entre un estado de error y una excepción de la VM es importante. Una propiedad inexistente puede ser un resultado normal que el programa evalúe. Una dirección inválida es un fallo de ejecución.
-
-## 11.3. Lectura de una propiedad
-
-El servicio genérico `PROPERTY_READ` recibe:
-
-- El ámbito del objeto: mensaje, emisor, destinatario, canal u otro objeto autorizado.
-- El identificador de propiedad.
-- El formato solicitado.
-- La región y la dirección del buffer de destino.
-- La capacidad disponible.
-
-El runtime devuelve:
-
-- Estado.
-- Longitud requerida o bytes transferidos.
-- Tipo del valor.
-- Indicador de truncamiento, si el contrato permite truncamiento.
-
-La propiedad no se carga al comenzar el mensaje. Se resuelve al invocar el servicio.
-
-Si la capacidad es insuficiente, el contrato debe elegir entre informar la longitud necesaria sin escribir, truncar de manera explícita o utilizar una operación de consulta de longitud. No se permite truncamiento silencioso.
-
-## 11.4. Escritura de una propiedad
-
-`PROPERTY_WRITE` recibe el ámbito, el identificador de propiedad, el tipo del valor y el buffer de entrada.
-
-El runtime verifica:
-
-1. Que la propiedad exista o admita creación.
-2. Que el tipo sea compatible.
-3. Que el valor cumpla los límites.
-4. Que el programa tenga capacidad de escritura.
-5. Que el actor que origina el mensaje no esté siendo confundido con la identidad administrativa del programa.
-6. Que la escritura pueda incorporarse al journal.
-7. Que el resultado final respete las invariantes de iflow.
-
-El servicio devuelve un estado. La aceptación de una escritura en el journal no significa necesariamente que el mensaje original ya haya sido modificado.
-
-## 11.5. Espacio de nombres de propiedades y servicios
-
-Los identificadores deben pertenecer a espacios de nombres versionados. Un esquema conceptual:
-
-- `message.content`
-- `message.metadata.*`
-- `actor.permissions.*`
-- `recipient.metadata.*`
-- `channel.*`
-- `routing.*`
-
-Estos nombres son identificadores de servicios o propiedades, no mnemónicos de la ISA.
-
-El formato binario puede utilizar identificadores numéricos registrados para evitar analizar cadenas en cada invocación. Los nombres simbólicos se resuelven al cargar el programa.
-
-Las propiedades desconocidas deben producir `NOT_FOUND` o `UNSUPPORTED`, no una excepción de decodificación ni una consulta reflexiva arbitraria sobre objetos Java.
-
-## 11.6. Atomicidad y concurrencia del host
-
-La interfaz debe declarar si cada servicio:
-
-- Lee una instantánea estable.
-- Lee el valor actual del host.
-- Registra una escritura diferida.
-- Realiza una operación inmediata.
-- Puede fallar parcialmente.
-
-Las operaciones de modificación de mensajes deben preferir el journal. Los servicios de consulta externa pueden ser inmediatos si no alteran estado.
-
-Los servicios no pueden bloquear indefinidamente esperando un hilo del servidor. Si una API solo puede ejecutarse en el hilo principal, el runtime debe programar la operación según el contrato del host y definir si la evaluación se suspende o se rechaza. La primera versión debería evitar suspensiones arbitrarias de la VM.
-
-# 12. Modelo de excepciones y privilegios
-
-## 12.1. Dos dominios de autoridad
-
-En lugar de reproducir los anillos x86, se distinguen dos dominios:
-
-- Dominio de programa: ejecuta instrucciones, usa regiones autorizadas e invoca servicios declarados.
-- Dominio de supervisor: valida capacidades, administra memoria, ejecuta servicios del host, confirma cambios y controla recursos.
-
-El firmware estándar no obtiene acceso privilegiado simplemente por ser código llamado «firmware». La autoridad procede del runtime y de las capacidades explícitamente concedidas.
-
-## 12.2. Matriz de privilegios
-
-| Operación                                     | Programa                         | Supervisor/runtime                   |
-| --------------------------------------------- | -------------------------------- | ------------------------------------ |
-| Leer memoria privada                          | Sí                               | Sí                                   |
-| Escribir memoria privada                      | Sí                               | Sí                                   |
-| Modificar código ejecutable                   | No                               | Cargador autorizado                  |
-| Acceder a otro contexto                       | No                               | Solo mediante interfaces controladas |
-| Modificar tablas de servicios                 | No                               | Sí                                   |
-| Invocar servicios permitidos                  | Sí                               | Sí                                   |
-| Invocar servicios privilegiados sin capacidad | No                               | Según autorización                   |
-| Cambiar configuración del runtime             | No                               | Administración                       |
-| Modificar el mensaje                          | Solo mediante journal autorizado | Sí                                   |
-| Confirmar cambios                             | No directamente                  | Sí                                   |
-| Entregar mensajes                             | No                               | Dispatcher                           |
-| Consultar permisos                            | Solo servicio autorizado         | Sí                                   |
-| Modificar el presupuesto                      | No                               | Supervisor                           |
-
-## 12.3. Capacidades
-
-Cada programa declara las capacidades que necesita, pero la declaración no concede autoridad por sí sola.
-
-Durante la carga, el administrador y el runtime determinan cuáles se conceden. En cada ejecución se construye un conjunto de capacidades efectivas limitado por:
-
-- Capacidades aprobadas al instalar el programa.
-- Configuración del runtime.
-- Ámbito de ejecución.
-- Permisos del actor, cuando la operación dependa del jugador o emisor.
-- Restricciones de la propiedad o servicio.
-
-Las comprobaciones sensibles se repiten en el límite del servicio. No se confía en que el compilador o el validador hayan eliminado todas las operaciones ilegales.
-
-## 12.4. Excepciones y recuperación
-
-Una excepción no recuperable termina la ejecución y descarta el journal. El runtime registra el motivo y devuelve un resultado de fallo controlado al router.
-
-El servidor no debe recibir una excepción fatal causada por un programa de usuario. Los errores internos del runtime se registran separadamente y no se disfrazan como un fallo normal de política.
-
-La pila y los registros se descartan tras una excepción. El estado persistente solo se conserva si el contrato define que la operación fallida no lo modificó o si su actualización ya se confirmó mediante un procedimiento consistente.
-
-No se habilita inicialmente un vector de interrupciones modificable por programas. Las excepciones se representan mediante códigos internos y rutas de error controladas.
-
-> **Actualización (D31–D33).** El firmware dejó de ser pasivo: con el firmware ON, la máquina resetea
-> en una rutina de BIOS (`fw_reset`) que hace POST, configura el hardware (pantalla por MMIO) y cede
-> el control al `main`. Una **tabla de interrupciones configurable por el BIOS** (no por el programa
-> de usuario) y **fuentes de interrupción por E/S** (D33) ya están implementadas: el BIOS publica la
-> tabla en su NVRAM, el runtime la lee y despacha la línea como una llamada de hardware. El despacho
-> sigue estando bajo control del runtime, no de un vector arbitrario del programa. Ver
-> `docs/workdir/PLAN.md`, revisión 2026-10-17 (2), y `src/iflow/HDL.md`.
-
-# 13. Firmware y bibliotecas estándar
-
-## 13.1. Qué significa firmware en esta arquitectura
-
-El firmware es una capa de convenciones, rutinas reutilizables y servicios estándar. No es un BIOS de hardware ni un kernel completo.
-
-> **Actualización (D32–D33).** En la implementación actual el firmware ROM es **activo**: además de la
-> capa de convenciones (stdlib y ABI), el punto de entrada de una imagen con firmware es su rutina de
-> reset (`fw_reset`), que ejecuta un POST mínimo —limpia la RAM volátil, configura la pantalla por
-> MMIO y publica la tabla de interrupciones en la NVRAM— y encadena con el `main` del usuario. Sigue
-> **sin ser un kernel completo**: no hay planificación, ni aislamiento entre programas, ni servicios
-> privilegiados propios del firmware. Ver `src/iflow/HDL.md` §8 y `docs/workdir/PLAN.md`.
-
-Sus responsabilidades son:
-
-- Definir el punto de entrada.
-- Inicializar el contexto.
-- Establecer convenciones de llamadas.
-- Registrar las bibliotecas estándar compatibles.
-- Proporcionar rutinas reutilizables.
-- Definir códigos de error y convenciones de retorno.
-- Verificar compatibilidad con la ABI.
-- Preparar el programa para ejecución.
-
-La creación de regiones, la asignación de capacidades y la inicialización de la tabla de servicios siguen perteneciendo al runtime privilegiado.
-
-## 13.2. Bibliotecas
-
-| Biblioteca   | Funciones                                 | Implementación recomendada          |
-| ------------ | ----------------------------------------- | ----------------------------------- |
-| `mem`        | Copia, movimiento, comparación binaria    | Primitivas del runtime y wrappers   |
-| `text`       | Longitudes, búsqueda, comparación Unicode | Rutinas controladas                 |
-| `string`     | Construcción y concatenación acotada      | Bytecode y servicios de memoria     |
-| `property`   | Lectura y escritura genéricas             | Wrappers sobre `HOST`               |
-| `permission` | Consulta de permisos                      | Servicio del host                   |
-| `routing`    | Construcción de decisiones válidas        | Wrapper sobre servicios autorizados |
-| `transform`  | Solicitud de transformaciones             | Host y journal                      |
-| `state`      | Lectura y escritura persistente           | Host con cuotas                     |
-| `regex`      | Coincidencias y extracción                | Runtime con límites estrictos       |
-
-No es obligatorio implementar todas las bibliotecas como bytecode. Las operaciones costosas o difíciles de acotar pueden ser primitivas del runtime, siempre que su semántica esté documentada y no otorguen acceso directo a objetos Java.
-
-## 13.3. Expresiones regulares
-
-Las expresiones regulares requieren un tratamiento especial.
-
-La primera versión debe usar un motor con comportamiento acotado, preferiblemente basado en autómatas para el subconjunto soportado. Si se utiliza un motor cuya complejidad puede ser exponencial, debe existir una defensa específica que limite el patrón, la entrada y el trabajo realizado.
-
-Límites necesarios:
-
-- Longitud máxima del patrón.
-- Longitud máxima de entrada.
-- Número máximo de grupos y construcciones admitidas.
-- Memoria máxima del motor.
-- Presupuesto específico de regex.
-- Rechazo de construcciones no soportadas.
-- Resultado explícito cuando se agota el presupuesto.
-
-No basta con cobrar una unidad de gas por invocar una regex. El coste debe reflejar el trabajo realizado, o la operación debe tener un límite interno estricto.
-
-## 13.4. Carga y versionado
-
-Las bibliotecas se cargan y validan al registrar el programa o preparar el runtime. Las rutinas inmutables pueden compartirse entre ejecuciones.
-
-El firmware declara su versión y las bibliotecas disponibles. Un programa incompatible no debe empezar a ejecutarse para fallar después al invocar un servicio inexistente.
-
-# 14. Protocolo de inicialización y diagnóstico
-
-## 14.1. Secuencia de arranque
-
-1. Crear el runtime.
-2. Validar la configuración de memoria y recursos.
-3. Registrar la tabla de servicios.
-4. Comprobar versiones de ABI y firmware.
-5. Validar y cargar las bibliotecas.
-6. Verificar la integridad de las imágenes de programa.
-7. Ejecutar pruebas de autodiagnóstico de bajo coste.
-8. Publicar el programa como disponible.
-9. Aceptar evaluaciones.
-
-No se necesita un loopback obligatorio. Un programa de eco puede ser útil para comprobar el camino de entrada y salida de una operación concreta, pero no demuestra que el resto de la ISA funcione correctamente.
-
-## 14.2. Niveles de diagnóstico
-
-| Nivel              | Frecuencia          | Pruebas                                          |
-| ------------------ | ------------------- | ------------------------------------------------ |
-| Inicialización     | Una vez por runtime | Configuración, servicios, ABI y memoria          |
-| Carga del programa | Por artefacto       | Formato, opcodes, saltos y capacidades           |
-| Desarrollo         | Bajo demanda        | Pruebas exhaustivas, trazas y casos límite       |
-| Producción         | Según configuración | Contadores, errores, límites y salud del runtime |
-
-Las pruebas exhaustivas de aritmética y decodificación no deben ejecutarse por cada mensaje.
-
-El diagnóstico de producción debe evitar exponer datos sensibles del mensaje. Las trazas pueden registrar offsets, opcodes, códigos de error y costes sin volcar el contenido completo.
-
-# 15. Estado persistente y concurrencia
-
-## 15.1. Modelo de estado
-
-La persistencia de registros o memoria debe convertirse en una capacidad formal denominada, provisionalmente, persistent execution state.
-
-Se distinguen cuatro ámbitos:
-
-1. Transitorio: registros, pila, buffers y variables de una ejecución.
-2. Estado de mensaje: journal, caché y resultados temporales.
-3. Estado de instancia de programa: datos que pueden sobrevivir entre mensajes para una instancia lógica determinada.
-4. Estado global del runtime: configuración, bibliotecas y estructuras administrativas.
-
-El estado transitorio se reinicializa siempre. El estado de mensaje se descarta al finalizar. El estado de instancia solo se conserva mediante el mecanismo autorizado.
-
-## 15.2. Persistencia controlada
-
-La arquitectura puede permitir que registros y datos privados sobrevivan entre ejecuciones, pero no debe hacerlo accidentalmente por reutilizar un contexto del pool.
-
-Para habilitar esa función se requiere:
-
-- Un ámbito explícito de persistencia.
-- Una identidad estable de la instancia lógica.
-- Una declaración de capacidad.
-- Una cuota de memoria.
-- Una política de inicialización.
-- Una política de expiración.
-- Una política de acceso.
-- Una estrategia de concurrencia.
-- Un procedimiento de migración de versión.
-- Una regla de recuperación ante corrupción.
-
-La pila nunca se conserva. Tampoco se conservan automáticamente los permisos efectivos, los buffers del mensaje ni los handles temporales del host.
-
-Los registros persistentes no forman parte de la ABI general de las subrutinas: son estado de instancia controlado por el runtime. Su conservación debe ser explícita en el descriptor del programa y no una consecuencia de qué trabajador del pool atendió el mensaje anterior.
-
-## 15.3. Riesgo de contaminación entre mensajes
-
-Permitir que una política conserve estado puede ser útil para contadores, ventanas de observación o algoritmos de routing stateful. También puede permitir que información de un mensaje afecte a otro.
-
-Por eso, la clave de estado debe estar definida por el administrador: por ejemplo, por programa y ámbito configurado, no por un identificador de jugador elegido arbitrariamente por el bytecode.
-
-El runtime debe impedir que el programa cambie el ámbito de su estado sin autorización.
-
-## 15.4. Concurrencia
-
-La primera versión debe ejecutar secuencialmente las operaciones que modifican una misma instancia lógica de estado.
-
-Si dos mensajes intentan modificar ese estado simultáneamente, las opciones son:
-
-- Serializar la ejecución por instancia.
-- Usar control optimista de versiones y rechazar conflictos.
-- Aislar las instancias si no necesitan compartir estado.
-
-La recomendación inicial es serialización por instancia persistente. Es más fácil de verificar que permitir escrituras concurrentes arbitrarias sobre registros y memoria compartidos.
-
-Los mensajes independientes pueden procesarse en paralelo mediante trabajadores Java, cada uno con su propio contexto.
-
-No se implementa paralelismo dentro de una misma VM. No se justifican aún múltiples núcleos virtuales ni un scheduler interno: añadirían sincronización y semánticas de memoria compartida sin una necesidad demostrada.
-
-# 16. Integración con el router y el dispatcher de iflow
-
-## 16.1. Contrato arquitectónico
-
-Se conserva el contrato conceptual:
-
-`Router.route(Message, Actor) -> RouteOutcome`
-
-La VM no reemplaza al dispatcher. Se integra como motor de políticas invocado por el router.
-
-La arquitectura recomendada es:
-
-- `VmPolicyEngine`: ejecuta el programa y produce un resultado intermedio.
-- `VmExecutionContext`: contiene el estado privado de la evaluación.
-- `HostServiceRegistry`: proporciona acceso autorizado a servicios.
-- `PolicyResultValidator`: valida la decisión y el journal.
-- `DefaultRouter`: mantiene la coordinación con las reglas y el ciclo de routing.
-- `MessageDispatcher`: expande destinatarios y entrega el mensaje.
-- `RateLimiter` y `PermissionChecker`: continúan siendo servicios del host.
-
-El motor de políticas no debe llamar directamente al dispatcher ni decidir por su cuenta en qué hilo se entrega un mensaje.
-
-## 16.2. Representación del resultado
-
-El resultado intermedio debe incluir:
-
-- Estado de ejecución.
-- Decisión de routing.
-- Transformaciones pendientes.
-- Journal de modificaciones.
-- Diagnóstico no sensible.
-- Consumo de recursos.
-- Referencia de versión del programa.
-
-La decisión de routing utiliza un conjunto cerrado de variantes:
-
-| Decisión           | Semántica                                               |
-| ------------------ | ------------------------------------------------------- |
-| `LOG`              | Registrar o continuar según la semántica existente      |
-| `DROP`             | No entregar                                             |
-| `REJECT`           | Rechazar de acuerdo con el contrato actual              |
-| `REDIRECT`         | Solicitar redirección validada                          |
-| `CHANNEL_REDIRECT` | Solicitar cambio de canal validado                      |
-| `RATE_LIMIT`       | Aplicar la semántica de limitación definida por el host |
-| `CONTINUE`         | Continuar el flujo normal, si el contrato lo permite    |
-
-`CONTINUE` es un valor interno del nuevo modelo, no una nueva decisión pública obligatoria. Debe mapearse a la semántica real del router existente.
-
-Los valores inválidos se rechazan. No se convierten automáticamente en `CONTINUE`, porque eso podría permitir que un programa defectuoso eluda una política de seguridad.
-
-## 16.3. Rate limiting y permisos
-
-El orden debe preservar los dos niveles existentes:
-
-- El rate limiting de emisión se evalúa una vez por mensaje, antes del fan-out.
-- El rate limiting asociado a una regla se evalúa en el ámbito de destinatario que corresponda a esa regla.
-
-La VM no debe duplicar estas comprobaciones si el router ya las realiza.
-
-Las políticas pueden solicitar consultas o decisiones mediante servicios. El runtime conserva la autoridad sobre la identidad del actor, la clave del rate limiter y el momento de aplicación.
-
-Una regla que requiera un permiso no debe sustituir `PermissionChecker` por una implementación propia que acceda directamente a las APIs del host.
-
-## 16.4. Migración de reglas
-
-La migración debe realizarse en tres modalidades:
-
-1. Compatibilidad: el motor existente continúa ejecutando reglas que todavía no se han migrado.
-2. Traducción parcial: reglas simples y de semántica equivalente se convierten a bytecode.
-3. Programa nativo: políticas complejas se escriben para la VM.
-
-Las reglas SpEL no deben traducirse automáticamente cuando sus efectos secundarios, orden de evaluación, tratamiento de errores o semántica de valores nulos difieran.
-
-Durante la transición debe ser posible ejecutar pruebas de comparación en modo sombra: ambos motores evalúan el mismo caso, pero solo uno produce efectos. Las divergencias se registran para su revisión.
-
-La activación de un programa debe ser atómica respecto a la publicación de su nueva versión. Un mensaje no debe observar a mitad de su evaluación una mezcla de dos versiones de programa.
-
-# 17. Presupuesto de ejecución y protección de recursos
-
-## 17.1. Fuel
-
-Cada ejecución recibe un presupuesto finito de unidades de trabajo, denominado `fuel`.
-
-El contador es privado de la ejecución. El programa no puede incrementarlo, reiniciarlo ni transferirlo a otra ejecución.
-
-El coste se descuenta antes de realizar una operación que pueda consumir recursos. Cuando el coste no se puede calcular de antemano, se descuenta de manera incremental.
-
-## 17.2. Costes iniciales propuestos
-
-Los valores siguientes son unidades de diseño para el prototipo, no mediciones de tiempo ni constantes universales.
-
-| Operación                        | Fuel inicial                                       |
-| -------------------------------- | -------------------------------------------------- |
-| Instrucción aritmética simple    | 1                                                  |
-| Comparación o salto              | 1                                                  |
-| Carga o almacenamiento ordinario | 2                                                  |
-| Llamada o retorno                | 2                                                  |
-| Invocación `HOST`                | 10 de base, más coste del servicio                 |
-| Copia de memoria                 | 1 por cada bloque de hasta 16 bytes                |
-| Conversión de texto              | Base más coste por bytes procesados                |
-| Consulta de propiedad            | Base más coste según tamaño y operación            |
-| Regex                            | Coste medido por el motor o presupuesto específico |
-| Asignación de memoria            | Base más coste proporcional al tamaño              |
-
-Los costes deben calibrarse mediante benchmarks. Su función es limitar trabajo, no predecir exactamente los nanosegundos de una operación.
-
-## 17.3. Operaciones costosas
-
-Una instrucción `HOST` no puede eludir el presupuesto ejecutando una operación nativa de coste ilimitado.
-
-Cada servicio debe declarar:
-
-- Coste fijo de entrada.
-- Coste variable.
-- Límites de entrada y salida.
-- Posibles asignaciones.
-- Condiciones de cancelación.
-- Si puede bloquearse o delegar trabajo.
-
-Para un servicio de copia, el coste se calcula por bytes. Para regex, el runtime debe limitar el trabajo interno o utilizar un algoritmo de complejidad acotada. Para servicios que no puedan detenerse con seguridad, la operación debe ser estrictamente limitada o no exponerse a programas de usuario.
-
-## 17.4. Límites independientes
-
-Fuel no sustituye a:
-
-- Cuota de memoria.
-- Límite de pila.
-- Límite de profundidad de llamadas.
-- Longitud máxima de entrada.
-- Límite de buffers.
-- Número máximo de servicios.
-- Cuota de estado persistente.
-- Control de concurrencia.
-- Límite de tiempo para operaciones externas.
-
-El agotamiento de fuel provoca la terminación obligatoria de la ejecución y el descarte del journal. No existe una excepción recuperable que permita al programa continuar sin presupuesto.
-
-# 18. Rendimiento y estrategia de optimización
-
-## 18.1. Implementación inicial
-
-La primera implementación debe ser un intérprete sencillo, con un bucle de despacho explícito y un conjunto reducido de instrucciones.
-
-Prioridades:
-
-1. Validación del bytecode al cargar.
-2. Contextos de ejecución reutilizables.
-3. Buffers reutilizables y acotados.
-4. Servicios del host con contratos compactos.
-5. Evitar asignaciones por instrucción.
-6. Evitar conversiones repetidas de cadenas.
-7. Caché de propiedades dentro de la evaluación.
-8. Medición del coste de cada familia de instrucciones.
-
-No se recomienda introducir inicialmente un JIT, un formato de microcódigo, SIMD ni aceleración mediante GPU.
-
-## 18.2. Hipótesis de rendimiento
-
-La arquitectura puede ser eficiente si las políticas hacen suficiente trabajo local y las consultas al host no dominan el tiempo total.
-
-Puede ser ineficiente si una política necesita efectuar muchas llamadas pequeñas al host, convierte cadenas repetidamente o ejecuta una gran cantidad de instrucciones para reproducir operaciones que el runtime ya realiza de manera optimizada.
-
-Por ello, la ISA debe seguir siendo pequeña, pero la ABI debe permitir operaciones genéricas por lotes cuando estén justificadas. Una operación por lotes debe mantener semántica genérica; no debe convertirse en una instrucción especial por propiedad.
-
-## 18.3. Benchmark obligatorio
-
-La comparación debe incluir al menos:
-
-- Motor actual con reglas simples.
-- Motor actual con condiciones complejas.
-- VM con programa transparente.
-- VM con consultas al host.
-- VM con transformaciones de texto.
-- VM con búsquedas y bucles.
-- VM con estado persistente.
-- VM con errores y agotamiento de fuel.
-
-Métricas:
-
-- Throughput.
-- Latencia p50, p95 y p99.
-- Asignaciones por mensaje.
-- Bytes asignados por mensaje.
-- Tiempo de CPU.
-- Coste de llamadas al host.
-- Coste de inicialización y validación.
-- Coste de reutilización de contextos.
-- Contención del estado persistente.
-
-Las pruebas deben usar cargas equivalentes y medir también la presión sobre el hilo principal de Bukkit/Spigot cuando corresponda.
-
-No debe afirmarse que la VM es más rápida que las reglas existentes sin mediciones reproducibles.
-
-# 19. Formato de programas y herramientas de desarrollo
-
-## 19.1. Ensamblador
-
-El ensamblador debe soportar:
-
-- Mnemónicos y operandos tipados.
-- Etiquetas.
-- Directivas de secciones.
-- Constantes numéricas y cadenas.
-- Declaración de capacidades.
-- Símbolos de servicios.
-- Resolución de saltos.
-- Verificación de rangos.
-- Generación de metadatos.
-- Errores con número de línea y ubicación.
-
-La sintaxis exacta puede evolucionar, pero debe mantener la distinción entre código, datos, constantes y declaraciones de capacidades.
-
-## 19.2. Formato binario
-
-El artefacto compilado incluye la cabecera versionada, las secciones, el punto de entrada y las capacidades declaradas. El formato debe permitir rechazar programas incompatibles antes de su publicación.
-
-No se deben ejecutar artefactos que declaren capacidades desconocidas o que dependan de una ABI no soportada.
-
-## 19.3. Herramientas
-
-La primera versión del ecosistema debe incluir:
-
-- Ensamblador.
-- Desensamblador.
-- Validador estático.
-- Verificador de compatibilidad.
-- Trazador de ejecución.
-- Inspector de registros.
-- Inspector de regiones de memoria.
-- Informe de consumo de fuel.
-- Diagnóstico de servicios.
-- Ejecutor de pruebas reproducibles.
-
-La depuración debe poder detenerse en un límite de instrucción, pero esa capacidad pertenece a las herramientas de desarrollo y no debe convertirse en una vía de suspensión arbitraria en producción.
-
-## 19.4. Lenguaje de nivel superior
-
-La ISA debe ser adecuada como objetivo de compilación. No es necesario decidir ahora la sintaxis de un lenguaje de políticas de alto nivel.
-
-La posibilidad de compilar reglas o un lenguaje posterior a bytecode debe evaluarse después de cerrar la semántica de la máquina y construir un validador fiable.
-
-# 20. Programas de ejemplo completos
-
-Los ejemplos siguientes definen un dialecto de ensamblador de referencia. Utilizan instrucciones de la ISA descrita y rutinas estándar identificadas mediante contratos explícitos. No representan todavía archivos binarios compilados.
-
-Para hacer los ejemplos legibles, se emplean símbolos como `PROPERTY_READ` y `ROUTE_DROP`. El ensamblador resuelve estos símbolos a identificadores de servicios registrados. No son opcodes adicionales.
-
-Convenciones de los ejemplos:
-
-- `R0`–`R7` son registros generales.
-- `HOST` invoca un servicio mediante la ABI definida.
-- `HALT` termina la evaluación.
-- `JZ` y `JNZ` consumen los flags establecidos por una operación previa.
-- `CALL` y `RET` utilizan la pila privada.
-- Los buffers y handles se preparan mediante el cargador o rutinas estándar.
-- El runtime valida todas las decisiones antes de aplicarlas.
-
-## Ejemplo A. Paso transparente
-
-El programa no modifica el mensaje y solicita la continuación normal del flujo.
-
-```
-.entry main
-
-main:
-    LI   R0, ROUTE_CONTINUE
-    HOST
-    HALT
+# ESPECIFICACIÓN TÉCNICA DE REFERENCIA v3 — iFlow VM (32 bits)
+
+> **Origen y continuidad (2026-10-23):** este documento recoge la auditoría manual de iFlow del
+> 2026-10-20 y se ratifica como **especificación técnica de referencia v3** de la línea **`iflow-vm`**
+> (VM propia de 32 bits). Sus hallazgos y decisiones son requisitos de esa línea; **no se heredan**
+> al motor paralelo **`iflow-wasm`** (WebAssembly/Chicory).
+
+**Estado:** especificación técnica de referencia v3 (ratificada el 2026-10-23); la pasada original de
+auditoría fue en solo lectura.
+**Commit base de la pasada:** `2f0b217` (local, no publicado).
+**Base de la discusión de arquitectura:** `4857997` (local, no publicado).
+**Modo:** lectura estática y sondas locales sobre las clases compiladas; no se ejecutó la suite Gradle
+ni pruebas de integración en esta pasada.
+**Nota de reemplazo:** este documento sustituye la auditoría integral anterior. El contenido previo
+queda en el historial de git; la historia no se reescribe.
+
+> **Distinción de alcance:** la auditoría vigente comprende `IFLOW-MAN-01…41` y las preguntas 1–34.
+> La sección `§3.7`, los hallazgos `IFLOW-MAN-42…45` y las preguntas 35–38 son **material diferido**:
+> se conservan para la próxima sesión, después de reimplementar la VM con las nuevas specs, y no
+> forman parte de las conclusiones ni de la remediación de esta pasada.
+
+---
+
+> **Alcance de esta pasada:** contratos de entrada, enlace host↔iFlow, `PolicyTarget`, carga de
+> `.flow`, camino de transformación/canal, `HALT`/IRQ, MMU/bus/MMIO, parser, intérprete, servicios
+> `HOST`, política de ejecución, firmware del compilador y primeras cuentas de la cola de rate limit.
+> Quedan pendientes los tests, la integración host/TextFormatter y la validación E2E. La sección 8
+> registra la dirección de arquitectura ratificada durante la revisión; no está implementada.
+
+## 1. Mapa de lectura
+
+| Bloque | Archivos leídos | Qué se verificó | Estado |
+|---|---|---|---|
+| Contratos de entrada | `Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, `PassThroughProgram`, `VmConfigLoader` | contrato, semántica de targets, fallback, carga inicial | ✅ leído |
+| Enlace host↔iFlow | `DefaultTextFormatter`, `SuiteHost.deliver`, `MessageDispatcher`, `PolicyResultValidator`, `HostServiceRegistry` (routing/DMA/property) | cómo se transforma, rutea, formatea y entrega; `SET_CHANNEL` vs `CHANNEL_REDIRECT` | ✅ leído |
+| Ejecución / IRQ | `VmInterpreter` completo, `ExecutionContext` (pila/cancelación/`irqHandler`), `VmPic`, `IrqTable`, `VmMemoryMap` | despacho de IRQ, estado de CPU, pila/CALL/RET, mapa de memoria, límites de 16 bits | ✅ leído |
+| MMU / memoria | `SoftMMU`, `PageTable`, `PageEntry`, `PhysicalMemory`, `VmBus`, `VmDmaController`, `VmMemoryMap` | 64 KB, 16 páginas de 4 KB, copy-on-write, permisos, ownership, MMIO, DMA; límites para 32 bits | ✅ leído |
+| ISA / parser | `Opcode`, `ProgramImage`, `ProgramImageParser`, fixtures `.flow` | magic, versiones, secciones, bounds, SHA-256, entry point, instrucciones | ✅ leído |
+| Servicios / política | `HostServiceRegistry`, `VmPolicyEngine`, `PolicyResultValidator`, `MessageHostContext` | ABI `HOST`, capabilities, property, routing, input, fuel, carga y arranque | ✅ leído |
+| Cola / rate limit | `RateLimiter`, `VmPolicyEngine` (rate limit de emisión), `MessageDispatcher` (rate limit por target) | dónde se aplica el límite, si hay cola o reintento | ✅ leído |
+| Compilador / firmware | `tools/iflow-compiler/src/assembler.ts`, `types.ts`, `test/firmware.flowasm` | ROM embebida, vector de reset, POST, tablas IRQ, datos/constantes | 🟡 assembler leído; tests no ejecutados |
+| Pendiente | suite de tests, integración host/TextFormatter, E2E y editor web | cobertura real, entrega/cancelación de evento, validación de extremo a extremo | ⏳ pendiente |
+
+## 2. Definiciones para no confundir transformación con canal
+
+Estas definiciones son **propuestas de trabajo**, no código aplicado. Sirven para separar dos
+conceptos que hoy están mezclados en `PolicyTarget` y en el journal.
+
+- **Transformar un mensaje:** mutar su contenido o sus metadatos sin cambiar su identidad de destino.
+  Ejemplos: reescribir texto, resolver placeholders, cambiar formato, idioma, color, sonidos, flags.
+- **Cambiar de canal:** cambiar el destino lógico del mensaje. Eso puede implicar otro tail de formato,
+  otras reglas de permisos y, potencialmente, otro conjunto de destinatarios. No es solo una mutación
+  de presentación.
+- **Rutear:** decidir si el mensaje se entrega, se deniega, se cancela o se redirige. Es una decisión,
+  no una mutación.
+- **Entregar:** efecto final en el adaptador de plataforma. Solo ocurre si hay una decisión explícita
+  de entrega.
+- **Cancelar mensaje:** no entregar este mensaje concreto. **Cancelar evento:** cancelar el evento de
+  la plataforma que originó el mensaje; son cosas distintas y hoy no existe un camino de vuelta al
+  evento.
+
+Conclusión conceptual: **`TRANSFORM_APPLY` debe quedarse en contenido/metadatos**. El cambio de canal
+debe ser `SET_CHANNEL` validado. Si cambiar de canal exige re-evaluar permisos o destinatarios, eso es
+una segunda fase de routing acotada, no una re-entrega recursiva.
+
+## 3. Hallazgos confirmados
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-01` | Baja | `Router.rules()` documenta que siempre lanza `UnsupportedOperationException`, pero devuelve `Collections.emptyList()`. | `Router.java:43-50` |
+| `IFLOW-MAN-02` | Baja | `RouteOutcome.redirected()` solo reconoce `REDIRECT`; `RouteDecision.delivered()` también cuenta `CHANNEL_REDIRECT`. La asimetría no está documentada. | `RouteOutcome.java:22-24`, `RouteDecision.java:32-36` |
+| `IFLOW-MAN-03` | Alta | `VmConfigLoader` hace *fail-open* tanto si falta `policy.flow` como si está corrupto: warning y `PassThroughProgram`. No distingue “no configurado” de “política rota”. | `VmConfigLoader.java:25-39` |
+| `IFLOW-MAN-04` | Alta | `REDIRECT` a un actor concreto está roto: el target se guarda en `redirectChannel`, pero `RoutingResult` solo tiene un booleano `redirect` y `MessageDispatcher` siempre llama a `deliverConsole()`. El target nunca se lee. | `PolicyResultValidator.java:86-97`, `RoutingResult.java`, `MessageDispatcher.java:151-157` |
+| `IFLOW-MAN-05` | Alta | `CHANNEL_REDIRECT` reconstruye el mensaje desde `messageWithResolvedSource`, no desde `result.message()`: pierde transformaciones previas. Después llama **una sola vez** a `host.deliver()` y comprueba `reResult.decision().delivered()`. Como `delivered()` incluye `CHANNEL_REDIRECT` y `REDIRECT`, un segundo redirect no se sigue: se entrega al recipient original con `reResult.rendered()` y el `redirectedMsg` sin usar `reResult.message()`, o se ignora el target de consola. No hay recursión, pero sí truncamiento silencioso y pérdida de las transformaciones del segundo salto. | `MessageDispatcher.java:158-176` |
+| `IFLOW-MAN-06` | Alta | `SET_CHANNEL` no valida que el canal exista; `CHANNEL_REDIRECT` sí. Si el canal no existe, el formateador puede caer al ancestro o al default. Además, `SET_CHANNEL` no re-evalúa permisos; `CHANNEL_REDIRECT` sí. No son equivalentes. | `PolicyResultValidator.java:160-166`, `DefaultTextFormatter.java:44-60` |
+| `IFLOW-MAN-07` | Media | `TRANSFORM_APPLY` solo reescribe texto (placeholders/detección de idioma). No cambia canal, formato ni destino. Si “transformar” incluye cambiar canal, el nombre y el contrato actuales son incompletos. | `HostServiceRegistry.java:470-508` |
+| `IFLOW-MAN-08` | Alta | El validador arranca con `target = LOG`; si la VM no llama a `ROUTE_DECISION`, el mensaje se entrega. Si la VM falla, se devuelve `REJECT` y no se entrega. **Silencio = permitir; crash = denegar**, al revés de un firewall. | `PolicyResultValidator.java:70-75`, `VmPolicyEngine.java:181-260` |
+| `IFLOW-MAN-09` | Media | `LOG` no escribe en ningún sink: solo registra `SET_PROCESSED` y `Message.processed=true`. No se encontró ningún consumidor de `processed()`. No hay diferencia práctica con “permitir”. | `HostServiceRegistry.java:618`, `PolicyResultValidator.java:78-85,174` |
+| `IFLOW-MAN-10` | Media | `DROP` y `REJECT` no se diferencian en entrega: ambos descartan. Solo cambia el log de debug (`DROP` silencioso, `REJECT` con línea). `CONNECTION_LOST_MARKER` solo aparece en `isConnectionLostMarker()` y en un test; no se escribe en producción. | `MessageDispatcher.java:329-334`, `PolicyTarget.java:26-31` |
+| `IFLOW-MAN-11` | Alta | `RATE_LIMIT` no encola ni reintenta. El rate limit de emisión es un token bucket que, al agotarse, devuelve un `DispatchReport` con 0 entregas; el target `RATE_LIMIT` del VM solo guarda `backoffMillis` y el dispatcher lo trata como silenciado. No hay cola, ni scheduler de reintento, ni timer IRQ. | `MessageDispatcher.java:98-113,180`, `HostServiceRegistry.java:601-625`, `VmPolicyEngine.java:641-664` |
+| `IFLOW-MAN-12` | Alta | `HALT` es terminal, no un `HLT`: pone `IP = codeSize` y el bucle termina. El despacho de IRQ ocurre al inicio del bucle; después de `HALT` ya no hay límite de instrucción donde despachar. No hay timer IRQ ni flag global de interrupciones. | `VmInterpreter.java:73-76,297-302,469-505`, `VmPic.java`, `ExecutionContext.java:310-322` |
+| `IFLOW-MAN-13` | Media | La cuenta de cola de 16 bits es viable solo para payload puro. 24 KB / 256 B = 93,75 mensajes; una entrada real necesita deadline, estado, canal/destinatario o handle. El mensaje completo no debe estar en la VM: el host puede guardar el objeto y la VM solo el handle. | `VmMemoryMap.java:80-100`, `MessageDispatcher.java`, `Message` |
+| `IFLOW-MAN-14` | Media | La CPU conoce la tabla de IRQ del BIOS vía `ExecutionContext.irqHandler()` y `IrqTable` sobre NVRAM. Es acoplamiento a un firmware concreto; la CPU debería hablar con un `InterruptController`/`InterruptVectorTable` genérico y el firmware decidir dónde vive la tabla. | `ExecutionContext.java:306-322`, `IrqTable.java` |
+| `IFLOW-MAN-15` | Baja | La fórmula propuesta “longitud / cantidad de nulos = tamaño del array” no es correcta: da el promedio de bytes por elemento. El número de elementos es la cantidad de nulos (si hay terminador final) o nulos + 1 (si no). El array de destinatarios tampoco cabe en 12.000 entradas dentro del buffer de entrada de 4 KB. | Propuesta de ABI, no implementada |
+
+### 3.1. Pasada de memoria, bus, CPU, IRQ y servicios
+
+> Confirmado por lectura y por sondas locales contra las clases compiladas del código actual. Las
+> sondas no forman parte del repositorio y no se modificó código de producción.
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-16` | Alta | `VmBus.readWord/writeWord` eligen el dispositivo solo por la dirección inicial; una palabra que cruza RAM↔MMIO o dos dispositivos no se divide. Sonda: `readWord(0x0FEF)` lanza `AIOOBE` en `VmNvram` (índice 224); `writeWord(0x0F0F, 0x1234)` escribe solo el byte bajo en el registro de pantalla y deja `0x0F10` de NVRAM intacto; `readWord(0x0EFF)` devuelve la palabra de RAM aunque el byte alto caiga en MMIO. `readBlock/writeBlock` sí dividen por byte; el fallo es exclusivo del camino de palabra. | `VmBus.java:100-143`, `VmNvram.java:54-70` |
+| `IFLOW-MAN-17` | Alta | `deliverPendingInterrupt` hace `pic.beginService(irq)` y `ctx.enterInterrupt(ip)` antes de `ctx.enterCall` y del push del retorno. Si la pila falla (por ejemplo `maxStackSize=0`), la excepción deja `irqDepth=1`, la línea `inService` y `current=irq`, pero `pending=0`; el handler nunca corrió y, con el PIC persistente, la línea queda enmascarada. La secuencia de commit del IRQ no es atómica. | `VmInterpreter.java:491-505`, `ExecutionContext.java:332-350` |
+| `IFLOW-MAN-18` | Media | `PageTable.mapPage` solo valida alineación, no que el frame físico exista. `mapPage(0, 0x10000)` y `mapPage(0, -4096)` se aceptan; el acceso posterior termina en `AIOOBE` de `PhysicalMemory` (índice 16 o 1048575), no en `VmException`. El problema crece con frames dispersos de 32 bits. | `PageTable.java:65-75`, `PageEntry.java:33-35`, `PhysicalMemory.java:103-109` |
+| `IFLOW-MAN-19` | Media | No se verifica que los destinos de control sean frontera de instrucción. `executeJump` lo admite (“simplified: just check it's valid”); `executeCall` y el handler de IRQ solo comprueban rango; `executeReturn` no comprueba ni rango ni frontera; el parser solo valida `0 <= entryPoint < codeLength`. Sonda: un `JMP` dentro de un inmediato ejecuta bytes como `MOV` y un `entryPoint` dentro de un `LI` llega a `HALT`. | `VmInterpreter.java:448-465,508-555`, `ProgramImageParser.java:183-187` |
+| `IFLOW-MAN-20` | Alta | `ROUTE_DECISION` con `REDIRECT` y longitud 0 o negativa registra `SET_PROCESSED` (LOG, permite) en lugar de error; con `CHANNEL_REDIRECT` registra un canal `null`, el validador omite la comprobación de existencia y el dispatcher cae a consola. Sonda: `REDIRECT` longitud 0 y -1 devuelven `OK` y `SET_PROCESSED`; `CHANNEL_REDIRECT` longitud 0 devuelve `OK` y `REDIRECT_CHANNEL=null`. Un test actual fija el caso nulo como válido. | `HostServiceRegistry.java:580-625`, `PolicyResultValidator.java:87-124`, `MessageDispatcher.java:158-176` |
+| `IFLOW-MAN-21` | Media | `argLength` negativo de `HOST` no se valida de forma central. `VmBus.getRegion` hace `new byte[length]` antes de leer; los servicios pasan `R3` sin comprobar y un valor negativo produce `NegativeArraySizeException`, que el intérprete convierte en `HOST_ERROR` (o un `REJECT`) en vez de `INVALID_ARGUMENT`. | `VmBus.java:157-160`, `HostServiceRegistry.java:393-412,580-609`, `VmInterpreter.java:108-114` |
+| `IFLOW-MAN-22` | Media | `messageProperty` usa `String.valueOf` para idioma, color y formato; cuando el valor es `null` devuelve la cadena `"null"`. `PROPERTY_EXISTS` la considera presente y la autodetección de `PROP_LANG_SOURCE` solo actúa si el valor es `null` o vacío, así que nunca se activa. | `VmPolicyEngine.java:503-515`, `HostServiceRegistry.java:421-435,266-272` |
+| `IFLOW-MAN-23` | Media | `prepareInput` escribe campos NUL-separados sin longitud ni escape. Un `U+0000` en el texto trunca el campo y desplaza los siguientes; un NUL en emisor/canal puede inyectar campos. Además la truncación a 256 bytes puede partir un carácter UTF-8 multibyte. | `VmPolicyEngine.java:355-395` |
+| `IFLOW-MAN-24` | Media | Las instrucciones de bloque del guest (`COPY`/`MOVE`) usan `ctx.dma()`, que es un bus `SUPERVISOR`, no el bus `PROGRAM` de la CPU. Sonda: con una página `mapPageKernel` R/W, `COPY` la escribe correctamente mientras un `writeByte` directo con privilegio `PROGRAM` es denegado. Hoy no hay páginas de kernel escribibles expuestas, pero se rompe la separación de dominios y cualquier página kernel futura sería escribible por el guest. | `VmInterpreter.java:244-260`, `ExecutionContext.java:465-473`, `VmBus.java:41-54` |
+| `IFLOW-MAN-25` | Media | `VmDmaController.validateRange` calcula `endAddr = vaddr + length` en `int`; con desbordamiento (`0xFFFF + Integer.MAX_VALUE`) el rango se acepta y no se valida ninguna página. La clase promete transferencias “all-or-nothing”, pero `copyBlock` lee y luego escribe sin rollback; el camino MMIO de `VmBus.writeBlock` escribe byte a byte y puede dejar el destino parcial si un dispositivo falla. | `VmDmaController.java:20,144-159,198-228`, `VmBus.java:136-143` |
+| `IFLOW-MAN-26` | Media | `VmPic` guarda un solo `current`. Si se anida una IRQ, `beginService` de la segunda pisa `current`; el ACK de la interna lo deja en `-1` y el stub del BIOS, que lee `CURRENT`, puede hacer ACK de la línea 15 al volver al handler externo. `inService` conserva las líneas, pero no hay pila de líneas activas. | `VmPic.java:52-53,122-145`, `assembler.ts:478-483` |
+| `IFLOW-MAN-27` | Media | `HostServiceRegistry.invoke` cobra el fuel base antes del servicio y el variable después. `STATE_WRITE` escribe el estado del host de forma inmediata; si el fuel variable se agota, la ejecución termina en `REJECT` pero el estado ya cambió. No hay journal ni rollback para los efectos del host. | `HostServiceRegistry.java:393-402,654-664` |
+| `IFLOW-MAN-28` | Media | El mapa de 64 KB solapa la apertura MMIO con la página de código 0. Con firmware desactivado, el assembler deja el código de usuario en `0x0000` y permite hasta 4 KB, así que puede llegar a `0x0F00`; la CPU ejecuta esos bytes desde RAM, pero un acceso de datos a la misma dirección se decodifica como dispositivo antes de la MMU. El código y el MMIO son el mismo byte con dos significados. | `VmMemoryMap.java:42-47,104-130`, `SoftMMU.java:329-331`, `VmBus.java:92-98`, `assembler.ts:630-637` |
+
+### 3.1.x. Arquitectura de capas, estado persistente y concurrencia
+
+> Hallazgos transversales que afectan la estructura completa de la VM y su viabilidad como máquina persistente multi-núcleo. Confirmados por lectura de `VmPolicyEngine`, `ExecutionContext`, `MessageHostContext`, `VmBus`, `VmInterpreter`, `MessageDispatcher` y `SuiteHost`.
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-46` | Crítica | **`VmPolicyEngine` concentra BIOS + bootloader + kernel + router.** `setupProgramMappings()` mapea código, constantes, datos, stack, I/O, adjunta dispositivos (display, NVRAM, PIC) y escribe código/constantes con privilegio `SUPERVISOR` — todo trabajo de BIOS/bootloader. `route()` reconfigura `ExecutionContext` por mensaje, dispara `IRQ_MESSAGE` y ejecuta el entry point — trabajo de kernel/scheduler. No hay separación de capas: el router *es* la máquina. | `VmPolicyEngine.java:310-380` (`setupProgramMappings`), `VmPolicyEngine.java:200-266` (`route`), `VmPolicyEngine.java:470-540` (`setProgram`) |
+| `IFLOW-MAN-47` | Crítica | **`ExecutionContext` mutable y reconfigurado por mensaje** rompe la persistencia real y la concurrencia futura. `contextPool.acquire()` + `configureContext()` inyectan `SoftMMU`, dispositivos, `hostState` en cada ejecución. El estado efímero (registros, PC, SP, FP, flags, fuel, journal, `hostContext`, `irqDepth`, `inInterrupt`) se mezcla con referencias a estado persistente. Si se quita `machineLock` o se añaden cores, dos contextos concurrentes comparten `SoftMMU` mutable sin aislamiento. | `ExecutionContext.java:180-230` (`configureContext`), `VmPolicyEngine.java:209-225`, `ExecutionContext.java:240-260` (`reset`/`initialize`) |
+| `IFLOW-MAN-48` | Alta | **`MessageHostContext` constructor de 10 parámetros** acopla el contexto del mensaje a todo el host (`channels`, `permissions`, `rateLimit`, `serviceRegistry`). Viola "Tell, don't ask"; imposibilita testear sin montar el host completo. `initialize()` (líneas 400-420) es otro setter masivo que reconstruye el contexto al reciclarlo. El puerto `HostContext` debería ser solo lectura/escritura de estado (`readProperty`, `writeProperty`, `readState`, `writeState`, `readChannelProperty`). | `VmPolicyEngine.java:370-420` (constructor + `initialize`), `VmPolicyEngine.java:222` (instanciación en `route`) |
+| `IFLOW-MAN-49` | Crítica | **No hay kernel / scheduler / cola dentro de la VM.** El host (`MessageDispatcher.dispatch()`) actúa como scheduler externo: expande destinatarios, maneja rate limit, parallaliza con `ExecutorService`, aplica timeouts, programa `sleepMillis`. La VM no tiene cola de mensajes, no tiene `HALT` real con timer IRQ, no tiene syscall `exec`/`yield`. El mensaje no es una IRQ atendida por el kernel; es un argumento de `route()`. | `MessageDispatcher.java:100-215`, `VmPolicyEngine.java:235` (`interpreter.execute(ctx, entryPoint)`), `VmInterpreter.java:73-76` (`HALT` terminal) |
+| `IFLOW-MAN-50` | Media | **`VmBus` subutilizado; `VmPolicyEngine` wirea dispositivos directamente.** `VmBus` debería ser el único camino de transacciones (CPU `PROGRAM`, DMA `SUPERVISOR`, decode MMIO, word-split). En su lugar, `VmPolicyEngine.setupProgramMappings()` hace `mmu.attach(display)`, `mmu.attach(nvram)`, `mmu.attach(pic)` directamente. `VmBus` solo lo usan `VmInterpreter` (fetch/load/store) y `VmDmaController`. | `VmPolicyEngine.java:360-370`, `VmBus.java:41-54`, `VmInterpreter.java:150-200`, `VmDmaController.java:140-160` |
+| `IFLOW-MAN-51` | Alta | **`machineLock` serializa toda la VM y oculta los defectos de diseño.** `route()` toma el lock, ejecuta `interpreter.execute()`, valida, suelta. Mientras el lock está tomado, ningún otro mensaje avanza. Si se elimina el lock para multi-núcleo (arquitectura objetivo §8: núcleos configurables detectados en instalador), el `SoftMMU` compartido, los dispositivos sin sincronización y `ExecutionContext` reconfigurado causan *data races* inmediatos. El lock es un parche que evita enfrentar la arquitectura. | `VmPolicyEngine.java:200` (`machineLock.lock()`), `VmPolicyEngine.java:265` (`finally machineLock.unlock()`), `IFLOW-MAN-47` |
+| `IFLOW-MAN-52` | Crítica | **El mensaje no determina el flujo de ejecución; es solo una IRQ (`MESSAGE_IRQ`).** La arquitectura correcta (§8): el kernel atiende la IRQ, el userspace (programa `.flow`) usa `HOST` con `R2/R3` para leer parámetros del mensaje mapeados en memoria, hace su lógica, y finalmente invoca `HOST` con `DELIVER` para enviar según parámetros finales. Hoy `VmPolicyEngine.route()` recibe `Message` + `recipient`, prepara input en buffer `0x7000`, dispara `IRQ_MESSAGE`, y salta al entry point — el host dicta la semántica, no el guest. | `VmPolicyEngine.java:355-395` (`prepareInput`), `VmPolicyEngine.java:228` (`pic.raise(MESSAGE_IRQ)`), `HostServiceRegistry.java:260-290` (`HOST` services), `VmInterpreter.java:200-240` (`executeHost`) |
+| `IFLOW-MAN-53` | Media | **La máquina de 32 bits debe ser multi-núcleo configurable.** La arquitectura objetivo (§8) prevé núcleos definidos en el archivo de configuración del módulo iFlow, detectados en el primer script de instalación del Module Manager. El diseño actual (`machineLock` global, `ExecutionContext` pool único, `SoftMMU` compartido sin aislamiento) no soporta esto. La transición a 32 bits requiere rediseñar el estado por core y el bus compartido. | `IFLOW-MAN-47`, `IFLOW-MAN-51`, `PLAN.md` §8 (arquitectura objetivo), `tools/module-manager` (instalador) |
+| `IFLOW-MAN-54` | Alta | **`ExecutionContext` debe contener SOLO estado efímero por mensaje.** Estado efímero correcto: registros (R0-R15, PC, SP, FP, flags), fuel, journal, `hostContext`, `irqDepth`, `inInterrupt`, `startNanos`. NO debe contener ni reconfigurar: `SoftMMU`, dispositivos (display, NVRAM, PIC), `hostState` (global, se accede por referencia), `message`/`recipient`/`emitter`/`path` (vía `MessageHostContext` ligero). La persistencia (RAM, dispositivos, page tables) pertenece a `MachineState`/`LoadedProgram`, inicializada una vez por BIOS/bootloader/kernel. | `ExecutionContext.java:1-120` (campos), `ExecutionContext.java:180-230` (`configureContext`), `VmPolicyEngine.java:195-199` (comentario admite el workaround) |
+
+### 3.2. Observaciones de compilador y firmware
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-29` | Baja | `.section data` solo cambia un string interno: no mueve la dirección ni emite datos. `.const "global"` (dos tokens) se ignora en silencio; las etiquetas `channel_name` y `test_message` del fixture apuntan a la dirección de código y no hay bytes de cadena. El README del compilador y el fixture prometen una sección de datos que el assembler no implementa. | `assembler.ts:146-157,640-648,700-709`, `test/firmware.flowasm:345-353` |
+| `IFLOW-MAN-30` | Media | El POST del firmware limpia solo la región de datos `0x3000-0x4FFF`; no limpia la pila `0x5000-0x6FFF`. `ExecutionContext.initialize` reinicia `SP/FP` y limpia solo entrada/salida, así que bytes de la pila de un mensaje anterior pueden leerse en el siguiente. Es una fuga de estado entre ejecuciones, aunque el frame activo se sobrescriba normalmente. | `assembler.ts:501-513`, `ExecutionContext.java:214-226`, `VmMemoryMap.java:61-66` |
+| `IFLOW-MAN-31` | Baja | Se declaran propiedades que ningún `readProperty` implementa: `PROP_SOUNDS`, `PROP_PROCESSED`, `PROP_TRANSLATE` y `PROP_ACTOR_WORLD`. `PROPERTY_READ` devuelve `NOT_FOUND` y `PROPERTY_EXISTS` responde 0 aunque la constante sea pública; el ABI anuncia más de lo que expone. | `HostServiceRegistry.java:105-124`, `VmPolicyEngine.java:503-528` |
+
+### 3.3. Nomenclatura y endianness
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-32` | Baja | El loader dice “using pass-through” y la clase se llama `PassThroughProgram`. El runtime no puede asumir que el binario de fallback permite el mensaje: un fallback puede denegar, transformar o fallar. El nombre correcto es **fallback**, no *pass-through*. | `VmConfigLoader.java:32,39-41`, `PassThroughProgram.java:7-18`, `IFLOW-MAN-03`, `IFLOW-MAN-D06` |
+| `IFLOW-MAN-33` | Media | El formato `.flow` v2 guarda magic, header y constantes en big-endian, y el intérprete lee los operandos multibyte (`LI`, `u16`) en big-endian, mientras la memoria del guest y `SoftMMU.readWord/writeWord` usan little-endian. `ProgramImageParser` convierte las constantes a `int` y `VmPolicyEngine` las vuelve a escribir en little-endian. Es una conversión deliberada entre dos convenciones; el objetivo es una sola convención little-endian en toda la VM, incluida la ROM y el stream de instrucciones. | `ProgramImageParser.java:42-45,82-87,127`, `assembler.ts:1280-1307`, `VmPolicyEngine.java:315-316`, `SoftMMU.java:173-185`, `VmInterpreter.java:154,176,185,201,592-594` |
+
+### 3.4. Modelo de ejecución persistente y fuel
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-34` | Alta | El fuel es una cota finita de instrucciones por ejecución (`consumeFuel(1)` por instrucción y coste adicional por servicio). Es incompatible con una máquina persistente: (1) un `sleep`/espera real cede la CPU y despierta por timer o IRQ, así que no se puede modelar con un presupuesto que solo avanza al ejecutar; si se implementa como busy-wait, el fuel lo corta; (2) el arranque BIOS → bootloader → kernel → scheduler es una secuencia larga que no pertenece a un mensaje y no tiene un presupuesto natural; (3) la vida de la máquina ya no termina al entregar un mensaje, por lo que `fuelBudget`/`fuelRemaining` no miden el recurso relevante. Un límite así o no alcanza para arrancar o no acota nada útil. | `VmInterpreter.java:84-85`, `ExecutionContext.java:240-251`, `HostServiceRegistry.java:393-402`, `PLAN.md:1953-1963` (`D36`) |
+
+### 3.5. Rate limit, routing y tiempo
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-35` | Media | Hay dos caminos redundantes para el mismo rate limit (`ROUTE_RATE_LIMIT` y `ROUTE_DECISION` con `DECISION_RATE_LIMIT`), y ambos hacen que el host/emulador calcule el backoff con el `RateLimiter` inyectado. La política —esperar, encolar o descartar— pertenece al software de usuario `.flow`; el hardware/emulador solo debe exponer mecanismos (RTC, timer, ciclos, `HALT`/sleep, scheduler) y el host no debe decidir. El defecto inmediato es la duplicación de contratos; el fondo es que la decisión está en la capa equivocada. | `HostServiceRegistry.java:299-305,603-613,747-765`, `VmPolicyEngine.java:168`, `IFLOW-MAN-11` |
+| `IFLOW-MAN-36` | Media | El journal no tiene un `OpType.ROUTE_DECISION` explícito: `ROUTE_DECISION` usa `SET_PROCESSED` con `detail = "route:..."` y `PolicyResultValidator` parsea ese string. Varias decisiones compiten por “la última gana”; el flag “processed” y la decisión de routing comparten la misma entrada. La decisión es del guest; el host solo debería registrar una decisión ya tomada, no inferirla de strings ni mezclarla con el estado del mensaje. | `HostServiceRegistry.java:617-630`, `ModificationJournal.java:17-28`, `PolicyResultValidator.java:76-110,138-151` |
+| `IFLOW-MAN-37` | Media | La ISA actual no expone tiempo ni ciclos al guest. `ExecutionContext.elapsedNanos()` mide tiempo de pared del host y no es accesible desde el programa; `HALT` existe, pero es terminal y no un `HLT` con timer; no hay RTC ni timer IRQ. La arquitectura objetivo sí debe permitir medir y dormir: el hardware expone RTC/timer/contador de ciclos y `HALT`/sleep, y el software de usuario decide qué hacer con ese tiempo. Falta el mecanismo, no la capacidad conceptual. | `Opcode.java:12-67`, `VmInterpreter.java:73-76,146-309`, `ExecutionContext.java:531-532`, `IFLOW-MAN-12` |
+| `IFLOW-MAN-38` | Media | El journal difiere las escrituras, pero las lecturas de propiedades siguen viendo el mensaje original: `PROPERTY_WRITE` registra una entrada y `PROPERTY_READ` lee `message.text()`/`path`; `TRANSFORM_APPLY` modifica el buffer de entrada, no la vista del host. Una política que escribe o transforma y luego lee el mismo campo ve el valor viejo: no hay *read-your-writes* ni vista provisional. | `MessageHostContext.java:426-471,503-516`, `VmPolicyEngine.java:232-233`, `HostServiceRegistry.java:421-460` |
+
+### 3.6. Dispatcher, timeout y expansión de destinatarios
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-39` | Alta | El timeout de 10 s por destinatario no detiene de forma efectiva la ejecución: aunque `future.cancel(true)` interrumpa el hilo, el intérprete no consulta interrupciones y el task puede seguir. La ruta sigue ejecutándose bajo `machineLock`, mutando el estado persistente de la VM; las rutas siguientes quedan bloqueadas y el resultado se descarta. El `DispatchReport` la cuenta como silenciada mientras la máquina sigue ocupada. | `MessageDispatcher.java:145-213`, `VmPolicyEngine.java:200-266`, `VmInterpreter.java` (sin checks de interrupción) |
+| `IFLOW-MAN-40` | Media | En el camino `sleepMillis > 0`, `delivered++` ocurre **antes** de que el `sleepScheduler` ejecute la entrega. Si `delivery.deliver` falla, solo se registra el error y el reporte ya contó la entrega; si `close()` apaga el scheduler, las tareas pendientes se pierden. Además, el scheduler es de un solo hilo, así que las entregas retrasadas se serializan detrás de la primera que bloquee. | `MessageDispatcher.java:186-203,342-356` |
+| `IFLOW-MAN-41` | Media | La expansión de destinatarios es fail-open de forma inconsistente: `PERMISSION` con qualifier vacío y `WORLD` con `null` devuelven todos los jugadores online, mientras que un `WORLD` desconocido y un `RADIUS` inválido devuelven vacío. No hay validación ni error de configuración; un qualifier vacío o un `world(null)` puede convertir un envío dirigido en broadcast. | `MessageDispatcher.java:229-298` |
+
+### 3.7. Material diferido: render, idioma y contrato de `Formats`
+
+> **No forma parte de la auditoría vigente.** Esta sección se conserva para la próxima sesión, después
+> de reimplementar la VM con las nuevas specs. No debe usarse como conclusión de esta pasada ni como
+> base para remediar el código actual.
+
+| ID | Severidad | Hallazgo | Evidencia |
+|---|---|---|---|
+| `IFLOW-MAN-42` | Media | El pipeline de render ignora la configuración de idioma del canal y el `langTarget` del mensaje. `Channel.langSource/langTarget` se cargan en `ConfigLoader` y se exponen en la API, pero `SuiteHost.effectiveLanguage` solo mira `recipient.language()`/default y `effectiveSource` solo `message.langSource()`/detección/default. `Message.langTarget` tampoco se lee. `lang-target` y `withLangTarget()` son inertes: el destino efectivo siempre es el idioma del recipient o el default. | `SuiteHost.java:163-207`, `Channel.java:89-95,132-139`, `Message.java:93-99`, `ConfigLoader.java:158-170`, `ConfigLoaderTest.java:113,156` |
+| `IFLOW-MAN-43` | Media | `Formats` declara N textos/formatos paralelos, pero el pipeline solo renderiza el índice 0. `DefaultTextFormatter.format/formatTooltip` usan `merged.format(0)` y `SuiteHost.renderFor` pone `message.text()` (primer texto) en `%content%`; `MessageDispatcher` entrega un solo componente. Los formatos adicionales que `ConfigLoader` carga (el test comprueba `formats().length == 2`) nunca se emiten. Si el contrato es multi-mensaje, está incumplido; si no, la API y la configuración sobran. | `Formats.java:12-15,42-48`, `DefaultTextFormatter.java:45-62`, `SuiteHost.java:178-185`, `Message.java:132-139`, `ConfigLoaderTest.java:150` |
+| `IFLOW-MAN-44` | Media | `REDIRECT` se renderiza con el contexto del destinatario, no con el del console ni el del target. `SuiteHost.deliver` calcula `lang = effectiveLanguage(recipient)` antes de `router.route` y llama `renderFor(..., recipient, lang)`; `MessageDispatcher` manda ese componente a `deliverConsole`. El console recibe el idioma y los placeholders del recipient. Cuando se implemente el target de `IFLOW-MAN-04`, el problema se extiende al actor destino. | `SuiteHost.java:163-175,178-185`, `MessageDispatcher.java:153-157`, `RoutingResult.java:16-17` |
+| `IFLOW-MAN-45` | Baja | `Direction.channel(Channel)` es un contrato muerto: Spigot y el tester construyen `Direction.others().channel(Channel.CHAT)`, pero ningún consumidor lee `direction.channel()`; `MessageDispatcher.expand` usa `kind/qualifier` y el canal sale de `Message.channel()`. El override de canal del `Direction` no cambia nada y da falsa confianza. | `Direction.java:19-20,39-41,101-104`, `MessageDispatcher.java:236-249`, `TextFormatterSuitePlugin.java:698`, `TestService.java:509` |
+
+## 4. Cosas que están bien y no hay que romper
+
+- `DefaultTextFormatter` resuelve el canal **después** de aplicar el journal; un `SET_CHANNEL` sí cambia el tail de formato. El formateador no es el problema.
+- El despacho de IRQ mientras la VM está corriendo sí usa la tabla, guarda estado y hace un CALL de hardware. El mecanismo existe; el problema es la secuencia de commit no atómica (`IFLOW-MAN-17`) y que `HALT` sigue siendo terminal (`IFLOW-MAN-12`).
+- `PolicyResultValidator` valida que el canal de `CHANNEL_REDIRECT` exista **solo si no es `null`**; el caso nulo queda abierto (`IFLOW-MAN-20`).
+- `VmBus.readBlock/writeBlock` sí dividen una transferencia que contiene un dispositivo aunque ninguno de sus extremos caiga en él; el fallo de `IFLOW-MAN-16` está limitado al camino de palabra.
+- `SoftMMU.writeBlock` prevalida todas las páginas antes de escribir; el problema de `IFLOW-MAN-25` aparece cuando la validación se desborda o cuando la escritura llega a MMIO.
+- `ProgramImageParser` verifica el SHA-256, que no sobren bytes y los tamaños de código/constantes; `IFLOW-MAN-19` es la validación que falta, no un parser sin controles.
+- `VmDmaController` rechaza longitudes negativas en `copyBlock/moveBlock/validateRange`; el caso que falla es el desbordamiento de la suma y la atomicidad prometida.
+- `RateLimiter` funciona como token bucket por `(canal, emisor)` para el límite de emisión previo al fan-out.
+- `PassThroughProgram` es una única fuente de bytecode para el fallback y el programa por defecto; la idea de no duplicar bytecode es correcta.
+- `VmMemoryMap` es una única fuente de verdad para el mapa de 64 KB; buena base para no hardcodear páginas.
+
+## 5. Decisiones propuestas (pendientes de ratificar; no aplicadas)
+
+| ID | Propuesta | Motivo |
+|---|---|---|
+| `IFLOW-MAN-D01` | **Default deny + `DELIVER` explícito.** Si la VM no llama a `DELIVER`, no se entrega. | Coherencia con firewall; elimina “silencio = permitir”. |
+| `IFLOW-MAN-D02` | **`SET_CHANNEL` validado** como única mutación de canal. Si el canal no existe, error controlado; no fallback silencioso. | Evita que un typo cambie el formato sin avisar. |
+| `IFLOW-MAN-D03` | **Eliminar `REDIRECT` y `CHANNEL_REDIRECT` como targets.** La consola es un canal/actor (`Channel.CONSOLE`, `actors.console()`); el cambio de canal es `SET_CHANNEL`. | Elimina el caso especial y la re-entrega recursiva. |
+| `IFLOW-MAN-D04` | **Reducir `PolicyTarget`** a `DELIVER`, `CANCEL_EVENT` y `ERROR` (o equivalente). `DROP` deja de ser target: no llamar a `DELIVER` ya es drop. `LOG` se sustituye por pantalla/auditoría. | Menos estados muertos y menos semántica inventada. |
+| `IFLOW-MAN-D05` | **Separar cancelación de mensaje y de evento.** `CANCEL_EVENT` debe volver al adaptador de plataforma, no solo marcar el `Message`. | Hoy `CANCEL_MESSAGE` no cancela el evento. |
+| `IFLOW-MAN-D06` | **Fallback configurable:** `policy.flow` + `fallback-program` + `on-load-error` (`fallback`/`fail-closed`). Dos firmwares: allow-all y deny-all. Si el fallback también falla, deny-all + error visible o negarse a arrancar. | Distingue “no configurado” de “política rota” y permite lógica compleja por defecto. |
+| `IFLOW-MAN-D07` | **`HLT` real** (estado `HALTED`, flag global de interrupciones, `IRQ` de timer, reanudación tras handler, timeout). Mantener `HALT` como terminación o renombrarlo a `EXIT`. | `HALT` actual no puede esperar ni despertar. |
+| `IFLOW-MAN-D08` | **IRQ de mensaje configurable** hacia el entry point del programa de usuario; enmascarar las demás líneas durante la espera. | Evita despertar por cualquier IRQ. |
+| `IFLOW-MAN-D09` | **Separar firmware/BIOS, bootloader y kernel.** El reset vector entra al firmware/BIOS; el BIOS hace POST e inicializa memoria, page tables, stack e interrupciones. El bootloader no inicializa hardware: solo carga el kernel de ROM a RAM y salta. El kernel gestiona scheduler/cola/tiempo y carga los programas. | No convertir el BIOS en kernel por accidente ni darle al bootloader responsabilidades del BIOS. |
+| `IFLOW-MAN-D10` | **Nombres genéricos de hardware** en la CPU: `InterruptController`, `InterruptVectorTable`, `DisplayDevice`, `NvramDevice`, `Mmu`, `Bus`. | La CPU no debe depender de la estructura interna del BIOS. |
+| `IFLOW-MAN-D11` | **Cola con handles, no con mensajes completos.** El host conserva los objetos; la VM guarda handles con generación/epoch y arrays separados de deadline/estado/prioridad. El ancho del handle (16 o 32 bits) se decide con el ABI; la dirección y la memoria son de 32 bits. En 32 bits la capacidad la fija el límite de RAM, no los 12.288 del VM actual. | Evita serializar el mensaje y convierte la cola en un recurso del kernel, no en un array gigante de objetos. |
+| `IFLOW-MAN-D12` | **Firmwares de rate limit como producto:** `drop-on-saturation.flow`, `queue-on-saturation.flow`, `adaptive.flow` (decide según carga/prioridad). | Es la misión de iFlow: lógica compleja de chat. |
+| `IFLOW-MAN-D13` | **Array de destinatarios null-separated** en un buffer acotado, con contrato explícito: UTF-8, contador de elementos = nulos (o nulos+1), máximo de bytes, comportamiento ante overflow. | Es viable, pero la fórmula de longitud debe corregirse y el buffer no es infinito. |
+
+### 5.1. Decisiones ratificadas en esta pasada
+
+Estas cuatro decisiones ya están ratificadas; no se han implementado.
+
+| ID | Decisión | Motivo |
+|---|---|---|
+| `IFLOW-MAN-D14` | **Fallback neutral, no `PassThrough`.** La clase pasa a `FallbackProgram` y los mensajes dicen “using fallback”. El runtime no asume que el fallback permite el mensaje: es una política más y puede denegar, transformar o fallar. | El hardware/runtime no debe depender de la semántica de un binario de software. “Pass-through” describe una política concreta, no el rol de fallback. |
+| `IFLOW-MAN-D15` | **Little-endian único.** Header, magic, segmentos, constantes, instrucciones, memoria y ROM usan little-endian. El loader no hace conversiones de extremo. | El código máquina y la memoria deben compartir una sola convención; una conversión “deliberada” entre formato y memoria es deuda y una fuente de errores. |
+| `IFLOW-MAN-D16` | **Decode jerárquico tipo x86 y `MOV` único.** El primer byte y los bits de modo abren o cierran cajas; cada caja decide si sigue un byte tipo ModR/M/SIB, desplazamiento o inmediato, hasta la caja final del opcode. Se elimina `LI`: `MOV` cubre registro→registro, registro↔memoria e inmediato→registro; queda abierto si también inmediato→memoria. | Evita opcodes especiales y una tabla plana; permite crecer a 32 bits con modos y longitudes expresados por bits. La dirección está ratificada; el layout exacto queda en 8.8. |
+| `IFLOW-MAN-D36R` | **Retirar el fuel como límite de ejecución.** La máquina es persistente: el tiempo, la CPU, el `sleep`/`wake` y la preempción pertenecen al scheduler/kernel, no a un contador de instrucciones por mensaje. El arranque BIOS → bootloader → kernel → scheduler no tiene un presupuesto finito por ejecución. La protección contra bucles queda abierta en 8.8 (quantum, timer IRQ, watchdog de host o combinación), pero no se implementa con el fuel actual. | Revisa `D36` del `PLAN`: el fuel fue útil mientras la VM era una ejecución acotada de un mensaje, pero no representa una máquina que duerme, despierta y sigue viva. |
+
+### 5.2. Decisiones ratificadas: rate limit, routing y tiempo
+
+No implementadas en esta pasada.
+
+> **Corrección de `D40` (2026-10-20):** la política de rate limit no vive en el kernel ni en el
+> BIOS: vive en el **userspace de la VM** (programa `.flow`). El hardware, el BIOS y el kernel solo
+> aportan mecanismos: RTC/timer, contador de ciclos, `HALT`/sleep, scheduler y primitivas de cola.
+> La versión anterior de `D40` decía “VM/kernel”; se corrige para no confundir mecanismo con política.
+>
+> Tampoco es correcto decir que “la VM no puede razonar sobre su propio tiempo ni dormir”: **sí puede**
+> si el hardware expone RTC/timer y `HALT`. Lo que falta hoy es el mecanismo (RTC, timer IRQ, `HALT`
+> real), no la capacidad conceptual. El token bucket debe vivir en memoria del guest; el reloj es un
+> dispositivo de la VM que el guest lee, no una política del host.
+
+| ID | Decisión | Motivo |
+|---|---|---|
+| `IFLOW-MAN-D40` | **La política de rate limit vive en el userspace `.flow`, no en el emulador/hardware, ni en el BIOS, ni en el kernel.** El token bucket, el backoff y la decisión esperar/encolar/descartar son software de usuario en la VM. El hardware/kernel solo proveen los mecanismos: RTC/timer, contador de ciclos, `HALT`/sleep, scheduler y primitivas de cola. Se elimina la duplicación `ROUTE_RATE_LIMIT`/`DECISION_RATE_LIMIT`: un solo contrato; el guest decide y el host no calcula el backoff. El host puede conservar un cap duro de seguridad, separado de la política. | `IFLOW-MAN-35`; la decisión pertenece al software, no al emulador; el hardware no debe elegir por la política. |
+| `IFLOW-MAN-D41` | **Decisión de routing explícita y tipada.** El journal tiene una operación `ROUTE_DECISION` (o equivalente) con target, destino, backoff y razón; no se usa `SET_PROCESSED` como transporte ni se parsea `route:*`. La decisión la toma el guest; el host solo la registra. Si hay varias decisiones, se rechazan o se define una regla única explícita, no “la última gana”. | `IFLOW-MAN-36`; el contrato debe ser legible y verificable, no un detalle de string. |
+| `IFLOW-MAN-D42` | **El hardware expone tiempo y ciclos; la política temporal es userspace.** La ISA expone un contador monótono de ciclos virtuales y/o un RTC/timer, con snapshot atómico y frecuencia conocida. El software de usuario usa esas lecturas para medir, calcular deadlines y decidir. El `sleep`/espera se hace con `HALT`/timer o una primitiva del kernel que cede la CPU, no con busy-wait. El ancho exacto (32/64 bits), la frecuencia y si el contador avanza durante la espera quedan abiertos en 8.8. | `IFLOW-MAN-37`; el hardware debe dar el mecanismo de tiempo, pero no decidir timeouts ni rate limits. |
+
+### 5.3. Decisión ratificada: alcance del journal
+
+| ID | Decisión | Motivo |
+|---|---|---|
+| `IFLOW-MAN-D43` | **El journal sobrevive al nuevo modelo, pero solo como write set del mensaje.** Sigue siendo el mecanismo para que las mutaciones del mensaje de una ejecución se apliquen todas o ninguna en el límite host/mensaje. No cubre el estado de la máquina, la RAM, el tiempo, el rate limit, la cola ni la entrega; esos efectos necesitan su propio modelo (estado del guest, scheduler o transacción de máquina). | Confirmado en la revisión: la atomicidad del mensaje sigue siendo útil aunque la máquina sea persistente; confundirla con atomicidad de máquina sería el error. |
+
+## 6. Matemática de la cola: correcciones y límites
+
+> **Nota (2026-10-20):** estas cuentas describen el VM actual de 16 bits y 64 KB. La dirección
+> ratificada es 32 bits de memoria física y virtual, hasta 4 GiB. En ese modelo la cola se limita por
+> el cap de RAM por VM y las cifras de 12.288 dejan de ser el techo. Ver sección 8.
+
+- RAM de usuario actual: **28 KB** (7 páginas de 4 KB). Si la pantalla está activa, ocupa 4 KB; quedan
+  **24 KB** utilizables.
+- Array de índices de 16 bits: `24.576 / 2 = 12.288` entradas. El índice puede direccionar hasta
+  **65.536** handles, pero solo caben 12.288 vivos en la cola.
+- UUID binario de 16 bytes: `24.576 / 16 = 1.536`; UUID como texto hexadecimal de 32 bytes:
+  `24.576 / 32 = 768` (tu cifra de 750 es correcta para 24.000 bytes). Con metadatos, baja.
+- Entrada con `índice(2) + deadline(4) + estado(1) + flags(1) = 8 bytes`: **3.072** entradas.
+- **No derives un UUID de dos bytes.** Un índice de 16 bits es un handle, no un identificador único.
+  Si el host reutiliza slots, añade una generación/epoch para evitar ABA (un handle viejo que apunta
+  a un mensaje nuevo).
+- **`longitud / nulos` no da el número de elementos.** Da el promedio de bytes por elemento. El número
+  de elementos es `nulos` (con terminador final) o `nulos + 1` (sin terminador). Si quieres acceso
+  O(1), añade una tabla de offsets; si no, escanear es aceptable para listas pequeñas.
+- **Destinatarios:** el buffer de entrada es de 4 KB. Con nombres de ~16 bytes + NUL, caben ~240, no
+  12.000. Los 12.000 son handles de cola, no destinatarios.
+- **32 bits no es gratis:** duplica punteros y slots de pila; una cola de índices de 32 bits reduce
+  la densidad. Pero la dirección ratificada es **32 bits de memoria física y virtual**, no solo de
+  direccionamiento. Los handles pueden seguir siendo de 16 bits con generación si el ABI lo permite,
+  pero el espacio de direcciones, los frames y la page table son de 32 bits. Toca ISA, ABI, parser,
+  MMU y tests.
+
+## 7. Ruta de auditoría pendiente
+
+| Orden | Componente | Qué falta verificar |
+|---|---|---|
+| 1 | `SoftMMU` | paginación, permisos R/W/X, copy-on-write, ownership, solapamientos |
+| 2 | `VmBus` + MMIO | orden de decode, privilegios, DMA, apertura de dispositivos |
+| 3 | `VmInterpreter` completo | fetch/decode/execute, flags, pila, CALL/RET, fuel, instrucciones de bloque |
+| 4 | `ProgramImageParser` | magic, versiones, secciones, bounds, SHA-256, ABI/ISA |
+| 5 | `HostServiceRegistry` completo | todos los servicios, DMA, capabilities, property, errores |
+| 6 | `VmPolicyEngine` completo | carga, arranque, contexto, `machineLock`, errores, pool |
+| 7 | `IrqTable` / `VmPic` / `VmNvram` / `VmDisplay` | layout, máscaras, prioridad, MMIO, persistencia |
+| 8 | Tests | 397 tests declarados; cobertura real y casos de canal/IRQ/HALT |
+| 9 | Compilador `.flowasm` | ABI, firmware, IRQ, determinismo, ejemplos |
+| 10 | Integración host/TextFormatter | transformación vs canal, entrega, cancelación de evento |
+
+**Estado al 2026-10-20:** los bloques 1–7 están leídos; el 8 (tests) no se ejecutó; el 9 (compilador)
+se revisó en lectura, sin ejecutar sus tests; el 10 sigue pendiente. Los hallazgos de esta pasada están
+en `3.1`–`3.6`, separados de los `IFLOW-MAN-01…15` de la primera revisión. La `§3.1.x` y los
+hallazgos `46…54` son hallazgos arquitecturales transversales confirmados en esta pasada; la `§3.7`
+y los hallazgos `42…45` quedan como material diferido para después de reimplementar la VM.
+
+## 8. Arquitectura objetivo ratificada: ROM, BIOS, kernel y 32 bits
+
+Nada de esta sección está implementado. El VM actual sigue siendo de 16 bits y 64 KB. Esta sección
+registra la dirección ratificada durante la revisión manual del 2026-10-20 para la próxima generación
+de iFlow. Separa las decisiones de máquina de las decisiones de contrato de políticas
+(`IFLOW-MAN-D01…D16`, `D36R` y `D40…D43`; `D14…D16`, `D36R` y `D40…D43` ya están ratificadas).
+
+### 8.1. Correcciones ratificadas
+
+| Tema | Decisión |
+|---|---|
+| `.flow` | Es la **ROM completa**, no un programa ejecutable. |
+| Fallback | Es **fallback neutral**, no `pass-through`: `FallbackProgram`, mensaje “using fallback”. Puede permitir, denegar o transformar; el runtime no asume su semántica. |
+| Endianness | **Little-endian único** en ROM, header, segmentos, constantes, instrucciones y memoria. Sin conversiones en el loader. |
+| ISA / decode | **Decode jerárquico tipo x86** por cajas de bits; `MOV` único para reg-reg, reg-mem e inmediato. Se elimina `LI` como opcode. |
+| Ejecución persistente / fuel | La máquina es **persistente**; el fuel deja de ser el límite. El scheduler/kernel gestiona tiempo, `sleep`/`wake` y CPU; el arranque no tiene presupuesto por mensaje. El reemplazo del fuel queda abierto en 8.8. |
+| Política vs mecanismo | El rate limit, el routing, los timeouts y las decisiones de espera son **política de userspace `.flow`**. El hardware, el BIOS y el kernel solo exponen mecanismos: RTC/timer, ciclos, `HALT`/sleep, scheduler y colas. |
+| Rate limit | El token bucket y la decisión esperar/encolar/descartar viven en el **userspace de la VM**; el host no calcula backoff ni mantiene la política. Se elimina la duplicación `ROUTE_RATE_LIMIT`/`DECISION_RATE_LIMIT`: un solo contrato. El host puede conservar un cap duro de seguridad. |
+| Routing | El journal usa una decisión **explícita y tipada**; el guest decide y el host solo registra. No se sobrecarga `SET_PROCESSED` ni se parsea `route:*`. |
+| Tiempo | La ISA expone **RTC/timer y contador de ciclos virtuales**; el software de usuario calcula deadlines. El `sleep` es `HALT`/timer o cesión al scheduler, no busy-wait. |
+| Journal | Sobrevive como **write set del mensaje**: todo o nada para las mutaciones del mensaje de una ejecución. No cubre estado de máquina, RAM, tiempo, rate limit, cola ni entrega. |
+| Reset vector | Entra al **firmware/BIOS**. No entra al bootloader. |
+| BIOS | Hace POST e inicializa memoria, page tables, stack e interrupciones. Publica las tablas que necesita el resto del sistema. |
+| Bootloader | **No inicializa hardware**: no hace POST, no configura page tables, no cambia el stack y no enciende interrupciones. Solo carga el kernel de ROM a RAM y salta. |
+| Entry point | Solo existe **un entry point arquitectónico**: el reset vector del BIOS. |
+| Entry points de programas | Los administra el kernel al cargar cada programa. No son entry points de arranque de la ROM. |
+| Memoria | **32 bits de memoria física y virtual**, no solo 32 bits de direccionamiento. |
+| Máximo | 4 GiB de espacio físico. ROM, RAM y MMIO comparten ese espacio; el máximo de RAM útil es menor que 4 GiB. |
+| Asignación | Física dispersa: frames de 4 KB asignados bajo demanda. No se reservan 4 GiB por VM. |
+| Compresión | Se estudiará compresión de memoria en el emulador, a nivel de frame. Es una propuesta abierta, no una decisión cerrada. |
+| Tipo de dirección | `long` con máscara o un tipo propio (`Address32`/bitset) si `long` complica el modelo. |
+| Almacenamiento físico | `byte[][]` de frames de 4096 bytes; no un `byte[]` de 4 GiB. |
+| Objetivo | VM de networking empresarial con kernel real, no un plugin de políticas. La competitividad es un objetivo de diseño; esta auditoría no aporta benchmarks. |
+
+Roles separados:
+
+- **Firmware/BIOS:** reset vector, POST, memoria, page tables, stack, interrupciones, enumeración de
+  hardware y tablas del sistema.
+- **Bootloader:** cargar y verificar el kernel; no inicializar hardware.
+- **Kernel:** scheduler, cola, tiempo, syscalls, aislamiento, carga de programas.
+- **Programas:** lógica de políticas; entry point de proceso administrado por el kernel.
+
+### 8.2. `.flow` como ROM
+
+El formato v2 actual describe un ejecutable: `entryPoint`, `codeLength`, `constantsLength` y una
+sección de código. Para BIOS + kernel + programas eso es insuficiente. El contenedor debe describir
+la ROM entera.
+
+Header propuesto:
+
+```text
+magic           "FLOWROM"
+formatVersion   3
+isaVersion      32
+romSize
+resetVector
+tocOffset
+tocCount
+flags
+hash            cubre toda la ROM
+signature       opcional
 ```
 
-`ROUTE_CONTINUE` solicita que iflow continúe el procesamiento normal. No implica entrega inmediata ni omite las comprobaciones del router.
+Tabla de contenidos propuesta:
 
-El runtime verifica que el resultado es válido y no encuentra modificaciones que confirmar.
-
-## Ejemplo B. Descarte de mensaje
-
-```
-.entry main
-
-main:
-    LI   R0, PROPERTY_READ
-    ; R1 identifica el descriptor de la propiedad
-    ; R2 contiene el offset del buffer
-    HOST
-
-    ; La biblioteca compara el valor leído
-    ; y establece el resultado de comparación.
-    CALL check_discard_condition
-    JNZ discard
-    JMP continue
-
-discard:
-    LI   R0, ROUTE_DROP
-    HOST
-    HALT
-
-continue:
-    LI   R0, ROUTE_CONTINUE
-    HOST
-    HALT
-
-check_discard_condition:
-    ; Cuerpo de la rutina definido por la biblioteca
-    RET
+```text
+type            BIOS | BOOT | KERNEL | PROGRAM | DATA | FONT | CONFIG
+offset
+size
+loadAddress
+flags           R / W / X / privilegios
+hash            por segmento
 ```
 
-El fragmento muestra la estructura de control, pero `check_discard_condition` requiere una implementación concreta para el tipo de dato y la condición elegida. No se considera un programa compilable hasta que esa rutina y sus argumentos estén definidos.
+Puntos importantes:
 
-## Ejemplo C. Restricción por permisos
+- El header de la ROM tiene **un solo** `resetVector`. La TOC no define puntos de entrada de arranque.
+- Cada segmento ejecutable (`BOOT`, `KERNEL`, `PROGRAM`) puede llevar su entry interno en su propio
+  header de segmento. Lo consumen el BIOS, el bootloader o el kernel; no la CPU al reset.
+- Un programa de usuario no tiene entry point de ROM: tiene entry point de proceso, y el kernel decide
+  cuándo y cómo saltar a él.
+- El host solo carga la ROM y la mapea. No cablea programas ni conoce su lógica.
+- La ROM se mapea R/X; la RAM es R/W; el MMIO se decodifica como dispositivo.
+- El hash cubre toda la imagen y cada segmento puede tener su propio hash.
+- `ProgramImage` deja de ser el contenedor principal y pasa a ser un segmento. Hacen falta
+  `RomImage`/`RomParser` y un formato v3. Los `.flow` v2 se rechazan o se migran explícitamente.
 
-La comprobación de permisos corresponde al host.
+### 8.3. Secuencia de arranque
 
-```
-.entry main
+1. El host carga el `.flow` como ROM y lo mapea en el espacio físico.
+2. La CPU arranca en `resetVector`.
+3. El reset vector entra al **firmware/BIOS**, nunca al bootloader.
+4. El BIOS hace POST: memoria, page tables, stack, controlador de interrupciones, timer, display,
+   NVRAM y tablas del sistema.
+5. El BIOS localiza el segmento `BOOT` y salta al bootloader.
+6. El bootloader carga el segmento `KERNEL` de ROM a RAM, verifica su hash y salta.
+7. El kernel inicializa scheduler, cola, syscalls y carga los segmentos `PROGRAM` cuando corresponda.
+8. Cada programa corre en un contexto de proceso con su entry point administrado por el kernel.
 
-main:
-    LI   R0, PERMISSION_CHECK
-    ; Descriptor: identidad del actor y permiso requerido
-    ; La identidad procede del contexto autorizado.
-    HOST
+El bootloader no repite la inicialización del BIOS. Si el BIOS ya dejó page tables y stack listos, el
+bootloader los usa; no los reconstruye.
 
-    ; El resultado se interpreta según la ABI:
-    ; autorizado o denegado.
-    ; La rama se implementa usando el código de estado
-    ; devuelto por el servicio.
-    CALL interpret_permission_result
-    HALT
+**Estado actual, para no confundirlo con la arquitectura objetivo:** el compilador ya antepone una ROM
+de 4 KB con un `fw_reset` que es el entry point y hace un POST parcial (limpia datos, configura display
+y publica la tabla de IRQ). Pero el formato v2 no tiene TOC ni segmentos, el host sigue inicializando
+page tables y stack, y el firmware no inicializa la pila ni el PIC. Es un híbrido firmware+programa;
+no es todavía una ROM con BIOS, bootloader y kernel separados.
 
-interpret_permission_result:
-    ; Si autorizado:
-    LI   R0, ROUTE_CONTINUE
-    HOST
-    RET
-```
+### 8.4. Modelo de memoria de 32 bits
 
-Este ejemplo es estructural: el contrato de `PERMISSION_CHECK` debe especificar el estado exacto de retorno y la rutina `interpret_permission_result` debe cubrir ambos casos antes de que el programa se considere terminado. El bytecode no puede falsificar la respuesta del `PermissionChecker`.
+| Concepto | Decisión |
+|---|---|
+| Espacio virtual | 32 bits, hasta 4 GiB |
+| Espacio físico | 32 bits, hasta 4 GiB; ROM/RAM/MMIO comparten el rango |
+| Página | 4 KB |
+| Frames | 1.048.576 máximos (`4 GiB / 4 KB`) |
+| Page table | Dos niveles, 10 + 10 + 12 bits; PDE y PTE de 4 bytes |
+| Backing store | `byte[][] frames = new byte[1 << 20][]`; frames de 4096 bytes bajo demanda |
+| Direcciones | `long` con máscara `0xFFFF_FFFFL`, o `Address32` si se quiere un tipo propio |
+| Límite práctico | Cap por VM configurable (por ejemplo 64 MB, 256 MB, 1 GB); 4 GiB es el máximo arquitectónico |
+| Traducción | TLB/caché de página; no hacer page walk byte a byte |
+| COW/snapshots | Por frame; nunca clonar 4 GiB completos |
 
-## Ejemplo D. Transformación de texto
+Detalles de implementación:
 
-La transformación utiliza un buffer temporal. El siguiente es el flujo requerido:
+- Java no permite un `byte[]` de 4 GiB. El array de frames es la solución; el índice de frame y el
+  offset caben en `int`, pero la aritmética de direcciones debe usar `long` o un tipo sin signo.
+- La page table completa de 4 GiB ocuparía unos 4 MB de PTEs más el directorio. Debe ser dispersa:
+  solo se asignan las tablas de las regiones mapeadas.
+- El array de 1.048.576 referencias ya ocupa varios MB en la JVM. Si eso es demasiado, se puede
+  usar un array de arrays por niveles o una estructura sparse; el contrato visible sigue siendo
+  “frames de 4 KB bajo demanda”.
+- `PhysicalMemory.freeze()` actual clona la memoria plana. En 32 bits eso es inviable; el snapshot
+  debe ser por frame y acotado.
+- `getMemorySnapshot()` no puede devolver 4 GiB. Debe ser una operación acotada o por regiones.
+- El MMIO se decodifica antes de la MMU, como hoy. Los registros de dispositivo también pasan a
+  direcciones de 32 bits.
+- La ISA debe ser de 32 bits: registros, opcodes, modos de direccionamiento, assembler, compilador,
+  ABI y tests. Un ISA de 16 bits no puede direccionar 4 GiB de forma plana.
 
-```
-.entry main
+### 8.5. Compresión de memoria (propuesta abierta)
 
-main:
-    ; 1. Leer el contenido en el buffer de trabajo.
-    LI   R0, PROPERTY_READ
-    HOST
+El emulador podría comprimir frames fríos para aumentar la capacidad efectiva sin reservar 4 GiB.
+Diseño posible:
 
-    ; 2. Ejecutar la transformación sobre memoria privada.
-    CALL transform_text
+- Compresión **a nivel de frame** (4 KB), transparente al guest.
+- Zero-page deduplicación: todos los frames cero comparten una página inmutable.
+- COW sobre frames comprimidos: al escribir, se descomprime y se copia.
+- Frames calientes sin comprimir; frames fríos comprimidos (LZ4, zstd o RLE simple).
+- El guest sigue viendo 4 GiB; la compresión no cambia page tables ni permisos.
+- Límite de descompresión por frame para evitar bombas y picos de latencia.
+- La compresión no sustituye la asignación dispersa; es una capa adicional.
 
-    ; 3. Registrar la escritura diferida.
-    LI   R0, PROPERTY_WRITE
-    HOST
+Costes: CPU, latencia de acceso, complejidad de TLB/COW y necesidad de métricas. Debe decidirse
+después de medir cargas reales, no antes.
 
-    ; 4. Solicitar continuación.
-    LI   R0, ROUTE_CONTINUE
-    HOST
-    HALT
+### 8.6. Capacidad de cola con 32 bits
 
-transform_text:
-    ; La rutina debe validar el rango, la codificación
-    ; y la capacidad antes de modificar el buffer.
-    RET
-```
+La cola ya no está limitada por los 12.288 handles del VM de 64 KB. Está limitada por el cap de RAM
+por VM y por el tamaño de cada entrada.
 
-La rutina concreta depende de la transformación. El runtime no confirma el cambio al objeto original hasta validar y confirmar el journal.
+| Bytes por entrada | 64 MB | 256 MB | 1 GB |
+|---:|---:|---:|---:|
+| 8 | 8.388.608 | 33.554.432 | 134.217.728 |
+| 12 | 5.592.405 | 22.369.621 | 89.478.485 |
+| 16 | 4.194.304 | 16.777.216 | 67.108.864 |
 
-## Ejemplo E. Búsqueda de subcadena
+- 12.000 mensajes dejan de ser un problema incluso con 64 MB.
+- Con 4 GiB teóricos: ~536 millones de entradas de 8 bytes o ~268 millones de 16 bytes, pero no se
+  asignan de golpe.
+- Los handles pueden ser de 16 bits con generación o de 32 bits; el ancho se decide con el ABI.
+- La cola vive en el kernel. El host conserva los objetos `Message` y ejecuta `DELIVER(handle)`.
+- El estado de la entrada puede ser implícito (`cli` → pop → `DELIVER` → `sti`); solo hace falta un
+  campo explícito si hay entrega asíncrona, reintentos, cancelación o reentrancia.
 
-Esta rutina demuestra un bucle de búsqueda sobre una región de memoria. `LDB`, `CMP`, `JZ`, `JMP` y `RET` son instrucciones de la ISA.
+### 8.7. Impacto en el código actual
 
-```
-; Entrada:
-; R1 = región de texto
-; R2 = offset inicial
-; R3 = longitud del texto
-; R4 = byte buscado
-; Salida:
-; R0 = offset encontrado o 0xFFFF
+| Componente | Impacto |
+|---|---|
+| ISA / CPU | Registros y direcciones de 32 bits; opcodes, decoder, intérprete, flags, pila, CALL/RET, fuel. |
+| `SoftMMU` / `PageTable` / `PageEntry` | Traducción de 32 bits, page table de dos niveles, TLB, permisos, ownership. |
+| `PhysicalMemory` | Frames de 4 KB bajo demanda, snapshots por frame, COW, compresión opcional. |
+| `VmMemoryMap` | Mapa de 32 bits: ROM, RAM, MMIO, stack, kernel, programas. |
+| `.flow` / parser | Formato ROM v3 con header, TOC, segmentos y hash; `RomImage`/`RomParser`. |
+| Arranque | BIOS, bootloader y kernel separados; reset vector al BIOS; el BIOS, no el host, inicializa page tables, stack y PIC. |
+| ABI `HOST` | Direcciones y tamaños de 32 bits; longitudes sin signo validadas en un único punto; DMA, capabilities y servicios. |
+| IRQ | Timer IRQ, PIC, `HLT` real, máscara, scheduler; commit de IRQ atómico y pila de líneas en servicio. |
+| Bus / MMIO | Transacciones de palabra y de 32 bits divididas por frontera de dispositivo; el camino rápido no puede saltarse el decode. |
+| DMA / privilegios | Masters separados: el guest usa `PROGRAM` para `COPY`/`MOVE`; solo el host/bootloader usa `SUPERVISOR`. |
+| Verificador ISA | Mapa de fronteras de instrucción; entry point, CALL/RET, handler de IRQ y saltos deben caer en una frontera. |
+| Memoria física | Validar frame y rango antes de traducir; `VmException`, nunca `AIOOBE`; frames dispersos acotados. |
+| Input ABI | Campos con longitud/escape o TLV; UTF-8 sin cortar caracteres; ausencia distinta de la cadena `"null"`. |
+| Tests / compilador | Recompilar fixtures, assembler y compiler; tests de 32 bits, ROM, arranque, memoria, IRQ y fronteras. |
+| Documentación | README, `src/iflow/README.md`, wiki histórica y esta auditoría. |
 
-find_byte:
-    LI   R0, 0xFFFF
-    LI   R5, 0
+Esto no es un parche de `SoftMMU`: es una VM nueva o un modo 32 bits separado. El VM de 16 bits y el
+de 32 bits no deberían compartir el mismo intérprete sin una separación clara de ISA y formato.
 
-loop:
-    CMP  R5, R3
-    JZ   not_found
+### 8.8. Decisiones abiertas
 
-    LDB  R6, [R1:R2+R5]
-    CMP  R6, R4
-    JZ   found
+1. ¿El VM de 16 bits se reemplaza por el de 32 bits o conviven como targets distintos?
+2. ¿Dónde se mapea la ROM y cuál es la dirección exacta del reset vector?
+3. ¿Cuál es el cap de RAM por VM por defecto: 64 MB, 256 MB, 1 GB?
+4. ¿Páginas de 4 KB, 4 MB o mixtas para el kernel?
+5. ¿La compresión de memoria entra en la primera versión o queda para una fase posterior?
+6. ¿Handles de 16 bits con generación o de 32 bits?
+7. ¿El timer es un dispositivo del host, un contador virtual de ciclos o ambos?
+8. ¿Cómo carga el kernel los programas: TOC directa, filesystem mínimo o imagen en RAM?
+9. ¿Qué capacidades/privilegios tiene un programa de usuario?
+10. ¿Cómo se migran los `.flow` v2 y el compilador `.flowasm`?
+11. ¿La ROM se mapea como memoria R/X o se expone como dispositivo de bloque?
+12. ¿Qué benchmarks definen “competitivo en networking empresarial”?
+13. ¿Cuál es el layout exacto del decode jerárquico: qué bits abren cada caja y cuántos niveles hay?
+14. ¿`MOV` admite inmediato→memoria o solo inmediato→registro y registro↔memoria?
+15. ¿`LI` desaparece por completo o queda solo como alias de ensamblador que se traduce a `MOV`?
+16. ¿La migración a little-endian único rompe `.flow` v2 o se hace en el formato v3?
+17. ¿Cuántos bits ocupan registro, modo, desplazamiento e inmediato en la ISA de 32 bits?
+18. ¿Qué sustituye al fuel: quantum de scheduler, timer IRQ, watchdog de host, cuotas por actor o una combinación?
+19. ¿Cómo se evita un bucle infinito en una máquina persistente sin fuel, sin bloquear el scheduler?
+20. ¿Cómo se contabiliza CPU y se implementa `sleep`/`wake` en la máquina persistente?
+21. ¿El fuel desaparece del ABI o queda solo como métrica de diagnóstico?
+22. ¿El contador de ciclos es de 32 o 64 bits y cómo se expone en registros de 32 bits sin tearing?
+23. ¿La frecuencia es fija en Hz o se expone como numerador/denominador? ¿Cómo se maneja el overflow?
+24. ¿El contador avanza durante `sleep`/espera, solo cuando la VM ejecuta, o ambos (ciclos de CPU vs tiempo virtual)?
+25. ¿La instrucción de tiempo puede usarse para busy-wait o el kernel debe forzar `sleep`/yield?
+26. ¿Las lecturas de propiedades dentro de la misma ejecución deben ver el journal (*read-your-writes*) o el mensaje original? Si se mantiene lo segundo, debe documentarse y no sorprender a las políticas.
+27. ¿Qué mecanismo de tiempo expone el hardware: RTC MMIO, timer IRQ, `RDCYCLE`, `RDTIME`, o varios? ¿Cómo se combinan?
+28. ¿`HALT` acepta un deadline o el kernel expone `sleep(ticks)`? ¿Cómo despierta, cómo se reanuda y qué pasa si llega una IRQ antes?
+29. ¿Dónde vive el token bucket: RAM de usuario, NVRAM o estado del kernel? ¿Cómo sobrevive a `sleep` y a un fallo de ejecución?
+30. ¿Se eliminan `ROUTE_RATE_LIMIT` y `DECISION_RATE_LIMIT`, o queda uno como primitiva? ¿El guest pasa el backoff ya calculado?
+31. ¿Cómo se separa el cap duro del host de la política del guest para que no se confundan ni se dupliquen?
+32. ¿El timeout del dispatcher debe cancelar la ejecución y liberar `machineLock`, o el scheduler/kernel debe matar el quantum por otra vía?
+33. ¿La expansión de `PERMISSION`/`WORLD` vacíos debe ser fail-open, fail-closed o un error de configuración?
+34. ¿Una entrega diferida por `sleep` cuenta como entregada antes de ejecutarse? ¿Cómo se compensa si el scheduler se cierra o la entrega falla?
+35. **(Diferida — no forma parte de la auditoría vigente)** ¿Cuál es la precedencia de idioma: `Message.langTarget`, `Channel.langTarget`, `Actor.language` o `config.defaultLanguage`? ¿Y la de `langSource` frente a la detección automática?
+36. **(Diferida — no forma parte de la auditoría vigente)** ¿`Formats` debe renderizar N mensajes/líneas o el contrato real es un solo mensaje? Si es N, ¿cómo se combinan los N textos con `%content%` y los placeholders?
+37. **(Diferida — no forma parte de la auditoría vigente)** ¿`Direction.channel` debe eliminarse o el dispatcher debe honrarlo? Si se honra, ¿qué precede: `Direction.channel` o `Message.channel`?
+38. **(Diferida — no forma parte de la auditoría vigente)** ¿El redirect a consola o a un actor debe renderizarse con el contexto del destino y no con el del recipient? ¿Cómo se representa el actor consola para placeholders e idioma?
 
-    ; Avanzar al siguiente byte.
-    ADD  R5, R5, 1
-    JMP  loop
+> Las preguntas 35–38 se retoman después de reimplementar la VM; no bloquean el cierre de esta pasada.
 
-found:
-    MOV  R0, R5
-    RET
+### 8.9. ISA de 32 bits: decode jerárquico y `MOV`
 
-not_found:
-    RET
-```
+La dirección ratificada es un decoder **jerárquico**, inspirado en x86, no una tabla plana de opcodes.
+La idea se puede describir así:
 
-La notación de memoria mostrada es azúcar sintáctico del ensamblador: debe traducirse a las instrucciones y operandos de dirección admitidos. Si la ISA v1 no incluye una forma indexada, el ensamblador debe generar el cálculo del offset mediante instrucciones válidas. No se puede asignar al dialecto una instrucción de carga indexada que no exista en el mapa de opcodes.
-
-El bucle está limitado por `R3`, y el runtime aplica además el presupuesto de ejecución.
-
-## Ejemplo F. Modificación de canal
-
-```
-.entry main
-
-main:
-    ; Leer el canal actual si la política lo necesita.
-    LI   R0, PROPERTY_READ
-    HOST
-
-    ; Solicitar un cambio mediante el servicio genérico
-    ; de escritura de propiedades.
-    LI   R0, PROPERTY_WRITE
-    HOST
-
-    ; Solicitar la decisión correspondiente.
-    LI   R0, ROUTE_CHANNEL_REDIRECT
-    HOST
-
-    HALT
-```
-
-El programa solicita una modificación y una decisión. El runtime debe validar que el destino existe, que el actor y la política pueden usarlo y que el resultado es coherente con el contrato de iflow. La modificación no se confirma si la evaluación falla.
-
-## Ejemplo G. Estado entre mensajes
-
-La persistencia debe realizarse mediante el servicio de estado, no dejando registros de un contexto del pool sin inicializar.
-
-```
-.entry main
-
-main:
-    ; Leer el contador de la instancia lógica.
-    LI   R0, STATE_READ
-    HOST
-
-    ; La ABI devuelve el valor o NOT_FOUND.
-    CALL increment_counter
-
-    ; Escribir el nuevo valor en el journal de estado.
-    LI   R0, STATE_WRITE
-    HOST
-
-    LI   R0, ROUTE_CONTINUE
-    HOST
-    HALT
-
-increment_counter:
-    ; El cuerpo concreto debe comprobar el valor,
-    ; el overflow y la cuota del estado.
-    RET
-```
-
-`STATE_READ` y `STATE_WRITE` solo están disponibles cuando el programa posee la capacidad correspondiente. La actualización se serializa por instancia o utiliza control de versiones.
-
-## Ejemplo H. Agotamiento de presupuesto
-
-```
-.entry main
-
-loop:
-    JMP loop
-```
-
-El programa nunca termina por su propio flujo de control. El supervisor agota el fuel, genera `OUT_OF_FUEL`, descarta el journal y devuelve el contexto al pool únicamente si sigue siendo seguro reutilizarlo.
-
-## Ejemplo I. Fallo durante una modificación
-
-```
-.entry main
-
-main:
-    LI   R0, PROPERTY_WRITE
-    HOST
-
-    ; Provocar una excepción controlada.
-    TRAP 0x01
-
-    HALT
+```text
+byte 0
+  ├─ bits de grupo: ¿qué familia de operación es?
+  ├─ bits de modo: ¿reg-reg, reg-mem, mem-reg, inmediato?
+  └─ bits de tamaño/dirección: ¿hay desplazamiento? ¿hay inmediato?
+        └─ caja siguiente (ModR/M, SIB, displacement, immediate)
+              └─ caja final: opcode concreto
 ```
 
-La primera operación registra una modificación pendiente. La excepción posterior impide confirmar el journal. El mensaje original permanece sin modificar, siempre que el servicio de escritura haya respetado el contrato transaccional.
-
-## Ejemplo J. Propiedad desconocida para la ISA
-
-```
-.entry main
-
-main:
-    ; PROPERTY_READ es un servicio genérico.
-    ; El identificador simbólico de la propiedad se
-    ; resuelve en el descriptor de argumentos.
-    LI   R0, PROPERTY_READ
-    HOST
-
-    ; La propiedad puede incorporarse al registro de
-    ; servicios sin añadir un opcode al procesador.
-    HALT
-```
-
-El ejemplo demuestra la separación entre ISA y dominio, pero el descriptor de argumentos y el buffer deben inicializarse antes de ejecutar el programa. Si la propiedad no está registrada o no es visible para el actor, el servicio devuelve el estado correspondiente.
-
-## 20.1. Condición de aceptación de los ejemplos
-
-Los ejemplos anteriores validan la estructura arquitectónica, pero no todos son todavía programas compilables completos. Las rutinas auxiliares, descriptores de argumentos y algunas convenciones de comparación necesitan cerrarse en la especificación de la ABI y del ensamblador.
-
-Antes de declarar terminada la fase de diseño, el equipo debe convertir estos ejemplos en fixtures compilables y ejecutables. No sería correcto presentar pseudocódigo incompleto como prueba de conformidad de la ISA.
-
-# 21. Plan de pruebas de conformidad
-
-El objetivo de las pruebas es garantizar que dos implementaciones de la ISA produzcan los mismos resultados observables, aunque internamente utilicen estructuras de datos o estrategias de optimización diferentes.
-
-## 21.1. Pruebas de la ISA
-
-| Suite            | Casos obligatorios                               | Criterio de aceptación                           |
-| ---------------- | ------------------------------------------------ | ------------------------------------------------ |
-| Decodificación   | Cada opcode válido, desconocido y truncado       | Resultado definido sin lecturas fuera de límites |
-| Aritmética       | Cero, máximos, mínimos y overflow                | Resultado idéntico al modelo formal              |
-| División         | Divisor cero y casos extremos con signo          | Excepciones y resultados exactos                 |
-| Comparaciones    | Con signo y sin signo                            | Flags correctos                                  |
-| Desplazamientos  | Conteos 0, 15 y valores inválidos                | Semántica determinista                           |
-| Flujo de control | Saltos, llamadas, retornos y límites             | Ningún salto a código inválido                   |
-| Memoria          | Región inexistente, permisos y límites           | Rechazo seguro                                   |
-| Bloques          | Copias solapadas y no solapadas                  | Semántica documentada                            |
-| Unicode          | Secuencias válidas e inválidas                   | Conversión y errores consistentes                |
-| Servicios        | Éxito, error, truncamiento y denegación          | ABI respetada                                    |
-| Privilegios      | Acceso a región y servicio no autorizados        | Sin elevación de privilegios                     |
-| Fuel             | Bucle infinito y operación costosa               | Terminación dentro de límites                    |
-| Aislamiento      | Ejecuciones sucesivas con contextos reutilizados | Sin contaminación accidental                     |
-| Persistencia     | Reinicio, expiración y conflictos                | Estado conforme a la política                    |
-| Atomicidad       | Error después de una escritura                   | Sin modificaciones parciales confirmadas         |
-| Concurrencia     | Accesos simultáneos al estado                    | Semántica de serialización respetada             |
-
-## 21.2. Pruebas basadas en propiedades
-
-Se recomienda generar automáticamente secuencias de instrucciones válidas y comparar sus resultados con un modelo de referencia sencillo.
-
-Ejemplos:
-
-- `MOV` conserva exactamente el valor del registro fuente.
-- `LDB` siempre produce un valor entre 0 y 255.
-- `STB` no modifica los siete bytes vecinos ni ningún otro dato fuera de su destino.
-- `MOVE` produce el mismo resultado que una copia de instantánea cuando los rangos se solapan.
-- Una escritura fallida no modifica el journal.
-- Una ejecución sin capacidad no puede completar un servicio protegido.
-- Un programa que agota el fuel no puede confirmarse como una ejecución normal.
-- El contexto devuelto al pool no contiene registros, pila ni buffers transitorios del mensaje anterior.
-
-La implementación de referencia debe priorizar claridad y corrección sobre rendimiento.
-
-## 21.3. Ejecución diferencial
-
-Cada programa de prueba debe ejecutarse en:
-
-1. El intérprete de referencia.
-2. La implementación optimizada, cuando exista.
-3. El desensamblador y validador del formato.
-4. El runtime de integración, para las pruebas que utilizan servicios del host.
-
-Se comparan los registros observables, el estado final de memoria autorizada, los errores, el fuel consumido según el modelo y el resultado de routing.
-
-## 21.4. Pruebas de carga
-
-Los perfiles de carga deben incluir:
-
-- Mensajes pequeños y políticas transparentes.
-- Mensajes de varios kilobytes.
-- Reglas con muchas consultas de propiedades.
-- Transformaciones de texto.
-- Búsquedas y bucles.
-- Regex.
-- Estado persistente con contención.
-- Alto volumen de mensajes independientes.
-- Ejecuciones que terminan por agotamiento de presupuesto.
-
-No se establece un objetivo numérico de mensajes por segundo sin medir primero el entorno de referencia.
-
-# 22. Registro de decisiones arquitectónicas
-
-Esta tabla es el registro normativo de las decisiones propuestas para la versión inicial.
-
-| Decisión           | Alternativas                                        | Recomendación                              | Confianza |
-| ------------------ | --------------------------------------------------- | ------------------------------------------ | --------- |
-| Ancho de palabra   | 16 / 32 bits                                        | 16 bits, con memoria regional              | Media     |
-| Direccionamiento   | Plano / segmentado / regiones                       | Handles y offsets regionales               | Alta      |
-| Codificación       | Fija / variable / mixta                             | Mixta, determinada por opcode              | Media     |
-| Registros          | Banco pequeño / ampliado                            | Ocho GPR y registros de control definidos  | Media     |
-| Alias de registros | Mitades alta/baja / sin alias                       | Sin alias                                  | Alta      |
-| Servicios          | Vectores / llamadas directas / instrucción genérica | `HOST` y tabla versionada                  | Alta      |
-| Privilegios        | Rings / capacidades / permisos                      | Supervisor del runtime y capacidades       | Alta      |
-| Firmware           | BIOS / microkernel / biblioteca                     | Firmware mínimo                            | Alta      |
-| Persistencia       | Implícita / explícita                               | Explícita y desactivada por defecto        | Alta      |
-| Ejecución          | VM por mensaje / compartida / pool                  | Programa compartido y pool de contextos    | Alta      |
-| Concurrencia       | Intérprete secuencial / multihilo interno           | Concurrencia administrada por Java         | Alta      |
-| Estado compartido  | Libre / serializado / versionado                    | Serialización por instancia inicialmente   | Alta      |
-| Atomicidad         | Escritura inmediata / diferida                      | Journal y confirmación                     | Alta      |
-| Presupuesto        | Timeout / instrucciones / fuel                      | Fuel más límites por recurso               | Alta      |
-| Regex              | Motor general / autómata acotado                    | Motor con complejidad y recursos limitados | Alta      |
-| Optimización       | Intérprete / JIT / microcódigo                      | Intérprete primero                         | Alta      |
-| Formato binario    | Sin versión / versionado                            | Formato e ISA versionados                  | Alta      |
-| Compatibilidad     | Sustitución inmediata / migración                   | Adaptador y migración gradual              | Alta      |
-
-## 22.1. Decisiones que deben someterse a revisión experimental
-
-Hay cuatro áreas que no deberían considerarse cerradas sin prototipos:
-
-A. Ancho de 16 bits. La memoria regional soluciona el límite de direccionamiento, pero puede aumentar el número de instrucciones y los costes de manejo de direcciones. Debe compararse con una variante de 32 bits utilizando los mismos programas y el mismo intérprete de referencia.
-
-B. Coste de `HOST`. La instrucción genérica aporta extensibilidad, pero demasiadas llamadas pequeñas al host pueden dominar la latencia. Deben medirse las consultas de propiedades, la caché y las operaciones por lotes.
-
-C. Persistencia de registros. Puede ser útil para programas stateful, pero añade complejidad de versionado, aislamiento y recuperación. Debe implementarse después de validar el modelo transitorio.
-
-D. Atomicidad. El journal reduce el riesgo de dejar mensajes parcialmente modificados, pero introduce memoria temporal y un protocolo de confirmación. Debe medirse con transformaciones reales y definirse con precisión qué sucede si falla una actualización externa durante el commit.
-
-## 22.2. Invariantes arquitectónicos no negociables
-
-1. Ningún bytecode puede acceder directamente a un objeto Java.
-2. Ningún contexto de ejecución puede escribir directamente en la memoria privada de otro.
-3. La pila nunca se comparte entre mensajes.
-4. El presupuesto de ejecución nunca puede reiniciarse desde el programa.
-5. Los servicios validan sus argumentos y capacidades.
-6. Las decisiones de routing se validan antes de llegar al dispatcher.
-7. El código ejecutable y las tablas privilegiadas no son escribibles por programas de usuario.
-8. Un error de programa no puede producir una entrega parcial por un camino no autorizado.
-9. La persistencia se administra mediante un ámbito explícito.
-10. Las optimizaciones deben conservar la semántica de la ISA.
-11. Una versión incompatible del programa se rechaza antes de publicarse.
-12. Las operaciones costosas deben tener un coste acotado o un mecanismo efectivo de cancelación.
-
-# 23. Riesgos, limitaciones y cuestiones pendientes
-
-## 23.1. Riesgos principales
-
-Crítico
-
-Inconsistencia transaccional
-
-Una operación de host puede modificar un recurso antes de que otra operación falle. El journal debe definir qué operaciones son diferidas, cuáles son irreversibles y cómo se manejan los fallos durante la confirmación.
-
-Crítico
-
-Persistencia con fuga de información
-
-Si una instancia conserva registros o memoria sin una identidad y ámbito claros, un mensaje puede influir en otro. La persistencia necesita un modelo de autoridad y aislamiento propio.
-
-Alto
-
-Coste de la ISA de 16 bits
-
-El modelo regional es viable, pero el coste real de gestionar handles y offsets debe medirse frente a una ISA de 32 bits.
-
-Alto
-
-Bloqueo indirecto mediante servicios
-
-Aunque el intérprete tenga fuel, un servicio Java bloqueante puede retener un hilo. Cada servicio necesita límites operativos, no solo un coste de entrada.
-
-Alto
-
-Complejidad del formato y la ABI
-
-Una ISA pequeña no garantiza una ABI sencilla. El descriptor de argumentos, la semántica de las propiedades, los errores y las capacidades deben ser uniformes.
-
-## 23.2. Limitaciones del diseño inicial
-
-- El direccionamiento regional requiere una convención de acceso y gestión de handles bien definida.
-- La VM no es automáticamente más rápida que SpEL o que las reglas actuales.
-- Las operaciones del host pueden dominar el coste total.
-- El estado persistente introduce problemas de concurrencia y migración.
-- El journal no garantiza atomicidad global sobre sistemas externos que no participen en la transacción.
-- Una ISA portable no garantiza idéntico rendimiento en diferentes JVM.
-- Las reglas complejas existentes pueden no ser traducibles automáticamente.
-- Los ejemplos de la sección 20 todavía requieren fixtures compilables y una ABI cerrada.
-
-## 23.3. Cuestiones que requieren información adicional del proyecto
-
-Antes de implementar el adaptador definitivo deben verificarse en el código actual de TextFormatter Suite:
-
-1. La semántica exacta de `RouteOutcome` y de cada `PolicyTarget`.
-2. El orden real de evaluación de reglas y condiciones.
-3. El momento en que se aplican las transformaciones.
-4. El ciclo de vida del objeto `Message` durante la evaluación y la entrega.
-5. Los puntos exactos en que se comprueban los permisos.
-6. Las claves y los ámbitos de los dos niveles de rate limiting.
-7. Las restricciones de hilo de los servicios Bukkit, Spigot y Fabric.
-8. Los requisitos de compatibilidad de las reglas y configuraciones existentes.
-
-No es correcto afirmar que el nuevo motor conserva todos los contratos hasta verificar estas semánticas en la implementación real.
-
-# 24. Hoja de ruta de implementación por fases
-
-La implementación debe avanzar en incrementos verificables. Cada fase debe dejar el sistema en un estado coherente, sin introducir prematuramente características que dificulten el diagnóstico de errores.
-
-## 01
-
-### Cerrar la especificación normativa
-
-Dependencias: ninguna · Prioridad máxima
-
-Objetivo: resolver los formatos de instrucción, ABI, semántica numérica, regiones y resultados de routing.
-
-Componentes: documentos de ISA, ABI, formato binario y contratos de integración.
-
-Pruebas: revisión de contradicciones, ejemplos ensamblables y casos límite de cada instrucción.
-
-Aceptación: no existen operandos, códigos de estado, excepciones o transiciones de control sin definir.
-
-Riesgos de regresión: introducir semánticas incompatibles con el router actual.
-
-Fuera de alcance: implementación del intérprete, optimizaciones y persistencia avanzada.
-
-## 02
-
-### Modelo de referencia y formato binario
-
-Dependencia: fase 01
-
-Objetivo: establecer una representación normativa de instrucciones y programas.
-
-Componentes: especificación de opcode, codificador de prueba, decodificador de referencia y fixtures binarios.
-
-Pruebas: instrucciones válidas, truncadas, opcodes desconocidos y destinos inválidos.
-
-Aceptación: cada instrucción tiene una codificación única y una longitud determinable.
-
-Riesgos de regresión: divergencia entre ensamblador y decodificador.
-
-Fuera de alcance: servicios del host, runtime de producción y optimizaciones.
-
-## 03
-
-### Intérprete mínimo
-
-Dependencia: fase 02
-
-Objetivo: ejecutar la ISA fundamental sin acceso al host.
-
-Componentes: banco de registros, fetch/decode/execute, aritmética, memoria básica y saltos.
-
-Pruebas: suite completa de aritmética, flujo de control, límites y excepciones.
-
-Aceptación: el intérprete coincide con el modelo de referencia para todas las pruebas deterministas.
-
-Riesgos de regresión: diferencias de signo, overflow o actualización de flags.
-
-Fuera de alcance: persistencia, routing y concurrencia.
-
-## 04
-
-### Memoria protegida y supervisor
-
-Dependencia: fase 03
-
-Objetivo: completar el modelo regional y la protección de memoria.
-
-Componentes: gestor de regiones, cuotas, pila, permisos y excepciones.
-
-Pruebas: rangos inválidos, overflow de offsets, escrituras cruzadas y agotamiento de recursos.
-
-Aceptación: ninguna operación puede modificar una región fuera de sus permisos.
-
-Riesgos de regresión: errores de límites y asignaciones no contabilizadas.
-
-Fuera de alcance: memoria compartida entre programas y JIT.
-
-## 05
-
-### Fuel y terminación segura
-
-Dependencia: fase 04
-
-Objetivo: imponer límites a instrucciones, bloques y servicios.
-
-Componentes: supervisor de presupuesto, límites de pila, cuotas de memoria y cancelación.
-
-Pruebas: bucles infinitos, operaciones costosas y agotamiento durante transformaciones.
-
-Aceptación: ninguna ejecución puede continuar después de agotar su presupuesto ni reiniciarlo por sí misma.
-
-Riesgos de regresión: operaciones del runtime cuyo coste no se contabilice.
-
-Fuera de alcance: persistencia y paralelismo.
-
-## 06
-
-### ABI y servicios del host
-
-Dependencias: fases 04 y 05
-
-Objetivo: permitir lecturas y escrituras controladas.
-
-Componentes: `HOST`, registro de servicios, descriptores de argumentos, capacidades y journal.
-
-Pruebas: propiedades ausentes, buffers insuficientes, permisos, errores y escrituras diferidas.
-
-Aceptación: ningún servicio permite acceso directo a objetos Java y todos validan argumentos y capacidades.
-
-Riesgos de regresión: bloqueos de hilo y diferencias entre la semántica declarada y la real del host.
-
-Fuera de alcance: acceso arbitrario a red, filesystem o ejecución de código nativo.
-
-## 07
-
-### Ensamblador, bibliotecas y ejemplos ejecutables
-
-Dependencias: fases 02–06
-
-Objetivo: convertir la ISA en una plataforma utilizable.
-
-Componentes: ensamblador, desensamblador, bibliotecas, diagnósticos y fixtures.
-
-Pruebas: compilación de todos los ejemplos, round-trip de desensamblado y ejecución reproducible.
-
-Aceptación: cada ejemplo aceptado puede ensamblarse, validarse y ejecutarse con resultados esperados.
-
-Riesgos de regresión: divergencia entre sintaxis, ABI y formato binario.
-
-Fuera de alcance: lenguaje de alto nivel y compilación JIT.
-
-## 08
-
-### Adaptador de routing y compatibilidad
-
-Dependencias: fases 06 y 07
-
-Objetivo: integrar la VM sin sustituir el dispatcher ni alterar accidentalmente las semánticas existentes.
-
-Componentes: `VmPolicyEngine`, validador de resultados, journal y adaptadores del router.
-
-Pruebas: equivalencia de decisiones, rate limiting, permisos, transformaciones y errores.
-
-Aceptación: las políticas de prueba producen los resultados esperados y las decisiones inválidas se rechazan.
-
-Riesgos de regresión: duplicación de controles o cambios en el orden de evaluación.
-
-Fuera de alcance: retirar el motor antiguo sin una migración verificada.
-
-## 09
-
-### Pool de contextos y persistencia controlada
-
-Dependencia: fase 08
-
-Objetivo: reutilizar recursos sin compartir accidentalmente estado transitorio.
-
-Componentes: pool acotado, limpieza de contextos, almacén de estado, serialización y cuotas.
-
-Pruebas: reutilización después de éxito y error, contaminación entre mensajes, concurrencia y reinicio.
-
-Aceptación: el estado transitorio queda limpio; el estado persistente solo sobrevive según su ámbito declarado.
-
-Riesgos de regresión: fugas de información y condiciones de carrera.
-
-Fuera de alcance: estado global mutable sin aislamiento y scheduler interno.
-
-## 10
-
-### Evaluación de rendimiento y endurecimiento
-
-Dependencias: fases 01–09
-
-Objetivo: decidir si la VM cumple los objetivos del proyecto y qué optimizaciones están justificadas.
-
-Componentes: benchmarks, perfiles, métricas, pruebas de carga y auditoría de seguridad.
-
-Pruebas: perfiles representativos, comparación con el motor actual, latencia p50/p95/p99 y asignaciones.
-
-Aceptación: resultados reproducibles, límites verificados y ausencia de regresiones funcionales conocidas.
-
-Riesgos de regresión: optimizaciones que alteren semántica o reduzcan el aislamiento.
-
-Fuera de alcance: JIT, paralelismo interno o cambios de ISA sin evidencia.
-
-# Dictamen final
-
-La propuesta de un CPU virtual para iflow es técnicamente viable, y el enfoque de una ISA pequeña con acceso genérico al host es coherente con el objetivo de permitir lógica compleja sin convertir el procesador en un catálogo de propiedades del mensaje.
-
-Sin embargo, el diseño no debería pasar directamente a implementación completa. Antes deben cerrarse tres contratos:
-
-1. ISA y formato binario: todos los operandos, códigos de operación, excepciones, flags y reglas de direccionamiento deben quedar normativamente definidos.
-2. ABI del host: las lecturas, escrituras, capacidades, errores y operaciones transaccionales deben tener semántica precisa.
-3. Contrato de routing: el resultado de la VM debe mapearse sin ambigüedad a los comportamientos actuales de iflow.
-
-La primera implementación debe demostrar corrección, aislamiento y terminación acotada antes de optimizar el rendimiento.
-
-La persistencia de registros y memoria puede convertirse en una característica potente, pero solo después de implementar un contexto transitorio limpio, un almacén de estado con ámbitos explícitos y un protocolo de recuperación. No debe surgir accidentalmente del mecanismo de reutilización.
-
-Por último, el criterio para considerar exitosa la arquitectura no es que se parezca a un procesador físico ni que ejecute muchas instrucciones. Es que permita expresar políticas que resulten difíciles de mantener con el motor actual, con una semántica verificable, una integración limpia con el host y un coste de ejecución medido que justifique su adopción.
-
-La decisión de construirla debe quedar condicionada a una prueba de concepto que compare el intérprete de referencia con el motor actual en corrección, latencia, asignaciones y complejidad de las políticas. Esa evidencia determinará si conviene conservar la ISA de 16 bits propuesta o cambiarla antes de fijar la primera versión estable.
+Cada conjunto de bits **abre o cierra** la presencia de la caja siguiente. No se lee una instrucción
+de tamaño fijo mirando solo el primer byte: se recorre un árbol hasta la hoja. Eso permite que el
+mismo `MOV` tenga varias formas y que la ISA crezca sin reservar un opcode distinto para cada una.
+
+Reglas de diseño:
+
+- **`MOV` único.** Cubre como mínimo:
+  - `MOV Rd, Rs` (registro a registro),
+  - `MOV Rd, [Ra + disp]` (memoria a registro),
+  - `MOV [Ra + disp], Rs` (registro a memoria),
+  - `MOV Rd, imm` (inmediato a registro).
+  Queda abierto si también existe `MOV [Ra + disp], imm`.
+- **`LI` desaparece del ISA.** Si se conserva compatibilidad de ensamblador, `LI` será un alias que
+  emite un `MOV` inmediato, no un opcode propio.
+- **Little-endian en toda la cadena.** Los campos multibyte de la instrucción, el inmediato, el
+  desplazamiento, las constantes y el header de la ROM se leen de menor a mayor. No hay conversión
+  entre el formato y la memoria.
+- **Longitud validable.** El decoder debe saber cuántos bytes consume cada caja antes de ejecutar y
+  rechazar una caja reservada o una combinación ilegal. La frontera de instrucción se calcula con el
+  mismo decoder que ejecuta, para que no haya dos verdades.
+- **32 bits.** Registros, direcciones y desplazamientos son de 32 bits. El layout exacto de los bits
+  queda para la decisión abierta 13–17; no se inventa aquí.
+
+Lo que **no** cambia: la separación entre transformar contenido y cambiar canal, el journal, la
+validación de la decisión y el modelo de memoria de la sección 8.4.
+
+### 8.10. Tiempo, ciclos, RTC y `HALT`
+
+La máquina persistente necesita **mecanismos** de tiempo; la **política** temporal pertenece al
+userspace `.flow`. El hardware/emulador debe exponer, como mínimo:
+
+- un **RTC/timer** (MMIO o instrucción) con frecuencia conocida;
+- un **contador monótono de ciclos virtuales**, provisionalmente `RDCYCLE`;
+- una **IRQ de timer** y un `HALT` que pueda despertar por esa IRQ (no el `HALT` terminal actual);
+- una forma de **ceder la CPU** y reanudar: `HALT` con deadline o una primitiva de `sleep` del kernel.
+
+Con esos mecanismos, el software de usuario puede medir intervalos, calcular deadlines, implementar
+timeouts y decidir esperar, encolar o descartar. El hardware no decide nada de eso.
+
+Requisitos:
+
+- **Precisión.** Las lecturas deben permitir calcular intervalos y deadlines sin depender del reloj de
+  pared del host. La frecuencia debe ser conocida y estable (Hz o un par numerador/denominador).
+- **Snapshot atómico.** En una ISA de 32 bits, un contador de 64 bits no puede leerse en dos
+  instrucciones sin riesgo de *tearing* entre el low y el high. `RDCYCLE` debe entregar un snapshot
+  coherente, por ejemplo con dos registros en una sola instrucción o con un mecanismo de lectura
+  atómica.
+- **Contador virtual, no `TSC` del host.** Debe ser monótono por VM, con offset/escala propios. No debe
+  exponer el `TSC` físico ni permitir inferir actividad de otras VM.
+- **CPU vs tiempo.** Hay que decidir si el contador avanza solo cuando la VM ejecuta, también durante
+  `sleep`/espera, o si se exponen dos fuentes: ciclos de CPU y tiempo virtual. El scheduler necesita
+  deadlines; el rate limit necesita una base temporal; no son necesariamente el mismo contador.
+- **`sleep` no es busy-wait.** La instrucción de tiempo sirve para medir y calcular, no para girar en
+  un bucle hasta que pase un deadline. Dormir es ceder la CPU al scheduler/kernel y despertar por timer
+  o IRQ. Un busy-wait basado en `RDCYCLE` consumiría CPU real y volvería a introducir el problema que
+  el fuel intentaba limitar.
+- **Overflow y wrap.** El contrato debe definir qué pasa al desbordar, cómo se comparan dos lecturas
+  separadas por un wrap y si el contador puede resetearse al arrancar una VM.
+- **Rate limit en userspace.** El token bucket de `IFLOW-MAN-D40` es software de usuario; usa estas
+  lecturas y `HALT`/sleep como mecanismos, pero el host no calcula el backoff.
+
+El layout exacto (nombre, registros, ancho, frecuencia, semántica durante la espera y relación entre
+RTC y contador de ciclos) queda en las decisiones abiertas 22–25 y 27–31.
+
+### 8.11. Rate limit: mecanismo vs política
+
+El defecto actual no es solo que el rate limit esté en el host: hay **dos caminos** para la misma
+decisión (`ROUTE_RATE_LIMIT` y `DECISION_RATE_LIMIT`) y ambos calculan el backoff en el emulador. La
+separación objetivo es:
+
+| Capa | Responsabilidad |
+|---|---|
+| Hardware/emulador | CPU, MMU, PIC, RTC/timer, contador de ciclos, MMIO, `HALT`/timer. **No** mantiene token buckets, no calcula backoff y no decide esperar/encolar/descartar. |
+| BIOS | POST, inicialización de RTC/timer/PIC y publicación de tablas. **No** implementa política de rate limit. |
+| Kernel | Scheduler, `sleep`/`wake`, timers, cola y primitivas de contexto. **No** decide la política por canal/actor. |
+| Userspace `.flow` | Token bucket, lectura de tiempo, cálculo de backoff y decisión esperar/encolar/descartar. Es la política. |
+| Límite host | Entrega, journal del mensaje y, si hace falta, un **cap duro de seguridad** separado. No es la política. |
+
+Consecuencias:
+
+- Se elimina la duplicación: **un solo contrato** de rate limit. Si el guest decide, el host no debe
+  volver a calcular el mismo backoff por otro servicio.
+- El guest debe poder leer el tiempo (RTC/ciclos) y dormir (`HALT`/timer o `sleep`) para implementar
+  la política; el kernel solo aporta el mecanismo.
+- El `PolicyTarget.RATE_LIMIT` actual, que solo silencia y no encola, no alcanza para una política
+  real; la cola/reintento pertenece al modelo de userspace/kernel, no al journal del mensaje.
+- El cap duro del host, si existe, debe ser explícito y no confundirse con la decisión del `.flow`.
+
+## 9. Criterio de cierre de esta auditoría
+
+- No se modifica código hasta ratificar `IFLOW-MAN-D01…D13` y las decisiones abiertas de la sección
+  8.8. `D14…D16`, `D36R` y `D40…D43` ya están ratificadas, pero tampoco se implementan en esta pasada.
+- Cada hallazgo debe tener evidencia en código y, cuando se remedie, un test de regresión.
+- Este documento es el registro definitivo de los hallazgos `IFLOW-MAN-*` y de la arquitectura
+  objetivo; al cerrar la pasada se actualizará el estado de cada punto (confirmado, descartado,
+  ratificado o remediado). Los hallazgos `16…54` están confirmados por lectura/sonda, pero su
+  remediación sigue pendiente de ratificación. Los hallazgos `46…54` (arquitectura de capas,
+  estado persistente, concurrencia) son parte de la auditoría vigente; la `§3.7` y los hallazgos
+  `42…45` son material diferido: no se consideran parte del cierre de esta pasada y se retoman
+  después de reimplementar la VM con las nuevas specs.
+- No se publica nada sin autorización explícita. Los commits locales de esta auditoría siguen sin
+  publicar; `git log origin/main..HEAD` es la lista vigente.

@@ -1,5 +1,12 @@
 # iflow — VM 16-bit flat 64KB + SoftMMU 4KB
 
+> **Línea 2026-10-23:** este módulo es la base de **`iflow-vm`**, la VM propia que evoluciona a
+> 32 bits. Su especificación técnica de referencia v3 vive en
+> [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md). La línea
+> paralela **`iflow-wasm`** (WebAssembly + Chicory) está en
+> [`src/iflow-wasm/`](../iflow-wasm/) y **no hereda** este ISA, este ABI `HOST` ni el modelo
+> BIOS/kernel.
+
 > **Estado**: ✅ Implementada y probada (397 tests)
 >
 > **Tipo**: Módulo funcional (VM interpreted)
@@ -386,6 +393,6 @@ src/iflow/
 ## Referencias
 
 - [`HDL.md`](HDL.md) — mapeo a HDL: módulos, buses, señales, flujo de datos (D28)
-- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica completa (ABI v2)
+- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica de referencia v3 de `iflow-vm` (32 bits)
 - [`tools/iflow-compiler/`](../../tools/iflow-compiler/) — Ensamblador TypeScript (.flowasm → .flow)
 - [`docs/prompts/diseno/iflow-cpu-design.md`](../../docs/prompts/diseno/iflow-cpu-design.md) — Diseño del CPU virtual (memoria, rings, privilegios)

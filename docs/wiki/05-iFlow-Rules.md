@@ -2,6 +2,10 @@
 
 > **This page describes the current iFlow virtual machine.**
 >
+> **2026-10-23:** this VM is the base of **`iflow-vm`**, which evolves to 32 bits. The parallel
+> line **`iflow-wasm`** (WebAssembly + Chicory) lives in `src/iflow-wasm` and does not inherit this
+> ISA or ABI.
+>
 > The old `DefaultRouter` / `Rule` / SpEL-based rule engine was removed. Its
 > documentation is preserved only in git history; it does **not** describe the
 > code in `src/iflow`. The current implementation is a 16-bit interpreted VM

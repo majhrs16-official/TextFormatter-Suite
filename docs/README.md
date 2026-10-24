@@ -5,7 +5,7 @@
 Archivo | Propósito | Audiencia |
 |---------|-----------|-----------|
 | `workdir/PLAN.md` | Plan de ejecución: estado actual, fases completadas, próximos pasos, deuda técnica | Equipo / Mantenedores |
-| `workdir/AUDITORIA.md` | Auditoría manual de iFlow (2026-10-20, en curso): hallazgos `IFLOW-MAN-*`, propuestas, arquitectura objetivo ROM/BIOS/kernel/32 bits y ruta pendiente | Equipo / Auditores |
+| `prompts/diseno/iflow-cpu-implement.md` | Especificación técnica de referencia v3 de iFlow VM (32 bits), derivada de la auditoría manual 2026-10-20: hallazgos `IFLOW-MAN-*`, propuestas, arquitectura objetivo ROM/BIOS/kernel/32 bits y ruta pendiente | Equipo / Arquitectos |
 | `workdir/ADR.md` | Decisiones de arquitectura (fuente de verdad) | Arquitectos / Equipo |
 | `RELEASE_NOTES.md` | Notas de versión por fase (FASE 0-17), breaking changes, comandos CI | Equipo / Auditores |
 | `../CHANGELOG.md` | Cambios relevantes desde la última revisión; **no implica releases públicos** | Usuarios / Contribuidores |
@@ -35,9 +35,9 @@ prompts/diseno/manager-v2.md             →  implementación en src/manager-*
 prompts/diseno/web-editor.md             →  implementación en src/web-editor/
 prompts/especificaciones/commands-v2.md  →  implementación en src/host/config/CommandsConfig*
 prompts/especificaciones/extension-v1.md →  implementación en src/extension-api/
-skills auditar-*                         →  informes de auditoría (workdir/AUDITORIA.md)
+skills auditar-*                         →  auditorías contra la spec v3 (prompts/diseno/iflow-cpu-implement.md)
 skills generar-*                         →  README raíz y CodeGuide (src/README.md)
-workdir/{PLAN,AUDITORIA,ADR}             →  derivan wiki/ y RELEASE_NOTES.md
+workdir/{PLAN,ADR} + prompts/diseno      →  derivan wiki/ y RELEASE_NOTES.md
 ```
 
 ### Regla de archivado

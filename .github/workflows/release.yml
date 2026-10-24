@@ -48,6 +48,7 @@ jobs:
             :src:kernel:build \
             :src:logger:build \
             :src:iflow:build \
+            :src:iflow-wasm:build \
             :src:host:build \
             :src:textformatter:build \
             :src:gtranslate:build \

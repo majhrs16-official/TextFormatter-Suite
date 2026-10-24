@@ -124,7 +124,7 @@ cd src/web-editor && npm run check && npm run test:integration
 ## 📄 Documentación Relacionada
 
 - **PLAN.md** — Estado y bitácora en [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md)
-- **AUDITORIA.md** — Última auditoría en [`docs/workdir/AUDITORIA.md`](docs/workdir/AUDITORIA.md)
+- **iflow-cpu-implement.md** — Especificación técnica de referencia v3 de iFlow VM en [`docs/prompts/diseno/iflow-cpu-implement.md`](docs/prompts/diseno/iflow-cpu-implement.md)
 - **ADR.md** — Decisiones de arquitectura en [`docs/workdir/ADR.md`](docs/workdir/ADR.md)
 - **verification-metadata.xml** — SHA256/SHA512 de dependencias (en `gradle/` y raíz)
 

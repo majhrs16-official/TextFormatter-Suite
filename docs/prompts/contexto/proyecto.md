@@ -25,7 +25,7 @@ El proyecto se concibe como una suite donde cada motor es una extensión descarg
 
 Documentación:
 - /README.md
-- /docs (PROMPT.md, PROMPT_NOW.md, ADR.md, PLAN.md, AUDITORIA.md)
+- /docs (PROMPT.md, PROMPT_NOW.md, ADR.md, PLAN.md, prompts/diseno/iflow-cpu-implement.md)
 - /docs/web-editor/
 
 Repositorio:

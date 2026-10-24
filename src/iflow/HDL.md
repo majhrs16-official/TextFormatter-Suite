@@ -267,6 +267,6 @@ hardware previsto pendiente.
 - [`README.md`](README.md) — vista funcional (componentes, ISA, ABI, tests)
 - [`docs/prompts/diseno/iflow-cpu-design.md`](../../docs/prompts/diseno/iflow-cpu-design.md) — §4
   (componentes) y §14 (privilegios/anillos)
-- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — §12
-  (privilegios, excepciones) y §13 (firmware)
+- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) —
+  especificación técnica de referencia v3 (arquitectura objetivo: ROM/BIOS/kernel, privilegios y 32 bits)
 - [`docs/workdir/PLAN.md`](../../docs/workdir/PLAN.md) — decisiones D17–D33

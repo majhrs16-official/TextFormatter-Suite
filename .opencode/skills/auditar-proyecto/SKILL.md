@@ -33,7 +33,7 @@ este fichero solo lo sitúa en el flujo de trabajo del repositorio.
 
 Informe final en el orden que fija la referencia, con una sección de cobertura de
 auditoría. Se entrega en la conversación; si el usuario quiere versionarlo, va a
-`docs/workdir/AUDITORIA.md`.
+`docs/workdir/AUDITORIA-<tema>.md`.
 
 ## Reglas
 

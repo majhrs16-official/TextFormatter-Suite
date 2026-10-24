@@ -41,4 +41,4 @@ especificación. No crees un directorio nuevo: `references/` es el sitio.
 
 Diagnóstico fundamentado en el código real, con veredicto por área y evidencia
 (fichero y línea). Se entrega en la conversación; si el usuario quiere
-versionarlo, va a `docs/workdir/AUDITORIA.md`.
+versionarlo, va a `docs/workdir/AUDITORIA-<tema>.md`.

@@ -386,6 +386,6 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 ## Referencias
 
 - [`src/iflow/README.md`](../../src/iflow/README.md) — VM architecture, ISA, services
-- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Spec técnico completo
+- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica de referencia v3 de `iflow-vm`
 - [`src/iflow/src/main/java/.../VmInterpreter.java`] — Reference interpreter implementation
 - [`src/iflow/src/test/.../VmInterpreterTest.java`] — Instruction test vectors
