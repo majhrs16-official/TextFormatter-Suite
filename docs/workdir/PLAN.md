@@ -186,13 +186,18 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
-> **Situación actual (2026-10-23):** de 30 módulos Java en `src/`, **12 no tienen directorio de tests**, **2 lo tienen vacío** (`fabric-host`, `tester`) y **16 tienen entre 1 y 9 archivos de test**. Solo `iflow-vm` (27), `host` (9) y `textformatter` (6) superan los 5 archivos. No hay gates de cobertura mínimos por módulo ni presupuesto de tests en el CI.
+> **Situación actual (2026-10-23):** inventario real generado con `./gradlew testInventory` — **32 módulos Java** en `src/`:
+> - **1 sin directorio de tests**: `common-legacy`
+> - **2 con directorio vacío**: `fabric-host`, `tester`
+> - **29 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (9), `textformatter` (6) superan 5 archivos
+> - **8 módulos con reporte JaCoCo**: `iflow-vm` (86.2% línea / 71.3% rama), `kernel` (91.1%/82.0%), `logger` (93.3%/78.6%), `messages` (93.3%/75.0%), `textformatter` (81.6%/66.7%), `host` (30.9%/23.8%), `spigot-host` (2.5%/4.6%), `transport` (6.0%/1.0%)
+> - **21 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
 
 **Objetivo:** que **cada módulo** tenga una suite de tests unitarios y de componente con **cobertura significativa** (líneas/branches ≥ 70 % en código de producción, ≥ 90 % en SPI/API pública) y tests de regresión para cada bug/fix documentado.
 
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
-| **T0 — Inventario y baseline** | Matriz `módulo × {archivos test, cobertura actual, gaps críticos}` generada por script CI | Tabla en `docs/workdir/TEST-INVENTORY.md` con datos reales |
+| **T0 — Inventario y baseline** ✅ | Matriz `módulo × {archivos test, cobertura actual, gaps críticos}` generada por script CI | Tabla en `docs/workdir/TEST-INVENTORY.md` con datos reales |
 | **T1 — Scaffold obligatorio** | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | 0 módulos sin directorio de tests; 0 directorios vacíos |
 | **T2 — Gates de cobertura por módulo** | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | Gates verdes en CI para todos los módulos |
 | **T3 — Tests de contrato SPI/API** | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | Tests de contrato pasan en aislamiento; documentación de contratos generada |
@@ -208,7 +213,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.
 - **Documentación viva**: cada módulo tiene `src/<mod>/README.md` con sección «Tests» que explica cómo correr, qué cubre y cómo añadir casos.
 
-**Próxima acción T0:** script Gradle `./gradlew testInventory` que recorre `src/*/src/test`, cuenta archivos, ejecuta JaCoCo en modo reporte y escribe `docs/workdir/TEST-INVENTORY.md`.
+**Próxima acción T1:** crear `src/test` en `common-legacy`, `fabric-host`, `tester`; añadir `testImplementation` JUnit5/AssertJ/Mockito a todos los `build.gradle`; verificar `./gradlew test` pasa en todos los módulos.
 
 ---
 
