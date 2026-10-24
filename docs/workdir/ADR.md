@@ -395,7 +395,7 @@ Hechos verificados (2026-10-19):
 - `Cpu.setProgram()`, `Cpu.step()` y `Cpu.reset()` eran `TODO` sin implementación.
 - La ISA del boceto es la actual **menos** las variantes inmediatas `LDBI`, `LDWI`, `STBI` y `STWI`.
 - `ControlUnit.executeHost()` no recibía `HostServiceRegistry`, así que los servicios del host no podían resolverse.
-- Ninguna clase del módulo iFlow lleva contabilidad de ciclos ni CPI (`grep` sobre `src/iflow/src/main/java/`); el límite de ejecución es el *fuel budget* de `vm/execution/ExecutionContext` (líneas 36, 93, 133).
+- Ninguna clase del módulo iFlow lleva contabilidad de ciclos ni CPI (`grep` sobre `src/iflow-vm/src/main/java/`); el límite de ejecución es el *fuel budget* de `vm/execution/ExecutionContext` (líneas 36, 93, 133).
 - El boceto es anterior al ABI de `HOST` v2 (2026-10-16/17) y al despacho de interrupciones en frontera de instrucción (D33).
 
 **Decisión.** El modelo «CPU física» **no se implementa como estructura de paquetes**. El «CPU / banco de registros / bus / firmware» de la especificación es un **modelo mental**, no un mapa de clases: la CPU se materializa como intérprete con contexto de ejecución reutilizable y el bus como `vm/memory/VmBus`. El boceto se descarta; no se importa.
@@ -481,7 +481,7 @@ Hechos que sostienen la decisión (verificados):
 
 **Implementación (2026-10-19).**
 `VmMemoryMap.java` (javadoc del contrato), `VmBus.java`, `VmDevice.java` (referencias), `VmDisplayTest.java`
-(test que lo fija), `docs/workdir/PLAN.md` (D35), `src/iflow/README.md` y `src/iflow/HDL.md`. Sin cambios
+(test que lo fija), `docs/workdir/PLAN.md` (D35), `src/iflow-vm/README.md` y `src/iflow-vm/HDL.md`. Sin cambios
 de comportamiento: el código ya se comportaba así; ahora está declarado y probado.
 
 
@@ -542,7 +542,7 @@ Cambios aplicados:
   pero no se evalúa ni se vuelve a mostrar.
 - Las menciones a SpEL en documentos históricos (release notes antiguas, prompts de diseño, auditorías)
   se conservan como registro, no como estado actual.
-- Cualquier política nueva debe implementarse en la VM y documentarse en `src/iflow/README.md`.
+- Cualquier política nueva debe implementarse en la VM y documentarse en `src/iflow-vm/README.md`.
 
 **Implementación (2026-10-20).** Código, build, lockfiles, metadata, schema del editor y documentación
 actualizados; `buildAll` pasa con 766 tests JVM (0 fallos, 11 skipped).

@@ -13,7 +13,7 @@
 
 ## 2. Non-Responsibilities
 
-- **No core formatting/routing** — delegates to `textformatter`/`iflow`
+- **No core formatting/routing** — delegates to `textformatter`/`iflow-vm`
 - **No platform-specific rendering** — platform adapters handle rendering
 
 ---

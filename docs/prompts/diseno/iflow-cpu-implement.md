@@ -480,7 +480,7 @@ por VM y por el tamaño de cada entrada.
 | Memoria física | Validar frame y rango antes de traducir; `VmException`, nunca `AIOOBE`; frames dispersos acotados. |
 | Input ABI | Campos con longitud/escape o TLV; UTF-8 sin cortar caracteres; ausencia distinta de la cadena `"null"`. |
 | Tests / compilador | Recompilar fixtures, assembler y compiler; tests de 32 bits, ROM, arranque, memoria, IRQ y fronteras. |
-| Documentación | README, `src/iflow/README.md`, wiki histórica y esta auditoría. |
+| Documentación | README, `src/iflow-vm/README.md`, wiki histórica y esta auditoría. |
 
 Esto no es un parche de `SoftMMU`: es una VM nueva o un modo 32 bits separado. El VM de 16 bits y el
 de 32 bits no deberían compartir el mismo intérprete sin una separación clara de ISA y formato.

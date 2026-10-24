@@ -18,7 +18,7 @@
 **iFlow no se abandona ni se elimina.** Se mantienen dos líneas paralelas que comparten el contrato
 de políticas del host, pero no el mismo runtime:
 
-- **`iflow-vm` — VM propia de 32 bits.** Es la evolución de la VM actual (`src/iflow/`), con las
+- **`iflow-vm` — VM propia de 32 bits.** Es la evolución de la VM actual (`src/iflow-vm/`), con las
   mejoras pendientes de `docs/prompts/diseno/iflow-cpu-implement.md`: memoria/MMU de 32 bits, ISA `.flow` revisada,
   BIOS/kernel/scheduler, IRQ, tiempo, persistencia y concurrencia. Conserva el compilador
   `tools/iflow-compiler/` y los artefactos `.flow`. No se borra nada de la base actual.
@@ -39,7 +39,7 @@ cuando ambas estén listas.
 - La configuración por módulo y el editor web como superficies de autoría.
 - Las decisiones de seguridad que no dependen del runtime: sandbox, capabilities, límites duros de
   memoria/tiempo/tamaño, validación de artefactos y verificación de integridad.
-- **`src/iflow/` como base de `iflow-vm`**: código, tests, fixtures y compilador se conservan y
+- **`src/iflow-vm/` como base de la VM de 32 bits**: código, tests, fixtures y compilador se conservan y
   evolucionan en la línea de 32 bits. **No se borra.**
 - **WebAssembly + Chicory** como línea `iflow-wasm`, con módulo propio en `src/iflow-wasm/`.
 
@@ -83,7 +83,7 @@ Reglas de diseño:
 
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
-| **V0 — Módulo y spec** | Renombrar `src/iflow/` a `src/iflow-vm/`, actualizar Gradle/CI/docs y enlazar la especificación v3 `docs/prompts/diseno/iflow-cpu-implement.md` | `:src:iflow-vm:test` compila; la spec v3 queda enlazada |
+| **V0 — Módulo y spec** | `src/iflow-vm/` renombrado, Gradle/CI/docs actualizados y especificación v3 enlazada | ✅ `:src:iflow-vm:build`, `:src:iflow-wasm:build` y `:src:host:build` verificados con JDK 21 |
 | **V1 — Contrato 32 bits** | ADR de ISA, memoria/MMU, IRQ, scheduler, tiempo y ABI `HOST` v3; compatibilidad `.flow` | Contrato congelado antes de tocar el núcleo |
 | **V2 — Núcleo** | CPU/MMU/bus de 32 bits, arranque BIOS/kernel, fixtures actualizados | Tests de memoria, privilegios y arranque |
 | **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
@@ -94,7 +94,7 @@ Reglas de diseño:
 
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
-| **W0 — Scaffold** | `src/iflow-wasm/` creado, dependencia Chicory, loader mínimo y lockfile/verificación iniciales | Módulo Gradle incluido; falta validar el build y regenerar metadatos con JDK |
+| **W0 — Scaffold** | `src/iflow-wasm/` creado, dependencia Chicory, loader mínimo y lockfile/verificación iniciales | ✅ Módulo Gradle incluido; `:src:iflow-wasm:build` validado con JDK 21 y Chicory 1.4.0 |
 | **W1 — Contrato** | ADR del motor Wasm: imports/exports, capabilities, límites, errores, ciclo de vida | Contrato revisado y congelado antes de escribir el motor |
 | **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | Test unitario con un módulo mínimo compilado |
 | **W3 — Integración** | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.wasm` |
@@ -114,8 +114,8 @@ Reglas de diseño:
 ### Próxima acción inmediata (V0/W0/W1)
 
 1. Mantener `docs/prompts/diseno/iflow-cpu-implement.md` como especificación técnica de referencia v3 de la VM de 32 bits.
-2. Conservar `src/iflow/` como base de `iflow-vm` y planificar su renombre a `src/iflow-vm/`.
-3. Validar el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) en un entorno con JDK.
+2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
+3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. Escribir el ADR del motor Wasm y el ADR de la VM de 32 bits antes de implementar núcleos.
 
 ---
@@ -127,7 +127,7 @@ Reglas de diseño:
 | core-api (modelo atómico + SPI) | ✅ estable, JDK-puro | tests |
 | kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
 | textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
-| iflow (router/reglas/rate-limit per-key) | 🧱 base de `iflow-vm`: se conserva y evoluciona a 32 bits; no se borra | tests actuales |
+| iflow-vm (router/reglas/rate-limit per-key) | 🧱 módulo `src/iflow-vm/`: se conserva y evoluciona a 32 bits; no se borra | tests actuales |
 | iflow-wasm (WebAssembly + Chicory) | 🧪 scaffold creado: módulo, dependencia y loader mínimo; sin integración | pendiente de build |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
@@ -227,7 +227,7 @@ export JAVA_HOME=/opt/javac/x64/21
 ./gradlew --offline build
 ```
 
-> 🧱 **Toolchain de iFlow VM (2026-10-23).** `tools/iflow-compiler/` y `:src:iflow:test` son la
+> 🧱 **Toolchain de iFlow VM (2026-10-23).** `tools/iflow-compiler/` y `:src:iflow-vm:test` son la
 > base de `iflow-vm`; se conservan y evolucionan a 32 bits. En paralelo, `iflow-wasm` usa Chicory y
 > artefactos `.wasm`, no `.flow`.
 
@@ -560,7 +560,7 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | **core-api** (SPI + Modelo) | Module/ModuleDescriptor registration, Semver parsing & compatibility, Message/Builder inmutabilidad, Direction expansion (8 kinds), Actor equality & serialization | SPI configs, Message builders, Direction enums | Valid ModuleDescriptors, correct semver ranges, immutable Messages, expanded receiver lists |
 | **kernel** (ModuleLoader + Graph) | Tarjan cycle detection, CONTRACT_MISMATCH / JVM_MISMATCH handling, Environment bootstrap order, ServiceLoader discovery | Module JARs with varying semver/JVM reqs | Correct load order, proper mismatch degradation, no cycles |
 | **textformatter** (MiniMessage) | TemplateRenderer with `<tr>` tags, MiniEscape injection safety, PlaceholderResolver (PAPI/identity), ChannelRegistry load/save, Format groups per event type | MiniMessage templates, raw text, PAPI placeholders | Escaped output, translated segments, correct channel formats |
-| **iflow** (VM + policies) | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `HOST` services, RateLimiter per-key, PermissionChecker (base + send/receive), fuel budget and max-steps guard | `.flow` programs, message streams, permission maps | Correct routing decisions, rate-limited drops, permission-gated delivery |
+| **iflow-vm** (VM + policies) | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `HOST` services, RateLimiter per-key, PermissionChecker (base + send/receive), fuel budget and max-steps guard | `.flow` programs, message streams, permission maps | Correct routing decisions, rate-limited drops, permission-gated delivery |
 | **gtranslate / ltranslate** | Provider selection & fallback, HttpTransport pool & rate-limit, Translation cache TTL, Error handling (429, 5xx, timeout) | Text batches, provider configs, mock HTTP | Translated text, proper fallback, metrics recorded |
 | **sync-* (discord/telegram/http/tcpudp/velocity/websocket)** | Sink start/stop idempotency, MessageCodec encode/decode, Discord gateway reconnect, Telegram watermark offset, TCP/UDP raw framing, WebSocket subscription | Events, config YAML, mock sockets | Delivered payloads, acknowledged receipts, no leaks |
 | **host** (SuiteHost + Dispatcher) | ConfigLoader round-trip, MessageDispatcher Direction→receivers, ChatDelivery port contract, ActorDirectory snapshot anti-CME, Reload atomicity | Config files, Actor sets, Direction enums | Parsed config, delivered messages, thread-safe snapshots |
@@ -609,8 +609,8 @@ Objetivo: Cubrir cada módulo/sección del proyecto con tests que definan claram
 | **ConfigLoader type field** | Lee `type` (CHAT|EVENT) de `channels/*.yml`, default CHAT, `ConfigPath.CHANNEL_TYPE` en enum centralizado | `host`, `spigot-host`, `fabric-host` |
 | **Messages Module** | i18n centralizado EN/ES, `MessagesCatalog` singleton, reemplaza strings hardcodeados | `suite/messages` |
 | **Fixes bugs heredados** | `SpigotScheduler.ticks()` redondeo, `NmsLocaleBridge` cache, `RateLimiter` per-key (no 1), `HttpSink` idempotente, `TcpSink`/`UdpSink` volatile, memory pressure 10MB | `spigot-host`, `fabric-host`, `sync-*` |
-| **Message immutable + withX()** | `withLangTarget`, `withText`, `withCancelled`, `withResolvedSourceLanguage`, `Builder.from()` | `core-api`, `iflow`, `host` |
-| **RateLimiter per-key** | Token bucket por `channel + actor`, capacidad = `channel.rateLimitPerSecond()` | `iflow` |
+| **Message immutable + withX()** | `withLangTarget`, `withText`, `withCancelled`, `withResolvedSourceLanguage`, `Builder.from()` | `core-api`, `iflow-vm`, `host` |
+| **RateLimiter per-key** | Token bucket por `channel + actor`, capacidad = `channel.rateLimitPerSecond()` | `iflow-vm` |
 | **Debug endpoint seguro** | 127.0.0.1:9091, auth token `X-Debug-Token`, sin `/debug/simulate`, sin CORS * | `observability` |
 | **Discord respeta iFlow** | `mirror(DispatchReport)` solo si `delivered > 0` | `spigot-host` |
 | **Language detection O(1)** | `resolvedSourceLanguage` caché en Message, `SuiteHost.resolveSourceLanguage()` | `core-api`, `host` |
@@ -891,8 +891,8 @@ source ~/.nvm/nvm.sh
 # Web editor
 cd src/web-editor && npm run check && npm run test:integration
 
-# Suite Java (orden; offline salvo deps nuevas; incluye iflow e iflow-wasm)
-for m in core-api kernel textformatter iflow iflow-wasm gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket sync-velocity host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
+# Suite Java (orden; offline salvo deps nuevas; incluye iflow-vm e iflow-wasm)
+for m in core-api kernel textformatter iflow-vm iflow-wasm gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket sync-velocity host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
   (cd src/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
 done
 
@@ -915,7 +915,7 @@ Git: commits convencionales por tema; push SOLO con autorización explícita.
 ```bash
 # Se conserva para la línea iflow-vm; no borrar.
 cd tools/iflow-compiler && npm run build && npm run test:validation
-./gradlew :src:iflow:iflowAsm
+./gradlew :src:iflow-vm:iflowAsm
 ```
 
 **Toolchain Wasm/Chicory (W0 en adelante):**
@@ -992,7 +992,7 @@ Todos los items P1 resueltos:
 
 | Área | Estado | Comentario |
 |------|--------|------------|
-| **Core modules** | ✅ Compilan + tests pasan | core-api, iflow, host, textformatter, manager-impl, observability, extension-api, inworld, sync-velocity, sync-websocket |
+| **Core modules** | ✅ Compilan + tests pasan | core-api, iflow-vm, host, textformatter, manager-impl, observability, extension-api, inworld, sync-velocity, sync-websocket |
 | **Bugs críticos (C1-C5)** | ✅ Arreglados | Message contract, MessageEvent, Module Manager, DebugEndpoint, Compilación |
 | **Bugs altos (H1-H5)** | ✅ Arreglados | RateLimiter, Discord bypass, Language cache, ConfigValidator, Channel/Direction |
 | **Security Sprint 1** | ✅ Done | SpEL eliminado, YAML SafeConstructor, MiniEscape, SafeConstructor args |
@@ -1201,7 +1201,7 @@ lote 4. Cualquier otro ID responde `status=5 (UNSUPPORTED)`.
 
 | Fuente | Estado |
 |---|---|
-| `src/iflow/README.md` | ✅ v2 |
+| `src/iflow-vm/README.md` | ✅ v2 |
 | `tools/iflow-compiler/README.md` | ✅ v2 |
 | `docs/prompts/diseno/iflow-cpu-implement.md` §11 | ✅ v2 |
 | `HostServiceRegistry` (impl) | ✅ v2 |
@@ -1212,7 +1212,7 @@ Todas resueltas:
 
 1. **D11 — `R4`**: ✅ **resultado escalar de salida** (extras desde `R5`).
 2. **Prop IDs** tras D2: ✅ reasignados a `0x00–0x03` dentro de su scope.
-3. **Switch bare-metal (D6)**: ✅ tarea Gradle `:src:iflow:iflowAsm` + `-Piflow.baremetal=true`; el CLI expone `--no-firmware`. (`65af8ce`)
+3. **Switch bare-metal (D6)**: ✅ tarea Gradle `:src:iflow-vm:iflowAsm` + `-Piflow.baremetal=true`; el CLI expone `--no-firmware`. (`65af8ce`)
 
 ### Lista de cambios (archivos a tocar)
 
@@ -1220,20 +1220,20 @@ Todas resueltas:
 |---|---|---|
 | `tools/iflow-compiler/src/assembler.ts` | validador `imm16`/`label` | ✅ hecho (`ae9f635`) |
 | `tools/iflow-compiler/test/validation/*` | fixture `valid-symbolic-immediate` | ✅ hecho (`ae9f635`) |
-| `src/iflow/.../isa/Opcode.java` | `instructionSize(RET)` 2→1 | ✅ hecho (`252be08`) |
-| `src/iflow/.../isa/OpcodeTest.java` | assert de tamaño `RET` | ✅ hecho (`252be08`) |
-| `src/iflow/.../execution/VmInterpreter.java` | `executeHost`: mapeo `R0=op,R1=options,R2=base,R3=length,R4=result` | ✅ hecho (`a946d57`) |
-| `src/iflow/.../service/ServiceResult.java` | plegar `bytesTransferred` en `length`; exponer `status` numérico | ✅ hecho (`a946d57`) |
-| `src/iflow/.../service/HostServiceRegistry.java` | quitar `argOffset`; `propId = options & 0x00FF`; exponer `status`; `length` in/out | ✅ hecho (`a946d57`) |
-| `src/iflow/.../service/HostServiceRegistryTest.java` | reescribir a la v2 (+ tests de status/options/BUFFER_TOO_SMALL) | ✅ hecho (`a946d57`) |
+| `src/iflow-vm/.../isa/Opcode.java` | `instructionSize(RET)` 2→1 | ✅ hecho (`252be08`) |
+| `src/iflow-vm/.../isa/OpcodeTest.java` | assert de tamaño `RET` | ✅ hecho (`252be08`) |
+| `src/iflow-vm/.../execution/VmInterpreter.java` | `executeHost`: mapeo `R0=op,R1=options,R2=base,R3=length,R4=result` | ✅ hecho (`a946d57`) |
+| `src/iflow-vm/.../service/ServiceResult.java` | plegar `bytesTransferred` en `length`; exponer `status` numérico | ✅ hecho (`a946d57`) |
+| `src/iflow-vm/.../service/HostServiceRegistry.java` | quitar `argOffset`; `propId = options & 0x00FF`; exponer `status`; `length` in/out | ✅ hecho (`a946d57`) |
+| `src/iflow-vm/.../service/HostServiceRegistryTest.java` | reescribir a la v2 (+ tests de status/options/BUFFER_TOO_SMALL) | ✅ hecho (`a946d57`) |
 | consumidores de bytecode (`VmConfigLoader`, `VmPolicyEngine`, `PolicyPrograms`, `loadtest`, `VmIntegrationTest`) | migrar a v2 | ✅ hecho (`a946d57`, `1c33e5b`) |
-| `src/iflow/.../isa/ProgramImageParser.java` | límite de code 1→2 páginas (ROM + usuario) | ✅ hecho (`1c33e5b`) |
+| `src/iflow-vm/.../isa/ProgramImageParser.java` | límite de code 1→2 páginas (ROM + usuario) | ✅ hecho (`1c33e5b`) |
 | `tools/iflow-compiler/src/types.ts` | `INSTRUCTION_SIZES[RET]` 2→1 | ✅ hecho (`252be08`) |
 | `tools/iflow-compiler/src/assembler.ts` | `RET` spec `min:0`; `emitConst` → valor; origin 0x1000 si firmware ON; `.firmware` re-base | ✅ hecho (`9743754`) |
 | `tools/iflow-compiler/src/cli.ts` | `--no-firmware` | ✅ hecho (`9743754`) |
 | `tools/iflow-compiler/test/*.flowasm` + `.flow`/`.lst` | quitar `.origin 0x0000`; HOST v2; regenerar artefactos | ✅ hecho (`9743754`) |
-| `src/iflow/README.md`, `tools/iflow-compiler/README.md`, `docs/prompts/diseno/iflow-cpu-implement.md` | ABI v2 (fuente única) | ✅ hecho (`da2a0cb`) |
-| `src/iflow/build.gradle` | tarea `iflowAsm`/`iflowCompilerBuild` + `-Piflow.baremetal` | ✅ hecho (`65af8ce`) |
+| `src/iflow-vm/README.md`, `tools/iflow-compiler/README.md`, `docs/prompts/diseno/iflow-cpu-implement.md` | ABI v2 (fuente única) | ✅ hecho (`da2a0cb`) |
+| `src/iflow-vm/build.gradle` | tarea `iflowAsm`/`iflowCompilerBuild` + `-Piflow.baremetal` | ✅ hecho (`65af8ce`) |
 | `tools/iflow-compiler/examples/policy.flowasm` | ejemplo de policy v2 (default de `iflowAsm`) | ✅ hecho (`65af8ce`) |
 
 ### Bitácora de progreso
@@ -1351,7 +1351,7 @@ mapa (`CONSTANTS_MAX_SIZE` evita que las constantes invadan datos).
   `FirmwareIntegration`, `VmPolicyEngine`, `HostServiceRegistry`, `PolicyPrograms`,
   `EndToEndIntegration`; nuevos `VmMemoryMapTest` y `ProgramImageParserTest`.
 
-**Verificación:** `:src:iflow:test` (261 tests), `:src:host:test`, `:src:loadtest:test`
+**Verificación:** `:src:iflow-vm:test` (261 tests), `:src:host:test`, `:src:loadtest:test`
 → BUILD SUCCESSFUL; suite de validación del compilador 11/11; `firmware.flow` sigue en
 4615 bytes (mismo tamaño; cambian bytes de equates y símbolos).
 
@@ -1775,22 +1775,22 @@ Las opciones del build dejan de pasarse como `-P` sueltos y viven **documentadas
 
 | Opción | Default | Para |
 |---|---|---|
-| `logger.debug` | `false` | inyecta `DEBUG` en `DebugConfig.java` (y muestra stdout/stderr en `:src:iflow:test`) |
-| `iflow.source` | `examples/policy.flowasm` | entrada de `:src:iflow:iflowAsm` |
-| `iflow.output` | `<buildDir>/iflow/policy.flow` | salida de `:src:iflow:iflowAsm` |
+| `logger.debug` | `false` | inyecta `DEBUG` en `DebugConfig.java` (y muestra stdout/stderr en `:src:iflow-vm:test`) |
+| `iflow.source` | `examples/policy.flowasm` | entrada de `:src:iflow-vm:iflowAsm` |
+| `iflow.output` | `<buildDir>/iflow/policy.flow` | salida de `:src:iflow-vm:iflowAsm` |
 | `iflow.origin` | (lo decide el modo) | origin de ensamblado |
 | `iflow.baremetal` | `false` | sin ROM de firmware |
 | `buildTimestamp` | `0` en SNAPSHOT | releases reproducibles |
 
 Tocados: `gradle.properties` (nuevo), `build.gradle` (raíz), `src/logger/build.gradle`,
-`src/iflow/build.gradle`. Verificado que el default compila y que `-Plogger.debug=true` recompila
+`src/iflow-vm/build.gradle`. Verificado que el default compila y que `-Plogger.debug=true` recompila
 con `DEBUG=true` y restaura el placeholder. **No** se añade `org.gradle.*` al archivo para no
 alterar el comportamiento del build.
 
 ### D28 — Mapeo formal a HDL (✅ aplicado)
 
 Objetivo: legibilidad **estándar** de la correspondencia VM↔hardware. Entregable: un documento
-`src/iflow/HDL.md` con:
+`src/iflow-vm/HDL.md` con:
 
 - **Componentes → módulos**: `VmInterpreter` (CPU/control/unidad de decodificación),
   `SoftMMU` (MMU: traducción + permisos), `PhysicalMemory` (RAM), `VmBus` (interconnect/decodificador
@@ -1803,7 +1803,7 @@ Objetivo: legibilidad **estándar** de la correspondencia VM↔hardware. Entrega
   decodificación de MMIO por el interconnect.
 - **Estructura/ISA**: formato de instrucción, opcodes y mapa de memoria (`VmMemoryMap`).
 
-**Entregado**: `src/iflow/HDL.md` (§1 vista del SoC, §2 módulos entidad↔clase, §3 señales del bus,
+**Entregado**: `src/iflow-vm/HDL.md` (§1 vista del SoC, §2 módulos entidad↔clase, §3 señales del bus,
 §4 clock/reset, §5 flujo de datos, §6 decodificación/mapa, §7 estructura código↔HDL, §8 hardware
 previsto, §9 nomenclatura). Enlazado desde `README.md`.
 
@@ -2025,7 +2025,7 @@ completa si se deshabilita la pantalla**.
 - Tests: `VmDisplayTest` reescrito para la regla de página, con un caso de **reutilización**
   (`pageIsPlainRamWhileTheScreenIsDisabled`: RAM → framebuffer → RAM al deshabilitar);
   `VmPolicyEngineTest.programDrawsOnTheMemoryMappedScreen` reubicado a `0xF000`.
-- Documentación: `src/iflow/README.md`, `src/iflow/HDL.md` y `tools/iflow-compiler/README.md`.
+- Documentación: `src/iflow-vm/README.md`, `src/iflow-vm/HDL.md` y `tools/iflow-compiler/README.md`.
 
 **Dato verificado de paso.** El firmware ensamblado termina en **`0x029B`** (668 B), no en `0x0204`:
 el README era correcto y el comentario de `VmMemoryMap` estaba obsoleto (corregido). Quedan **3172 B**
@@ -2059,7 +2059,7 @@ cuyo impacto se limita a forzar el cold-boot de la propia máquina del programa 
 - Test que lo fija: `VmDisplayTest.programMayDriveDeviceRegistersInsideTheKernelPage`. Comprueba las
   dos caras: un maestro `PROGRAM` recibe `PRIVILEGE_FAULT` al escribir **RAM** en la página kernel R/X,
   pero **sí** configura la pantalla a través de la apertura.
-- Documentación: `src/iflow/README.md` (mapa de memoria) y `src/iflow/HDL.md` (§1, *interconnect*).
+- Documentación: `src/iflow-vm/README.md` (mapa de memoria) y `src/iflow-vm/HDL.md` (§1, *interconnect*).
 
 **Alternativas descartadas.**
 

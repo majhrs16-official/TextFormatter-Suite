@@ -43,7 +43,7 @@
 **All modules** depend on `core-api`:
 - `kernel` — uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
 - `textformatter` — uses `Message`, `Channel`, `TranslationService`, `PlaceholderResolver`
-- `iflow` — uses `Message`, `Channel`, `ActorDirectory` SPI
+- `iflow-vm` — uses `Message`, `Channel`, `ActorDirectory` SPI
 - `host` — uses nearly all SPIs and domain types (**Clean Architecture: no compile deps on translators**)
 - `gtranslate`/`ltranslate` — implement `TranslatorProvider` SPI (runtime discovery via ServiceLoader)
 - `transport` — uses `Message` for codecs

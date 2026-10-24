@@ -24,7 +24,7 @@ dependencies {
     implementation project(':src:kernel')
     implementation project(':src:host')
     implementation project(':src:textformatter')
-    implementation project(':src:iflow')
+    implementation project(':src:iflow-vm')
     implementation project(':src:messages')
     implementation 'net.kyori:adventure-api:4.17.0'
 

@@ -2,18 +2,18 @@
 
 > **This page describes the current iFlow virtual machine.**
 >
-> **2026-10-23:** this VM is the base of **`iflow-vm`**, which evolves to 32 bits. The parallel
+> **2026-10-23:** this VM is **`iflow-vm`**, which evolves to 32 bits. The parallel
 > line **`iflow-wasm`** (WebAssembly + Chicory) lives in `src/iflow-wasm` and does not inherit this
 > ISA or ABI.
 >
 > The old `DefaultRouter` / `Rule` / SpEL-based rule engine was removed. Its
 > documentation is preserved only in git history; it does **not** describe the
-> code in `src/iflow`. The current implementation is a 16-bit interpreted VM
+> code in `src/iflow-vm`. The current implementation is a 16-bit interpreted VM
 > with a binary `.flow` image.
 
 ## What it is
 
-`iflow` is the routing and policy module of TextFormatter Suite. It implements
+`iflow-vm` is the routing and policy module of TextFormatter Suite. It implements
 the `Router` SPI and decides what happens to a message (deliver, drop, reject or
 redirect) by executing a program on a small virtual machine.
 
@@ -74,13 +74,13 @@ through `VmPolicyEngine.display()` for diagnostics and tests.
 The ISA includes data transfer, indirect memory access, arithmetic, logic,
 shifts, comparisons, branches, calls, stack operations, `HOST`, `RAISE`, `ACK`,
 `RET` and `HALT`. See the full tables and examples in
-[`src/iflow/README.md`](../../src/iflow/README.md) and the hardware-oriented
-mapping in [`src/iflow/HDL.md`](../../src/iflow/HDL.md).
+[`src/iflow-vm/README.md`](../../src/iflow-vm/README.md) and the hardware-oriented
+mapping in [`src/iflow-vm/HDL.md`](../../src/iflow-vm/HDL.md).
 
 ## Build and test
 
 ```bash
-./gradlew :src:iflow:test --offline --no-daemon
+./gradlew :src:iflow-vm:test --offline --no-daemon
 ```
 
 The module currently has 397 tests, including interpreter, MMU, host services,
@@ -91,4 +91,4 @@ policy engine and firmware integration.
 If you are looking for the old declarative `rules.yml` syntax with `cond`,
 `action`, `target` and SpEL conditions, that engine no longer exists in the
 current code. Do not use old wiki revisions or external snippets as a reference
-for `src/iflow`; use the module README and the tests instead.
+for `src/iflow-vm`; use the module README and the tests instead.

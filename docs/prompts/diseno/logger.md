@@ -18,11 +18,11 @@ Necesito implementar un sistema de logging general y de ultra bajo nivel ubicado
   - Salida estándar (`System.out.println`).
   - Archivo principal del plugin: `<servidor>/plugins/<manager>/suite.log`.
   - Archivo de respaldo temporal: `/tmp/TextFormatter-Suite.log`.
-- Cada módulo mantendrá su propio formato distintivo al registrar sus eventos (por ejemplo, `iflow` volcando el estado de la VM por ciclo de instrucción, y otros módulos como GTranslate registrando pasos de red, parsing de URL, etc.).
+- Cada módulo mantendrá su propio formato distintivo al registrar sus eventos (por ejemplo, `iflow-vm` volcando el estado de la VM por ciclo de instrucción, y otros módulos como GTranslate registrando pasos de red, parsing de URL, etc.).
 
 ---
 
 ### Tareas a realizar:
 1. Crear el módulo unificado en `/src/logger` que soporte la gestión general de logs (`info`, `warn`, `error`) y los destinos de archivos/consola.
 2. Definir la propiedad booleana `final static` controlada por la compilación de Gradle (sin `System.getProperty`).
-3. Implementar el método estático `Logger.debug(...)` listo para ser consumido por los diferentes módulos (empezando por `iflow`) garantizando la eliminación de código muerto por parte del compilador Java.
+3. Implementar el método estático `Logger.debug(...)` listo para ser consumido por los diferentes módulos (empezando por `iflow-vm`) garantizando la eliminación de código muerto por parte del compilador Java.

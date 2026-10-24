@@ -58,12 +58,12 @@ no implementa todavía el ABI de host ni el contrato de políticas.
 ## Build
 
 ```bash
-./gradlew :src:iflow-wasm:test
+./gradlew :src:iflow-wasm:build
 ```
 
-> **Pendiente de entorno:** el lockfile y las entradas de `gradle/verification-metadata.xml` para
-> Chicory se añadieron de forma inicial, pero deben regenerarse/validarse con Gradle en un entorno
-> con JDK antes de declarar W0 cerrado. En esta sesión no hay `java` disponible.
+> **Validación:** `:src:iflow-wasm:build` pasa con JDK 21 y Chicory `1.4.0`. El lockfile está
+> resuelto y `gradle/verification-metadata.xml` incluye la verificación SHA-256/SHA-512 de
+> `asm-bom:9.8`, transitiva de Chicory.
 
 ## Próximos pasos
 

@@ -114,7 +114,7 @@ chat:
 │  │  Dispatcher │  ConfigLoad │  Translator │  ModuleManager  │ │
 │  └─────────────┴─────────────┴─────────────┴─────────────────┘ │
 ├─────────────────────────────────────────────────────────────────┤
-│  textformatter │ iflow │ kernel │ transport │ gtranslate │ ... │
+│  textformatter │ iflow-vm │ kernel │ transport │ gtranslate │ ... │
 ├─────────────────────────────────────────────────────────────────┤
 │                        core-api (SPI)                           │
 └─────────────────────────────────────────────────────────────────┘
@@ -127,7 +127,7 @@ chat:
 | `src/core-api` | 17 | SPI + model (JDK-only): `Module`, `Message`, `Translator`, `SyncSink`, `ActorDirectory`, `TranslationService` |
 | `src/kernel` | 17 | `ModuleLoader`, `ModuleGraph` (Tarjan, self-cycle detection, semver) |
 | `src/textformatter` | 17 | MiniMessage engine, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` translation |
-| `src/iflow` | 17 | `DefaultRouter`, `Rule`, `RateLimiter` (per-key, `ReentrantReadWriteLock`) |
+| `src/iflow-vm` | 17 | `DefaultRouter`, `Rule`, `RateLimiter` (per-key, `ReentrantReadWriteLock`) |
 | `src/gtranslate` | 17 | Google Translate provider (web scraping, UA rotation, rate limit) |
 | `src/ltranslate` | 17 | LibreTranslate provider (self-hosted/public) |
 | `src/sync-discord` | 17 | Discord v10 (WebSocket + REST), `char[]` tokens |

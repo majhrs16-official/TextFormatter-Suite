@@ -28,7 +28,7 @@ iflow es un firewall y router declarativo de mensajes. Decide si un mensaje debe
 
 Forma parte de una arquitectura modular que separa responsabilidades:
 
-- `iflow`: políticas, condiciones, transformaciones de routing, control de entrega y rate limiting.
+- `iflow-vm`: políticas, condiciones, transformaciones de routing, control de entrega y rate limiting.
 - `textformatter`: formato y renderizado de mensajes.
 - `gtranslate` / `ltranslate`: traducción.
 - `sync-*`: sincronización con servicios y plataformas externas.
@@ -595,7 +595,7 @@ Una excepción de programa no debe convertirse accidentalmente en una excepción
 > escapan al servidor. La **tabla de IRQ** la define el BIOS en memoria (no el programa de usuario),
 > con **fuentes de interrupción por E/S** (D33, implementada): el runtime la lee y despacha la línea
 > como una llamada de hardware. El firmware ROM es **activo** (D32): resetea en su rutina de POST y
-> encadena con el `main`. Ver `src/iflow/HDL.md` y `docs/workdir/PLAN.md`.
+> encadena con el `main`. Ver `src/iflow-vm/HDL.md` y `docs/workdir/PLAN.md`.
 
 ---
 

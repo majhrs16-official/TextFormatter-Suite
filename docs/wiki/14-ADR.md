@@ -13,7 +13,7 @@ TextFormatter Suite needs a maintainable, testable architecture that supports mu
 
 Adopt **Hexagonal Architecture** (Ports & Adapters) with:
 - **Core** (`core-api`): Pure Java, zero dependencies, contains SPI interfaces and domain models
-- **Modules** (`textformatter`, `iflow`, `kernel`, etc.): Implement SPI interfaces, depend only on `core-api`
+- **Modules** (`textformatter`, `iflow-vm`, `kernel`, etc.): Implement SPI interfaces, depend only on `core-api`
 - **Hosts** (`spigot-host`, `fabric-host`): Platform adapters, depend on modules + platform APIs
 - **Sync**: Independent modules implementing `SyncSink` SPI
 

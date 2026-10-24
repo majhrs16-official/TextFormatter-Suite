@@ -1,5 +1,8 @@
 # iFlow VM — debug capture logs
 
+> **Nota:** los logs conservan `:src:iflow` porque son anteriores al renombre de V0. La ruta actual
+> del módulo es `src/iflow-vm/` y la tarea Gradle es `:src:iflow-vm:test`.
+
 Generated with the zero-overhead logger compiled with `-Plogger.debug=true`.
 
 ## Files

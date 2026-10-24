@@ -16,7 +16,7 @@
 ## 2. Non-Responsibilities
 
 - **No Discord bot commands** — only message sending
-- **No message routing** — `iflow` decides what to sync
+- **No message routing** — `iflow-vm` decides what to sync
 - **No platform-specific Minecraft code** — pure JDA
 
 ---

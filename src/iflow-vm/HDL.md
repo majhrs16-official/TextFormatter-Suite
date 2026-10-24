@@ -1,6 +1,6 @@
-# iflow — Mapeo a HDL (descripción hardware)
+# iflow-vm — Mapeo a HDL (descripción hardware)
 
-> **Propósito (D28).** Este documento describe la VM iflow como un *SoC*: qué
+> **Propósito (D28).** Este documento describe la VM iflow-vm como un *SoC*: qué
 > entidades existen, cómo se interconectan, qué señales lleva cada bus y cómo
 > fluyen los datos. El objetivo es que la arquitectura sea legible con la
 > nomenclatura estándar de una descripción hardware (módulos, puertos, buses,

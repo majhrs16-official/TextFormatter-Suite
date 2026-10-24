@@ -20,7 +20,7 @@
 ## 2. Non-Responsibilities
 
 - **No core formatting logic** — delegates to `textformatter` via `host`
-- **No routing logic** — delegates to `iflow` via `host`
+- **No routing logic** — delegates to `iflow-vm` via `host`
 - **No translation logic** — delegates to `gtranslate`/`ltranslate` via `host`
 - **No sync logic** — delegates to sync modules via `host`
 - **No module loading** — delegates to `kernel` via `host`
@@ -34,7 +34,7 @@
 | `core-api` | Compile | All SPIs (via Maven coordinates) |
 | `kernel` | Compile | Module loading |
 | `host` | Compile | Bootstrap, dispatch, config |
-| `iflow` | Compile | Routing |
+| `iflow-vm` | Compile | Routing |
 | `textformatter` | Compile | Formatting |
 | `sync-discord` | Compile | Discord sync |
 | `sync-velocity` | Compile | Velocity sync |

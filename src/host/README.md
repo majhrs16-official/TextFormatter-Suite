@@ -1,6 +1,6 @@
 # host — Shared Bootstrap, Dispatch & Configuration
 
-> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapters (`spigot-host`, `fabric-host`) extend this.
+> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow-vm`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapters (`spigot-host`, `fabric-host`) extend this.
 
 ---
 
@@ -33,7 +33,7 @@
 | `core-api` | Compile | All SPIs, domain types |
 | `kernel` | Compile | `ModuleLoader` for module discovery |
 | `textformatter` | Compile | `TextFormatter`, `ChannelRegistry` |
-| `iflow` | Compile | `Router` for message routing |
+| `iflow-vm` | Compile | `Router` for message routing |
 | `transport` | Compile | `HttpTransport` for webhook sync |
 | `gson` | Compile | Config schema generation |
 | `snakeyaml` | Compile | YAML config parsing |

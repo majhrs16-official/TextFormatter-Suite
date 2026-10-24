@@ -100,8 +100,8 @@ tasks.register('printSourceDirs') {
 //   iflow.origin     hex origin      (default: firmware/bare-metal decides)
 //   iflow.baremetal  true/false      (default: false)
 //
-//   ./gradlew :src:iflow:iflowAsm
-//   ./gradlew :src:iflow:iflowAsm -Piflow.source=path/to/prog.flowasm
+//   ./gradlew :src:iflow-vm:iflowAsm
+//   ./gradlew :src:iflow-vm:iflowAsm -Piflow.source=path/to/prog.flowasm
 //
 // Requires Node.js 18+ and tools/iflow-compiler/node_modules (run: npm ci).
 

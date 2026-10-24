@@ -18,7 +18,7 @@
 - **No transform execution** — there is no `TransformEngine`; `Preset.apply(...)` is an empty placeholder
 - **No policy evaluation** — routing, conditions and actions belong to the iFlow VM (`.flow`)
 - **No inline expressions** — SpEL and `PresetRule` conditions were removed from the repository
-- **No message routing** — `iflow` handles routing
+- **No message routing** — `iflow-vm` handles routing
 - **No formatting** — delegates to `textformatter`
 - **No platform-specific code** — pure Java/YAML
 

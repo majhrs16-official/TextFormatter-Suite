@@ -30,7 +30,7 @@ configurations.all {
 dependencies {
     implementation project(':src:core-api')
     implementation project(':src:kernel')
-    implementation project(':src:iflow')
+    implementation project(':src:iflow-vm')
     implementation project(':src:host')
     implementation project(':src:sync-discord')
     implementation project(':src:sync-http')

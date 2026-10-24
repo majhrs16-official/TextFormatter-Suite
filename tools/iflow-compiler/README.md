@@ -342,7 +342,7 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 ```
 
 `dist/` es un artefacto generado y **no se versiona**: se produce con `npm run build`
-(y también vía la tarea Gradle `:src:iflow:iflowCompilerBuild`).
+(y también vía la tarea Gradle `:src:iflow-vm:iflowCompilerBuild`).
 
 ---
 
@@ -385,7 +385,7 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 
 ## Referencias
 
-- [`src/iflow/README.md`](../../src/iflow/README.md) — VM architecture, ISA, services
+- [`src/iflow-vm/README.md`](../../src/iflow-vm/README.md) — VM architecture, ISA, services
 - [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica de referencia v3 de `iflow-vm`
-- [`src/iflow/src/main/java/.../VmInterpreter.java`] — Reference interpreter implementation
-- [`src/iflow/src/test/.../VmInterpreterTest.java`] — Instruction test vectors
+- [`src/iflow-vm/src/main/java/.../VmInterpreter.java`] — Reference interpreter implementation
+- [`src/iflow-vm/src/test/.../VmInterpreterTest.java`] — Instruction test vectors

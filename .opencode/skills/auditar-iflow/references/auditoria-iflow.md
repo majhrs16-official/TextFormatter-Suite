@@ -6,7 +6,7 @@ Realiza una auditoría técnica exhaustiva, crítica y verificable del módulo *
 **Repositorio:** https://github.com/majhrs16-official/TextFormatter-Suite
 
 **Alcance obligatorio:**
-- Todo el módulo `src/iflow/`.
+- Todo el módulo `src/iflow-vm/`.
 - Todo el compilador `tools/iflow-compiler/`.
 - Todos los README, especificaciones, documentos de diseño, ejemplos, programas ensamblados, fixtures y archivos de configuración relacionados con iFlow.
 - Todos los módulos externos de TextFormatter Suite que interactúen con iFlow, en la medida necesaria para comprobar sus contratos e integración.
@@ -88,7 +88,7 @@ Usa rutas relativas a la raíz del repositorio.
 
 Ejemplo de formato:
 
-`src/iflow/src/main/java/.../VmInterpreter.java:120-137`
+`src/iflow-vm/src/main/java/.../VmInterpreter.java:120-137`
 
 Los nombres de archivo y los números de línea deben proceder de la versión del código que realmente inspeccionaste. Comprueba las líneas antes de entregar el informe.
 

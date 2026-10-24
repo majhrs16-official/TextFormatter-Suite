@@ -20,7 +20,7 @@
 
 - No platform I/O: Discord, Telegram, HTTP, TCP/UDP and WebSocket live in their
   own sync modules.
-- No message formatting, translation or routing: `host`/`iflow` produce the
+- No message formatting, translation or routing: `host`/`iflow-vm` produce the
   `Message`; the bus only distributes it.
 - No persistence.
 

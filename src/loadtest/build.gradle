@@ -18,7 +18,7 @@ java {
 dependencies {
     implementation project(':src:core-api')
     implementation project(':src:textformatter')
-    implementation project(':src:iflow')
+    implementation project(':src:iflow-vm')
     implementation project(':src:host')
     implementation project(':src:transport')
     implementation project(':src:kernel')

@@ -15,7 +15,7 @@
 ## 2. Non-Responsibilities
 
 - **No bot commands/updates** — only message sending (no long polling/webhook)
-- **No message routing** — `iflow` decides what to sync
+- **No message routing** — `iflow-vm` decides what to sync
 - **No platform-specific Minecraft code** — pure HTTP
 
 ---

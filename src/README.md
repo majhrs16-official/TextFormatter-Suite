@@ -13,7 +13,7 @@ TextFormatter Suite
 │   ├── core-api          → Core interfaces, SPI, domain types
 │   ├── kernel            → Module loading & dependency resolution
 │   ├── textformatter     → Template engine, placeholders, channels
-│   ├── iflow             → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de `iflow-vm` 32 bits)
+│   ├── iflow-vm          → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de la VM de 32 bits)
 │   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; scaffold W0, sin integración aún
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
@@ -47,7 +47,7 @@ TextFormatter Suite
 **Key architectural principles observed in code:**
 - `core-api` has **zero dependencies** on other modules — it defines contracts only
 - `kernel` depends only on `core-api` — loads modules via SPI
-- `host` is the **integration hub** — wires core-api, textformatter, iflow, translations, transports
+- `host` is the **integration hub** — wires core-api, textformatter, iflow-vm, translations, transports
 - Platform adapters (`spigot-host`, `fabric-host`) depend on `host` + all sync modules
 - Sync modules depend on `core-api` + `transport` (and `kernel` for tests)
 - **No circular dependencies** between core modules
@@ -60,10 +60,10 @@ TextFormatter Suite
 |-----------|----------------|------------|---------|
 | `core-api` | Core interfaces, SPI, domain types (Module, Actor, Channel, TranslationService, SyncSink, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
-| `textformatter` | Template rendering (MiniMessage), placeholders, channel registry | `core-api` | `host`, `iflow`, `presets`, `spigot-host`, `fabric-host` |
-| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de `iflow-vm` 32 bits | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
+| `textformatter` | Template rendering (MiniMessage), placeholders, channel registry | `core-api` | `host`, `iflow-vm`, `presets`, `spigot-host`, `fabric-host` |
+| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; scaffold W0: carga e instancia módulos, sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
-| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
+| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow-vm`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
@@ -83,8 +83,8 @@ TextFormatter Suite
 | `sync-websocket` | WebSocket sync sink | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-velocity` | Velocity proxy sync sink | `core-api` | `fabric-host` |
 | `sync-bus` | Unified fan-out, deduplication, retries and sink lifecycle | `core-api` | `spigot-host`, `fabric-host` |
-| `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
-| `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
+| `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
+| `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |
 | `loadtest` | Load testing utilities | — | `fabric-host` |
 | `tester` | Testing utilities (Spigot-dependent) | `core-api` | `spigot-host` |
@@ -98,7 +98,7 @@ TextFormatter Suite
 | `core-api` | Contracts & SPI | Define all platform-agnostic interfaces | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, placeholders, channels | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
-| `iflow` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de `iflow-vm` 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowModule` | [iflow/README.md](iflow/README.md) |
+| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowModule` | [iflow-vm/README.md](iflow-vm/README.md) |
 | `iflow-wasm` | Motor WebAssembly con Chicory; scaffold W0 | `WasmModuleLoader`, parse/instantiate | — (sin `Module` aún) | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
@@ -134,9 +134,9 @@ TextFormatter Suite
   → ChannelRegistry.java
 ```
 
-### Understand Message Routing (iflow)
+### Understand Message Routing (iflow-vm)
 ```
-→ src/iflow/README.md#data-flow
+→ src/iflow-vm/README.md#data-flow
   → VmPolicyEngine.java
   → VmInterpreter.java / SoftMMU.java
   → VmConfigLoader.java (policy.flow)
@@ -246,7 +246,7 @@ TextFormatter Suite
 |----------|-------------------|---------------------|-------|
 | `core-api` → * | `core-api` is depended upon by all | Nothing depends on `core-api` internally | Pure interfaces, no implementations |
 | `kernel` → `core-api` | `kernel` uses `core-api` SPI | `core-api` must not depend on `kernel` | Module loading mechanism |
-| `host` → core modules | `host` integrates `textformatter`, `iflow`, translations, transports | Core modules must not depend on `host` | `host` is the integration hub |
+| `host` → core modules | `host` integrates `textformatter`, `iflow-vm`, translations, transports | Core modules must not depend on `host` | `host` is the integration hub |
 | Platform adapters → `host` | `spigot-host`/`fabric-host` depend on `host` | `host` must not depend on platform adapters | Platform-agnostic core |
 | Sync modules → `core-api` + `transport` | Sync modules implement `SyncSink` SPI | `core-api` must not depend on sync modules | Transport abstraction |
 | `manager-apt`/`manager-core` → `manager-spi` | Implementations depend on the SPI | SPI must not depend on implementations | Standard API/impl separation |
@@ -284,7 +284,7 @@ Platform Adapter (SpigotChatDelivery / FabricChatDelivery)
          ↓
 MessageDispatcher.dispatch()
          ↓
-Router.route() [iflow] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
+Router.route() [iflow-vm] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
          ↓
 TextFormatter.format() → MiniMessage + placeholder substitution
          ↓
@@ -330,7 +330,7 @@ Module.initialize() called in order
 | **Configuration** | `host` | `ConfigLoader`, `HostConfig`, `ConfigValidator`, `ConfigSchemaGenerator` |
 | **Module System** | `kernel` | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` |
 | **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` |
-| **Routing/Rules (VM)** | `iflow` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` |
+| **Routing/Rules (VM)** | `iflow-vm` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` |
 | **Translation** | `gtranslate`/`ltranslate` | `GTranslateProvider`, `LTranslateProvider` (implement `TranslationService`) |
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
 | **Observability** | `observability` | `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint`, `DebugEndpoint` |
@@ -365,7 +365,7 @@ Module.initialize() called in order
 | Understand overall architecture | `src/README.md` (this file) | Module READMEs |
 | Understand module loading | `kernel/src/main/java/me/majhrs16/suite/kernel/ModuleLoader.java` | `ModuleGraph.java` |
 | Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `ChannelRegistry.java` |
-| Understand routing (VM) | `iflow/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java` |
+| Understand routing (VM) | `iflow-vm/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java` |
 | Understand bootstrap | `host/src/main/java/me/majhrs16/suite/host/SuiteBootstrap.java` | `SuiteHost.java`, `MessageDispatcher.java` |
 | Understand Spigot integration | `spigot-host/src/main/java/me/majhrs16/suite/spigothost/TextFormatterSuitePlugin.java` | `SpigotActorDirectory.java`, `SpigotChatDelivery.java` |
 | Understand Fabric integration | `fabric-host/src/main/java/me/majhrs16/suite/fabrichost/TextFormatterSuiteMod.java` | `FabricActorDirectory.java`, `FabricChatDelivery.java` |

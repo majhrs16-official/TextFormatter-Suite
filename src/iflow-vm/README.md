@@ -1,7 +1,7 @@
-# iflow — VM 16-bit flat 64KB + SoftMMU 4KB
+# iflow-vm — VM 16-bit flat 64KB + SoftMMU 4KB
 
-> **Línea 2026-10-23:** este módulo es la base de **`iflow-vm`**, la VM propia que evoluciona a
-> 32 bits. Su especificación técnica de referencia v3 vive en
+> **Línea 2026-10-23:** este módulo es **`iflow-vm`**, la VM propia que evoluciona a 32 bits.
+> Su especificación técnica de referencia v3 vive en
 > [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md). La línea
 > paralela **`iflow-wasm`** (WebAssembly + Chicory) está en
 > [`src/iflow-wasm/`](../iflow-wasm/) y **no hereda** este ISA, este ABI `HOST` ni el modelo
@@ -348,7 +348,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 ### Files
 
 ```
-src/iflow/
+src/iflow-vm/
 ├── src/main/java/me/majhrs16/suite/iflow/
 │   ├── Router.java                    # SPI interface
 │   ├── RouteDecision.java

@@ -19,13 +19,13 @@ entero antes de concluir.**
 
 ## Cómo
 
-1. Alcance mínimo: `src/iflow/` (base de `iflow-vm` 32 bits), `tools/iflow-compiler/`,
+1. Alcance mínimo: `src/iflow-vm/` (base de la VM de 32 bits), `tools/iflow-compiler/`,
    sus tests, los contratos del ABI v2 y los módulos que interactúan con la VM.
    `src/iflow-wasm/` queda **fuera de alcance**: es la línea WebAssembly/Chicory y
    se audita por separado.
 2. Contrasta cada contrato con `docs/prompts/diseno/iflow-cpu-design.md`, la
    especificación técnica de referencia v3 `docs/prompts/diseno/iflow-cpu-implement.md` y los contratos
-   ABI v2 documentados en `src/iflow/README.md` y `tools/iflow-compiler/README.md`.
+   ABI v2 documentados en `src/iflow-vm/README.md` y `tools/iflow-compiler/README.md`.
    Una discrepancia entre esa documentación y el código es un hallazgo, no un detalle.
 3. Aporta evidencia reproducible: fichero y línea, programa ensamblado, comando o
    test. Los números de línea deben proceder del código que realmente inspeccionaste.

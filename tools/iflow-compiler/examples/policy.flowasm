@@ -9,8 +9,8 @@
 ;   node dist/cli.js examples/policy.flowasm -o policy.flow --no-firmware ; bare-metal
 ;
 ; Or through Gradle (firmware on by default):
-;   ./gradlew :src:iflow:iflowAsm
-;   ./gradlew :src:iflow:iflowAsm -Piflow.baremetal=true
+;   ./gradlew :src:iflow-vm:iflowAsm
+;   ./gradlew :src:iflow-vm:iflowAsm -Piflow.baremetal=true
 ;
 ; The .const block below duplicates the firmware ROM equates so the program
 ; assembles in both modes; a user definition wins over the ROM's.

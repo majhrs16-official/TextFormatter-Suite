@@ -15,7 +15,7 @@
 ## 2. Non-Responsibilities
 
 - **No standalone proxy** — requires Velocity proxy with plugin
-- **No message routing** — `iflow` decides what to sync
+- **No message routing** — `iflow-vm` decides what to sync
 - **Not Fabric-only** — works as a standard Velocity plugin (Java 17+, Velocity API 3.4.0)
 
 ---
