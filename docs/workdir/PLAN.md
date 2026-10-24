@@ -1,7 +1,7 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-23 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm pendiente (W3.5)**; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL eliminado de todo el repositorio; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-10-23 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL eliminado de todo el repositorio; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
 
@@ -30,9 +30,10 @@ Las dos líneas son independientes. Los hallazgos `IFLOW-MAN-*` se incorporan co
 aplican automáticamente** a `iflow-wasm`. El host podrá seleccionar el motor por configuración
 cuando ambas estén listas.
 
-El único pendiente transversal es la **paridad funcional de propiedades del mensaje** (W3.5): que
-`iflow-wasm` exponga los mismos controles que `iflow-vm` ya ofrece. No reactiva el backlog de 32 bits
-de la VM. Detalle en «Paridad funcional pendiente».
+El único pendiente transversal es la **paridad funcional de propiedades del mensaje** (W3.5) contra
+la **spec v3**: que `iflow-wasm` implemente el mismo contrato de transformación, decisión y entrega,
+no el ABI `HOST` v2 de `src/iflow-vm`. No reactiva el backlog de 32 bits de la VM. Detalle en
+«Paridad funcional pendiente».
 
 ### Qué se conserva
 
@@ -99,56 +100,66 @@ Reglas de diseño:
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **W0 — Scaffold** | `src/iflow-wasm/` creado, dependencia Chicory, loader mínimo y lockfile/verificación iniciales | ✅ Módulo Gradle incluido; `:src:iflow-wasm:build` validado con JDK 21 y Chicory 1.4.0 |
-| **W1 — Contrato** | ADR del motor Wasm: imports/exports, capabilities, límites, errores, ciclo de vida | Contrato revisado y congelado antes de escribir el motor |
+| **W1 — Contrato** | ADR del motor Wasm: imports/exports alineados a la **spec v3**, capabilities, límites, errores, ciclo de vida | Contrato revisado y congelado antes de escribir el motor |
 | **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | Test unitario con un módulo mínimo compilado |
 | **W3 — Integración** | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.wasm` |
-| **W3.5 — Paridad de mensaje** | Imports de propiedades, decisiones y servicios equivalentes a `iflow-vm` | Matriz `.flow` vs `.wasm` con los mismos resultados observables |
+| **W3.5 — Paridad de mensaje (v3)** | Imports de transformación, decisión y entrega alineados a la spec v3 | Matriz `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable |
 | **W4 — Herramientas** | Ejemplos en al menos dos lenguajes, validador de artefactos y guía de autoría | Build reproducible de los ejemplos + tests |
 | **W5 — Editor** | Soporte del panel web para editar/compilar/subir `.wasm` | Flujo de autoría de extremo a extremo |
 
-### Paridad funcional pendiente: `iflow-vm` ↔ `iflow-wasm`
+### Paridad funcional pendiente: `iflow-vm` (v3) ↔ `iflow-wasm`
 
-> **Alcance:** esta paridad se mide contra los controles que `iflow-vm` expone **hoy** para las
-> propiedades del mensaje. **No** incluye el backlog de la VM de 32 bits (ISA, MMU, BIOS, scheduler,
-> persistencia, concurrencia); esas fases V1–V5 no se abordan en este trabajo.
+> **Base de la paridad:** la **spec v3** (`docs/prompts/diseno/iflow-cpu-implement.md`), no el código
+> actual de `src/iflow-vm`. Ese código implementa la **v2 de 16 bits** y se conserva como base
+> histórica; sus `PROP_*`, `MessageHostContext`, `PolicyTarget` y `HOST` v2 **no son contrato vigente**.
+>
+> **Alcance:** replicar en Wasm el contrato v3 de transformación, decisión y entrega, sin heredar ISA,
+> MMU, BIOS/kernel ni ABI `HOST` v2. **No** incluye el backlog V1–V5 de la VM de 32 bits.
 
-El objetivo es que una política `.wasm` pueda leer y modificar el mensaje y producir la misma
-`RouteDecision`/`RouteOutcome` que una política `.flow`, sin compartir ISA ni ABI. La paridad es de
-**contrato observable**, no de implementación.
+El objetivo es que una política `.wasm` observe y transforme el mensaje y emita la misma decisión
+explícita que una política `.flow` v3, con el mismo resultado observable. La paridad es de **contrato**,
+no de implementación: los nombres de imports pueden diferir, la semántica no.
 
-| Control | Baseline actual en `iflow-vm` | Pendiente en `iflow-wasm` |
+| Área | Contrato v3 | Pendiente en `iflow-wasm` |
 |---|---|---|
-| Texto / contenido | lectura y escritura (`PROP_CONTENT`) | import de lectura/escritura con buffer y límite |
-| Canal | lectura y escritura (`PROP_CHANNEL`; `PROP_CHAN_NAME` vía scope canal) | equivalente + validación de canal existente |
-| Dirección | lectura (`PROP_DIRECTION`) | import de lectura |
-| Tipo de mensaje | lectura (`PROP_TYPE`) | import de lectura |
-| Idioma origen | lectura y escritura (`PROP_LANG_SOURCE`) | import de lectura/escritura + validación `Language` |
-| Idioma destino | lectura y escritura (`PROP_LANG_TARGET`) | import de lectura/escritura + validación `Language` |
-| Color mode | lectura y escritura (`PROP_COLOR_MODE`, validado) | import de lectura/escritura + validación `ColorMode` |
-| `formatPapi` | lectura (`PROP_FORMAT_PAPI`) | import de lectura |
-| `sleepMillis` | lectura (`PROP_SLEEP_MILLIS`) | import de lectura |
-| `cancelled` | lectura (`PROP_CANCELLED`) | import de lectura |
-| Identidad y clon | `MESSAGE_ID`, `MESSAGE_CLONE` | imports equivalentes |
-| Decisiones de routing | `LOG`/`CONTINUE`, `DROP`/`REJECT`, `REDIRECT` actor, `CHANNEL_REDIRECT`, `RATE_LIMIT` | imports de decisión con los mismos códigos y validación |
-| Servicios de apoyo | permisos, estado, canal, placeholders y detección de idioma | imports equivalentes, capability-gated |
+| Contexto de solo lectura | Tipo, dirección, emisor, destinatario, canal e identidad del mensaje, leídos como parámetros del IRQ. | Imports de lectura; sin mutación. |
+| Contenido | `TRANSFORM_APPLY` solo contenido/metadatos: texto, placeholders y formato. | Host functions de lectura/escritura con buffer TLV/longitud; UTF-8 sin truncar. |
+| Metadatos | Idioma origen/destino, color y flags; sonidos solo si v3 ratifica su contrato (hoy no está implementado en v2). La precedencia de idioma sigue diferida (`IFLOW-MAN-42` / Q35). | Definir el conjunto exacto de propiedades y sus validadores; **no copiar** los `PROP_*` v2. |
+| Canal | `SET_CHANNEL` validado como única mutación de canal; si cambia permisos/destinatarios, segunda fase de routing, no reentrega recursiva. | Import de `SET_CHANNEL` + validación de existencia y permisos. |
+| Routing | Decisión explícita y tipada; el guest decide y el host registra. Default deny + `DELIVER` explícito y `CANCEL_EVENT` separado de cancelar mensaje (D01–D05 pendientes de ratificar). | Import de decisión con target/destino/razón; sin `route:*` ni `SET_PROCESSED`. |
+| Journal | Solo write set del mensaje: todo o nada para sus mutaciones; no cubre máquina, tiempo, rate limit, cola ni entrega (`D43`). | Transacción de mensaje en el host con la misma semántica. |
+| Rate limit y tiempo | Política en userspace: token bucket, backoff y sleep usan RTC/ciclos/`HALT`; el host no calcula backoff y solo puede imponer un cap duro (`D40`, `D42`). | Exponer reloj/ciclos y `HALT`/sleep; **no** importar `RATE_LIMIT` ni `sleepMillis` como propiedad. |
+| Input ABI | Campos con longitud/escape o TLV; UTF-8 sin cortar; ausencia distinta de `"null"`; `read-your-writes` es decisión abierta (Q26). | Definir ABI de entrada/salida y comportamiento de lectura tras escritura. |
+| Propiedades declaradas sin implementar | `PROP_SOUNDS`, `PROP_PROCESSED`, `PROP_TRANSLATE` y `PROP_ACTOR_WORLD` no son baseline: se implementan o se retiran (`IFLOW-MAN-31`). | No replicarlas hasta que v3 fije su contrato. |
+| Material diferido | Precedencia de idioma, `Formats` N, `Direction.channel` y render de redirect (`IFLOW-MAN-42…45`). | Fuera de W3.5 hasta que se retomen tras implementar v3. |
 
-> **Huecos conocidos del baseline:** `iflow-vm` **no** expone lectura ni escritura de `sounds`,
-> `translate` ni `processed`; `formatPapi`, `sleepMillis` y `cancelled` son solo lectura. La paridad
-> replica lo que existe. Ampliar esos controles es una decisión aparte, no parte de este pendiente.
+> **Estado de las decisiones:** D01–D05 siguen propuestas (no ratificadas); D14–D16, D36R y
+> D40–D43 sí están ratificadas. La paridad sigue la dirección v3, pero no congela nombres de
+> `PolicyTarget`, IDs de propiedades ni imports hasta ratificar D01–D13 y cerrar las preguntas
+> abiertas que afecten al contrato.
+
+> **No se hereda de la v2:** `LOG`/`processed`, `DROP`/`REJECT` como targets separados,
+> `REDIRECT`/`CHANNEL_REDIRECT`, `RATE_LIMIT` con backoff calculado por el host, `sleepMillis` como
+> propiedad del mensaje, `PROP_*` declaradas sin implementar ni la lectura que convierte `null` en
+> `"null"`.
 
 **Criterios de cierre:**
 
-1. Un corpus de políticas equivalentes `.flow`/`.wasm` produce el mismo `RouteDecision` y el mismo
-   mensaje resultante para las mismas entradas (texto, canal, idiomas, color, decisiones y backoff).
-2. Las escrituras son atómicas: si la política falla, se cancela o se rechaza, el mensaje original
-   no se muta (journal/descarte, equivalente al `ModificationJournal` de la VM).
-3. Propiedad desconocida, enum inválido, buffer insuficiente o capability denegada devuelven un
-   error tipado; nunca una mutación silenciosa ni un truncado del texto.
-4. Los límites de memoria, tiempo y tamaño de entrada/salida se aplican antes de invocar el guest.
-5. La matriz de paridad queda documentada y cubierta por tests negativos y positivos.
+1. Un corpus de políticas `.flow` v3 (ROM) y `.wasm` produce la misma decisión explícita
+   (target/destino/razón) y el mismo mensaje transformado para las mismas entradas.
+2. `SET_CHANNEL` valida existencia y permisos igual en ambos motores; un cambio que altere
+   destinatarios se resuelve como segunda fase de routing, no como reentrega recursiva.
+3. El journal es atómico y cubre solo el write set del mensaje; no filtra estado de máquina, tiempo,
+   rate limit, cola ni entrega.
+4. La política de rate limit y de tiempo vive en el guest; el host solo aplica un cap duro separado
+   y no calcula backoff ni interpreta `sleepMillis` como propiedad.
+5. El ABI de entrada/salida usa longitud/escape o TLV, no trunca UTF-8 y distingue ausencia de
+   `"null"`; *read-your-writes* queda documentado según Q26.
+6. La matriz de paridad y los tests negativos (propiedad desconocida, enum inválido, buffer
+   insuficiente, capability denegada, canal inexistente) quedan documentados.
 
-**Fases:** W1 define los imports; W2 implementa las host functions y la validación; W3 integra el
-motor; W3.5 cierra la paridad. No se toca el backlog V1–V5 de `iflow-vm`.
+**Fases:** W1 define los imports alineados a la spec v3; W2 implementa las host functions y la
+validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog V1–V5 de `iflow-vm`.
 
 ### Decisiones pendientes (ADR)
 
@@ -157,8 +168,9 @@ motor; W3.5 cierra la paridad. No se toca el backlog V1–V5 de `iflow-vm`.
 - **`iflow-wasm`:** nombre/artefacto definitivo, versión de Chicory (W0 fija `runtime:1.4.0`;
   falta decidir compilador/WASI), ABI de imports, capabilities, límites, hot-reload y firma/hash
   de artefactos.
-- **Paridad `iflow-vm` ↔ `iflow-wasm`:** contrato de imports de propiedades/decisiones, semántica
-  de journal y criterios de equivalencia observable (ver «Paridad funcional pendiente»).
+- **Paridad `iflow-vm` ↔ `iflow-wasm`:** contrato de imports alineado a la **spec v3**
+  (transformación, decisión, entrega y journal), no el ABI v2 de `src/iflow-vm`; criterios de
+  equivalencia observable (ver «Paridad funcional pendiente»).
 - **Convivencia:** selección de motor por configuración, formato de configuración común, migración
   de políticas y criterio para declarar un motor como predeterminado.
 
@@ -168,7 +180,7 @@ motor; W3.5 cierra la paridad. No se toca el backlog V1–V5 de `iflow-vm`.
 2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
 3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. Escribir el ADR del motor Wasm y el ADR de la VM de 32 bits antes de implementar núcleos.
-5. Completar la paridad funcional de propiedades y decisiones entre ambos motores (W3.5); no incluye el backlog V1–V5 de `iflow-vm`.
+5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5); no se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
 
 ---
 
@@ -179,8 +191,8 @@ motor; W3.5 cierra la paridad. No se toca el backlog V1–V5 de `iflow-vm`.
 | core-api (modelo atómico + SPI) | ✅ estable, JDK-puro | tests |
 | kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
 | textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
-| iflow-vm (router/reglas/rate-limit per-key) | 🧱 módulo `src/iflow-vm/`: se conserva y evoluciona a 32 bits; no se borra | tests actuales |
-| iflow-wasm (WebAssembly + Chicory) | 🧪 W0 validado (loader mínimo); W1 contrato, W2 runtime, W3 integración y W3.5 paridad pendientes | build |
+| iflow-vm (implementación v2 de 16 bits) | 🧱 módulo `src/iflow-vm/`: base histórica; el contrato vigente es la spec v3 de 32 bits (V1–V5) | tests actuales |
+| iflow-wasm (WebAssembly + Chicory) | 🧪 W0 validado (loader mínimo); W1 contrato, W2 runtime, W3 integración y W3.5 paridad v3 pendientes | build |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
@@ -975,7 +987,7 @@ cd tools/iflow-compiler && npm run build && npm run test:validation
 El scaffold W0 ya está validado en `src/iflow-wasm/` con la dependencia
 `com.dylibso.chicory:runtime:1.4.0` y un loader mínimo; el lockfile y la verificación están
 resueltos. Lo siguiente es fijar el contrato de imports (W1), compilar un `.wasm` mínimo y ejecutarlo
-con un test unitario (W2), y cerrar la paridad de propiedades/decisiones (W3.5). Los comandos
+con un test unitario (W2), y cerrar la paridad de contrato v3 (W3.5). Los comandos
 concretos se documentarán al cerrar W1/W2:
 
 > ⚠️ **Memoria del entorno**: es la máquina anfitriona (no un contenedor): ~7.5 GiB
