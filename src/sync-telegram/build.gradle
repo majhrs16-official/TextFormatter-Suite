@@ -22,6 +22,7 @@ dependencies {
     implementation 'org.json:json:20240303'
 
     testImplementation project(':src:kernel')
+    testImplementation project(':src:sync-bus')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

@@ -85,7 +85,7 @@ public final class ChatTranslatorConfig {
             long translationTimeoutMs
     ) {
         public static Config defaults() {
-            return new Config(null, true, 10000, 5000, 30_000);
+            return new Config("google", true, 10000, 5000, 30_000);
         }
     }
 }

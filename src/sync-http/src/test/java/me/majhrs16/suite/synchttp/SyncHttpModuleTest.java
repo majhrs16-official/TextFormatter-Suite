@@ -8,9 +8,11 @@ import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.kernel.ResolutionStatus;
+import me.majhrs16.suite.syncbus.SyncBusModule;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,14 +37,25 @@ class SyncHttpModuleTest {
         ModuleDescriptor descriptor = new SyncHttpModule().descriptor();
         assertTrue(descriptor.provides().contains(
             Capability.of("sync-sink", SemVer.of(2, 1, 0))));
+        assertTrue(descriptor.requires().stream()
+            .anyMatch(r -> r.name().equals("sync-bus")));
+    }
+
+    @Test
+    void requiresSyncBusCapability() {
+        ModuleDescriptor descriptor = new SyncHttpModule().descriptor();
+        assertTrue(descriptor.requires().stream()
+            .anyMatch(r -> r.name().equals("sync-bus")));
     }
 
     @Test
     void resolvesInRealKernelGraph() {
-        me.majhrs16.suite.api.Module module = new SyncHttpModule();
+        Module syncHttpModule = new SyncHttpModule();
+        Module syncBusModule = new SyncBusModule();
         ResolutionResult result = new ModuleGraph(Environment.current())
-            .resolve(java.util.List.of(module));
+            .resolve(List.of(syncHttpModule, syncBusModule));
 
-        assertEquals(ResolutionStatus.RESOLVED, result.of(module));
+        assertEquals(ResolutionStatus.RESOLVED, result.of(syncHttpModule));
+        assertEquals(ResolutionStatus.RESOLVED, result.of(syncBusModule));
     }
 }

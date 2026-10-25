@@ -215,6 +215,44 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 ---
 
+### Fixes de Inconsistencia (desde `docs/workdir/REPORT.md` — 2026-10-25)
+
+> **Fuente:** Auditoría integral + decisiones manuales en `REPORT.md`. 9 items **FIX_NOW** (P0), 3 **FIX_LATER** (P1/P2), 4 **NEEDS_DESIGN** (ADR).
+
+#### P0 — FIX_NOW (Bloquean arquitectura correcta)
+
+| ID | Acción | Módulos afectados | Criterio de cierre |
+|---|---|---|---|
+| **I-002** | Añadir `require('sync-bus')` a submódulos sync | `sync-discord`, `sync-websocket`, `sync-telegram`, `sync-http`, `sync-velocity` | ✅ `grep -r "require.*sync-bus" src/sync-*/` → 6/6 |
+| **I-006** | Crear `Module` implementation en `iflow-vm` y `iflow-wasm` | `iflow-vm`, `iflow-wasm` | ✅ `grep -r "implements Module" src/iflow-vm/ src/iflow-wasm/` → YES |
+| **I-007** | Añadir `ModuleDescriptor` a 19 módulos sin él | `host`, `transport`, `messages`, `logger`, `core-api`, `extension-api`, `manager-spi`, `manager-core`, `performance`, `loadtest`, `common-legacy`, `fabric-host`, `spigot-host`, `example-extension`, `kernel`, `iflow-vm`, `iflow-wasm`, `web-editor` | ✅ Core modules done: host, kernel, transport, messages, logger, manager-spi, manager-core, manager-apt (8/19). Platform adapters excluded per clean/hexa. API modules (core-api, extension-api) don't need Module. Remaining: performance, loadtest, common-legacy, example-extension, web-editor |
+| **I-003** | **CT4:** Integrar `ChatTranslator` en `SuiteHost.bootstrap()` | `host`, `chattranslator`, `spigot-host`, `fabric-host` | Pipeline real usa `ChatTranslator`; `TranslationService` delega o se elimina |
+| **I-005** | Cargar `ChatTranslatorConfig` + `BackendConfig` en bootstrap | `host` (SuiteHost), `chattranslator` | `SuiteHost.bootstrap()` instancia `ChatTranslator` y lo expone |
+| **I-009** | Mover `TranslatorsConfig.discoverProviders()` a `chattranslator.BackendConfig` | `host` (eliminar), `chattranslator` (nuevo `BackendConfig`) | `host` no usa `ServiceLoader<TranslatorProvider>`; `chattranslator` carga backends |
+| **I-014** | Resolver confusión capability `chattranslator` vs `translator` | `chattranslator`, `gtranslate`, `ltranslate` | ADR: façade provee `translator` capability unificada; backends requieren `chattranslator` |
+| **I-016** | Alinear `ChatTranslatorConfig.defaultBackend` con `storage.md` | `chattranslator`, `storage.md` | Default `'google'` en ambos (o `null` documentado como auto) | ✅ `ChatTranslatorConfig.defaults()` = `'google'` |
+| **I-011** | **M1:** Mover `ConfigLoader.loadChannels()` a `textformatter.ChannelConfig` | `host` (eliminar), `textformatter` (nuevo `ChannelConfig`) | `textformatter` carga sus channels; `host` no conoce channels |
+| **I-018** | Completar `resetConfigs` con nuevos directorios `config/<modulo>/` | `spigot-host` | Backup incluye chattranslator, sync-bus, sync-*, inworld, observability, iflow-firewall |
+
+#### P1 — FIX_LATER (Próxima iteración)
+
+| ID | Acción | Módulos afectados | Criterio de cierre |
+|---|---|---|---|
+| **I-004** | Migrar carga config centralizada (translators, sync) a dueños | `host`, `chattranslator`, `sync-bus`, submódulos sync | Cada dueño carga su config en `onLoad()` |
+| **I-012** | Corregir rutas sync en spigot-host: `sync/*.yml` → `config/sync-*/config.yml` | `spigot-host`, `fabric-host` | Carga desde nuevas rutas; submódulos gestionan su config |
+| **I-017** | Corregir `copyDefaultsIfMissing` a nuevas rutas `config/<modulo>/` | `spigot-host` | Primer arranque crea configs en ubicaciones correctas |
+
+#### P2 — NEEDS_DESIGN (Requieren ADR antes de actuar)
+
+| ID | Tema | Decisión requerida |
+|---|---|---|
+| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ¿Se implementa módulo legacy para editor web? |
+| **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | ¿Platform adapters cero deps a módulos core? |
+| **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ¿Abstraer `messages.yml` en `config/suite/` único? |
+| **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | ¿Façade provee capability unificada `translator`? |
+
+---
+
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
 > **Situación actual (2026-10-24):** inventario real generado con `./gradlew testInventory` — **33 módulos Java** en `src/`:

@@ -23,6 +23,7 @@ dependencies {
     implementation project(':src:host')
     implementation project(':src:transport')
     implementation project(':src:kernel')
+    implementation project(':src:sync-bus')
     implementation project(':src:sync-discord')
 
     // Adventure for Component (needed by ChatDelivery)

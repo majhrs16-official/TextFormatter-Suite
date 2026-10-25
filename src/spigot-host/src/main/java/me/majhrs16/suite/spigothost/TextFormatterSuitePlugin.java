@@ -606,6 +606,18 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     Files.move(dirPath, target, StandardCopyOption.REPLACE_EXISTING);
                 }
             }
+            // Nuevos directorios de config por módulo (architecture v3)
+            for (String mod : List.of(
+                    "chattranslator", "sync-bus", "sync-discord", "sync-websocket",
+                    "sync-telegram", "sync-http", "sync-socket", "inworld", "observability",
+                    "iflow-firewall", "textformatter")) {
+                Path dirPath = folder.resolve("config").resolve(mod);
+                if (Files.isDirectory(dirPath)) {
+                    Path target = backupDir.resolve("config").resolve(mod);
+                    Files.createDirectories(target.getParent());
+                    Files.move(dirPath, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
             copyDefaultsIfMissing(folder);
             return true;
         } catch (IOException exception) {
