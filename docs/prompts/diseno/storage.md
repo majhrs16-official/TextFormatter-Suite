@@ -1,99 +1,94 @@
 # Estructura de Almacenamiento (Storage Layout)
 
 > **Fuente de verdad**: Este documento describe cómo la suite organiza sus archivos de configuración en disco. Es la referencia única para rutas, precedencia y ciclo de vida de los archivos YAML.
+>
+> **Principio**: Cada módulo Java (`src/<modulo>/`) es dueño de su directorio de configuración en `config/<modulo>/`. El host/plataforma solo gestiona el directorio raíz y delega.
 
 ---
 
-## 1. Layout General
+## 1. Layout General (Arquitectura Objetivo)
 
 ```
-<servidor>/                          ← Raíz del servidor (ej. Paper, Fabric)
-└── <manager>/                        ← Directorio del gestor (ej. plugins/TextFormatterSuite, mods/textformatter)
-    ├── config/                       ← **Directorio raíz de configuración de la suite**
-    │   ├── suite/                    ← Configuración GLOBAL (aplica a toda la suite)
-    │   │   ├── config.yml            ← Config principal: idioma, claim-mode, sound, parallel, repositorios
-    │   │   ├── channels/             ← Definición de canales (chat.global, join, quit, etc.)
+<servidor>/                          ← Raíz del servidor (Paper, Fabric, etc.)
+└── <manager>/                       ← Directorio del gestor (plugins/TextFormatterSuite, mods/textformatter)
+    ├── config/                      ← **Directorio raíz de configuración de la suite**
+    │   ├── suite/                   ← Configuración GLOBAL del host (solo lo que el core necesita)
+    │   │   ├── config.yml           ← Config principal: idioma, claim-mode, sound, parallel, repositorios
+    │   │   ├── rules.yml            ← Reglas globales de transformación/bloqueo (motor de reglas)
+    │   │   └── messages.yml         ← Strings de UI del host/platform (comandos /suite, prefijos)
+    │   │
+    │   ├── textformatter/           ← **Módulo textformatter** - Dueño de canales y formatos
+    │   │   ├── channels/            ← Definición de canales (chat.global, join, quit, etc.)
     │   │   │   ├── chat.global.yml
     │   │   │   ├── join.yml
     │   │   │   └── ...
-    │   │   ├── translators/          ← Configuración de backends de traducción (SPI)
+    │   │   └── config.yml           ← Config específica de textformatter (si aplica)
+    │   │
+    │   ├── chattranslator/          ← **Módulo chattranslator** - Dueño de backends de traducción
+    │   │   ├── translators/         ← Configuración de backends SPI (google, libre, etc.)
     │   │   │   ├── google.yml
     │   │   │   ├── libre.yml
     │   │   │   └── ...
-    │   │   ├── sync/                 ← Configuración de sinks de sincronización
-    │   │   │   ├── discord.yml
-    │   │   │   ├── websocket.yml
-    │   │   │   └── ...
-    │   │   ├── messages.yml          ← Catálogo de mensajes i18n (EN/ES)
-    │   │   └── rules.yml             ← Reglas globales de transformación/bloqueo
+    │   │   └── config.yml           ← Config de la fachada: default-backend, cache, timeouts
     │   │
-    │   ├── chattranslator/           ← Configuración ESPECÍFICA del módulo ChatTranslator
-    │   │   └── config.yml            ← default-backend, context-override-enabled, cache, timeouts
+    │   ├── sync/                    ← **Módulo sync-bus** - Dueño de sincronización
+    │   │   ├── discord.yml
+    │   │   ├── websocket.yml
+    │   │   ├── tcp.yml
+    │   │   ├── udp.yml
+    │   │   ├── telegram.yml
+    │   │   └── config.yml           ← Config global de sync (si aplica)
     │   │
-    │   ├── gtranslate/               ← Configuración ESPECÍFICA del backend Google Translate
-    │   │   └── config.yml            ← (opcional, params extra como base-url custom)
+    │   ├── inworld/                 ← **Módulo inworld** - Dueño de interacciones en mundo
+    │   │   └── config.yml           ← Formatos sign/cofre/libro, radios, etc.
     │   │
-    │   ├── ltranslate/               ← Configuración ESPECÍFICA del backend LibreTranslate
-    │   │   └── config.yml            ← base-url, api-key, timeout
+    │   ├── observability/           ← **Módulo observability** - Dueño de métricas/debug/health
+    │   │   └── config.yml           ← Puerto, bind, auth-token, métricas habilitadas
     │   │
-    │   ├── inworld/                  ← Configuración ESPECÍFICA del módulo InWorld
-    │   │   └── config.yml            ← Formatos de sign/cofre/libro, radios, etc.
-    │   │
-    │   ├── observability/            ← Configuración ESPECÍFICA de observabilidad
-    │   │   └── config.yml            ← Puerto, bind, auth-token, métricas habilitadas
-    │   │
-    │   └── <modulo>/                 ← **Cada módulo tiene su propio directorio**
+    │   └── <modulo>/                ← **Cada módulo tiene su propio directorio**
     │       └── config.yml
     │
-    ├── data/                         ← Datos persistentes en runtime (no configs editables)
-    │   ├── languages.yml             ← Almacenamiento de idiomas de jugadores (UserLanguageStore)
-    │   ├── cache/                    ← Cachés serializadas (traducción, detección)
-    │   └── journal/                  ← Journal de políticas iFlow (si habilitado)
+    ├── data/                        ← Datos persistentes en runtime (no configs editables)
+    │   ├── languages.yml            ← Almacenamiento de idiomas de jugadores (UserLanguageStore)
+    │   ├── cache/                   ← Cachés serializadas (traducción, detección)
+    │   └── journal/                 ← Journal de políticas iFlow (si habilitado)
     │
-    ├── modules/                      ← JARs de módulos descargados/instalados (manager)
+    ├── modules/                     ← JARs de módulos descargados/instalados (manager)
     │   └── <modulo>-<version>.jar
     │
-    ├── backup/                       ← Backups automáticos al hacer /suite reset
+    ├── backup/                      ← Backups automáticos al hacer /suite reset
     │   └── <timestamp>/
     │       ├── config.yml
-    │       ├── channels/
+    │       ├── textformatter/
+    │       ├── chattranslator/
     │       └── ...
     │
-    └── logs/                         ← Logs específicos de la suite (opcional)
+    └── logs/                        ← Logs específicos de la suite (opcional)
 ```
 
 ---
 
-## 2. Principios de Diseño
+## 2. Estado Actual vs Objetivo (Migración Pendiente)
 
-### 2.1 Separación de Responsabilidades por Directorio
+| Directorio Actual | Dueño Real (Código) | Dueño Correcto (Arquitectura) | Estado |
+|-------------------|---------------------|------------------------------|--------|
+| `config/suite/channels/` | `host` carga, `textformatter` usa | **`textformatter`** | ⚠️ Migrar |
+| `config/suite/translators/` | `host` carga (`TranslatorsConfig`) | **`chattranslator`** | ⚠️ Migrar |
+| `config/suite/sync/` | `spigot-host` carga directo | **`sync-bus`** | ⚠️ Migrar |
+| `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform-specific) | ✅ OK |
+| `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
+| `config/suite/rules.yml` | `host` carga | **`suite` (host core)** | ✅ OK |
 
-| Directorio | Propietario | Quién lo edita | Ciclo de vida |
-|------------|-------------|----------------|---------------|
-| `config/suite/` | **Host/Suite** | Admin + Suite (valida al arranque) | Persistente; migración automática en updates |
-| `config/chattranslator/` | **Módulo chattranslator** | Admin (config) + Módulo (lee) | Persistente; módulo lo carga en `onLoad` |
-| `config/gtranslate/` | **Módulo gtranslate** | Admin | Persistente; backend lo usa en `TranslatorProvider.create()` |
-| `config/<modulo>/` | **Módulo correspondiente** | Admin | Persistente; cada módulo gestiona su propio YAML |
-| `data/` | **Host/Suite** | Solo Suite (runtime) | Persistente; serialización periódica |
-| `modules/` | **Module Manager** | Solo Manager (descarga/instala) | Transitorio (cache de JARs) |
-| `backup/` | **Suite** | Solo Suite (auto) | Persistente hasta limpieza manual |
-
-### 2.2 Regla de Oro: Un Directorio por Módulo
-
-> **Cada módulo Java (`src/<modulo>/`) tiene su directorio de configuración dedicado en `config/<modulo>/`.**
-
-- **NO** mezclar configuración de módulos en `config/suite/config.yml`
-- **NO** que un módulo lea/escriba en el directorio de otro módulo
-- **SÍ** que el host/gestor provea la ruta base (`folder`) y cada módulo resuelva su subdirectorio
+> **Nota**: La migración implica mover la lógica de carga (`ConfigLoader.loadChannels`, `TranslatorsConfig.load`, etc.) desde `host` hacia los módulos dueños (`textformatter`, `chattranslator`, `sync-bus`).
 
 ---
 
-## 3. Especificación por Archivo
+## 3. Especificación por Archivo (Por Módulo Dueño)
 
-### 3.1 `config/suite/config.yml` (Global)
+### 3.1 `config/suite/config.yml` — Host Core (Global)
 
 ```yaml
-# Configuración global de la suite
+# Configuración global del host/core suite
 quick-look: true
 language: en
 iflow:
@@ -109,18 +104,54 @@ repositories:
     url: "https://github.com/majhrs16-official/TextFormatter-Suite/releases"
     type: "github"
     enabled: true
-module-allowlist: []              # Lista blanca de módulos permitidos (vacío = todos)
+module-allowlist: []
 ```
 
-**Cargado por**: `ConfigLoader.loadConfig(folder)` → `HostConfig`  
-**Usado por**: `SuiteHost`, `MessageDispatcher`, `Router`, todos los componentes core
+**Cargado por**: `ConfigLoader.loadConfig(folder)` → `HostConfig` (en `host`)  
+**Dueño**: `host` module (core)
 
 ---
 
-### 3.2 `config/suite/channels/*.yml` (Canales)
+### 3.2 `config/suite/rules.yml` — Host Core (Reglas Globales)
 
 ```yaml
-# config/suite/channels/chat.global.yml
+# Reglas globales de transformación/bloqueo/redirección
+rules:
+  - name: "no-caps"
+    condition: "message.text().equals(message.text().toUpperCase()) && message.text().length() > 5"
+    action: "BLOCK"
+  - name: "staff-redirect"
+    condition: "sender.hasPermission('suite.staff')"
+    action: "REDIRECT"
+    target-channel: "chat.staff"
+```
+
+**Cargado por**: `host` (rule engine)  
+**Dueño**: `host` module (core)
+
+---
+
+### 3.3 `config/suite/messages.yml` — Platform Adapter (Spigot/Fabric)
+
+```yaml
+# Strings de UI específicos de la plataforma (comandos /suite, prefijos)
+prefix: "[suite] "
+not-initialized: "[suite] no inicializado"
+usage: "[suite] uso: /suite <lang|reload|status|toggle|reset|module|suite>"
+enabled: "[suite] activo: {} canales, traductor '{}'"
+# ... resto de mensajes de comandos
+```
+
+**Cargado por**: `MessagesConfig.load(folder)` en `spigot-host` / `fabric-host`  
+**Dueño**: Cada **platform adapter** (específico de Spigot/Fabric)  
+**No pertenece** al core ni a módulos compartidos.
+
+---
+
+### 3.4 `config/textformatter/channels/*.yml` — Módulo textformatter
+
+```yaml
+# config/textformatter/channels/chat.global.yml
 name: "chat.global"
 permission: "suite.chat.global"
 send-permission: "suite.chat.global.send"
@@ -135,40 +166,45 @@ tooltips: []
 sounds: []
 ```
 
-**Cargado por**: `ConfigLoader.loadChannels(folder)` → `ChannelRegistry`  
-**Usado por**: `Router`, `TextFormatter`, `ChatTranslator` (para validar `SET_CHANNEL`)
+**Cargado por**: `textformatter` (nuevo: `ChannelConfig.load(folder)`)  
+**Dueño**: `textformatter` module  
+**Usado por**: `ChannelRegistry`, `Router`, `ChatTranslator` (validar `SET_CHANNEL`)
+
+> **Migración pendiente**: Mover `ConfigLoader.loadChannels()` de `host` a `textformatter`.
 
 ---
 
-### 3.3 `config/suite/translators/*.yml` (Backends SPI)
+### 3.5 `config/chattranslator/translators/*.yml` — Módulo chattranslator
 
 ```yaml
-# config/suite/translators/google.yml
+# config/chattranslator/translators/google.yml
 provider: "google"                # Debe coincidir con TranslatorProvider.name()
 active: true
-# Parámetros específicos del backend (pasados a TranslatorProvider.create())
 timeout: 10                       # segundos
 ```
 
 ```yaml
-# config/suite/translators/libre.yml
+# config/chattranslator/translators/libre.yml
 provider: "libre"
 active: true
 base-url: "https://translate.example.com"
-api-key: ""                       # Opcional
+api-key: ""
 timeout: 15
 ```
 
-**Cargado por**: `TranslatorsConfig.load(folder)` → `TranslatorManager`  
+**Cargado por**: `chattranslator` (nuevo: `BackendConfig.load(folder)`)  
 **Descubierto por**: `ServiceLoader<TranslatorProvider>` (SPI)  
-**Usado por**: `TranslationService`, `ChatTranslator`
+**Dueño**: `chattranslator` module  
+**Usado por**: `TranslatorManager`, `TranslationService`, `ChatTranslator`
+
+> **Migración pendiente**: Mover `TranslatorsConfig.load()` de `host` a `chattranslator`.
 
 ---
 
-### 3.4 `config/chattranslator/config.yml` (Módulo ChatTranslator)
+### 3.6 `config/chattranslator/config.yml` — Módulo chattranslator (Fachada)
 
 ```yaml
-# Configuración específica de la fachada ChatTranslator
+# Configuración de la fachada ChatTranslator
 default-backend: "google"         # Backend por defecto (null = auto: primer disponible)
 context-override-enabled: true    # Permitir setContextBackend(key, backend) en runtime
 cache-max-size: 10000             # Límite entradas caché traducción
@@ -177,23 +213,61 @@ translation-timeout-ms: 30000     # Timeout peticiones traducción (ms)
 ```
 
 **Cargado por**: `ChatTranslatorConfig.load(folder)` → `ChatTranslatorConfig.Config`  
-**Usado por**: `ChatTranslatorModule.onLoad()` → inyecta en `ChatTranslator` constructor
+**Dueño**: `chattranslator` module
 
 ---
 
-### 3.5 `config/<modulo>/config.yml` (Patrón Genérico)
+### 3.7 `config/sync/*.yml` — Módulo sync-bus
 
 ```yaml
-# Cada módulo define su propio schema. Ejemplos:
+# config/sync/discord.yml
+enabled: true
+token: ""
+channels: []
 
-# config/inworld/config.yml
+# config/sync/websocket.yml
+enabled: false
+port: 9092
+bind: "127.0.0.1"
+token: "changeme"
+
+# config/sync/tcp.yml
+enabled: false
+host: "127.0.0.1"
+port: 9093
+
+# config/sync/telegram.yml
+enabled: false
+token: ""
+chat-id: 0
+```
+
+**Cargado por**: `sync-bus` (nuevo: `SyncConfig.load(folder)`)  
+**Dueño**: `sync-bus` module  
+**Usado por**: Sinks de sincronización (Discord, WebSocket, TCP, UDP, Telegram)
+
+> **Migración pendiente**: Mover carga de sync de `spigot-host` a `sync-bus`.
+
+---
+
+### 3.8 `config/inworld/config.yml` — Módulo inworld
+
+```yaml
 sign-format: "<gray>[Sign]</gray> <content>"
 chest-format: "<gold>[Chest]</gold> <content>"
 book-format: "<green>[Book]</green> <content>"
 radius-format: "<aqua>[Local]</aqua> <sender>: <content>"
 world-format: "<blue>[World]</blue> <sender>: <content>"
+```
 
-# config/observability/config.yml
+**Cargado por**: `inworld` (ya lo hace en `InWorldHandler`)  
+**Dueño**: `inworld` module
+
+---
+
+### 3.9 `config/observability/config.yml` — Módulo observability
+
+```yaml
 port: 9091
 bind: "127.0.0.1"
 auth-token: "changeme"
@@ -202,12 +276,12 @@ debug-enabled: true
 health-enabled: true
 ```
 
-**Cargado por**: Cada módulo en su `onLoad()` via `ConfigLoader` o YAML directo  
-**Responsabilidad**: El módulo dueño del directorio
+**Cargado por**: `observability` (ya lo hace en `Observability.createDefault`)  
+**Dueño**: `observability` module
 
 ---
 
-### 3.6 `data/languages.yml` (UserLanguageStore)
+### 3.10 `data/languages.yml` — Host Core (UserLanguageStore)
 
 ```yaml
 # Almacenamiento persistente de idiomas por jugador
@@ -217,7 +291,8 @@ health-enabled: true
 ```
 
 **Gestionado por**: `YamlUserLanguageStore` (Spigot) / equivalente Fabric  
-**Interfaz**: `UserLanguageStore` SPI
+**Interfaz**: `UserLanguageStore` SPI  
+**Dueño**: `host` module (core, no platform-specific)
 
 ---
 
@@ -228,12 +303,15 @@ health-enabled: true
 ```
 1. SuiteHost.bootstrap(folder) / SuiteBootstrap.bootstrap(folder)
    │
-   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))          → HostConfig
-   ├─► ConfigLoader.loadChannels(folder.resolve("suite/channels")) → ChannelRegistry
-   ├─► TranslatorsConfig.load(folder.resolve("suite/translators")) → TranslatorManager
-   ├─► ChatTranslatorConfig.load(folder.resolve("chattranslator")) → ChatTranslatorConfig.Config
-   ├─► InWorldConfig.load(folder.resolve("inworld"))             → InWorldConfig
-   └─► ... (cada módulo carga su config/<modulo>/config.yml)
+   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))              → HostConfig (suite/config.yml)
+   ├─► RulesConfig.load(folder.resolve("suite"))                     → Rules (suite/rules.yml)
+   ├─► textformatter.ChannelConfig.load(folder.resolve("textformatter")) → ChannelRegistry
+   ├─► chattranslator.BackendConfig.load(folder.resolve("chattranslator")) → TranslatorManager
+   ├─► chattranslator.ChatTranslatorConfig.load(folder.resolve("chattranslator")) → ChatTranslator
+   ├─► syncbus.SyncConfig.load(folder.resolve("sync"))               → SyncBus + sinks
+   ├─► inworld.InWorldConfig.load(folder.resolve("inworld"))         → InWorldHandler
+   ├─► observability.ObservabilityConfig.load(folder.resolve("observability")) → Observability
+   └─► MessagesConfig.load(folder.resolve("suite"))                  → Messages (platform adapter)
 ```
 
 ### 4.2 Recarga (`/suite reload`)
@@ -249,13 +327,15 @@ health-enabled: true
 ```
 1. Mueve configs de usuario a backup/<timestamp>/
    - config/suite/config.yml
-   - config/suite/channels/
-   - config/suite/translators/
+   - config/suite/rules.yml
+   - config/suite/messages.yml
+   - config/textformatter/
    - config/chattranslator/
+   - config/sync/
+   - config/inworld/
+   - config/observability/
    - config/<modulo>/ (todos)
-   - messages.yml
-   - rules.yml
-2. Regenera defaults desde resources/defaults/
+2. Regenera defaults desde resources/defaults/ de cada módulo
 3. Notifica al admin: "Configs reseteados. Reinicia para aplicar."
 ```
 
@@ -265,9 +345,11 @@ health-enabled: true
 
 | Elemento | Convención | Ejemplo |
 |----------|------------|---------|
-| Directorio módulo | `kebab-case` | `chattranslator`, `gtranslate`, `inworld` |
+| Directorio módulo | `kebab-case` | `textformatter`, `chattranslator`, `sync` |
 | Archivo config principal | `config.yml` | `config/chattranslator/config.yml` |
-| Sub-archivos (colecciones) | `<nombre>.yml` | `config/suite/channels/chat.global.yml` |
+| Sub-archivos (colecciones) | `<nombre>.yml` | `config/textformatter/channels/chat.global.yml` |
+| Backends (colección) | `<provider>.yml` | `config/chattranslator/translators/google.yml` |
+| Sinks (colección) | `<sink>.yml` | `config/sync/discord.yml` |
 | Backup timestamp | `yyyyMMdd-HHmmss` | `backup/20261024-153045/` |
 | JAR módulo | `<modulo>-<version>.jar` | `chattranslator-2.1.0.jar` |
 
@@ -278,7 +360,7 @@ health-enabled: true
 ### 6.1 Validación al Arranque
 
 - `ConfigValidator.validate(HostConfig, logger, folder)` valida `config/suite/config.yml`
-- Cada módulo valida su propio `config/<modulo>/config.yml` en `onLoad()`
+- Cada módulo valida su propio `config/<modulo>/config.yml` en su `onLoad()`
 - Errores → log ERROR + config degradado (defaults) + suite sigue arrancando
 
 ### 6.2 Migración de Versiones
@@ -294,32 +376,48 @@ health-enabled: true
 ```java
 // En ChatTranslatorModule.onLoad(SuiteHost host)
 public void onLoad(SuiteHost host) {
-    Path folder = host.config().getConfigDirectory(); // o similar
+    // host.config() expone el directorio base (folder)
+    Path folder = host.config().getConfigDirectory(); // Path al <manager>/config
     
     // Cargar config propia (config/chattranslator/config.yml)
-    ChatTranslatorConfig.Config config = ChatTranslatorConfig.load(folder);
+    ChatTranslatorConfig.Config facadeConfig = ChatTranslatorConfig.load(folder);
     
-    // Inyectar en facade
-    TranslatorManager manager = host.translatorManager();
-    TranslationService translation = host.translation();
-    ChatTranslator chatTranslator = new ChatTranslator(manager, translation, config);
+    // Cargar backends (config/chattranslator/translators/*.yml)
+    TranslatorManager manager = BackendConfig.load(folder);
+    
+    // Crear fachada
+    TranslationService translation = host.translation(); // ya creado con manager
+    ChatTranslator chatTranslator = new ChatTranslator(manager, translation, facadeConfig);
     
     // Registrar en host para acceso global
     host.setChatTranslator(chatTranslator);
 }
 ```
 
-> **Nota**: `host.config()` debe exponer el directorio base (`folder`) para que los módulos resuelvan `folder.resolve("<modulo>").resolve("config.yml")`.
+> **Nota**: `HostConfig` debe exponer `getConfigDirectory()` que devuelve `Path` al directorio `<manager>/config`. Los módulos resuelven `folder.resolve("<modulo>").resolve("config.yml")`.
 
 ---
 
-## 8. Referencias de Código
+## 8. Referencias de Código (Estado Actual vs Migración)
 
-| Componente | Archivo |
-|------------|---------|
-| `ConfigLoader` | `src/host/src/main/java/me/majhrs16/suite/host/config/ConfigLoader.java` |
-| `TranslatorsConfig` | `src/host/src/main/java/me/majhrs16/suite/host/config/TranslatorsConfig.java` |
-| `ChatTranslatorConfig` | `src/chattranslator/src/main/java/me/majhrs16/suite/chattranslator/ChatTranslatorConfig.java` |
-| `YamlUserLanguageStore` | `src/host/src/main/java/me/majhrs16/suite/host/config/YamlUserLanguageStore.java` |
-| `TextFormatterSuitePlugin.copyDefaultsIfMissing` | `src/spigot-host/.../TextFormatterSuitePlugin.java` |
-| `SuiteBootstrap` | `src/host/src/main/java/me/majhrs16/suite/host/SuiteBootstrap.java` |
+| Componente | Archivo Actual | Archivo Objetivo (Post-Migración) |
+|------------|----------------|-----------------------------------|
+| `ConfigLoader.loadConfig` | `src/host/.../ConfigLoader.java` | `src/host/.../ConfigLoader.java` (solo suite) |
+| `ConfigLoader.loadChannels` | `src/host/.../ConfigLoader.java` | `src/textformatter/.../ChannelConfig.java` |
+| `TranslatorsConfig.load` | `src/host/.../TranslatorsConfig.java` | `src/chattranslator/.../BackendConfig.java` |
+| `ChatTranslatorConfig.load` | `src/chattranslator/.../ChatTranslatorConfig.java` | ✅ Ya en módulo correcto |
+| `SyncConfig.load` | `src/spigot-host/.../TextFormatterSuitePlugin.java` | `src/sync-bus/.../SyncConfig.java` |
+| `MessagesConfig.load` | `src/spigot-host/.../MessagesConfig.java` | ✅ En platform adapter (correcto) |
+| `YamlUserLanguageStore` | `src/host/.../YamlUserLanguageStore.java` | ✅ En host core (correcto) |
+| `InWorldConfig` | `src/inworld/.../InWorldHandler.java` | ✅ En inworld (correcto) |
+| `Observability` | `src/observability/.../Observability.java` | ✅ En observability (correcto) |
+
+---
+
+## 9. Próximos Pasos de Migración
+
+1. **textformatter**: Crear `ChannelConfig` en `src/textformatter`, mover lógica de channels ahí
+2. **chattranslator**: Crear `BackendConfig` en `src/chattranslator`, mover `TranslatorsConfig` ahí
+3. **sync-bus**: Crear `SyncConfig` en `src/sync-bus`, mover carga de sinks ahí
+4. **host**: Simplificar `ConfigLoader` y `TranslatorsConfig` para solo manejar `suite/config.yml` y `suite/rules.yml`
+5. **spigot-host/fabric-host**: Eliminar carga directa de sync/channels/translators; usar módulos
