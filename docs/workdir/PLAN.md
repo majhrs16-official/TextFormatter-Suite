@@ -254,7 +254,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:sync-bus` | ✅ OK | 1 | N/A | 116 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-discord` | ✅ OK | 3 | N/A | 476 | N/A | N/A |  |
 | `src:sync-http` | ✅ OK | 3 | N/A | 192 | N/A | N/A |  |
-| `src:sync-tcpudp` | ✅ OK | 3 | N/A | 202 | N/A | N/A |  |
+| `src:sync-socket` | ✅ OK | 3 | N/A | 202 | N/A | N/A |  |
 | `src:sync-telegram` | ✅ OK | 2 | N/A | 173 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-velocity` | ✅ OK | 1 | N/A | 305 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-websocket` | ✅ OK | 1 | N/A | 26 | N/A | N/A | Pocos tests (<3) |
@@ -334,7 +334,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL eliminado, SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
 - ✅ **Clean Architecture (Translator SPI)**: `host` ya no depende de `gtranslate`/`ltranslate` en compile-time. Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`). Proveedores se descubren via `ServiceLoader` en runtime. Tests usan `testImplementation` para translators.
 - ✅ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
-- ✅ **sync-telegram, sync-http, sync-tcpudp**: ✅ **SyncBus registered** - full SyncBus integration with per-sink isolation, retry/backoff
+- ✅ **sync-telegram, sync-http, sync-socket**: ✅ **SyncBus registered** - full SyncBus integration with per-sink isolation, retry/backoff
 
 ---
 
@@ -439,7 +439,7 @@ export JAVA_HOME=/opt/javac/x64/21
 - `TcpSink`/`UdpSink` → campos volatile.
 - **Wiring suite→plataforma** → `SpigotChatDelivery` (hop a main thread), `SuiteHost.bootstrap` con ServiceLoader, `MessageDispatcher` expande `Direction`→receptores, orquesta por-receptor.
 - Dominio duplicado → `suite/core-api` adoptado como canónico; `common` → `common-legacy`; bridge `ChatRouter` eliminado.
-- `HttpTransport` único en `suite/transport` (extraído de gtranslate/ltranslate/sync-*). `MessageCodec` único en `sync-http`/`sync-tcpudp`.
+- `HttpTransport` único en `suite/transport` (extraído de gtranslate/ltranslate/sync-*). `MessageCodec` único en `sync-http`/`sync-socket`.
 - Schema centralizado → `ConfigPath` enum en `ConfigLoader` genera `paths.json`.
 - **Web-editor P0 arreglado y verificado** (`npm run check` + integración verde).
 
@@ -1063,7 +1063,7 @@ source ~/.nvm/nvm.sh
 cd src/web-editor && npm run check && npm run test:integration
 
 # Suite Java (orden; offline salvo deps nuevas; incluye iflow-vm e iflow-wasm)
-for m in core-api kernel textformatter iflow-vm iflow-wasm gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-tcpudp sync-websocket sync-velocity host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
+for m in core-api kernel textformatter iflow-vm iflow-wasm gtranslate ltranslate messages tester transport sync-discord sync-telegram sync-http sync-socket sync-websocket sync-velocity host presets inworld observability extension-api example-extension loadtest performance manager-api manager-impl; do
   (cd src/$m && ./gradlew test publishToMavenLocal --offline --no-daemon)
 done
 
@@ -1212,7 +1212,7 @@ Todos los items P1 resueltos:
 | **B-06** | 🟠 Alto | **Rate limit WebSocket nunca recupera** — Ventana sliding por último mensaje | ✅ **RESUELTO** | Ventana fija alineada a época (`now / 1000 * 1000`) |
 | **M-01** | 🟠 Alto | **GTranslate solo primera oración** — `root[0][0][0]` | ✅ **RESUELTO** | Concatena todos los segmentos `root[0][i][0]` |
 | **M-02** | 🟠 Alto | **Thundering herd traducciones** — Sin dedup in-flight | ✅ **RESUELTO** | `inFlightTranslations` cache con `whenComplete` cleanup |
-| **M-03** | 🟠 Alto | **ArrayStoreException en MessageCodec** — `toArray(new String[0])` sin validar | ✅ **RESUELTO** | Validación elemento a elemento en sync-http/sync-tcpudp |
+| **M-03** | 🟠 Alto | **ArrayStoreException en MessageCodec** — `toArray(new String[0])` sin validar | ✅ **RESUELTO** | Validación elemento a elemento en sync-http/sync-socket |
 
 ### 🟡 MEDIOS (P2) — **TODOS RESUELTOS ✅**
 

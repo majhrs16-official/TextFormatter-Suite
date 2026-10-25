@@ -30,8 +30,8 @@ import me.majhrs16.suite.syncbus.DefaultSyncBus;
 import me.majhrs16.suite.syncbus.SyncBus;
 import me.majhrs16.suite.synctelegram.TelegramSink;
 import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
-import me.majhrs16.suite.synctcpudp.TcpSink;
-import me.majhrs16.suite.synctcpudp.UdpSink;
+import me.majhrs16.suite.syncsocket.TcpSink;
+import me.majhrs16.suite.syncsocket.UdpSink;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;

@@ -36,7 +36,7 @@ dependencies {
     testImplementation project(':src:ltranslate')
     testImplementation project(':src:sync-discord')
     testImplementation project(':src:sync-http')
-    testImplementation project(':src:sync-tcpudp')
+    testImplementation project(':src:sync-socket')
     testImplementation project(':src:sync-telegram')
     testImplementation project(':src:sync-websocket')
 

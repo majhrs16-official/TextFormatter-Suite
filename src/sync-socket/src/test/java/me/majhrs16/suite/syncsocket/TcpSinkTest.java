@@ -1,4 +1,4 @@
-package me.majhrs16.suite.synctcpudp;
+package me.majhrs16.suite.syncsocket;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;

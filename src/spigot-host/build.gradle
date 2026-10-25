@@ -34,7 +34,7 @@ dependencies {
     implementation project(':src:host')
     implementation project(':src:sync-discord')
     implementation project(':src:sync-http')
-    implementation project(':src:sync-tcpudp')
+    implementation project(':src:sync-socket')
     implementation project(':src:sync-telegram')
     implementation project(':src:sync-websocket')
     implementation project(':src:sync-bus')

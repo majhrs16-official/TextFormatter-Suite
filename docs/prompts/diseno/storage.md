@@ -65,7 +65,7 @@
     │   ├── sync-http/               ← **Submódulo** (sink HTTP)
     │   │   └── config.yml           ← endpoints, auth, timeouts
     │   │
-    │   ├── sync-tcpudp/             ← **Submódulo** (sinks TCP/UDP)
+    │   ├── sync-socket/             ← **Submódulo** (sinks TCP/UDP)
     │   │   ├── tcp.yml
     │   │   └── udp.yml
     │   │
@@ -108,7 +108,7 @@
 | `config/suite/sync/discord.yml` | `spigot-host` carga directo | **`sync-discord`** (submódulo) | 🔄 Migrar |
 | `config/suite/sync/websocket.yml` | `spigot-host` carga directo | **`sync-websocket`** (submódulo) | 🔄 Migrar |
 | `config/suite/sync/telegram.yml` | `spigot-host` carga directo | **`sync-telegram`** (submódulo) | 🔄 Migrar |
-| `config/suite/sync/tcp.yml` / `udp.yml` | `spigot-host` carga directo | **`sync-tcpudp`** (submódulo) | 🔄 Migrar |
+| `config/suite/sync/tcp.yml` / `udp.yml` | `spigot-host` carga directo | **`sync-socket`** (submódulo) | 🔄 Migrar |
 | `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform adapter) | ✅ OK |
 | `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
 | `config/suite/rules.yml` | `host` carga | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
@@ -340,23 +340,23 @@ chat-id: 0
 
 ---
 
-### 3.7.4 `config/sync-tcpudp/` — Submódulo sync-tcpudp
+### 3.7.4 `config/sync-socket/` — Submódulo sync-socket (TCP/UDP)
 
 ```yaml
-# config/sync-tcpudp/tcp.yml
+# config/sync-socket/tcp.yml
 enabled: false
 host: "127.0.0.1"
 port: 9093
 
-# config/sync-tcpudp/udp.yml
+# config/sync-socket/udp.yml
 enabled: false
 remote-host: "127.0.0.1"
 remote-port: 9094
 local-port: 9095
 ```
 
-**Cargado por**: `sync-tcpudp` (en su `onLoad`)  
-**Dueño**: `sync-tcpudp` module (submódulo)  
+**Cargado por**: `sync-socket` (en su `onLoad`)  
+**Dueño**: `sync-socket` module (submódulo)  
 **Require**: `Capability.of("sync-bus", ...)`  
 **Provide**: `Capability.of("sync-sink", ...)` (doble: tcp + udp)
 
@@ -436,7 +436,7 @@ health-enabled: true
        ├─► sync-websocket → se registra en SyncBus
        ├─► sync-telegram → se registra en SyncBus
        ├─► sync-http → se registra en SyncBus
-       └─► sync-tcpudp → se registra en SyncBus
+       └─► sync-socket → se registra en SyncBus
 ```
 
 ### 4.2 Recarga (`/suite reload`)
@@ -461,7 +461,7 @@ health-enabled: true
    - config/sync-websocket/
    - config/sync-telegram/
    - config/sync-http/
-   - config/sync-tcpudp/
+   - config/sync-socket/
    - config/inworld/
    - config/observability/
    - config/<modulo>/ (todos)
@@ -480,7 +480,7 @@ health-enabled: true
 | Archivo config principal | `config.yml` | `config/chattranslator/config.yml`, `config/sync-discord/config.yml` |
 | Sub-archivos (colecciones) | `<nombre>.yml` | `config/textformatter/channels/chat.global.yml` |
 | Backends (colección) | `<provider>.yml` | `config/chattranslator/translators/google.yml` |
-| Sinks (colección — ya no aplica, cada submódulo tiene su config.yml) | — | `config/sync-discord/config.yml` |
+| Sinks (colección — ya no aplica, cada submódulo tiene su config.yml) | — | `config/sync-discord/config.yml`, `config/sync-socket/config.yml` |
 | Backup timestamp | `yyyyMMdd-HHmmss` | `backup/20261024-153045/` |
 | JAR módulo | `<modulo>-<version>.jar` | `chattranslator-2.1.0.jar` |
 | JAR submódulo | `<submodulo>-<version>.jar` | `gtranslate-2.1.0.jar`, `sync-discord-2.1.0.jar` |
