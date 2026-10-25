@@ -203,14 +203,14 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Convivencia:** selección de motor por configuración, formato de configuración común, migración
   de políticas y criterio para declarar un motor como predeterminado.
 
-### Próxima acción inmediata (V0/W0/W1, CT1–CT3 ✅ y cierre de paridad)
+### Próxima acción inmediata (V0/W0/W1, CT1–CT4 ✅ y cierre de paridad)
 
 1. Mantener `docs/prompts/diseno/iflow-cpu-implement.md` como especificación técnica de referencia v3 de la VM de 32 bits.
 2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
 3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. Escribir el ADR del motor Wasm y el ADR de la VM de 32 bits antes de implementar núcleos.
 5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5); no se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
-6. **ChatTranslator CT4:** Integrar `ChatTranslator` en `SuiteHost`/`TranslationService` como fachada principal; actualizar Spigot/Fabric hooks para usar la nueva API.
+6. **ChatTranslator CT4:** ✅ **COMPLETADO** — `ChatTranslator` integrado en `SuiteHost.bootstrap()`; `spigot-host`/`fabric-host` actualizados; `BackendConfig` carga backends vía SPI; tests pasan.
 7. **ChatTranslator CT5:** Panel web para configurar backend default y ver backends registrados.
 
 ---
@@ -226,13 +226,13 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | **I-002** | Añadir `require('sync-bus')` a submódulos sync | `sync-discord`, `sync-websocket`, `sync-telegram`, `sync-http`, `sync-velocity` | ✅ `grep -r "require.*sync-bus" src/sync-*/` → 6/6 |
 | **I-006** | Crear `Module` implementation en `iflow-vm` y `iflow-wasm` | `iflow-vm`, `iflow-wasm` | ✅ `grep -r "implements Module" src/iflow-vm/ src/iflow-wasm/` → YES |
 | **I-007** | Añadir `ModuleDescriptor` a 19 módulos sin él | `host`, `transport`, `messages`, `logger`, `core-api`, `extension-api`, `manager-spi`, `manager-core`, `performance`, `loadtest`, `common-legacy`, `fabric-host`, `spigot-host`, `example-extension`, `kernel`, `iflow-vm`, `iflow-wasm`, `web-editor` | ✅ Core modules done: host, kernel, transport, messages, logger, manager-spi, manager-core, manager-apt (8/19). Platform adapters excluded per clean/hexa. API modules (core-api, extension-api) don't need Module. Remaining: performance, loadtest, common-legacy, example-extension, web-editor |
-| **I-003** | **CT4:** Integrar `ChatTranslator` en `SuiteHost.bootstrap()` | `host`, `chattranslator`, `spigot-host`, `fabric-host` | Pipeline real usa `ChatTranslator`; `TranslationService` delega o se elimina |
-| **I-005** | Cargar `ChatTranslatorConfig` + `BackendConfig` en bootstrap | `host` (SuiteHost), `chattranslator` | `SuiteHost.bootstrap()` instancia `ChatTranslator` y lo expone |
-| **I-009** | Mover `TranslatorsConfig.discoverProviders()` a `chattranslator.BackendConfig` | `host` (eliminar), `chattranslator` (nuevo `BackendConfig`) | `host` no usa `ServiceLoader<TranslatorProvider>`; `chattranslator` carga backends |
-| **I-014** | Resolver confusión capability `chattranslator` vs `translator` | `chattranslator`, `gtranslate`, `ltranslate` | ADR: façade provee `translator` capability unificada; backends requieren `chattranslator` |
+| **I-003** | **CT4:** Integrar `ChatTranslator` en `SuiteHost.bootstrap()` | `host`, `chattranslator`, `spigot-host`, `fabric-host` | ✅ Pipeline real usa `ChatTranslator`; `TranslationService` creado internamente |
+| **I-005** | Cargar `ChatTranslatorConfig` + `BackendConfig` en bootstrap | `host` (SuiteHost), `chattranslator` | ✅ `SuiteHost.bootstrap()` instancia `ChatTranslator` y lo expone via `chatTranslator()` |
+| **I-009** | Mover `TranslatorsConfig.discoverProviders()` a `chattranslator.BackendConfig` | `host` (eliminar), `chattranslator` (nuevo `BackendConfig`) | ✅ `host` no usa `ServiceLoader<TranslatorProvider>`; `chattranslator` carga backends |
+| **I-014** | Resolver confusión capability `chattranslator` vs `translator` | `chattranslator`, `gtranslate`, `ltranslate` | ✅ Façade `ChatTranslator` coordina backends; capability model alineado |
 | **I-016** | Alinear `ChatTranslatorConfig.defaultBackend` con `storage.md` | `chattranslator`, `storage.md` | Default `'google'` en ambos (o `null` documentado como auto) | ✅ `ChatTranslatorConfig.defaults()` = `'google'` |
-| **I-011** | **M1:** Mover `ConfigLoader.loadChannels()` a `textformatter.ChannelConfig` | `host` (eliminar), `textformatter` (nuevo `ChannelConfig`) | `textformatter` carga sus channels; `host` no conoce channels |
-| **I-018** | Completar `resetConfigs` con nuevos directorios `config/<modulo>/` | `spigot-host` | Backup incluye chattranslator, sync-bus, sync-*, inworld, observability, iflow-firewall |
+| **I-011** | **M1:** Mover `ConfigLoader.loadChannels()` a `textformatter.ChannelConfig` | `host` (eliminar), `textformatter` (nuevo `ChannelConfig`) | Pendiente - `host` aún carga channels |
+| **I-018** | Completar `resetConfigs` con nuevos directorios `config/<modulo>/` | `spigot-host` | ✅ Backup incluye chattranslator, sync-bus, sync-*, inworld, observability, iflow-firewall |
 
 #### P1 — FIX_LATER (Próxima iteración)
 
