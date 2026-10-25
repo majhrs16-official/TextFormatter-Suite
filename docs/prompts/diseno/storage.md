@@ -6,7 +6,24 @@
 
 ---
 
-## 1. Layout General (Arquitectura Objetivo)
+## 1.2 Terminología: Módulo vs Submódulo
+
+> **Convención de arquitectura** usada en toda la suite:
+
+| Término | Definición | Ejemplos |
+|---------|------------|----------|
+| **Módulo** | Mini-aplicación central con responsabilidad cohesiva, ciclo de vida propio, y capacidad de registro vía SPI (`ModuleDescriptor`). Puede funcionar independientemente o como núcleo para submódulos. | `chattranslator`, `sync-bus`, `textformatter`, `iflow-vm`, `host`, `observability` |
+| **Submódulo** | Derivación/especialización que **extiende** un módulo central. Se registra como proveedor de capability del módulo padre. No existe sin su módulo padre. | `gtranslate`/`ltranslate` (submódulos de `chattranslator`), `sync-discord`/`sync-websocket`/`sync-telegram` (submódulos de `sync-bus`) |
+
+**Reglas:**
+1. Un **módulo** declara `provide(Capability.of("nombre-módulo", ...))`
+2. Un **submódulo** declara `require(Capability.of("módulo-padre", ...))` y `provide(Capability.of("translator|sync-sink", ...))`
+3. Cada **submódulo** es dueño de su `config/<submódulo>/config.yml`
+3. El **módulo padre** solo gestiona config genérica (`config/<módulo>/config.yml`) y coordina el registro de submódulos
+
+---
+
+## 1.3 Layout General (Arquitectura Objetivo)
 
 ```
 <servidor>/                          ← Raíz del servidor (Paper, Fabric, etc.)
@@ -33,13 +50,24 @@
     │   │   │   └── ...
     │   │   └── config.yml           ← Config de la fachada: default-backend, cache, timeouts
     │   │
-    │   ├── sync/                    ← **Módulo sync-bus** - Dueño de sincronización
-    │   │   ├── discord.yml
-    │   │   ├── websocket.yml
+    │   ├── sync-bus/                ← **Módulo sync-bus** - Bus central de sincronización
+    │   │   └── config.yml           ← Config genérica del bus (timeouts, retries, límites)
+    │   │
+    │   ├── sync-discord/            ← **Submódulo** (sink Discord)
+    │   │   └── config.yml           ← token, channels, guild, etc.
+    │   │
+    │   ├── sync-websocket/          ← **Submódulo** (sink WebSocket)
+    │   │   └── config.yml           ← port, bind, token, enabled
+    │   │
+    │   ├── sync-telegram/           ← **Submódulo** (sink Telegram)
+    │   │   └── config.yml           ← token, chat-id
+    │   │
+    │   ├── sync-http/               ← **Submódulo** (sink HTTP)
+    │   │   └── config.yml           ← endpoints, auth, timeouts
+    │   │
+    │   ├── sync-tcpudp/             ← **Submódulo** (sinks TCP/UDP)
     │   │   ├── tcp.yml
-    │   │   ├── udp.yml
-    │   │   ├── telegram.yml
-    │   │   └── config.yml           ← Config global de sync (si aplica)
+    │   │   └── udp.yml
     │   │
     │   ├── inworld/                 ← **Módulo inworld** - Dueño de interacciones en mundo
     │   │   └── config.yml           ← Formatos sign/cofre/libro, radios, etc.
@@ -47,7 +75,7 @@
     │   ├── observability/           ← **Módulo observability** - Dueño de métricas/debug/health
     │   │   └── config.yml           ← Puerto, bind, auth-token, métricas habilitadas
     │   │
-    │   └── <modulo>/                ← **Cada módulo tiene su propio directorio**
+    │   └── <modulo>/                ← **Cada módulo/submódulo tiene su propio directorio**
     │       └── config.yml
     │
     ├── data/                        ← Datos persistentes en runtime (no configs editables)
@@ -76,7 +104,11 @@
 |-------------------|---------------------|------------------------------|--------|
 | `config/suite/channels/` | `host` carga, `textformatter` usa | **`textformatter`** | ⚠️ Migrar |
 | `config/suite/translators/` | `host` carga (`TranslatorsConfig`) | **`chattranslator`** | ⚠️ Migrar |
-| `config/suite/sync/` | `spigot-host` carga directo | **`sync-bus`** | ⚠️ Migrar |
+| `config/suite/sync/` | `spigot-host` carga directo | **Descompuesto en submódulos** | 🔄 Rediseño |
+| `config/suite/sync/discord.yml` | `spigot-host` carga directo | **`sync-discord`** (submódulo) | 🔄 Migrar |
+| `config/suite/sync/websocket.yml` | `spigot-host` carga directo | **`sync-websocket`** (submódulo) | 🔄 Migrar |
+| `config/suite/sync/telegram.yml` | `spigot-host` carga directo | **`sync-telegram`** (submódulo) | 🔄 Migrar |
+| `config/suite/sync/tcp.yml` / `udp.yml` | `spigot-host` carga directo | **`sync-tcpudp`** (submódulo) | 🔄 Migrar |
 | `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform adapter) | ✅ OK |
 | `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
 | `config/suite/rules.yml` | `host` carga | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
@@ -246,36 +278,89 @@ translation-timeout-ms: 30000     # Timeout peticiones traducción (ms)
 
 ---
 
-### 3.7 `config/sync/*.yml` — Módulo sync-bus
+### 3.7 `config/sync-bus/config.yml` — Módulo sync-bus (Bus Central)
 
 ```yaml
-# config/sync/discord.yml
+# Configuración genérica del bus de sincronización
+default-timeout-ms: 5000
+max-retries: 3
+backoff-base-ms: 1000
+max-concurrent-deliveries: 100
+```
+
+**Cargado por**: `sync-bus` (`SyncBusConfig.load(folder)`)  
+**Dueño**: `sync-bus` module (módulo central)  
+**Usado por**: `DefaultSyncBus`, registro de sinks, health checks
+
+---
+
+### 3.7.1 `config/sync-discord/config.yml` — Submódulo sync-discord
+
+```yaml
 enabled: true
 token: ""
 channels: []
+```
 
-# config/sync/websocket.yml
+**Cargado por**: `sync-discord` (en su `onLoad`)  
+**Dueño**: `sync-discord` module (submódulo)  
+**Require**: `Capability.of("sync-bus", ...)`  
+**Provide**: `Capability.of("sync-sink", ...)`
+
+---
+
+### 3.7.2 `config/sync-websocket/config.yml` — Submódulo sync-websocket
+
+```yaml
 enabled: false
 port: 9092
 bind: "127.0.0.1"
 token: "changeme"
+```
 
-# config/sync/tcp.yml
-enabled: false
-host: "127.0.0.1"
-port: 9093
+**Cargado por**: `sync-websocket` (en su `onLoad`)  
+**Dueño**: `sync-websocket` module (submódulo)  
+**Require**: `Capability.of("sync-bus", ...)`  
+**Provide**: `Capability.of("sync-sink", ...)`
 
-# config/sync/telegram.yml
+---
+
+### 3.7.3 `config/sync-telegram/config.yml` — Submódulo sync-telegram
+
+```yaml
 enabled: false
 token: ""
 chat-id: 0
 ```
 
-**Cargado por**: `sync-bus` (nuevo: `SyncConfig.load(folder)`)  
-**Dueño**: `sync-bus` module  
-**Usado por**: Sinks de sincronización (Discord, WebSocket, TCP, UDP, Telegram)
+**Cargado por**: `sync-telegram` (en su `onLoad`)  
+**Dueño**: `sync-telegram` module (submódulo)  
+**Require**: `Capability.of("sync-bus", ...)`  
+**Provide**: `Capability.of("sync-sink", ...)`
 
-> **Migración pendiente**: Mover carga de sync de `spigot-host` a `sync-bus`.
+---
+
+### 3.7.4 `config/sync-tcpudp/` — Submódulo sync-tcpudp
+
+```yaml
+# config/sync-tcpudp/tcp.yml
+enabled: false
+host: "127.0.0.1"
+port: 9093
+
+# config/sync-tcpudp/udp.yml
+enabled: false
+remote-host: "127.0.0.1"
+remote-port: 9094
+local-port: 9095
+```
+
+**Cargado por**: `sync-tcpudp` (en su `onLoad`)  
+**Dueño**: `sync-tcpudp` module (submódulo)  
+**Require**: `Capability.of("sync-bus", ...)`  
+**Provide**: `Capability.of("sync-sink", ...)` (doble: tcp + udp)
+
+> **Migración pendiente**: Mover carga de sync de `spigot-host` a cada submódulo respectivo. El `sync-bus` solo carga su config genérica.
 
 ---
 
@@ -327,20 +412,31 @@ health-enabled: true
 
 ## 4. Ciclo de Vida de Archivos
 
-### 4.1 Arranque (Bootstrap)
+### 4.1 Arranque (Bootstrap) — Orden Módulos → Submódulos
 
 ```
 1. SuiteHost.bootstrap(folder) / SuiteBootstrap.bootstrap(folder)
    │
-   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))              → HostConfig (suite/config.yml)
-   ├─► RulesConfig.load(folder.resolve("suite"))                     → Rules (suite/rules.yml)
-   ├─► textformatter.ChannelConfig.load(folder.resolve("textformatter")) → ChannelRegistry
-   ├─► chattranslator.BackendConfig.load(folder.resolve("chattranslator")) → TranslatorManager
-   ├─► chattranslator.ChatTranslatorConfig.load(folder.resolve("chattranslator")) → ChatTranslator
-   ├─► syncbus.SyncConfig.load(folder.resolve("sync"))               → SyncBus + sinks
-   ├─► inworld.InWorldConfig.load(folder.resolve("inworld"))         → InWorldHandler
-   ├─► observability.ObservabilityConfig.load(folder.resolve("observability")) → Observability
-   └─► MessagesConfig.load(folder.resolve("suite"))                  → Messages (platform adapter)
+   ├─► MÓDULOS CORE (independientes, sin requires de otros módulos suite)
+   │   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))              → HostConfig (suite/config.yml)
+   │   ├─► RulesConfig.load(folder.resolve("suite"))                     → Rules (suite/rules.yml)
+   │   ├─► textformatter.ChannelConfig.load(folder.resolve("textformatter")) → ChannelRegistry
+   │   ├─► inworld.InWorldConfig.load(folder.resolve("inworld"))         → InWorldHandler
+   │   ├─► observability.ObservabilityConfig.load(folder.resolve("observability")) → Observability
+   │   └─► MessagesConfig.load(folder.resolve("suite"))                  → Messages (platform adapter)
+   │
+   ├─► MÓDULOS CON DEPENDENCIAS (cargan después de sus requires)
+   │   ├─► chattranslator.BackendConfig.load(folder.resolve("chattranslator")) → TranslatorManager
+   │   ├─► chattranslator.ChatTranslatorConfig.load(folder.resolve("chattranslator")) → ChatTranslator
+   │   └─► syncbus.SyncBusConfig.load(folder.resolve("sync-bus"))        → SyncBus (config genérica)
+   │
+   └─► SUBMÓDULOS (cargan tras sus módulos padre; auto-registran vía SPI)
+       ├─► gtranslate/ltranslate → se registran en TranslatorManager
+       ├─► sync-discord → se registra en SyncBus
+       ├─► sync-websocket → se registra en SyncBus
+       ├─► sync-telegram → se registra en SyncBus
+       ├─► sync-http → se registra en SyncBus
+       └─► sync-tcpudp → se registra en SyncBus
 ```
 
 ### 4.2 Recarga (`/suite reload`)
@@ -360,7 +456,12 @@ health-enabled: true
    - config/iflow-firewall/
    - config/textformatter/
    - config/chattranslator/
-   - config/sync/
+   - config/sync-bus/
+   - config/sync-discord/
+   - config/sync-websocket/
+   - config/sync-telegram/
+   - config/sync-http/
+   - config/sync-tcpudp/
    - config/inworld/
    - config/observability/
    - config/<modulo>/ (todos)
@@ -374,13 +475,15 @@ health-enabled: true
 
 | Elemento | Convención | Ejemplo |
 |----------|------------|---------|
-| Directorio módulo | `kebab-case` | `textformatter`, `chattranslator`, `sync` |
-| Archivo config principal | `config.yml` | `config/chattranslator/config.yml` |
+| Directorio **módulo** | `kebab-case` | `textformatter`, `chattranslator`, `sync-bus`, `inworld` |
+| Directorio **submódulo** | `kebab-case` | `gtranslate`, `ltranslate`, `sync-discord`, `sync-websocket` |
+| Archivo config principal | `config.yml` | `config/chattranslator/config.yml`, `config/sync-discord/config.yml` |
 | Sub-archivos (colecciones) | `<nombre>.yml` | `config/textformatter/channels/chat.global.yml` |
 | Backends (colección) | `<provider>.yml` | `config/chattranslator/translators/google.yml` |
-| Sinks (colección) | `<sink>.yml` | `config/sync/discord.yml` |
+| Sinks (colección — ya no aplica, cada submódulo tiene su config.yml) | — | `config/sync-discord/config.yml` |
 | Backup timestamp | `yyyyMMdd-HHmmss` | `backup/20261024-153045/` |
 | JAR módulo | `<modulo>-<version>.jar` | `chattranslator-2.1.0.jar` |
+| JAR submódulo | `<submodulo>-<version>.jar` | `gtranslate-2.1.0.jar`, `sync-discord-2.1.0.jar` |
 
 ---
 
