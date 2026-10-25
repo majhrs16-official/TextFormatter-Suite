@@ -140,7 +140,7 @@ class MessageDispatcherTest {
                                          List<Actor> online,
                                          PermissionChecker permissions) {
         SuiteHost host = SuiteHost.bootstrap(dir, permissions,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
         return new MessageDispatcher(host, new TestDirectory(online, CONSOLE),
             delivery, permissions, quietLogger());
     }
@@ -212,7 +212,7 @@ class MessageDispatcherTest {
     void redirectRuleSendsToConsoleInsteadOfPlayers() throws Exception {
         writeLayout(false);
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
         RecordingDelivery delivery = new RecordingDelivery();
         MessageDispatcher subject = new MessageDispatcher(host,
@@ -231,7 +231,7 @@ class MessageDispatcherTest {
     void dropRuleSilencesEverything() throws Exception {
         writeLayout(false);
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_DROP);
         RecordingDelivery delivery = new RecordingDelivery();
         MessageDispatcher subject = new MessageDispatcher(host,

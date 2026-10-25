@@ -108,7 +108,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             final InWorldHandler inworldHandler;
             final SyncBus syncBus;
             final PluginLogger logger;
-            final TranslationService translationService;
 
             Runtime(SuiteHost host, MessageDispatcher dispatcher,
                     SpigotActorDirectory directory, UserLanguageStore languages,
@@ -119,8 +118,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     ModuleLifecycle moduleLifecycle,
                     InWorldHandler inworldHandler,
                     SyncBus syncBus,
-                    PluginLogger logger,
-                    TranslationService translationService) {
+                    PluginLogger logger) {
                 this.host = host;
                 this.dispatcher = dispatcher;
                 this.directory = directory;
@@ -134,7 +132,6 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 this.inworldHandler = inworldHandler;
                 this.syncBus = syncBus;
                 this.logger = logger;
-                this.translationService = translationService;
             }
 
             public SuiteHost host() { return host; }
@@ -208,9 +205,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                         logger.warn("Error closing Router: " + e.getMessage());
                     }
                 }
-                if (translationService != null) {
+                if (host != null && host.translation() != null) {
                     try {
-                        translationService.close();
+                        host.translation().close();
                         logger.debug("TranslationService closed");
                     } catch (Exception e) {
                         logger.warn("Error closing TranslationService: " + e.getMessage());
@@ -294,8 +291,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             folder);
         PermissionChecker permissions = this::hasPermission;
         this.messages = MessagesConfig.load(folder, "/defaults/messages.yml");
-        TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
-        SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
+        SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions,
             new SpigotPlaceholderResolver(), logger);
         final UserLanguageStore languages;
         if (languageStore == null) {
@@ -544,7 +540,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         ModuleLifecycle moduleLifecycle = new ModuleLifecycleAdapter(managerFacade, logger);
 
         // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, managerFacade, moduleLifecycle, inworldHandler, syncBus, logger, translation);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, managerFacade, moduleLifecycle, inworldHandler, syncBus, logger);
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -1077,8 +1073,7 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
             null, // moduleLifecycle
             null, // inworldHandler
             null, // syncBus
-            rt != null ? rt.logger : null,
-            rt != null ? rt.translationService : null
+            rt != null ? rt.logger : null
         );
         String[] args = type.equals("full") ? new String[0] : new String[]{type};
         return handleTest(temp, sender, args);

@@ -73,7 +73,7 @@ class SuiteIntegrationTest {
         TranslationService translation = new TranslationService(tm);
 
         // Create host
-        host = SuiteBootstrap.bootstrap(tempDir, (PermissionChecker) (actor, perm) -> true, translation, logger);
+        host = SuiteBootstrap.bootstrap(tempDir, (PermissionChecker) (actor, perm) -> true, null, logger);
     }
 
     @AfterAll

@@ -14,8 +14,14 @@ import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ModuleLoader;
 import me.majhrs16.suite.kernel.ResolutionResult;
+import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.chattranslator.ChatTranslator;
+import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
+import me.majhrs16.suite.chattranslator.BackendConfig;
+import me.majhrs16.suite.api.spi.TranslatorManager;
+import me.majhrs16.suite.iflow.channel.RateLimiter;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -52,10 +58,19 @@ public final class SuiteBootstrap {
      * through their own platform entry points per the Module contract.</p>
      */
     public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      TranslationService translation,
                                       me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
                                       PluginLogger logger) {
-        // 1. Load platform config
+        return bootstrap(configDir, permissions, placeholders, logger, ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null));
+    }
+
+    /**
+     * Bootstraps with an explicitly provided {@link ChatDelivery} implementation.
+     * Loads chattranslator config and backends, creates ChatTranslator facade.
+     */
+    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
+                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
+                                      PluginLogger logger,
+                                      ChatDelivery chatDelivery) {
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(configDir, logger);
         if (!configResult.isValid()) {
             if (logger != null) {
@@ -76,11 +91,17 @@ public final class SuiteBootstrap {
         }
         ChannelRegistry channels = channelsResult.config();
 
+        // Load ChatTranslator configuration and backends
+        ChatTranslatorConfig.Config chatTranslatorConfig = ChatTranslatorConfig.load(configDir);
+        TranslatorManager translatorManager = BackendConfig.load(configDir);
+        TranslationService translationService = new TranslationService(translatorManager);
+        ChatTranslator chatTranslator = new ChatTranslator(translatorManager, translationService, chatTranslatorConfig);
+
         // 2. Discover and resolve modules via kernel (descriptors only)
         List<Module> modules = ModuleLoader.discover();
         Environment env = Environment.current();
         ModuleGraph graph = new ModuleGraph(env);
-        me.majhrs16.suite.kernel.ResolutionResult result = graph.resolve(modules);
+        ResolutionResult result = graph.resolve(modules);
 
         // 3. Validate all modules resolved (no cycles, unmet requirements, etc.)
         if (!result.allResolved()) {
@@ -94,29 +115,25 @@ public final class SuiteBootstrap {
             throw new IllegalStateException(sb.toString());
         }
 
-        // 4. Wire core components (these are the actual services, not Module descriptors)
         // Load the VM policy program (policy.flow or the pass-through fallback)
-        me.majhrs16.suite.iflow.vm.isa.ProgramImage program = me.majhrs16.suite.iflow.vm.VmConfigLoader.loadProgram(configDir, logger);
+        me.majhrs16.suite.iflow.vm.isa.ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
 
         // Create rate limiter (shared with VM engine)
-        me.majhrs16.suite.iflow.channel.RateLimiter rateLimit = new me.majhrs16.suite.iflow.channel.RateLimiter();
+        RateLimiter rateLimit = new RateLimiter();
 
         // Create VM policy engine
-        me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine router = new me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine(channels, permissions, rateLimit);
+        VmPolicyEngine router = new VmPolicyEngine(channels, permissions, rateLimit);
         router.setProgram(program);
 
-        me.majhrs16.suite.textformatter.TextFormatter formatter = me.majhrs16.suite.textformatter.TextFormatters.create(channels, translation, placeholders, logger);
-
-        // 5. Create SuiteHost with core components
-        ChatDelivery chatDelivery = ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null);
-        return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
+        TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
+        return new SuiteHost(config, channels, translationService, chatTranslator, router, formatter, logger, chatDelivery);
     }
 
     /**
      * Bootstraps with default translation service and no placeholder resolver.
      */
     public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      TranslationService translation, PluginLogger logger) {
-        return bootstrap(configDir, permissions, translation, null, logger);
+                                      PluginLogger logger) {
+        return bootstrap(configDir, permissions, null, logger);
     }
 }

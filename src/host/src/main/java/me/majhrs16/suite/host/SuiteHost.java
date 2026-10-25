@@ -21,6 +21,11 @@ import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
+import me.majhrs16.suite.chattranslator.ChatTranslator;
+import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
+import me.majhrs16.suite.chattranslator.BackendConfig;
+import me.majhrs16.suite.api.spi.TranslatorManager;
+import me.majhrs16.suite.api.spi.TranslationService;
 
 import net.kyori.adventure.text.Component;
 
@@ -46,6 +51,7 @@ public final class SuiteHost {
     private final HostConfig config;
     private final ChannelRegistry channels;
     private final TranslationService translation;
+    private final ChatTranslator chatTranslator;
     private final Router router;
     private final TextFormatter formatter;
     private final PluginLogger logger;
@@ -54,6 +60,7 @@ public final class SuiteHost {
     SuiteHost(HostConfig config,
               ChannelRegistry channels,
               TranslationService translation,
+              ChatTranslator chatTranslator,
               Router router,
               TextFormatter formatter,
               PluginLogger logger,
@@ -61,16 +68,20 @@ public final class SuiteHost {
         this.config = config;
         this.channels = channels;
         this.translation = translation;
+        this.chatTranslator = chatTranslator;
         this.router = router;
         this.formatter = formatter;
         this.logger = logger;
         this.chatDelivery = chatDelivery;
     }
 
-    /** Bootstraps from a config directory following the suite layout. */
+    /**
+     * Bootstraps from a config directory following the suite layout.
+     * Loads ChatTranslator configuration and backends from chattranslator/ directory.
+     */
     public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      TranslationService translation, PluginLogger logger) {
-        return bootstrap(configDir, permissions, translation, null, logger);
+                                      PluginLogger logger) {
+        return bootstrap(configDir, permissions, null, logger);
     }
 
     /**
@@ -78,19 +89,16 @@ public final class SuiteHost {
      * on Spigot); {@code null} keeps built-in variables only.
      */
     public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      TranslationService translation,
                                       me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
                                       PluginLogger logger) {
-        return bootstrap(configDir, permissions, translation, placeholders, logger, ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null));
+        return bootstrap(configDir, permissions, placeholders, logger, ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null));
     }
 
     /**
      * Bootstraps with an explicitly provided {@link ChatDelivery} implementation.
-     * Use {@link #bootstrap(Path, PermissionChecker, TranslationService, PluginLogger)}
-     * for ServiceLoader-auto-discovery.
+     * Loads chattranslator config and backends, creates ChatTranslator facade.
      */
     public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      TranslationService translation,
                                       me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
                                       PluginLogger logger,
                                       ChatDelivery chatDelivery) {
@@ -109,6 +117,12 @@ public final class SuiteHost {
         HostConfig config = configResult.config();
         ChannelRegistry channels = channelsResult.config();
 
+        // Load ChatTranslator configuration and backends
+        ChatTranslatorConfig.Config chatTranslatorConfig = ChatTranslatorConfig.load(configDir);
+        TranslatorManager translatorManager = BackendConfig.load(configDir);
+        TranslationService translationService = new TranslationService(translatorManager);
+        ChatTranslator chatTranslator = new ChatTranslator(translatorManager, translationService, chatTranslatorConfig);
+
         // Load the VM policy program (policy.flow or the pass-through fallback)
         me.majhrs16.suite.iflow.vm.isa.ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
 
@@ -119,8 +133,8 @@ public final class SuiteHost {
         VmPolicyEngine router = new VmPolicyEngine(channels, permissions, rateLimit);
         router.setProgram(program);
 
-        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
-        return new SuiteHost(config, channels, translation, router, formatter, logger, chatDelivery);
+        TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
+        return new SuiteHost(config, channels, translationService, chatTranslator, router, formatter, logger, chatDelivery);
     }
 
     public HostConfig config() {
@@ -133,6 +147,10 @@ public final class SuiteHost {
 
     public TranslationService translation() {
         return translation;
+    }
+
+    public ChatTranslator chatTranslator() {
+        return chatTranslator;
     }
 
     public Router router() {

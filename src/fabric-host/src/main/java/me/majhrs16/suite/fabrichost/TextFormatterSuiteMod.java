@@ -124,7 +124,6 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         final FabricInWorldHandler inworldHandler;
         final SyncBus syncBus;
         final PluginLogger logger;
-        final TranslationService translationService;
         final ExecutorService eventExecutor;
 
         Runtime(SuiteHost host, MessageDispatcher dispatcher,
@@ -134,8 +133,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 ExtensionManager extensionManager,
                 FabricInWorldHandler inworldHandler,
                 SyncBus syncBus,
-                PluginLogger logger,
-                TranslationService translationService) {
+                PluginLogger logger) {
             this.host = host;
             this.dispatcher = dispatcher;
             this.directory = directory;
@@ -147,7 +145,6 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             this.inworldHandler = inworldHandler;
             this.syncBus = syncBus;
             this.logger = logger;
-            this.translationService = translationService;
             this.eventExecutor = new ThreadPoolExecutor(
                 2, 8, 60L, TimeUnit.SECONDS,
                 new java.util.concurrent.LinkedBlockingQueue<>(1000),
@@ -213,9 +210,9 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                     logger.warn("Error closing Router: " + e.getMessage());
                 }
             }
-            if (translationService != null) {
+            if (host != null && host.translation() != null) {
                 try {
-                    translationService.close();
+                    host.translation().close();
                     logger.debug("TranslationService closed");
                 } catch (Exception e) {
                     logger.warn("Error closing TranslationService: " + e.getMessage());
@@ -457,8 +454,7 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
         PluginLogger logger = logger();
         PermissionChecker permissions = TextFormatterSuiteMod::hasPermission;
         MESSAGES = MessagesConfig.load(folder, "/defaults/messages.yml");
-        TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
-        SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
+        SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions,
             new FabricPlaceholderResolver(), logger);
 
         // Validate configuration structure
@@ -666,7 +662,7 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
         FabricInWorldHandler inworldHandler = new FabricInWorldHandler(reloaded, dispatcher,
             SERVER,
             reloaded.channels(), logger,
-            translation, finalLanguages);
+            reloaded.translation(), finalLanguages);
         inworldHandler.registerListeners();
 
         // Reload extensions
@@ -678,7 +674,7 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                     reloaded,
                     dispatcher,
                     logger,
-                    translation,
+                    reloaded.translation(),
                     finalLanguages,
                     reloaded.channels(),
                     folder,
@@ -690,7 +686,7 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
         );
         extensionManager.start();
 
-        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, extensionManager, inworldHandler, syncBus, logger, translation);
+        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, extensionManager, inworldHandler, syncBus, logger);
         
         if (bridge != null) {
             bridge.start();

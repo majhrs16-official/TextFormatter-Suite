@@ -169,7 +169,7 @@ public class MessageProcessingBenchmark {
             }
         };
 
-        host = SuiteHost.bootstrap(tempDir, permissions, translation, mockPlaceholders, mockLogger, mockDelivery);
+        host = SuiteHost.bootstrap(tempDir, permissions, mockPlaceholders, mockLogger, mockDelivery);
 
         // Create mock ActorDirectory
         ActorDirectory mockActorDirectory = new ActorDirectory() {

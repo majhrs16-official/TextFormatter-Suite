@@ -77,7 +77,7 @@ class CrossLanguageGoldenTest {
                 }));
 
         me.majhrs16.suite.host.SuiteHost host = me.majhrs16.suite.host.SuiteHost.bootstrap(dir,
-            me.majhrs16.suite.iflow.channel.PermissionChecker.ALLOW_ALL, TRANS_SERVICE, quietLogger());
+            me.majhrs16.suite.iflow.channel.PermissionChecker.ALLOW_ALL, null, quietLogger());
 
         String[] formats = {
             "<gray>%player_name%: %content%</gray>",

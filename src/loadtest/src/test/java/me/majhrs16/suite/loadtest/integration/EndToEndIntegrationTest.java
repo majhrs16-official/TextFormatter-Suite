@@ -92,7 +92,7 @@ class EndToEndIntegrationTest {
         host = SuiteBootstrap.bootstrap(
             tempDir, 
             (actor, perm) -> true, 
-            translation, 
+            null, 
             logger
         );
     }
@@ -297,7 +297,6 @@ class EndToEndIntegrationTest {
         SuiteHost testHost = SuiteHost.bootstrap(
             tempDir,
             (actor, perm) -> true,
-            translation,
             noopResolver,
             logger,
             delivery
@@ -370,7 +369,6 @@ class EndToEndIntegrationTest {
         SuiteHost testHost = SuiteHost.bootstrap(
             tempDir,
             (actor, perm) -> true,
-            translation,
             noopResolver,
             logger,
             delivery

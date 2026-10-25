@@ -67,6 +67,7 @@ class SuiteHostTest {
 
     private void writeDefaultLayout() throws Exception {
         Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("chattranslator/translators"));
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
@@ -76,13 +77,21 @@ class SuiteHostTest {
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
             """);
+        Files.writeString(dir.resolve("chattranslator/config.yml"), """
+            default-backend: "fake"
+            context-override-enabled: true
+            """);
+        Files.writeString(dir.resolve("chattranslator/translators/fake.yml"), """
+            provider: "fake"
+            active: true
+            """);
     }
 
     @Test
     void routesAndRendersEndToEnd() throws Exception {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
 
         Message message = Message.builder()
             .sender(STEVE)
@@ -101,7 +110,7 @@ class SuiteHostTest {
     void dropRuleSilencesDelivery() throws Exception {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_DROP);
 
         RoutingResult result = host.deliver(
@@ -118,7 +127,7 @@ class SuiteHostTest {
     void rejectSetsConnectionLostMarkerDecision() throws Exception {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REJECT);
 
         RoutingResult result = host.deliver(
@@ -135,7 +144,7 @@ class SuiteHostTest {
     void redirectGoesToConsole() throws Exception {
         writeDefaultLayout();
         SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
 
         RoutingResult result = host.deliver(
@@ -158,7 +167,7 @@ class SuiteHostTest {
             """);
         PermissionChecker onlySenderCanSend = (actor, permission) -> !permission.equals("cht.chat.send");
         SuiteHost host = SuiteHost.bootstrap(dir, onlySenderCanSend,
-            fakeTranslation(), quietLogger());
+            null, quietLogger());
 
         RoutingResult echo = host.deliver(
             Message.builder().sender(STEVE).direction(Direction.initiator())
