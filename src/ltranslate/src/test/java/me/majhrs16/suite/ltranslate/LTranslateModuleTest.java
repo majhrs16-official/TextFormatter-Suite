@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
+import me.majhrs16.suite.chattranslator.ChatTranslatorModule;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
@@ -11,6 +12,7 @@ import me.majhrs16.suite.kernel.ResolutionStatus;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,11 +40,20 @@ class LTranslateModuleTest {
     }
 
     @Test
-    void resolvesInRealKernelGraph() {
-        me.majhrs16.suite.api.Module module = new LTranslateModule();
-        ResolutionResult result = new ModuleGraph(Environment.current())
-            .resolve(java.util.List.of(module));
+    void requiresChatTranslatorCapability() {
+        ModuleDescriptor descriptor = new LTranslateModule().descriptor();
+        assertTrue(descriptor.requires().stream()
+            .anyMatch(r -> r.name().equals("chattranslator")));
+    }
 
-        assertEquals(ResolutionStatus.RESOLVED, result.of(module));
+    @Test
+    void resolvesInRealKernelGraph() {
+        me.majhrs16.suite.api.Module ltranslateModule = new LTranslateModule();
+        me.majhrs16.suite.api.Module chatTranslatorModule = new ChatTranslatorModule();
+        ResolutionResult result = new ModuleGraph(Environment.current())
+            .resolve(List.of(ltranslateModule, chatTranslatorModule));
+
+        assertEquals(ResolutionStatus.RESOLVED, result.of(ltranslateModule));
+        assertEquals(ResolutionStatus.RESOLVED, result.of(chatTranslatorModule));
     }
 }

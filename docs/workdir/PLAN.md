@@ -102,9 +102,9 @@ Reglas de diseño:
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **CT0 — Scaffold** | Módulo `src/chattranslator/` creado, `ChatTranslator` facade, `Module` SPI, tests unitarios (12 tests) | ✅ Módulo Gradle incluido; `:src:chattranslator:build` y tests pasan |
-| **CT1 — Config & Default Backend** | Soporte para `translator.default-backend` en `config.yml`; lectura al arranque | Config schema extendido; test de integración con config real |
-| **CT2 — Context Flags Runtime** | API `setContextBackend(key, backend)` funcional; prioridad contexto > config > auto | Tests de prioridad pasando; sin regresiones en `gtranslate`/`ltranslate` |
-| **CT3 — Backend Re-registration** | Backends (`gtranslate`, `ltranslate`) declaran requerimiento `chattranslator` en `ModuleDescriptor`; `manager` respeta orden de carga | Grafo de dependencias válido; backends se cargan después del frontend |
+| **CT1 — Config & Default Backend** | Soporte para `default-backend` en `config/chattranslator/config.yml`; `ChatTranslatorConfig` carga al arranque | ✅ Config schema propio (`chattranslator/config.yml`); `ChatTranslatorConfig.load(folder)` implementado; tests de prioridad pasando |
+| **CT2 — Context Flags Runtime** | API `setContextBackend(key, backend)` funcional; prioridad contexto > config > auto | ✅ Tests de prioridad pasando; `context-override-enabled` configurable |
+| **CT3 — Backend Re-registration** | Backends (`gtranslate`, `ltranslate`) declaran requerimiento `chattranslator` en `ModuleDescriptor`; `manager` respeta orden de carga | ✅ `gtranslate`/`ltranslate` actualizados con `.require(Requirement.atLeast("chattranslator", ...))`; tests de resolución de grafo pasando |
 | **CT4 — Integración Host** | `SuiteHost`/`TranslationService` usan `ChatTranslator` como fachada principal; Spigot/Fabric hooks actualizados | Mensaje real traducido via `ChatTranslator` en pipeline E2E |
 | **CT5 — Editor & Autoría** | Panel web para configurar backend default y ver backends registrados | UI funcional + tests de integración |
 
@@ -203,15 +203,15 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - **Convivencia:** selección de motor por configuración, formato de configuración común, migración
   de políticas y criterio para declarar un motor como predeterminado.
 
-### Próxima acción inmediata (V0/W0/W1, CT1–CT2 y cierre de paridad)
+### Próxima acción inmediata (V0/W0/W1, CT1–CT3 ✅ y cierre de paridad)
 
 1. Mantener `docs/prompts/diseno/iflow-cpu-implement.md` como especificación técnica de referencia v3 de la VM de 32 bits.
 2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
 3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. Escribir el ADR del motor Wasm y el ADR de la VM de 32 bits antes de implementar núcleos.
 5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5); no se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
-6. **ChatTranslator CT1:** Extender schema de config (`config.yml` → `translator.default-backend`) y leerlo en `ChatTranslatorModule.onLoad()` (o equivalente en host).
-7. **ChatTranslator CT2:** Validar prioridad contexto > config > auto con tests de integración; actualizar `gtranslate`/`ltranslate` para declarar `requires(Capability.of("chattranslator", ...))` en sus `ModuleDescriptor`.
+6. **ChatTranslator CT4:** Integrar `ChatTranslator` en `SuiteHost`/`TranslationService` como fachada principal; actualizar Spigot/Fabric hooks para usar la nueva API.
+7. **ChatTranslator CT5:** Panel web para configurar backend default y ver backends registrados.
 
 ---
 

@@ -22,10 +22,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * La selección del backend sigue esta prioridad:
  * <ol>
  *   <li><strong>Flag de contexto (runtime):</strong> Si la petición incluye un
- *       contexto con clave {@code "chattranslator.backend"} indicando un nombre
- *       de proveedor (ej. {@code "google"}, {@code "libre"}), se usa ese backend.</li>
- *   <li><strong>Configuración estática (config.yml):</strong> En ausencia de flag,
- *       se usa el backend configurado como predeterminado en {@code translator.default}.</li>
+ *       contexto con clave indicando un nombre de proveedor (ej. {@code "google"}, {@code "libre"}),
+ *       se usa ese backend (si {@code contextOverrideEnabled} es true).</li>
+ *   <li><strong>Configuración estática (chattranslator/config.yml):</strong> En ausencia de flag,
+ *       se usa el backend configurado como predeterminado en {@code default-backend}.</li>
  *   <li><strong>Fallback automático:</strong> Si el backend indicado no está
  *       disponible, se recurre al primer proveedor disponible en el
  *       {@link TranslatorManager}.</li>
@@ -40,6 +40,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @see TranslationService
  * @see TranslatorManager
  * @see Translator
+ * @see ChatTranslatorConfig
  */
 public final class ChatTranslator implements AutoCloseable {
 
@@ -47,24 +48,34 @@ public final class ChatTranslator implements AutoCloseable {
     private final TranslationService translationService;
     private final ReadWriteLock configLock = new ReentrantReadWriteLock();
     private volatile String defaultBackend;
+    private volatile boolean contextOverrideEnabled;
 
     // Cache de contextos activos por hilo/petición (clave -> nombre backend)
     private final Map<String, String> contextBackendOverride = new ConcurrentHashMap<>();
 
     /**
-     * Crea una instancia de ChatTranslator con el manager y servicio de traducción.
+     * Crea una instancia de ChatTranslator con el manager, servicio de traducción y configuración.
      *
      * @param manager           gestor de proveedores (inyectado desde el host)
      * @param translationService servicio de traducción (inyectado desde el host)
+     * @param config            configuración del módulo (desde chattranslator/config.yml)
      */
-    public ChatTranslator(TranslatorManager manager, TranslationService translationService) {
+    public ChatTranslator(TranslatorManager manager, TranslationService translationService, ChatTranslatorConfig.Config config) {
         this.manager = manager;
         this.translationService = translationService;
-        this.defaultBackend = null;
+        this.defaultBackend = config.defaultBackend();
+        this.contextOverrideEnabled = config.contextOverrideEnabled();
     }
 
     /**
-     * Establece el backend predeterminado desde configuración estática (config.yml).
+     * Constructor de compatibilidad sin config explícita (usa defaults).
+     */
+    public ChatTranslator(TranslatorManager manager, TranslationService translationService) {
+        this(manager, translationService, ChatTranslatorConfig.Config.defaults());
+    }
+
+    /**
+     * Establece el backend predeterminado desde configuración estática (chattranslator/config.yml).
      * Se invoca durante el arranque del host al cargar la configuración.
      *
      * @param backendName nombre del backend (ej. {@code "google"}, {@code "libre"}),
@@ -94,16 +105,38 @@ public final class ChatTranslator implements AutoCloseable {
     }
 
     /**
+     * Habilita o deshabilita los overrides de contexto en runtime.
+     *
+     * @param enabled {@code true} para permitir {@code setContextBackend}
+     */
+    public void setContextOverrideEnabled(boolean enabled) {
+        this.contextOverrideEnabled = enabled;
+    }
+
+    /**
+     * Verifica si los overrides de contexto están habilitados.
+     *
+     * @return {@code true} si se permiten overrides por contexto
+     */
+    public boolean isContextOverrideEnabled() {
+        return contextOverrideEnabled;
+    }
+
+    /**
      * Establece un override de backend para un contexto de ejecución específico.
      * <p>
      * Este método permite forzar un backend concreto para una petición concreta
      * (ej. comando de usuario, evento específico) sin afectar la configuración global.
+     * Solo funciona si {@code contextOverrideEnabled} es {@code true}.
      * </p>
      *
      * @param contextKey clave única del contexto (ej. ID de petición, UUID de comando)
      * @param backendName nombre del backend a forzar, o {@code null} para limpiar el override
      */
     public void setContextBackend(String contextKey, String backendName) {
+        if (!contextOverrideEnabled) {
+            return;
+        }
         if (contextKey == null || contextKey.isBlank()) {
             return;
         }
@@ -240,7 +273,7 @@ public final class ChatTranslator implements AutoCloseable {
      * Resuelve el backend a usar según prioridad: contexto > config > null (auto).
      */
     private String resolveBackend(String contextKey) {
-        if (contextKey != null) {
+        if (contextKey != null && contextOverrideEnabled) {
             String ctxBackend = contextBackendOverride.get(contextKey);
             if (ctxBackend != null) {
                 return ctxBackend;
