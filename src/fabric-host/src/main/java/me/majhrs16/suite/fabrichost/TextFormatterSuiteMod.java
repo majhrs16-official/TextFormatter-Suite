@@ -456,7 +456,7 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
         copyDefaultsIfMissing(folder);
         PluginLogger logger = logger();
         PermissionChecker permissions = TextFormatterSuiteMod::hasPermission;
-        MESSAGES = MessagesConfig.load(folder, MessagesCatalog.getInstance().getAllMessages());
+        MESSAGES = MessagesConfig.load(folder, "/defaults/messages.yml");
         TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
         SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
             new FabricPlaceholderResolver(), logger);

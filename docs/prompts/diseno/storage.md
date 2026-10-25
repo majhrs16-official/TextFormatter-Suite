@@ -75,7 +75,7 @@
 | `config/suite/channels/` | `host` carga, `textformatter` usa | **`textformatter`** | ⚠️ Migrar |
 | `config/suite/translators/` | `host` carga (`TranslatorsConfig`) | **`chattranslator`** | ⚠️ Migrar |
 | `config/suite/sync/` | `spigot-host` carga directo | **`sync-bus`** | ⚠️ Migrar |
-| `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform-specific) | ✅ OK |
+| `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform adapter) | ✅ OK |
 | `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
 | `config/suite/rules.yml` | `host` carga | **`suite` (host core)** | ✅ OK |
 

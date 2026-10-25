@@ -58,7 +58,7 @@ public final class DiscordBridge {
         Path configPath = folder.resolve("sync/discord.yml");
         if (!Files.exists(configPath)) return null;
         try {
-            MessagesConfig syncConfig = MessagesConfig.load(configPath, Map.of());
+            MessagesConfig syncConfig = MessagesConfig.load(configPath, "/defaults/sync/discord.yml");
             String token = syncConfig.format("token");
             String channelStr = syncConfig.format("channel");
             long channelId = channelStr != null && !channelStr.isBlank() ? Long.parseLong(channelStr) : 0;

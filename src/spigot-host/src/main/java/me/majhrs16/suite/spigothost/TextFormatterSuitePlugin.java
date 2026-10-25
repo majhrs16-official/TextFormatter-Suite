@@ -293,7 +293,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger,
             folder);
         PermissionChecker permissions = this::hasPermission;
-        this.messages = MessagesConfig.load(folder, MessagesCatalog.getInstance().getAllMessages());
+        this.messages = MessagesConfig.load(folder, "/defaults/messages.yml");
         TranslationService translation = new TranslationService(TranslatorsConfig.load(folder));
         SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions, translation,
             new SpigotPlaceholderResolver(), logger);
