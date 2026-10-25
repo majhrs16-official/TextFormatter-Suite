@@ -14,8 +14,10 @@
     ├── config/                      ← **Directorio raíz de configuración de la suite**
     │   ├── suite/                   ← Configuración GLOBAL del host (solo lo que el core necesita)
     │   │   ├── config.yml           ← Config principal: idioma, claim-mode, sound, parallel, repositorios
-    │   │   ├── rules.yml            ← Reglas globales de transformación/bloqueo (motor de reglas)
     │   │   └── messages.yml         ← Strings de UI del host/platform (comandos /suite, prefijos)
+    │   │
+    │   ├── iflow-firewall/          ← **Módulo iflow-firewall** (legacy, solo editor web)
+    │   │   └── rules.yml            ← Grafo iFlow legacy YAML (solo editor web, no runtime)
     │   │
     │   ├── textformatter/           ← **Módulo textformatter** - Dueño de canales y formatos
     │   │   ├── channels/            ← Definición de canales (chat.global, join, quit, etc.)
@@ -77,7 +79,7 @@
 | `config/suite/sync/` | `spigot-host` carga directo | **`sync-bus`** | ⚠️ Migrar |
 | `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform adapter) | ✅ OK |
 | `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
-| `config/suite/rules.yml` | `host` carga | **`suite` (host core)** | ✅ OK |
+| `config/suite/rules.yml` | `host` carga | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
 
 > **Nota**: La migración implica mover la lógica de carga (`ConfigLoader.loadChannels`, `TranslatorsConfig.load`, etc.) desde `host` hacia los módulos dueños (`textformatter`, `chattranslator`, `sync-bus`).
 
@@ -128,6 +130,33 @@ rules:
 
 **Cargado por**: `host` (rule engine)  
 **Dueño**: `host` module (core)
+
+---
+
+### 3.3.1 `config/iflow-firewall/rules.yml` — Módulo iflow-firewall (Legacy)
+
+> **Nota**: Este módulo es opcional y solo para compatibilidad con el editor web legacy.
+> El runtime actual usa `policy.flow` (bytecode binario); este archivo YAML
+> solo sirve para validación/edición en el web editor.
+
+```yaml
+# iFlow v2 no evalúa reglas YAML ni expresiones inline.
+# Las políticas se cargan desde policy.flow (bytecode binario).
+# Este archivo se conserva como grafo legacy para el editor web y no
+# participa en la ejecución del runtime.
+guard:
+  max-steps: 512
+filter:
+  dedup-fanout: true
+  priority: batch-first
+priority: batch-first
+nodes: []
+edges: []
+```
+
+**Cargado por**: `iflow-firewall` (opcional, solo web editor)  
+**Dueño**: `iflow-firewall` module (legacy, solo editor web)  
+**No participa** en la ejecución del runtime (VM .flow / Wasm)
 
 ---
 
@@ -327,8 +356,8 @@ health-enabled: true
 ```
 1. Mueve configs de usuario a backup/<timestamp>/
    - config/suite/config.yml
-   - config/suite/rules.yml
    - config/suite/messages.yml
+   - config/iflow-firewall/
    - config/textformatter/
    - config/chattranslator/
    - config/sync/
