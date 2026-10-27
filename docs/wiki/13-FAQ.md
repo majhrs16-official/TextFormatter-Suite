@@ -133,8 +133,9 @@ Yes, implement `TranslationService` SPI and register via `Module` or `Extension`
 
 There is no inline condition language or SpEL in `iflow-vm`. Conditions and actions are bytecode
 in the `.flow` program, executed by `VmPolicyEngine`/`VmInterpreter`. The legacy `condition` key in
-`rules.yml` is ignored by the VM and by the editor graph; only the independent `iflow-firewall`
-engine (selected with `iflow.engine.kind: firewall`) executes SpEL rules.
+`rules.yml` is ignored by the VM and by the editor graph; only the mutually exclusive
+`iflow-firewall` engine (selected with `iflow.engine.kind: firewall`; install only one iFlow
+engine) executes SpEL rules.
 
 ## Sync
 

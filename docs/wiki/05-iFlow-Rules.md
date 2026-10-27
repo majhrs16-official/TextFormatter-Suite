@@ -7,9 +7,10 @@
 > ISA or ABI.
 >
 > The old `DefaultRouter` / `Rule` / SpEL-based rule engine was restored as the
-> independent **`iflow-firewall`** module (ADR-001, 2026-10-27). It does **not**
+> mutually exclusive **`iflow-firewall`** engine (ADR-001, 2026-10-27). It does **not**
 > describe the code in `src/iflow-vm`, which remains a 16-bit interpreted VM with
-> a binary `.flow` image. Both modules coexist; the host selects one with
+> a binary `.flow` image. The three iFlow engines share the base package
+> `me.majhrs16.suite.iflow` and only one may be installed; the host selects it with
 > `iflow.engine.kind` (`vm` by default, `firewall` for the legacy engine).
 
 ## What it is
@@ -90,7 +91,8 @@ policy engine and firmware integration.
 ## Historical note
 
 The old declarative `rules.yml` syntax with `cond`, `action`, `target` and SpEL
-conditions lives in the independent **`iflow-firewall`** module (`src/iflow-firewall`),
+conditions lives in the **`iflow-firewall`** engine (`src/iflow-firewall`), a mutually
+exclusive alternative to the VM,
 not in `iflow-vm`. Do not use old wiki revisions or external snippets as a reference
 for `src/iflow-vm`; use the module README and the tests instead. For the legacy engine,
 see the `iflow-firewall` sources and ADR-001.

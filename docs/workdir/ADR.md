@@ -550,36 +550,44 @@ actualizados; `buildAll` pasa con 766 tests JVM (0 fallos, 11 skipped).
 
 ---
 
-## Decisión 2026-10-27 — Restauración literal del motor SpEL legacy en `iflow-firewall` (revoca parcialmente 2026-10-20)
+## Decisión 2026-10-27 — Restauración del motor SpEL legacy en `iflow-firewall` como alternativa mutuamente excluyente
 
 **Estado:** Aceptada. Sustituye, **solo para `iflow-firewall`**, la decisión de 2026-10-20 de
 eliminar SpEL de todo el repositorio. La VM y Wasm siguen sin SpEL.
 
 **Contexto.** El usuario pidió restaurar el último commit donde existía el iFlow legacy y desarrollar
-`iflow-vm` e `iflow-firewall` en paralelo, sin que uno sustituya al otro. La búsqueda inicial no
-encontraba `iflow-firewall` porque la ruta original era `src/iflow`: en `933bdd3^` (padre del *VM
+`iflow-vm` e `iflow-firewall` en paralelo, sin que uno sustituya al otro en código. La búsqueda inicial
+no encontraba `iflow-firewall` porque la ruta original era `src/iflow`: en `933bdd3^` (padre del *VM
 architecture rewrite*) convivían `DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`,
 `ScriptSurface`, `Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, `PermissionChecker`,
 `RateLimiter` e `IflowModule`; el host tenía `RuleConfigLoader`. `933bdd3` los sustituyó por la VM,
 `e21e7d7` eliminó SpEL y `ead0523` renombró el módulo a `iflow-vm`.
 
+**Regla de producto.** Los tres motores —`iflow-vm`, `iflow-wasm` e `iflow-firewall`— son
+**mutuamente excluyentes**. Solo uno puede estar instalado en un servidor a la vez; instalar otro
+desinstala/reemplaza al anterior. Los tres comparten el paquete base `me.majhrs16.suite.iflow`
+(con subpaquetes propios: `.vm`, `.wasm`, `.rule`, etc.). El contrato `Router` tiene el mismo FQCN
+en los motores que lo implementan. Por eso no deben coexistir en el classpath y no se usa un sufijo `.firewall` ni un
+módulo `iflow-api` compartido.
+
 **Decisión.**
 
 1. Restaurar literalmente ese motor en `src/iflow-firewall`, con su propio contrato
-   (`Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, etc.) y su propio descriptor
-   `IflowModule`, que provee el capability `router`. Para evitar colisión de FQCN con
-   `iflow-vm` en el mismo classpath, el paquete restaurado es
-   `me.majhrs16.suite.iflow.firewall`; la lógica es la de `933bdd3^`.
-2. Mantener los módulos independientes: `iflow-firewall` no depende de `iflow-vm` y viceversa.
-   No se crea un módulo `iflow-api` compartido; cada uno conserva sus tipos.
-3. El host es el único punto de integración: `RouterFactory` selecciona el motor con
-   `iflow.engine.kind` (`vm` por defecto, `firewall` legacy) y `FirewallRouterAdapter` adapta los
-   tipos legacy al contrato que consume `SuiteHost`.
-4. `rules.yml` acepta la lista histórica de reglas (SpEL) o un mapa con `rules:`; el grafo del
+   (`Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, etc.) en el paquete
+   `me.majhrs16.suite.iflow`, y su descriptor `IflowFirewallModule` (nombre
+   `iflow-firewall`), que provee el capability `router`.
+2. Mantener los motores independientes: `iflow-firewall` no depende de `iflow-vm` y viceversa.
+   No se crea un módulo `iflow-api` compartido; cada JAR aporta las clases del contrato base.
+3. El host se compila contra `me.majhrs16.suite.iflow.Router`; `RouterFactory` selecciona el motor
+   con `iflow.engine.kind` (`vm` por defecto, `firewall` legacy). No hay adaptador: el motor
+   instalado implementa el mismo contrato.
+4. `ExpressionEvaluator` y `ExpressionEvaluationException` viven en `iflow-firewall`, no en
+   `core-api`, porque solo los usa este motor.
+5. `rules.yml` acepta la lista histórica de reglas (SpEL) o un mapa con `rules:`; el grafo del
    editor se valida pero no se ejecuta.
-5. Se restauran `ExpressionEvaluator`/`ExpressionEvaluationException` en `core-api` y
-   `spring-expression:6.1.12` en `iflow-firewall`; el sandbox conserva el bloqueo de `T()`, la
-   allowlist de clases, la resolución de métodos sin argumentos y una caché LRU acotada (1024).
+6. Se restaura `spring-expression:6.1.12` en `iflow-firewall`; el sandbox conserva el bloqueo de
+   `T()`, la allowlist de clases, la resolución de métodos sin argumentos y una caché LRU acotada
+   (1024).
 
 **Alcance de la revocación.** No se reintroduce SpEL en `textformatter`, presets, `<expr>` ni en el
 campo de condición del editor. Esas partes de la decisión de 2026-10-20 siguen vigentes. El único
@@ -587,17 +595,19 @@ consumidor de SpEL es el motor legacy opcional de `iflow-firewall`.
 
 **Consecuencias.**
 
-- Dos superficies de política ejecutables y seleccionables; ninguna reemplaza a la otra.
-- `spring-expression`/`spring-core`/`spring-jcl` vuelven al classpath de `iflow-firewall` (y al
-  runtime de tests de los módulos que dependen del host), no al de `iflow-vm`/`iflow-wasm`.
-- Hay dos contratos `Router` y un adaptador en `host`; es el coste de mantener los módulos
-  independientes.
-- El motor legacy solo se ejecuta con `iflow.engine.kind: firewall`; el default `vm` conserva el
-  comportamiento anterior.
+- Los tres motores son alternativas instalables; el gestor de paquetes debe reemplazar uno por otro.
+  Mientras el classpath de desarrollo contenga varios, `SuiteBootstrap` filtra los no seleccionados
+  antes de resolver el grafo.
+- Cada JAR duplica las clases del contrato base con el mismo FQCN. Es intencional y solo es seguro
+  porque los motores son excluyentes; un despliegue con dos a la vez no está soportado.
+- `spring-expression`/`spring-core`/`spring-jcl` vuelven solo al classpath de `iflow-firewall`.
+- `core-api` no incorpora SPI de expresión de un solo módulo.
+- El default `iflow.engine.kind: vm` conserva el comportamiento anterior; el motor legacy solo se
+  ejecuta si está instalado y se selecciona `firewall`.
 - Tests: 44 en `iflow-firewall` (motor, SpEL, loader, validador) y 3 de integración en `host`
-  (selección VM/firewall, adaptador, convivencia de ambos descriptores en el kernel).
+  (selección VM/firewall y descriptores alternativos).
 
-**Implementación (2026-10-27).** Código restaurado, `build.gradle` y lockfiles actualizados,
-`FirewallConfig` tolera el esquema legacy, selección de motor en `HostConfig`/`ConfigLoader`,
-`RouterFactory`/`FirewallRouterAdapter` en `host`, y documentación (PLAN, storage, README, wiki)
-alineada. `./gradlew build` pasa.
+**Implementación (2026-10-27).** Código restaurado en `me.majhrs16.suite.iflow`, descriptor
+`iflow-firewall`, SPI de expresión dentro del módulo, `RouterFactory` sin adaptador, `FirewallConfig`
+tolera el esquema legacy, selección de motor en `HostConfig`/`ConfigLoader`, y documentación de
+exclusividad (PLAN, ADR, storage, README, wiki). `./gradlew build` pasa.

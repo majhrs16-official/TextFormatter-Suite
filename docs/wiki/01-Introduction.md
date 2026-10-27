@@ -30,7 +30,7 @@ TextFormatter Suite is a modern, modular, and highly extensible chat formatting 
 ### 🔒 Security
 - **Tokens in `char[]`** - Discord, Telegram, LibreTranslate tokens zeroed after use (`Arrays.fill('\0')`)
 - **MiniEscape Complete** - Escapes 10 chars: `< > \ { } [ ] ( ) # @`
-- **No Inline Expression Engine in the VM** - templates only substitute placeholders. Policies run in the iFlow VM (`.flow`) by default; the optional legacy `iflow-firewall` engine can execute SpEL rules when `iflow.engine.kind: firewall`.
+- **No Inline Expression Engine in the VM** - templates only substitute placeholders. Policies run in the iFlow VM (`.flow`) by default; the optional, mutually exclusive legacy `iflow-firewall` engine can execute SpEL rules when `iflow.engine.kind: firewall`.
 - **SSRF Protection** - `HttpTransport` validates IPs via `getAllByName()` (RFC 1918/3927/6598)
 - **SafeConstructor** - All YAML loaders use `SafeConstructor` (no arbitrary deserialization)
 - **Signature Verification** - Module Manager supports cosign/gpg verification (mandatory for production)

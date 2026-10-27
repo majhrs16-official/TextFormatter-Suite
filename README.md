@@ -164,7 +164,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (397 tests) |
-| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; independiente de `iflow-vm` | ✅ Probado (44 tests) |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | ✅ Probado (44 tests) |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | 🧪 W2 |
 | `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML; sin motor de ejecución | ✅ Catálogo probado (2 tests) |
 
@@ -444,4 +444,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-27 — `iflow-firewall` restaura el motor SpEL legacy (ADR-001) y convive con `iflow-vm`; el host selecciona el motor con `iflow.engine.kind`. Antes: P0 de código, limpieza material, aislamiento de SpEL, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto. El primer run de CI (#65) reveló metadata de verificación incompleta para un checkout limpio; la corrección se publicó y el run #66 completó los cuatro jobs en verde. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*
+*Última actualización: 2026-10-27 — `iflow-firewall` restaura el motor SpEL legacy (ADR-001) como alternativa **mutuamente excluyente** de `iflow-vm`; el host selecciona el motor instalado con `iflow.engine.kind`. Antes: P0 de código, limpieza material, aislamiento de SpEL, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto. El primer run de CI (#65) reveló metadata de verificación incompleta para un checkout limpio; la corrección se publicó y el run #66 completó los cuatro jobs en verde. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*

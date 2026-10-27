@@ -106,8 +106,8 @@ Use **Spring Expression Language (SpEL)** for rule conditions and actions.
 
 ### Current Decision
 
-SpEL is confined to the independent **`iflow-firewall`** module, which restores the
-legacy engine from `933bdd3^:src/iflow` (ADR-001). `iflow-vm` and `iflow-wasm` do not
+SpEL is confined to the **`iflow-firewall`** engine, a mutually exclusive alternative that
+restores the legacy implementation from `933bdd3^:src/iflow` (ADR-001). `iflow-vm` and `iflow-wasm` do not
 use SpEL: the VM executes binary `.flow` programs in `VmPolicyEngine`/`VmInterpreter`,
 and templates only substitute placeholders. The host selects the engine with
 `iflow.engine.kind` (`vm` by default, `firewall` for the legacy rules).

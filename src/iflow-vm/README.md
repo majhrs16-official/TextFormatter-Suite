@@ -340,7 +340,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 
 | Clase | Responsabilidad |
 |-------|-----------------|
-| `IflowModule` | Registra `VmPolicyEngine` como `Router` SPI |
+| `IfowVmModule` | Registra `VmPolicyEngine` como `Router` SPI |
 | `VmPolicyEngine` | Implementa `Router`, ejecuta VM, valida resultado |
 | `VmPolicyEngine.setProgram()` | Hot-reload de `ProgramImage` |
 | `VmConfigLoader.loadProgram()` | Carga `policy.flow` o fallback pass-through |

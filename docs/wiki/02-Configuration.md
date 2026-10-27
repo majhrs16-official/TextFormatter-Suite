@@ -240,9 +240,10 @@ iFlow v2 executes **binary VM programs** (`.flow`), not YAML rule expressions. A
 `VmConfigLoader` tries `policy.flow`; if it is absent or invalid, it falls back to a
 pass-through program. The VM has no SpEL and no inline condition language.
 
-The optional legacy engine `iflow-firewall` is independent of the VM and can execute
-SpEL rules from `config/iflow-firewall/rules.yml` when `iflow.engine.kind: firewall`.
-With the default `iflow.engine.kind: vm`, that file is not part of the runtime.
+The optional legacy engine `iflow-firewall` is a **mutually exclusive alternative** to the VM
+(only one iFlow engine may be installed) and can execute SpEL rules from
+`config/iflow-firewall/rules.yml` when `iflow.engine.kind: firewall`. With the default
+`iflow.engine.kind: vm`, that file is not part of the runtime.
 
 ```text
 config-dir/

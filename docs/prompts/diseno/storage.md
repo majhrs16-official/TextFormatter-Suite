@@ -96,6 +96,14 @@
     └── logs/                        ← Logs específicos de la suite (opcional)
 ```
 
+> **Motores iFlow mutuamente excluyentes.** `iflow-vm`, `iflow-wasm` e `iflow-firewall` ocupan
+> el mismo slot de instalación de motor iFlow y comparten el paquete base
+> `me.majhrs16.suite.iflow`. Solo uno puede
+> estar en `modules/`/classpath a la vez; instalar otro **desinstala/reemplaza** al anterior. No se
+> soporta la convivencia de dos motores ni un sufijo de paquete por motor (por ejemplo `.firewall`).
+> El monorepo compila todos para tests, pero `SuiteBootstrap` activa solo el seleccionado y el
+> empaquetado de producción debe incluir uno.
+
 ---
 
 ## 2. Estado Actual vs Objetivo (Migración Pendiente)
@@ -183,11 +191,13 @@ nodes: []
 edges: []
 ```
 
-**Cargado por**: `iflow-firewall.RuleConfigLoader.loadRules(folder)` (reglas) y
-`iflow-firewall.FirewallConfig.load(folder)` (validación del grafo)
+**Cargado por**: `RuleConfigLoader.loadRules(folder)` (reglas) y `FirewallConfig.load(folder)`
+(validación del grafo), ambos en `me.majhrs16.suite.iflow`
 **Dueño**: `iflow-firewall` module
 **Resolución**: `config/iflow-firewall/rules.yml` (canónico) → `rules.yml` (heredado)  
 **Selección de motor**: `iflow.engine.kind` en `config/suite/config.yml` (`vm` default | `firewall`)
+**Exclusividad**: `iflow-vm`, `iflow-wasm` e `iflow-firewall` son mutuamente excluyentes; solo uno
+se instala, comparten `me.majhrs16.suite.iflow` y el host usa el motor instalado
 
 ---
 
@@ -418,7 +428,7 @@ health-enabled: true
    │
    ├─► MÓDULOS CORE (independientes, sin requires de otros módulos suite)
    │   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))              → HostConfig (suite/config.yml)
-   │   ├─► firewall.FirewallConfig.load(folder)                          → RuleGraph (iflow-firewall/rules.yml)
+   │   ├─► iflow.FirewallConfig.load(folder)                             → RuleGraph (iflow-firewall/rules.yml)
    │   ├─► textformatter.ChannelConfig.load(folder.resolve("textformatter")) → ChannelRegistry
    │   ├─► inworld.InWorldConfig.load(folder.resolve("inworld"))         → InWorldHandler
    │   ├─► observability.ObservabilityConfig.load(folder.resolve("observability")) → Observability
