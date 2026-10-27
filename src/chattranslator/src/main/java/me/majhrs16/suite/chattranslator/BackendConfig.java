@@ -34,13 +34,17 @@ public final class BackendConfig {
     }
 
     /**
-     * Construye el manager desde {@code dir/chattranslator/translators/*.yml}.
+     * Construye el manager desde {@code dir/config/chattranslator/translators/*.yml}.
+     * <p>
+     * Se mantienen las rutas heredadas ({@code chattranslator/translators/} y
+     * {@code translators/}) durante la migración al layout de {@code storage.md}.
+     * </p>
      *
      * @param dir directorio base del suite (ej. plugin data folder)
      * @return TranslatorManager poblado con proveedores activos
      */
     public static TranslatorManager load(Path dir) {
-        Path translatorsDir = dir.resolve("chattranslator").resolve("translators");
+        Path translatorsDir = resolveTranslatorsDir(dir);
         List<Provider> providers = readProviders(translatorsDir);
         TranslatorManager manager = new TranslatorManager();
 
@@ -50,6 +54,23 @@ public final class BackendConfig {
             }
         }
         return manager;
+    }
+
+    /** @return el primer directorio de backends existente, o la ruta canónica. */
+    public static Path resolveTranslatorsDir(Path dir) {
+        Path canonical = dir.resolve("config").resolve("chattranslator").resolve("translators");
+        if (Files.isDirectory(canonical)) {
+            return canonical;
+        }
+        Path intermediate = dir.resolve("chattranslator").resolve("translators");
+        if (Files.isDirectory(intermediate)) {
+            return intermediate;
+        }
+        Path legacy = dir.resolve("translators");
+        if (Files.isDirectory(legacy)) {
+            return legacy;
+        }
+        return canonical;
     }
 
     /**

@@ -21,6 +21,9 @@ dependencies {
     implementation 'org.yaml:snakeyaml:2.2'
 
     testImplementation project(':src:kernel')
+    // Proveedores reales para descubrir backends vía ServiceLoader
+    testImplementation project(':src:gtranslate')
+    testImplementation project(':src:ltranslate')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'

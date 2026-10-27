@@ -32,15 +32,16 @@ public final class MessagesConfig {
     }
 
     /**
-     * Builds the message table from {@code dir/messages.yml}.
-     * If the file doesn't exist, loads the default resource from classpath.
+     * Builds the message table from {@code config/suite/messages.yml}
+     * (legacy {@code messages.yml}). If the file doesn't exist, loads the
+     * default resource from classpath.
      *
      * @param dir configuration directory (e.g. plugin data folder)
      * @param defaultResource classpath path to default messages.yml (e.g. "/defaults/messages.yml")
      */
     public static MessagesConfig load(Path dir, String defaultResource) {
         Map<String, String> merged = new HashMap<>();
-        Path file = dir.resolve("messages.yml");
+        Path file = HostPaths.suiteMessages(dir);
 
         // First, load defaults from resource (source of truth for defaults)
         loadDefaultsFromResource(defaultResource, merged);

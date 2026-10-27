@@ -14,9 +14,9 @@ import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
+import me.majhrs16.suite.host.config.HostPaths;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.config.MessagesConfig;
-import me.majhrs16.suite.host.config.TranslatorsConfig;
 import me.majhrs16.suite.host.config.YamlUserLanguageStore;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.inworld.InWorldHandler;
@@ -29,6 +29,7 @@ import me.majhrs16.suite.spigothost.logic.ChannelSelector;
 import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.syncbus.DefaultSyncBus;
+import me.majhrs16.suite.syncbus.SyncConfigPaths;
 import me.majhrs16.suite.syncbus.SyncBus;
 import me.majhrs16.suite.synchttp.HttpSink;
 import me.majhrs16.suite.synctelegram.TelegramSink;
@@ -310,7 +311,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize WebSocket Sync Sink (check enabled field)
         WebSocketSyncSink wsSink = null;
         try {
-            Path wsConfig = folder.resolve("sync/websocket.yml");
+            Path wsConfig = SyncConfigPaths.webSocket(folder);
             String wsToken = "";
             int wsPort = 9092;
             String wsBind = "127.0.0.1";
@@ -365,7 +366,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize TCP Sync Sink
         TcpSink tcpSink = null;
         try {
-            Path tcpConfig = folder.resolve("sync/tcp.yml");
+            Path tcpConfig = SyncConfigPaths.tcp(folder);
             if (Files.exists(tcpConfig)) {
                 org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
                     new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
@@ -392,7 +393,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize UDP Sync Sink
         UdpSink udpSink = null;
         try {
-            Path udpConfig = folder.resolve("sync/udp.yml");
+            Path udpConfig = SyncConfigPaths.udp(folder);
             if (Files.exists(udpConfig)) {
                 org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
                     new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
@@ -419,7 +420,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize Telegram Sync Sink
         TelegramSink telegramSink = null;
         try {
-            Path telegramConfig = folder.resolve("sync/telegram.yml");
+            Path telegramConfig = SyncConfigPaths.telegram(folder);
             if (Files.exists(telegramConfig)) {
                 org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
                     new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
@@ -564,22 +565,36 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         } catch (IOException ignored) {
             return;
         }
-        copyResource(folder, "defaults/config.yml", folder.resolve("config.yml"));
+        // storage.md: cada módulo escribe en config/<modulo>/. Si ya existe la
+        // ruta heredada no se duplica el archivo (evita configs divergentes).
+        copyResourceIfMissing(folder, "defaults/config.yml",
+            HostPaths.canonicalSuiteConfig(folder), folder.resolve("config.yml"));
         for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
-            copyResource(folder, "defaults/channels/" + name + ".yml",
+            copyResourceIfMissing(folder, "defaults/channels/" + name + ".yml",
+                folder.resolve("config/textformatter/channels/" + name + ".yml"),
                 folder.resolve("channels/" + name + ".yml"));
         }
-        copyResource(folder, "defaults/translators/google.yml",
+        copyResourceIfMissing(folder, "defaults/translators/google.yml",
+            folder.resolve("config/chattranslator/translators/google.yml"),
             folder.resolve("translators/google.yml"));
-        copyResource(folder, "defaults/messages.yml", folder.resolve("messages.yml"));
-        copyResource(folder, "defaults/sync/discord.yml",
-            folder.resolve("sync/discord.yml"));
-        copyResource(folder, "defaults/sync/websocket.yml",
-            folder.resolve("sync/websocket.yml"));
-        copyResource(folder, "defaults/inworld.yml",
-            folder.resolve("inworld.yml"));
-        copyResource(folder, "defaults/rules.yml",
-            folder.resolve("rules.yml"));
+        copyResourceIfMissing(folder, "defaults/messages.yml",
+            HostPaths.canonicalSuiteMessages(folder), folder.resolve("messages.yml"));
+        copyResourceIfMissing(folder, "defaults/sync/discord.yml",
+            SyncConfigPaths.canonicalDiscord(folder), folder.resolve("sync/discord.yml"));
+        copyResourceIfMissing(folder, "defaults/sync/websocket.yml",
+            SyncConfigPaths.canonicalWebSocket(folder), folder.resolve("sync/websocket.yml"));
+        copyResourceIfMissing(folder, "defaults/inworld.yml",
+            folder.resolve("config/inworld/config.yml"), folder.resolve("inworld.yml"));
+        copyResourceIfMissing(folder, "defaults/rules.yml",
+            folder.resolve("config/iflow-firewall/rules.yml"), folder.resolve("rules.yml"));
+    }
+
+    /** Copia el default solo si no existe ya ni la ruta canónica ni la heredada. */
+    private void copyResourceIfMissing(Path folder, String resourcePath, Path canonical, Path legacy) {
+        if (Files.exists(canonical) || (legacy != null && Files.exists(legacy))) {
+            return;
+        }
+        copyResource(folder, resourcePath, canonical);
     }
 
     /** /suite reset: mueve configs de usuario a backup/{@code <ts>}/ y regenera defaults. */
@@ -587,14 +602,14 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         try {
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
             Path backupDir = folder.resolve("backup").resolve(stamp);
-            for (String name : List.of("config.yml", "messages.yml")) {
+            for (String name : List.of("config.yml", "messages.yml", "rules.yml", "inworld.yml")) {
                 Path p = folder.resolve(name);
                 if (Files.exists(p)) {
                     Files.createDirectories(backupDir);
                     Files.move(p, backupDir.resolve(name), StandardCopyOption.REPLACE_EXISTING);
                 }
             }
-            for (String sub : List.of("channels", "translators")) {
+            for (String sub : List.of("channels", "translators", "sync")) {
                 Path dirPath = folder.resolve(sub);
                 if (Files.isDirectory(dirPath)) {
                     Path target = backupDir.resolve(sub);
@@ -604,7 +619,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             }
             // Nuevos directorios de config por módulo (architecture v3)
             for (String mod : List.of(
-                    "chattranslator", "sync-bus", "sync-discord", "sync-websocket",
+                    "suite", "chattranslator", "sync-bus", "sync-discord", "sync-websocket",
                     "sync-telegram", "sync-http", "sync-socket", "inworld", "observability",
                     "iflow-firewall", "textformatter")) {
                 Path dirPath = folder.resolve("config").resolve(mod);

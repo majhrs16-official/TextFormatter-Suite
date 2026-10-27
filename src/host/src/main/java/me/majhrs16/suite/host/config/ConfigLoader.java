@@ -60,10 +60,10 @@ public final class ConfigLoader {
         public List<String> errors() { return errors; }
     }
 
-    /** Loads {@code config.yml} from {@code dir}; missing file → defaults. */
+    /** Loads {@code config/suite/config.yml} (legacy {@code config.yml}); missing → defaults. */
     public static LoadResult<HostConfig> loadConfig(Path dir, PluginLogger logger) {
         List<String> errors = new ArrayList<>();
-        Path file = dir.resolve("config.yml");
+        Path file = HostPaths.suiteConfig(dir);
         if (!Files.exists(file)) {
             String msg = "config.yml not found at " + file + "; using defaults";
             if (logger != null) logger.error(msg);

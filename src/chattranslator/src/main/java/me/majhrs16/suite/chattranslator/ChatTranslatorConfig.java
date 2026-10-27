@@ -26,13 +26,17 @@ public final class ChatTranslatorConfig {
     }
 
     /**
-     * Carga la configuración desde {@code dir/chattranslator/config.yml}.
+     * Carga la configuración desde {@code dir/config/chattranslator/config.yml}.
+     * <p>
+     * Se mantiene la ruta heredada {@code chattranslator/config.yml} durante la
+     * migración al layout de {@code storage.md}.
+     * </p>
      *
      * @param dir directorio base del suite (ej. plugin data folder)
      * @return configuración cargada, o defaults si no existe
      */
     public static Config load(Path dir) {
-        Path configFile = dir.resolve("chattranslator").resolve("config.yml");
+        Path configFile = resolveConfigFile(dir);
         if (!Files.exists(configFile)) {
             return Config.defaults();
         }
@@ -46,9 +50,9 @@ public final class ChatTranslatorConfig {
 
             String defaultBackend = str(map.get("default-backend"), null);
             boolean contextOverrideEnabled = bool(map.get("context-override-enabled"), true);
-            int cacheMaxSize = (int) (long) map.getOrDefault("cache-max-size", 10000);
-            int detectionCacheMaxSize = (int) (long) map.getOrDefault("detection-cache-max-size", 5000);
-            long translationTimeoutMs = (long) map.getOrDefault("translation-timeout-ms", 30_000);
+            int cacheMaxSize = intOf(map.get("cache-max-size"), 10_000);
+            int detectionCacheMaxSize = intOf(map.get("detection-cache-max-size"), 5_000);
+            long translationTimeoutMs = longOf(map.get("translation-timeout-ms"), 30_000L);
 
             return new Config(defaultBackend, contextOverrideEnabled, cacheMaxSize,
                 detectionCacheMaxSize, translationTimeoutMs);
@@ -58,8 +62,42 @@ public final class ChatTranslatorConfig {
         }
     }
 
+    /** @return la ruta canónica si existe, o la heredada; la canónica si no hay ninguna. */
+    public static Path resolveConfigFile(Path dir) {
+        Path canonical = dir.resolve("config").resolve("chattranslator").resolve("config.yml");
+        if (Files.exists(canonical)) {
+            return canonical;
+        }
+        Path intermediate = dir.resolve("chattranslator").resolve("config.yml");
+        return Files.exists(intermediate) ? intermediate : canonical;
+    }
+
     private static String str(Object o, String def) {
         return o == null ? def : String.valueOf(o);
+    }
+
+    private static int intOf(Object o, int def) {
+        if (o instanceof Number n) return n.intValue();
+        if (o instanceof String s) {
+            try {
+                return Integer.parseInt(s.trim());
+            } catch (NumberFormatException ignored) {
+                return def;
+            }
+        }
+        return def;
+    }
+
+    private static long longOf(Object o, long def) {
+        if (o instanceof Number n) return n.longValue();
+        if (o instanceof String s) {
+            try {
+                return Long.parseLong(s.trim());
+            } catch (NumberFormatException ignored) {
+                return def;
+            }
+        }
+        return def;
     }
 
     private static boolean bool(Object o, boolean def) {

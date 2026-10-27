@@ -52,9 +52,6 @@ public final class ConfigValidator {
         // Validate translators
         issues.addAll(validateTranslators(configDir));
 
-        // Validate sync configs
-        issues.addAll(validateSync(configDir));
-
         // Log issues
         for (ValidationIssue issue : issues) {
             switch (issue.level()) {
@@ -72,7 +69,7 @@ public final class ConfigValidator {
      */
     private static List<ValidationIssue> validateConfig(HostConfig config, Path configDir) {
         List<ValidationIssue> issues = new ArrayList<>();
-        Path file = configDir.resolve("config.yml");
+        Path file = HostPaths.suiteConfig(configDir);
 
         if (!file.toFile().exists()) {
             issues.add(new ValidationIssue(
@@ -344,7 +341,12 @@ public final class ConfigValidator {
      */
     private static List<ValidationIssue> validateRules(Path configDir) {
         List<ValidationIssue> issues = new ArrayList<>();
-        Path file = configDir.resolve("rules.yml");
+        // iflow-firewall es dueño de su config (storage.md): config/iflow-firewall/rules.yml
+        Path canonical = configDir.resolve("config").resolve("iflow-firewall").resolve("rules.yml");
+        Path legacy = configDir.resolve("rules.yml");
+        Path file = java.nio.file.Files.exists(canonical) || !java.nio.file.Files.exists(legacy)
+            ? canonical
+            : legacy;
 
         if (!file.toFile().exists()) {
             issues.add(new ValidationIssue(
@@ -523,7 +525,8 @@ public final class ConfigValidator {
      */
     private static List<ValidationIssue> validateTranslators(Path configDir) {
         List<ValidationIssue> issues = new ArrayList<>();
-        Path translatorsDir = configDir.resolve("translators");
+        // chattranslator es dueño de sus backends (storage.md)
+        Path translatorsDir = me.majhrs16.suite.chattranslator.BackendConfig.resolveTranslatorsDir(configDir);
 
         if (!translatorsDir.toFile().exists()) {
             issues.add(new ValidationIssue(
@@ -599,67 +602,6 @@ public final class ConfigValidator {
                 "translators/",
                 "ningún proveedor marcado como active; traducción deshabilitada"
             ));
-        }
-
-        return issues;
-    }
-
-    /**
-     * Validates sync/*.yml files.
-     */
-    private static List<ValidationIssue> validateSync(Path configDir) {
-        List<ValidationIssue> issues = new ArrayList<>();
-        Path syncDir = configDir.resolve("sync");
-
-        if (!syncDir.toFile().exists()) {
-            return issues;
-        }
-
-        String[] required = {"discord.yml", "telegram.yml", "http.yml", "tcp-udp.yml"};
-        for (String req : required) {
-            Path f = syncDir.resolve(req);
-            if (f.toFile().exists()) {
-                try {
-                    org.yaml.snakeyaml.Yaml yaml = safeYaml();
-                    String content = java.nio.file.Files.readString(f);
-                    Object root = yaml.load(content);
-                    if (root instanceof Map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> map = (Map<String, Object>) root;
-                        Object enabled = map.get("enabled");
-                        if (enabled instanceof Boolean && (Boolean) enabled) {
-                            // Validate required fields per type
-                            if (req.equals("discord.yml")) {
-                                Object token = map.get("token");
-                                if (token == null || !(token instanceof String) || ((String) token).isBlank()) {
-                                    issues.add(new ValidationIssue(
-                                        ValidationLevel.ERROR,
-                                        "sync",
-                                        req,
-                                        "discord enabled=true pero falta 'token'"
-                                    ));
-                                }
-                                Object channel = map.get("channel");
-                                if (channel == null || !(channel instanceof String) || ((String) channel).isBlank()) {
-                                    issues.add(new ValidationIssue(
-                                        ValidationLevel.ERROR,
-                                        "sync",
-                                        req,
-                                        "discord enabled=true pero falta 'channel'"
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    issues.add(new ValidationIssue(
-                        ValidationLevel.ERROR,
-                        "sync",
-                        req,
-                        "error leyendo: " + e.getMessage()
-                    ));
-                }
-            }
         }
 
         return issues;

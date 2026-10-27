@@ -102,18 +102,18 @@
 
 | Directorio Actual | Dueño Real (Código) | Dueño Correcto (Arquitectura) | Estado |
 |-------------------|---------------------|------------------------------|--------|
-| `config/suite/channels/` | `host` carga, `textformatter` usa | **`textformatter`** | ⚠️ Migrar |
-| `config/suite/translators/` | `host` carga (`TranslatorsConfig`) | **`chattranslator`** | ⚠️ Migrar |
-| `config/suite/sync/` | `spigot-host` carga directo | **Descompuesto en submódulos** | 🔄 Rediseño |
-| `config/suite/sync/discord.yml` | `spigot-host` carga directo | **`sync-discord`** (submódulo) | 🔄 Migrar |
-| `config/suite/sync/websocket.yml` | `spigot-host` carga directo | **`sync-websocket`** (submódulo) | 🔄 Migrar |
-| `config/suite/sync/telegram.yml` | `spigot-host` carga directo | **`sync-telegram`** (submódulo) | 🔄 Migrar |
-| `config/suite/sync/tcp.yml` / `udp.yml` | `spigot-host` carga directo | **`sync-socket`** (submódulo) | 🔄 Migrar |
-| `config/suite/messages.yml` | `spigot-host` carga (`MessagesConfig`) | **`spigot-host` / `fabric-host`** (platform adapter) | ✅ OK |
-| `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
-| `config/suite/rules.yml` | `host` carga | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
+| `config/textformatter/channels/` | `textformatter` carga (`ChannelConfig`) | **`textformatter`** | ✅ Migrado (I-011) |
+| `config/chattranslator/translators/` | `chattranslator` carga (`BackendConfig`) | **`chattranslator`** | ✅ Migrado (I-004) |
+| `config/sync-bus/`, `config/sync-*/` | `spigot-host`/`fabric-host` cargan vía `SyncConfigPaths` | **cada submódulo sync** | 🟡 Rutas migradas (I-012); falta que cada sink cargue su propia config |
+| `config/sync-discord/config.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-discord`** (submódulo) | 🟡 Migrar carga |
+| `config/sync-websocket/config.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-websocket`** (submódulo) | 🟡 Migrar carga |
+| `config/sync-telegram/config.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-telegram`** (submódulo) | 🟡 Migrar carga |
+| `config/sync-socket/tcp.yml` / `udp.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-socket`** (submódulo) | 🟡 Migrar carga |
+| `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
+| `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
+| `config/iflow-firewall/rules.yml` | `host` valida, editor web consume | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
 
-> **Nota**: La migración implica mover la lógica de carga (`ConfigLoader.loadChannels`, `TranslatorsConfig.load`, etc.) desde `host` hacia los módulos dueños (`textformatter`, `chattranslator`, `sync-bus`). Canales ya migrado (`textformatter.ChannelConfig`, I-011 ✅); translators y sync siguen pendientes (I-004/I-012).
+> **Nota**: `textformatter`, `chattranslator`, `suite` y las rutas sync ya usan el layout canónico con fallback a las rutas heredadas. Lo que queda de I-004 es que cada sink sync exponga su propia clase de config en vez de que el adapter parsee el YAML.
 
 ---
 
@@ -258,7 +258,7 @@ timeout: 15
 **Dueño**: `chattranslator` module  
 **Usado por**: `TranslatorManager`, `TranslationService`, `ChatTranslator`
 
-> **Migración pendiente**: Mover `TranslatorsConfig.load()` de `host` a `chattranslator`.
+> **Migración completada (I-004)**: `TranslatorsConfig` se eliminó de `host`; `chattranslator.BackendConfig` carga `config/chattranslator/translators/` y `ChatTranslatorConfig` carga `config/chattranslator/config.yml` (con fallback a las rutas heredadas).
 
 ---
 
@@ -360,7 +360,7 @@ local-port: 9095
 **Require**: `Capability.of("sync-bus", ...)`  
 **Provide**: `Capability.of("sync-sink", ...)` (doble: tcp + udp)
 
-> **Migración pendiente**: Mover carga de sync de `spigot-host` a cada submódulo respectivo. El `sync-bus` solo carga su config genérica.
+> **Migración de rutas completada (I-012)**: los adapters resuelven cada archivo con `syncbus.SyncConfigPaths` (`config/sync-*/` canónico, `sync/*.yml` como fallback). Pendiente (I-004): que cada sink parseé su propia config en vez del adapter.
 
 ---
 

@@ -53,7 +53,7 @@ public final class DiscordBridge {
     /** @return an active bridge, or {@code null} when disabled/unavailable. */
     public static DiscordBridge create(Path dataFolder, MessageDispatcher dispatcher,
                                        PluginLogger logger, SyncBus syncBus) {
-        Path file = dataFolder.resolve("sync").resolve("discord.yml");
+        Path file = me.majhrs16.suite.syncbus.SyncConfigPaths.discord(dataFolder);
         if (!Files.exists(file)) {
             return null;
         }

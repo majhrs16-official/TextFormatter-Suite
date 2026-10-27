@@ -232,15 +232,15 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | **I-014** | Resolver confusión capability `chattranslator` vs `translator` | `chattranslator`, `gtranslate`, `ltranslate` | ✅ Façade `ChatTranslator` coordina backends; capability model alineado |
 | **I-016** | Alinear `ChatTranslatorConfig.defaultBackend` con `storage.md` | `chattranslator`, `storage.md` | Default `'google'` en ambos (o `null` documentado como auto) | ✅ `ChatTranslatorConfig.defaults()` = `'google'` |
 | **I-011** | **M1:** Mover `ConfigLoader.loadChannels()` a `textformatter.ChannelConfig` | `host` (eliminar), `textformatter` (nuevo `ChannelConfig`) | ✅ `ChannelConfig` en `textformatter` (canónico `config/textformatter/channels/` + fallbacks legacy); `ConfigLoader.loadChannels()` eliminado; `SuiteHost`/`SuiteBootstrap`/`ConfigValidator`/`loadtest` usan `ChannelConfig`; 7 tests en `ChannelConfigTest` |
-| **I-018** | Completar `resetConfigs` con nuevos directorios `config/<modulo>/` | `spigot-host` | ✅ Backup incluye chattranslator, sync-bus, sync-*, inworld, observability, iflow-firewall |
+| **I-018** | Completar `resetConfigs` con nuevos directorios `config/<modulo>/` | `spigot-host`, `fabric-host` | ✅ Backup incluye `config/` (suite, chattranslator, sync-*, inworld, observability, iflow-firewall, textformatter) + heredados (`channels/`, `translators/`, `sync/`, `rules.yml`, `inworld.yml`); fabric-host alineado con spigot-host |
 
 #### P1 — FIX_LATER (Próxima iteración)
 
 | ID | Acción | Módulos afectados | Criterio de cierre |
 |---|---|---|---|
-| **I-004** | Migrar carga config centralizada (translators, sync) a dueños | `host`, `chattranslator`, `sync-bus`, submódulos sync | Cada dueño carga su config en `onLoad()` |
-| **I-012** | Corregir rutas sync en spigot-host: `sync/*.yml` → `config/sync-*/config.yml` | `spigot-host`, `fabric-host` | Carga desde nuevas rutas; submódulos gestionan su config |
-| **I-017** | Corregir `copyDefaultsIfMissing` a nuevas rutas `config/<modulo>/` | `spigot-host` | Primer arranque crea configs en ubicaciones correctas |
+| **I-004** | Migrar carga config centralizada (translators, sync) a dueños | `host`, `chattranslator`, `sync-bus`, submódulos sync | 🟡 Parcial: `TranslatorsConfig` eliminado de `host` (dueño: `chattranslator.BackendConfig`) y `ChatTranslatorConfig` resuelve `config/chattranslator/`. Sync sigue cargándose en los adapters (rutas centralizadas en `syncbus.SyncConfigPaths`); falta que cada sink exponga su propia clase de config. `messages.yml` queda en `host` a la espera del ADR I-020 |
+| **I-012** | Corregir rutas sync en spigot-host: `sync/*.yml` → `config/sync-*/config.yml` | `spigot-host`, `fabric-host` | ✅ Rutas resueltas vía `syncbus.SyncConfigPaths` (canónica `config/sync-*/`, fallback `sync/*.yml`); websocket/tcp/udp/telegram y `DiscordBridge` en ambas plataformas |
+| **I-017** | Corregir `copyDefaultsIfMissing` a nuevas rutas `config/<modulo>/` | `spigot-host`, `fabric-host` | ✅ Primer arranque escribe `config/suite/`, `config/textformatter/channels/`, `config/chattranslator/translators/`, `config/sync-*/`, `config/inworld/`, `config/iflow-firewall/`; no duplica si existe la ruta legacy |
 
 #### P2 — NEEDS_DESIGN (Requieren ADR antes de actuar)
 

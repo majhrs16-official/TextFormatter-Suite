@@ -55,7 +55,7 @@ public final class DiscordBridge {
     }
 
     public static DiscordBridge create(Path folder, MessageDispatcher dispatcher, PluginLogger logger, SyncBus syncBus) {
-        Path configPath = folder.resolve("sync/discord.yml");
+        Path configPath = me.majhrs16.suite.syncbus.SyncConfigPaths.discord(folder);
         if (!Files.exists(configPath)) return null;
         try {
             MessagesConfig syncConfig = MessagesConfig.load(configPath, "/defaults/sync/discord.yml");
