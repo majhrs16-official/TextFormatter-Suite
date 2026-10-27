@@ -105,7 +105,7 @@ Real-time performance bottleneck detector.
 ## I
 
 **iFlow**
-The rule engine module (`suite-iflow`) for message routing and transformation.
+The iFlow policy engines (`suite-iflow-vm`, `suite-iflow-firewall`, `suite-iflow-wasm`) for message routing and transformation; they are mutually exclusive packages.
 
 **InWorld**
 Module for in-world interactions (signs, chests, books, WORLD/RADIUS channels).

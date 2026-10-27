@@ -596,8 +596,10 @@ consumidor de SpEL es el motor legacy opcional de `iflow-firewall`.
 **Consecuencias.**
 
 - Los tres motores son alternativas instalables; el gestor de paquetes debe reemplazar uno por otro.
-  Mientras el classpath de desarrollo contenga varios, `SuiteBootstrap` filtra los no seleccionados
-  antes de resolver el grafo.
+  Se compilan los tres y `./gradlew publishIflowEngines` los publica como paquetes Maven separados
+  (`suite-iflow-vm`, `suite-iflow-firewall`, `suite-iflow-wasm`) en `build/repo`. Mientras el
+  classpath de desarrollo contenga varios, `SuiteBootstrap` filtra los no seleccionados antes de
+  resolver el grafo.
 - Cada JAR duplica las clases del contrato base con el mismo FQCN. Es intencional y solo es seguro
   porque los motores son excluyentes; un despliegue con dos a la vez no está soportado.
 - `spring-expression`/`spring-core`/`spring-jcl` vuelven solo al classpath de `iflow-firewall`.

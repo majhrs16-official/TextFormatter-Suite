@@ -115,7 +115,10 @@ me.majhrs16.suite.mymodule.MyModule
 dependencies {
     implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
     implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-iflow:2.1.0-SNAPSHOT'
+    implementation 'me.majhrs16:suite-iflow-vm:2.1.0-SNAPSHOT'
+    // Alternativas mutuamente excluyentes (elija una):
+    // implementation 'me.majhrs16:suite-iflow-firewall:2.1.0-SNAPSHOT'
+    // implementation 'me.majhrs16:suite-iflow-wasm:2.1.0-SNAPSHOT'
     // Add other suite modules as needed
 }
 ```
@@ -461,8 +464,8 @@ public void benchmarkTemplateRendering() {
 ./gradlew publishToMavenLocal
 
 # Run specific module tests
-./gradlew :suite:textformatter:test
-./gradlew :suite:iflow:test
+./gradlew :src:textformatter:test
+./gradlew :src:iflow-vm:test
 ```
 
 ### Publishing
@@ -470,6 +473,9 @@ public void benchmarkTemplateRendering() {
 ```bash
 # Publish to mavenLocal
 ./gradlew publishToMavenLocal
+
+# Publish the three mutually exclusive iFlow engines as separate packages
+./gradlew publishIflowEngines
 
 # Publish to Maven Central (requires credentials)
 ./gradlew publish

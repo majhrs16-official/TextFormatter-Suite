@@ -158,6 +158,25 @@ tasks.register('extclean') {
 }
 
 // ============================================================
+// iFlow engine packages: compile all three, publish them separately
+// ============================================================
+tasks.register('publishIflowEngines') {
+    description 'Compila y publica iflow-vm, iflow-wasm e iflow-firewall como paquetes separados en build/repo'
+    group 'publishing'
+    dependsOn ':src:iflow-vm:publishMavenPublicationToLocalRepository',
+              ':src:iflow-wasm:publishMavenPublicationToLocalRepository',
+              ':src:iflow-firewall:publishMavenPublicationToLocalRepository'
+}
+
+tasks.register('publishIflowEnginesToMavenLocal') {
+    description 'Publica los tres motores iFlow por separado en el repositorio Maven local'
+    group 'publishing'
+    dependsOn ':src:iflow-vm:publishToMavenLocal',
+              ':src:iflow-wasm:publishToMavenLocal',
+              ':src:iflow-firewall:publishToMavenLocal'
+}
+
+// ============================================================
 // Dependency locking tasks
 // ============================================================
 tasks.register('writeLocks') {

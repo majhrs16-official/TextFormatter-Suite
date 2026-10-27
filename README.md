@@ -349,6 +349,7 @@ cd src/web-editor && npm run check
 | Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 766 tests JVM en 28 módulos y 108 tests JS (verificación local 2026-10-20) |
 | Solo build (sin tests) | `./gradlew build -x test --no-daemon` | Solo el proyecto raíz |
 | Plugin Spigot (fat-jar) | `./gradlew :src:spigot-host:build --no-daemon` | En `src/spigot-host/build/libs/` |
+| Paquetes iFlow (3 motores) | `./gradlew publishIflowEngines --no-daemon` | Publica `suite-iflow-vm`, `suite-iflow-firewall` y `suite-iflow-wasm` por separado en `build/repo/` |
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
 | Javadoc | `./gradlew javadocAll --no-daemon` | En `**/build/docs/javadoc/` |
 | Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 32 lockfiles, 0 missing; falla si falta alguno |

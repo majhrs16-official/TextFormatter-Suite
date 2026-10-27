@@ -5,6 +5,7 @@ plugins {
 }
 
 group = 'me.majhrs16'
+description = 'iFlow VM: motor de políticas de 32 bits con bytecode .flow'
 
 repositories {
     mavenLocal()
@@ -55,7 +56,7 @@ publishing {
     publications {
         maven(MavenPublication) {
             from components.java
-            artifactId = 'suite-iflow'
+            artifactId = 'suite-iflow-vm'
         }
     }
     repositories {

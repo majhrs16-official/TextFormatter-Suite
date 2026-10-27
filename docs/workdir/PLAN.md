@@ -48,8 +48,10 @@ cuando ambas estén listas.
 > Consecuencia operativa: el paquete instalado debe aportar las clases de `me.majhrs16.suite.iflow`
 > y el host selecciona el motor con `iflow.engine.kind` (`vm` por defecto, `firewall` para el
 > motor legacy). Un despliegue con dos motores a la vez no está soportado. El monorepo compila
-> todos los motores para tests, pero `SuiteBootstrap` filtra los descriptores alternativos antes
-> de resolver el grafo; el empaquetado de producción debe incluir un solo motor.
+> los tres y `./gradlew publishIflowEngines` los publica como paquetes Maven separados en
+> `build/repo` (`suite-iflow-vm`, `suite-iflow-wasm` y `suite-iflow-firewall`); el classpath de
+> ejecución debe contener exactamente uno, y `SuiteBootstrap` filtra los alternativos si el
+> classpath de desarrollo trae varios.
 
 El único pendiente transversal es la **paridad funcional de propiedades del mensaje** (W3.5) contra
 la **spec v3**: que `iflow-wasm` implemente el mismo contrato de transformación, decisión y entrega,
@@ -386,7 +388,8 @@ SpEL-free que solo validaba el grafo del editor.
 *Negativas*
 - Cada JAR de motor duplica las clases del contrato base (`Router`, `RouteDecision`,
   etc.) con el mismo FQCN. Es intencional y seguro **solo** porque los motores son
-  excluyentes; `SuiteBootstrap` deja activo uno y el empaquetado debe incluir uno solo.
+  excluyentes; `SuiteBootstrap` deja activo uno y los tres se publican como paquetes
+  separados, nunca en el mismo artefacto.
 - El gestor de paquetes debe hacer cumplir la exclusividad (reemplazo/desinstalación)
   y el empaquetado no debe incluir dos motores en el mismo classpath.
 - SpEL vuelve a ser una superficie de seguridad y una dependencia
@@ -422,8 +425,9 @@ SpEL-free que solo validaba el grafo del editor.
 **Implementación (2026-10-27).** Código restaurado en `me.majhrs16.suite.iflow`,
 descriptor `iflow-firewall`, SPI de expresión dentro del módulo, `RouterFactory`
 sin adaptador, `FirewallConfig` tolera el esquema legacy, selección de motor en
-`HostConfig`/`ConfigLoader` y documentación de exclusividad (PLAN, ADR, storage,
-README, wiki). `./gradlew build` pasa.
+`HostConfig`/`ConfigLoader`, publicación separada de los tres motores con
+`publishIflowEngines` y documentación de exclusividad (PLAN, ADR, storage, README,
+wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 ---
 

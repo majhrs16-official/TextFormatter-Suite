@@ -101,8 +101,9 @@
 > `me.majhrs16.suite.iflow`. Solo uno puede
 > estar en `modules/`/classpath a la vez; instalar otro **desinstala/reemplaza** al anterior. No se
 > soporta la convivencia de dos motores ni un sufijo de paquete por motor (por ejemplo `.firewall`).
-> El monorepo compila todos para tests, pero `SuiteBootstrap` activa solo el seleccionado y el
-> empaquetado de producción debe incluir uno.
+> El monorepo compila los tres y `./gradlew publishIflowEngines` los publica como paquetes
+> Maven separados en `build/repo`; el classpath de ejecución debe contener uno solo y
+> `SuiteBootstrap` activa el seleccionado.
 
 ---
 
