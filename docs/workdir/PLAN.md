@@ -130,7 +130,7 @@ Reglas de diseño:
 |---|---|---|
 | **W0 — Scaffold** | `src/iflow-wasm/` creado, dependencia Chicory, loader mínimo y lockfile/verificación iniciales | ✅ Módulo Gradle incluido; `:src:iflow-wasm:build` validado con JDK 21 y Chicory 1.4.0 |
 | **W1 — Contrato** | ADR del motor Wasm: imports/exports alineados a la **spec v3**, capabilities, límites, errores, ciclo de vida | 📝 ADR-W1 propuesto (inline más abajo): `decide` como export obligatorio, imports vacíos por defecto, sin WASI, `start` denegado, 256 páginas y 4 MiB por artefacto |
-| **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | ✅ `WasmContract`/`ValidationResult`; `WasmModuleLoader` valida imports/exports/start/memoria, instancia con `withStart`/`withMemoryLimits` e invoca exports; 15 tests con módulos binarios escritos a mano |
+| **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | ✅ `WasmContract`/`ValidationResult`; `WasmModuleLoader` valida imports/exports/start/memoria, instancia con `withStart`/`withMemoryLimits` e invoca exports; 14 tests con módulos binarios escritos a mano |
 | **W3 — Integración** | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.wasm` |
 | **W3.5 — Paridad de mensaje (v3)** | Imports de transformación, decisión y entrega alineados a la spec v3 | Matriz `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable |
 | **W4 — Herramientas** | Ejemplos en al menos dos lenguajes, validador de artefactos y guía de autoría | Build reproducible de los ejemplos + tests |
