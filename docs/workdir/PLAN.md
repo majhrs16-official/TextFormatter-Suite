@@ -322,7 +322,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y aplicado: `src/iflow-firewall` restaura **literalmente** el motor SpEL de `933bdd3^:src/iflow`; es **alternativa mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) y el host elige con `iflow.engine.kind` |
 | **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🟡 Paridad inmediata aplicada (`gtranslate`/`ltranslate` en `fabric-host`); 📝 ADR-019 propuesto para adapters sin deps a módulos core |
 | **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ✅ Aceptado: un único `config/suite/messages.yml` para todas las plataformas (`HostPaths`); loader compartido en `host` |
-| **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | 📝 ADR-008 propuesto: mantener `chattranslator` (façade) + `translator` (proveedor) |
+| **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | ✅ ADR-008 aceptado y verificado: se mantienen `chattranslator` (façade) y `translator` (proveedor); `ChatTranslatorModuleTest` prueba que la façade activa sin backends, que un backend sin façade queda inactivo y que ambos resuelven cuando coexisten |
 
 #### ADR-001: `iflow-firewall` restaura el motor SpEL legacy como alternativa mutuamente excluyente
 
@@ -576,7 +576,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 #### ADR-008: Mantener `chattranslator` (façade) y `translator` (proveedor) como capabilities separadas
 
-**Estado:** Propuesto
+**Estado:** Aceptado (2026-10-27).
 
 **Contexto**
 
@@ -614,6 +614,14 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
    - Ventajas: nombres autoexplicativos.
    - Limitaciones: cambio de contrato en todos los descriptores y tests; obliga a versionar la capability.
    - Evaluación: aplazada hasta una revisión mayor de contratos; no compensa ahora.
+
+**Implementación (2026-10-27).** Se mantiene la opción 1 sin cambios de contrato.
+`ChatTranslatorModuleTest` fija la semántica: `chattranslator` provee la façade y no
+requiere backends; `GTranslateModule` sin façade queda en
+`UNSATISFIED_REQUIREMENT`; con la façade presente ambos módulos resuelven. La
+dirección documentada es **proveedor (`translator`) requiere façade
+(`chattranslator`)**, nunca al revés, porque la traducción es opcional y el
+pipeline debe degradar a no-op cuando no hay backends instalados.
 
 ---
 

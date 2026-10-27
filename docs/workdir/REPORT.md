@@ -105,7 +105,7 @@ Y opcionalmente **NOTAS** con tu razonamiento.
 | **Descripción** | `ChatTranslatorModule` provee capability `chattranslator`. Backends (`gtranslate`, `ltranslate`) proveen `translator` y requieren `chattranslator`. Semántica confusa: façade no expone capability unificada. |
 | **Evidencia** | `ChatTranslatorModule.java:22` - `provide('chattranslator')`; `GTranslateModule.java:22` - `provide('translator')` |
 | **DECISIÓN** | [ ] FIX_NOW  [*] FIX_LATER  [ ] WONT_FIX  [ ] NEEDS_DESIGN  [ ] DELEGATE |
-| **NOTAS** | |
+| **NOTAS** | Resuelto por ADR-008 (2026-10-27): se mantienen ambas capabilities. `ChatTranslatorModuleTest` verifica que `chattranslator` activa sin backends, que un backend `translator` sin façade queda inactivo y que ambos resuelven cuando coexisten. |
 
 ### INCONSISTENCY-009: Host usa ServiceLoader<TranslatorProvider> en lugar de delegar a chattranslator
 | Campo | Valor |
