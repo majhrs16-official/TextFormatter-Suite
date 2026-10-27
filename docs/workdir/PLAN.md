@@ -106,7 +106,7 @@ Reglas de diseño:
 | **CT2 — Context Flags Runtime** | API `setContextBackend(key, backend)` funcional; prioridad contexto > config > auto | ✅ Tests de prioridad pasando; `context-override-enabled` configurable |
 | **CT3 — Backend Re-registration** | Backends (`gtranslate`, `ltranslate`) declaran requerimiento `chattranslator` en `ModuleDescriptor`; `manager` respeta orden de carga | ✅ `gtranslate`/`ltranslate` actualizados con `.require(Requirement.atLeast("chattranslator", ...))`; tests de resolución de grafo pasando |
 | **CT4 — Integración Host** | `SuiteHost`/`TranslationService` usan `ChatTranslator` como fachada principal; Spigot/Fabric hooks actualizados | Mensaje real traducido via `ChatTranslator` en pipeline E2E |
-| **CT5 — Editor & Autoría** | Panel web para configurar backend default y ver backends registrados | UI funcional + tests de integración |
+| **CT5 — Editor & Autoría** | Panel web para configurar backend default y ver backends registrados | ⏸️ Diferido con el editor web (`PLAN.md:12`); el backend (`ChatTranslatorConfig` + `BackendConfig`) ya expone lo necesario |
 
 ### Decisiones pendientes (ADR) — ChatTranslator
 
@@ -129,12 +129,63 @@ Reglas de diseño:
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **W0 — Scaffold** | `src/iflow-wasm/` creado, dependencia Chicory, loader mínimo y lockfile/verificación iniciales | ✅ Módulo Gradle incluido; `:src:iflow-wasm:build` validado con JDK 21 y Chicory 1.4.0 |
-| **W1 — Contrato** | ADR del motor Wasm: imports/exports alineados a la **spec v3**, capabilities, límites, errores, ciclo de vida | Contrato revisado y congelado antes de escribir el motor |
-| **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | Test unitario con un módulo mínimo compilado |
+| **W1 — Contrato** | ADR del motor Wasm: imports/exports alineados a la **spec v3**, capabilities, límites, errores, ciclo de vida | 📝 ADR-W1 propuesto (inline más abajo): `decide` como export obligatorio, imports vacíos por defecto, sin WASI, `start` denegado, 256 páginas y 4 MiB por artefacto |
+| **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | ✅ `WasmContract`/`ValidationResult`; `WasmModuleLoader` valida imports/exports/start/memoria, instancia con `withStart`/`withMemoryLimits` e invoca exports; 15 tests con módulos binarios escritos a mano |
 | **W3 — Integración** | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.wasm` |
 | **W3.5 — Paridad de mensaje (v3)** | Imports de transformación, decisión y entrega alineados a la spec v3 | Matriz `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable |
 | **W4 — Herramientas** | Ejemplos en al menos dos lenguajes, validador de artefactos y guía de autoría | Build reproducible de los ejemplos + tests |
 | **W5 — Editor** | Soporte del panel web para editar/compilar/subir `.wasm` | Flujo de autoría de extremo a extremo |
+
+#### ADR-W1: Contrato del motor Wasm — política pura, sin imports implícitos y con límites duros
+
+**Estado:** Propuesto
+
+**Contexto**
+
+- `Hecho verificado`: Chicory `1.4.0` está fijado en `src/iflow-wasm/build.gradle` y W0 expone solo `Parser.parse` + `Instance.builder`.
+- `Hecho verificado`: la spec v3 (`docs/prompts/diseno/iflow-cpu-implement.md`) define transformación, decisión y entrega, pero el contrato de imports de Wasm sigue pendiente (W3.5).
+- `Restricción`: el artefacto `.wasm` es dato no confiable; un módulo puede declarar memoria de 4 GiB, imports de WASI o una función `start` que se ejecuta al instanciar.
+- `Restricción`: no hay toolchain WAT en el build; los tests de W2 usan módulos binarios mínimos escritos a mano.
+- `Supuesto`: las políticas reales serán pequeñas (lógica de decisión), no cargas de datos; 4 MiB y 256 páginas son holgados para ese caso y deben revisarse si aparecen políticas mayores.
+- La decisión fija el contrato mínimo que W3 (`WasmPolicyEngine`) puede asumir.
+
+**Consecuencias**
+
+*Positivas*
+- Un artefacto con imports no declarados, `start` o memoria excesiva se rechaza antes de ejecutar código, no durante.
+- La instancia se crea con `withStart(contract.allowStart())` y `withMemoryLimits(initial, max)`, así el crecimiento de memoria queda acotado aunque el módulo declare un máximo superior.
+- El límite de 4 MiB y la comprobación de tamaño evitan leer/parsear artefactos desproporcionados.
+- Los errores de validación son acumulativos (`ValidationResult.errors()`), lo que da diagnóstico completo en lugar de fallar en el primer incumplimiento.
+
+*Negativas*
+- Todo módulo que necesite imports legítimos (p. ej. `iflow.*` para leer el mensaje) será rechazado hasta que W3 amplíe `allowedImportModules`; el contrato actual es deliberadamente incompleto.
+- No se valida todavía la **firma** de los exports (tipos/aridad): un export llamado `decide` con la firma equivocada pasa la validación y fallará al invocarlo.
+- El límite de memoria se aplica al total por instancia; un módulo con varias memorias se rechaza, lo que excluye el proposal multi-memory.
+- Sin hash/firma del artefacto, el contrato no protege contra sustitución del `.wasm` en disco.
+
+**Alternativas consideradas**
+
+1. **Permitir cualquier import y confiar en el host para denegar en runtime**
+   - Ventajas: compatible con cualquier toolchain desde el primer día.
+   - Limitaciones: el módulo puede enlazar con WASI o imports no auditados; el coste de seguridad se traslada a cada llamada.
+   - Evaluación: descartada; el modelo de capabilities exige denegar por defecto.
+
+2. **Contrato mínimo actual: sin imports, `decide` obligatorio, sin `start`, memoria y tamaño acotados (elegida para W2)**
+   - Ventajas: superficie de ataque mínima; testeable con módulos binarios; permite congelar W2 sin esperar al ABI v3.
+   - Limitaciones: no sirve aún para políticas que lean el mensaje; requiere ampliación versionada en W3.
+   - Evaluación: **recomendada**; W3 añade imports `iflow.*` con lista blanca explícita y validación de firmas.
+
+3. **Contrato completo v3 antes de implementar W2**
+   - Ventajas: una sola congelación de contrato.
+   - Limitaciones: bloquea W2 tras una spec que aún está en revisión (W3.5); sin runtime no se puede validar la spec.
+   - Evaluación: descartada por orden de dependencias; W2 valida la mecánica, W3/W3.5 el contrato de mensaje.
+
+**Pendiente de decisión (W3)**
+- Nombres y firmas de los imports `iflow.*` (transformación, decisión, entrega) y su correspondencia con la spec v3.
+- Validación de firma de exports mediante `Instance.exportType(name)`.
+- Hash/firma del artefacto y política de hot-reload.
+- Selección de motor (`.flow` vs `.wasm`) por configuración.
+
 
 ### Paridad funcional pendiente: `iflow-vm` (v3) ↔ `iflow-wasm`
 
@@ -211,7 +262,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 4. Escribir el ADR del motor Wasm y el ADR de la VM de 32 bits antes de implementar núcleos.
 5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5); no se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
 6. **ChatTranslator CT4:** ✅ **COMPLETADO** — `ChatTranslator` integrado en `SuiteHost.bootstrap()`; `spigot-host`/`fabric-host` actualizados; `BackendConfig` carga backends vía SPI; tests pasan.
-7. **ChatTranslator CT5:** Panel web para configurar backend default y ver backends registrados.
+7. **ChatTranslator CT5:** ⏸️ diferido con el editor web; el backend de configuración ya está listo.
 
 ---
 
@@ -246,10 +297,179 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 | ID | Tema | Decisión requerida |
 |---|---|---|
-| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ¿Se implementa módulo legacy para editor web? |
-| **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | ¿Platform adapters cero deps a módulos core? |
-| **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ¿Abstraer `messages.yml` en `config/suite/` único? |
-| **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | ¿Façade provee capability unificada `translator`? |
+| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | 📝 ADR-001 propuesto. `Hecho verificado`: no existe `src/iflow-firewall/` ni archivos `*firewall*` en ningún commit (`git log --all -- '*firewall*'` sin resultados), por lo que «restaurar desde el historial» no es posible |
+| **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🟡 Paridad inmediata aplicada (`gtranslate`/`ltranslate` en `fabric-host`); 📝 ADR-019 propuesto para adapters sin deps a módulos core |
+| **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ✅ Aceptado: un único `config/suite/messages.yml` para todas las plataformas (`HostPaths`); loader compartido en `host` |
+| **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | 📝 ADR-008 propuesto: mantener `chattranslator` (façade) + `translator` (proveedor) |
+
+#### ADR-001: `rules.yml` queda como activo legacy del editor web, sin módulo `iflow-firewall`
+
+**Estado:** Propuesto
+
+**Contexto**
+
+- `Hecho verificado`: no hay `src/iflow-firewall/` en el árbol actual (`docs/workdir/REPORT.md:203`).
+- `Hecho verificado`: el historial completo de git no contiene ningún archivo con `firewall` en el nombre (`git log --all --diff-filter=D --name-only -- '*firewall*'` no devuelve nada). La nota de `REPORT.md:206` («restaurar el código original del iflow legacy desde el historial») no tiene material que restaurar.
+- `Hecho verificado`: el esquema `nodes`/`edges`/`guard`/`filter` solo se toca en `src/host/.../ConfigValidator.java:342` (validación) y `src/host/.../ConfigSchemaGenerator.java` (generación de schema para el editor). No hay parser de runtime.
+- `storage.md` describe `config/iflow-firewall/rules.yml` como módulo con ownership y ciclo de vida, y el editor web está diferido (`PLAN.md:12`).
+- La decisión afecta a si se crea un módulo Gradle nuevo o se corrige la documentación para reflejar el uso real.
+
+**Consecuencias**
+
+*Positivas*
+- La documentación y el grafo de módulos dejan de prometer un componente que no existe; `ModuleGraph` no puede quedar a la espera de una capability inexistente.
+- `rules.yml` conserva compatibilidad para el editor web sin añadir código Java sin consumidor en runtime.
+- `ConfigValidator` ya resuelve `config/iflow-firewall/rules.yml` con fallback, así que la ruta canónica queda estable.
+
+*Negativas*
+- La validación del schema legacy sigue viviendo temporalmente en `host`, no en un dueño dedicado: mientras el editor esté diferido, la responsabilidad queda repartida entre `host` y `web-editor`.
+- Si en el futuro el editor necesita ejecutar o transformar el grafo, habrá que crear el módulo y migrar la validación; el coste se aplaza, no se elimina.
+
+**Alternativas consideradas**
+
+1. **Crear `src/iflow-firewall` con parser/validador y `Module` propio**
+   - Ventajas: ownership explícito; la validación sale de `host`; módulo listo para el editor.
+   - Limitaciones: módulo sin consumidor en runtime; duplica el schema del editor; coste de mantenimiento y de cobertura mientras el editor está diferido.
+   - Evaluación: no se descarta por criterio técnico, sino porque el editor está fuera de alcance (`PLAN.md:12`); queda como trabajo futuro si se retoma.
+
+2. **Mantener `rules.yml` como activo legacy del editor, sin módulo Java**
+   - Ventajas: refleja el estado real; cero código nuevo; conserva la ruta canónica y el fallback.
+   - Limitaciones: `storage.md` debe dejar de llamarlo «módulo»; la validación sigue en `host`.
+   - Evaluación: **recomendada**; requiere aprobación explícita porque contradice parcialmente la nota de `REPORT.md:206`.
+
+3. **Eliminar `rules.yml` y sus referencias**
+   - Ventajas: máxima limpieza; desaparece la ambigüedad.
+   - Limitaciones: rompe el editor web y los presets que exportan el grafo; `ConfigSchemaGenerator` seguiría generando la ruta si no se recorta también.
+   - Evaluación: descartada mientras el editor siga siendo un objetivo diferido pero no cancelado.
+
+---
+
+#### ADR-019: Platform adapters como composition roots delgados; módulos descubiertos en runtime
+
+**Estado:** Propuesto
+
+**Contexto**
+
+- `Hecho verificado`: `spigot-host/build.gradle:42-43` declara `gtranslate` y `ltranslate`; hasta esta iteración `fabric-host` no los declaraba, por lo que `ServiceLoader<TranslatorProvider>` no encontraba proveedores en Fabric y la traducción caía a no-op. La paridad inmediata ya está aplicada (`fabric-host/build.gradle:35-36`).
+- `Hecho verificado`: ambos adapters importan módulos de feature directamente: `sync-*` (`TextFormatterSuitePlugin.java:31-38`, `TextFormatterSuiteMod.java:29-35`), `extension-api`, `observability`, `manager-*` en Spigot.
+- `Hecho verificado`: existe el SPI `Module`/`ModuleDescriptor` en `core-api` y `kernel.ModuleGraph` resuelve `provides`/`requires`; el host compone el runtime en `SuiteHost.bootstrap`.
+- `Requisito`: los adapters deben ser agnósticos a la plataforma y no arrastrar módulos de feature.
+- `Restricción`: Spigot y Fabric necesitan un composition root que construya sinks, listeners y servicios de plataforma; la pregunta es cuánto conoce ese root.
+
+**Consecuencias**
+
+*Positivas*
+- Un adapter que solo depende de `core-api` + una fachada de arranque puede reutilizarse en una plataforma nueva sin recompilar el resto de módulos.
+- El grafo `provides`/`requires` pasa a ser la fuente de verdad de la composición, en vez de listas de dependencias Gradle duplicadas por adapter.
+- Añadir o quitar un sink deja de requerir cambios en dos `build.gradle` y dos clases de arranque.
+
+*Negativas*
+- El descubrimiento en runtime exige un classloader aislado, un directorio de módulos y gestión de versiones/colisiones; hoy no existe.
+- Los fallos pasan de compilación a arranque, con peor diagnóstico si el `ModuleDescriptor` está mal declarado.
+- La migración toca ambos adapters y el orden de arranque; es un cambio de alto riesgo sin tests de servidor real (los E2E de plataforma están descartados, `PLAN.md:832`).
+
+**Alternativas consideradas**
+
+1. **Mantener el composition root con dependencias de compilación (estado actual)**
+   - Ventajas: errores en compilación; arranque determinista; sin classloader propio.
+   - Limitaciones: viola el objetivo de agnosticismo; cada módulo nuevo obliga a editar ambos adapters.
+   - Evaluación: se conserva como estado transitorio.
+
+2. **Descubrimiento total en runtime: adapters dependen solo de `core-api` + fachada del launcher**
+   - Ventajas: agnosticismo real; módulos versionables por separado.
+   - Limitaciones: classloader, aislamiento, hot-reload, diagnóstico y empaquetado (shadow jars) son trabajo no trivial; además `SuiteHost` vive en `host`, así que la fachada del launcher debe extraerse antes.
+   - Evaluación: objetivo a medio plazo; no se aborda sin ADR aceptado y sin un plan de migración por fases.
+
+3. **Extracción por fases: mover el wiring a una fachada en `host` y dejar los adapters con una sola dependencia de arranque**
+   - Ventajas: reduce el conocimiento de los adapters sin introducir classloader; prepara el paso a (2).
+   - Limitaciones: sigue habiendo dependencia de compilación con `host`; no elimina las listas de sinks, solo las centraliza.
+   - Evaluación: **recomendada como siguiente paso**; la paridad Fabric ya está resuelta y este ADR fija el rumbo.
+
+---
+
+#### ADR-020: Un único `config/suite/messages.yml` para todas las plataformas
+
+**Estado:** Aceptado (decisión del usuario en `docs/workdir/REPORT.md:234`)
+
+**Contexto**
+
+- `MessagesConfig` vive en `host` (`MessagesConfig.java:24`) y `storage.md` lo asignaba a «cada platform adapter».
+- Duplicar el archivo por plataforma haría divergir los textos de UI entre Spigot y Fabric y obligaría a mantener dos copias de los defaults.
+- Decisión registrada: «No puede haber un directorio por cada plataforma, se debería abstraer en un mismo archivo para todas las plataformas, y ese es `<manager>/config/suite/`».
+- `Hecho verificado`: `HostPaths.suiteMessages()` resuelve `config/suite/messages.yml` con fallback a `messages.yml`; `MessagesConfig.load()` ya lo consume.
+
+**Consecuencias**
+
+*Positivas*
+- Una sola fuente de verdad para los textos de UI, independiente de la plataforma.
+- Los fallbacks mantienen funcionando instalaciones con el archivo plano anterior.
+- `resetConfigs`/`copyDefaultsIfMissing` escriben y respaldan la misma ruta en Spigot y Fabric.
+
+*Negativas*
+- `host` (core) sigue conociendo un recurso de presentación; si en el futuro se quiere un `messages` por plataforma habría que introducir overrides por adapter.
+- El archivo compartido puede contener claves específicas de una plataforma; hoy no hay validación que lo impida.
+
+**Alternativas consideradas**
+
+1. **`messages.yml` por adapter (propuesta original de `storage.md`)**
+   - Ventajas: cada plataforma controla sus textos.
+   - Limitaciones: duplicación y divergencia; dos defaults que mantener.
+   - Evaluación: descartada por la decisión del usuario.
+
+2. **Un archivo único con loader en `host` (elegida)**
+   - Ventajas: fuente única, reutiliza `HostPaths`, sin duplicar clases.
+   - Limitaciones: acoplamiento de `host` a un recurso de presentación.
+   - Evaluación: aceptada; el acoplamiento se considera menor frente a la duplicación.
+
+3. **Mover el loader a un módulo `presentation`/`messages` compartido**
+   - Ventajas: separación estricta entre core y UI.
+   - Limitaciones: nuevo módulo y dependencia adicional en ambos adapters; el módulo `messages` existente gestiona catálogos, no el archivo de configuración.
+   - Evaluación: aplazada; no aporta valor inmediato sobre (2).
+
+---
+
+#### ADR-008: Mantener `chattranslator` (façade) y `translator` (proveedor) como capabilities separadas
+
+**Estado:** Propuesto
+
+**Contexto**
+
+- `Hecho verificado`: `ChatTranslatorModule.java:22` provee `chattranslator`; `GTranslateModule.java:22-23` y `LTranslateModule.java:22-23` proveen `translator` y requieren `chattranslator`.
+- `Hecho verificado`: ningún módulo requiere `translator`; la façade no exige un backend concreto.
+- `Hecho verificado`: en `kernel.ModuleGraph` una `Requirement` no satisfecha deja el módulo inactivo (`ModuleGraph.java:259` y siguientes), es decir, los requisitos son obligatorios.
+- La traducción es opcional: una instalación sin backends debe arrancar con `TranslationService` en modo no-op.
+- La ambigüedad es de nomenclatura y de dirección del grafo, no de funcionamiento.
+
+**Consecuencias**
+
+*Positivas*
+- La façade puede activarse sin backends y el pipeline degrada a no-op, que es el comportamiento actual de `ChatTranslator`.
+- Los proveedores declaran explícitamente que necesitan la façade, lo que ordena la inicialización (façade primero, backends después).
+- No hay cambios de contrato ni migración de capacidades.
+
+*Negativas*
+- Dos nombres (`chattranslator`, `translator`) para un mismo dominio invitan a error al declarar nuevos módulos.
+- La dirección «proveedor requiere façade» es la inversa de la intuición habitual («façade requiere proveedor»); requiere documentación explícita.
+- Si en el futuro se quisiera exigir al menos un backend, el modelo actual de `Requirement` no permite expresar «opcional».
+
+**Alternativas consideradas**
+
+1. **Mantener ambas capabilities y documentar la dirección (recomendada)**
+   - Ventajas: cero churn; el grafo actual ya funciona y expresa la opcionalidad.
+   - Limitaciones: la nomenclatura sigue siendo confusa sin documentación.
+   - Evaluación: **recomendada**; añadir un test de kernel que verifique que `chattranslator` activa sin proveedores.
+
+2. **Unificar en `translator` para todos**
+   - Ventajas: un solo nombre.
+   - Limitaciones: `ModuleDescriptor` no distingue rol (façade vs proveedor); no se podría saber si un `translator` es coordinador o backend; además rompe CT3 y los tests existentes.
+   - Evaluación: descartada por pérdida de información semántica.
+
+3. **Renombrar a `translation-facade` y `translation-provider`**
+   - Ventajas: nombres autoexplicativos.
+   - Limitaciones: cambio de contrato en todos los descriptores y tests; obliga a versionar la capability.
+   - Evaluación: aplazada hasta una revisión mayor de contratos; no compensa ahora.
+
+---
 
 ---
 
