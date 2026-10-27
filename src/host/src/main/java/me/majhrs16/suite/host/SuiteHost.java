@@ -13,7 +13,6 @@ import me.majhrs16.suite.iflow.RouteDecision;
 import me.majhrs16.suite.iflow.RouteOutcome;
 import me.majhrs16.suite.iflow.Router;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.channel.RateLimiter;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
@@ -21,8 +20,6 @@ import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.ChannelConfig.LoadResult;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
-import me.majhrs16.suite.iflow.vm.VmConfigLoader;
-import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.chattranslator.ChatTranslator;
 import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
 import me.majhrs16.suite.chattranslator.BackendConfig;
@@ -125,15 +122,9 @@ public final class SuiteHost {
         TranslationService translationService = new TranslationService(translatorManager);
         ChatTranslator chatTranslator = new ChatTranslator(translatorManager, translationService, chatTranslatorConfig);
 
-        // Load the VM policy program (policy.flow or the pass-through fallback)
-        me.majhrs16.suite.iflow.vm.isa.ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
-
-        // Create rate limiter (shared with VM engine)
-        RateLimiter rateLimit = new RateLimiter();
-
-        // Create VM policy engine
-        VmPolicyEngine router = new VmPolicyEngine(channels, permissions, rateLimit);
-        router.setProgram(program);
+        // Select the iFlow runtime (vm by default, firewall via iflow.engine.kind)
+        Router router = RouterFactory.create(config, configDir, channels, permissions,
+            placeholders, translationService, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
         return new SuiteHost(config, channels, translationService, chatTranslator, router, formatter, logger, chatDelivery);

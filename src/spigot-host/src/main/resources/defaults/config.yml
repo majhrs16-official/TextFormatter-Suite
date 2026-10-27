@@ -3,6 +3,7 @@ general:
 
 iflow:
   engine:
+    kind: vm
     parallel: false
 
 sonido:

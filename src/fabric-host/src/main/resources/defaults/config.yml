@@ -5,5 +5,9 @@ general:
   sound-enabled: true
   claim-mode: cancel-event
 
+iflow:
+  engine:
+    kind: vm
+
 chat:
   global-prefix: ""

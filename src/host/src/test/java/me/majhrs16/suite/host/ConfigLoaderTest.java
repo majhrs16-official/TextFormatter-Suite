@@ -41,6 +41,7 @@ class ConfigLoaderTest {
         assertEquals(true, config.quickLook());
         assertEquals(Language.EN, config.defaultLanguage());
         assertFalse(config.engineParallel());
+        assertEquals(HostConfig.Engine.VM, config.engine());
         assertTrue(config.soundEnabled());
         assertFalse(result.isValid()); // missing file = degraded
     }
@@ -53,6 +54,7 @@ class ConfigLoaderTest {
               language: es
             iflow:
               engine:
+                kind: firewall
                 parallel: true
             sonido:
               enabled: false
@@ -66,6 +68,7 @@ class ConfigLoaderTest {
         assertFalse(config.quickLook());
         assertEquals(Language.ES, config.defaultLanguage());
         assertTrue(config.engineParallel());
+        assertEquals(HostConfig.Engine.FIREWALL, config.engine());
         assertFalse(config.soundEnabled());
         assertEquals(HostConfig.ClaimMode.CLEAR_RECIPIENTS, config.claimMode());
         assertTrue(result.isValid());
@@ -81,6 +84,20 @@ class ConfigLoaderTest {
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
         assertEquals(HostConfig.ClaimMode.CANCEL_EVENT, result.config().claimMode());
         assertTrue(result.isValid()); // invalid value falls back but config is valid
+    }
+
+    @Test
+    void unknownEngineFallsBackToVm() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+            iflow:
+              engine:
+                kind: no-existe
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+
+        assertEquals(HostConfig.Engine.VM, result.config().engine());
+        assertTrue(result.isValid());
     }
 
     @Test

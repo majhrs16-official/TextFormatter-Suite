@@ -11,6 +11,7 @@ import java.util.List;
  * @param quickLook         show an annotated echo to the sender (quick-look).
  * @param defaultLanguage   fallback UI/language code when nothing else is set.
  * @param engineParallel    iFlow knob: parallel recipient routing (new in v2.1).
+ * @param engine            iFlow runtime: VM (`.flow`) or firewall (legacy SpEL rules).
  * @param soundEnabled      master switch for channel sounds.
  * @param claimMode         how the platform host takes over vanilla chat.
  * @param logChatToConsole  whether to also send player chat to server console.
@@ -20,12 +21,21 @@ public record HostConfig(
         boolean quickLook,
         Language defaultLanguage,
         boolean engineParallel,
+        Engine engine,
         boolean soundEnabled,
         ClaimMode claimMode,
         boolean logChatToConsole,
         List<Repository> repositories,
         List<String> moduleAllowlist
 ) {
+
+    /** iFlow runtime selection; both engines live side by side. */
+    public enum Engine {
+        /** Binary {@code .flow} programs executed by {@code iflow-vm}. */
+        VM,
+        /** Legacy SpEL rules executed by {@code iflow-firewall}. */
+        FIREWALL
+    }
 
     /** How the adapter claims a vanilla chat event. */
     public enum ClaimMode {
@@ -47,6 +57,6 @@ public record HostConfig(
     ) {}
 
     public static HostConfig defaults() {
-        return new HostConfig(true, Language.EN, false, true, ClaimMode.CANCEL_EVENT, true, List.of(), List.of());
+        return new HostConfig(true, Language.EN, false, Engine.VM, true, ClaimMode.CANCEL_EVENT, true, List.of(), List.of());
     }
 }

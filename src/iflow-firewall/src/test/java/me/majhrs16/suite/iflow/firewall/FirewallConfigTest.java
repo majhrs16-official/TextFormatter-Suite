@@ -177,13 +177,42 @@ class FirewallConfigTest {
 
     @Test
     void rootMustBeAMap() throws Exception {
-        Files.writeString(canonical(), "- uno\n- dos\n");
+        Files.writeString(canonical(), "solo texto");
 
         FirewallConfig config = FirewallConfig.load(dir);
 
         assertFalse(config.valid());
         assertTrue(hasIssue(config, FirewallIssue.Level.ERROR, "rules.yml"));
         assertEquals(RuleGraph.empty(), config.graph());
+    }
+
+    @Test
+    void legacyRuleListIsAcceptedAsInfo() throws Exception {
+        Files.writeString(canonical(), """
+            - id: drop-private
+              target: DROP
+              channel: private
+            """);
+
+        FirewallConfig config = FirewallConfig.load(dir);
+
+        assertTrue(config.valid(), config.issues().toString());
+        assertTrue(hasIssue(config, FirewallIssue.Level.INFO, "rules.yml"));
+        assertEquals(RuleGraph.empty(), config.graph());
+    }
+
+    @Test
+    void legacyRulesKeyIsAcceptedAsInfo() throws Exception {
+        Files.writeString(canonical(), """
+            rules:
+              - id: drop-private
+                target: DROP
+            """);
+
+        FirewallConfig config = FirewallConfig.load(dir);
+
+        assertTrue(config.valid());
+        assertTrue(hasIssue(config, FirewallIssue.Level.INFO, "rules.yml"));
     }
 
     @Test

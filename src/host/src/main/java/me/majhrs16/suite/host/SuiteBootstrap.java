@@ -8,8 +8,6 @@ import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.iflow.Router;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.vm.VmConfigLoader;
-import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ModuleLoader;
@@ -23,7 +21,6 @@ import me.majhrs16.suite.chattranslator.ChatTranslator;
 import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
 import me.majhrs16.suite.chattranslator.BackendConfig;
 import me.majhrs16.suite.api.spi.TranslatorManager;
-import me.majhrs16.suite.iflow.channel.RateLimiter;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -117,15 +114,9 @@ public final class SuiteBootstrap {
             throw new IllegalStateException(sb.toString());
         }
 
-        // Load the VM policy program (policy.flow or the pass-through fallback)
-        me.majhrs16.suite.iflow.vm.isa.ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
-
-        // Create rate limiter (shared with VM engine)
-        RateLimiter rateLimit = new RateLimiter();
-
-        // Create VM policy engine
-        VmPolicyEngine router = new VmPolicyEngine(channels, permissions, rateLimit);
-        router.setProgram(program);
+        // Select the iFlow runtime (vm by default, firewall via iflow.engine.kind)
+        Router router = RouterFactory.create(config, configDir, channels, permissions,
+            placeholders, translationService, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
         return new SuiteHost(config, channels, translationService, chatTranslator, router, formatter, logger, chatDelivery);

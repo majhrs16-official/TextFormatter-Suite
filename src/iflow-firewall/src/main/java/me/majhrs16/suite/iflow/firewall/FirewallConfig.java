@@ -82,6 +82,10 @@ public final class FirewallConfig {
             return error(file, "error parseando YAML: " + exception.getMessage());
         }
 
+        if (root instanceof List<?>) {
+            return legacyRules(file);
+        }
+
         if (!(root instanceof Map<?, ?> raw)) {
             return new FirewallConfig(file, RuleGraph.empty(), List.of(new FirewallIssue(
                 FirewallIssue.Level.ERROR,
@@ -92,6 +96,9 @@ public final class FirewallConfig {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) raw;
+        if (map.get("rules") instanceof List<?>) {
+            return legacyRules(file);
+        }
         List<FirewallIssue> issues = new ArrayList<>();
 
         int maxSteps = parseGuard(map, issues);
@@ -108,6 +115,18 @@ public final class FirewallConfig {
             FirewallIssue.Level.ERROR,
             "rules.yml",
             message
+        )));
+    }
+
+    /**
+     * El formato histórico de ejecución es una lista de reglas (o un mapa con
+     * {@code rules:}). No es un grafo del editor: se acepta sin modelarlo.
+     */
+    private static FirewallConfig legacyRules(Path file) {
+        return new FirewallConfig(file, RuleGraph.empty(), List.of(new FirewallIssue(
+            FirewallIssue.Level.INFO,
+            "rules.yml",
+            "rules.yml legacy (lista de reglas); lo valida iflow-firewall al cargar"
         )));
     }
 
