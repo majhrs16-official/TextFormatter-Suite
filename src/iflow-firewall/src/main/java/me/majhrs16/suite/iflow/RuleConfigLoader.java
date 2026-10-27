@@ -1,10 +1,10 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.iflow.firewall.rule.Rule;
-import me.majhrs16.suite.iflow.firewall.rule.TransformOp;
-import me.majhrs16.suite.iflow.firewall.target.PolicyTarget;
+import me.majhrs16.suite.iflow.rule.Rule;
+import me.majhrs16.suite.iflow.rule.TransformOp;
+import me.majhrs16.suite.iflow.target.PolicyTarget;
 
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;

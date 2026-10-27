@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import java.util.List;
 import java.util.Objects;

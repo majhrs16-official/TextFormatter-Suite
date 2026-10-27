@@ -29,11 +29,11 @@ public record HostConfig(
         List<String> moduleAllowlist
 ) {
 
-    /** iFlow runtime selection; both engines live side by side. */
+    /** iFlow runtime selection; the engines are mutually exclusive alternatives. */
     public enum Engine {
         /** Binary {@code .flow} programs executed by {@code iflow-vm}. */
         VM,
-        /** Legacy SpEL rules executed by {@code iflow-firewall}. */
+        /** Legacy SpEL rules executed by {@code iflow-firewall} (alternative to the VM). */
         FIREWALL
     }
 

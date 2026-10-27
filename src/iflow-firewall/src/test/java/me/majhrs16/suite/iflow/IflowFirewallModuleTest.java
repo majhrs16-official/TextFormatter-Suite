@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
@@ -22,23 +22,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * which the TextFormatter module provides. The kernel graph must resolve both
  * when they are present together and must flag iFlow as unmet on its own.
  */
-class IflowModuleTest {
+class IflowFirewallModuleTest {
 
     @Test
     void registersModuleForServiceLoader() {
         Module module = ServiceLoader.load(Module.class)
             .stream()
             .map(ServiceLoader.Provider::get)
-            .filter(candidate -> candidate.descriptor().name().equals("iflow"))
+            .filter(candidate -> candidate.descriptor().name().equals("iflow-firewall"))
             .findFirst()
-            .orElseThrow(() -> new AssertionError("iflow module not registered"));
+            .orElseThrow(() -> new AssertionError("iflow-firewall module not registered"));
 
-        assertEquals("iflow", module.descriptor().name());
+        assertEquals("iflow-firewall", module.descriptor().name());
     }
 
     @Test
     void declaresRouterCapabilityAndChannelApiRequirement() {
-        ModuleDescriptor descriptor = new IflowModule().descriptor();
+        ModuleDescriptor descriptor = new IflowFirewallModule().descriptor();
 
         assertEquals("2.1.0", descriptor.contractVersion().toString());
         assertTrue(descriptor.provides().contains(
@@ -51,7 +51,7 @@ class IflowModuleTest {
     void resolvesAlongsideTextFormatterInRealGraph() {
         ModuleGraph graph = new ModuleGraph(Environment.current());
         ResolutionResult result = graph.resolve(java.util.List.of(
-            new IflowModule(),
+            new IflowFirewallModule(),
             new TextFormatterModule()));
 
         assertTrue(result.allResolved(), "both modules must resolve together");
@@ -59,7 +59,7 @@ class IflowModuleTest {
 
     @Test
     void aloneIsUnsatisfiedWithoutChannelApi() {
-        me.majhrs16.suite.api.Module iflow = new IflowModule();
+        me.majhrs16.suite.api.Module iflow = new IflowFirewallModule();
         ModuleGraph graph = new ModuleGraph(Environment.current());
         ResolutionResult result = graph.resolve(java.util.List.of(iflow));
 

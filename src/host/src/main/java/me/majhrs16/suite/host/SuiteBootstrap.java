@@ -96,8 +96,9 @@ public final class SuiteBootstrap {
         TranslationService translationService = new TranslationService(translatorManager);
         ChatTranslator chatTranslator = new ChatTranslator(translatorManager, translationService, chatTranslatorConfig);
 
-        // 2. Discover and resolve modules via kernel (descriptors only)
-        List<Module> modules = ModuleLoader.discover();
+        // 2. Discover and resolve modules via kernel (descriptors only).
+        // iFlow engines are mutually exclusive; keep only the configured one.
+        List<Module> modules = IflowEngineSelector.select(ModuleLoader.discover(), config.engine());
         Environment env = Environment.current();
         ModuleGraph graph = new ModuleGraph(env);
         ResolutionResult result = graph.resolve(modules);

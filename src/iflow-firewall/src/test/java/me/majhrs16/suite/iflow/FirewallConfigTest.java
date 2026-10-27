@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

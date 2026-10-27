@@ -1,13 +1,13 @@
-package me.majhrs16.suite.api.spi;
+package me.majhrs16.suite.iflow;
 
 import java.util.Map;
 
 /**
- * Evaluates inline scripting expressions inside a template.
+ * Evaluates legacy iFlow rule expressions (conditions and actions).
  *
- * <p>Templates may contain {@code <expr>...</expr>} tags whose content is an
- * expression evaluated against a binding map (player, content, languages, ...).
- * The result is embedded as escaped literal text.</p>
+ * <p>This SPI belongs to {@code iflow-firewall}; it is not used by templates,
+ * by {@code iflow-vm} or by {@code iflow-wasm}. The host no longer exposes
+ * {@code <expr>} tags.</p>
  */
 public interface ExpressionEvaluator {
 

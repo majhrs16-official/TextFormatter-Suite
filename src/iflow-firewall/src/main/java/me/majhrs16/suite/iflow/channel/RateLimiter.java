@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall.channel;
+package me.majhrs16.suite.iflow.channel;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;

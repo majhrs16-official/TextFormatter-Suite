@@ -5,11 +5,11 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.iflow.Router;
+import me.majhrs16.suite.iflow.DefaultRouter;
+import me.majhrs16.suite.iflow.RuleConfigLoader;
+import me.majhrs16.suite.iflow.RuleExpressionEvaluator;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.iflow.channel.RateLimiter;
-import me.majhrs16.suite.iflow.firewall.DefaultRouter;
-import me.majhrs16.suite.iflow.firewall.RuleConfigLoader;
-import me.majhrs16.suite.iflow.firewall.RuleExpressionEvaluator;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -22,9 +22,11 @@ import java.util.Objects;
  * Selects the iFlow runtime ({@code iflow-vm} or {@code iflow-firewall}) from
  * {@code iflow.engine.kind} in {@code config.yml}.
  *
- * <p>Both modules are optional peers: the host depends on each one, and this
- * factory is the only seam that chooses between them. Neither module imports
- * the other.</p>
+ * <p>{@code iflow-vm}, {@code iflow-wasm} and {@code iflow-firewall} are
+ * <strong>mutually exclusive</strong> engines: only one may be installed at a
+ * time. They share the base package {@code me.majhrs16.suite.iflow}, so the
+ * host is compiled against that shared contract and the installed engine
+ * supplies the classes. This factory is the only seam that chooses one.</p>
  */
 public final class RouterFactory {
 
@@ -62,7 +64,7 @@ public final class RouterFactory {
             if (logger != null) {
                 logger.info("iFlow engine: firewall (legacy SpEL rules)");
             }
-            return new FirewallRouterAdapter(firewall);
+            return firewall;
         }
 
         ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);

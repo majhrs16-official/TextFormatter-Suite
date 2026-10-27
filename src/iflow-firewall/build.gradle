@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'me.majhrs16'
-description = 'iFlow firewall legacy: motor de reglas SpEL restaurado desde 933bdd3^, independiente de iflow-vm'
+description = 'iFlow firewall legacy: motor de reglas SpEL restaurado desde 933bdd3^, alternativa mutuamente excluyente a iflow-vm'
 
 repositories {
     mavenLocal()

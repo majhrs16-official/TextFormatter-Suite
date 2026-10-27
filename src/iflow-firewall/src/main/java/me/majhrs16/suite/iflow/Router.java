@@ -1,8 +1,8 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.firewall.rule.Rule;
+import me.majhrs16.suite.iflow.rule.Rule;
 
 import java.util.Collection;
 

@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
@@ -7,18 +7,19 @@ import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 
 /**
- * SPI provider declaring the iFlow module in the kernel graph.
+ * SPI provider for the legacy {@code iflow-firewall} engine.
  *
- * <p>iFlow provides the {@code router} capability and <em>requires</em> the
- * {@code channel-api} capability from the TextFormatter module, exercising the
- * cross-module dependency the graph was built for: a host with both jars
- * present resolves both; one missing channel-api leaves iFlow unmet.</p>
+ * <p>It provides the {@code router} capability and requires {@code channel-api}
+ * from TextFormatter. The three iFlow engines ({@code iflow-vm},
+ * {@code iflow-wasm}, {@code iflow-firewall}) are mutually exclusive: only one
+ * may be installed, so this descriptor is never active together with
+ * {@code iflow-vm} in a supported deployment.</p>
  */
-public final class IflowModule implements Module {
+public final class IflowFirewallModule implements Module {
 
     @Override
     public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.builder("iflow")
+        return ModuleDescriptor.builder("iflow-firewall")
             .version(SemVer.of(2, 1, 0))
             .contractVersion(SemVer.of(2, 1, 0))
             .jvmRange(17, 0)

@@ -1,7 +1,7 @@
-package me.majhrs16.suite.api.spi;
+package me.majhrs16.suite.iflow;
 
 /**
- * Thrown when an inline scripting expression cannot be evaluated.
+ * Thrown when a legacy iFlow rule expression cannot be evaluated.
  */
 public class ExpressionEvaluationException extends RuntimeException {
 

@@ -341,7 +341,7 @@ public final class ConfigValidator {
      * {@code iflow-firewall}.
      */
     private static List<ValidationIssue> validateRules(Path configDir) {
-        return me.majhrs16.suite.iflow.firewall.FirewallConfig.load(configDir).issues().stream()
+        return me.majhrs16.suite.iflow.FirewallConfig.load(configDir).issues().stream()
             .map(issue -> new ValidationIssue(
                 switch (issue.level()) {
                     case INFO -> ValidationLevel.INFO;

@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall.rule;
+package me.majhrs16.suite.iflow.rule;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;

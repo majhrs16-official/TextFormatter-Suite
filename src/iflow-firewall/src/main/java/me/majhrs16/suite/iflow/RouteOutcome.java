@@ -1,7 +1,7 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.firewall.target.PolicyTarget;
+import me.majhrs16.suite.iflow.target.PolicyTarget;
 
 /**
  * Result of a routing evaluation, including the potentially transformed message.

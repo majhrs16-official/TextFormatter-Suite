@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.firewall.rule;
+package me.majhrs16.suite.iflow.rule;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;

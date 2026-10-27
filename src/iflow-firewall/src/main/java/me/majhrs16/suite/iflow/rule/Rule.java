@@ -1,7 +1,7 @@
-package me.majhrs16.suite.iflow.firewall.rule;
+package me.majhrs16.suite.iflow.rule;
 
 import me.majhrs16.suite.api.message.Direction;
-import me.majhrs16.suite.iflow.firewall.target.PolicyTarget;
+import me.majhrs16.suite.iflow.target.PolicyTarget;
 
 import java.util.List;
 import java.util.Objects;

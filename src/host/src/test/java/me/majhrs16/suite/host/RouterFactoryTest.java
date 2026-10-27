@@ -1,19 +1,19 @@
 package me.majhrs16.suite.host;
 
+import me.majhrs16.suite.api.Capability;
+import me.majhrs16.suite.api.Module;
+import me.majhrs16.suite.api.ModuleDescriptor;
+import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.iflow.IflowFirewallModule;
 import me.majhrs16.suite.iflow.IfowVmModule;
 import me.majhrs16.suite.iflow.Router;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.firewall.IflowModule;
 import me.majhrs16.suite.iflow.target.PolicyTarget;
-import me.majhrs16.suite.kernel.Environment;
-import me.majhrs16.suite.kernel.ModuleGraph;
-import me.majhrs16.suite.kernel.ResolutionResult;
-import me.majhrs16.suite.textformatter.TextFormatterModule;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
@@ -91,13 +91,26 @@ class RouterFactoryTest {
     }
 
     @Test
-    void bothIflowModulesResolveInTheSameGraph() {
-        ModuleGraph graph = new ModuleGraph(Environment.current());
-        ResolutionResult result = graph.resolve(List.of(
-            new IflowModule(),
-            new IfowVmModule(),
-            new TextFormatterModule()));
+    void iflowEnginesAreAlternativeModules() {
+        ModuleDescriptor firewall = new IflowFirewallModule().descriptor();
+        ModuleDescriptor vm = new IfowVmModule().descriptor();
+        assertEquals("iflow-firewall", firewall.name());
+        assertEquals("iflow-vm", vm.name());
+        assertTrue(firewall.provides().contains(Capability.of("router", SemVer.of(2, 1, 0))));
+        assertTrue(vm.provides().contains(Capability.of("iflow-vm", SemVer.of(2, 1, 0))));
+    }
 
-        assertTrue(result.allResolved(), result.rejected().toString());
+    @Test
+    void onlyTheSelectedIflowEngineReachesTheKernel() {
+        List<Module> engines = List.of(new IflowFirewallModule(), new IfowVmModule());
+
+        assertEquals(List.of("iflow-vm"),
+            names(IflowEngineSelector.select(engines, HostConfig.Engine.VM)));
+        assertEquals(List.of("iflow-firewall"),
+            names(IflowEngineSelector.select(engines, HostConfig.Engine.FIREWALL)));
+    }
+
+    private static List<String> names(List<Module> modules) {
+        return modules.stream().map(module -> module.descriptor().name()).toList();
     }
 }

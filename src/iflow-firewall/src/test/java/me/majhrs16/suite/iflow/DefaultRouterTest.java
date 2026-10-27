@@ -1,13 +1,13 @@
-package me.majhrs16.suite.iflow.firewall;
+package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.firewall.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.firewall.rule.Rule;
-import me.majhrs16.suite.iflow.firewall.rule.TransformOp;
-import me.majhrs16.suite.iflow.firewall.target.PolicyTarget;
+import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.iflow.rule.Rule;
+import me.majhrs16.suite.iflow.rule.TransformOp;
+import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
