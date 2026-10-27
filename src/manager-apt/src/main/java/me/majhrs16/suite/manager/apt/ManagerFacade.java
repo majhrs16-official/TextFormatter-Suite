@@ -94,10 +94,22 @@ public final class ManagerFacade {
 
     /**
      * Installs packages from repositories (`/suite repo install`).
+     * Automatically confirms replacement plans. Prefer the overload with
+     * {@code confirmed} for interactive callers.
      */
     public AptInstaller.InstallResult repoInstall(Collection<String> packages, String version, String channel, boolean force) {
         ensureInitialized();
         return aptInstaller.install(packages, version, channel, force);
+    }
+
+    /**
+     * Installs packages from repositories, optionally confirming replacement of
+     * installed packages that conflict through {@code Exclude}.
+     */
+    public AptInstaller.InstallResult repoInstall(Collection<String> packages, String version,
+                                                   String channel, boolean force, boolean confirmed) {
+        ensureInitialized();
+        return aptInstaller.install(packages, version, channel, force, confirmed);
     }
 
     /**

@@ -15,6 +15,8 @@ public final class PackageEntry {
     private final String channel;
     private final PackageType type;
     private final List<String> dependencies;
+    private final List<String> excludes;
+    private final List<String> provides;
     private final String arch;
     private final String platform;
     private final String url;
@@ -31,11 +33,23 @@ public final class PackageEntry {
                         String url, String os, String sha256, long size,
                         Map<String, FileEntry> files, String sourceArtifact,
                         String parentPackage, Map<String, String> extraFields) {
+        this(name, version, channel, type, dependencies, List.of(), List.of(),
+                arch, platform, url, os, sha256, size, files, sourceArtifact,
+                parentPackage, extraFields);
+    }
+
+    public PackageEntry(String name, String version, String channel, PackageType type,
+                        List<String> dependencies, List<String> excludes, List<String> provides,
+                        String arch, String platform, String url, String os, String sha256, long size,
+                        Map<String, FileEntry> files, String sourceArtifact,
+                        String parentPackage, Map<String, String> extraFields) {
         this.name = name;
         this.version = version;
         this.channel = channel;
         this.type = type;
         this.dependencies = dependencies;
+        this.excludes = excludes != null ? List.copyOf(excludes) : List.of();
+        this.provides = provides != null ? List.copyOf(provides) : List.of();
         this.arch = arch;
         this.platform = platform;
         this.url = url;
@@ -54,6 +68,10 @@ public final class PackageEntry {
     public String channel() { return channel; }
     public PackageType type() { return type; }
     public List<String> dependencies() { return dependencies; }
+    /** Package names (or provided virtual names) that cannot coexist with this package. */
+    public List<String> excludes() { return excludes; }
+    /** Virtual package names supplied by this package. */
+    public List<String> provides() { return provides; }
     public String arch() { return arch; }
     public String platform() { return platform; }
     public String url() { return url; }

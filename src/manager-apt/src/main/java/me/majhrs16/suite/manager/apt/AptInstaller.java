@@ -49,8 +49,21 @@ public final class AptInstaller {
 
     /**
      * Installs packages from repositories (equivalent to `apt install`).
+     * This convenience overload automatically confirms replacement plans; user
+     * interfaces should call {@link #install(Collection, String, String, boolean, boolean)}
+     * with {@code confirmed=false} first to show the replacement prompt.
      */
     public InstallResult install(Collection<String> packageNames, String versionConstraint, String channel, boolean force) {
+        return install(packageNames, versionConstraint, channel, force, true);
+    }
+
+    /**
+     * Installs packages from repositories. When the resolved plan needs to remove
+     * packages because of an {@code Exclude} conflict, {@code confirmed=false}
+     * returns a confirmation result instead of modifying the system.
+     */
+    public InstallResult install(Collection<String> packageNames, String versionConstraint,
+                                 String channel, boolean force, boolean confirmed) {
         logger.info("APT install: " + packageNames + " " + versionConstraint + " (" + channel + ")");
         
         // Resolve plan
@@ -64,26 +77,57 @@ public final class AptInstaller {
         if (plan.steps().isEmpty()) {
             return new InstallResult(true, List.of(), "No packages to install");
         }
+
+        if (plan.requiresConfirmation() && !confirmed) {
+            return InstallResult.confirmation(plan);
+        }
         
-        // Execute plan
-        List<String> installed = new ArrayList<>();
+        // Download every package before removing anything from the system. This
+        // avoids losing the replaced package when the network fails halfway.
+        List<DownloadedPackage> downloads = new ArrayList<>();
         for (DependencyResolver.PlanStep step : plan.steps()) {
             if (step.type() != DependencyResolver.PlanStep.Type.INSTALL) continue;
-            
             RepositoryManager.PackageCandidate candidate = step.candidate();
             try {
-                Path zipPath = downloadPackage(candidate);
-                List<me.majhrs16.suite.manager.spi.PackageEntry> entries = installer.install(zipPath, force);
+                downloads.add(new DownloadedPackage(candidate, downloadPackage(candidate)));
+            } catch (Exception e) {
+                return new InstallResult(false, List.of(),
+                        "Failed to download " + candidate.name() + ": " + e.getMessage());
+            }
+        }
+
+        // Execute plan: removed packages must leave before the new ones are installed.
+        List<String> installed = new ArrayList<>();
+        List<String> replaced = new ArrayList<>();
+        for (me.majhrs16.suite.manager.spi.PackageEntry oldPackage : plan.replaced()) {
+            try {
+                installer.remove(oldPackage.name(), oldPackage.version(), oldPackage.channel(), false);
+                replaced.add(oldPackage.name() + " " + oldPackage.version());
+            } catch (Exception e) {
+                return new InstallResult(false, installed,
+                        "Failed to replace " + oldPackage.name() + ": " + e.getMessage());
+            }
+        }
+
+        for (DownloadedPackage download : downloads) {
+            RepositoryManager.PackageCandidate candidate = download.candidate();
+            try {
+                List<me.majhrs16.suite.manager.spi.PackageEntry> entries =
+                        installer.install(download.zipPath(), force);
                 for (me.majhrs16.suite.manager.spi.PackageEntry entry : entries) {
                     installed.add(entry.name() + " " + entry.version());
                 }
             } catch (Exception e) {
-                return new InstallResult(false, installed, "Failed to install " + candidate.name() + ": " + e.getMessage());
+                String prefix = replaced.isEmpty() ? "" : "Replaced " + String.join(", ", replaced) + ". ";
+                return new InstallResult(false, installed,
+                        prefix + "Failed to install " + candidate.name() + ": " + e.getMessage());
             }
         }
         
         return new InstallResult(true, installed, null);
     }
+
+    private record DownloadedPackage(RepositoryManager.PackageCandidate candidate, Path zipPath) {}
 
     /**
      * Upgrades all installed packages (equivalent to `apt upgrade`).
@@ -309,16 +353,48 @@ public final class AptInstaller {
         private final boolean success;
         private final List<String> packages;
         private final String error;
+        private final boolean requiresConfirmation;
+        private final List<String> packagesToInstall;
+        private final List<String> packagesToReplace;
 
         public InstallResult(boolean success, List<String> packages, String error) {
+            this(success, packages, error, false, List.of(), List.of());
+        }
+
+        public InstallResult(boolean success, List<String> packages, String error,
+                             boolean requiresConfirmation, List<String> packagesToInstall,
+                             List<String> packagesToReplace) {
             this.success = success;
             this.packages = packages;
             this.error = error;
+            this.requiresConfirmation = requiresConfirmation;
+            this.packagesToInstall = packagesToInstall;
+            this.packagesToReplace = packagesToReplace;
+        }
+
+        static InstallResult confirmation(DependencyResolver.ResolutionPlan plan) {
+            List<String> toInstall = plan.steps().stream()
+                    .filter(step -> step.type() == DependencyResolver.PlanStep.Type.INSTALL)
+                    .map(step -> step.candidate().name() + " " + step.candidate().version())
+                    .collect(Collectors.toList());
+            List<String> toReplace = plan.replaced().stream()
+                    .map(entry -> entry.name() + " " + entry.version())
+                    .collect(Collectors.toList());
+            return new InstallResult(false, List.of(), null, true, toInstall, toReplace);
         }
 
         public boolean success() { return success; }
         public List<String> packages() { return packages; }
         public String error() { return error; }
+        public boolean requiresConfirmation() { return requiresConfirmation; }
+        public List<String> packagesToInstall() { return packagesToInstall; }
+        public List<String> packagesToReplace() { return packagesToReplace; }
+
+        /** APT-style replacement question for command user interfaces. */
+        public String confirmationMessage() {
+            return "Deseas instalar estos paquetes?: " + String.join(", ", packagesToInstall)
+                    + "\n  Reemplazarán a: " + String.join(", ", packagesToReplace);
+        }
     }
 
     public static class RemoveResult {

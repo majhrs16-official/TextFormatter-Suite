@@ -124,12 +124,23 @@ public final class DynamicCommand extends org.bukkit.command.Command {
             return true;
         }
 
+        // Los comandos de paquetes aceptan un token final "confirm" para aprobar
+        // un reemplazo planificado sin convertirlo en un argumento posicional.
+        boolean confirmed = false;
+        if ((actionRef.equals("module") || actionRef.equals("repo"))
+                && remainingArgs.length > 0
+                && remainingArgs[remainingArgs.length - 1].equalsIgnoreCase("confirm")) {
+            confirmed = true;
+            remainingArgs = java.util.Arrays.copyOf(remainingArgs, remainingArgs.length - 1);
+        }
+
         // Preparar bindings para el script
         Map<String, String> bindings = new java.util.HashMap<>(fixedArgs);
         for (int i = 0; i < action.args().size() && i < remainingArgs.length; i++) {
             CommandsConfig.ArgDef argDef = action.args().get(i);
             bindings.put(argDef.name(), remainingArgs[i]);
         }
+        bindings.put("confirmed", Boolean.toString(confirmed));
 
         // Ejecutar según acción (hardcodeado por ahora; TODO: script engine)
         return executeHardcoded(sender, actionRef, bindings);
@@ -272,6 +283,7 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                 String version = bindings.getOrDefault("version", "");
                 String channel = bindings.getOrDefault("channel", "stable");
                 boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
+                boolean confirmed = Boolean.parseBoolean(bindings.getOrDefault("confirmed", "false"));
 
                 switch (action) {
                     case "list" -> {
@@ -318,7 +330,11 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                         sender.sendMessage("§a[Package] Instalando " + module + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
                         Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
                             try {
-                                AptInstaller.InstallResult result = mf.repoInstall(List.of(module), version.isBlank() ? "*" : version, channel, force);
+                                AptInstaller.InstallResult result = mf.repoInstall(List.of(module), version.isBlank() ? "*" : version, channel, force, confirmed);
+                                if (result.requiresConfirmation()) {
+                                    sendInstallConfirmation(sender, result);
+                                    return;
+                                }
                                 if (result.success()) {
                                     for (String pkg : result.packages()) {
                                         sender.sendMessage("§a[Package] ✓ " + pkg + " instalado correctamente");
@@ -377,6 +393,8 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                             sender.sendMessage("  §fSHA256: §a" + e.sha256());
                             sender.sendMessage("  §fTamaño: §a" + e.size() + " bytes");
                             sender.sendMessage("  §fDependencias: §7" + (e.dependencies().isEmpty() ? "(none)" : String.join(", ", e.dependencies())));
+                            sender.sendMessage("  §fExcluye: §7" + (e.excludes().isEmpty() ? "(none)" : String.join(", ", e.excludes())));
+                            sender.sendMessage("  §fProvee: §7" + (e.provides().isEmpty() ? "(none)" : String.join(", ", e.provides())));
                             sender.sendMessage("  §fArchivos: §7" + e.files().size());
                             return true;
                         }
@@ -420,6 +438,7 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                 String channel = bindings.getOrDefault("channel", "stable");
                 boolean force = Boolean.parseBoolean(bindings.getOrDefault("force", "false"));
                 boolean autoRemove = Boolean.parseBoolean(bindings.getOrDefault("auto-remove", "true"));
+                boolean confirmed = Boolean.parseBoolean(bindings.getOrDefault("confirmed", "false"));
 
                 switch (action) {
                     case "update" -> {
@@ -448,7 +467,11 @@ public final class DynamicCommand extends org.bukkit.command.Command {
                         sender.sendMessage("§a[Repo] Instalando " + pkg + (version.isBlank() ? "" : ":" + version) + " (" + channel + ")...");
                         Bukkit.getScheduler().runTaskAsynchronously(registrar.plugin(), () -> {
                             try {
-                                AptInstaller.InstallResult result = mf.repoInstall(List.of(pkg), version.isBlank() ? "*" : version, channel, force);
+                                AptInstaller.InstallResult result = mf.repoInstall(List.of(pkg), version.isBlank() ? "*" : version, channel, force, confirmed);
+                                if (result.requiresConfirmation()) {
+                                    sendInstallConfirmation(sender, result);
+                                    return;
+                                }
                                 if (result.success()) {
                                     for (String p : result.packages()) {
                                         sender.sendMessage("§a[Repo] ✓ " + p + " instalado correctamente");
@@ -698,6 +721,14 @@ public final class DynamicCommand extends org.bukkit.command.Command {
 
     private void sendUsage(CommandSender sender) {
         sender.sendMessage("§eUso: /" + name + " <" + String.join("|", node.children().keySet()) + ">");
+    }
+
+    private void sendInstallConfirmation(CommandSender sender, AptInstaller.InstallResult result) {
+        sender.sendMessage("§eDeseas instalar estos paquetes?: §f"
+                + String.join(", ", result.packagesToInstall()));
+        sender.sendMessage("  §eReemplazarán a: §f"
+                + String.join(", ", result.packagesToReplace()));
+        sender.sendMessage("§7Ejecuta el mismo comando añadiendo 'confirm' al final para continuar.");
     }
 
     private String[] subArray(String[] arr, int start) {

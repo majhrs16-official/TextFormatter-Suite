@@ -232,6 +232,8 @@ public static List<PackageEntry> parseManifest(String content) throws ParseExcep
         String channel = requireField(fields, "Channel", blockNum);
         String typeStr = requireField(fields, "Type", blockNum);
         String dependenciesStr = fields.getOrDefault("Dependencies", "");
+        String excludesStr = fields.getOrDefault("Exclude", "");
+        String providesStr = fields.getOrDefault("Provide", "");
         String arch = fields.getOrDefault("Arch", "none");
         String platform = fields.getOrDefault("Platform", "common");
         String url = fields.getOrDefault("URL", "");
@@ -271,18 +273,39 @@ public static List<PackageEntry> parseManifest(String content) throws ParseExcep
             throw new ParseException("Block " + blockNum + ": invalid SHA256: " + sha256);
         }
 
+        List<String> excludes = parseNameList(excludesStr);
+        List<String> provides = parseNameList(providesStr);
+
         // Split extra fields (status-only fields)
         Map<String, String> extraFields = new LinkedHashMap<>();
-        Set<String> knownFields = Set.of("Name", "Version", "Channel", "Type", "Dependencies", 
-                "Arch", "Platform", "URL", "OS", "SHA256", "Size", "SourceArtifact", "ParentPackage");
+        Set<String> knownFields = Set.of("Name", "Version", "Channel", "Type", "Dependencies",
+                "Exclude", "Provide", "Arch", "Platform", "URL", "OS", "SHA256", "Size",
+                "SourceArtifact", "ParentPackage");
         for (Map.Entry<String, String> entry : fields.entrySet()) {
             if (!knownFields.contains(entry.getKey())) {
                 extraFields.put(entry.getKey(), entry.getValue());
             }
         }
 
-        return new PackageEntry(name, version, channel, type, dependencies, arch, platform,
-                url, os, sha256, size, files, sourceArtifact, parentPackage, extraFields);
+        return new PackageEntry(name, version, channel, type, dependencies, excludes, provides,
+                arch, platform, url, os, sha256, size, files, sourceArtifact, parentPackage, extraFields);
+    }
+
+    /**
+     * Parses a whitespace-separated list of package names, preserving order and
+     * removing duplicates. Commas are accepted as separators for compatibility.
+     */
+    private static List<String> parseNameList(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (String name : value.trim().split("[\\s,]+")) {
+            if (!name.isBlank()) {
+                names.add(name);
+            }
+        }
+        return List.copyOf(names);
     }
 
     private static String requireField(Map<String, String> fields, String key, int blockNum) throws ParseException {
@@ -316,6 +339,12 @@ public static List<PackageEntry> parseManifest(String content) throws ParseExcep
             }
         }
         sb.append("Dependencies: ").append(String.join(",", depStrings)).append("\n");
+        if (!entry.excludes().isEmpty()) {
+            sb.append("Exclude: ").append(String.join(" ", entry.excludes())).append("\n");
+        }
+        if (!entry.provides().isEmpty()) {
+            sb.append("Provide: ").append(String.join(" ", entry.provides())).append("\n");
+        }
         
         sb.append("Arch: ").append(entry.arch()).append("\n");
         sb.append("Platform: ").append(entry.platform()).append("\n");

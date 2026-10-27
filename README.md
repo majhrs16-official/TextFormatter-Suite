@@ -190,8 +190,8 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `manager-spi` | SPI del Module Manager: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`, manifiestos y versiones | ✅ Probado |
-| `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado (19 tests) |
-| `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo probado (13 tests) |
+| `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado (25 tests) |
+| `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo probado (14 tests) |
 | `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado (6 tests) |
 | `example-extension` | Demo de extensión funcional | ✅ Probado (3 tests) |
 | `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ✅ Probado (6 tests) |

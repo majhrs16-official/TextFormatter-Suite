@@ -243,7 +243,94 @@ class PackageInstallerTest {
         assertEquals(2, db.getAllPackages().size());
     }
 
-    private void createValidZip(Path zipPath, String name, String version, String channel, 
+    @Test
+    void install_packageExcludeConflict_throws() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path firewallZip = tempDir.resolve("iflow-firewall.zip");
+        createZipWithMetadata(firewallZip, "iflow-firewall", "2.1.0", "stable",
+                "firewall.jar", "firewall".getBytes(), "", "iflow-vm", "iflow");
+        installer.install(firewallZip, false);
+
+        Path vmZip = tempDir.resolve("iflow-vm.zip");
+        createZipWithMetadata(vmZip, "iflow-vm", "2.1.0", "stable",
+                "vm.jar", "vm".getBytes(), "", "", "iflow");
+
+        InstallException ex = assertThrows(InstallException.class, () -> installer.install(vmZip, false));
+        assertTrue(ex.getMessage().contains("Package conflict"));
+        assertTrue(db.isInstalled("iflow-firewall"));
+        assertFalse(db.isInstalled("iflow-vm"));
+    }
+
+    @Test
+    void install_dependencySatisfiedByProvide() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path providerZip = tempDir.resolve("provider.zip");
+        createZipWithMetadata(providerZip, "iflow-vm", "2.1.0", "stable",
+                "provider.jar", "provider".getBytes(), "", "", "iflow");
+        installer.install(providerZip, false);
+
+        Path consumerZip = tempDir.resolve("consumer.zip");
+        createZipWithMetadata(consumerZip, "consumer", "1.0.0", "stable",
+                "consumer.jar", "consumer".getBytes(), "iflow@>=2.0.0", "", "");
+        installer.install(consumerZip, false);
+
+        assertTrue(db.isInstalled("consumer"));
+    }
+
+    private void createZipWithMetadata(Path zipPath, String name, String version, String channel,
+                                       String fileName, byte[] fileContent,
+                                       String dependencies, String exclude, String provide) throws Exception {
+        String fileSha256 = computeSha256(fileContent);
+        StringBuilder manifest = new StringBuilder();
+        manifest.append("Name: ").append(name).append("\n")
+                .append("Version: ").append(version).append("\n")
+                .append("Channel: ").append(channel).append("\n")
+                .append("Type: PACKAGE\n")
+                .append("Dependencies: ").append(dependencies).append("\n");
+        if (!exclude.isBlank()) {
+            manifest.append("Exclude: ").append(exclude).append("\n");
+        }
+        if (!provide.isBlank()) {
+            manifest.append("Provide: ").append(provide).append("\n");
+        }
+        manifest.append("Arch: none\n")
+                .append("Platform: common\n")
+                .append("URL: \n")
+                .append("OS: none\n")
+                .append("SHA256: \n")
+                .append("Size: 0\n")
+                .append("Files: \n")
+                .append("  ").append(fileName).append("\t")
+                .append(fileContent.length).append("\t")
+                .append(fileSha256).append("\t")
+                .append(name);
+
+        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
+            ZipEntry manifestEntry = new ZipEntry("METADATA/package.list");
+            zos.putNextEntry(manifestEntry);
+            zos.write(manifest.toString().getBytes());
+            zos.closeEntry();
+
+            ZipEntry fileEntry = new ZipEntry(fileName);
+            zos.putNextEntry(fileEntry);
+            zos.write(fileContent);
+            zos.closeEntry();
+        }
+    }
+
+    private void createValidZip(Path zipPath, String name, String version, String channel,
                                 String fileName, byte[] fileContent) throws Exception {
         String fileSha256 = computeSha256(fileContent);
         createValidZipFull(zipPath, name, version, channel, fileName, fileContent, fileSha256, null);

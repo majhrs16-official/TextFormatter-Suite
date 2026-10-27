@@ -62,7 +62,7 @@
 | `ModuleDescriptor` | Module metadata (name, author, Java/platform requirements, ...) |
 | `Environment` | Manager runtime context (platform, Java/Minecraft versions, capabilities) |
 | `ModuleLifecycle` | Lifecycle SPI and its resolution value types |
-| `PackageEntry` | One package record in a manifest or `library/status` |
+| `PackageEntry` | One package record in a manifest or `library/status` (includes optional `Exclude`/`Provide`) |
 | `FileEntry` | One file record in a package inventory |
 | `PackageType` | `PACKAGE`, `DEPENDENCY`, `METAPACKAGE` |
 | `ManifestParser` | Parses/serializes package lists and dependency specs |

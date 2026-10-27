@@ -165,6 +165,15 @@ Cada bloque de paquete debe contemplar los siguientes campos:
 
 Además, debe incluir el inventario de archivos pertenecientes al paquete.
 
+Campos opcionales del formato compartido con `library/status`:
+
+- `Exclude`: nombres de paquetes separados por espacios que no pueden coexistir con este paquete.
+- `Provide`: nombres virtuales separados por espacios que este paquete satisface, pensados para metapaquetes y contratos estables.
+
+**Exclude:** relación simétrica de conflicto. Si cualquiera de los dos paquetes excluye al otro (por nombre real o por un nombre virtual de `Provide`), no pueden estar instalados a la vez. La instalación local debe rechazar el conflicto; la instalación desde repositorio debe planificar la retirada y pedir confirmación antes de reemplazar.
+
+**Provide:** nombre virtual que satisface dependencias sin cambiar la identidad del paquete. Un paquete instalado que declare `Provide: iflow` satisface una dependencia `iflow`; varios paquetes pueden declarar el mismo nombre virtual si `Exclude` impide su convivencia.
+
 El formato definitivo debe conservar la siguiente semántica:
 
 **Name:** nombre canónico del paquete.

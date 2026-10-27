@@ -186,4 +186,79 @@ class LocalPackageDatabaseTest {
         assertEquals(List.of("dep1"), found.get().dependencies());
         assertEquals("2024-01-01T00:00:00Z", found.get().extraFields().get("Installed-Time"));
     }
+
+    @Test
+    void saveAndLoad_preservesExcludeAndProvide() throws Exception {
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
+        db.initialize();
+        db.registerPackage(packageEntry("iflow-vm", "2.1.0", List.of(),
+                List.of("iflow-firewall", "iflow-wasm"), List.of("iflow")));
+
+        LocalPackageDatabase reloaded = new LocalPackageDatabase(tempDir);
+        reloaded.initialize();
+
+        PackageEntry entry = reloaded.getPackage("iflow-vm", "2.1.0", "stable").orElseThrow();
+        assertEquals(List.of("iflow-firewall", "iflow-wasm"), entry.excludes());
+        assertEquals(List.of("iflow"), entry.provides());
+    }
+
+    @Test
+    void findConflicts_isSymmetricAndHonoursProvide() throws Exception {
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
+        db.initialize();
+
+        PackageEntry firewall = packageEntry("iflow-firewall", "2.1.0", List.of(),
+                List.of("iflow-vm"), List.of("iflow"));
+        PackageEntry vm = packageEntry("iflow-vm", "2.1.0", List.of(),
+                List.of(), List.of("iflow"));
+
+        db.registerPackage(firewall);
+
+        assertEquals(List.of(firewall), db.findConflicts(vm));
+        assertTrue(LocalPackageDatabase.conflicts(firewall, vm));
+        assertFalse(LocalPackageDatabase.conflicts(vm, vm));
+    }
+
+    @Test
+    void dependencyCanBeSatisfiedByProvidedName() throws Exception {
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
+        db.initialize();
+
+        db.registerPackage(packageEntry("iflow-vm", "2.1.0", List.of(),
+                List.of(), List.of("iflow")));
+
+        assertTrue(db.isDependencySatisfied("iflow", ">=2.0.0"));
+        assertTrue(db.findInstalledProvider("iflow").isPresent());
+        assertFalse(db.isDependencySatisfied("iflow", ">=3.0.0"));
+    }
+
+    @Test
+    void reverseDependencies_honourProvideAndOtherProviders() throws Exception {
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
+        db.initialize();
+
+        PackageEntry vm = packageEntry("iflow-vm", "2.1.0", List.of(),
+                List.of(), List.of("iflow"));
+        PackageEntry firewall = packageEntry("iflow-firewall", "2.1.0", List.of(),
+                List.of(), List.of("iflow"));
+        PackageEntry consumer = packageEntry("consumer", "1.0.0", List.of("iflow"),
+                List.of(), List.of());
+
+        db.registerPackage(firewall);
+        db.registerPackage(consumer);
+        assertEquals(List.of(consumer), db.getReverseDependencies("iflow-firewall"));
+
+        db.registerPackage(vm);
+        assertTrue(db.getReverseDependencies("iflow-firewall").isEmpty());
+    }
+
+    private PackageEntry packageEntry(String name, String version, List<String> dependencies,
+                                      List<String> excludes, List<String> provides) {
+        return new PackageEntry(
+                name, version, "stable", PackageType.PACKAGE,
+                dependencies, excludes, provides, "none", "common", "", "none",
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                100, Map.of(), "source", "", Map.of()
+        );
+    }
 }

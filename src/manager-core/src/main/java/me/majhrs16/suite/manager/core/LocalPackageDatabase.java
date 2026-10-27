@@ -187,6 +187,74 @@ public final class LocalPackageDatabase {
     }
 
     /**
+     * Gets the latest installed package that supplies {@code name}, either by its
+     * real package name or through a virtual {@code Provide} name.
+     */
+    public Optional<PackageEntry> findInstalledProvider(String name) {
+        lock.readLock().lock();
+        try {
+            return packages.values().stream()
+                    .filter(p -> p.name().equals(name) || p.provides().contains(name))
+                    .max(Comparator.comparing(p -> Version.parse(p.version())));
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Checks whether an installed package satisfies a dependency name and version
+     * constraint, including virtual names declared with {@code Provide}.
+     */
+    public boolean isDependencySatisfied(String name, String constraint) {
+        lock.readLock().lock();
+        try {
+            return packages.values().stream()
+                    .filter(p -> p.name().equals(name) || p.provides().contains(name))
+                    .anyMatch(p -> Version.parse(p.version()).satisfies(constraint));
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Finds installed packages that conflict with {@code candidate} through the
+     * symmetric {@code Exclude} relation. A package conflicts with another when
+     * either one excludes the other's name or a virtual name it provides.
+     */
+    public List<PackageEntry> findConflicts(PackageEntry candidate) {
+        lock.readLock().lock();
+        try {
+            return packages.values().stream()
+                    .filter(installed -> !installed.name().equals(candidate.name()))
+                    .filter(installed -> conflicts(candidate, installed))
+                    .collect(Collectors.toList());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Returns true when two packages cannot coexist according to their Exclude
+     * declarations. The relation is symmetric: it is enough for one side to
+     * exclude the other.
+     */
+    public static boolean conflicts(PackageEntry first, PackageEntry second) {
+        if (first.name().equals(second.name())) {
+            return false;
+        }
+        return excludes(first, second) || excludes(second, first);
+    }
+
+    private static boolean excludes(PackageEntry source, PackageEntry target) {
+        for (String excluded : source.excludes()) {
+            if (excluded.equals(target.name()) || target.provides().contains(excluded)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Gets all installed packages.
      */
     public List<PackageEntry> getAllPackages() {
@@ -387,16 +455,51 @@ public final class LocalPackageDatabase {
 
     /**
      * Gets packages that depend on the given package (reverse dependencies).
+     * Dependencies may be satisfied by the real package name or by a virtual
+     * name declared with {@code Provide}.
      */
     public List<PackageEntry> getReverseDependencies(String packageName) {
         lock.readLock().lock();
         try {
-            return packages.values().stream()
-                    .filter(p -> p.dependencies().contains(packageName))
-                    .collect(Collectors.toList());
+            Set<String> suppliedNames = new HashSet<>();
+            suppliedNames.add(packageName);
+            packages.values().stream()
+                    .filter(p -> p.name().equals(packageName))
+                    .forEach(p -> suppliedNames.addAll(p.provides()));
+
+            List<PackageEntry> reverse = new ArrayList<>();
+            for (PackageEntry dependent : packages.values()) {
+                if (dependent.name().equals(packageName)) {
+                    continue;
+                }
+                for (String dependency : dependent.dependencies()) {
+                    ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dependency);
+                    if (spec == null || !suppliedNames.contains(spec.name())) {
+                        continue;
+                    }
+                    if (!isDependencySatisfiedExcluding(spec.name(), spec.constraint(), packageName)) {
+                        reverse.add(dependent);
+                        break;
+                    }
+                }
+            }
+            return reverse;
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    private boolean isDependencySatisfiedExcluding(String dependencyName, String constraint, String excludedName) {
+        for (PackageEntry p : packages.values()) {
+            if (p.name().equals(excludedName)) {
+                continue;
+            }
+            if ((p.name().equals(dependencyName) || p.provides().contains(dependencyName))
+                    && Version.parse(p.version()).satisfies(constraint)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

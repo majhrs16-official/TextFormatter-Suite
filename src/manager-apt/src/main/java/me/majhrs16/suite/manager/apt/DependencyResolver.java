@@ -82,8 +82,9 @@ public final class DependencyResolver {
         
         // Build plan with topological sort
         List<PlanStep> steps = buildInstallPlan(selected);
+        List<PackageEntry> replaced = findReplacedPackages(selected);
         
-        return new ResolutionPlan(steps, true, null);
+        return new ResolutionPlan(steps, true, null, replaced);
     }
 
     /**
@@ -156,6 +157,11 @@ public final class DependencyResolver {
         
         // Check if already installed with compatible version
         Optional<PackageEntry> installed = localDb.getLatestInstalled(pkgName, channel != null ? channel : "stable");
+        if (installed.isEmpty()) {
+            // A virtual package (Provide) may satisfy this dependency even when no
+            // package with this exact name is installed.
+            installed = localDb.findInstalledProvider(pkgName);
+        }
         if (installed.isPresent() && !force) {
             Version installedVersion = Version.parse(installed.get().version());
             if (installedVersion.satisfies(versionConstraint)) {
@@ -187,8 +193,9 @@ public final class DependencyResolver {
                 // Download and parse manifest to get dependencies
                 PackageManifest manifest = fetchAndParseManifest(candidate);
                 
-                // Create resolved package with dependencies
-                ResolvedPackage resolvedPkg = new ResolvedPackage(candidate, manifest.dependencies());
+                // Create resolved package with dependencies and conflict metadata
+                ResolvedPackage resolvedPkg = new ResolvedPackage(candidate, manifest.dependencies(),
+                        manifest.allPackages());
                 
                 selected.put(candidate.name(), resolvedPkg);
                 resolved.add(pkgName);
@@ -503,14 +510,104 @@ public final class DependencyResolver {
         return steps;
     }
 
+    private List<PackageEntry> findReplacedPackages(Map<String, ResolvedPackage> selected) {
+        List<PackageEntry> selectedEntries = selected.values().stream()
+                .flatMap(pkg -> pkg.entries().stream())
+                .collect(Collectors.toList());
+
+        // Detect conflicts inside the requested set first.
+        for (int i = 0; i < selectedEntries.size(); i++) {
+            PackageEntry first = selectedEntries.get(i);
+            for (int j = i + 1; j < selectedEntries.size(); j++) {
+                PackageEntry second = selectedEntries.get(j);
+                if (LocalPackageDatabase.conflicts(first, second)) {
+                    throw new ResolutionException("Requested packages conflict: "
+                            + first.name() + " excludes " + second.name());
+                }
+            }
+        }
+
+        Map<String, PackageEntry> replaced = new LinkedHashMap<>();
+        for (PackageEntry candidate : selectedEntries) {
+            for (PackageEntry installed : localDb.getAllPackages()) {
+                if (selected.containsKey(installed.name())) {
+                    continue;
+                }
+                if (LocalPackageDatabase.conflicts(candidate, installed)) {
+                    replaced.put(installed.id(), installed);
+                }
+            }
+        }
+
+        // Removing a package that still has installed dependents would leave the
+        // system broken. Allow it only when one of the new packages satisfies the
+        // dependent's dependency.
+        for (PackageEntry oldPackage : replaced.values()) {
+            for (PackageEntry selectedEntry : selectedEntries) {
+                if (dependsOn(selectedEntry, oldPackage)
+                        && !selectedSatisfiesDependencyOf(selectedEntry, oldPackage, selected)) {
+                    throw new ResolutionException("Cannot replace " + oldPackage.name()
+                            + ": required by " + selectedEntry.name() + " " + selectedEntry.version());
+                }
+            }
+            for (PackageEntry dependent : localDb.getReverseDependencies(oldPackage.name())) {
+                if (replaced.containsKey(dependent.id())) {
+                    continue;
+                }
+                if (!selectedSatisfiesDependencyOf(dependent, oldPackage, selected)) {
+                    throw new ResolutionException("Cannot replace " + oldPackage.name()
+                            + ": required by " + dependent.name() + " " + dependent.version());
+                }
+            }
+        }
+
+        return List.copyOf(replaced.values());
+    }
+
+    private boolean dependsOn(PackageEntry dependent, PackageEntry removed) {
+        Set<String> removedNames = new HashSet<>();
+        removedNames.add(removed.name());
+        removedNames.addAll(removed.provides());
+        for (String dependency : dependent.dependencies()) {
+            ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dependency);
+            if (spec != null && removedNames.contains(spec.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean selectedSatisfiesDependencyOf(PackageEntry dependent, PackageEntry removed,
+                                                  Map<String, ResolvedPackage> selected) {
+        Set<String> removedNames = new HashSet<>();
+        removedNames.add(removed.name());
+        removedNames.addAll(removed.provides());
+
+        for (String dependency : dependent.dependencies()) {
+            ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dependency);
+            if (spec == null || !removedNames.contains(spec.name())) {
+                continue;
+            }
+            for (ResolvedPackage candidate : selected.values()) {
+                for (PackageEntry entry : candidate.entries()) {
+                    if ((entry.name().equals(spec.name()) || entry.provides().contains(spec.name()))
+                            && Version.parse(entry.version()).satisfies(spec.constraint())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     private List<ResolutionIssue> diagnoseIssues() {
         List<ResolutionIssue> issues = new ArrayList<>();
         
         for (PackageEntry entry : localDb.getAllPackages()) {
             for (String dep : entry.dependencies()) {
-                boolean satisfied = localDb.getAllPackages().stream()
-                        .anyMatch(p -> p.name().equals(dep));
-                if (!satisfied) {
+                ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dep);
+                if (spec == null) continue;
+                if (!localDb.isDependencySatisfied(spec.name(), spec.constraint())) {
                     issues.add(new ResolutionIssue(entry.name(), "MISSING_DEPENDENCY", 
                             "Missing dependency: " + dep));
                 }
@@ -524,16 +621,27 @@ public final class DependencyResolver {
         private final List<PlanStep> steps;
         private final boolean success;
         private final String error;
+        private final List<PackageEntry> replaced;
 
         public ResolutionPlan(List<PlanStep> steps, boolean success, String error) {
+            this(steps, success, error, List.of());
+        }
+
+        public ResolutionPlan(List<PlanStep> steps, boolean success, String error,
+                              List<PackageEntry> replaced) {
             this.steps = steps;
             this.success = success;
             this.error = error;
+            this.replaced = replaced;
         }
 
         public List<PlanStep> steps() { return steps; }
         public boolean success() { return success; }
         public String error() { return error; }
+        /** Installed packages that must be removed before executing this plan. */
+        public List<PackageEntry> replaced() { return replaced; }
+        /** True when the user must confirm the replacement of installed packages. */
+        public boolean requiresConfirmation() { return !replaced.isEmpty(); }
     }
 
     public static class PlanStep {
@@ -579,14 +687,22 @@ public final class DependencyResolver {
     static class ResolvedPackage {
         private final PackageCandidate candidate;
         private final List<String> dependencies;
+        private final List<PackageEntry> entries;
 
         public ResolvedPackage(PackageCandidate candidate, List<String> dependencies) {
+            this(candidate, dependencies, List.of());
+        }
+
+        public ResolvedPackage(PackageCandidate candidate, List<String> dependencies,
+                               List<PackageEntry> entries) {
             this.candidate = candidate;
             this.dependencies = dependencies;
+            this.entries = entries;
         }
 
         public PackageCandidate candidate() { return candidate; }
         public List<String> dependencies() { return dependencies; }
+        public List<PackageEntry> entries() { return entries; }
     }
 
     private static class PackageManifest {
@@ -603,5 +719,11 @@ public final class DependencyResolver {
         public PackageEntry mainPackage() { return mainPackage; }
         public List<PackageEntry> additionalPackages() { return additionalPackages; }
         public List<String> dependencies() { return dependencies; }
+        public List<PackageEntry> allPackages() {
+            List<PackageEntry> all = new ArrayList<>(additionalPackages.size() + 1);
+            all.add(mainPackage);
+            all.addAll(additionalPackages);
+            return all;
+        }
     }
 }

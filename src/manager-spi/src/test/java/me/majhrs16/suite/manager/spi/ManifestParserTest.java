@@ -152,6 +152,39 @@ class ManifestParserTest {
     }
 
     @Test
+    void parseManifest_excludeAndProvide() throws Exception {
+        String content = "Name: iflow-vm\nVersion: 2.1.0\nChannel: stable\nType: PACKAGE\n"
+                + "Dependencies: core-api\nExclude: iflow-firewall iflow-wasm\nProvide: iflow router\n"
+                + "Arch: none\nPlatform: common\nURL: \nOS: none\nSHA256: "
+                + "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\nSize: 0\nFiles: \n";
+
+        List<PackageEntry> entries = ManifestParser.parseManifest(content);
+
+        assertEquals(1, entries.size());
+        assertEquals(List.of("iflow-firewall", "iflow-wasm"), entries.get(0).excludes());
+        assertEquals(List.of("iflow", "router"), entries.get(0).provides());
+    }
+
+    @Test
+    void serialize_excludeAndProvideRoundTrip() throws Exception {
+        PackageEntry entry = new PackageEntry(
+                "iflow-vm", "2.1.0", "stable", PackageType.PACKAGE,
+                List.of("core-api"), List.of("iflow-firewall", "iflow-wasm"), List.of("iflow"),
+                "none", "common", "", "none",
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                0, java.util.Map.of(), "", "", java.util.Map.of()
+        );
+
+        String serialized = ManifestParser.serialize(entry);
+        assertTrue(serialized.contains("Exclude: iflow-firewall iflow-wasm"));
+        assertTrue(serialized.contains("Provide: iflow"));
+
+        PackageEntry parsed = ManifestParser.parseManifest(serialized).get(0);
+        assertEquals(entry.excludes(), parsed.excludes());
+        assertEquals(entry.provides(), parsed.provides());
+    }
+
+    @Test
     void parseManifest_dependenciesWithConstraints() throws Exception {
         String content = "Name: textformatter\nVersion: 2.0.0\nChannel: stable\nType: PACKAGE\nDependencies: iflow@>=1.0.0, gtranslate ^1.0.0\nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\nSize: 51200\nFiles: \n  textformatter.jar\t51200\t1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\ttextformatter";
         

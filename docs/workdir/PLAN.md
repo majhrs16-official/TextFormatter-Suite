@@ -390,13 +390,72 @@ SpEL-free que solo validaba el grafo del editor.
   etc.) con el mismo FQCN. Es intencional y seguro **solo** porque los motores son
   excluyentes; `SuiteBootstrap` deja activo uno y los tres se publican como paquetes
   separados, nunca en el mismo artefacto.
-- El gestor de paquetes debe hacer cumplir la exclusividad (reemplazo/desinstalación)
-  y el empaquetado no debe incluir dos motores en el mismo classpath.
+- El gestor de paquetes hace cumplir la exclusividad mediante los campos
+  `Exclude`/`Provide` del formato compartido (`METADATA/package.list` y
+  `library/status`); el empaquetado no debe incluir dos motores en el mismo classpath.
 - SpEL vuelve a ser una superficie de seguridad y una dependencia
   (`spring-expression`, `spring-core`, `spring-jcl`) solo en `iflow-firewall`.
 - `rules.yml` admite dos esquemas (lista ejecutable y grafo del editor), lo que
   puede confundir; el grafo no ejecuta nada.
 - El motor legacy no se usa salvo que `iflow.engine.kind: firewall` y esté instalado.
+
+### Formato de paquete: `Exclude` y `Provide` (2026-10-27)
+
+El formato compartido por `METADATA/package.list` y `library/status` incorpora dos
+campos opcionales, ambos con nombres separados por espacios:
+
+```
+Exclude: iflow-firewall iflow-wasm
+Provide: iflow router
+```
+
+- **`Exclude`** declara paquetes que no pueden coexistir con el paquete actual. La
+  relación es simétrica: basta que cualquiera de los dos excluya al otro. También
+  coincide con nombres virtuales que el otro paquete declare en `Provide`.
+- **`Provide`** declara nombres virtuales que el paquete satisface. Sirve sobre todo
+  para metapaquetes y contratos estables: una dependencia `iflow` puede quedar
+  satisfecha por `iflow-vm`, `iflow-wasm` o `iflow-firewall` sin que el dependiente
+  conozca el motor concreto. No cambia la identidad del paquete ni crea un paquete
+  real adicional.
+
+Semántica de instalación:
+
+1. `PackageInstaller` (instalación local de un ZIP) rechaza la instalación si algún
+   paquete del manifiesto entra en conflicto con uno ya instalado. El mensaje indica
+   que debe desinstalarse primero; `force` no omite conflictos de paquete.
+2. `DependencyResolver` calcula, además de los pasos de instalación, la lista de
+   paquetes instalados que deben retirarse por `Exclude`. Si retirar uno rompe una
+   dependencia inversa que ningún paquete nuevo satisface, la resolución falla.
+3. `AptInstaller.install(..., confirmed=false)` no modifica el sistema si hay
+   reemplazos: devuelve un resultado de confirmación con la pregunta estilo APT:
+   `Deseas instalar estos paquetes?: <lista>` y `Reemplazarán a: <paquetes>`.
+   Con `confirmed=true` retira primero los paquetes en conflicto y después instala
+   el plan. En los comandos, el token final `confirm` activa esa confirmación:
+   `/suite repo install iflow-vm confirm`.
+4. Las dependencias satisfechas por `Provide` se reconocen tanto al instalar como al
+   comprobar dependencias inversas y al diagnosticar paquetes rotos.
+
+Manifiestos recomendados para los tres motores iFlow (cada uno excluye a los otros
+dos y provee el nombre virtual `iflow`):
+
+```
+Exclude: iflow-firewall iflow-wasm
+Provide: iflow
+```
+
+```
+Exclude: iflow-vm iflow-wasm
+Provide: iflow
+```
+
+```
+Exclude: iflow-vm iflow-firewall
+Provide: iflow
+```
+
+El estado instalado conserva `Exclude`/`Provide` al serializarse, de modo que la
+exclusividad sigue vigente después de reiniciar el servidor. `module info` muestra
+ambos campos.
 
 **Alternativas consideradas**
 

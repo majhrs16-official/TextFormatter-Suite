@@ -113,10 +113,13 @@ public final class PackageInstaller {
             // 4. Check dependencies
             checkDependencies(manifest);
 
-            // 5. Check for conflicts (file ownership)
+            // 5. Check package conflicts declared through Exclude
+            checkPackageConflicts(manifest);
+
+            // 6. Check for conflicts (file ownership)
             checkFileConflicts(manifest, force);
 
-            // 6. Extract ALL files to temporary location FIRST (transactional)
+            // 7. Extract ALL files to temporary location FIRST (transactional)
             tempExtractDir = Files.createTempDirectory(database.getTmpDir(), "install-");
             
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
@@ -131,7 +134,7 @@ public final class PackageInstaller {
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
                     TransactionLog.OperationState.EXTRACTED, "Files extracted successfully");
 
-            // 7. Validate all extracted files against manifest
+            // 8. Validate all extracted files against manifest
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
                     TransactionLog.OperationState.VALIDATING, "Validating extracted files");
             for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
@@ -141,7 +144,7 @@ public final class PackageInstaller {
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
                     TransactionLog.OperationState.VALIDATED, "All files validated");
 
-            // 8. ATOMIC COMMIT: Move all files from temp to final location
+            // 9. ATOMIC COMMIT: Move all files from temp to final location
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
                     TransactionLog.OperationState.MOVING, "Moving files to final location");
             for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
@@ -151,7 +154,7 @@ public final class PackageInstaller {
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
                     TransactionLog.OperationState.MOVED, "Files moved to final location");
 
-            // 9. Register all packages in database
+            // 10. Register all packages in database
             transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
                     TransactionLog.OperationState.REGISTERING, "Registering packages");
             for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
@@ -164,6 +167,8 @@ public final class PackageInstaller {
                         pkgEntry.channel(),
                         pkgEntry.type(),
                         pkgEntry.dependencies(),
+                        pkgEntry.excludes(),
+                        pkgEntry.provides(),
                         pkgEntry.arch(),
                         pkgEntry.platform(),
                         pkgEntry.url(),
@@ -447,21 +452,47 @@ public final class PackageInstaller {
                 ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dep);
                 if (spec == null) continue;
                 
-                // Check if dependency is satisfied by installed packages
-                boolean satisfied = false;
-                for (PackageEntry installed : database.getAllPackages()) {
-                    if (installed.name().equals(spec.name())) {
-                        // Check version constraint
-                        Version installedVersion = Version.parse(installed.version());
-                        if (installedVersion.satisfies(spec.constraint())) {
-                            satisfied = true;
-                            break;
-                        }
-                    }
-                }
-                if (!satisfied) {
+                // Check if dependency is satisfied by an installed package or by a
+                // package included in this same multi-package manifest, either
+                // through its real name or through a virtual Provide name.
+                if (!database.isDependencySatisfied(spec.name(), spec.constraint())
+                        && !manifestSatisfies(manifest, spec)) {
                     throw new InstallException("Unsatisfied dependency: " + pkg.name() + " requires " + dep);
                 }
+            }
+        }
+    }
+
+    private boolean manifestSatisfies(PackageManifest manifest, ManifestParser.DependencySpec spec) {
+        for (PackageEntry candidate : manifest.allPackages()) {
+            if ((candidate.name().equals(spec.name()) || candidate.provides().contains(spec.name()))
+                    && Version.parse(candidate.version()).satisfies(spec.constraint())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void checkPackageConflicts(PackageManifest manifest) throws InstallException {
+        List<PackageEntry> packages = manifest.allPackages();
+        for (int i = 0; i < packages.size(); i++) {
+            PackageEntry pkg = packages.get(i);
+            for (int j = i + 1; j < packages.size(); j++) {
+                PackageEntry other = packages.get(j);
+                if (LocalPackageDatabase.conflicts(pkg, other)) {
+                    throw new InstallException("Package conflict inside manifest: "
+                            + pkg.name() + " cannot coexist with " + other.name() + " (Exclude).");
+                }
+            }
+
+            List<PackageEntry> conflicts = database.findConflicts(pkg);
+            if (!conflicts.isEmpty()) {
+                String names = conflicts.stream()
+                        .map(p -> p.name() + " " + p.version())
+                        .collect(Collectors.joining(", "));
+                throw new InstallException("Package conflict: " + pkg.name()
+                        + " cannot coexist with " + names
+                        + " (Exclude). Remove the conflicting package first.");
             }
         }
     }
