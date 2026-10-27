@@ -17,6 +17,8 @@ import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.textformatter.ChannelConfig;
+import me.majhrs16.suite.textformatter.ChannelConfig.LoadResult;
 import me.majhrs16.suite.chattranslator.ChatTranslator;
 import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
 import me.majhrs16.suite.chattranslator.BackendConfig;
@@ -81,7 +83,7 @@ public final class SuiteBootstrap {
         }
         HostConfig config = configResult.config();
 
-        ConfigLoader.LoadResult<ChannelRegistry> channelsResult = ConfigLoader.loadChannels(configDir, logger);
+        LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(configDir);
         if (!channelsResult.isValid()) {
             if (logger != null) {
                 for (String err : channelsResult.errors()) {

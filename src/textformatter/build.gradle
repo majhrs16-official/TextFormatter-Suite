@@ -20,6 +20,7 @@ dependencies {
     implementation project(':src:core-api')
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
+    implementation 'org.yaml:snakeyaml:2.2'
 
     testImplementation project(':src:kernel')
 

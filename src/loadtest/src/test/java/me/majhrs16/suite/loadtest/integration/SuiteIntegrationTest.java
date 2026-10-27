@@ -8,6 +8,7 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.SuiteBootstrap;
 import me.majhrs16.suite.host.RoutingResult;
+import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
 import me.majhrs16.suite.api.spi.PluginLogger;
@@ -51,7 +52,7 @@ class SuiteIntegrationTest {
 
         // Load config
         var configResult = ConfigLoader.loadConfig(tempDir, null);
-        channels = ConfigLoader.loadChannels(tempDir, null).config();
+        channels = ChannelConfig.load(tempDir).config();
 
         // Create mock logger
         logger = new PluginLogger() {
@@ -179,7 +180,7 @@ class SuiteIntegrationTest {
     // Helper methods
     private static void createDefaultConfigs(Path dir) throws Exception {
         // Create minimal config files for testing
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.createDirectories(dir.resolve("translators"));
         Files.createDirectories(dir.resolve("sync"));
 
@@ -212,7 +213,7 @@ class SuiteIntegrationTest {
             tooltips: []
             sounds: []
             """;
-        Files.writeString(dir.resolve("channels/chat.global.yml"), channelYaml);
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.global.yml"), channelYaml);
 
         // Default translator
         String translatorYaml = """

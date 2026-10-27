@@ -81,7 +81,7 @@ class E2ETestDataProviders {
     }
 
     static void createDefaultConfigs(Path dir) throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.createDirectories(dir.resolve("translators"));
         Files.createDirectories(dir.resolve("sync"));
         
@@ -114,7 +114,7 @@ class E2ETestDataProviders {
             tooltips: []
             sounds: []
             """;
-        Files.writeString(dir.resolve("channels/chat.global.yml"), channelYaml);
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.global.yml"), channelYaml);
         
         // Default translator
         String translatorYaml = """

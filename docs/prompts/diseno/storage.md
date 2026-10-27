@@ -113,7 +113,7 @@
 | `config/suite/config.yml` | `host` carga (`HostConfig`) | **`suite` (host core)** | ✅ OK |
 | `config/suite/rules.yml` | `host` carga | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
 
-> **Nota**: La migración implica mover la lógica de carga (`ConfigLoader.loadChannels`, `TranslatorsConfig.load`, etc.) desde `host` hacia los módulos dueños (`textformatter`, `chattranslator`, `sync-bus`).
+> **Nota**: La migración implica mover la lógica de carga (`ConfigLoader.loadChannels`, `TranslatorsConfig.load`, etc.) desde `host` hacia los módulos dueños (`textformatter`, `chattranslator`, `sync-bus`). Canales ya migrado (`textformatter.ChannelConfig`, I-011 ✅); translators y sync siguen pendientes (I-004/I-012).
 
 ---
 
@@ -231,7 +231,7 @@ sounds: []
 **Dueño**: `textformatter` module  
 **Usado por**: `ChannelRegistry`, `Router`, `ChatTranslator` (validar `SET_CHANNEL`)
 
-> **Migración pendiente**: Mover `ConfigLoader.loadChannels()` de `host` a `textformatter`.
+> **Migración completada (I-011)**: `ConfigLoader.loadChannels()` se eliminó de `host`; la carga vive en `textformatter.ChannelConfig`. Rutas resueltas: `config/textformatter/channels/` (canónica) → `textformatter/channels/` → `channels/` (legacy).
 
 ---
 
@@ -535,7 +535,7 @@ public void onLoad(SuiteHost host) {
 | Componente | Archivo Actual | Archivo Objetivo (Post-Migración) |
 |------------|----------------|-----------------------------------|
 | `ConfigLoader.loadConfig` | `src/host/.../ConfigLoader.java` | `src/host/.../ConfigLoader.java` (solo suite) |
-| `ConfigLoader.loadChannels` | `src/host/.../ConfigLoader.java` | `src/textformatter/.../ChannelConfig.java` |
+| `ConfigLoader.loadChannels` | — (eliminado) | ✅ `src/textformatter/.../ChannelConfig.java` |
 | `TranslatorsConfig.load` | `src/host/.../TranslatorsConfig.java` | `src/chattranslator/.../BackendConfig.java` |
 | `ChatTranslatorConfig.load` | `src/chattranslator/.../ChatTranslatorConfig.java` | ✅ Ya en módulo correcto |
 | `SyncConfig.load` | `src/spigot-host/.../TextFormatterSuitePlugin.java` | `src/sync-bus/.../SyncConfig.java` |

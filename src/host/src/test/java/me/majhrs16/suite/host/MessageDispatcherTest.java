@@ -118,7 +118,7 @@ class MessageDispatcherTest {
     }
 
     private void writeLayout(boolean withSound) throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
@@ -129,7 +129,7 @@ class MessageDispatcherTest {
                 volume: 1.0
                 pitch: 1.0
             """ : "";
-        Files.writeString(dir.resolve("channels/chat.yml"), """
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
@@ -332,14 +332,14 @@ class MessageDispatcherTest {
 
     @Test
     void soundDisabledInConfigSilencesAllChannelSounds() throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
             sonido:
               enabled: false
             """);
-        Files.writeString(dir.resolve("channels/chat.yml"), """
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'

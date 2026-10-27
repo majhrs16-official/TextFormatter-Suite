@@ -341,8 +341,16 @@ interface ActorDirectory {
 
 ```java
 final class ConfigLoader {
-    static HostConfig loadConfig(Path dir);
-    static ChannelRegistry loadChannels(Path dir);
+    static LoadResult<HostConfig> loadConfig(Path dir, PluginLogger logger);
+}
+```
+
+### ChannelConfig (módulo textformatter)
+
+```java
+final class ChannelConfig {
+    static LoadResult<ChannelRegistry> load(Path dir);
+    static Path resolveChannelsDir(Path dir);
 }
 ```
 

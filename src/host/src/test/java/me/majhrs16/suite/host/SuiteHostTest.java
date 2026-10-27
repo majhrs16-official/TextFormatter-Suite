@@ -66,13 +66,13 @@ class SuiteHostTest {
     }
 
     private void writeDefaultLayout() throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.createDirectories(dir.resolve("chattranslator/translators"));
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
             """);
-        Files.writeString(dir.resolve("channels/chat.yml"), """
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
@@ -158,8 +158,8 @@ class SuiteHostTest {
 
     @Test
     void quickLookEchoDoesNotRecheckSendPermission() throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
-        Files.writeString(dir.resolve("channels/chat.yml"), """
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             send-permission: cht.chat.send
             messages:

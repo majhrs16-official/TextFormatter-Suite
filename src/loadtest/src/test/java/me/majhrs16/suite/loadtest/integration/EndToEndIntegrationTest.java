@@ -8,6 +8,7 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.RoutingResult;
 import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
@@ -68,7 +69,7 @@ class EndToEndIntegrationTest {
         
         // Load config
         var configResult = ConfigLoader.loadConfig(tempDir, logger);
-        channels = ConfigLoader.loadChannels(tempDir, logger).config();
+        channels = ChannelConfig.load(tempDir).config();
         
         // Create mock logger
         logger = new PluginLogger() {
@@ -151,7 +152,7 @@ class EndToEndIntegrationTest {
     // ============================================================
 
     private static void createDefaultConfigs(Path dir) throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.createDirectories(dir.resolve("translators"));
         Files.createDirectories(dir.resolve("sync"));
         
@@ -182,7 +183,7 @@ class EndToEndIntegrationTest {
             tooltips: []
             sounds: []
             """;
-        Files.writeString(dir.resolve("channels/chat.global.yml"), channelYaml);
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.global.yml"), channelYaml);
         
         String translatorYaml = """
             provider: google

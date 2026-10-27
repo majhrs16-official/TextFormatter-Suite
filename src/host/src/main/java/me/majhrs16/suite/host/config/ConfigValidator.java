@@ -106,18 +106,22 @@ public final class ConfigValidator {
     }
 
     /**
-     * Validates channels/*.yml files.
+     * Validates the channel definitions owned by {@code textformatter}.
+     * <p>
+     * La ruta se resuelve con {@link me.majhrs16.suite.textformatter.ChannelConfig}
+     * para no duplicar el layout ({@code config/textformatter/channels/}).
+     * </p>
      */
     private static List<ValidationIssue> validateChannels(Path configDir) {
         List<ValidationIssue> issues = new ArrayList<>();
-        Path channelsDir = configDir.resolve("channels");
+        Path channelsDir = me.majhrs16.suite.textformatter.ChannelConfig.resolveChannelsDir(configDir);
 
         if (!channelsDir.toFile().exists()) {
             issues.add(new ValidationIssue(
                 ValidationLevel.WARNING,
                 "channels",
-                "channels/",
-                "directorio channels/ no existe; no hay canales configurados"
+                channelsDir.toString(),
+                "directorio de canales no existe; no hay canales configurados"
             ));
             return issues;
         }

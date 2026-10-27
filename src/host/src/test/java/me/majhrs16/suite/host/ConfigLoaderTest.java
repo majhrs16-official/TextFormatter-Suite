@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
@@ -83,57 +84,11 @@ class ConfigLoaderTest {
     }
 
     @Test
-    void loadsChannelsFromDirectory() throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
-        Files.writeString(dir.resolve("channels/chat.yml"), """
-            name: chat
-            permission: cht.chat
-            send-permission: cht.chat.send
-            lang-target: es
-            rate-limit-per-second: 3
-            messages:
-              - '<gray><tr>%content%</tr></gray>'
-            sounds:
-              - name: BLOCK_NOTE_BLOCK_PLING
-                volume: 0.5
-                pitch: 1.2
-            """);
-        Files.writeString(dir.resolve("channels/private.yml"), """
-            name: private.owner
-            receive-permission: cht.private.receive
-            """);
-
-        ConfigLoader.LoadResult<ChannelRegistry> result = ConfigLoader.loadChannels(dir, quietLogger());
-        ChannelRegistry registry = result.config();
-
-        assertEquals(2, registry.all().size());
-        Channel chat = registry.get("chat").orElseThrow();
-        assertEquals("cht.chat", chat.permission());
-        assertEquals("cht.chat.send", chat.sendPolicy());
-        assertEquals(Language.ES, chat.langTarget());
-        assertEquals(3, chat.rateLimitPerSecond());
-        assertEquals(1, chat.messages().formats().length);
-        assertEquals(1, chat.sounds().size());
-        assertTrue(registry.resolve("private.owner.extra").name().equals("private.owner"));
-        assertTrue(result.isValid());
-    }
-
-    @Test
-    void returnsEmptyRegistryWithoutChannelsDir() {
-        ConfigLoader.LoadResult<ChannelRegistry> result = ConfigLoader.loadChannels(dir, quietLogger());
-        ChannelRegistry registry = result.config();
-
-        assertEquals(0, registry.all().size());
-        assertEquals("chat", registry.resolve("anything").name());
-        assertFalse(result.isValid()); // missing dir = degraded
-    }
-
-    @Test
     void parsesEditorExportedDefaultConfig() throws Exception {
         Path cfg = Path.of(ConfigLoaderTest.class
             .getResource("/editor-default/config").toURI());
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(cfg, quietLogger());
-        ConfigLoader.LoadResult<ChannelRegistry> channelsResult = ConfigLoader.loadChannels(cfg, quietLogger());
+        ChannelConfig.LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(cfg);
         HostConfig config = configResult.config();
         ChannelRegistry registry = channelsResult.config();
 

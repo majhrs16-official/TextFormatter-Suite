@@ -1,11 +1,7 @@
 package me.majhrs16.suite.host.config;
 
-import me.majhrs16.suite.api.message.Formats;
 import me.majhrs16.suite.api.message.Language;
-import me.majhrs16.suite.api.message.SoundSpec;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -20,8 +16,10 @@ import java.util.Map;
 import java.util.ArrayList;
 
 /**
- * Reads the suite's file layout (config.yml + channels/*.yml) into the
- * resolved {@link HostConfig} and {@link ChannelRegistry}.
+ * Reads the suite-level {@code config.yml} into the resolved {@link HostConfig}.
+ * <p>
+ * La definición de canales es propiedad de {@code textformatter} y se carga con
+ * {@code me.majhrs16.suite.textformatter.ChannelConfig}.
  *
  * <p>Every field is optional; defaults mirror the suite defaults. Unknown
  * keys are ignored so older configs degrade gracefully. Errors are logged
@@ -102,118 +100,6 @@ public final class ConfigLoader {
         }
     }
 
-    /**
-     * Loads every {@code channels/*.yml} into a {@link ChannelRegistry}.
-     * Missing directory or files yield an empty registry (resolver falls back
-     * to a synthetic {@code chat} channel).
-     */
-    public static LoadResult<ChannelRegistry> loadChannels(Path dir, PluginLogger logger) {
-        List<String> errors = new ArrayList<>();
-        Path channelsDir = dir.resolve("channels");
-        if (!Files.isDirectory(channelsDir)) {
-            String msg = "channels directory not found at " + channelsDir + "; using empty registry";
-            if (logger != null) logger.error(msg);
-            errors.add(msg);
-            return LoadResult.degraded(ChannelRegistry.builder().build(), errors);
-        }
-        ChannelRegistry.Builder builder = ChannelRegistry.builder();
-        try (var stream = Files.list(channelsDir)) {
-            stream.filter(p -> p.toString().endsWith(".yml"))
-                .forEach(p -> {
-                    var result = readChannel(p, logger);
-                    if (result.isValid() && result.config() != null) {
-                        builder.register(result.config());
-                    }
-                    errors.addAll(result.errors());
-                });
-        } catch (IOException | RuntimeException e) {
-            String msg = "Failed to list channels directory: " + e.getMessage();
-            if (logger != null) logger.error(msg, e);
-            errors.add(msg);
-            return LoadResult.degraded(ChannelRegistry.builder().build(), errors);
-        }
-        return errors.isEmpty() ? LoadResult.success(builder.build()) : LoadResult.degraded(builder.build(), errors);
-    }
-
-    private static LoadResult<Channel> readChannel(Path file, PluginLogger logger) {
-        List<String> errors = new ArrayList<>();
-        try {
-            Object root = YAML.load(Files.readString(file));
-            if (!(root instanceof Map)) {
-                String msg = "Channel file " + file + " root is not a map; skipping";
-                if (logger != null) logger.error(msg);
-                errors.add(msg);
-                return LoadResult.degraded(null, errors);
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) root;
-            String name = str(map.get(ConfigPath.CHANNEL_NAME.key()), fileName(file));
-            if (name == null || name.isBlank()) {
-                String msg = "Channel file " + file + " has no valid name; skipping";
-                if (logger != null) logger.error(msg);
-                errors.add(msg);
-                return LoadResult.degraded(null, errors);
-            }
-
-            Channel.Builder builder = Channel.builder(name)
-                .permission(str(map.get(ConfigPath.CHANNEL_PERMISSION.key()), null))
-                .sendPermission(str(map.get(ConfigPath.CHANNEL_SEND_PERMISSION.key()), null))
-                .receivePermission(str(map.get(ConfigPath.CHANNEL_RECEIVE_PERMISSION.key()), null))
-                .messages(readFormats(map.get(ConfigPath.CHANNEL_MESSAGES.key())))
-                .tooltips(readFormats(map.get(ConfigPath.CHANNEL_TOOLTIPS.key())))
-                .showSender(bool(map.get(ConfigPath.CHANNEL_SHOW_SENDER.key()), true))
-                .rateLimitPerSecond(intOf(map.get(ConfigPath.CHANNEL_RATE_LIMIT.key()), 0))
-                .type(parseType(str(map.get(ConfigPath.CHANNEL_TYPE.key()), "chat")));
-
-            Language source = Language.of(str(map.get(ConfigPath.CHANNEL_LANG_SOURCE.key()), "auto")).orElse(Language.AUTO);
-            Language target = Language.of(str(map.get(ConfigPath.CHANNEL_LANG_TARGET.key()), "auto")).orElse(Language.AUTO);
-            builder.langSource(source).langTarget(target);
-
-            builder.sounds(readSounds(map.get(ConfigPath.CHANNEL_SOUNDS.key())));
-            return errors.isEmpty() ? LoadResult.success(builder.build()) : LoadResult.degraded(builder.build(), errors);
-        } catch (IOException | RuntimeException e) {
-            String msg = "Failed to load channel file " + file + ": " + e.getMessage();
-            if (logger != null) logger.error(msg, e);
-            errors.add(msg);
-            return LoadResult.degraded(null, errors);
-        }
-    }
-
-    // -- helpers ----------------------------------------------------------
-
-    private static Formats readFormats(Object raw) {
-        if (!(raw instanceof List)) {
-            return Formats.empty();
-        }
-        @SuppressWarnings("unchecked")
-        List<String> templates = ((List<Object>) raw).stream()
-            .map(String::valueOf)
-            .toList();
-        return new Formats(new String[0], templates.toArray(new String[0]));
-    }
-
-    private static List<SoundSpec> readSounds(Object raw) {
-        if (!(raw instanceof List)) {
-            return List.of();
-        }
-        List<SoundSpec> sounds = new java.util.ArrayList<>();
-        @SuppressWarnings("unchecked")
-        List<Object> entries = (List<Object>) raw;
-        for (Object entry : entries) {
-            if (entry instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> m = (Map<String, Object>) entry;
-                String name = str(m.get(ConfigPath.SOUND_NAME.key()), null);
-                if (name != null) {
-                    sounds.add(new SoundSpec(name,
-                        floatOf(m.get(ConfigPath.SOUND_VOLUME.key()), 1.0f),
-                        floatOf(m.get(ConfigPath.SOUND_PITCH.key()), 1.0f)));
-                }
-            }
-        }
-        return sounds;
-    }
-
     @SuppressWarnings("unchecked")
     private static Object nested(Map<String, Object> map, ConfigPath... path) {
         Object current = map;
@@ -237,36 +123,12 @@ public final class ConfigLoader {
         }
     }
 
-    private static String fileName(Path file) {
-        String name = file.getFileName().toString();
-        return name.endsWith(".yml") ? name.substring(0, name.length() - 4) : name;
-    }
-
     private static String str(Object value, String fallback) {
         return value == null ? fallback : String.valueOf(value);
     }
 
     private static boolean bool(Object value, boolean fallback) {
         return value instanceof Boolean b ? b : fallback;
-    }
-
-    private static int intOf(Object value, int fallback) {
-        return value instanceof Number n ? n.intValue() : fallback;
-    }
-
-    private static float floatOf(Object value, float fallback) {
-        return value instanceof Number n ? n.floatValue() : fallback;
-    }
-
-    private static me.majhrs16.suite.textformatter.channel.Channel.Type parseType(String value) {
-        if (value == null || value.isBlank()) {
-            return me.majhrs16.suite.textformatter.channel.Channel.Type.CHAT;
-        }
-        try {
-            return me.majhrs16.suite.textformatter.channel.Channel.Type.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            return me.majhrs16.suite.textformatter.channel.Channel.Type.CHAT;
-        }
     }
 
     /**

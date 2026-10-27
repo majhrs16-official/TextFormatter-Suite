@@ -120,7 +120,7 @@ class E2EPipelineTest {
     }
 
     private void writeConfig() throws Exception {
-        Files.createDirectories(dir.resolve("channels"));
+        Files.createDirectories(dir.resolve("config/textformatter/channels"));
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
@@ -144,12 +144,22 @@ class E2EPipelineTest {
             "messages:\n" +
             "  - '" + format + "'\n" +
             soundBlock;
-        Files.writeString(dir.resolve("channels/" + name + ".yml"), content);
+        Files.writeString(dir.resolve("config/textformatter/channels/" + name + ".yml"), content);
     }
 
     private MessageDispatcher createDispatcher(RecordingDelivery delivery, List<Actor> online, PermissionChecker permissions) throws Exception {
         writeConfig();
-        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
+        // chat channel requires 'vip' receive permission (only ALEX has it via vipOnly checker)
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
+            name: chat
+            receive-permission: vip
+            messages:
+              - '<gray>%player_name%: <tr>%content%</tr></gray>'
+            sounds:
+              - name: entity.experience_orb.pickup
+                volume: 1.0
+                pitch: 1.0
+            """);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
         SuiteHost host = SuiteHost.bootstrap(dir, permissions, null, quietLogger());
@@ -298,7 +308,7 @@ class E2EPipelineTest {
 
         writeConfig();
         // Channel with rate limit
-        Files.writeString(dir.resolve("channels/chat.yml"), """
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'

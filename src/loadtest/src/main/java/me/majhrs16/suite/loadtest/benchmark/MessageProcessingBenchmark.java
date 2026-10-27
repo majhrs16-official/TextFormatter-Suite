@@ -8,6 +8,7 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.textformatter.template.TemplateRenderer;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.textformatter.template.Template;
+import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.channel.Channel;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
 import me.majhrs16.suite.iflow.channel.PermissionChecker;
@@ -150,7 +151,7 @@ public class MessageProcessingBenchmark {
         // Create a minimal SuiteHost for dispatcher using bootstrap
         Path tempDir = Files.createTempDirectory("benchmark-config");
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(tempDir, mockLogger);
-        ConfigLoader.LoadResult<ChannelRegistry> channelsResult = ConfigLoader.loadChannels(tempDir, mockLogger);
+        ChannelConfig.LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(tempDir);
 
         // Create mock ChatDelivery using plain text components
         ChatDelivery mockDelivery = new ChatDelivery() {

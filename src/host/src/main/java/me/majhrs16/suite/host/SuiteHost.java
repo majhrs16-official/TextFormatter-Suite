@@ -18,6 +18,8 @@ import me.majhrs16.suite.iflow.target.PolicyTarget;
 import me.majhrs16.suite.textformatter.TextFormatter;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.textformatter.ChannelConfig;
+import me.majhrs16.suite.textformatter.ChannelConfig.LoadResult;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
@@ -108,7 +110,7 @@ public final class SuiteHost {
                 logger.error("Config error: " + err);
             }
         }
-        ConfigLoader.LoadResult<ChannelRegistry> channelsResult = ConfigLoader.loadChannels(configDir, logger);
+        LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(configDir);
         if (!channelsResult.isValid() && logger != null) {
             for (String err : channelsResult.errors()) {
                 logger.error("Channel config error: " + err);
