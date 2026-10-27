@@ -91,9 +91,9 @@ Monolithic jar vs modular architecture.
 
 ---
 
-## ADR-004: SpEL for Rule Conditions (superseded)
+## ADR-004: SpEL for Rule Conditions (revived in iflow-firewall)
 
-**Status**: Superseded (2026-10-20)
+**Status**: Revived for the legacy module (2026-10-27); superseded for the VM (2026-10-20)
 **Date**: 2023-04-10
 
 ### Context
@@ -106,17 +106,21 @@ Use **Spring Expression Language (SpEL)** for rule conditions and actions.
 
 ### Current Decision
 
-SpEL has been removed from the entire repository. iFlow v2 executes binary `.flow` programs in
-`VmPolicyEngine`/`VmInterpreter`; templates only substitute placeholders. The old `ExpressionEvaluator`
-SPI, `SpelExpressionEvaluator`, `<expr>` step, preset rule expressions and the web-editor condition
-field no longer exist.
+SpEL is confined to the independent **`iflow-firewall`** module, which restores the
+legacy engine from `933bdd3^:src/iflow` (ADR-001). `iflow-vm` and `iflow-wasm` do not
+use SpEL: the VM executes binary `.flow` programs in `VmPolicyEngine`/`VmInterpreter`,
+and templates only substitute placeholders. The host selects the engine with
+`iflow.engine.kind` (`vm` by default, `firewall` for the legacy rules).
 
 ### Consequences
 
-- One executable policy surface (the VM), with no Spring Expression dependency.
-- No inline expression sandbox to maintain.
+- Two executable policy surfaces, selectable per deployment; neither replaces the other.
+- SpEL returns as an optional dependency and security surface; the sandbox blocks `T()`,
+  uses a class allowlist and limits method resolution to zero-argument calls.
+- `iflow-vm`/`iflow-wasm` remain SpEL-free.
 - Legacy `rules.yml` graphs remain editor-only and are not evaluated.
-- Historical records may still mention SpEL; they do not describe the current runtime.
+- Historical records may still mention the 2026-10-20 removal; that period is superseded
+  for `iflow-firewall` by ADR-001 (2026-10-27).
 
 ---
 

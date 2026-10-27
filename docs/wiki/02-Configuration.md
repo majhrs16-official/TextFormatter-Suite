@@ -39,6 +39,7 @@ general:
   language: en                      # Default language (en, es, fr, de, auto)
 iflow:
   engine:
+    kind: vm                        # vm (iflow-vm, .flow) | firewall (legacy SpEL rules)
     parallel: false                 # Enable parallel rule processing (experimental)
 sonido:
   enabled: true                     # Enable sound effects globally
@@ -65,6 +66,7 @@ repositories:                       # Module Manager repositories (F12-14)
 |-----|------|---------|-------------|
 | `quick-look` | boolean | `true` | Show message preview on hover |
 | `general.language` | string | `en` | Default language code |
+| `iflow.engine.kind` | string | `vm` | iFlow runtime: `vm` (`.flow`) or `firewall` (legacy SpEL rules) |
 | `iflow.engine.parallel` | boolean | `false` | Enable parallel rule processing |
 | `sonido.enabled` | boolean | `true` | Enable sound effects globally |
 | `chat.claim-mode` | string | `cancel-event` | How to handle vanilla chat: `cancel-event` or `clear-recipients` |
@@ -236,12 +238,16 @@ port: 9092                            # WebSocket server port
 
 iFlow v2 executes **binary VM programs** (`.flow`), not YAML rule expressions. At startup
 `VmConfigLoader` tries `policy.flow`; if it is absent or invalid, it falls back to a
-pass-through program. There is no SpEL, no inline condition language and no YAML compilation.
+pass-through program. The VM has no SpEL and no inline condition language.
+
+The optional legacy engine `iflow-firewall` is independent of the VM and can execute
+SpEL rules from `config/iflow-firewall/rules.yml` when `iflow.engine.kind: firewall`.
+With the default `iflow.engine.kind: vm`, that file is not part of the runtime.
 
 ```text
 config-dir/
-├── policy.flow     # binary VM program loaded by VmConfigLoader
-└── rules.yml       # legacy graph used by the web editor; ignored by the runtime
+├── policy.flow     # binary VM program loaded by VmConfigLoader (vm engine)
+└── rules.yml       # legacy rules for iflow-firewall; graph is editor-only
 ```
 
 The legacy `rules.yml` graph may still be imported/exported by the web editor for reference,

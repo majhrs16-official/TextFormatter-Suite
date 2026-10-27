@@ -6,10 +6,11 @@
 > line **`iflow-wasm`** (WebAssembly + Chicory) lives in `src/iflow-wasm` and does not inherit this
 > ISA or ABI.
 >
-> The old `DefaultRouter` / `Rule` / SpEL-based rule engine was removed. Its
-> documentation is preserved only in git history; it does **not** describe the
-> code in `src/iflow-vm`. The current implementation is a 16-bit interpreted VM
-> with a binary `.flow` image.
+> The old `DefaultRouter` / `Rule` / SpEL-based rule engine was restored as the
+> independent **`iflow-firewall`** module (ADR-001, 2026-10-27). It does **not**
+> describe the code in `src/iflow-vm`, which remains a 16-bit interpreted VM with
+> a binary `.flow` image. Both modules coexist; the host selects one with
+> `iflow.engine.kind` (`vm` by default, `firewall` for the legacy engine).
 
 ## What it is
 
@@ -88,7 +89,8 @@ policy engine and firmware integration.
 
 ## Historical note
 
-If you are looking for the old declarative `rules.yml` syntax with `cond`,
-`action`, `target` and SpEL conditions, that engine no longer exists in the
-current code. Do not use old wiki revisions or external snippets as a reference
-for `src/iflow-vm`; use the module README and the tests instead.
+The old declarative `rules.yml` syntax with `cond`, `action`, `target` and SpEL
+conditions lives in the independent **`iflow-firewall`** module (`src/iflow-firewall`),
+not in `iflow-vm`. Do not use old wiki revisions or external snippets as a reference
+for `src/iflow-vm`; use the module README and the tests instead. For the legacy engine,
+see the `iflow-firewall` sources and ADR-001.

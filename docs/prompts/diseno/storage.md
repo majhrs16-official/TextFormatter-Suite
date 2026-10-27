@@ -33,8 +33,8 @@
     │   │   ├── config.yml           ← Config principal: idioma, claim-mode, sound, parallel, repositorios
     │   │   └── messages.yml         ← Strings de UI del host/platform (comandos /suite, prefijos)
     │   │
-    │   ├── iflow-firewall/          ← **Módulo iflow-firewall** (legacy, solo editor web)
-    │   │   └── rules.yml            ← Grafo iFlow legacy YAML (solo editor web, no runtime)
+    │   ├── iflow-firewall/          ← **Módulo iflow-firewall** (motor SpEL legacy + grafo del editor)
+    │   │   └── rules.yml            ← Reglas legacy ejecutables o grafo del editor (no se ejecuta)
     │   │
     │   ├── textformatter/           ← **Módulo textformatter** - Dueño de canales y formatos
     │   │   ├── channels/            ← Definición de canales (chat.global, join, quit, etc.)
@@ -111,7 +111,7 @@
 | `config/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
 | `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
 | `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
-| `config/iflow-firewall/rules.yml` | `iflow-firewall` carga (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
+| `config/iflow-firewall/rules.yml` | `iflow-firewall` carga reglas (`RuleConfigLoader`) y valida el grafo (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
 
 > **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. El único archivo compartido es `config/suite/messages.yml` (ADR-020).
 
@@ -127,6 +127,7 @@ quick-look: true
 language: en
 iflow:
   engine:
+    kind: vm                      # vm (iflow-vm, .flow) | firewall (iflow-firewall, SpEL legacy)
     parallel: false
 sound:
   enabled: true
@@ -146,25 +147,32 @@ module-allowlist: []
 
 ---
 
-### 3.2 `rules.yml` — absorbido por `iflow-firewall`
+### 3.2 `rules.yml` — propiedad de `iflow-firewall`
 
-> **Histórico:** el antiguo `config/suite/rules.yml` con `rules: [{condition, action}]` quedó obsoleto
-> al eliminar SpEL (`e21e7d7`). El único `rules.yml` vigente es
-> `config/iflow-firewall/rules.yml` (§3.3.1), propiedad del módulo `iflow-firewall`.
+> **Histórico:** el antiguo `config/suite/rules.yml` con `rules: [{condition, action}]` se movió a
+> `config/iflow-firewall/rules.yml` (§3.3.1). SpEL se conserva **solo** en `iflow-firewall`
+> (ADR-001, 2026-10-27); `iflow-vm` e `iflow-wasm` no lo usan.
 
 ---
 
-### 3.3.1 `config/iflow-firewall/rules.yml` — Módulo iflow-firewall (Legacy)
+### 3.3.1 `config/iflow-firewall/rules.yml` — Módulo iflow-firewall
 
-> **Nota**: Este módulo es opcional y solo para compatibilidad con el editor web legacy.
-> El runtime actual usa `policy.flow` (bytecode binario); este archivo YAML
-> solo sirve para validación/edición en el web editor.
+> **Nota**: el archivo admite dos esquemas. La **lista de reglas** (o un mapa con `rules:`) la
+> ejecuta el motor SpEL legacy cuando `iflow.engine.kind: firewall`. El **grafo del editor**
+> (`guard`/`filter`/`nodes`/`edges`) se valida pero no se ejecuta. Con `iflow.engine.kind: vm`
+> (default) el archivo no participa en el runtime.
 
 ```yaml
-# iFlow v2 no evalúa reglas YAML ni expresiones inline.
-# Las políticas se cargan desde policy.flow (bytecode binario).
-# Este archivo se conserva como grafo legacy para el editor web y no
-# participa en la ejecución del runtime.
+# Esquema legacy ejecutable (motor SpEL de iflow-firewall)
+- id: drop-private
+  target: DROP
+  channel: private
+  condition: "#content.length() > 0"
+  action: "#surface.cancel()"
+```
+
+```yaml
+# Esquema del editor web (solo validación, no ejecución)
 guard:
   max-steps: 512
 filter:
@@ -175,10 +183,11 @@ nodes: []
 edges: []
 ```
 
-**Cargado por**: `iflow-firewall.FirewallConfig.load(folder)`  
-**Dueño**: `iflow-firewall` module (legacy, solo editor web)  
+**Cargado por**: `iflow-firewall.RuleConfigLoader.loadRules(folder)` (reglas) y
+`iflow-firewall.FirewallConfig.load(folder)` (validación del grafo)
+**Dueño**: `iflow-firewall` module
 **Resolución**: `config/iflow-firewall/rules.yml` (canónico) → `rules.yml` (heredado)  
-**No participa** en la ejecución del runtime (VM .flow / Wasm)
+**Selección de motor**: `iflow.engine.kind` en `config/suite/config.yml` (`vm` default | `firewall`)
 
 ---
 

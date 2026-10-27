@@ -1,9 +1,9 @@
 # PLAN — TextFormatter Suite
 
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-24 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL eliminado de todo el repositorio; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-10-27 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado:** las menciones a SpEL en secciones históricas de este plan se conservan como registro de decisiones pasadas. No describen el runtime actual: `ExpressionEvaluator`, `SpelExpressionEvaluator`, `<expr>`, las reglas SpEL de presets y el campo de condición del editor fueron eliminados el 2026-10-20.
+> **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001) y convive con la VM; el host elige con `iflow.engine.kind` (`vm` por defecto). Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
 > **Nota de estado (2026-10-23):** **iFlow no se abandona ni se elimina.** Se divide en dos líneas paralelas: **`iflow-vm`** (VM propia de 32 bits, con las mejoras de la auditoría) e **`iflow-wasm`** (motor WebAssembly sobre Chicory). La especificación técnica de referencia v3 queda en `docs/prompts/diseno/iflow-cpu-implement.md` y recoge los hallazgos `IFLOW-MAN-*` como requisitos de la línea de 32 bits; **no se hereda** al motor Wasm. Las secciones históricas de este plan se conservan, pero la fuente de verdad es este bloque y el estado real.
 >
@@ -297,61 +297,94 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 | ID | Tema | Decisión requerida |
 |---|---|---|
-| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y aplicado: `src/iflow-firewall` es un módulo real (capability `firewall`, dueño de `rules.yml`). El módulo original era `src/iflow` (pre-VM, `933bdd3^`), no una ruta `iflow-firewall` |
+| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y aplicado: `src/iflow-firewall` restaura **literalmente** el motor SpEL de `933bdd3^:src/iflow`; convive con `iflow-vm` (ambos proveen `router`) y el host elige con `iflow.engine.kind` |
 | **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🟡 Paridad inmediata aplicada (`gtranslate`/`ltranslate` en `fabric-host`); 📝 ADR-019 propuesto para adapters sin deps a módulos core |
 | **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ✅ Aceptado: un único `config/suite/messages.yml` para todas las plataformas (`HostPaths`); loader compartido en `host` |
 | **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | 📝 ADR-008 propuesto: mantener `chattranslator` (façade) + `translator` (proveedor) |
 
-#### ADR-001: `iflow-firewall` se restaura como módulo dueño del grafo legacy (sin SpEL)
+#### ADR-001: `iflow-firewall` restaura el motor SpEL legacy y convive con `iflow-vm`
 
-**Estado:** Aceptado (2026-10-27)
+**Estado:** Aceptado (2026-10-27). Reemplaza la propuesta anterior de un módulo
+SpEL-free que solo validaba el grafo del editor.
 
 **Contexto**
 
-- **Corrección del hallazgo previo:** `git log --all -- '*firewall*'` no devuelve nada porque la ruta `iflow-firewall` nunca existió; el módulo original se llamaba **`src/iflow`**. Buscarlo por el nombre nuevo daba un falso negativo.
-- `Hecho verificado`: en `933bdd3^` (padre del *VM architecture rewrite*) `src/iflow/` tenía 27 archivos, entre ellos `DefaultRouter.java` (javadoc: *«Firewall contract of the iFlow module»*), `Router.java`, `RuleExpressionEvaluator.java`, `rule/Rule.java`, `rule/ScriptSurface.java`, `rule/TransformOp.java`, `channel/RateLimiter.java` y `target/PolicyTarget.java`; el host tenía `RuleConfigLoader.java`.
-- `Hecho verificado`: `933bdd3` (*VM architecture rewrite*) eliminó `RuleConfigLoader` y sustituyó el motor de reglas por `VmPolicyEngine`/`VmInterpreter`.
-- `Hecho verificado`: `e21e7d7` (*elimina SpEL y el motor de transformaciones legado*) retiró `ExpressionEvaluator`, `ExpressionEvaluationException` y `spring-expression` del árbol.
-- `Hecho verificado`: `ead0523` renombró `src/iflow` a `src/iflow-vm`; la historia de `src/iflow` termina ahí.
-- `Hecho verificado`: el esquema actual de `rules.yml` (`guard`/`filter`/`nodes`/`edges`) es el del editor web (`web-editor-schema/model.js`, `ConfigSchemaGenerator`), no el `rules:` con `condition`/`action` SpEL del motor histórico.
-- `Restricción`: el runtime de políticas ya está cubierto por `iflow-vm` (`.flow`) e `iflow-wasm` (`.wasm`); registrar un segundo proveedor de `router` rompería el grafo de capabilities.
+- La búsqueda inicial (`git log --all -- '*firewall*'`) no encontró nada porque la
+  ruta `iflow-firewall` nunca existió: el módulo original se llamaba `src/iflow`.
+- `Hecho verificado`: en `933bdd3^` (padre del *VM architecture rewrite*) `src/iflow/`
+  tenía 27 archivos: `DefaultRouter.java` (*«Firewall contract of the iFlow module»*),
+  `Router`, `RouteDecision`, `RouteOutcome`, `RuleExpressionEvaluator`, `rule/{Rule,
+  ScriptSurface, TransformOp}`, `channel/{PermissionChecker, RateLimiter}`,
+  `target/PolicyTarget` e `IflowModule`; el host tenía `RuleConfigLoader`.
+- `Hecho verificado`: `933bdd3` sustituyó el motor por `VmPolicyEngine`; `e21e7d7`
+  eliminó SpEL (`ExpressionEvaluator`, `SpelExpressionEvaluator`, `spring-expression`);
+  `ead0523` renombró `src/iflow` a `src/iflow-vm`.
+- **Decisión explícita del usuario (2026-10-27):** restaurar literalmente el motor
+  SpEL y desarrollar `iflow-vm` e `iflow-firewall` en paralelo, sin que uno sustituya
+  al otro. La decisión de `e21e7d7` queda superada **solo** para este módulo; la VM
+  y Wasm siguen sin SpEL.
+- Restricción de diseño: cada módulo es independiente. No se crea un `iflow-api`
+  compartido ni `iflow-firewall` depende de `iflow-vm`.
 
 **Decisión**
 
-1. Se crea **`src/iflow-firewall`** como módulo Gradle real, con `Module`/`ModuleDescriptor` (`iflow-firewall`, capability `firewall`, sin requisitos).
-2. El módulo es dueño de `config/iflow-firewall/rules.yml` (fallback `rules.yml`): resuelve la ruta, modela el grafo (`RuleGraph`) y acumula incidencias (`FirewallConfig`/`FirewallIssue`).
-3. `host.ConfigValidator` delega la validación en el módulo; el host deja de conocer el esquema.
-4. El módulo **no** reimplementa el router SpEL ni provee `router`: el runtime no evalúa `rules.yml`. El archivo queda como grafo legacy del editor web, tal como declara el recurso `defaults/rules.yml`.
+1. `src/iflow-firewall` contiene el motor restaurado desde `933bdd3^:src/iflow`:
+   `Router`, `RouteDecision`, `RouteOutcome`, `DefaultRouter`,
+   `RuleExpressionEvaluator`, `rule/{Rule, ScriptSurface, TransformOp}`,
+   `channel/{PermissionChecker, RateLimiter}`, `target/PolicyTarget`,
+   `RuleConfigLoader` e `IflowModule`. Para convivir en el mismo classpath sin colisión
+   de FQCN con `iflow-vm`, el paquete es `me.majhrs16.suite.iflow.firewall`; la lógica
+   es la del commit histórico.
+2. Cada módulo conserva **sus propios tipos** y provee el capability `router`.
+   El kernel admite varios proveedores del mismo capability; no hay dependencia
+   cruzada entre `iflow-vm` e `iflow-firewall`.
+3. `host` es el único puente de integración: `RouterFactory` selecciona el motor
+   con `iflow.engine.kind` (`vm` por defecto, `firewall` legacy) y
+   `FirewallRouterAdapter` traduce los tipos legacy al contrato que usa `SuiteHost`.
+4. `config/iflow-firewall/rules.yml` acepta la lista histórica de reglas (con
+   `condition`/`action` SpEL) o un mapa con `rules:`. El grafo del editor
+   (`guard`/`filter`/`nodes`/`edges`) se valida pero **no se ejecuta**.
+5. Se restauran `ExpressionEvaluator` y `ExpressionEvaluationException` en
+   `core-api`, y `spring-expression:6.1.12` en `iflow-firewall`.
 
 **Consecuencias**
 
 *Positivas*
-- El módulo que `storage.md` y `REPORT.md` daban por existente ahora existe, tiene dueño y tests; desaparece el «módulo fantasma».
-- La validación del grafo sale de `host` y vive en un único lugar reutilizable por el editor web.
-- No se reintroduce SpEL ni se duplica el capability `router`; la línea `iflow-vm`/`iflow-wasm` queda intacta.
-- La ruta canónica con fallback es coherente con el resto de módulos (I-011/I-012/I-017).
+- Los dos motores existen y son seleccionables; ninguno reemplaza al otro.
+- Se recupera el código histórico y sus tests (`DefaultRouter`, `Rule`,
+  `RateLimiter`, `IflowModule`), más tests de SpEL y del loader.
+- Los módulos no se cruzan: `iflow-firewall` depende de `core-api` y
+  `textformatter`, no de `iflow-vm`.
+- El sandbox de SpEL se conserva: `T()` bloqueado, allowlist de clases,
+  resolución de métodos solo sin argumentos y caché LRU acotada (1024).
+- El host mantiene un único punto de selección y un adaptador explícito.
 
 *Negativas*
-- El módulo no ejecuta reglas: si el editor vuelve a necesitar ejecución, habrá que decidir entre compilar el grafo a `.flow`/`.wasm` o añadir un intérprete (nuevo ADR).
-- El modelo actual valida estructura, no semántica (no comprueba que las aristas referencien nodos existentes ni ciclos); se mantiene la paridad con el validador previo para no bloquear grafos del editor.
-- `rules.yml` sigue siendo un formato solo-editor; no hay garantía de que el runtime y el editor compartan semántica hasta que exista un compilador de grafo.
+- SpEL vuelve a ser una superficie de seguridad y una dependencia
+  (`spring-expression`, `spring-core`, `spring-jcl`); requiere auditoría continua.
+- Hay dos contratos `Router`/`RouteDecision`/`PolicyTarget` (VM y firewall) y un
+  adaptador en `host`; es el precio de mantener los módulos independientes.
+- `rules.yml` admite dos esquemas (lista ejecutable y grafo del editor), lo que
+  puede confundir; el grafo no ejecuta nada.
+- El motor legacy no se usa salvo que `iflow.engine.kind: firewall`.
 
 **Alternativas consideradas**
 
-1. **Restaurar literalmente `933bdd3^:src/iflow` como `src/iflow-firewall`**
-   - Ventajas: recupera el código histórico exacto.
-   - Limitaciones: reintroduce SpEL (`spring-expression`, `ExpressionEvaluator`), eliminado por `e21e7d7`; depende de `Router`/`Rule`/`TransformOp` que ya no existen; duplicaría el capability `router` frente a `iflow-vm`.
-   - Evaluación: descartada; contradice decisiones vigentes y no compila contra la API actual.
-
-2. **Módulo SpEL-free dueño del grafo legacy, sin runtime (elegida)**
-   - Ventajas: respeta la arquitectura actual; da dueño real al archivo; validación compartida con el editor.
-   - Limitaciones: no ejecuta reglas; cobertura limitada a carga/validación.
-   - Evaluación: **aceptada**.
-
-3. **Mantener `rules.yml` sin módulo y retirar la promesa de `storage.md`**
-   - Ventajas: cero código nuevo.
-   - Limitaciones: contradice la decisión del usuario («debe ser un módulo sí o sí») y deja la validación en `host`.
+1. **`iflow-api` compartido con un único `Router`**
+   - Ventajas: sin adaptador ni duplicación de tipos.
+   - Limitaciones: crea un tercer módulo del que dependen ambos; el usuario lo
+     rechazó explícitamente por mezclar los módulos.
    - Evaluación: descartada.
+
+2. **Restaurar solo el grafo SpEL-free (decisión anterior)**
+   - Ventajas: no reintroduce SpEL.
+   - Limitaciones: no es el motor histórico y contradice la decisión del usuario.
+   - Evaluación: descartada.
+
+3. **Restauración literal con módulos independientes y adaptador en `host` (elegida)**
+   - Ventajas: fidelidad histórica, independencia de módulos, selección explícita.
+   - Limitaciones: duplicación de contrato y adaptador; SpEL de vuelta.
+   - Evaluación: **aceptada**.
 
 ---
 
@@ -506,7 +539,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
 | `src:iflow-wasm` | ✅ OK | 1 | N/A | 32 | N/A | N/A | Pocos tests (<3) |
-| `src:iflow-firewall` | ✅ OK | 2 | 413 | 251 | 97.9% | 86.8% | Valida estructura, no semántica (paridad con el validador previo); 15 tests |
+| `src:iflow-firewall` | ✅ OK | 5 | 2553 | 722 | 61.6% | 50.1% | Restauración literal del motor SpEL (44 tests); incluye validador del grafo del editor |
 | `src:chattranslator` | ✅ OK | 1 | N/A | 350+ | N/A | N/A | 12 tests unitarios |
 | `src:inworld` | ✅ OK | 1 | N/A | 1100+ | N/A | N/A | 26 tests integración |
 | `src:kernel` | ✅ OK | 4 | 202 | 243 | 91.1% | 82.0% |  |
@@ -601,7 +634,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 - ✅ **Suite corriendo en Fabric** (mod `TextFormatterSuite` instalable, thin-jar construido, Fabric 1.21 + Fabric API 0.100.5).
 - ✅ **Módulos core compilando + tests pasando (histórico, 2026-10-04)**: core-api, kernel, textformatter, iflow (v2 congelado el 2026-10-23), gtranslate, ltranslate, sync-*, host, messages, tester, transport, manager-api, manager-impl, presets, inworld, observability, extension-api, example-extension, loadtest, performance, sync-websocket.
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
-- ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL eliminado, SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
+- ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL aislado en `iflow-firewall` con sandbox (ADR-001), SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
 - ✅ **Clean Architecture (Translator SPI)**: `host` ya no depende de `gtranslate`/`ltranslate` en compile-time. Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`). Proveedores se descubren via `ServiceLoader` en runtime. Tests usan `testImplementation` para translators.
 - ✅ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
 - ✅ **sync-telegram, sync-http, sync-socket**: ✅ **SyncBus registered** - full SyncBus integration with per-sink isolation, retry/backoff
@@ -863,7 +896,7 @@ export JAVA_HOME=/opt/javac/x64/21
 | **OBS-01** | 🟡 Media | DebugEndpoint executor sin shutdown | `executor.shutdown()` en `stop()` |
 | **CFG-01** | 🟡 Media | ConfigLoader degradaba silenciosamente a defaults | `LoadResult` con errores, logging ERROR level |
 | **MGR-02** | 🟠 Alta | `register()` no integraba con kernel | `register()` SPI-only + `discoverAll()` |
-| **SEC-01** | 🟡 Media | SpEL cache ilimitado (histórico) | SpEL eliminado; VM `.flow` |
+| **SEC-01** | 🟡 Media | SpEL cache ilimitado (histórico) | Cache LRU acotada (1024) en `iflow-firewall`; VM `.flow` sin SpEL |
 | **SEC-02** | 🟡 Media | SSRF en HttpTransport | Validación IPs privadas (RFC 1918, 3927, 6598) + deny patterns |
 
 ---
@@ -872,7 +905,7 @@ export JAVA_HOME=/opt/javac/x64/21
 
 ### ✅ COMPLETADO (2026-09-26)
 - Module Manager (F12) núcleo: version resolver, dependency resolver (module.yml), SHA256, register() SPI, discoverAll(), discoverAvailableModules(), manifest validation
-- Security Sprint 3: char[] tokens, MiniEscape completo, PAPI check, SpEL eliminado, SSRF protection, DependencyVerification (verification-metadata.xml)
+- Security Sprint 3: char[] tokens, MiniEscape completo, PAPI check, SpEL aislado en `iflow-firewall` con sandbox, SSRF protection, DependencyVerification (verification-metadata.xml)
 - Fixes críticos: Message.toJson(), DebugEndpoint executor shutdown, ConfigLoader LoadResult, register() SPI-only, SpEL eliminado, SSRF
 - Repository Abstraction (F12-14): config.yml `repositories:` con soporte GitHub, local (file://), HTTP; fallback ordenado; testing local sin GitHub
 - sync-velocity: Production-ready (async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping)

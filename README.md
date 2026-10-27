@@ -12,7 +12,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 
 **Problema que resuelve:** Los plugins de chat tradicionales mezclan formateo, traducción, permisos, sincronización cross-server y lógica de negocio en una única base de código acoplada a la plataforma (Bukkit/Fabric). TextFormatter Suite separa estas responsabilidades en módulos reemplazables, testeables en aislamiento y desplegables selectivamente.
 
-**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow-vm`, `iflow-wasm`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen de `core-api` y, cuando aplica, de contratos compartidos (`transport`, `messages`).
+**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow-vm`, `iflow-wasm`, `iflow-firewall`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen de `core-api` y, cuando aplica, de contratos compartidos (`transport`, `messages`).
 
 **Lo que NO es:**
 - Un plugin único "todo en uno" listo para descargar y usar
@@ -48,7 +48,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 108 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
 | **Config schema v2.2 (single-source)** | ✅ Sincronizado | `ConfigPath` enum → `paths.json`/`js/paths.js`/`js/model.js` via `ConfigSchemaGenerator`; `verifySchema` en CI (56 paths) |
 | **Dependency Verification** | ✅ Activa con excepción documentada | 32 lockfiles (root + 31 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante; los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
-| **Security Sprint 3** | ⚠️ P0 corregidos, P1 pendiente | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos; SpEL eliminado del repositorio |
+| **Security Sprint 3** | ⚠️ P0 corregidos, P1 pendiente | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos; SpEL aislado en `iflow-firewall` con sandbox (ADR-001) |
 | **Tests E2E pipeline completo** | ❌ Pendiente | Chat → iFlow → format → delivery en servidor real; 12 tests E2E unitarios existen pero requieren servidor real para validación completa |
 | **GitHub Releases / publicación** | ❌ Denegado por decisión | No se publicarán releases ni tags mientras el proyecto siga en desarrollo; distribución vía source/build local. Ver [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) |
 | **gradle.lockfile portable** | ⚠️ Parcial | Lockfiles existen pero reproducibilidad cross-platform no verificada exhaustivamente |
@@ -164,7 +164,8 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (397 tests) |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; scaffold W0: carga e instancia módulos, sin ABI de host ni integración | 🧪 Scaffold |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; independiente de `iflow-vm` | ✅ Probado (44 tests) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | 🧪 W2 |
 | `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML; sin motor de ejecución | ✅ Catálogo probado (2 tests) |
 
 ### Traducción
@@ -406,7 +407,7 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 | **docs/workdir/ADR.md** | Architecture Decision Records: decisiones inmutables con contexto/fecha/consecuencias | [`docs/workdir/ADR.md`](docs/workdir/ADR.md) |
 | **docs/wiki/01-Introduction.md** | Entrada wiki usuario/dev: quick start, módulos, arquitectura, guías | [`docs/wiki/01-Introduction.md`](docs/wiki/01-Introduction.md) |
 | **docs/wiki/02-Configuration.md** | Guía configuración (config.yml, channels, rules, translators, sync) | [`docs/wiki/02-Configuration.md`](docs/wiki/02-Configuration.md) |
-| **docs/wiki/05-iFlow-Rules.md** | ⚠️ Histórico: describe el iFlow antiguo (`DefaultRouter`, SpEL), no la VM `.flow` actual. Para la VM, ver [`src/iflow-vm/README.md`](src/iflow-vm/README.md); para WebAssembly, [`src/iflow-wasm/README.md`](src/iflow-wasm/README.md) | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
+| **docs/wiki/05-iFlow-Rules.md** | ⚠️ Legacy: describe el motor de reglas antiguo (`DefaultRouter`, SpEL), restaurado en `iflow-firewall` y seleccionable con `iflow.engine.kind: firewall`. La VM `.flow` y Wasm no usan SpEL | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
 | **docs/wiki/08-Commands.md** | Referencia comandos `/suite` (dinámicos v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
 | **docs/prompts/** | Material de referencia: contexto del proyecto, diseños de componentes y contratos de formato | [`docs/prompts/README.md`](docs/prompts/README.md) |
@@ -443,4 +444,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-20 — P0 de código, limpieza material, eliminación de SpEL en todo el repositorio, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto. El primer run de CI (#65) reveló metadata de verificación incompleta para un checkout limpio; la corrección se publicó y el run #66 completó los cuatro jobs en verde. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*
+*Última actualización: 2026-10-27 — `iflow-firewall` restaura el motor SpEL legacy (ADR-001) y convive con `iflow-vm`; el host selecciona el motor con `iflow.engine.kind`. Antes: P0 de código, limpieza material, aislamiento de SpEL, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto. El primer run de CI (#65) reveló metadata de verificación incompleta para un checkout limpio; la corrección se publicó y el run #66 completó los cuatro jobs en verde. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*

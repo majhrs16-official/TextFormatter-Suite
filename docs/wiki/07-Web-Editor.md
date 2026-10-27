@@ -257,7 +257,7 @@ The Condition node has the most comprehensive properties panel:
 - **Receiver** — recipient name pattern
 - **Direction** — INITIATOR, OTHERS, ALL, CONSOLE, WORLD, RADIUS, PERMISSION, SPECIFIC
 
-> **Legacy graph only:** the condition expression field was removed with SpEL. `rules.yml` is not evaluated by the iFlow VM; policy logic lives in `policy.flow`. A previously imported `condition` key may be preserved on round-trip but is not shown or executed.
+> **Legacy graph only:** the condition expression field is not part of the editor graph. `rules.yml` is not evaluated by the iFlow VM; policy logic lives in `policy.flow`. A previously imported `condition` key may be preserved on round-trip. The independent `iflow-firewall` engine can execute a top-level rule list with `condition`/`action` when `iflow.engine.kind: firewall`.
 
 **Actions** (10 available):
 | Action | Description |
