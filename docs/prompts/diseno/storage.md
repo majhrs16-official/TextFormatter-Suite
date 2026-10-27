@@ -104,16 +104,16 @@
 |-------------------|---------------------|------------------------------|--------|
 | `config/textformatter/channels/` | `textformatter` carga (`ChannelConfig`) | **`textformatter`** | ✅ Migrado (I-011) |
 | `config/chattranslator/translators/` | `chattranslator` carga (`BackendConfig`) | **`chattranslator`** | ✅ Migrado (I-004) |
-| `config/sync-bus/`, `config/sync-*/` | `spigot-host`/`fabric-host` cargan vía `SyncConfigPaths` | **cada submódulo sync** | 🟡 Rutas migradas (I-012); falta que cada sink cargue su propia config |
-| `config/sync-discord/config.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-discord`** (submódulo) | 🟡 Migrar carga |
-| `config/sync-websocket/config.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-websocket`** (submódulo) | 🟡 Migrar carga |
-| `config/sync-telegram/config.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-telegram`** (submódulo) | 🟡 Migrar carga |
-| `config/sync-socket/tcp.yml` / `udp.yml` | `spigot-host`/`fabric-host` carga directo | **`sync-socket`** (submódulo) | 🟡 Migrar carga |
+| `config/sync-bus/`, `config/sync-*/` | cada submódulo sync carga su config (`SyncYaml`) | **cada submódulo sync** | ✅ Migrado (I-004) |
+| `config/sync-discord/config.yml` | `sync-discord` carga (`DiscordConfig`) | **`sync-discord`** (submódulo) | ✅ Migrado (I-004) |
+| `config/sync-websocket/config.yml` | `sync-websocket` carga (`WebSocketSyncConfig`) | **`sync-websocket`** (submódulo) | ✅ Migrado (I-004) |
+| `config/sync-telegram/config.yml` | `sync-telegram` carga (`TelegramConfig`) | **`sync-telegram`** (submódulo) | ✅ Migrado (I-004) |
+| `config/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
 | `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
 | `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
 | `config/iflow-firewall/rules.yml` | `host` valida, editor web consume | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
 
-> **Nota**: `textformatter`, `chattranslator`, `suite` y las rutas sync ya usan el layout canónico con fallback a las rutas heredadas. Lo que queda de I-004 es que cada sink sync exponga su propia clase de config en vez de que el adapter parsee el YAML.
+> **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. El único archivo compartido es `config/suite/messages.yml` (ADR-020).
 
 ---
 
@@ -360,7 +360,7 @@ local-port: 9095
 **Require**: `Capability.of("sync-bus", ...)`  
 **Provide**: `Capability.of("sync-sink", ...)` (doble: tcp + udp)
 
-> **Migración de rutas completada (I-012)**: los adapters resuelven cada archivo con `syncbus.SyncConfigPaths` (`config/sync-*/` canónico, `sync/*.yml` como fallback). Pendiente (I-004): que cada sink parseé su propia config en vez del adapter.
+> **Migración completada (I-012/I-004)**: los adapters resuelven cada archivo con `syncbus.SyncConfigPaths` (`config/sync-*/` canónico, `sync/*.yml` como fallback) y cada submódulo expone su config (`DiscordConfig`, `WebSocketSyncConfig`, `SocketConfig`, `TelegramConfig`) sobre `syncbus.SyncYaml`; el adapter ya no parsea YAML de sync.
 
 ---
 

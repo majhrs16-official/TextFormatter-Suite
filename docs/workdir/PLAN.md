@@ -289,7 +289,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 | ID | Acción | Módulos afectados | Criterio de cierre |
 |---|---|---|---|
-| **I-004** | Migrar carga config centralizada (translators, sync) a dueños | `host`, `chattranslator`, `sync-bus`, submódulos sync | 🟡 Parcial: `TranslatorsConfig` eliminado de `host` (dueño: `chattranslator.BackendConfig`) y `ChatTranslatorConfig` resuelve `config/chattranslator/`. Sync sigue cargándose en los adapters (rutas centralizadas en `syncbus.SyncConfigPaths`); falta que cada sink exponga su propia clase de config. `messages.yml` queda en `host` a la espera del ADR I-020 |
+| **I-004** | Migrar carga config centralizada (translators, sync) a dueños | `host`, `chattranslator`, `sync-bus`, submódulos sync | ✅ `TranslatorsConfig` eliminado de `host` (`chattranslator.BackendConfig`/`ChatTranslatorConfig` cargan sus archivos); cada submódulo sync expone su config (`DiscordConfig`, `WebSocketSyncConfig`, `SocketConfig`, `TelegramConfig`) sobre `syncbus.SyncYaml`, y los adapters ya no parsean YAML de sync. `messages.yml` queda en `host` según ADR-020 |
 | **I-012** | Corregir rutas sync en spigot-host: `sync/*.yml` → `config/sync-*/config.yml` | `spigot-host`, `fabric-host` | ✅ Rutas resueltas vía `syncbus.SyncConfigPaths` (canónica `config/sync-*/`, fallback `sync/*.yml`); websocket/tcp/udp/telegram y `DiscordBridge` en ambas plataformas |
 | **I-017** | Corregir `copyDefaultsIfMissing` a nuevas rutas `config/<modulo>/` | `spigot-host`, `fabric-host` | ✅ Primer arranque escribe `config/suite/`, `config/textformatter/channels/`, `config/chattranslator/translators/`, `config/sync-*/`, `config/inworld/`, `config/iflow-firewall/`; no duplica si existe la ruta legacy |
 

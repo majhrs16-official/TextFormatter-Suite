@@ -4,17 +4,11 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.syncdiscord.DiscordConfig;
 import me.majhrs16.suite.syncdiscord.JdaDiscordSink;
 import me.majhrs16.suite.syncbus.SyncBus;
 
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
-import org.yaml.snakeyaml.LoaderOptions;
-
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 
 /**
  * Runtime wiring for the Discord border (A9): reads {@code sync/discord.yml}
@@ -53,33 +47,18 @@ public final class DiscordBridge {
     /** @return an active bridge, or {@code null} when disabled/unavailable. */
     public static DiscordBridge create(Path dataFolder, MessageDispatcher dispatcher,
                                        PluginLogger logger, SyncBus syncBus) {
-        Path file = me.majhrs16.suite.syncbus.SyncConfigPaths.discord(dataFolder);
-        if (!Files.exists(file)) {
+        DiscordConfig config = DiscordConfig.load(dataFolder);
+        if (!config.usable()) {
             return null;
         }
-        try {
-            Object root = new Yaml(new SafeConstructor(new LoaderOptions())).load(Files.readString(file));
-            if (!(root instanceof Map)) {
-                return null;
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) root;
-            boolean enabled = Boolean.TRUE.equals(map.get("enabled"));
-            String token = map.get("token") == null ? "" : String.valueOf(map.get("token")).trim();
-            long channelId = parseChannel(map.get("channel"));
-            if (!enabled || token.isEmpty()) {
-                return null;
-            }
-            // If channel is 0 or invalid, still create the bridge but it won't send messages
-            // until a valid channel is configured
-            if (channelId <= 0) {
-                logger.warn("Discord channel ID not configured (channel=0); bridge created but will not send messages");
-            }
-            return new DiscordBridge(new JdaDiscordSink(token, channelId, logger), dispatcher, logger, syncBus);
-        } catch (IOException | RuntimeException exception) {
-            logger.warn("discord.yml ilegible: " + exception.getMessage());
-            return null;
+        // If channel is 0 or invalid, still create the bridge but it won't send messages
+        // until a valid channel is configured
+        if (!config.hasChannel()) {
+            logger.warn("Discord channel ID not configured (channel=0); bridge created but will not send messages");
         }
+        return new DiscordBridge(
+            new JdaDiscordSink(config.token(), config.channelId(), logger),
+            dispatcher, logger, syncBus);
     }
 
     /** Connects to Discord; failure logs and leaves the bridge inactive. */
@@ -125,14 +104,6 @@ public final class DiscordBridge {
             } catch (Exception exception) {
                 logger.debug("espejo Discord falló: " + exception.getMessage());
             }
-        }
-    }
-
-    private static long parseChannel(Object raw) {
-        try {
-            return Long.parseLong(String.valueOf(raw).trim());
-        } catch (NumberFormatException ignored) {
-            return -1;
         }
     }
 }

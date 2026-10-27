@@ -32,8 +32,11 @@ import me.majhrs16.suite.syncbus.DefaultSyncBus;
 import me.majhrs16.suite.syncbus.SyncConfigPaths;
 import me.majhrs16.suite.syncbus.SyncBus;
 import me.majhrs16.suite.synchttp.HttpSink;
+import me.majhrs16.suite.synctelegram.TelegramConfig;
 import me.majhrs16.suite.synctelegram.TelegramSink;
+import me.majhrs16.suite.syncwebsocket.WebSocketSyncConfig;
 import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
+import me.majhrs16.suite.syncsocket.SocketConfig;
 import me.majhrs16.suite.syncsocket.TcpSink;
 import me.majhrs16.suite.syncsocket.UdpSink;
 import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
@@ -64,7 +67,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -311,40 +313,14 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize WebSocket Sync Sink (check enabled field)
         WebSocketSyncSink wsSink = null;
         try {
-            Path wsConfig = SyncConfigPaths.webSocket(folder);
-            String wsToken = "";
-            int wsPort = 9092;
-            String wsBind = "127.0.0.1";
-            boolean wsEnabled = false;
-            if (Files.exists(wsConfig)) {
-                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
-                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
-                String content = Files.readString(wsConfig);
-                @SuppressWarnings("unchecked")
-                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
-                if (map != null) {
-                    Object token = map.get("token");
-                    if (token instanceof String) wsToken = (String) token;
-                    Object port = map.get("port");
-                    if (port instanceof Number) wsPort = ((Number) port).intValue();
-                    Object bind = map.get("bind");
-                    if (bind instanceof String) wsBind = (String) bind;
-                    Object enabled = map.get("enabled");
-                    if (enabled instanceof Boolean) wsEnabled = (Boolean) enabled;
-                }
-            }
-
-            // SECURITY: Only start if enabled, require token, bind to configured address
-            if (wsEnabled) {
-                if (wsToken == null || wsToken.isBlank()) {
-                    logger.warn("WebSocket sync is enabled but no auth token configured! Refusing to start without token.");
-                } else {
-                    // Use system property or config for bind address
-                    String bindAddress = System.getProperty("textformattersuite.ws.bind", wsBind);
-                    wsSink = new WebSocketSyncSink(wsPort, wsToken, logger, bindAddress);
-                    // Listener will be set via SyncBus
-                    logger.info("WebSocket sync sink created on " + bindAddress + ":" + wsPort);
-                }
+            WebSocketSyncConfig wsConfig = WebSocketSyncConfig.load(folder);
+            if (wsConfig.usable()) {
+                // SECURITY: system property overrides the configured bind address
+                String bindAddress = System.getProperty("textformattersuite.ws.bind", wsConfig.bind());
+                wsSink = new WebSocketSyncSink(wsConfig.port(), wsConfig.token(), logger, bindAddress);
+                logger.info("WebSocket sync sink created on " + bindAddress + ":" + wsConfig.port());
+            } else if (wsConfig.enabled()) {
+                logger.warn("WebSocket sync is enabled but no auth token configured! Refusing to start without token.");
             } else {
                 logger.info("WebSocket sync sink is disabled (enabled: false in config)");
             }
@@ -366,25 +342,10 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize TCP Sync Sink
         TcpSink tcpSink = null;
         try {
-            Path tcpConfig = SyncConfigPaths.tcp(folder);
-            if (Files.exists(tcpConfig)) {
-                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
-                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
-                String content = Files.readString(tcpConfig);
-                @SuppressWarnings("unchecked")
-                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
-                if (map != null) {
-                    Object enabled = map.get("enabled");
-                    if (Boolean.TRUE.equals(enabled)) {
-                        String remoteHost = map.get("remoteHost") != null ? map.get("remoteHost").toString() : "";
-                        int remotePort = map.get("remotePort") != null ? ((Number) map.get("remotePort")).intValue() : 0;
-                        int localPort = map.get("localPort") != null ? ((Number) map.get("localPort")).intValue() : 0;
-                        if (!remoteHost.isBlank() && remotePort > 0) {
-                            tcpSink = new TcpSink(remoteHost, remotePort, localPort);
-                            logger.info("TCP sync sink created: " + remoteHost + ":" + remotePort);
-                        }
-                    }
-                }
+            SocketConfig tcpConfig = SocketConfig.loadTcp(folder);
+            if (tcpConfig.usable()) {
+                tcpSink = new TcpSink(tcpConfig.remoteHost(), tcpConfig.remotePort(), tcpConfig.localPort());
+                logger.info("TCP sync sink created: " + tcpConfig.remoteHost() + ":" + tcpConfig.remotePort());
             }
         } catch (Exception e) {
             logger.warn("Failed to create TCP sync sink: " + e.getMessage());
@@ -393,25 +354,10 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize UDP Sync Sink
         UdpSink udpSink = null;
         try {
-            Path udpConfig = SyncConfigPaths.udp(folder);
-            if (Files.exists(udpConfig)) {
-                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
-                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
-                String content = Files.readString(udpConfig);
-                @SuppressWarnings("unchecked")
-                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
-                if (map != null) {
-                    Object enabled = map.get("enabled");
-                    if (Boolean.TRUE.equals(enabled)) {
-                        String remoteHost = map.get("remoteHost") != null ? map.get("remoteHost").toString() : "";
-                        int remotePort = map.get("remotePort") != null ? ((Number) map.get("remotePort")).intValue() : 0;
-                        int localPort = map.get("localPort") != null ? ((Number) map.get("localPort")).intValue() : 0;
-                        if (!remoteHost.isBlank() && remotePort > 0) {
-                            udpSink = new UdpSink(remoteHost, remotePort, localPort);
-                            logger.info("UDP sync sink created: " + remoteHost + ":" + remotePort);
-                        }
-                    }
-                }
+            SocketConfig udpConfig = SocketConfig.loadUdp(folder);
+            if (udpConfig.usable()) {
+                udpSink = new UdpSink(udpConfig.remoteHost(), udpConfig.remotePort(), udpConfig.localPort());
+                logger.info("UDP sync sink created: " + udpConfig.remoteHost() + ":" + udpConfig.remotePort());
             }
         } catch (Exception e) {
             logger.warn("Failed to create UDP sync sink: " + e.getMessage());
@@ -420,24 +366,11 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Initialize Telegram Sync Sink
         TelegramSink telegramSink = null;
         try {
-            Path telegramConfig = SyncConfigPaths.telegram(folder);
-            if (Files.exists(telegramConfig)) {
-                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml(
-                    new org.yaml.snakeyaml.constructor.SafeConstructor(new org.yaml.snakeyaml.LoaderOptions()));
-                String content = Files.readString(telegramConfig);
-                @SuppressWarnings("unchecked")
-                Map<String, Object> map = (Map<String, Object>) yaml.load(content);
-                if (map != null) {
-                    Object enabled = map.get("enabled");
-                    if (Boolean.TRUE.equals(enabled)) {
-                        String token = map.get("token") != null ? map.get("token").toString() : "";
-                        long chatId = map.get("chatId") != null ? ((Number) map.get("chatId")).longValue() : 0;
-                        if (!token.isBlank() && chatId != 0) {
-                            telegramSink = new TelegramSink(token, chatId, new me.majhrs16.suite.transport.HttpTransport());
-                            logger.info("Telegram sync sink created for chat " + chatId);
-                        }
-                    }
-                }
+            TelegramConfig telegramConfig = TelegramConfig.load(folder);
+            if (telegramConfig.usable()) {
+                telegramSink = new TelegramSink(telegramConfig.token(), telegramConfig.chatId(),
+                    new me.majhrs16.suite.transport.HttpTransport());
+                logger.info("Telegram sync sink created for chat " + telegramConfig.chatId());
             }
         } catch (Exception e) {
             logger.warn("Failed to create Telegram sync sink: " + e.getMessage());

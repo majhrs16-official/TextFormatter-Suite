@@ -85,5 +85,5 @@ org.wiremock:wiremock:3.5.4=testCompileClasspath,testRuntimeClasspath
 org.xmlunit:xmlunit-core:2.9.1=testCompileClasspath,testRuntimeClasspath
 org.xmlunit:xmlunit-legacy:2.9.1=testCompileClasspath,testRuntimeClasspath
 org.xmlunit:xmlunit-placeholders:2.9.1=testCompileClasspath,testRuntimeClasspath
-org.yaml:snakeyaml:2.2=testCompileClasspath,testRuntimeClasspath
-empty=annotationProcessor,compileClasspath,runtimeClasspath,testAnnotationProcessor
+org.yaml:snakeyaml:2.2=compileClasspath,testCompileClasspath,testRuntimeClasspath
+empty=annotationProcessor,runtimeClasspath,testAnnotationProcessor

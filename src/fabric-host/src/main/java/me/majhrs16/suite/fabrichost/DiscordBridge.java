@@ -4,9 +4,9 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.host.config.MessagesConfig;
 import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.spi.SyncListener;
+import me.majhrs16.suite.syncdiscord.DiscordConfig;
 import me.majhrs16.suite.syncbus.SyncBus;
 
 import net.dv8tion.jda.api.JDA;
@@ -16,10 +16,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -33,19 +30,19 @@ public final class DiscordBridge {
     private final GuildMessageChannel channel;
     private final MessageDispatcher dispatcher;
     private final PluginLogger logger;
-    private final MessagesConfig messages;
+    private final String format;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final DiscordSyncSink sink;
     private final SyncBus syncBus;
 
     private DiscordBridge(JDA jda, GuildMessageChannel channel,
                           MessageDispatcher dispatcher, PluginLogger logger,
-                          MessagesConfig messages, SyncBus syncBus) {
+                          String format, SyncBus syncBus) {
         this.jda = jda;
         this.channel = channel;
         this.dispatcher = dispatcher;
         this.logger = logger;
-        this.messages = messages;
+        this.format = format;
         this.sink = new DiscordSyncSink();
         this.syncBus = syncBus;
     }
@@ -55,28 +52,25 @@ public final class DiscordBridge {
     }
 
     public static DiscordBridge create(Path folder, MessageDispatcher dispatcher, PluginLogger logger, SyncBus syncBus) {
-        Path configPath = me.majhrs16.suite.syncbus.SyncConfigPaths.discord(folder);
-        if (!Files.exists(configPath)) return null;
+        DiscordConfig config = DiscordConfig.load(folder);
+        // Fabric needs the channel to build the JDA listener; without it the bridge is a no-op.
+        if (!config.usable() || !config.hasChannel()) {
+            return null;
+        }
         try {
-            MessagesConfig syncConfig = MessagesConfig.load(configPath, "/defaults/sync/discord.yml");
-            String token = syncConfig.format("token");
-            String channelStr = syncConfig.format("channel");
-            long channelId = channelStr != null && !channelStr.isBlank() ? Long.parseLong(channelStr) : 0;
-            if (token == null || token.isBlank() || channelId == 0) return null;
-
-            JDA jda = JDABuilder.createDefault(token)
+            JDA jda = JDABuilder.createDefault(config.token())
                 .setChunkingFilter(ChunkingFilter.NONE)
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .enableIntents(GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
                 .build()
                 .awaitReady();
 
-            GuildMessageChannel channel = jda.getChannelById(GuildMessageChannel.class, channelId);
+            GuildMessageChannel channel = jda.getChannelById(GuildMessageChannel.class, config.channelId());
             if (channel == null) {
                 jda.shutdown();
                 return null;
             }
-            return new DiscordBridge(jda, channel, dispatcher, logger, syncConfig, syncBus);
+            return new DiscordBridge(jda, channel, dispatcher, logger, config.format(), syncBus);
         } catch (Exception exception) {
             logger.error("Discord bridge init failed", exception);
             return null;
@@ -119,7 +113,6 @@ public final class DiscordBridge {
 
     public void mirror(Message message) {
         if (channel == null) return;
-        String format = messages.format("format", "{sender}: {content}");
         String sender = message.sender() == null ? "Console" : message.sender().name();
         String text = format.replace("{sender}", sender).replace("{content}", message.text());
         channel.sendMessage(text).queue();
