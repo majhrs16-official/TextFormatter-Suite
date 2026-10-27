@@ -337,187 +337,22 @@ public final class ConfigValidator {
     }
 
     /**
-     * Validates rules.yml (iFlow graph).
+     * Valida el grafo legacy {@code rules.yml} delegando en su dueño,
+     * {@code iflow-firewall}.
      */
     private static List<ValidationIssue> validateRules(Path configDir) {
-        List<ValidationIssue> issues = new ArrayList<>();
-        // iflow-firewall es dueño de su config (storage.md): config/iflow-firewall/rules.yml
-        Path canonical = configDir.resolve("config").resolve("iflow-firewall").resolve("rules.yml");
-        Path legacy = configDir.resolve("rules.yml");
-        Path file = java.nio.file.Files.exists(canonical) || !java.nio.file.Files.exists(legacy)
-            ? canonical
-            : legacy;
-
-        if (!file.toFile().exists()) {
-            issues.add(new ValidationIssue(
-                ValidationLevel.INFO,
+        return me.majhrs16.suite.iflow.firewall.FirewallConfig.load(configDir).issues().stream()
+            .map(issue -> new ValidationIssue(
+                switch (issue.level()) {
+                    case INFO -> ValidationLevel.INFO;
+                    case WARNING -> ValidationLevel.WARNING;
+                    case ERROR -> ValidationLevel.ERROR;
+                },
                 "rules",
-                "rules.yml",
-                "rules.yml no existe; iFlow usará default-accept"
-            ));
-            return issues;
-        }
-
-        try {
-            org.yaml.snakeyaml.Yaml yaml = safeYaml();
-            String content = java.nio.file.Files.readString(file);
-            Object root = yaml.load(content);
-
-            if (!(root instanceof Map)) {
-                issues.add(new ValidationIssue(
-                    ValidationLevel.ERROR,
-                    "rules",
-                    "rules.yml",
-                    "YAML inválido: raíz debe ser un mapa"
-                ));
-                return issues;
-            }
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) root;
-
-            // Validate guard
-            Object guardObj = map.get("guard");
-            if (guardObj instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> guard = (Map<String, Object>) guardObj;
-                Object ms = guard.get("max-steps");
-                if (ms != null) {
-                    if (!(ms instanceof Number) || ((Number) ms).intValue() < 1) {
-                        issues.add(new ValidationIssue(
-                            ValidationLevel.ERROR,
-                            "rules",
-                            "guard.max-steps",
-                            "debe ser un entero >= 1"
-                        ));
-                    }
-                }
-            }
-
-            // Validate filter
-            Object filterObj = map.get("filter");
-            if (filterObj instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> filter = (Map<String, Object>) filterObj;
-                Object df = filter.get("dedup-fanout");
-                if (df != null && !(df instanceof Boolean)) {
-                    issues.add(new ValidationIssue(
-                        ValidationLevel.WARNING,
-                        "rules",
-                        "filter.dedup-fanout",
-                        "debe ser true/false"
-                    ));
-                }
-            }
-
-            // Validate nodes
-            Object nodesObj = map.get("nodes");
-            if (nodesObj instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Object> nodes = (List<Object>) nodesObj;
-                Set<String> nodeIds = new java.util.HashSet<>();
-                for (int i = 0; i < nodes.size(); i++) {
-                    Object n = nodes.get(i);
-                    if (n instanceof Map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> node = (Map<String, Object>) n;
-                        Object id = node.get("id");
-                        if (id == null || !(id instanceof String)) {
-                            issues.add(new ValidationIssue(
-                                ValidationLevel.ERROR,
-                                "rules",
-                                "nodes[" + i + "].id",
-                                "id obligatorio y debe ser string"
-                            ));
-                        } else {
-                            String idStr = (String) id;
-                            if (!nodeIds.add(idStr)) {
-                                issues.add(new ValidationIssue(
-                                    ValidationLevel.ERROR,
-                                    "rules",
-                                    "nodes[" + i + "].id",
-                                    "id duplicado: " + idStr
-                                ));
-                            }
-                        }
-                        Object kind = node.get("kind");
-                        if (kind == null || !(kind instanceof String)) {
-                            issues.add(new ValidationIssue(
-                                ValidationLevel.ERROR,
-                                "rules",
-                                "nodes[" + i + "].kind",
-                                "kind obligatorio: input, cond, transform, loop, sleep, output, redirect"
-                            ));
-                        } else {
-                            String kindStr = (String) kind;
-                            Set<String> validKinds = Set.of("input", "cond", "transform", "loop", "sleep", "output", "redirect");
-                            if (!validKinds.contains(kindStr)) {
-                                issues.add(new ValidationIssue(
-                                    ValidationLevel.ERROR,
-                                    "rules",
-                                    "nodes[" + i + "].kind",
-                                    "kind inválido: " + kindStr + " (esperado: " + validKinds + ")"
-                                ));
-                            }
-                        }
-                    } else {
-                        issues.add(new ValidationIssue(
-                            ValidationLevel.ERROR,
-                            "rules",
-                            "nodes[" + i + "]",
-                            "cada nodo debe ser un mapa"
-                        ));
-                    }
-                }
-            }
-
-            // Validate edges
-            Object edgesObj = map.get("edges");
-            if (edgesObj instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Object> edges = (List<Object>) edgesObj;
-                for (int i = 0; i < edges.size(); i++) {
-                    Object e = edges.get(i);
-                    if (e instanceof Map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> edge = (Map<String, Object>) e;
-                        if (edge.get("from") == null || !(edge.get("from") instanceof String)) {
-                            issues.add(new ValidationIssue(
-                                ValidationLevel.ERROR,
-                                "rules",
-                                "edges[" + i + "].from",
-                                "from obligatorio (string)"
-                            ));
-                        }
-                        if (edge.get("to") == null || !(edge.get("to") instanceof String)) {
-                            issues.add(new ValidationIssue(
-                                ValidationLevel.ERROR,
-                                "rules",
-                                "edges[" + i + "].to",
-                                "to obligatorio (string)"
-                            ));
-                        }
-                    } else {
-                        issues.add(new ValidationIssue(
-                            ValidationLevel.ERROR,
-                            "rules",
-                            "edges[" + i + "]",
-                            "cada edge debe ser un mapa con from y to"
-                        ));
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            issues.add(new ValidationIssue(
-                ValidationLevel.ERROR,
-                "rules",
-                "rules.yml",
-                "error parseando YAML: " + e.getMessage()
-            ));
-        }
-
-        return issues;
+                issue.path(),
+                issue.message()
+            ))
+            .toList();
     }
 
     /**

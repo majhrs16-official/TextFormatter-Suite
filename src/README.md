@@ -14,7 +14,8 @@ TextFormatter Suite
 │   ├── kernel            → Module loading & dependency resolution
 │   ├── textformatter     → Template engine, placeholders, channels
 │   ├── iflow-vm          → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de la VM de 32 bits)
-│   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; scaffold W0, sin integración aún
+│   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; contrato W1/W2 (validación, instancia, invocación), sin integración al pipeline
+│   ├── iflow-firewall    → dueño del grafo legacy `rules.yml` del editor web (validación, sin runtime de reglas)
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
 │   ├── transport         → Transport abstraction (HTTP, codecs)
@@ -62,7 +63,8 @@ TextFormatter Suite
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), placeholders, channel registry | `core-api` | `host`, `iflow-vm`, `presets`, `spigot-host`, `fabric-host` |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; scaffold W0: carga e instancia módulos, sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
+| `iflow-firewall` | Dueño del grafo legacy `rules.yml` (editor web): modelo, carga con fallback y validación | `core-api`, `org.yaml:snakeyaml` | `host` (validación), web editor |
 | `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring | `core-api`, `kernel`, `textformatter`, `iflow-vm`, `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
@@ -99,7 +101,8 @@ TextFormatter Suite
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, placeholders, channels | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowModule` | [iflow-vm/README.md](iflow-vm/README.md) |
-| `iflow-wasm` | Motor WebAssembly con Chicory; scaffold W0 | `WasmModuleLoader`, parse/instantiate | — (sin `Module` aún) | [iflow-wasm/README.md](iflow-wasm/README.md) |
+| `iflow-wasm` | Motor WebAssembly con Chicory (W2) | `WasmModuleLoader`, `WasmContract`, `ValidationResult` | `IfowWasmModule` | [iflow-wasm/README.md](iflow-wasm/README.md) |
+| `iflow-firewall` | Grafo legacy `rules.yml` (solo editor) | `RuleGraph`, `FirewallConfig`, `FirewallIssue` | `IfowFirewallModule` | — |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateModule` | [ltranslate/README.md](ltranslate/README.md) |

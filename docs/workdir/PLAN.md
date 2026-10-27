@@ -297,50 +297,61 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 | ID | Tema | Decisión requerida |
 |---|---|---|
-| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | 📝 ADR-001 propuesto. `Hecho verificado`: no existe `src/iflow-firewall/` ni archivos `*firewall*` en ningún commit (`git log --all -- '*firewall*'` sin resultados), por lo que «restaurar desde el historial» no es posible |
+| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y aplicado: `src/iflow-firewall` es un módulo real (capability `firewall`, dueño de `rules.yml`). El módulo original era `src/iflow` (pre-VM, `933bdd3^`), no una ruta `iflow-firewall` |
 | **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🟡 Paridad inmediata aplicada (`gtranslate`/`ltranslate` en `fabric-host`); 📝 ADR-019 propuesto para adapters sin deps a módulos core |
 | **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ✅ Aceptado: un único `config/suite/messages.yml` para todas las plataformas (`HostPaths`); loader compartido en `host` |
 | **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | 📝 ADR-008 propuesto: mantener `chattranslator` (façade) + `translator` (proveedor) |
 
-#### ADR-001: `rules.yml` queda como activo legacy del editor web, sin módulo `iflow-firewall`
+#### ADR-001: `iflow-firewall` se restaura como módulo dueño del grafo legacy (sin SpEL)
 
-**Estado:** Propuesto
+**Estado:** Aceptado (2026-10-27)
 
 **Contexto**
 
-- `Hecho verificado`: no hay `src/iflow-firewall/` en el árbol actual (`docs/workdir/REPORT.md:203`).
-- `Hecho verificado`: el historial completo de git no contiene ningún archivo con `firewall` en el nombre (`git log --all --diff-filter=D --name-only -- '*firewall*'` no devuelve nada). La nota de `REPORT.md:206` («restaurar el código original del iflow legacy desde el historial») no tiene material que restaurar.
-- `Hecho verificado`: el esquema `nodes`/`edges`/`guard`/`filter` solo se toca en `src/host/.../ConfigValidator.java:342` (validación) y `src/host/.../ConfigSchemaGenerator.java` (generación de schema para el editor). No hay parser de runtime.
-- `storage.md` describe `config/iflow-firewall/rules.yml` como módulo con ownership y ciclo de vida, y el editor web está diferido (`PLAN.md:12`).
-- La decisión afecta a si se crea un módulo Gradle nuevo o se corrige la documentación para reflejar el uso real.
+- **Corrección del hallazgo previo:** `git log --all -- '*firewall*'` no devuelve nada porque la ruta `iflow-firewall` nunca existió; el módulo original se llamaba **`src/iflow`**. Buscarlo por el nombre nuevo daba un falso negativo.
+- `Hecho verificado`: en `933bdd3^` (padre del *VM architecture rewrite*) `src/iflow/` tenía 27 archivos, entre ellos `DefaultRouter.java` (javadoc: *«Firewall contract of the iFlow module»*), `Router.java`, `RuleExpressionEvaluator.java`, `rule/Rule.java`, `rule/ScriptSurface.java`, `rule/TransformOp.java`, `channel/RateLimiter.java` y `target/PolicyTarget.java`; el host tenía `RuleConfigLoader.java`.
+- `Hecho verificado`: `933bdd3` (*VM architecture rewrite*) eliminó `RuleConfigLoader` y sustituyó el motor de reglas por `VmPolicyEngine`/`VmInterpreter`.
+- `Hecho verificado`: `e21e7d7` (*elimina SpEL y el motor de transformaciones legado*) retiró `ExpressionEvaluator`, `ExpressionEvaluationException` y `spring-expression` del árbol.
+- `Hecho verificado`: `ead0523` renombró `src/iflow` a `src/iflow-vm`; la historia de `src/iflow` termina ahí.
+- `Hecho verificado`: el esquema actual de `rules.yml` (`guard`/`filter`/`nodes`/`edges`) es el del editor web (`web-editor-schema/model.js`, `ConfigSchemaGenerator`), no el `rules:` con `condition`/`action` SpEL del motor histórico.
+- `Restricción`: el runtime de políticas ya está cubierto por `iflow-vm` (`.flow`) e `iflow-wasm` (`.wasm`); registrar un segundo proveedor de `router` rompería el grafo de capabilities.
+
+**Decisión**
+
+1. Se crea **`src/iflow-firewall`** como módulo Gradle real, con `Module`/`ModuleDescriptor` (`iflow-firewall`, capability `firewall`, sin requisitos).
+2. El módulo es dueño de `config/iflow-firewall/rules.yml` (fallback `rules.yml`): resuelve la ruta, modela el grafo (`RuleGraph`) y acumula incidencias (`FirewallConfig`/`FirewallIssue`).
+3. `host.ConfigValidator` delega la validación en el módulo; el host deja de conocer el esquema.
+4. El módulo **no** reimplementa el router SpEL ni provee `router`: el runtime no evalúa `rules.yml`. El archivo queda como grafo legacy del editor web, tal como declara el recurso `defaults/rules.yml`.
 
 **Consecuencias**
 
 *Positivas*
-- La documentación y el grafo de módulos dejan de prometer un componente que no existe; `ModuleGraph` no puede quedar a la espera de una capability inexistente.
-- `rules.yml` conserva compatibilidad para el editor web sin añadir código Java sin consumidor en runtime.
-- `ConfigValidator` ya resuelve `config/iflow-firewall/rules.yml` con fallback, así que la ruta canónica queda estable.
+- El módulo que `storage.md` y `REPORT.md` daban por existente ahora existe, tiene dueño y tests; desaparece el «módulo fantasma».
+- La validación del grafo sale de `host` y vive en un único lugar reutilizable por el editor web.
+- No se reintroduce SpEL ni se duplica el capability `router`; la línea `iflow-vm`/`iflow-wasm` queda intacta.
+- La ruta canónica con fallback es coherente con el resto de módulos (I-011/I-012/I-017).
 
 *Negativas*
-- La validación del schema legacy sigue viviendo temporalmente en `host`, no en un dueño dedicado: mientras el editor esté diferido, la responsabilidad queda repartida entre `host` y `web-editor`.
-- Si en el futuro el editor necesita ejecutar o transformar el grafo, habrá que crear el módulo y migrar la validación; el coste se aplaza, no se elimina.
+- El módulo no ejecuta reglas: si el editor vuelve a necesitar ejecución, habrá que decidir entre compilar el grafo a `.flow`/`.wasm` o añadir un intérprete (nuevo ADR).
+- El modelo actual valida estructura, no semántica (no comprueba que las aristas referencien nodos existentes ni ciclos); se mantiene la paridad con el validador previo para no bloquear grafos del editor.
+- `rules.yml` sigue siendo un formato solo-editor; no hay garantía de que el runtime y el editor compartan semántica hasta que exista un compilador de grafo.
 
 **Alternativas consideradas**
 
-1. **Crear `src/iflow-firewall` con parser/validador y `Module` propio**
-   - Ventajas: ownership explícito; la validación sale de `host`; módulo listo para el editor.
-   - Limitaciones: módulo sin consumidor en runtime; duplica el schema del editor; coste de mantenimiento y de cobertura mientras el editor está diferido.
-   - Evaluación: no se descarta por criterio técnico, sino porque el editor está fuera de alcance (`PLAN.md:12`); queda como trabajo futuro si se retoma.
+1. **Restaurar literalmente `933bdd3^:src/iflow` como `src/iflow-firewall`**
+   - Ventajas: recupera el código histórico exacto.
+   - Limitaciones: reintroduce SpEL (`spring-expression`, `ExpressionEvaluator`), eliminado por `e21e7d7`; depende de `Router`/`Rule`/`TransformOp` que ya no existen; duplicaría el capability `router` frente a `iflow-vm`.
+   - Evaluación: descartada; contradice decisiones vigentes y no compila contra la API actual.
 
-2. **Mantener `rules.yml` como activo legacy del editor, sin módulo Java**
-   - Ventajas: refleja el estado real; cero código nuevo; conserva la ruta canónica y el fallback.
-   - Limitaciones: `storage.md` debe dejar de llamarlo «módulo»; la validación sigue en `host`.
-   - Evaluación: **recomendada**; requiere aprobación explícita porque contradice parcialmente la nota de `REPORT.md:206`.
+2. **Módulo SpEL-free dueño del grafo legacy, sin runtime (elegida)**
+   - Ventajas: respeta la arquitectura actual; da dueño real al archivo; validación compartida con el editor.
+   - Limitaciones: no ejecuta reglas; cobertura limitada a carga/validación.
+   - Evaluación: **aceptada**.
 
-3. **Eliminar `rules.yml` y sus referencias**
-   - Ventajas: máxima limpieza; desaparece la ambigüedad.
-   - Limitaciones: rompe el editor web y los presets que exportan el grafo; `ConfigSchemaGenerator` seguiría generando la ruta si no se recorta también.
-   - Evaluación: descartada mientras el editor siga siendo un objetivo diferido pero no cancelado.
+3. **Mantener `rules.yml` sin módulo y retirar la promesa de `storage.md`**
+   - Ventajas: cero código nuevo.
+   - Limitaciones: contradice la decisión del usuario («debe ser un módulo sí o sí») y deja la validación en `host`.
+   - Evaluación: descartada.
 
 ---
 
@@ -475,10 +486,10 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
-> **Situación actual (2026-10-24):** inventario real generado con `./gradlew testInventory` — **33 módulos Java** en `src/`:
-> - **0 sin directorio de tests** (antes: `common-legacy`)
-> - **0 directorios vacíos** (antes: `fabric-host`, `tester`)
-> - **33 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (9), `textformatter` (6), `chattranslator` (12) superan 5 archivos
+> **Situación actual (2026-10-27):** inventario real generado con `./gradlew testInventory` — **34 módulos Java** en `src/`:
+> - **0 sin directorio de tests**
+> - **0 directorios vacíos**
+> - **34 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (12) y `textformatter` (7) superan 5 archivos
 > - **10 módulos con reporte JaCoCo**: `iflow-vm` (86.2%/71.3%), `kernel` (91.1%/82.0%), `logger` (93.3%/78.6%), `messages` (93.3%/75.0%), `textformatter` (81.6%/66.7%), `host` (30.9%/23.8%), `spigot-host` (2.5%/4.6%), `transport` (6.0%/1.0%), `fabric-host` (0.0%/0.0%), `tester` (0.0%/0.0%)
 > - **23 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
 
@@ -495,6 +506,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
 | `src:iflow-wasm` | ✅ OK | 1 | N/A | 32 | N/A | N/A | Pocos tests (<3) |
+| `src:iflow-firewall` | ✅ OK | 2 | 413 | 251 | 97.9% | 86.8% | Valida estructura, no semántica (paridad con el validador previo); 15 tests |
 | `src:chattranslator` | ✅ OK | 1 | N/A | 350+ | N/A | N/A | 12 tests unitarios |
 | `src:inworld` | ✅ OK | 1 | N/A | 1100+ | N/A | N/A | 26 tests integración |
 | `src:kernel` | ✅ OK | 4 | 202 | 243 | 91.1% | 82.0% |  |
@@ -520,7 +532,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | `src:textformatter` | ✅ OK | 6 | 282 | 512 | 81.6% | 66.7% |  |
 | `src:transport` | ✅ OK | 1 | 351 | 22 | 6.0% | 1.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 
-**Resumen:** 33 módulos totales · **33 con tests** · **0 sin test dir** · **0 vacíos** · 10 con cobertura real · 23 con tests pero sin reporte JaCoCo.
+**Resumen:** 34 módulos totales · **34 con tests** · **0 sin test dir** · **0 vacíos** · 11 con cobertura real · 23 con tests pero sin reporte JaCoCo.
 
 **Objetivo:** que **cada módulo** tenga una suite de tests unitarios y de componente con **cobertura significativa** (líneas/branches ≥ 70 % en código de producción, ≥ 90 % en SPI/API pública) y tests de regresión para cada bug/fix documentado.
 

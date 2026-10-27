@@ -203,7 +203,7 @@ Y opcionalmente **NOTAS** con tu razonamiento.
 | **Descripción** | `storage.md` describe `config/iflow-firewall/rules.yml` como módulo legacy para editor web, con ownership y ciclo de vida. **NO existe `src/iflow-firewall/` en código**. Reset incluye este directorio pero no hay módulo que lo gestione. |
 | **Evidencia** | `find /home/majhrs16/Documentos/textformatter-suite -name "*iflow-firewall*"` → no output |
 | **DECISIÓN** | [ ] FIX_NOW  [*] FIX_LATER  [ ] WONT_FIX  [*] NEEDS_DESIGN  [ ] DELEGATE |
-| **NOTAS** | Hay que restaurar el codigo original del iflow legacy desde el historial de git. |
+| **NOTAS** | Hay que restaurar el codigo original del iflow legacy desde el historial de git. **Resuelto 2026-10-27 (ADR-001):** el módulo original era `src/iflow` (pre-VM, `933bdd3^`), no una ruta `iflow-firewall`. Se creó `src/iflow-firewall` como dueño SpEL-free del grafo legacy `rules.yml` (capability `firewall`); el runtime de reglas SpEL no se restaura (eliminado en `e21e7d7`) y `router` sigue siendo de `iflow-vm`. |
 
 ---
 

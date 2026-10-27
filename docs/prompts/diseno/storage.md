@@ -111,7 +111,7 @@
 | `config/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
 | `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
 | `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
-| `config/iflow-firewall/rules.yml` | `host` valida, editor web consume | **`iflow-firewall`** (legacy, solo editor web) | 🆕 Nuevo módulo opcional |
+| `config/iflow-firewall/rules.yml` | `iflow-firewall` carga (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
 
 > **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. El único archivo compartido es `config/suite/messages.yml` (ADR-020).
 
@@ -146,22 +146,11 @@ module-allowlist: []
 
 ---
 
-### 3.2 `config/suite/rules.yml` — Host Core (Reglas Globales)
+### 3.2 `rules.yml` — absorbido por `iflow-firewall`
 
-```yaml
-# Reglas globales de transformación/bloqueo/redirección
-rules:
-  - name: "no-caps"
-    condition: "message.text().equals(message.text().toUpperCase()) && message.text().length() > 5"
-    action: "BLOCK"
-  - name: "staff-redirect"
-    condition: "sender.hasPermission('suite.staff')"
-    action: "REDIRECT"
-    target-channel: "chat.staff"
-```
-
-**Cargado por**: `host` (rule engine)  
-**Dueño**: `host` module (core)
+> **Histórico:** el antiguo `config/suite/rules.yml` con `rules: [{condition, action}]` quedó obsoleto
+> al eliminar SpEL (`e21e7d7`). El único `rules.yml` vigente es
+> `config/iflow-firewall/rules.yml` (§3.3.1), propiedad del módulo `iflow-firewall`.
 
 ---
 
@@ -186,8 +175,9 @@ nodes: []
 edges: []
 ```
 
-**Cargado por**: `iflow-firewall` (opcional, solo web editor)  
+**Cargado por**: `iflow-firewall.FirewallConfig.load(folder)`  
 **Dueño**: `iflow-firewall` module (legacy, solo editor web)  
+**Resolución**: `config/iflow-firewall/rules.yml` (canónico) → `rules.yml` (heredado)  
 **No participa** en la ejecución del runtime (VM .flow / Wasm)
 
 ---
@@ -419,7 +409,7 @@ health-enabled: true
    │
    ├─► MÓDULOS CORE (independientes, sin requires de otros módulos suite)
    │   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))              → HostConfig (suite/config.yml)
-   │   ├─► RulesConfig.load(folder.resolve("suite"))                     → Rules (suite/rules.yml)
+   │   ├─► firewall.FirewallConfig.load(folder)                          → RuleGraph (iflow-firewall/rules.yml)
    │   ├─► textformatter.ChannelConfig.load(folder.resolve("textformatter")) → ChannelRegistry
    │   ├─► inworld.InWorldConfig.load(folder.resolve("inworld"))         → InWorldHandler
    │   ├─► observability.ObservabilityConfig.load(folder.resolve("observability")) → Observability
@@ -548,8 +538,8 @@ public void onLoad(SuiteHost host) {
 
 ## 9. Próximos Pasos de Migración
 
-1. **textformatter**: Crear `ChannelConfig` en `src/textformatter`, mover lógica de channels ahí
-2. **chattranslator**: Crear `BackendConfig` en `src/chattranslator`, mover `TranslatorsConfig` ahí
-3. **sync-bus**: Crear `SyncConfig` en `src/sync-bus`, mover carga de sinks ahí
-4. **host**: Simplificar `ConfigLoader` y `TranslatorsConfig` para solo manejar `suite/config.yml` y `suite/rules.yml`
-5. **spigot-host/fabric-host**: Eliminar carga directa de sync/channels/translators; usar módulos
+1. ~~**textformatter**: Crear `ChannelConfig`~~ ✅ I-011
+2. ~~**chattranslator**: Crear `BackendConfig`~~ ✅ I-004
+3. ~~**sync-bus**: Cada sink con su config~~ ✅ I-004
+4. **host**: `ConfigLoader` solo maneja `config/suite/config.yml`; `rules.yml` vive en `iflow-firewall` (I-001) y `messages.yml` en `host` por ADR-020
+5. ~~**spigot-host/fabric-host**: Eliminar carga directa de sync/channels/translators~~ ✅ I-004/I-011

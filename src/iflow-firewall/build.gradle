@@ -1,0 +1,66 @@
+plugins {
+id 'jacoco'
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+description = 'iFlow firewall: legacy rules.yml graph (web editor), sin runtime de reglas'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    implementation project(':src:core-api')
+    implementation 'org.yaml:snakeyaml:2.2'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'suite-iflow-firewall'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}
+
+jacocoTestCoverageVerification {
+    violationRules { rule {
+        limit { counter = 'LINE'; value = 'COVEREDRATIO'; minimum = 0.80 }
+    } }
+}
+tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
