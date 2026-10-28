@@ -115,3 +115,9 @@ jacocoTestCoverageVerification {
     } }
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
+
+// Shared library package: iflow-vm and other engines load it from
+// library/dependencies through the manager.
+ext.moduleVersion = '2.1.0'
+ext.moduleType = 'DEPENDENCY'
+apply from: rootProject.file('gradle/module-package.gradle')

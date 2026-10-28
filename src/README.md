@@ -59,12 +59,12 @@ TextFormatter Suite
 
 | Directory | Responsibility | Depends On | Used By |
 |-----------|----------------|------------|---------|
-| `core-api` | Core interfaces, SPI, domain types (Module, Actor, Channel, TranslationService, SyncSink, etc.) | — | **All modules** |
+| `core-api` | Core interfaces, SPI, domain types and cross-package contracts (Module, Actor, Channel, ChannelRegistry, Router, TranslationService, SyncSink, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
-| `textformatter` | Template rendering (MiniMessage), placeholders, channel registry | `core-api` | `host`, `iflow-vm`, `presets`, `spigot-host`, `fabric-host` |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `textformatter` | `host`, `spigot-host`, `fabric-host` |
+| `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `presets`, `spigot-host`, `fabric-host` |
+| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `host`, `spigot-host`, `fabric-host` |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
-| `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | `core-api`, `textformatter`, `spring-expression`, `jackson`, `snakeyaml` | `host` (selección `vm`/`firewall`), web editor |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `host` (selección `vm`/`firewall`), web editor |
 | `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring; selecciona el motor iFlow instalado con `iflow.engine.kind` | `core-api`, `kernel`, `textformatter`, `iflow-vm`/`iflow-firewall` (alternativos), `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
@@ -97,12 +97,12 @@ TextFormatter Suite
 
 | Module | Purpose | Main Responsibility | Key Classes | Entry Points | README |
 |--------|---------|---------------------|-------------|--------------|--------|
-| `core-api` | Contracts & SPI | Define all platform-agnostic interfaces | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
+| `core-api` | Contracts & SPI | Define all platform-agnostic interfaces and shared contracts | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel`, `ChannelRegistry`, `Router` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
-| `textformatter` | Formatting engine | Templates, placeholders, channels | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` | `TextFormatterModule` | [textformatter/README.md](textformatter/README.md) |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IfowVmModule` | [iflow-vm/README.md](iflow-vm/README.md) |
-| `iflow-wasm` | Motor WebAssembly con Chicory (W2) | `WasmModuleLoader`, `WasmContract`, `ValidationResult` | `IfowWasmModule` | [iflow-wasm/README.md](iflow-wasm/README.md) |
-| `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallModule` | — |
+| `textformatter` | Formatting engine | Templates, placeholders | `DefaultTextFormatter`, `TemplateRenderer`, `TextFormatterActivator` | `TextFormatterActivator` | [textformatter/README.md](textformatter/README.md) |
+| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowVmActivator` | [iflow-vm/README.md](iflow-vm/README.md) |
+| `iflow-wasm` | Motor WebAssembly con Chicory (W2) | `WasmModuleLoader`, `WasmContract`, `ValidationResult` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
+| `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateModule` | [ltranslate/README.md](ltranslate/README.md) |
@@ -247,7 +247,7 @@ TextFormatter Suite
 
 | Boundary | Allowed Direction | Forbidden Direction | Notes |
 |----------|-------------------|---------------------|-------|
-| `core-api` → * | `core-api` is depended upon by all | Nothing depends on `core-api` internally | Pure interfaces, no implementations |
+| `core-api` → * | `core-api` is depended upon by all | Nothing depends on `core-api` internally | Pure contracts and shared value types; no feature dependencies |
 | `kernel` → `core-api` | `kernel` uses `core-api` SPI | `core-api` must not depend on `kernel` | Module loading mechanism |
 | `host` → core modules | `host` integrates `textformatter`, `iflow-vm`, translations, transports | Core modules must not depend on `host` | `host` is the integration hub |
 | Platform adapters → `host` | `spigot-host`/`fabric-host` depend on `host` | `host` must not depend on platform adapters | Platform-agnostic core |
@@ -332,7 +332,8 @@ Module.initialize() called in order
 |------|----------------|-----------|
 | **Configuration** | `host` | `ConfigLoader`, `HostConfig`, `ConfigValidator`, `ConfigSchemaGenerator` |
 | **Module System** | `kernel` | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` |
-| **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer`, `ChannelRegistry` |
+| **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer` |
+| **Shared channel/routing contracts** | `core-api` | `api/channel/Channel`, `api/channel/ChannelRegistry`, `api/iflow/Router` |
 | **Routing/Rules (VM)** | `iflow-vm` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` |
 | **Translation** | `gtranslate`/`ltranslate` | `GTranslateProvider`, `LTranslateProvider` (implement `TranslationService`) |
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
@@ -367,7 +368,7 @@ Module.initialize() called in order
 |------|------------|------|
 | Understand overall architecture | `src/README.md` (this file) | Module READMEs |
 | Understand module loading | `kernel/src/main/java/me/majhrs16/suite/kernel/ModuleLoader.java` | `ModuleGraph.java` |
-| Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `ChannelRegistry.java` |
+| Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `core-api/src/main/java/me/majhrs16/suite/api/channel/ChannelRegistry.java` |
 | Understand routing (VM) | `iflow-vm/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java` |
 | Understand bootstrap | `host/src/main/java/me/majhrs16/suite/host/SuiteBootstrap.java` | `SuiteHost.java`, `MessageDispatcher.java` |
 | Understand Spigot integration | `spigot-host/src/main/java/me/majhrs16/suite/spigothost/TextFormatterSuitePlugin.java` | `SpigotActorDirectory.java`, `SpigotChatDelivery.java` |
@@ -390,4 +391,4 @@ Module.initialize() called in order
 
 ---
 
-*Generated from actual repository state. Last updated: 2026-10-27 (iflow-firewall restores the legacy SpEL engine as a mutually exclusive alternative; iflow-vm and iflow-wasm stay SpEL-free).*
+*Generated from actual repository state. Last updated: 2026-10-27 (F5 closes the six base packages; shared channel/routing contracts move to core-api and logger becomes the first dependency package).*

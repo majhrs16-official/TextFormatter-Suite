@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
+import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.spi.PluginLogger;
@@ -187,6 +188,72 @@ class PackageRuntimeTest {
                     () -> "activation failed: " + activation.get(0).message());
             assertEquals(ModuleState.ACTIVE, fixture.host.state("chattranslator").orElseThrow());
         }
+    }
+
+    @Test
+    void installsRealIflowVmPackageWithItsLoggerDependency() throws Exception {
+        Path loggerZip = packageFromProperty("logger.package");
+        Path textformatterZip = packageFromProperty("textformatter.package");
+        Path vmZip = packageFromProperty("iflow-vm.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(loggerZip, false).isEmpty(),
+                    "dependency packages are installed but not activated");
+            assertTrue(fixture.runtime.installLocal(textformatterZip, false).get(0).isSuccess());
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(vmZip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("iflow-vm").orElseThrow());
+            assertTrue(fixture.host.services().find(Router.class).isPresent(),
+                    "iflow-vm must publish the shared Router service");
+        }
+    }
+
+    @Test
+    void installsRealIflowFirewallPackageAfterChannelApi() throws Exception {
+        Path textformatterZip = packageFromProperty("textformatter.package");
+        Path firewallZip = packageFromProperty("iflow-firewall.package");
+
+        try (Fixture fixture = fixture()) {
+            List<ActivationResult> formatterActivation =
+                    fixture.runtime.installLocal(textformatterZip, false);
+            assertTrue(formatterActivation.get(0).isSuccess(),
+                    () -> "textformatter failed: " + formatterActivation.get(0).message());
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(firewallZip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("iflow-firewall").orElseThrow());
+            assertTrue(fixture.host.services().find(Router.class).isPresent(),
+                    "iflow-firewall must publish the shared Router service");
+        }
+    }
+
+    @Test
+    void installsRealIflowWasmPackage() throws Exception {
+        Path wasmZip = packageFromProperty("iflow-wasm.package");
+
+        try (Fixture fixture = fixture()) {
+            List<ActivationResult> activation = fixture.runtime.installLocal(wasmZip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("iflow-wasm").orElseThrow());
+        }
+    }
+
+    private static Path packageFromProperty(String name) {
+        String packagePath = System.getProperty(name);
+        assertNotNull(packagePath, name + " must be set by the build");
+        Path zip = Path.of(packagePath);
+        assertTrue(Files.isRegularFile(zip), "missing distribution: " + zip);
+        return zip;
     }
 
     private Fixture fixture() throws IOException {

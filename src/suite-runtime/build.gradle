@@ -7,6 +7,10 @@ plugins {
 evaluationDependsOn(':src:textformatter')
 evaluationDependsOn(':src:messages')
 evaluationDependsOn(':src:chattranslator')
+evaluationDependsOn(':src:logger')
+evaluationDependsOn(':src:iflow-vm')
+evaluationDependsOn(':src:iflow-firewall')
+evaluationDependsOn(':src:iflow-wasm')
 
 group = 'me.majhrs16'
 
@@ -27,6 +31,10 @@ dependencies {
     testRuntimeOnly 'net.kyori:adventure-text-minimessage:4.17.0'
     testRuntimeOnly 'net.kyori:adventure-text-serializer-plain:4.17.0'
     testRuntimeOnly 'org.yaml:snakeyaml:2.2'
+    testRuntimeOnly 'org.springframework:spring-expression:6.1.12'
+    testRuntimeOnly 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
+    testRuntimeOnly 'com.fasterxml.jackson.core:jackson-annotations:2.17.1'
+    testRuntimeOnly 'com.dylibso.chicory:runtime:1.4.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -54,6 +62,22 @@ test {
     dependsOn chattranslatorPackage
     systemProperty 'chattranslator.package',
             chattranslatorPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def loggerPackage = project(':src:logger').tasks.named('modulePackage')
+    dependsOn loggerPackage
+    systemProperty 'logger.package',
+            loggerPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def iflowVmPackage = project(':src:iflow-vm').tasks.named('modulePackage')
+    dependsOn iflowVmPackage
+    systemProperty 'iflow-vm.package',
+            iflowVmPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def iflowFirewallPackage = project(':src:iflow-firewall').tasks.named('modulePackage')
+    dependsOn iflowFirewallPackage
+    systemProperty 'iflow-firewall.package',
+            iflowFirewallPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def iflowWasmPackage = project(':src:iflow-wasm').tasks.named('modulePackage')
+    dependsOn iflowWasmPackage
+    systemProperty 'iflow-wasm.package',
+            iflowWasmPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

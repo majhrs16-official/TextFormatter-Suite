@@ -19,7 +19,6 @@ java {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:textformatter')
     implementation project(':src:logger')
 
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
@@ -138,3 +137,9 @@ tasks.register('iflowAsm', Exec) {
 
     doFirst { output.parentFile.mkdirs() }
 }
+
+// F5 — distribution ZIP for the manager. The logger is a shared dependency
+// package, loaded from library/dependencies by the module classloader.
+ext.moduleVersion = '2.1.0'
+ext.moduleDependencies = 'logger@>=2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

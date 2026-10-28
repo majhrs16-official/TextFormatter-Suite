@@ -19,7 +19,7 @@ java {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:textformatter')
+    testImplementation project(':src:textformatter')
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
     implementation 'org.springframework:spring-expression:6.1.12'
@@ -71,3 +71,7 @@ jacocoTestCoverageVerification {
     } }
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
+
+// F5 — distribution ZIP for the manager
+ext.moduleVersion = '2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')
