@@ -1051,8 +1051,12 @@ desregistra al descargarse; el test instala `sync-common`, `transport`,
 `sync-telegram` sigue el mismo patrón con `config.yml`: registra el sink si hay
 token y chat, y lo desregistra al descargar el paquete. `sync-http` lee
 `outboundUrl`, `inboundPort` y credenciales de su `config.yml`, registra el sink
-y lo retira al descargarse. Quedan `sync-websocket`, `sync-discord`,
-`sync-velocity`, `observability`, `presets`, `extension-api`,
+y lo retira al descargarse. `sync-websocket` arranca su servidor en el puerto
+configurado, se registra en el bus y usa la fachada neutral
+`api.metrics.Metrics` en lugar de depender de `observability`. Las librerías de
+terceros (Java-WebSocket, Gson, org.json, Prometheus, JDA) siguen en el
+classpath del host hasta que F8 las empaquete como `DEPENDENCY`. Quedan
+`sync-discord`, `sync-velocity`, `observability`, `presets`, `extension-api`,
 `inworld`/`tester` y la retirada del cableado del host.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.

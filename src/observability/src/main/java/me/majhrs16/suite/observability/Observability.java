@@ -4,6 +4,8 @@ import me.majhrs16.suite.observability.endpoint.DebugEndpoint;
 import me.majhrs16.suite.observability.endpoint.MetricsEndpoint;
 import me.majhrs16.suite.observability.health.HealthCheckRegistry;
 import me.majhrs16.suite.observability.metrics.MetricsCollector;
+import me.majhrs16.suite.api.metrics.Metrics;
+import me.majhrs16.suite.api.metrics.MetricsSink;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
@@ -27,6 +29,7 @@ public final class Observability {
     private final HealthCheckRegistry healthCheckRegistry;
     private final PluginLogger logger;
     private volatile boolean started = false;
+    private volatile MetricsSink metricsSink;
 
     private Observability(SuiteHost host, MessageDispatcher dispatcher,
                           ChannelRegistry channels, PluginLogger logger,
@@ -117,6 +120,9 @@ public final class Observability {
         if (started) return;
         metricsEndpoint.start();
         debugEndpoint.start();
+        MetricsSink sink = MetricsCollector::recordSyncSent;
+        Metrics.install(sink);
+        metricsSink = sink;
         started = true;
         logger.info("Observability module started (metrics:" + metricsEndpoint.getPort() + ", debug:" + debugEndpoint.getPort() + ")");
     }
@@ -126,6 +132,8 @@ public final class Observability {
      */
     public void stop() {
         if (!started) return;
+        Metrics.uninstall(metricsSink);
+        metricsSink = null;
         metricsEndpoint.stop();
         debugEndpoint.stop();
         started = false;

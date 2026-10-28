@@ -443,6 +443,47 @@ class PackageRuntimeTest {
         }
     }
 
+    @Test
+    void installsSyncWebSocketPackageAndRegistersConfiguredSink() throws Exception {
+        Path transportZip = packageFromProperty("transport.package");
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path busZip = packageFromProperty("sync-bus.package");
+        Path webSocketZip = packageFromProperty("sync-websocket.package");
+        int port = freePort();
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-websocket");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("config.yml"), """
+                    enabled: true
+                    token: test-token
+                    port: %d
+                    bind: 127.0.0.1
+                    """.formatted(port));
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(webSocketZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "sync-websocket activation failed: " + activation.get(0).message());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertEquals(Set.of("websocket"), bus.sinkNames());
+
+            fixture.runtime.removeLocal("sync-websocket", "2.1.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading sync-websocket must unregister its sink");
+        }
+    }
+
+    private static int freePort() throws IOException {
+        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
+    }
+
     private static Path packageFromProperty(String name) {
         String packagePath = System.getProperty(name);
         assertNotNull(packagePath, name + " must be set by the build");

@@ -19,6 +19,7 @@ evaluationDependsOn(':src:sync-common')
 evaluationDependsOn(':src:sync-socket')
 evaluationDependsOn(':src:sync-telegram')
 evaluationDependsOn(':src:sync-http')
+evaluationDependsOn(':src:sync-websocket')
 
 group = 'me.majhrs16'
 
@@ -44,6 +45,8 @@ dependencies {
     testRuntimeOnly 'com.fasterxml.jackson.core:jackson-annotations:2.17.1'
     testRuntimeOnly 'com.dylibso.chicory:runtime:1.4.0'
     testRuntimeOnly 'org.json:json:20240303'
+    testRuntimeOnly 'org.java-websocket:Java-WebSocket:1.5.4'
+    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -119,6 +122,10 @@ test {
     dependsOn syncHttpPackage
     systemProperty 'sync-http.package',
             syncHttpPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def syncWebSocketPackage = project(':src:sync-websocket').tasks.named('modulePackage')
+    dependsOn syncWebSocketPackage
+    systemProperty 'sync-websocket.package',
+            syncWebSocketPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

@@ -5,7 +5,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.transport.MessageCodec;
-import me.majhrs16.suite.observability.metrics.MetricsCollector;
+import me.majhrs16.suite.api.metrics.Metrics;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -134,7 +134,7 @@ public final class WebSocketSyncSink implements SyncSink {
         String json = MessageCodec.toJson(message).toString();
         String path = getPathForMessage(message);
         broadcastToPath(path, json);
-        MetricsCollector.recordSyncSent("websocket", "success");
+        Metrics.recordSyncSent("websocket", "success");
     }
 
     @Override
@@ -155,9 +155,9 @@ public final class WebSocketSyncSink implements SyncSink {
             if (client.isOpen()) {
                 try {
                     client.send(jsonMessage);
-                    MetricsCollector.recordSyncSent("websocket", "success");
+                    Metrics.recordSyncSent("websocket", "success");
                 } catch (Exception e) {
-                    MetricsCollector.recordSyncSent("websocket", "failed");
+                    Metrics.recordSyncSent("websocket", "failed");
                     logger.warn("Failed to send to client: " + e.getMessage());
                 }
             }

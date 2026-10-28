@@ -63,6 +63,24 @@ class WebSocketSyncConfigTest {
     }
 
     @Test
+    void readsFromTheModuleConfigDirectory() throws Exception {
+        Path configDir = dir.resolve("config/sync-websocket");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("config.yml"), """
+            enabled: true
+            token: module-token
+            port: 9098
+            bind: 127.0.0.1
+            """);
+
+        WebSocketSyncConfig config = WebSocketSyncConfig.loadFromConfigDir(configDir);
+
+        assertTrue(config.usable());
+        assertEquals("module-token", config.token());
+        assertEquals(9098, config.port());
+    }
+
+    @Test
     void legacyFileIsReadDuringMigration() throws Exception {
         Path legacy = dir.resolve("sync/websocket.yml");
         Files.createDirectories(legacy.getParent());

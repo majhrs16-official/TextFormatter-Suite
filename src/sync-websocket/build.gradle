@@ -1,26 +1,26 @@
 plugins {
-id 'jacoco'
+    id 'jacoco'
     id 'java'
     id 'maven-publish'
 }
 
 group = 'me.majhrs16'
 
-repositories {
-    mavenLocal()
-    mavenCentral()
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+repositories {
+    mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
     implementation project(':src:core-api')
     implementation project(':src:sync-common')
     implementation project(':src:transport')
-    implementation project(':src:observability')
     implementation 'org.java-websocket:Java-WebSocket:1.5.4'
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.json:json:20231013'
@@ -31,28 +31,49 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
 test {
     useJUnitPlatform()
-    testLogging {
-        events 'passed', 'skipped', 'failed'
-    }
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
 }
 
 publishing {
     publications {
-        maven(MavenPublication) {
+        mavenJava(MavenPublication) {
             from components.java
             artifactId = 'suite-sync-websocket'
         }
     }
     repositories {
-        maven {
-            name = 'local'
-            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        mavenLocal()
+    }
+}
+
+// Disable dependency verification for test configurations
+configurations.configureEach {
+    if (name in ['testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
         }
     }
 }
+
+// F6 — optional package loaded by the module runtime.
+// Java-WebSocket, Gson and org.json are provided by the host parent classpath
+// until F8 packages third-party libraries as DEPENDENCY packages.
+ext.moduleVersion = '2.1.0'
+ext.moduleDependencies = 'sync-common@>=2.1.0,transport@>=2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

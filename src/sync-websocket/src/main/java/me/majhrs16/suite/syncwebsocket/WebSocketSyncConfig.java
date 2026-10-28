@@ -38,7 +38,21 @@ public record WebSocketSyncConfig(boolean enabled, String token, int port, Strin
      * @return configuración con defaults si el archivo no existe o no es válido
      */
     public static WebSocketSyncConfig load(Path dataFolder) {
-        Map<String, Object> map = SyncYaml.readMap(SyncConfigPaths.webSocket(dataFolder));
+        return loadFile(SyncConfigPaths.webSocket(dataFolder));
+    }
+
+    /**
+     * Carga la configuración desde la carpeta privada del módulo.
+     *
+     * @param configDir carpeta {@code config/sync-websocket}
+     * @return configuración con defaults si el archivo no existe o no es válido
+     */
+    public static WebSocketSyncConfig loadFromConfigDir(Path configDir) {
+        return loadFile(configDir.resolve("config.yml"));
+    }
+
+    private static WebSocketSyncConfig loadFile(Path file) {
+        Map<String, Object> map = SyncYaml.readMap(file);
         return new WebSocketSyncConfig(
             SyncYaml.bool(map, "enabled", false),
             SyncYaml.string(map, "token", ""),
