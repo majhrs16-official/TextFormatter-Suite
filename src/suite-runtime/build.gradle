@@ -5,6 +5,7 @@ plugins {
 }
 
 evaluationDependsOn(':src:textformatter')
+evaluationDependsOn(':src:messages')
 
 group = 'me.majhrs16'
 
@@ -44,6 +45,10 @@ test {
     dependsOn textformatterPackage
     systemProperty 'textformatter.package',
             textformatterPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def messagesPackage = project(':src:messages').tasks.named('modulePackage')
+    dependsOn messagesPackage
+    systemProperty 'messages.package',
+            messagesPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

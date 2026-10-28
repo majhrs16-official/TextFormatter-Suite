@@ -155,6 +155,23 @@ class PackageRuntimeTest {
         }
     }
 
+    @Test
+    void installsRealMessagesPackage() throws Exception {
+        String packagePath = System.getProperty("messages.package");
+        assertNotNull(packagePath, "messages.package must be set by the build");
+        Path zip = Path.of(packagePath);
+        assertTrue(Files.isRegularFile(zip), "missing distribution: " + zip);
+
+        try (Fixture fixture = fixture()) {
+            List<ActivationResult> activation = fixture.runtime.installLocal(zip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("messages").orElseThrow());
+        }
+    }
+
     private Fixture fixture() throws IOException {
         Path suiteRoot = tempDir.resolve("suite");
         Path managerDir = suiteRoot.resolve("manager");

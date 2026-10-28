@@ -55,3 +55,7 @@ publishing {
         mavenLocal()
     }
 }
+
+// F5 — distribution ZIP for the manager
+ext.moduleVersion = '2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

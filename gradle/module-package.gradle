@@ -1,0 +1,50 @@
+// Reusable distribution packaging for suite modules.
+//
+// A module build applies this script after defining `moduleVersion` (and
+// optionally `moduleId`, which defaults to the Gradle project name). The
+// resulting ZIP contains the module JAR and METADATA/package.list, ready for
+// `ManagerFacade.packageInstall(...)`.
+def moduleId = project.findProperty('moduleId') ?: project.name
+def moduleVersion = project.findProperty('moduleVersion') ?: project.version.toString()
+def moduleJarTask = tasks.named('jar')
+
+tasks.register('generateModuleManifest') {
+    dependsOn moduleJarTask
+    def jarFileProvider = moduleJarTask.flatMap { it.archiveFile }
+    inputs.file(jarFileProvider)
+    outputs.file(layout.buildDirectory.file('module/METADATA/package.list'))
+    doLast {
+        def jarFile = jarFileProvider.get().asFile
+        def bytes = jarFile.bytes
+        def digest = java.security.MessageDigest.getInstance('SHA-256').digest(bytes)
+        def sha = digest.collect { String.format('%02x', it & 0xff) }.join()
+        def manifest = """Name: ${moduleId}
+Version: ${moduleVersion}
+Channel: stable
+Type: PACKAGE
+Dependencies: 
+Arch: none
+Platform: common
+URL: 
+OS: none
+SHA256: 
+Size: 0
+Files: 
+  manager/library/packages/${moduleId}.jar\t${bytes.length}\t${sha}\t${moduleId}
+"""
+        def out = layout.buildDirectory.file('module/METADATA/package.list').get().asFile
+        out.parentFile.mkdirs()
+        out.text = manifest
+    }
+}
+
+tasks.register('modulePackage', Zip) {
+    dependsOn 'generateModuleManifest'
+    archiveFileName = "${moduleId}-${moduleVersion}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from(layout.buildDirectory.dir('module'))
+    from(moduleJarTask.flatMap { it.archiveFile }) {
+        into 'manager/library/packages'
+        rename { "${moduleId}.jar" }
+    }
+}
