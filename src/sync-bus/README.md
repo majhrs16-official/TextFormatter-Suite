@@ -30,8 +30,8 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `SyncSink`, `SyncListener`, `Message`, `PluginLogger` |
-| `kernel` | Test | Module/test fixtures |
+| `core-api` | Compile | `SyncBus`, `SyncSink`, `SyncListener`, `Message`, `PluginLogger` |
+| `snakeyaml` | Compile | `SyncYaml` for the sync-* configuration readers |
 
 ---
 
@@ -39,8 +39,9 @@
 
 | Consumer | Usage |
 |----------|-------|
-| `spigot-host` | Creates `DefaultSyncBus`, registers sinks, starts/stops with the plugin |
-| `fabric-host` | Same lifecycle in the Fabric mod |
+| module runtime | Activates `SyncBusActivator`; the bus is published as `SyncBus` in the service registry |
+| `sync-*` packages | Resolve `SyncBus` from the registry and register their sink |
+| `spigot-host` | Legacy wiring: creates `DefaultSyncBus` until F4b moves it to the runtime |
 
 ---
 
@@ -48,9 +49,10 @@
 
 | Component | Role |
 |-----------|------|
-| `SyncBus` | Public contract: registration, broadcast, directed send, lifecycle, metrics |
+| `SyncBus` | Public contract in `core-api`: registration, broadcast, directed send, lifecycle, metrics |
 | `DefaultSyncBus` | Implementation: global queue, dedup cache, per-sink workers, retries |
-| `SyncBusModule` | Descriptor publishing the `sync-bus` capability |
+| `SyncBusActivator` | `ModuleActivator` that creates, publishes, starts and stops the bus |
+| `SyncBusModule` | Legacy kernel descriptor publishing the `sync-bus` capability |
 
 Constants in `DefaultSyncBus`:
 
@@ -90,9 +92,11 @@ SyncSink → SyncListener.onMessage(sink, message)
        host pipeline (routing/formatting)
 ```
 
-`start()` is idempotent and starts every registered sink. `stop()` stops sink
-workers, calls `SyncSink.stop()`, wakes the global processor and shuts down the
-scheduler. `broadcast()` before `start()` or after `stop()` returns `0`.
+`start()` is idempotent and starts every registered sink. A sink registered
+after `start()` is started immediately, so a sink package installed later
+becomes live without restarting the host. `stop()` stops sink workers, calls
+`SyncSink.stop()`, wakes the global processor and shuts down the scheduler.
+`broadcast()` before `start()` or after `stop()` returns `0`.
 
 ---
 
@@ -100,9 +104,10 @@ scheduler. `broadcast()` before `start()` or after `stop()` returns `0`.
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| `DefaultSyncBus(PluginLogger)` | `DefaultSyncBus.java` | `spigot-host` / `fabric-host` startup |
-| `register(SyncSink)` | `DefaultSyncBus.java` | Host sink wiring |
-| `start()` / `stop()` | `DefaultSyncBus.java` | Host lifecycle |
+| `SyncBusActivator` | `SyncBusActivator.java` | Module runtime |
+| `DefaultSyncBus(PluginLogger)` | `DefaultSyncBus.java` | `SyncBusActivator` |
+| `register(SyncSink)` | `DefaultSyncBus.java` | Sink packages |
+| `start()` / `stop()` | `DefaultSyncBus.java` | Activator lifecycle |
 | `broadcast(Message)` | `DefaultSyncBus.java` | `DiscordBridge` and host message flow |
 
 ---
@@ -121,7 +126,11 @@ scheduler. `broadcast()` before `start()` or after `stop()` returns `0`.
 
 `DefaultSyncBusTest` covers registration, duplicate-name rejection, guards before
 start/after unregister, real delivery through a sink, sink shutdown and a
-non-blocking `stop()`.
+non-blocking `stop()`. It also covers the hot-load contract: a sink registered
+after `start()` is started immediately, and a sink that fails to start is rolled
+back. `PackageRuntimeTest.installsSyncBusPackageAndHotRegistersSinkModule`
+installs the real `sync-bus` ZIP and a sink package, then unloads the sink and
+checks that the running bus unregisters it.
 
 ```bash
 ./gradlew :src:sync-bus:test --no-daemon

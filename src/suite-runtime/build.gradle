@@ -14,6 +14,7 @@ evaluationDependsOn(':src:iflow-wasm')
 evaluationDependsOn(':src:transport')
 evaluationDependsOn(':src:gtranslate')
 evaluationDependsOn(':src:ltranslate')
+evaluationDependsOn(':src:sync-bus')
 
 group = 'me.majhrs16'
 
@@ -94,6 +95,10 @@ test {
     dependsOn ltranslatePackage
     systemProperty 'ltranslate.package',
             ltranslatePackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def syncBusPackage = project(':src:sync-bus').tasks.named('modulePackage')
+    dependsOn syncBusPackage
+    systemProperty 'sync-bus.package',
+            syncBusPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

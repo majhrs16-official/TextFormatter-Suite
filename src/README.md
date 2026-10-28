@@ -395,4 +395,4 @@ Module.initialize() called in order
 
 ---
 
-*Generated from actual repository state. Last updated: 2026-10-27 (F5 closes the six base packages; F6 adds transport as a dependency package, gtranslate/ltranslate activators and module lifecycle events for chattranslator).*
+*Generated from actual repository state. Last updated: 2026-10-28 (F5 closes the six base packages; F6 adds transport as a dependency package, gtranslate/ltranslate activators, module lifecycle events for chattranslator and sync-bus as an activatable package with hot sink registration).*

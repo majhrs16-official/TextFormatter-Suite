@@ -1,13 +1,11 @@
-package me.majhrs16.suite.syncbus;
-
-import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.spi.SyncListener;
-import me.majhrs16.suite.api.spi.SyncSink;
+package me.majhrs16.suite.api.spi;
 
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+
+import me.majhrs16.suite.api.message.Message;
 
 /**
  * Central hub for cross-platform message synchronization.
@@ -20,8 +18,8 @@ import java.util.concurrent.CompletableFuture;
  *   <li>Provides lifecycle management (start/stop) for all sinks</li>
  * </ul>
  * <p>
- * This replaces the fragmented wiring where each platform adapter managed its sinks individually.
- * The bus ensures consistent delivery semantics, deduplication, and backpressure across all transports.
+ * This contract lives in {@code core-api} so sink packages can register
+ * themselves without depending on the {@code sync-bus} implementation package.
  * </p>
  */
 public interface SyncBus extends AutoCloseable {
@@ -30,13 +28,17 @@ public interface SyncBus extends AutoCloseable {
      * Registers a sink with the bus. The sink will receive outbound messages
      * and its inbound events will be routed through the bus's listener.
      *
+     * <p>If the bus is already running, the sink is started immediately, which
+     * is what makes hot-loading a sink package work.</p>
+     *
      * @param sink the sink to register, must not be null
-     * @throws IllegalStateException if a sink with the same name is already registered
+     * @throws IllegalStateException if a sink with the same name is already
+     *                               registered or cannot be started
      */
     void register(SyncSink sink);
 
     /**
-     * Unregisters a sink from the bus.
+     * Unregisters a sink from the bus and stops it.
      *
      * @param name the sink name (as returned by {@link SyncSink#name()})
      * @return true if the sink was found and removed

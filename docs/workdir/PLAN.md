@@ -1039,7 +1039,11 @@ retirada del cableado compilado del host pertenece a F6/F4b.
 `TranslatorManager` cuando un proveedor aparece o desaparece, sin reiniciar el
 host. El test de `suite-runtime` instala los cuatro paquetes, comprueba que
 `chattranslator` ve google/libre y que al descargar `gtranslate` se queda solo
-con libre. Quedan `sync-*`, `observability`, `presets`, `extension-api`,
+con libre. `sync-bus` ya es paquete: su contrato `SyncBus` vive en `core-api`,
+`SyncBusActivator` publica el bus en el registro y un sink registrado después de
+`start()` arranca de inmediato; el test de `suite-runtime` instala el ZIP real,
+instala un paquete de sink y comprueba que al descargarlo el bus lo desregistra.
+Quedan `sync-*`, `observability`, `presets`, `extension-api`,
 `inworld`/`tester` y la retirada del cableado del host.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.

@@ -7,7 +7,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.syncdiscord.DiscordConfig;
-import me.majhrs16.suite.syncbus.SyncBus;
+import me.majhrs16.suite.api.spi.SyncBus;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;

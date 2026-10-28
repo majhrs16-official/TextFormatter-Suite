@@ -2,6 +2,7 @@ package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 
@@ -12,6 +13,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -152,8 +154,10 @@ public final class DefaultSyncBus implements SyncBus {
 
     @Override
     public void register(SyncSink sink) {
+        Objects.requireNonNull(sink, "sink");
         String name = sink.name();
-        SinkContext existing = sinks.putIfAbsent(name, new SinkContext(sink));
+        SinkContext created = new SinkContext(sink);
+        SinkContext existing = sinks.putIfAbsent(name, created);
         if (existing != null) {
             throw new IllegalStateException("Sink with name '" + name + "' already registered: " + existing.sink.getClass().getName());
         }
@@ -172,6 +176,27 @@ public final class DefaultSyncBus implements SyncBus {
         });
 
         sinkNamesSnapshot.add(name);
+
+        // A sink registered after start() must be started immediately;
+        // otherwise hot-loading a sync-* package would register a dead sink.
+        if (state.get() == LifecycleState.RUNNING) {
+            try {
+                sink.start();
+                created.start();
+            } catch (Exception failure) {
+                sinks.remove(name, created);
+                sinkNamesSnapshot.remove(name);
+                created.shutdown();
+                try {
+                    sink.stop();
+                } catch (Exception stopFailure) {
+                    failure.addSuppressed(stopFailure);
+                }
+                throw new IllegalStateException(
+                        "Cannot start sink '" + name + "': " + failure.getMessage(), failure);
+            }
+        }
+
         logger.debug("SyncBus: registered sink '" + name + "' (" + sink.getClass().getSimpleName() + ")");
     }
 

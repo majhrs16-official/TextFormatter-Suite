@@ -84,6 +84,41 @@ class DefaultSyncBusTest {
         assertEquals(0, bus.broadcast(Message.builder().text("stopped").build()));
     }
 
+    @Test
+    void startsSinkRegisteredAfterBusStartAndStopsItOnUnregister() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        bus.start();
+        try {
+            RecordingSink sink = new RecordingSink("late");
+            bus.register(sink);
+
+            assertTrue(sink.started,
+                    "a sink registered after start() must be started immediately");
+            assertEquals(1, bus.broadcast(Message.builder().text("late").build()));
+            assertTrue(sink.delivered.await(5, TimeUnit.SECONDS));
+
+            assertTrue(bus.unregister("late"));
+            assertTrue(sink.stopped);
+            assertFalse(bus.sinkNames().contains("late"));
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void failedLateSinkStartIsRolledBack() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        bus.start();
+        try {
+            assertThrows(IllegalStateException.class,
+                    () -> bus.register(new FailingStartSink("broken")));
+            assertFalse(bus.sinkNames().contains("broken"),
+                    "a sink that cannot start must not stay registered");
+        } finally {
+            bus.stop();
+        }
+    }
+
     private static final class NoopLogger implements PluginLogger {
         @Override public void info(String message, Object... args) {}
         @Override public void warn(String message, Object... args) {}
@@ -96,6 +131,7 @@ class DefaultSyncBusTest {
         private final String name;
         private final CountDownLatch delivered = new CountDownLatch(1);
         private volatile Message received;
+        private volatile boolean started;
         private volatile boolean stopped;
 
         RecordingSink(String name) {
@@ -105,12 +141,28 @@ class DefaultSyncBusTest {
         @Override public String name() { return name; }
         @Override public DeliverySemantics deliverySemantics() { return DeliverySemantics.AT_LEAST_ONCE; }
         @Override public Ordering ordering() { return Ordering.PER_CHANNEL; }
-        @Override public void start() {}
+        @Override public void start() { started = true; }
         @Override public void stop() { stopped = true; }
         @Override public void send(Message message) {
             received = message;
             delivered.countDown();
         }
         @Override public void setListener(SyncListener listener) { assertNotNull(listener); }
+    }
+
+    private static final class FailingStartSink implements SyncSink {
+        private final String name;
+
+        FailingStartSink(String name) {
+            this.name = name;
+        }
+
+        @Override public String name() { return name; }
+        @Override public DeliverySemantics deliverySemantics() { return DeliverySemantics.AT_LEAST_ONCE; }
+        @Override public Ordering ordering() { return Ordering.PER_CHANNEL; }
+        @Override public void start() throws Exception { throw new Exception("cannot start"); }
+        @Override public void stop() {}
+        @Override public void send(Message message) {}
+        @Override public void setListener(SyncListener listener) { }
     }
 }

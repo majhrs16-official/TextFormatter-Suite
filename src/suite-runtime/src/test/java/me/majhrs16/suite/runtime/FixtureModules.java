@@ -228,6 +228,92 @@ final class FixtureModules {
         return jar;
     }
 
+    static Path buildSinkJar(Path workDir, String moduleId, String version,
+                             String sinkName) throws IOException {
+        Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
+        Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
+        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = """
+                package fixture;
+
+                import me.majhrs16.suite.api.ModuleDescriptor;
+                import me.majhrs16.suite.api.Requirement;
+                import me.majhrs16.suite.api.SemVer;
+                import me.majhrs16.suite.api.message.Message;
+                import me.majhrs16.suite.api.runtime.ModuleActivator;
+                import me.majhrs16.suite.api.runtime.ModuleContext;
+                import me.majhrs16.suite.api.spi.SyncBus;
+                import me.majhrs16.suite.api.spi.SyncListener;
+                import me.majhrs16.suite.api.spi.SyncSink;
+
+                public final class Activator implements ModuleActivator {
+
+                    private SyncBus bus;
+                    private String sinkName;
+
+                    @Override
+                    public ModuleDescriptor descriptor() {
+                        return ModuleDescriptor.builder("MODULE_ID")
+                                .version(SemVer.parse("MODULE_VERSION"))
+                                .contractVersion(SemVer.of(2, 1, 0))
+                                .jvmRange(17, 0)
+                                .require(Requirement.atLeast("sync-bus", SemVer.of(2, 1, 0)))
+                                .build();
+                    }
+
+                    @Override
+                    public void start(ModuleContext context) {
+                        SyncBus resolved = context.services().find(SyncBus.class)
+                                .orElseThrow(() -> new IllegalStateException("sync-bus service missing"));
+                        FixtureSink sink = new FixtureSink("SINK_NAME");
+                        resolved.register(sink);
+                        this.bus = resolved;
+                        this.sinkName = sink.name();
+                    }
+
+                    @Override
+                    public void stop() {
+                        if (bus != null) {
+                            bus.unregister(sinkName);
+                            bus = null;
+                        }
+                    }
+
+                    static final class FixtureSink implements SyncSink {
+
+                        private final String name;
+
+                        FixtureSink(String name) {
+                            this.name = name;
+                        }
+
+                        @Override public String name() { return name; }
+                        @Override public DeliverySemantics deliverySemantics() {
+                            return DeliverySemantics.AT_LEAST_ONCE;
+                        }
+                        @Override public Ordering ordering() { return Ordering.PER_CHANNEL; }
+                        @Override public void start() { }
+                        @Override public void stop() { }
+                        @Override public void send(Message message) { }
+                        @Override public void setListener(SyncListener listener) { }
+                    }
+                }
+                """;
+        java = java
+                .replace("MODULE_ID", moduleId)
+                .replace("MODULE_VERSION", version)
+                .replace("SINK_NAME", sinkName);
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
     private static void compile(Path source, Path classesDir, List<Path> extraClasspath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         StringBuilder classpath = new StringBuilder(System.getProperty("java.class.path"));

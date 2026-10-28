@@ -15,6 +15,7 @@ import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslatorProvider;
@@ -300,6 +301,37 @@ class PackageRuntimeTest {
                     .toList();
             assertEquals(Set.of("libre"), Set.copyOf(afterUnload),
                     "chattranslator must drop the provider of an unloaded module");
+        }
+    }
+
+    @Test
+    void installsSyncBusPackageAndHotRegistersSinkModule() throws Exception {
+        Path busZip = packageFromProperty("sync-bus.package");
+
+        try (Fixture fixture = fixture()) {
+            List<ActivationResult> busActivation = fixture.runtime.installLocal(busZip, false);
+            assertTrue(busActivation.get(0).isSuccess(),
+                    () -> "sync-bus activation failed: " + busActivation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("sync-bus").orElseThrow());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertTrue(bus.sinkNames().isEmpty());
+
+            Path sinkJar = FixtureModules.buildSinkJar(
+                    tempDir, "sink-fixture", "1.0.0", "fixture-sink");
+            Path sinkZip = FixtureModules.buildPackageZip(
+                    tempDir, "sink-fixture", "1.0.0", "stable", sinkJar, "sync-bus@>=2.1.0");
+
+            List<ActivationResult> sinkActivation = fixture.runtime.installLocal(sinkZip, false);
+            assertTrue(sinkActivation.get(0).isSuccess(),
+                    () -> "sink activation failed: " + sinkActivation.get(0).message());
+            assertEquals(Set.of("fixture-sink"), bus.sinkNames(),
+                    "a sink registered after the bus started must be live immediately");
+
+            fixture.runtime.removeLocal("sink-fixture", "1.0.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading the sink package must unregister it from the running bus");
+            assertTrue(bus.isEmpty());
         }
     }
 

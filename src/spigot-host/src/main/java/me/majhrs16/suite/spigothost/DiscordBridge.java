@@ -6,7 +6,7 @@ import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.syncdiscord.DiscordConfig;
 import me.majhrs16.suite.syncdiscord.JdaDiscordSink;
-import me.majhrs16.suite.syncbus.SyncBus;
+import me.majhrs16.suite.api.spi.SyncBus;
 
 import java.nio.file.Path;
 
