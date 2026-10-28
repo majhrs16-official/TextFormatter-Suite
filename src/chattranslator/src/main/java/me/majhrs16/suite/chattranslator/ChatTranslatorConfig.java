@@ -36,7 +36,21 @@ public final class ChatTranslatorConfig {
      * @return configuración cargada, o defaults si no existe
      */
     public static Config load(Path dir) {
-        Path configFile = resolveConfigFile(dir);
+        return loadFile(resolveConfigFile(dir));
+    }
+
+    /**
+     * Loads {@code <configDir>/config.yml} for a module-scoped configuration
+     * directory.
+     *
+     * @param configDir module config directory
+     * @return configuration, or defaults if the file is missing or invalid
+     */
+    static Config loadFromConfigDir(Path configDir) {
+        return loadFile(configDir.resolve("config.yml"));
+    }
+
+    private static Config loadFile(Path configFile) {
         if (!Files.exists(configFile)) {
             return Config.defaults();
         }

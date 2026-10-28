@@ -6,6 +6,7 @@ plugins {
 
 evaluationDependsOn(':src:textformatter')
 evaluationDependsOn(':src:messages')
+evaluationDependsOn(':src:chattranslator')
 
 group = 'me.majhrs16'
 
@@ -49,6 +50,10 @@ test {
     dependsOn messagesPackage
     systemProperty 'messages.package',
             messagesPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def chattranslatorPackage = project(':src:chattranslator').tasks.named('modulePackage')
+    dependsOn chattranslatorPackage
+    systemProperty 'chattranslator.package',
+            chattranslatorPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
