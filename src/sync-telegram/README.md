@@ -7,14 +7,15 @@
 ## 1. Responsibilities
 
 - **Telegram Bot API integration** — HTTP calls to `api.telegram.org`
-- **Chat messaging** — send messages to configured chat ID(s)
-- **Module registration** — `SyncTelegramModule` registers sink
+- **Chat messaging** — send messages to the configured chat id
+- **Inbound polling** — `poll()` reads `getUpdates` and feeds `SyncListener`
+- **Module registration** — `SyncTelegramActivator` registers the sink with the running bus
 
 ---
 
 ## 2. Non-Responsibilities
 
-- **No bot commands/updates** — only message sending (no long polling/webhook)
+- **No bot commands** — only text messages and update polling
 - **No message routing** — `iflow-vm` decides what to sync
 - **No platform-specific Minecraft code** — pure HTTP
 
@@ -24,10 +25,11 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `SyncSink`, `Message` SPIs |
-| `transport` | Compile | `HttpTransport` for API calls |
+| `core-api` | Compile | `SyncSink`, `SyncBus`, `Message` SPIs |
+| `sync-common` | Compile | `TelegramConfig` YAML reader (`DEPENDENCY` package) |
+| `transport` | Compile | `HttpTransport` for API calls (`DEPENDENCY` package) |
 | `org.json` | Compile | JSON payload handling |
-| `kernel` | Test | Test fixtures |
+| `kernel` / `sync-bus` | Test | Module descriptor and bus fixtures |
 
 ---
 
@@ -35,9 +37,9 @@
 
 | Consumer | Usage |
 |----------|-------|
-| `host` | `SuiteBootstrap` collects `TelegramSink` |
-| `spigot-host` | Syncs chat to Telegram |
-| `fabric-host` | Syncs chat to Telegram |
+| module runtime | Activates `SyncTelegramActivator` from the `sync-telegram` ZIP |
+| `SyncBus` | Receives the `telegram` sink when its config is usable |
+| `spigot-host` | Legacy wiring: still constructs the sink until F4b |
 
 ---
 
@@ -45,8 +47,9 @@
 
 | Component | Role |
 |-----------|------|
-| `TelegramSink` | `SyncSink` impl: POST to `sendMessage` endpoint |
-| `SyncTelegramModule` | `Module` registering sink |
+| `TelegramSink` | `SyncSink` impl: POST to `sendMessage`, long-poll `getUpdates` |
+| `SyncTelegramActivator` | Reads `config.yml`, registers the sink with the bus and unregisters it on stop |
+| `SyncTelegramModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
 
 ---
 
@@ -62,15 +65,25 @@ HttpTransport.post(https://api.telegram.org/bot<token>/sendMessage)
 Telegram API responds
 ```
 
-**Config** (`HostConfig.sync.telegram`):
+**Config** (`config/sync-telegram/config.yml`):
 ```yaml
-sync:
-  telegram:
-    enabled: true
-    bot-token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-    chat-id: -1001234567890
-    parse-mode: "HTML"
+enabled: true
+token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+chatId: -1001234567890
 ```
+
+The activator reads the file from its module config directory. An enabled file
+without token or chat id is skipped with a log line; the package still
+activates.
+
+```bash
+./gradlew :src:sync-telegram:test
+```
+
+`PackageRuntimeTest.installsSyncTelegramPackageAndRegistersConfiguredSink`
+installs the real `sync-common`, `transport`, `sync-bus` and `sync-telegram`
+packages, verifies the sink is registered, then unloads `sync-telegram` and
+checks that the running bus is empty.
 
 ---
 
@@ -78,7 +91,8 @@ sync:
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| `SyncTelegramModule` | `SyncTelegramModule.java` | `ModuleLoader` → `SuiteBootstrap` |
+| `SyncTelegramActivator` | `SyncTelegramActivator.java` | Module runtime |
+| `SyncTelegramModule` | `SyncTelegramModule.java` | Legacy kernel descriptor |
 
 ---
 
@@ -94,7 +108,7 @@ sync:
 
 ```
 1. TelegramSink.java            → SyncSink implementation
-2. SyncTelegramModule.java      → Module registration
+2. SyncTelegramActivator.java   → Package lifecycle and bus registration
 3. transport/HttpTransport.java → HTTP client used
 ```
 
@@ -102,8 +116,8 @@ sync:
 
 ## 10. Related Modules
 
-- [core-api](../core-api/README.md) — `SyncSink`, `Message` SPIs
+- [core-api](../core-api/README.md) — `SyncSink`, `SyncBus`, `Message` SPIs
+- [sync-common](../sync-common/README.md) — YAML reader and config paths (`DEPENDENCY`)
+- [sync-bus](../sync-bus/README.md) — Fan-out bus that owns the sink
 - [transport](../transport/README.md) — `HttpTransport`
-- [host](../host/README.md) — Collects sinks, loads config
-- [kernel](../kernel/README.md) — Loads module
 - [sync-http](../sync-http/README.md) — HTTP sync (similar pattern)

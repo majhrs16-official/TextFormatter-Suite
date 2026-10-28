@@ -69,4 +69,21 @@ class TelegramConfigTest {
         assertTrue(config.usable());
         assertEquals(7L, config.chatId());
     }
+
+    @Test
+    void readsFromTheModuleConfigDirectory() throws Exception {
+        Path configDir = dir.resolve("config/sync-telegram");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("config.yml"), """
+            enabled: true
+            token: module-token
+            chatId: 99
+            """);
+
+        TelegramConfig config = TelegramConfig.loadFromConfigDir(configDir);
+
+        assertTrue(config.usable());
+        assertEquals("module-token", config.token());
+        assertEquals(99L, config.chatId());
+    }
 }

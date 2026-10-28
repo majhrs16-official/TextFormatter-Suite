@@ -27,7 +27,19 @@ public record TelegramConfig(boolean enabled, String token, long chatId) {
      * @return configuración con defaults si el archivo no existe o no es válido
      */
     public static TelegramConfig load(Path dataFolder) {
-        Map<String, Object> map = SyncYaml.readMap(SyncConfigPaths.telegram(dataFolder));
+        return loadFile(SyncConfigPaths.telegram(dataFolder));
+    }
+
+    /**
+     * @param configDir carpeta privada del módulo ({@code config/sync-telegram})
+     * @return configuración con defaults si el archivo no existe o no es válido
+     */
+    public static TelegramConfig loadFromConfigDir(Path configDir) {
+        return loadFile(configDir.resolve("config.yml"));
+    }
+
+    private static TelegramConfig loadFile(Path file) {
+        Map<String, Object> map = SyncYaml.readMap(file);
         return new TelegramConfig(
             SyncYaml.bool(map, "enabled", false),
             SyncYaml.string(map, "token", ""),

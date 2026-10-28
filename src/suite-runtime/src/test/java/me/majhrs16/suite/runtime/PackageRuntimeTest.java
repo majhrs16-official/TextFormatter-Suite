@@ -375,6 +375,39 @@ class PackageRuntimeTest {
         }
     }
 
+    @Test
+    void installsSyncTelegramPackageAndRegistersConfiguredSink() throws Exception {
+        Path transportZip = packageFromProperty("transport.package");
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path busZip = packageFromProperty("sync-bus.package");
+        Path telegramZip = packageFromProperty("sync-telegram.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-telegram");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("config.yml"), """
+                    enabled: true
+                    token: test-token
+                    chatId: 123456
+                    """);
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(telegramZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "sync-telegram activation failed: " + activation.get(0).message());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertEquals(Set.of("telegram"), bus.sinkNames());
+
+            fixture.runtime.removeLocal("sync-telegram", "2.1.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading sync-telegram must unregister its sink");
+        }
+    }
+
     private static Path packageFromProperty(String name) {
         String packagePath = System.getProperty(name);
         assertNotNull(packagePath, name + " must be set by the build");
