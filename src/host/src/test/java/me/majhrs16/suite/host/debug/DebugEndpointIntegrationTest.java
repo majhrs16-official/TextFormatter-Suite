@@ -1,4 +1,4 @@
-package me.majhrs16.suite.observability.endpoint;
+package me.majhrs16.suite.host.debug;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;

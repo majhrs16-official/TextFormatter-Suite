@@ -124,6 +124,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         final DiscordBridge bridge;
         final WebSocketSyncSink wsSink;
         final Observability observability;
+        final me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint;
         final ExtensionManager extensionManager;
         final FabricInWorldHandler inworldHandler;
         final SyncBus syncBus;
@@ -134,6 +135,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                 FabricActorDirectory directory, UserLanguageStore languages,
                 DiscordBridge bridge, WebSocketSyncSink wsSink,
                 Observability observability,
+                me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint,
                 ExtensionManager extensionManager,
                 FabricInWorldHandler inworldHandler,
                 SyncBus syncBus,
@@ -145,6 +147,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             this.bridge = bridge;
             this.wsSink = wsSink;
             this.observability = observability;
+            this.debugEndpoint = debugEndpoint;
             this.extensionManager = extensionManager;
             this.inworldHandler = inworldHandler;
             this.syncBus = syncBus;
@@ -182,6 +185,13 @@ public final class TextFormatterSuiteMod implements ModInitializer {
                     observability.stop();
                 } catch (Exception e) {
                     logger.warn("Error stopping Observability: " + e.getMessage());
+                }
+            }
+            if (debugEndpoint != null) {
+                try {
+                    debugEndpoint.stop();
+                } catch (Exception e) {
+                    logger.warn("Error stopping DebugEndpoint: " + e.getMessage());
                 }
             }
             if (extensionManager != null) {
@@ -586,13 +596,20 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
 
         // Initialize Observability module
         Observability observability = null;
+        me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint = null;
         try {
-            observability = Observability.createDefault(
-                reloaded, dispatcher, reloaded.channels(), logger);
+            observability = Observability.createDefault(logger);
             observability.start();
-            logger.info("Observability module started (metrics:9090, debug:9091)");
+            logger.info("Observability metrics started (metrics:" + observability.getMetricsEndpoint().getPort() + ")");
         } catch (Exception e) {
             logger.warn("Failed to start Observability module: " + e.getMessage());
+        }
+        try {
+            debugEndpoint = new me.majhrs16.suite.host.debug.DebugEndpoint(
+                reloaded, dispatcher, reloaded.channels(), logger, null, 9091);
+            debugEndpoint.start();
+        } catch (Exception e) {
+            logger.warn("Failed to start DebugEndpoint: " + e.getMessage());
         }
 
         // Initialize FabricInWorldHandler
@@ -623,7 +640,7 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
         );
         extensionManager.start();
 
-        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, extensionManager, inworldHandler, syncBus, logger);
+        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, debugEndpoint, extensionManager, inworldHandler, syncBus, logger);
         
         if (bridge != null) {
             bridge.start();

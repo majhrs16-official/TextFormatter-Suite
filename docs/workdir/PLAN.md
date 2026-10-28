@@ -1053,11 +1053,14 @@ token y chat, y lo desregistra al descargar el paquete. `sync-http` lee
 `outboundUrl`, `inboundPort` y credenciales de su `config.yml`, registra el sink
 y lo retira al descargarse. `sync-websocket` arranca su servidor en el puerto
 configurado, se registra en el bus y usa la fachada neutral
-`api.metrics.Metrics` en lugar de depender de `observability`. Las librerías de
-terceros (Java-WebSocket, Gson, org.json, Prometheus, JDA) siguen en el
-classpath del host hasta que F8 las empaquete como `DEPENDENCY`. Quedan
-`sync-discord`, `sync-velocity`, `observability`, `presets`, `extension-api`,
-`inworld`/`tester` y la retirada del cableado del host.
+`api.metrics.Metrics` en lugar de depender de `observability`. `observability`
+ya es paquete: publica `HealthCheckRegistry` y `Observability`, instala el sink
+Prometheus y sirve `/health`/`/metrics`; `DebugEndpoint` se movió a
+`host.debug` porque necesita estado del host. Las librerías de terceros
+(Java-WebSocket, Gson, org.json, Prometheus, JDA) siguen en el classpath del
+host hasta que F8 las empaquete como `DEPENDENCY`. Quedan `sync-discord`,
+`sync-velocity`, `presets`, `extension-api`, `inworld`/`tester` y la retirada
+del cableado del host.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se

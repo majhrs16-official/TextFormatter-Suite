@@ -2,11 +2,6 @@ package me.majhrs16.suite.observability.health;
 
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncSink;
-import me.majhrs16.suite.observability.endpoint.DebugEndpoint;
-import me.majhrs16.suite.observability.endpoint.MetricsEndpoint;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterEach;

@@ -1,7 +1,6 @@
 package me.majhrs16.suite.observability.endpoint;
 
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.observability.Observability;
 import me.majhrs16.suite.observability.health.HealthCheckRegistry;
 import me.majhrs16.suite.observability.metrics.MetricsCollector;
 

@@ -1,37 +1,39 @@
 plugins {
-id 'jacoco'
+    id 'jacoco'
     id 'java'
     id 'maven-publish'
 }
 
 group = 'me.majhrs16'
 
-repositories {
-    mavenLocal()
-    mavenCentral()
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+repositories {
+    mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:host')
-    implementation project(':src:textformatter')
+    implementation project(':src:sync-common')
     implementation 'io.prometheus:simpleclient:0.16.0'
     implementation 'io.prometheus:simpleclient_common:0.16.0'
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
 
-    testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'
     testImplementation 'org.mockito:mockito-core:5.11.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
-    testImplementation 'org.wiremock:wiremock:3.5.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -40,23 +42,23 @@ tasks.withType(JavaCompile).configureEach {
 
 test {
     useJUnitPlatform()
-    testLogging {
-        events 'passed', 'skipped', 'failed'
-    }
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
 }
 
 publishing {
     publications {
-        maven(MavenPublication) {
+        mavenJava(MavenPublication) {
             from components.java
             artifactId = 'suite-observability'
         }
     }
     repositories {
-        maven {
-            name = 'local'
-            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
-        }
+        mavenLocal()
     }
 }
 
@@ -68,3 +70,10 @@ configurations.configureEach {
         }
     }
 }
+
+// F6 — optional package loaded by the module runtime.
+// Prometheus is provided by the host parent classpath until F8 packages
+// third-party libraries as DEPENDENCY packages.
+ext.moduleVersion = '2.1.0'
+ext.moduleDependencies = 'sync-common@>=2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

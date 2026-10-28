@@ -1,80 +1,64 @@
 package me.majhrs16.suite.observability;
 
-import me.majhrs16.suite.observability.endpoint.DebugEndpoint;
 import me.majhrs16.suite.observability.endpoint.MetricsEndpoint;
 import me.majhrs16.suite.observability.health.HealthCheckRegistry;
 import me.majhrs16.suite.observability.metrics.MetricsCollector;
 import me.majhrs16.suite.api.metrics.Metrics;
 import me.majhrs16.suite.api.metrics.MetricsSink;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Main entry point for the Observability module.
- * Coordinates metrics, debug endpoints, and health checks.
+ * Metrics and health facade of the observability package.
+ *
+ * <p>It owns the Prometheus endpoint and the health registry. It deliberately
+ * knows nothing about the host or the debug endpoints: those are host adapters
+ * and live in {@code host.debug}.</p>
  */
 public final class Observability {
 
     private final MetricsEndpoint metricsEndpoint;
-    private final DebugEndpoint debugEndpoint;
     private final HealthCheckRegistry healthCheckRegistry;
     private final PluginLogger logger;
     private volatile boolean started = false;
     private volatile MetricsSink metricsSink;
 
-    private Observability(SuiteHost host, MessageDispatcher dispatcher,
-                          ChannelRegistry channels, PluginLogger logger,
-                          int metricsPort, int debugPort, String debugAuthToken) throws IOException {
-        this(host, dispatcher, channels, logger, metricsPort, debugPort, debugAuthToken, "127.0.0.1");
-    }
-
-    private Observability(SuiteHost host, MessageDispatcher dispatcher,
-                          ChannelRegistry channels, PluginLogger logger,
-                          int metricsPort, int debugPort, String debugAuthToken, String metricsBindAddress) throws IOException {
+    public Observability(PluginLogger logger, int metricsPort, String metricsBind,
+                         HealthCheckRegistry healthCheckRegistry) throws IOException {
         this.logger = logger;
-        this.metricsEndpoint = new MetricsEndpoint(logger, metricsPort, "/metrics", metricsBindAddress);
-        this.debugEndpoint = new DebugEndpoint(host, dispatcher, channels, logger, debugAuthToken);
-        this.healthCheckRegistry = new HealthCheckRegistry();
-
-        // Register default health checks
-        registerDefaultChecks();
+        this.metricsEndpoint = new MetricsEndpoint(logger, metricsPort, "/metrics", metricsBind);
+        this.healthCheckRegistry = healthCheckRegistry;
+        registerDefaultChecks(healthCheckRegistry);
     }
 
     /**
-     * Creates and starts the observability module.
+     * Creates and starts the metrics facade.
      */
-    public static Observability create(SuiteHost host, MessageDispatcher dispatcher,
-                                       ChannelRegistry channels, PluginLogger logger,
-                                       int metricsPort, int debugPort, String debugAuthToken) throws IOException {
-        String metricsBind = System.getProperty("textformattersuite.metrics.bind", "127.0.0.1");
-        Observability obs = new Observability(host, dispatcher, channels, logger, metricsPort, debugPort, debugAuthToken, metricsBind);
-        obs.start();
-        return obs;
+    public static Observability create(PluginLogger logger, int metricsPort, String metricsBind)
+            throws IOException {
+        Observability observability = new Observability(
+                logger, metricsPort, metricsBind, new HealthCheckRegistry());
+        observability.start();
+        return observability;
     }
 
     /**
-     * Creates with default ports (9090 metrics, 9091 debug).
+     * Creates with default ports (9090 metrics, localhost bind).
      */
-    public static Observability createDefault(SuiteHost host, MessageDispatcher dispatcher,
-                                               ChannelRegistry channels, PluginLogger logger) throws IOException {
+    public static Observability createDefault(PluginLogger logger) throws IOException {
         String metricsBind = System.getProperty("textformattersuite.metrics.bind", "127.0.0.1");
-        Observability obs = new Observability(host, dispatcher, channels, logger, 9090, 9091, null, metricsBind);
-        obs.start();
-        return obs;
+        return create(logger, 9090, metricsBind);
     }
 
-    private void registerDefaultChecks() {
-        // JVM health check
-        healthCheckRegistry.register("jvm", () -> {
+    /**
+     * Registers the JVM and thread-count health checks.
+     */
+    public static void registerDefaultChecks(HealthCheckRegistry registry) {
+        registry.register("jvm", () -> {
             long freeMemory = Runtime.getRuntime().freeMemory();
             long totalMemory = Runtime.getRuntime().totalMemory();
             long maxMemory = Runtime.getRuntime().maxMemory();
@@ -97,8 +81,7 @@ public final class Observability {
             );
         });
 
-        // Thread count check
-        healthCheckRegistry.register("threads", () -> {
+        registry.register("threads", () -> {
             int threadCount = Thread.activeCount();
             if (threadCount > 500) {
                 return HealthCheckRegistry.HealthCheckResult.degraded(
@@ -114,30 +97,28 @@ public final class Observability {
     }
 
     /**
-     * Starts all observability components.
+     * Starts the metrics endpoint and installs the Prometheus metrics sink.
      */
     public void start() {
         if (started) return;
         metricsEndpoint.start();
-        debugEndpoint.start();
         MetricsSink sink = MetricsCollector::recordSyncSent;
         Metrics.install(sink);
         metricsSink = sink;
         started = true;
-        logger.info("Observability module started (metrics:" + metricsEndpoint.getPort() + ", debug:" + debugEndpoint.getPort() + ")");
+        logger.info("Observability metrics started on port " + metricsEndpoint.getPort());
     }
 
     /**
-     * Stops all observability components.
+     * Stops the metrics endpoint and removes the metrics sink.
      */
     public void stop() {
         if (!started) return;
         Metrics.uninstall(metricsSink);
         metricsSink = null;
         metricsEndpoint.stop();
-        debugEndpoint.stop();
         started = false;
-        logger.info("Observability module stopped");
+        logger.info("Observability metrics stopped");
     }
 
     public boolean isStarted() {
@@ -148,17 +129,8 @@ public final class Observability {
         return metricsEndpoint;
     }
 
-    public DebugEndpoint getDebugEndpoint() {
-        return debugEndpoint;
-    }
-
     public HealthCheckRegistry getHealthCheckRegistry() {
         return healthCheckRegistry;
-    }
-
-    public MetricsCollector getMetricsCollector() {
-        // MetricsCollector uses static methods; return null as marker
-        return null;
     }
 
     /**

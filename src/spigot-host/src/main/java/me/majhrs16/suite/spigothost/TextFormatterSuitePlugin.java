@@ -105,6 +105,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             final DiscordBridge bridge;
             final WebSocketSyncSink wsSink;
             final me.majhrs16.suite.observability.Observability observability;
+            final me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint;
             final me.majhrs16.suite.extension.ExtensionManager extensionManager;
             final ManagerFacade managerFacade;
             final ModuleLifecycle moduleLifecycle;
@@ -116,6 +117,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     SpigotActorDirectory directory, UserLanguageStore languages,
                     DiscordBridge bridge, WebSocketSyncSink wsSink,
                     me.majhrs16.suite.observability.Observability observability,
+                    me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint,
                     me.majhrs16.suite.extension.ExtensionManager extensionManager,
                     ManagerFacade managerFacade,
                     ModuleLifecycle moduleLifecycle,
@@ -129,6 +131,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 this.bridge = bridge;
                 this.wsSink = wsSink;
                 this.observability = observability;
+                this.debugEndpoint = debugEndpoint;
                 this.extensionManager = extensionManager;
                 this.managerFacade = managerFacade;
                 this.moduleLifecycle = moduleLifecycle;
@@ -167,6 +170,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                         observability.stop();
                     } catch (Exception e) {
                         logger.warn("Error stopping Observability: " + e.getMessage());
+                    }
+                }
+                if (debugEndpoint != null) {
+                    try {
+                        debugEndpoint.stop();
+                    } catch (Exception e) {
+                        logger.warn("Error stopping DebugEndpoint: " + e.getMessage());
                     }
                 }
                 if (extensionManager != null) {
@@ -417,13 +427,20 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
 
         // Initialize Observability module
         me.majhrs16.suite.observability.Observability observability = null;
+        me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint = null;
         try {
-            observability = me.majhrs16.suite.observability.Observability.createDefault(
-                reloaded, dispatcher, reloaded.channels(), logger);
+            observability = me.majhrs16.suite.observability.Observability.createDefault(logger);
             observability.start();
-            logger.info("Observability module started (metrics:9090, debug:9091)");
+            logger.info("Observability metrics started (metrics:" + observability.getMetricsEndpoint().getPort() + ")");
         } catch (Exception e) {
             logger.warn("Failed to start Observability module: " + e.getMessage());
+        }
+        try {
+            debugEndpoint = new me.majhrs16.suite.host.debug.DebugEndpoint(
+                reloaded, dispatcher, reloaded.channels(), logger, null, 9091);
+            debugEndpoint.start();
+        } catch (Exception e) {
+            logger.warn("Failed to start DebugEndpoint: " + e.getMessage());
         }
 
         // Reload InWorldHandler
@@ -474,7 +491,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         ModuleLifecycle moduleLifecycle = new ModuleLifecycleAdapter(managerFacade, logger);
 
         // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, extensionManager, managerFacade, moduleLifecycle, inworldHandler, syncBus, logger);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, debugEndpoint, extensionManager, managerFacade, moduleLifecycle, inworldHandler, syncBus, logger);
     }
 
     private boolean hasPermission(Actor actor, String permission) {
@@ -1016,6 +1033,7 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
             rt != null ? rt.bridge : null,
             null, // wsSink
             null, // observability
+            null, // debugEndpoint
             null, // extensionManager
             null, // managerFacade
             null, // moduleLifecycle

@@ -478,6 +478,46 @@ class PackageRuntimeTest {
         }
     }
 
+    @Test
+    void installsObservabilityPackageAndServesHealthEndpoint() throws Exception {
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path observabilityZip = packageFromProperty("observability.package");
+        int port = freePort();
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/observability");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("config.yml"), """
+                    enabled: true
+                    metricsPort: %d
+                    metricsBind: 127.0.0.1
+                    """.formatted(port));
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(observabilityZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "observability activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("observability").orElseThrow());
+
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpResponse<String> response = client.send(
+                    java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create("http://127.0.0.1:" + port + "/health"))
+                            .GET()
+                            .build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"status\": \"UP\""));
+
+            fixture.runtime.removeLocal("observability", "2.1.0", "stable", false);
+            assertEquals(ModuleState.INSTALLED,
+                    fixture.host.state("observability").orElseThrow(),
+                    "unloading observability must deactivate the package");
+            assertFalse(fixture.host.activeModules().contains("observability"));
+        }
+    }
+
     private static int freePort() throws IOException {
         try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
             return socket.getLocalPort();

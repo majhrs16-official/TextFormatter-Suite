@@ -1,4 +1,4 @@
-package me.majhrs16.suite.observability.endpoint;
+package me.majhrs16.suite.host.debug;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;

@@ -20,6 +20,7 @@ evaluationDependsOn(':src:sync-socket')
 evaluationDependsOn(':src:sync-telegram')
 evaluationDependsOn(':src:sync-http')
 evaluationDependsOn(':src:sync-websocket')
+evaluationDependsOn(':src:observability')
 
 group = 'me.majhrs16'
 
@@ -47,6 +48,8 @@ dependencies {
     testRuntimeOnly 'org.json:json:20240303'
     testRuntimeOnly 'org.java-websocket:Java-WebSocket:1.5.4'
     testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
+    testRuntimeOnly 'io.prometheus:simpleclient:0.16.0'
+    testRuntimeOnly 'io.prometheus:simpleclient_common:0.16.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -126,6 +129,10 @@ test {
     dependsOn syncWebSocketPackage
     systemProperty 'sync-websocket.package',
             syncWebSocketPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def observabilityPackage = project(':src:observability').tasks.named('modulePackage')
+    dependsOn observabilityPackage
+    systemProperty 'observability.package',
+            observabilityPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
