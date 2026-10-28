@@ -14,8 +14,10 @@ import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.stream.Stream;
 
+import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
+import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.runtime.ModuleState;
@@ -29,11 +31,11 @@ import me.majhrs16.suite.kernel.ResolutionResult;
 /**
  * Loads module JARs from disk and manages their activation lifecycle.
  *
- * <p>F2 scope: discovery under {@code <library>/packages}, one isolated
+ * <p>Discovery happens under {@code <library>/packages}, one isolated
  * {@link ModuleClassLoader} per JAR, activation in dependency order, and real
  * deactivation that closes the classloader and every module-owned resource.
- * It intentionally does not read {@code library/status} yet; that wiring belongs
- * to F3.</p>
+ * Runtime states are persisted separately from {@code library/status} when a
+ * {@link RuntimeStateStore} is supplied.</p>
  */
 public final class ModuleHost implements AutoCloseable {
 
@@ -45,6 +47,7 @@ public final class ModuleHost implements AutoCloseable {
     private final RuntimeServiceRegistry services;
     private final RuntimeEventBus events;
     private final RuntimeScheduler scheduler;
+    private final RuntimeStateStore stateStore;
     private final Map<String, LoadedModule> active = new LinkedHashMap<>();
     private final Map<String, ModuleState> states = new LinkedHashMap<>();
 
@@ -55,10 +58,23 @@ public final class ModuleHost implements AutoCloseable {
      * @param logger      runtime logger
      */
     public ModuleHost(Path libraryRoot, Path configRoot, PlatformInfo platform, PluginLogger logger) {
+        this(libraryRoot, configRoot, platform, logger, null);
+    }
+
+    /**
+     * @param libraryRoot directory that contains {@code packages/}
+     * @param configRoot  directory under which each module gets its config dir
+     * @param platform    neutral platform information exposed to modules
+     * @param logger      runtime logger
+     * @param stateStore  optional transient store for runtime states
+     */
+    public ModuleHost(Path libraryRoot, Path configRoot, PlatformInfo platform, PluginLogger logger,
+                      RuntimeStateStore stateStore) {
         this.packagesDir = Objects.requireNonNull(libraryRoot, "libraryRoot").resolve("packages");
         this.configRoot = Objects.requireNonNull(configRoot, "configRoot");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.stateStore = stateStore;
         this.environment = Environment.current();
         this.services = new RuntimeServiceRegistry();
         this.events = new RuntimeEventBus(logger);
@@ -118,7 +134,7 @@ public final class ModuleHost implements AutoCloseable {
                 prepared.add(prepare(jar));
             } catch (Throwable failure) {
                 String name = jar.getFileName().toString();
-                states.put(name, ModuleState.FAILED);
+                setState(name, ModuleState.FAILED);
                 failures.add(ActivationResult.failed(name, "Cannot load " + name + ": " + failure.getMessage(), failure));
             }
         }
@@ -138,7 +154,7 @@ public final class ModuleHost implements AutoCloseable {
         for (Module module : resolution.rejected()) {
             PreparedModule preparedModule = byModule.get(module);
             String reason = resolution.reasonOf(module);
-            states.put(preparedModule.id, ModuleState.FAILED);
+            setState(preparedModule.id, ModuleState.FAILED);
             closeQuietly(preparedModule, reason);
             results.add(ActivationResult.failed(preparedModule.id, reason, null));
         }
@@ -158,7 +174,7 @@ public final class ModuleHost implements AutoCloseable {
             prepared = prepare(jar);
         } catch (Throwable failure) {
             String name = jar.getFileName().toString();
-            states.put(name, ModuleState.FAILED);
+            setState(name, ModuleState.FAILED);
             return ActivationResult.failed(name, "Cannot load " + name + ": " + failure.getMessage(), failure);
         }
         return activatePrepared(prepared);
@@ -196,13 +212,13 @@ public final class ModuleHost implements AutoCloseable {
         }
 
         if (failure != null) {
-            states.put(moduleId, ModuleState.RESTART_REQUIRED);
+            setState(moduleId, ModuleState.RESTART_REQUIRED);
             String message = "Module " + moduleId + " did not release cleanly: " + failure.getMessage();
             logger.error(message, failure);
             return DeactivationResult.restartRequired(moduleId, message, failure);
         }
 
-        states.put(moduleId, ModuleState.INSTALLED);
+        setState(moduleId, ModuleState.INSTALLED);
         logger.info("Module deactivated: " + moduleId);
         return DeactivationResult.deactivated(moduleId);
     }
@@ -232,6 +248,13 @@ public final class ModuleHost implements AutoCloseable {
         }
         events.close();
         scheduler.close();
+    }
+
+    private void setState(String moduleId, ModuleState state) {
+        states.put(moduleId, state);
+        if (stateStore != null) {
+            stateStore.save(states);
+        }
     }
 
     private PreparedModule prepare(Path jar) throws Exception {
@@ -283,21 +306,54 @@ public final class ModuleHost implements AutoCloseable {
             return ActivationResult.failed(prepared.id, message, null);
         }
 
+        String unsatisfied = unsatisfiedRequirement(prepared.descriptor);
+        if (unsatisfied != null) {
+            closeQuietly(prepared, unsatisfied);
+            setState(prepared.id, ModuleState.FAILED);
+            return ActivationResult.failed(prepared.id, unsatisfied, null);
+        }
+
         try {
             prepared.activator.start(prepared.context);
         } catch (Throwable failure) {
             closeQuietly(prepared, failure.getMessage());
-            states.put(prepared.id, ModuleState.FAILED);
+            setState(prepared.id, ModuleState.FAILED);
             logger.error("Module activation failed: " + prepared.id + " (" + failure.getMessage() + ")", failure);
             return ActivationResult.failed(prepared.id,
                     "Module activation failed: " + failure.getMessage(), failure);
         }
 
         active.put(prepared.id, new LoadedModule(
-                prepared.id, prepared.jar, prepared.activator, prepared.classLoader, prepared.context));
-        states.put(prepared.id, ModuleState.ACTIVE);
+                prepared.id, prepared.jar, prepared.descriptor, prepared.activator,
+                prepared.classLoader, prepared.context));
+        setState(prepared.id, ModuleState.ACTIVE);
         logger.info("Module activated: " + prepared.id + " " + prepared.descriptor.version());
         return ActivationResult.activated(prepared.id);
+    }
+
+    private String unsatisfiedRequirement(ModuleDescriptor descriptor) {
+        List<Capability> available = new ArrayList<>();
+        available.add(new Capability("api", environment.contractVersion()));
+        available.add(new Capability("jvm", environment.jvmVersion()));
+        for (LoadedModule module : active.values()) {
+            available.addAll(module.descriptor.provides());
+        }
+
+        for (Requirement requirement : descriptor.requires()) {
+            boolean satisfied = false;
+            for (Capability capability : available) {
+                if (capability.name().equals(requirement.name())
+                        && requirement.satisfiedBy(capability.version())) {
+                    satisfied = true;
+                    break;
+                }
+            }
+            if (!satisfied) {
+                return "Unsatisfied requirement in " + descriptor.name()
+                        + ": " + requirement.name() + "@" + requirement.min();
+            }
+        }
+        return null;
     }
 
     private void closeQuietly(PreparedModule prepared, String reason) {
@@ -339,8 +395,9 @@ public final class ModuleHost implements AutoCloseable {
         }
     }
 
-    private record LoadedModule(String id, Path jar, ModuleActivator activator,
-                                ModuleClassLoader classLoader, ModuleContext context) {
+    private record LoadedModule(String id, Path jar, ModuleDescriptor descriptor,
+                                ModuleActivator activator, ModuleClassLoader classLoader,
+                                ModuleContext context) {
     }
 
     private static final class PrefixedLogger implements PluginLogger {

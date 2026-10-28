@@ -5,7 +5,7 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-27 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada y F2 completada como POC**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos. F3+ se rigen por fases con puertas de calidad y un protocolo anti-vaguedad. Ver la sección **ADR-019** más abajo.
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC y F3 completada**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, y `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio. F4+ se rigen por fases con puertas de calidad y un protocolo anti-vaguedad. Ver la sección **ADR-019** más abajo.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
@@ -498,7 +498,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 **Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
 
-**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`) y F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`, 4 tests con JARs reales generados en runtime). F3+ pendientes.
+**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`) y F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados). F4+ pendientes.
 
 > **Ubicación:** este ADR vive en `docs/workdir/PLAN.md`. No es una sección de
 > `docs/workdir/ADR.md`; ese archivo es el documento histórico de decisiones base
@@ -797,11 +797,11 @@ sus registros, se cancelan sus tareas y se liberan sus recursos.
 
 ```java
 public final class ModuleHost implements AutoCloseable {
-    public void loadInstalled();                 // lee library/status
-    public ActivationResult activate(String id); // carga JAR + start()
+    public List<ActivationResult> loadInstalled();  // escanea library/packages
+    public ActivationResult activate(Path jarPath); // carga JAR + start()
     public DeactivationResult deactivate(String id);
-    public UpgradeResult upgrade(String id, Path newJar);
-    public RuntimeSnapshot snapshot();
+    public Map<String, ModuleState> snapshot();
+    // upgrade(id, newJar) llega en F7
 }
 ```
 
@@ -832,7 +832,8 @@ Reglas del loader:
 
 Secuencia de activación:
 
-1. Leer metadatos del paquete (`METADATA/package.list` y `library/status`).
+1. Recibir del manager las entradas instaladas (o escanear `library/packages` en
+   el arranque; `library/status` sigue siendo la fuente de qué está instalado).
 2. Resolver orden y dependencias con `kernel.ModuleGraph` y
    `DependencyResolver`.
 3. Crear classloader y alcance de servicios.
@@ -854,7 +855,9 @@ Secuencia de hot upgrade:
    classloader anterior.
 6. Si la versión anterior no libera recursos: mantenerla hasta reinicio, marcar
    `RESTART_REQUIRED` y no afirmar que el upgrade fue limpio.
-7. Confirmar el cambio en `library/status` solo después de la activación.
+7. Confirmar la instalación en `library/status` solo después de que la nueva
+   versión quede activa; el estado runtime se anota en
+   `<manager>/runtime/modules.status`.
 
 Secuencia de desactivación:
 
@@ -874,40 +877,43 @@ repo install <pkg>
   → resuelve dependencias y conflictos (Exclude/Provide)
   → descarga y verifica SHA-256
   → instala en library/packages
-  → registra INSTALLED en library/status
+  → registra la instalación en library/status
   → ModuleHost.activate(...)
-  → registra ACTIVE o FAILED
+  → anota ACTIVE o FAILED en runtime/modules.status
 
 repo remove <pkg>
   → ModuleHost.deactivate(...)
   → elimina archivos y dependencias huérfanas
-  → actualiza library/status
+  → actualiza library/status (instalación)
 
 repo upgrade
   → resuelve y descarga nueva versión
   → instala en ruta versionada
   → ModuleHost.upgrade(...)
   → si falla, rollback a la versión anterior
-  → si no se puede descargar la anterior, RESTART_REQUIRED
+  → si no se puede descargar la anterior, RESTART_REQUIRED en el estado runtime
 
 arranque
   → ManagerFacade.initialize()
   → ModuleHost.loadInstalled()
-  → ModuleHost.activateAll() en orden topológico
+  → activación en orden topológico
   → SuiteRuntime construye el pipeline desde ServiceRegistry
 ```
 
-`library/status` debe distinguir, como mínimo:
+`library/status` registra **solo instalación**: nombre, versión, canal,
+dependencias, archivos y hashes. No guarda si un módulo está activo en un
+instante dado (C6/P2).
 
-- `INSTALLED`: archivos presentes, sin activación confirmada.
+El estado runtime se guarda aparte, en `<manager>/runtime/modules.status`
+(transitorio, no autoritativo):
+
 - `ACTIVE`: activación confirmada.
 - `FAILED`: instalación correcta, activación fallida.
 - `RESTART_REQUIRED`: activación/desactivación incompleta que requiere reinicio.
-- `REMOVED`: retirado.
 
 La activación fallida no puede registrarse como correcta
-(`manager-v2.md:546-548`). El estado instalado y el estado activo son campos
-distintos.
+(`manager-v2.md:546-548`). Un paquete instalado y un módulo activo son hechos
+distintos y viven en archivos distintos.
 
 ##### Clasificación objetivo de módulos
 
@@ -1002,12 +1008,12 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F0. Inventario y contrato** | Congelar el estado real y aprobar este ADR | Inventario de módulos, grafo actual, lista de deuda, contratos `ModuleActivator`/`ModuleContext`/`ServiceRegistry`/`PlatformPorts` | ✅ ADR aceptado; inventario verificable; decisiones cerradas en «Decisiones cerradas por F0» |
 | **F1. API de ciclo de vida** | Introducir contratos sin tocar aún el arranque | `ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`; tests de contrato | ✅ `core-api` compila sin dependencias de features; 8 tests de contrato verdes |
 | **F2. ModuleHost POC** | Cargar un JAR real de fixture desde disco | `ModuleClassLoader`, `ModuleHost`, activación/desactivación, orden topológico, aislamiento, cierre de classloader; test de dos versiones de una misma clase | ✅ `src/suite-runtime` carga JARs reales generados en test, activa en orden de dependencias, aísla dos versiones de la misma clase, libera recursos y marca `FAILED` sin registrar servicios |
-| **F3. Manager + activación** | Unir paquetes con runtime | Instalación en `library/packages`, estado instalado/activo/fallido/reinicio, `repo install/remove/upgrade`, rollback básico | Instalar activa; activación fallida no se marca activa; remover desactiva; tests de `Exclude`/`Provide` y dependencias |
+| **F3. Manager + activación** | Unir paquetes con runtime | `PackageRuntime` en `suite-runtime`; instalación local y repo, activación/desactivación, estado runtime separado en `<manager>/runtime/modules.status`; tests con ZIPs y JARs reales | ✅ Instalar activa; activación fallida no cambia `library/status`; remover desactiva; dependencias y `Exclude`/`Provide` cubiertos por manager-core/apt. Rollback de upgrade se cierra en F7 |
 | **F4. SuiteRuntime y adapters** | Romper el acoplamiento de los adapters | `SuiteRuntime`, `SpigotPlatformPorts`, `FabricPlatformPorts`, traducción de eventos, comandos delegados; eliminar deps de features de los adapters | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
 | **F5. Migrar paquetes base** | Convertir features base en paquetes | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` como `ModuleActivator`; eliminar el cableado compilado | Cada paquete carga desde JAR, registra su servicio y funciona; el camino viejo ya no existe |
-| **F6. Migrar paquetes opcionales** | Convertir el resto de features | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api`; mover `inworld`/`tester` a plataforma o harness | Todos los paquetes se activan desde `library/status`; ningún feature queda compilado en el host |
-| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado coherente en `library/status` |
-| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, firmas/checksums, repositorios de confianza, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
+| **F6. Migrar paquetes opcionales** | Convertir el resto de features | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api`; mover `inworld`/`tester` a plataforma o harness | Todos los paquetes instalados se activan desde `library/status` + `library/packages`; ningún feature queda compilado en el host |
+| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado de instalación coherente y estado runtime en `<manager>/runtime/modules.status` |
+| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4 → F5/F6 → F7 → F8**. F5 y F6
 pueden solaparse solo si cada paquete tiene su propia puerta y no se deja el
@@ -1053,16 +1059,17 @@ Para evitar que el cambio quede a medias:
       `me.majhrs16.suite.textformatter`, `me.majhrs16.suite.iflow*`,
       `me.majhrs16.suite.chattranslator`, `me.majhrs16.suite.observability`,
       `me.majhrs16.suite.manager*` ni `me.majhrs16.suite.presets`.
-- [ ] `ModuleHost` carga un JAR desde `library/packages`, lo activa y lo
+- [x] `ModuleHost` carga un JAR desde `library/packages`, lo activa y lo
       desactiva sin classpath de features.
-- [ ] `library/status` distingue `INSTALLED`, `ACTIVE`, `FAILED` y
-      `RESTART_REQUIRED`.
+- [x] `library/status` registra solo la instalación; el estado runtime
+      (`ACTIVE`, `FAILED`, `RESTART_REQUIRED`) vive en
+      `<manager>/runtime/modules.status`, nunca en `library/status`.
 - [ ] `repo install` activa; `repo remove` desactiva; `repo upgrade` hace
       rollback si la nueva versión falla.
 - [ ] Un test de upgrade v1→v2 demuestra que la v1 se detiene y se descarga, y
       que la v2 queda activa.
 - [ ] Un test de upgrade fallido demuestra que la v1 sigue activa.
-- [ ] Un test de activación fallida demuestra que el paquete no se marca
+- [x] Un test de activación fallida demuestra que el paquete no se marca
       `ACTIVE`.
 - [ ] Un test de arquitectura falla si un adapter vuelve a declarar un feature.
 - [ ] No quedan `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado,

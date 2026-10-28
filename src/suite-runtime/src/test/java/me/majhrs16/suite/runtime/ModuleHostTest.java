@@ -5,27 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
-import me.majhrs16.suite.api.spi.PluginLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,8 +30,8 @@ class ModuleHostTest {
 
     @Test
     void activatesTwoVersionsOfTheSameClassInIsolatedClassLoaders() throws Exception {
-        Path v1 = buildJar("fixture-v1", "1.0.0", "v1", null, null, false, false);
-        Path v2 = buildJar("fixture-v2", "2.0.0", "v2", null, null, false, false);
+        Path v1 = FixtureModules.buildJar(tempDir, "fixture-v1", "1.0.0", "v1", null, null, false, false);
+        Path v2 = FixtureModules.buildJar(tempDir, "fixture-v2", "2.0.0", "v2", null, null, false, false);
 
         try (ModuleHost host = newHost()) {
             assertTrue(host.activate(v1).isSuccess());
@@ -75,8 +63,8 @@ class ModuleHostTest {
 
     @Test
     void loadInstalledActivatesInDependencyOrder() throws Exception {
-        Path base = buildJar("z-base", "1.0.0", "base", "base", null, false, true);
-        Path consumer = buildJar("a-consumer", "1.0.0", "consumer", null, "base", false, true);
+        Path base = FixtureModules.buildJar(tempDir, "z-base", "1.0.0", "base", "base", null, false, true);
+        Path consumer = FixtureModules.buildJar(tempDir, "a-consumer", "1.0.0", "consumer", null, "base", false, true);
 
         Path packages = tempDir.resolve("library").resolve("packages");
         Files.createDirectories(packages);
@@ -96,7 +84,7 @@ class ModuleHostTest {
 
     @Test
     void failedActivationIsReportedAndRollsBackServices() throws Exception {
-        Path broken = buildJar("broken", "1.0.0", "broken", null, null, true, false);
+        Path broken = FixtureModules.buildJar(tempDir, "broken", "1.0.0", "broken", null, null, true, false);
 
         try (ModuleHost host = newHost()) {
             ActivationResult result = host.activate(broken);
@@ -111,7 +99,7 @@ class ModuleHostTest {
 
     @Test
     void unsatisfiedRequirementIsNotActivated() throws Exception {
-        Path orphan = buildJar("orphan", "1.0.0", "orphan", null, "missing", false, false);
+        Path orphan = FixtureModules.buildJar(tempDir, "orphan", "1.0.0", "orphan", null, "missing", false, false);
 
         Path packages = tempDir.resolve("library").resolve("packages");
         Files.createDirectories(packages);
@@ -132,142 +120,6 @@ class ModuleHostTest {
                 tempDir.resolve("library"),
                 tempDir.resolve("config"),
                 PlatformInfo.current("test", "1.0"),
-                new RecordingLogger());
-    }
-
-    /**
-     * Compiles and packages a fixture module JAR.
-     */
-    private Path buildJar(String moduleId, String version, String payload,
-                          String provides, String requires, boolean failOnStart,
-                          boolean appendOrder) throws IOException {
-        Path sourceDir = tempDir.resolve("fixture-src-" + moduleId);
-        Path classesDir = tempDir.resolve("fixture-classes-" + moduleId);
-        Path jar = tempDir.resolve("fixture-" + moduleId + ".jar");
-        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
-        Files.createDirectories(source.getParent());
-        Files.createDirectories(classesDir);
-
-        String provideLine = provides == null ? ""
-                : "builder.provide(new Capability(\"" + provides + "\", SemVer.of(1, 0, 0)));";
-        String requireLine = requires == null ? ""
-                : "builder.require(Requirement.atLeast(\"" + requires + "\", SemVer.of(1, 0, 0)));";
-        String failLine = failOnStart ? "throw new IllegalStateException(\"fixture failure\");" : "";
-        String orderLine = appendOrder
-                ? "Files.writeString(context.configDir().resolveSibling(\"activation-order.log\"),"
-                    + " \"" + moduleId + "\\n\", StandardOpenOption.CREATE, StandardOpenOption.APPEND);"
-                : "";
-
-        String java = """
-                package fixture;
-
-                import java.nio.file.Files;
-                import java.nio.file.StandardOpenOption;
-                import me.majhrs16.suite.api.Capability;
-                import me.majhrs16.suite.api.ModuleDescriptor;
-                import me.majhrs16.suite.api.Requirement;
-                import me.majhrs16.suite.api.SemVer;
-                import me.majhrs16.suite.api.runtime.ModuleActivator;
-                import me.majhrs16.suite.api.runtime.ModuleContext;
-
-                public final class Activator implements ModuleActivator {
-
-                    private ModuleDescriptor descriptor;
-
-                    @Override
-                    public ModuleDescriptor descriptor() {
-                        if (descriptor == null) {
-                            ModuleDescriptor.Builder builder = ModuleDescriptor.builder("MODULE_ID")
-                                    .version(SemVer.of(1, 0, 0))
-                                    .contractVersion(SemVer.of(2, 1, 0))
-                                    .jvmRange(17, 0);
-                            PROVIDE_LINE
-                            REQUIRE_LINE
-                            descriptor = builder.build();
-                        }
-                        return descriptor;
-                    }
-
-                    @Override
-                    public void start(ModuleContext context) throws Exception {
-                        context.services().register(CharSequence.class, new Payload("PAYLOAD"));
-                        context.resources().track(new AutoCloseable() {
-                            @Override
-                            public void close() throws Exception {
-                                Files.writeString(context.configDir().resolve("released.marker"), "released");
-                            }
-                        });
-                        ORDER_LINE
-                        FAIL_LINE
-                    }
-
-                    @Override
-                    public void stop() {
-                    }
-
-                    public static final class Payload implements CharSequence {
-
-                        private final String value;
-
-                        public Payload(String value) {
-                            this.value = value;
-                        }
-
-                        @Override public int length() { return value.length(); }
-                        @Override public char charAt(int index) { return value.charAt(index); }
-                        @Override public CharSequence subSequence(int start, int end) {
-                            return value.subSequence(start, end);
-                        }
-                        @Override public String toString() { return value; }
-                    }
-                }
-                """;
-
-        java = java
-                .replace("MODULE_ID", moduleId)
-                .replace("PAYLOAD", payload)
-                .replace("PROVIDE_LINE", provideLine)
-                .replace("REQUIRE_LINE", requireLine)
-                .replace("ORDER_LINE", orderLine)
-                .replace("FAIL_LINE", failLine);
-
-        Files.writeString(source, java, StandardCharsets.UTF_8);
-
-        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        List<String> args = new ArrayList<>();
-        args.add("-classpath");
-        args.add(System.getProperty("java.class.path"));
-        args.add("-d");
-        args.add(classesDir.toString());
-        args.add(source.toString());
-        int exit = compiler.run(null, null, null, args.toArray(String[]::new));
-        assertEquals(0, exit, "fixture compilation failed");
-
-        try (JarOutputStream jarOut = new JarOutputStream(Files.newOutputStream(jar))) {
-            List<Path> compiled;
-            try (Stream<Path> walk = Files.walk(classesDir)) {
-                compiled = walk.filter(Files::isRegularFile).sorted().toList();
-            }
-            for (Path file : compiled) {
-                String name = classesDir.relativize(file).toString().replace(File.separatorChar, '/');
-                jarOut.putNextEntry(new JarEntry(name));
-                Files.copy(file, jarOut);
-                jarOut.closeEntry();
-            }
-            jarOut.putNextEntry(new JarEntry(
-                    "META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator"));
-            jarOut.write("fixture.Activator\n".getBytes(StandardCharsets.UTF_8));
-            jarOut.closeEntry();
-        }
-        return jar;
-    }
-
-    private static final class RecordingLogger implements PluginLogger {
-
-        @Override public void info(String message, Object... args) { }
-        @Override public void warn(String message, Object... args) { }
-        @Override public void error(String message, Object... args) { }
-        @Override public void error(String message, Throwable throwable) { }
-        @Override public void debug(String message, Object... args) { }
+                FixtureModules.logger());
     }
 }
