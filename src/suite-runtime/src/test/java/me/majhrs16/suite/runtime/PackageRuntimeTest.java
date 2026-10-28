@@ -408,6 +408,41 @@ class PackageRuntimeTest {
         }
     }
 
+    @Test
+    void installsSyncHttpPackageAndRegistersConfiguredSink() throws Exception {
+        Path transportZip = packageFromProperty("transport.package");
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path busZip = packageFromProperty("sync-bus.package");
+        Path httpZip = packageFromProperty("sync-http.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-http");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("config.yml"), """
+                    enabled: true
+                    outboundUrl: "http://127.0.0.1:9/hook"
+                    inboundPort: 0
+                    inboundPath: "/hook"
+                    bind: "127.0.0.1"
+                    """);
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(httpZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "sync-http activation failed: " + activation.get(0).message());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertEquals(Set.of("http"), bus.sinkNames());
+
+            fixture.runtime.removeLocal("sync-http", "2.1.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading sync-http must unregister its sink");
+        }
+    }
+
     private static Path packageFromProperty(String name) {
         String packagePath = System.getProperty(name);
         assertNotNull(packagePath, name + " must be set by the build");

@@ -1049,9 +1049,11 @@ sinks declaran en su manifiesto. `sync-socket` ya es paquete: su activador lee
 desregistra al descargarse; el test instala `sync-common`, `transport`,
 `sync-bus` y `sync-socket`, comprueba los dos sinks y descarga el paquete.
 `sync-telegram` sigue el mismo patrón con `config.yml`: registra el sink si hay
-token y chat, y lo desregistra al descargar el paquete. Quedan `sync-http`,
-`sync-websocket`, `sync-discord`, `sync-velocity`, `observability`, `presets`,
-`extension-api`, `inworld`/`tester` y la retirada del cableado del host.
+token y chat, y lo desregistra al descargar el paquete. `sync-http` lee
+`outboundUrl`, `inboundPort` y credenciales de su `config.yml`, registra el sink
+y lo retira al descargarse. Quedan `sync-websocket`, `sync-discord`,
+`sync-velocity`, `observability`, `presets`, `extension-api`,
+`inworld`/`tester` y la retirada del cableado del host.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se

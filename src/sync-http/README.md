@@ -1,6 +1,6 @@
 # sync-http — HTTP Webhook Sync Sink
 
-> **Purpose**: Implements `SyncSink` SPI from `core-api` for HTTP webhook synchronization (outbound webhooks + inbound REST endpoint). Uses `HttpTransport` from `transport` module.
+> **Purpose**: Implements `SyncSink` SPI from `core-api` for HTTP webhook synchronization (outbound webhooks + inbound REST endpoint). Uses the JDK `HttpClient` for outbound calls and `transport.MessageCodec` for the wire format.
 
 ---
 
@@ -8,21 +8,21 @@
 
 | Module | Transport | Sink Implementation | Key Dependency |
 |--------|-----------|---------------------|----------------|
-| `sync-http` | HTTP/HTTPS | `HttpSink` | `transport` (HttpTransport) |
-| `sync-tcpudp` | TCP/UDP | `TcpSink`, `UdpSink` | `transport` (MessageCodec) |
+| `sync-http` | HTTP/HTTPS | `HttpSink` | `transport` (`MessageCodec`) |
+| `sync-socket` | TCP/UDP | `TcpSink`, `UdpSink` | `transport` (`MessageCodec`) |
 | `sync-discord` | Discord (JDA) | `JdaDiscordSink`, `DiscordGateway` | `transport`, JDA |
 | `sync-telegram` | Telegram Bot API | `TelegramSink` | `transport` |
-| `sync-websocket` | WebSocket | `WebSocketSink` | `core-api` only |
-| `sync-velocity` | Velocity Proxy | `VelocitySink` | `core-api` only |
+| `sync-websocket` | WebSocket | `WebSocketSyncSink` | `observability` (metrics) |
+| `sync-velocity` | Velocity Proxy | `VelocitySink` | Velocity API |
 
 ---
 
 ## 1. Responsibilities (All Sync Modules)
 
 - **Implement `SyncSink`** — `send(message) → void`, `start()`, `stop()`
-- **Implement `SyncListener`** (optional) — `onMessageReceived(message)` for inbound
-- **Module registration** — `SyncXxxModule` registers sink with `SuiteBootstrap`
-- **Configuration** — read endpoint/credentials from `HostConfig.sync` section
+- **Implement `SyncListener`** (optional) — inbound messages for the bus
+- **Package registration** — `SyncXxxActivator` resolves `SyncBus` from the service registry and registers its sink
+- **Configuration** — read endpoint/credentials from the module-private `config/sync-xxx/` directory
 - **Message encoding** — use `MessageCodec` (from `transport`) for wire format
 
 ---
@@ -40,10 +40,11 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `SyncSink`, `SyncListener`, `Message` SPIs |
+| `core-api` | Compile | `SyncSink`, `SyncBus`, `SyncListener`, `Message` SPIs |
+| `sync-common` | Compile | YAML reader and config paths (`DEPENDENCY` package) |
 | `transport` | Compile | `HttpTransport`, `MessageCodec` (most modules) |
 | `org.json` | Compile | JSON payload handling |
-| `kernel` | Test | Test fixtures |
+| `kernel` / `sync-bus` | Test | Module descriptor and bus fixtures |
 
 **Module-specific:**
 - `sync-discord` → `net.dv8tion:JDA`
@@ -55,9 +56,9 @@
 
 | Consumer | Usage |
 |----------|-------|
-| `host` | `SuiteBootstrap` collects all `SyncSink` instances |
-| `spigot-host` | Syncs messages via registered sinks |
-| `fabric-host` | **Excluded from build** — would sync via registered sinks |
+| module runtime | Activates the `sync-*` packages and injects `SyncBus` |
+| `SyncBus` | Owns and fans out to every registered sink |
+| `spigot-host` / `fabric-host` | Legacy wiring until F4b |
 
 ---
 
@@ -66,8 +67,10 @@
 ### sync-http
 | Component | Role |
 |-----------|------|
-| `HttpSink` | Implements `SyncSink`: POST JSON to webhook URL |
-| `SyncHttpModule` | Registers `HttpSink` |
+| `HttpSink` | Implements `SyncSink`: POST JSON to the webhook and expose the inbound endpoint |
+| `HttpConfig` | Reads `config/sync-http/config.yml` |
+| `SyncHttpActivator` | Registers/unregisters `HttpSink` with the running bus |
+| `SyncHttpModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
 
 ### sync-tcpudp
 | Component | Role |
@@ -124,22 +127,29 @@ Module-specific transport:
   - VelocitySink: Velocity plugin message channel
 ```
 
-**Config** (from `HostConfig.sync`):
+**Config** (`config/sync-http/config.yml`):
 ```yaml
-sync:
-  http:
-    enabled: true
-    webhook-url: "https://example.com/webhook"
-  tcp:
-    enabled: true
-    host: "127.0.0.1"
-    port: 25565
-  discord:
-    enabled: true
-    token: "bot-token"
-    channel-id: 123456789
-  # ... etc
+enabled: true
+outboundUrl: "https://example.com/webhook"
+inboundPort: 0          # 0 = ephemeral
+inboundPath: "/hook"
+bind: "127.0.0.1"
+authToken: ""           # optional Bearer token
+hmacSecret: ""          # optional HMAC-SHA256 secret
 ```
+
+Each `sync-*` package reads its own directory under `config/`. An enabled file
+without the required fields is skipped with a log line; the package still
+activates.
+
+```bash
+./gradlew :src:sync-http:test
+```
+
+`PackageRuntimeTest.installsSyncHttpPackageAndRegistersConfiguredSink`
+installs the real `sync-common`, `transport`, `sync-bus` and `sync-http`
+packages, verifies the sink is registered, then unloads `sync-http` and checks
+that the running bus is empty.
 
 ---
 
@@ -147,12 +157,12 @@ sync:
 
 | Module | Entry Point | Called By |
 |--------|-------------|-----------|
-| `sync-http` | `SyncHttpModule` | `ModuleLoader` → `SuiteBootstrap` |
-| `sync-tcpudp` | `SyncTcpUdpModule` | `ModuleLoader` → `SuiteBootstrap` |
-| `sync-discord` | `SyncDiscordModule` | `ModuleLoader` → `SuiteBootstrap` |
-| `sync-telegram` | `SyncTelegramModule` | `ModuleLoader` → `SuiteBootstrap` |
-| `sync-websocket` | `SyncWebSocketModule` | `ModuleLoader` → `SuiteBootstrap` |
-| `sync-velocity` | `SyncVelocityModule` | `ModuleLoader` → `SuiteBootstrap` |
+| `sync-http` | `SyncHttpActivator` | Module runtime |
+| `sync-socket` | `SyncSocketActivator` | Module runtime |
+| `sync-discord` | `SyncDiscordModule` | Legacy kernel descriptor |
+| `sync-telegram` | `SyncTelegramActivator` | Module runtime |
+| `sync-websocket` | `SyncWebSocketModule` | Legacy kernel descriptor |
+| `sync-velocity` | `SyncVelocityModule` | Legacy kernel descriptor |
 
 ---
 
@@ -172,8 +182,9 @@ sync:
 ### sync-http
 ```
 1. HttpSink.java              → SyncSink implementation
-2. SyncHttpModule.java        → Module registration
-3. transport/HttpTransport.java → HTTP client used
+2. HttpConfig.java            → Module config schema
+3. SyncHttpActivator.java     → Package lifecycle and bus registration
+4. transport/MessageCodec.java → Wire format used by send()
 ```
 
 ### sync-tcpudp

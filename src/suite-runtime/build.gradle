@@ -18,6 +18,7 @@ evaluationDependsOn(':src:sync-bus')
 evaluationDependsOn(':src:sync-common')
 evaluationDependsOn(':src:sync-socket')
 evaluationDependsOn(':src:sync-telegram')
+evaluationDependsOn(':src:sync-http')
 
 group = 'me.majhrs16'
 
@@ -114,6 +115,10 @@ test {
     dependsOn syncTelegramPackage
     systemProperty 'sync-telegram.package',
             syncTelegramPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def syncHttpPackage = project(':src:sync-http').tasks.named('modulePackage')
+    dependsOn syncHttpPackage
+    systemProperty 'sync-http.package',
+            syncHttpPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
