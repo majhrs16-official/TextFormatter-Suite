@@ -1,7 +1,7 @@
 package me.majhrs16.suite.synctelegram;
 
-import me.majhrs16.suite.syncbus.SyncConfigPaths;
-import me.majhrs16.suite.syncbus.SyncYaml;
+import me.majhrs16.suite.synccommon.SyncConfigPaths;
+import me.majhrs16.suite.synccommon.SyncYaml;
 
 import java.nio.file.Path;
 import java.util.Map;

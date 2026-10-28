@@ -29,7 +29,7 @@ import me.majhrs16.suite.spigothost.logic.ChannelSelector;
 import me.majhrs16.suite.spigothost.logic.EventRules;
 import me.majhrs16.suite.spigothost.logic.LangSetting;
 import me.majhrs16.suite.syncbus.DefaultSyncBus;
-import me.majhrs16.suite.syncbus.SyncConfigPaths;
+import me.majhrs16.suite.synccommon.SyncConfigPaths;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.synchttp.HttpSink;
 import me.majhrs16.suite.synctelegram.TelegramConfig;

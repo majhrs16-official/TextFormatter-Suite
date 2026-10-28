@@ -1,4 +1,4 @@
-package me.majhrs16.suite.syncbus;
+package me.majhrs16.suite.synccommon;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

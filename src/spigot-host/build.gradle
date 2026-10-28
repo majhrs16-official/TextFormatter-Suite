@@ -37,6 +37,7 @@ dependencies {
     implementation project(':src:sync-socket')
     implementation project(':src:sync-telegram')
     implementation project(':src:sync-websocket')
+    implementation project(':src:sync-common')
     implementation project(':src:sync-bus')
     
     implementation project(':src:gtranslate')

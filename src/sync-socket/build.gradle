@@ -18,7 +18,7 @@ java {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:sync-bus')
+    implementation project(':src:sync-common')
     implementation project(':src:transport')
     implementation 'org.json:json:20240303'
 

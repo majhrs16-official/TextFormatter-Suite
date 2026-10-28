@@ -31,7 +31,6 @@
 | Dependency | Type | Reason |
 |------------|------|--------|
 | `core-api` | Compile | `SyncBus`, `SyncSink`, `SyncListener`, `Message`, `PluginLogger` |
-| `snakeyaml` | Compile | `SyncYaml` for the sync-* configuration readers |
 
 ---
 

@@ -86,6 +86,7 @@ TextFormatter Suite
 | `sync-websocket` | WebSocket sync sink | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-velocity` | Velocity proxy sync sink | `core-api` | `fabric-host` |
 | `sync-bus` | Unified fan-out, deduplication, retries and sink lifecycle | `core-api` | `spigot-host`, `fabric-host` |
+| `sync-common` | Shared YAML reader and sync config path resolution (`DEPENDENCY`) | JDK, `snakeyaml` | `sync-*` |
 | `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
 | `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |

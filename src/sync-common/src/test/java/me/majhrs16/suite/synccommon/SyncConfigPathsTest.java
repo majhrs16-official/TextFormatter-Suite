@@ -1,4 +1,4 @@
-package me.majhrs16.suite.syncbus;
+package me.majhrs16.suite.synccommon;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
