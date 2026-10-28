@@ -1,5 +1,6 @@
 package me.majhrs16.suite.api.spi;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -14,13 +15,24 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class TranslatorManager {
 
-    private final List<Translator> providers = new CopyOnWriteArrayList<>();
+    private volatile List<Translator> providers = new CopyOnWriteArrayList<>();
 
     public TranslatorManager() {
     }
 
     public TranslatorManager add(Translator provider) {
         providers.add(Objects.requireNonNull(provider, "provider"));
+        return this;
+    }
+
+    /**
+     * Replaces every configured provider atomically. Used by consumers that
+     * must rebuild their view when provider modules are installed or removed
+     * at runtime.
+     */
+    public TranslatorManager replaceAll(Collection<? extends Translator> replacements) {
+        Objects.requireNonNull(replacements, "replacements");
+        providers = new CopyOnWriteArrayList<>(replacements);
         return this;
     }
 

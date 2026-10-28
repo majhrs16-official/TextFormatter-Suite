@@ -80,4 +80,28 @@ class TranslatorManagerContractTest {
         // Lista inmutable
         assertThatThrownBy(() -> all.add(p1)).isInstanceOf(UnsupportedOperationException.class);
     }
+
+    @Test
+    @DisplayName("replaceAll() sustituye providers para recarga en caliente")
+    void replaceAllReplacesProviders() {
+        TranslatorManager manager = new TranslatorManager();
+        Translator oldProvider = new Translator() {
+            @Override public String name() { return "old"; }
+            @Override public String translate(String text, String from, String to) { return text; }
+            @Override public String detect(String text) { return "en"; }
+            @Override public boolean isAvailable() { return true; }
+        };
+        Translator newProvider = new Translator() {
+            @Override public String name() { return "new"; }
+            @Override public String translate(String text, String from, String to) { return text; }
+            @Override public String detect(String text) { return "en"; }
+            @Override public boolean isAvailable() { return true; }
+        };
+
+        manager.add(oldProvider);
+        manager.replaceAll(java.util.List.of(newProvider));
+
+        assertThat(manager.providers()).extracting(Translator::name).containsExactly("new");
+        assertThat(manager.active().name()).isEqualTo("new");
+    }
 }

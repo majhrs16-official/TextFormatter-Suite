@@ -18,8 +18,10 @@ import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.Requirement;
+import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.runtime.ModuleDeactivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
@@ -230,12 +232,14 @@ public final class ModuleHost implements AutoCloseable {
 
         if (failure != null) {
             setState(moduleId, ModuleState.RESTART_REQUIRED);
+            events.publish(new ModuleDeactivatedEvent(moduleId));
             String message = "Module " + moduleId + " did not release cleanly: " + failure.getMessage();
             logger.error(message, failure);
             return DeactivationResult.restartRequired(moduleId, message, failure);
         }
 
         setState(moduleId, ModuleState.INSTALLED);
+        events.publish(new ModuleDeactivatedEvent(moduleId));
         logger.info("Module deactivated: " + moduleId);
         return DeactivationResult.deactivated(moduleId);
     }
@@ -349,6 +353,7 @@ public final class ModuleHost implements AutoCloseable {
                 prepared.id, prepared.jar, prepared.descriptor, prepared.activator,
                 prepared.classLoader, prepared.context));
         setState(prepared.id, ModuleState.ACTIVE);
+        events.publish(new ModuleActivatedEvent(prepared.id, prepared.descriptor));
         logger.info("Module activated: " + prepared.id + " " + prepared.descriptor.version());
         return ActivationResult.activated(prepared.id);
     }

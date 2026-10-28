@@ -7,11 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
+import me.majhrs16.suite.api.runtime.ModuleDeactivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import org.junit.jupiter.api.Test;
@@ -147,6 +150,27 @@ class ModuleHostTest {
             assertFalse(result.isSuccess());
             assertEquals(ModuleState.FAILED, host.state("dep-orphan").orElseThrow());
             assertTrue(host.services().findAll(CharSequence.class).isEmpty());
+        }
+    }
+
+    @Test
+    void publishesActivationAndDeactivationEvents() throws Exception {
+        Path jar = FixtureModules.buildJar(
+                tempDir, "event-fixture", "1.0.0", "event", null, null, false, false);
+
+        try (ModuleHost host = newHost()) {
+            List<String> activated = new ArrayList<>();
+            List<String> deactivated = new ArrayList<>();
+            host.events().subscribe(ModuleActivatedEvent.class,
+                    event -> activated.add(event.moduleId()));
+            host.events().subscribe(ModuleDeactivatedEvent.class,
+                    event -> deactivated.add(event.moduleId()));
+
+            assertTrue(host.activate(jar).isSuccess());
+            assertEquals(List.of("event-fixture"), activated);
+
+            assertTrue(host.deactivate("event-fixture").isClean());
+            assertEquals(List.of("event-fixture"), deactivated);
         }
     }
 
