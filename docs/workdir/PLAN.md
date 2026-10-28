@@ -1434,15 +1434,15 @@ Spigot y Fabric no deben conocer la existencia de ningún módulo de feature. Su
 
 **Consecuencia:** El adapter se reduce a crear `PlatformPorts`, traducir eventos a `Message` y delegar en `SuiteRuntime`.
 
-### P4. Código arbitrario: el dueño del repositorio es responsable
+### P4. Código arbitrario: seguridad compartida (sandbox + dueño del repo)
 
-El manager tipo apt descarga e instala código arbitrario. Esa es la idea intencional. La seguridad no se basa en sandboxear cada módulo, sino en que el dueño del repositorio es responsable de lo que publica. SHA-256 es obligatorio para verificar integridad; firma es obligatoria para repositorios remotos; allowlist de repositorios de confianza.
+El manager tipo apt descarga e instala código arbitrario. Esa es la idea intencional. Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que publica**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. SHA-256 es obligatorio para verificar integridad; firma es obligatoria para repositorios remotos; allowlist de repositorios de confianza.
 
-**Consecuencia:** No se promete sandboxing de módulos. Se promete verificación de checksum y confianza en el repositorio.
+**Consecuencia:** No se promete que el sandbox por sí solo sea suficiente. La confianza recae en el dueño del repositorio, complementada con verificación de checksum y firma.
 
 ### P5. `force` significa forzar de verdad
 
-El parámetro `force` no omite conflictos de forma silenciosa. Si un administrador usa `force`, es porque quiere forzar las cosas y sabe lo que hace. Esto incluye permitir la instalación de paquetes excluyentes si el administrador así lo decide, con la advertencia correspondiente.
+El parámetro `force` no omite conflictos de forma silenciosa. Si un administrador usa `force`, es porque quiere forzar las cosas y sabe lo que hace. Esto incluye permitir la instalación de paquetes excluyentes si el administrador así lo decide, con la advertencia correspondiente. `force` es una señal de intención deliberada del operador, no un sinónimo de «ignorar problemas».
 
 **Consecuencia:** `force` debe poder romper invariables de coexistencia cuando el admin lo solicita explícitamente.
 
@@ -1487,6 +1487,30 @@ Las extensiones son módulos simplificados para programación de terceros. No ex
 El módulo `tester` no es harness ni herramienta de desarrollo excluida del artefacto final. Es un módulo de benchmarking en tiempo de ejecución y de prueba del pipeline completo: simula el envío de un jugador, traza la ejecución del mensaje etapa por etapa, inspecciona el comportamiento directo del sistema y lanza un check si la comprobación de todo el pipeline es correcto. Puede detectar fallos delicados, el punto exacto y la diferencia vs lo esperado.
 
 **Consecuencia:** `tester` vive en el directorio de producción y se distribuye como cualquier otro módulo.
+
+### P13. Romper para reestructurar, no parchear
+
+Cuando la arquitectura actual no puede sostener el modelo deseado, no se parchea lo que hay. Se rompe la suite, se desarma todo, se reestructura lo que debe ir y lo que no, y se vuelve a armar como debería haber sido desde el principio. No se aceptan implementaciones a medias, stubs, no-ops ni parches que preserven el acoplamiento actual.
+
+**Consecuencia:** Cada cambio que migra funcionalidad al runtime de módulos elimina el cableado viejo en el mismo cambio. No se mantienen dos formas de arrancar la suite.
+
+### P14. Tests obligatorios por fase
+
+Cada fase de trabajo termina con código, tests, documentación y eliminación del camino viejo. Una fase no se cierra porque compile; se cierra porque tiene su puerta verde.
+
+**Consecuencia:** Si una fase no se completa, se revierte. No se deja código a medias para «completarlo luego».
+
+### P15. Cada bug tiene su test
+
+Cada bug debe tener un test que demuestre que está resuelto. No se considera cerrado un bug sin su prueba de regresión.
+
+**Consecuencia:** Todo fix de bug debe ir acompañado de un test que falle antes del fix y pase después.
+
+### P16. Organización por capa técnica
+
+El directorio `src/` se organiza por capa técnica: `api`, `kernel`, `runtime`, `platform` y `packages`. `platform` contiene cada plataforma de Minecraft soportada; `kernel` contiene cada feature agnóstico, base, primario o importante para la arquitectura del sistema; `packages` contiene cada módulo independiente entre sí.
+
+**Consecuencia:** `spigot-host` y `fabric-host` viven en `platform/`. Los módulos de feature viven en `packages/`. Los contratos del núcleo viven en `api/` y `kernel/`.
 
 ---
 

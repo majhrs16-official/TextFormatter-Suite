@@ -33,6 +33,60 @@ Con el tiempo, la selección natural del software hará su trabajo: los módulos
 
 ---
 
+# Costumbres del Proyecto
+
+Estas son las costumbres de código y de diseño que guían el trabajo diario. Las especificaciones técnicas de cada una viven en el PLAN o en los ADR correspondientes.
+
+## C1. Documento vivo
+
+El PLAN y los documentos de diseño se reescriben, podan y actualizan constantemente. Solo lo vigente permanece en el documento activo. El historial de git conserva todo lo necesario; no se acumula histórico cerrado en los documentos activos.
+
+## C2. Romper para reestructurar
+
+Cuando la arquitectura actual no puede sostener el modelo deseado, no se parchea lo que hay. Se rompe la suite, se desarma todo, se reestructura lo que debe ir y lo que no, y se vuelve a armar como debería haber sido desde el principio. No se aceptan implementaciones a medias, stubs, no-ops ni parches que preserven el acoplamiento actual.
+
+## C3. Tests obligatorios por fase
+
+Cada fase de trabajo termina con código, tests, documentación y eliminación del camino viejo. Una fase no se cierra porque compile; se cierra porque tiene su puerta verde.
+
+## C4. Cada bug tiene su test
+
+Cada bug debe tener un test que demuestre que está resuelto. No se considera cerrado un bug sin su prueba de regresión.
+
+## C5. No stubs silenciosos
+
+No se devuelve `parent`, `false` ni vacío fingiendo éxito. Lo no soportado lanza un error explícito o se marca como `RESTART_REQUIRED`.
+
+## C6. Pluralidad sobre monolito
+
+Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario. No se fuerza un monolito a elegir un solo motor. Cada motor, backend o implementación es un módulo independiente instalable y reemplazable. Los motores opuestos para una misma tarea pueden coexistir como paquetes independientes; el usuario elige cuál instalar.
+
+## C7. Cambios con retrocompatibilidad ideal
+
+Idealmente se mantiene retrocompatibilidad. Cuando no es posible, se rompe a propósito. Cada fase debe tener puertas de calidad, planes 100% completados y tests en verde. Está prohibido dejar código a medias; si una fase no se completa, se tiene que terminar (a menos que haya una razón explícita para lo contrario).
+
+## C8. Pruebas E2E descartadas
+
+No se validará en servidores reales Spigot/Paper, Fabric ni proxies Velocity. La validación de plataformas se limita a compilación y tests automatizados que no requieran un servidor real.
+
+## C9. Seguridad compartida: sandbox + dueño del repo
+
+Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que se publica en él**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. SHA-256 es obligatorio para verificar integridad; firma es obligatoria para repositorios remotos.
+
+## C10. `force` significa forzar de verdad
+
+El parámetro `force` no omite conflictos de forma silenciosa. Si un administrador usa `force`, es porque quiere forzar las cosas y sabe lo que hace. Esto incluye permitir la instalación de paquetes excluyentes si el administrador así lo decide, con la advertencia correspondiente.
+
+## C11. `library/status` solo para instalados
+
+La presencia de un paquete en `library/status` implica que está instalado. El estado de ejecución (encendido/apagado, fallido, requiere reinicio) no pertenece a `library/status`; si es necesario rastrearlo, se hace en un directorio temporal dentro del directorio del manager, nunca en el estado de instalación.
+
+## C12. Organización por capa técnica
+
+El directorio `src/` se organiza por capa técnica: `api`, `kernel`, `runtime`, `platform` y `packages`. `platform` contiene cada plataforma de Minecraft soportada; `kernel` contiene cada feature agnóstico, base, primario o importante para la arquitectura del sistema; `packages` contiene cada módulo independiente entre sí.
+
+---
+
 # Principios de Diseño del Proyecto
 
 Estos son los principios abstractos que guían el proyecto. Las especificaciones técnicas de cada uno viven en el PLAN o en los ADR correspondientes.
