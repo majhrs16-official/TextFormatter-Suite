@@ -71,7 +71,7 @@ No se validará en servidores reales Spigot/Paper, Fabric ni proxies Velocity. L
 
 ## C9. Seguridad compartida: sandbox + dueño del repo
 
-Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que se publica en él**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. SHA-256 es obligatorio para verificar integridad; firma es obligatoria para repositorios remotos.
+Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que se publica en él**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. El manager verifica integridad (SHA-256) de lo que descarga; el operador decide qué repositorios añade. Firmas y allowlists son defensa en profundidad opcional, no el fundamento de la seguridad.
 
 ## C10. `force` significa forzar de verdad
 
@@ -97,12 +97,4 @@ Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario. No se f
 
 ## D6. Código arbitrario, repositorio responsable
 
-El manager instala código arbitrario. Esa es la idea. Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que se publica en él**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio.
-
-## C10. Las pruebas E2E en servidores reales están descartadas
-
-No se validará en servidores reales Spigot/Paper, Fabric ni proxies Velocity. La validación de plataformas se limita a compilación y tests automatizados que no requieran un servidor real. Las menciones históricas a «tests E2E pendientes», «probar en servidor real» o «proxy Velocity real» quedan cerradas por esta decisión.
-
-## C11. No acumular histórico en documentos
-
-Lo que ya está hecho, simplemente se borra del documento. El historial de git conserva todo lo necesario. No se debe acumular histórico cerrado en archivos de planificación o diseño; si ya está implementado, sale del documento activo.
+El manager instala código arbitrario. Esa es la idea. Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que se publica en él**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. Ver la costumbre C9.

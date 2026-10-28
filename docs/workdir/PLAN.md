@@ -5,7 +5,7 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-27 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. La implementación está pendiente y se rige por fases con puertas de calidad y un protocolo anti-vaguedad. Ver la sección **ADR-019** más abajo.
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada y F2 completada como POC**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos. F3+ se rigen por fases con puertas de calidad y un protocolo anti-vaguedad. Ver la sección **ADR-019** más abajo.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
@@ -498,7 +498,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 **Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
 
-**Implementación:** 0% — esta entrada fija la decisión, el diagnóstico y el plan; no se ha modificado código todavía.
+**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`) y F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`, 4 tests con JARs reales generados en runtime). F3+ pendientes.
 
 > **Ubicación:** este ADR vive en `docs/workdir/PLAN.md`. No es una sección de
 > `docs/workdir/ADR.md`; ese archivo es el documento histórico de decisiones base
@@ -820,9 +820,11 @@ public enum ModuleState {
 Reglas del loader:
 
 - Un `ModuleClassLoader` por módulo, con parent común de API.
-- Parent-first para `me.majhrs16.suite.api.*`, `java.*` y librerías compartidas
-  declaradas por el host.
+- Parent-first solo para `me.majhrs16.suite.api.*` y `java.*`.
 - Child-first para las clases de implementación del módulo.
+- Las librerías compartidas no viven en el host: el manager las entrega como
+  paquetes de dependencia relocalizados y el classloader del módulo las resuelve
+  desde el scope que el manager le asigna (C3).
 - Acceso a dependencias desde `library/dependencies`.
 - Cierre del classloader al desactivar.
 - Si el classloader no puede cerrarse o quedan hilos/listeners, el estado pasa
@@ -911,19 +913,22 @@ distintos.
 
 | Categoría | Módulos | Destino |
 |---|---|---|
-| Núcleo técnico | `core-api`, `kernel`, `logger`, `transport`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
+| Núcleo técnico | `core-api`, `kernel`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
 | Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma |
+| Paquetes de dependencia | `logger`, `transport`, SnakeYAML, JDA, Adventure y demás librerías compartidas | Paquetes de tipo dependencia; el manager los descarga, verifica, relocaliza y carga por módulo (C3) |
 | Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` | Paquetes instalados por defecto; `Exclude`/`Provide` para motores iFlow |
 | Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api` | Paquetes; dependencias declaradas en `METADATA/package.list` |
-| Plataforma | `inworld` (Bukkit), `tester` (Spigot), handlers Fabric | Adapter o paquete marcado `Platform: bukkit`/`fabric`; nunca en el loader neutral |
+| Plataforma | `inworld` (Bukkit), handlers Fabric | Adapter o paquete marcado `Platform: bukkit`/`fabric`; nunca en el loader neutral |
+| Producción auxiliar | `tester` (Spigot) | Módulo de producción: benchmarking en runtime y traza del pipeline completo (C7); no es harness |
 | Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
 | Eliminar | `common-legacy` (sin fuentes `main`), `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, dependencias muertas | Borrar en la fase correspondiente |
 
-Decisión por defecto propuesta: **todo feature es paquete**, incluso
-`textformatter`, `iflow-*`, `chattranslator` y `messages`. El núcleo solo
-contiene contratos, kernel, manager, runtime y adapters. La suite instala un
-conjunto base en el primer arranque; si falta, arranca en modo degradado con
-avisos explícitos, no con una implementación falsa.
+Decisión por defecto: **todo feature es paquete**, incluso `textformatter`,
+`iflow-*`, `chattranslator` y `messages`. El núcleo solo contiene contratos,
+kernel, manager y runtime; `logger` y `transport` son paquetes de dependencia,
+no código del host. La suite instala un conjunto base en el primer arranque; si
+falta, arranca en modo degradado con avisos explícitos, no con una
+implementación falsa.
 
 ##### Reglas de dependencia
 
@@ -978,7 +983,8 @@ módulo platform-specific
   paquetes o `runtimeOnly` del runtime, nunca dependencia de compilación del
   adapter.
 - `presets` y `manager-*` sin uso en Fabric: se usan o se eliminan.
-- `tester` en producción: se mueve a harness o a paquete platform-specific.
+- `tester` sigue siendo paquete de producción (C7): se mueve a `packages/`
+  como paquete de plataforma; nunca a harness.
 - `common-legacy`: se elimina si sigue sin fuentes `main`.
 - `sync-http` en Fabric: deja de ser una diferencia de adapter; se resuelve
   como paquete compartido.
@@ -993,9 +999,9 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 
 | Fase | Objetivo | Entregables | Puerta de cierre |
 |---|---|---|---|
-| **F0. Inventario y contrato** | Congelar el estado real y aprobar este ADR | Inventario de módulos, grafo actual, lista de deuda, contratos `ModuleActivator`/`ModuleContext`/`ServiceRegistry`/`PlatformPorts` | ADR aceptado; inventario verificable; ninguna decisión abierta que bloquee F1 |
-| **F1. API de ciclo de vida** | Introducir contratos sin tocar aún el arranque | `ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`; tests de contrato | `core-api` compila sin dependencias de features; tests de API verdes |
-| **F2. ModuleHost POC** | Cargar un JAR real de fixture desde disco | `ModuleClassLoader`, `ModuleHost`, activación/desactivación, orden topológico, aislamiento, cierre de classloader; test de dos versiones de una misma clase | Un JAR de fixture se carga, arranca, detiene y descarga sin classpath de features; sin fugas detectables en el fixture |
+| **F0. Inventario y contrato** | Congelar el estado real y aprobar este ADR | Inventario de módulos, grafo actual, lista de deuda, contratos `ModuleActivator`/`ModuleContext`/`ServiceRegistry`/`PlatformPorts` | ✅ ADR aceptado; inventario verificable; decisiones cerradas en «Decisiones cerradas por F0» |
+| **F1. API de ciclo de vida** | Introducir contratos sin tocar aún el arranque | `ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`; tests de contrato | ✅ `core-api` compila sin dependencias de features; 8 tests de contrato verdes |
+| **F2. ModuleHost POC** | Cargar un JAR real de fixture desde disco | `ModuleClassLoader`, `ModuleHost`, activación/desactivación, orden topológico, aislamiento, cierre de classloader; test de dos versiones de una misma clase | ✅ `src/suite-runtime` carga JARs reales generados en test, activa en orden de dependencias, aísla dos versiones de la misma clase, libera recursos y marca `FAILED` sin registrar servicios |
 | **F3. Manager + activación** | Unir paquetes con runtime | Instalación en `library/packages`, estado instalado/activo/fallido/reinicio, `repo install/remove/upgrade`, rollback básico | Instalar activa; activación fallida no se marca activa; remover desactiva; tests de `Exclude`/`Provide` y dependencias |
 | **F4. SuiteRuntime y adapters** | Romper el acoplamiento de los adapters | `SuiteRuntime`, `SpigotPlatformPorts`, `FabricPlatformPorts`, traducción de eventos, comandos delegados; eliminar deps de features de los adapters | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
 | **F5. Migrar paquetes base** | Convertir features base en paquetes | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` como `ModuleActivator`; eliminar el cableado compilado | Cada paquete carga desde JAR, registra su servicio y funciona; el camino viejo ya no existe |
@@ -1065,29 +1071,41 @@ Para evitar que el cambio quede a medias:
 - [ ] La documentación de módulos explica `ModuleActivator`, `ModuleContext`,
       `library/packages`, `library/status`, hot upgrade y límites de reinicio.
 
-##### Decisiones abiertas que F0 debe cerrar
+##### Decisiones cerradas por F0 (2026-10-27)
 
-1. **Núcleo vs paquetes:** confirmar que todo feature es paquete y que solo
-   `core-api`, `kernel`, `manager-*`, `suite-runtime`, `logger` y `transport`
-   son núcleo técnico.
-2. **`inworld` y `tester`:** decidir si son módulos platform-specific o código
-   del adapter. Propuesta: `inworld` se parte en API neutral + implementación
-   Bukkit/Fabric; `tester` se mueve a harness o paquete Spigot.
-3. **Extensions:** decidir si `ExtensionManager` se unifica con `ModuleHost`
-   (mismo ciclo de vida) o se mantiene como subsistema separado con contrato
-   propio. Propuesta: unificar como `ModuleKind.EXTENSION`.
-4. **Versiones concurrentes:** decidir si se permite coexistencia de versiones.
-   Propuesta: una versión activa por módulo; durante upgrade se solapan v1 y v2
-   solo hasta confirmar el swap.
-5. **Librerías compartidas:** decidir el parent classloader para SnakeYAML,
-   JDA, Adventure y transporte. Propuesta: librerías compartidas en el host,
-   parent-first; los módulos no las empaquetan.
-6. **Metadatos:** decidir si el descriptor autoritativo es
-   `METADATA/package.list` o el JAR. Propuesta: el paquete manda para resolver;
-   el `ModuleDescriptor` del JAR se valida contra él y falla si discrepa.
-7. **Seguridad:** decidir si se exigen firmas además de SHA-256 y qué
-   repositorios son de confianza. Propuesta: SHA-256 obligatorio, firma
-   obligatoria para repositorios remotos, allowlist de repos.
+Estas decisiones sustituyen la lista de preguntas abiertas anterior. F0 queda
+cerrada con ellas y F1 puede empezar.
+
+1. **Núcleo vs paquetes.** Todo feature es paquete. El núcleo técnico es
+   `core-api`, `kernel`, `manager-*` y `suite-runtime`. `logger` y `transport`
+   son paquetes de dependencia (C3), no código del host. Ningún JAR del host
+   contiene features.
+2. **`inworld` y `tester`.** `inworld` se parte en API neutral + implementación
+   de plataforma. `tester` es un módulo de producción (C7): se distribuye como
+   paquete de plataforma, con benchmarking en runtime y traza del pipeline
+   completo; no se mueve a harness.
+3. **Extensiones.** `ExtensionManager` se unifica con `ModuleHost`: una
+   extensión es un paquete de tipo extensión con el mismo ciclo de vida. No
+   existe un `enum` cerrado de módulos conocidos; cualquier repositorio de
+   terceros puede publicar paquetes custom (P11/C8).
+4. **Versiones concurrentes.** Al estilo Debian (C9): la versión nueva del mismo
+   paquete reemplaza a la anterior resolviendo el grafo. Durante un upgrade
+   pueden solaparse v1 y v2 solo hasta confirmar el swap; no hay coexistencia
+   permanente de dos versiones del mismo paquete.
+5. **Librerías compartidas.** Son paquetes de dependencia (C3). El manager las
+   descarga, verifica, relocaliza y carga; no viven en el host ni se compilan
+   dentro de los JAR de módulo. El classloader del módulo las resuelve desde el
+   scope de dependencias que el manager le asigna, no por parent-first contra el
+   classloader del host.
+6. **Metadatos.** El `packages.list` del repositorio es la fuente de verdad de
+   qué paquetes existen y desde dónde se descargan (C4). El
+   `METADATA/package.list` del ZIP es el manifiesto de instalación y se valida
+   contra el índice; si discrepa, la instalación falla.
+7. **Seguridad.** Hay sandbox por módulo, pero la responsabilidad principal es
+   del dueño del repositorio (D6/C9). El manager verifica integridad con
+   SHA-256 y el operador decide qué repositorios añadir. Firmas y allowlists son
+   mecanismos opcionales de defensa en profundidad, no requisitos de la
+   filosofía.
 
 ##### Consecuencias
 
@@ -1436,9 +1454,9 @@ Spigot y Fabric no deben conocer la existencia de ningún módulo de feature. Su
 
 ### P4. Código arbitrario: seguridad compartida (sandbox + dueño del repo)
 
-El manager tipo apt descarga e instala código arbitrario. Esa es la idea intencional. Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que publica**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. SHA-256 es obligatorio para verificar integridad; firma es obligatoria para repositorios remotos; allowlist de repositorios de confianza.
+El manager tipo apt descarga e instala código arbitrario. Esa es la idea intencional. Hay sandboxing por módulo, pero el punto central no es el sandbox: **el dueño del repositorio es responsable de lo que publica**. La seguridad se basa tanto en el sandbox como en la confianza en el repositorio. El manager verifica integridad con SHA-256; el operador decide qué repositorios añadir y responde por esa confianza. Firmas y allowlists pueden añadirse como defensa en profundidad, pero no son requisitos de la filosofía.
 
-**Consecuencia:** No se promete que el sandbox por sí solo sea suficiente. La confianza recae en el dueño del repositorio, complementada con verificación de checksum y firma.
+**Consecuencia:** No se promete que el sandbox por sí solo sea suficiente. La confianza recae en el dueño del repositorio, complementada con verificación de integridad.
 
 ### P5. `force` significa forzar de verdad
 
@@ -1462,7 +1480,7 @@ Cuando una funcionalidad se migra al runtime de módulos, su cableado compilado 
 
 SnakeYAML, JDA, Adventure, transporte y otras librerías no se compilan dentro del JAR del host ni de los módulos. Son dependencias gestionadas por el manager, quien se asegura de relocalizar y cargar dichas dependencias para cada paquete tipo módulo.
 
-**Consecuencia:** Ningún JAR de módulo empaqueta librerías compartidas. El classloader del módulo accede a ellas mediante delegation parent-first al classloader del host/runtime.
+**Consecuencia:** Ningún JAR de módulo empaqueta librerías compartidas. El classloader del módulo las resuelve desde el paquete de dependencia relocalizado que el manager le asigna; el host no las expone como parent-first.
 
 ### P9. Los metadatos autoritativos vienen del repositorio, no del JAR
 
