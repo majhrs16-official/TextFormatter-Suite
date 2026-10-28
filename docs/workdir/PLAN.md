@@ -1062,6 +1062,26 @@ host hasta que F8 las empaquete como `DEPENDENCY`. Quedan `sync-discord`,
 `sync-velocity`, `presets`, `extension-api`, `inworld`/`tester` y la retirada
 del cableado del host.
 
+**F6 restante — bloqueado por F4b/F7, no por falta de empaquetado:**
+- `sync-discord` activa JDA con una conexión externa bloqueante de hasta 30 s;
+  empaquetarlo sin un ciclo de vida no bloqueante (F7) haría que la activación
+  dependiera de la red y no es testeable sin un seam de conexión.
+- `sync-velocity` usa la API de Velocity; `inworld` y `tester` usan Paper API.
+  Pertenecen a los adapters de plataforma (F4b), no a paquetes neutrales.
+- `presets` y `extension-api` importan `host.config.HostConfig` y
+  `host.SuiteHost`/`MessageDispatcher`; necesitan puertos neutrales (F4b).
+- `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
+  inworld, tester y extensiones directamente. La retirada de ese cableado es
+  el primer trabajo de F4b: hosts sobre `SuiteRuntime` + `PlatformPorts`, sin
+  imports de features.
+
+**F4b — punto de partida medido:** `spigot-host` importa directamente al menos
+9 paquetes de feature (`sync-socket`, `sync-websocket`, `sync-telegram`,
+`sync-discord`, `sync-http`, `syncbus`, `observability`, `inworld`,
+`extension`) y `fabric-host` al menos 7 (sin `sync-http` ni `inworld`).
+El guard de arquitectura se añadirá cuando la primera rebanada de F4b deje el
+build verde; no se añade un guard que nazca rojo.
+
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
 deja el camino viejo activo. F4b se ejecuta después de F5/F6 porque el
