@@ -13,6 +13,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.manager.apt.AptInstaller;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 import me.majhrs16.suite.manager.core.PackageInstaller;
+import me.majhrs16.suite.manager.spi.PackageEntry;
 
 /**
  * Neutral composition root of the suite.
@@ -88,7 +89,10 @@ public final class SuiteRuntime implements AutoCloseable {
                 libraryRoot, configRoot, ports.info(), logger, stateStore);
         packageRuntime = new PackageRuntime(manager, moduleHost, logger);
 
-        List<ActivationResult> results = moduleHost.loadInstalled();
+        List<PackageEntry> installed = manager.packageList();
+        List<ActivationResult> results = installed.isEmpty()
+                ? moduleHost.loadInstalled()
+                : packageRuntime.activate(installed);
         for (ActivationResult result : results) {
             if (!result.isSuccess()) {
                 logger.warn("Module " + result.moduleId() + " was not activated at startup: "

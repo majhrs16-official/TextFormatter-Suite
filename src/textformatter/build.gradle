@@ -68,3 +68,49 @@ jacocoTestCoverageVerification {
     } }
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
+
+// F5 — distribution ZIP for the manager: JAR + METADATA/package.list
+def moduleVersion = '2.1.0'
+def moduleJarTask = tasks.named('jar')
+
+tasks.register('generateModuleManifest') {
+    dependsOn moduleJarTask
+    def jarFileProvider = moduleJarTask.flatMap { it.archiveFile }
+    inputs.file(jarFileProvider)
+    outputs.file(layout.buildDirectory.file('module/METADATA/package.list'))
+    doLast {
+        def jarFile = jarFileProvider.get().asFile
+        def bytes = jarFile.bytes
+        def digest = java.security.MessageDigest.getInstance('SHA-256').digest(bytes)
+        def sha = digest.collect { String.format('%02x', it & 0xff) }.join()
+        def manifest = """Name: textformatter
+Version: ${moduleVersion}
+Channel: stable
+Type: PACKAGE
+Dependencies: 
+Arch: none
+Platform: common
+URL: 
+OS: none
+SHA256: 
+Size: 0
+Files: 
+  manager/library/packages/textformatter.jar\t${bytes.length}\t${sha}\ttextformatter
+"""
+        def out = layout.buildDirectory.file('module/METADATA/package.list').get().asFile
+        out.parentFile.mkdirs()
+        out.text = manifest
+    }
+}
+
+tasks.register('modulePackage', Zip) {
+    dependsOn 'generateModuleManifest'
+    archiveFileName = "textformatter-${moduleVersion}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from(layout.buildDirectory.dir('module'))
+    from(moduleJarTask.flatMap { it.archiveFile }) {
+        into 'manager/library/packages'
+        rename { 'textformatter.jar' }
+    }
+}
+

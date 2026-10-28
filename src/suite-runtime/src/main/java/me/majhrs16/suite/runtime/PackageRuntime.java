@@ -43,6 +43,7 @@ public final class PackageRuntime {
     private final PluginLogger logger;
     private final Path installRoot;
     private final Path packagesRoot;
+    private final Path dependenciesRoot;
 
     /**
      * @param manager    initialized package manager
@@ -55,6 +56,7 @@ public final class PackageRuntime {
         this.logger = Objects.requireNonNull(logger, "logger");
         this.installRoot = manager.getManagerDir().getParent().toAbsolutePath().normalize();
         this.packagesRoot = moduleHost.packagesDir().toAbsolutePath().normalize();
+        this.dependenciesRoot = packagesRoot.getParent().resolve("dependencies");
     }
 
     /**
@@ -149,12 +151,21 @@ public final class PackageRuntime {
      * @return activation result per eligible JAR
      */
     public List<ActivationResult> activate(List<PackageEntry> entries) {
+        Map<String, PackageEntry> installed = new LinkedHashMap<>();
+        for (PackageEntry entry : manager.packageList()) {
+            installed.put(entry.name(), entry);
+        }
+        for (PackageEntry entry : entries) {
+            installed.putIfAbsent(entry.name(), entry);
+        }
+
         List<ActivationResult> results = new ArrayList<>();
         Set<Path> seen = new HashSet<>();
         for (PackageEntry entry : orderByDependencies(entries)) {
             if (entry.type() == PackageType.DEPENDENCY) {
                 continue;
             }
+            List<Path> dependencyJars = dependencyJars(entry, installed);
             for (FileEntry file : entry.files().values()) {
                 if (!isJar(file.path())) {
                     continue;
@@ -170,11 +181,53 @@ public final class PackageRuntime {
                     continue;
                 }
                 if (seen.add(jar)) {
-                    results.add(moduleHost.activate(jar));
+                    results.add(moduleHost.activate(jar, dependencyJars));
                 }
             }
         }
         return List.copyOf(results);
+    }
+
+    private List<Path> dependencyJars(PackageEntry entry, Map<String, PackageEntry> installed) {
+        List<Path> jars = new ArrayList<>();
+        collectDependencyJars(entry, installed, jars, new HashSet<>());
+        return List.copyOf(jars);
+    }
+
+    private void collectDependencyJars(PackageEntry entry, Map<String, PackageEntry> installed,
+                                       List<Path> jars, Set<String> visited) {
+        for (String dependency : entry.dependencies()) {
+            ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dependency);
+            if (spec == null || !visited.add(spec.name())) {
+                continue;
+            }
+            PackageEntry dependencyEntry = installed.get(spec.name());
+            if (dependencyEntry == null) {
+                logger.warn("Dependency " + spec.name() + " of " + entry.name()
+                        + " is not installed; its JARs are not visible to the module");
+                continue;
+            }
+            if (dependencyEntry.type() == PackageType.DEPENDENCY) {
+                for (FileEntry file : dependencyEntry.files().values()) {
+                    if (!isJar(file.path())) {
+                        continue;
+                    }
+                    Path jar = installRoot.resolve(file.path()).normalize();
+                    if (!jar.startsWith(dependenciesRoot)) {
+                        logger.warn("Dependency package " + dependencyEntry.name()
+                                + " installs a JAR outside library/dependencies: "
+                                + file.path() + "; not added to the module classloader");
+                        continue;
+                    }
+                    if (Files.isRegularFile(jar)) {
+                        jars.add(jar);
+                    } else {
+                        logger.warn("Dependency JAR is missing: " + jar);
+                    }
+                }
+            }
+            collectDependencyJars(dependencyEntry, installed, jars, visited);
+        }
     }
 
     private List<PackageEntry> orderByDependencies(List<PackageEntry> entries) {

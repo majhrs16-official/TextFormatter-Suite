@@ -4,6 +4,8 @@ plugins {
     id 'maven-publish'
 }
 
+evaluationDependsOn(':src:textformatter')
+
 group = 'me.majhrs16'
 
 repositories {
@@ -20,6 +22,9 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'
+    testRuntimeOnly 'net.kyori:adventure-text-minimessage:4.17.0'
+    testRuntimeOnly 'net.kyori:adventure-text-serializer-plain:4.17.0'
+    testRuntimeOnly 'org.yaml:snakeyaml:2.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -35,6 +40,10 @@ tasks.withType(JavaCompile).configureEach {
 
 test {
     useJUnitPlatform()
+    def textformatterPackage = project(':src:textformatter').tasks.named('modulePackage')
+    dependsOn textformatterPackage
+    systemProperty 'textformatter.package',
+            textformatterPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

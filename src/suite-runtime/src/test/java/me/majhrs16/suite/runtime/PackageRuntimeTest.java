@@ -2,6 +2,7 @@ package me.majhrs16.suite.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -101,6 +102,56 @@ class PackageRuntimeTest {
             assertEquals(Set.of("demo-base", "demo-consumer"),
                     Set.copyOf(fixture.host.activeModules()));
             assertEquals(ModuleState.ACTIVE, fixture.host.state("demo-consumer").orElseThrow());
+        }
+    }
+
+    @Test
+    void installsRealTextFormatterPackage() throws Exception {
+        String packagePath = System.getProperty("textformatter.package");
+        assertNotNull(packagePath, "textformatter.package must be set by the build");
+        Path zip = Path.of(packagePath);
+        assertTrue(Files.isRegularFile(zip), "missing distribution: " + zip);
+
+        try (Fixture fixture = fixture()) {
+            List<ActivationResult> activation = fixture.runtime.installLocal(zip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("textformatter").orElseThrow());
+            assertTrue(Files.isDirectory(
+                    fixture.manager.getManagerDir().resolve("config/textformatter/channels")));
+        }
+    }
+
+    @Test
+    void installsDependencyPackageAndMakesItsJarVisibleToTheConsumer() throws Exception {
+        try (Fixture fixture = fixture()) {
+            Path dependencyJar = FixtureModules.buildDependencyJar(
+                    tempDir, "fixture.dep.Shared", "shared-value");
+            Path dependencyZip = FixtureModules.buildDependencyPackageZip(
+                    tempDir, "shared-lib", "1.0.0", "stable", dependencyJar);
+
+            assertTrue(fixture.runtime.installLocal(dependencyZip, false).isEmpty(),
+                    "dependency packages are installed but not activated as modules");
+            assertTrue(fixture.manager.packageList().stream()
+                    .anyMatch(entry -> entry.name().equals("shared-lib")));
+
+            Path consumerJar = FixtureModules.buildJarUsingDependency(
+                    tempDir, "dep-consumer", "1.0.0", dependencyJar,
+                    "fixture.dep.Shared", "value()");
+            Path consumerZip = FixtureModules.buildPackageZip(
+                    tempDir, "dep-consumer", "1.0.0", "stable", consumerJar,
+                    "shared-lib@>=1.0.0");
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(consumerZip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(List.of("shared-value"),
+                    fixture.host.services().findAll(CharSequence.class).stream()
+                            .map(CharSequence::toString).toList());
         }
     }
 

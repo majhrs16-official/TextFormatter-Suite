@@ -129,16 +129,104 @@ final class FixtureModules {
 
         Files.writeString(source, java, StandardCharsets.UTF_8);
 
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
+    static Path buildDependencyJar(Path workDir, String className, String value) throws IOException {
+        int dot = className.lastIndexOf('.');
+        String packageName = dot < 0 ? "" : className.substring(0, dot);
+        String simpleName = dot < 0 ? className : className.substring(dot + 1);
+
+        Path sourceDir = workDir.resolve("dep-src-" + className);
+        Path classesDir = workDir.resolve("dep-classes-" + className);
+        Path jar = workDir.resolve("dep-" + className + ".jar");
+        Path source = sourceDir.resolve(className.replace('.', '/') + ".java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = (packageName.isEmpty() ? "" : "package " + packageName + ";\n\n")
+                + "public final class " + simpleName + " {\n"
+                + "    public static String value() {\n"
+                + "        return \"" + value + "\";\n"
+                + "    }\n"
+                + "}\n";
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, null);
+        return jar;
+    }
+
+    static Path buildJarUsingDependency(Path workDir, String moduleId, String version,
+                                        Path dependencyJar, String dependencyClass,
+                                        String dependencyField) throws IOException {
+        Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
+        Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
+        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = """
+                package fixture;
+
+                import me.majhrs16.suite.api.ModuleDescriptor;
+                import me.majhrs16.suite.api.SemVer;
+                import me.majhrs16.suite.api.runtime.ModuleActivator;
+                import me.majhrs16.suite.api.runtime.ModuleContext;
+
+                public final class Activator implements ModuleActivator {
+
+                    @Override
+                    public ModuleDescriptor descriptor() {
+                        return ModuleDescriptor.builder("MODULE_ID")
+                                .version(SemVer.parse("MODULE_VERSION"))
+                                .contractVersion(SemVer.of(2, 1, 0))
+                                .jvmRange(17, 0)
+                                .build();
+                    }
+
+                    @Override
+                    public void start(ModuleContext context) {
+                        context.services().register(CharSequence.class, DEPENDENCY_CLASS.DEPENDENCY_FIELD);
+                    }
+
+                    @Override
+                    public void stop() {
+                    }
+                }
+                """;
+        java = java
+                .replace("MODULE_ID", moduleId)
+                .replace("MODULE_VERSION", version)
+                .replace("DEPENDENCY_CLASS", dependencyClass)
+                .replace("DEPENDENCY_FIELD", dependencyField);
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+
+        compile(source, classesDir, List.of(dependencyJar));
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
+    private static void compile(Path source, Path classesDir, List<Path> extraClasspath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        StringBuilder classpath = new StringBuilder(System.getProperty("java.class.path"));
+        for (Path entry : extraClasspath) {
+            classpath.append(File.pathSeparatorChar).append(entry);
+        }
+
         List<String> args = new ArrayList<>();
         args.add("-classpath");
-        args.add(System.getProperty("java.class.path"));
+        args.add(classpath.toString());
         args.add("-d");
         args.add(classesDir.toString());
         args.add(source.toString());
         int exit = compiler.run(null, null, null, args.toArray(String[]::new));
         assertEquals(0, exit, "fixture compilation failed");
+    }
 
+    private static void writeJar(Path classesDir, Path jar, String serviceClass) throws IOException {
         try (JarOutputStream jarOut = new JarOutputStream(Files.newOutputStream(jar))) {
             List<Path> compiled;
             try (Stream<Path> walk = Files.walk(classesDir)) {
@@ -150,17 +238,30 @@ final class FixtureModules {
                 Files.copy(file, jarOut);
                 jarOut.closeEntry();
             }
-            jarOut.putNextEntry(new JarEntry(
-                    "META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator"));
-            jarOut.write("fixture.Activator\n".getBytes(StandardCharsets.UTF_8));
-            jarOut.closeEntry();
+            if (serviceClass != null) {
+                jarOut.putNextEntry(new JarEntry(
+                        "META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator"));
+                jarOut.write(serviceClass.getBytes(StandardCharsets.UTF_8));
+                jarOut.closeEntry();
+            }
         }
-        return jar;
     }
 
     static Path buildPackageZip(Path workDir, String packageName, String version, String channel,
                                 Path moduleJar, String dependencies) throws IOException {
-        String jarPath = "manager/library/packages/" + packageName + ".jar";
+        return buildPackageZip(workDir, packageName, version, channel, moduleJar, dependencies,
+                "PACKAGE", "manager/library/packages/" + packageName + ".jar");
+    }
+
+    static Path buildDependencyPackageZip(Path workDir, String packageName, String version,
+                                          String channel, Path dependencyJar) throws IOException {
+        return buildPackageZip(workDir, packageName, version, channel, dependencyJar, null,
+                "DEPENDENCY", "manager/library/dependencies/" + packageName + ".jar");
+    }
+
+    private static Path buildPackageZip(Path workDir, String packageName, String version,
+                                        String channel, Path moduleJar, String dependencies,
+                                        String type, String jarPath) throws IOException {
         byte[] jarBytes = Files.readAllBytes(moduleJar);
         String jarSha = sha256(jarBytes);
         String deps = dependencies == null ? "" : dependencies;
@@ -168,7 +269,7 @@ final class FixtureModules {
         String manifest = "Name: " + packageName + "\n"
                 + "Version: " + version + "\n"
                 + "Channel: " + channel + "\n"
-                + "Type: PACKAGE\n"
+                + "Type: " + type + "\n"
                 + "Dependencies: " + deps + "\n"
                 + "Arch: none\n"
                 + "Platform: common\n"

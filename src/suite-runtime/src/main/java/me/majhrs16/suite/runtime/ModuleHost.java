@@ -169,9 +169,26 @@ public final class ModuleHost implements AutoCloseable {
      * @return the activation outcome
      */
     public ActivationResult activate(Path jar) {
+        return activate(jar, List.of());
+    }
+
+    /**
+     * Activates a single module JAR with shared dependency JARs visible to its
+     * classloader.
+     *
+     * <p>Dependency JARs are searched after the module JAR, so the module can
+     * ship its own classes and still link against shared libraries installed by
+     * the manager.</p>
+     *
+     * @param jar             module JAR
+     * @param dependencyJars  shared dependency JARs
+     * @return the activation outcome
+     */
+    public ActivationResult activate(Path jar, List<Path> dependencyJars) {
+        Objects.requireNonNull(dependencyJars, "dependencyJars");
         PreparedModule prepared;
         try {
-            prepared = prepare(jar);
+            prepared = prepare(jar, dependencyJars);
         } catch (Throwable failure) {
             String name = jar.getFileName().toString();
             setState(name, ModuleState.FAILED);
@@ -258,7 +275,12 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     private PreparedModule prepare(Path jar) throws Exception {
-        ModuleClassLoader classLoader = new ModuleClassLoader(jar, ModuleActivator.class.getClassLoader());
+        return prepare(jar, List.of());
+    }
+
+    private PreparedModule prepare(Path jar, List<Path> dependencyJars) throws Exception {
+        ModuleClassLoader classLoader = new ModuleClassLoader(
+                jar, dependencyJars, ModuleActivator.class.getClassLoader());
         try {
             List<ModuleActivator> activators = new ArrayList<>();
             for (ModuleActivator activator : ServiceLoader.load(ModuleActivator.class, classLoader)) {

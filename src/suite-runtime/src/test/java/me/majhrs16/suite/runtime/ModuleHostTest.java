@@ -115,6 +115,41 @@ class ModuleHostTest {
         }
     }
 
+    @Test
+    void loadsClassesFromSharedDependencyJar() throws Exception {
+        Path dependency = FixtureModules.buildDependencyJar(
+                tempDir, "fixture.dep.Shared", "from-dependency");
+        Path consumer = FixtureModules.buildJarUsingDependency(
+                tempDir, "dep-consumer", "1.0.0", dependency,
+                "fixture.dep.Shared", "value()");
+
+        try (ModuleHost host = newHost()) {
+            ActivationResult result = host.activate(consumer, List.of(dependency));
+
+            assertTrue(result.isSuccess());
+            assertEquals(List.of("from-dependency"),
+                    host.services().findAll(CharSequence.class).stream()
+                            .map(CharSequence::toString).toList());
+        }
+    }
+
+    @Test
+    void missingSharedDependencyFailsActivation() throws Exception {
+        Path dependency = FixtureModules.buildDependencyJar(
+                tempDir, "fixture.dep.Missing", "unused");
+        Path consumer = FixtureModules.buildJarUsingDependency(
+                tempDir, "dep-orphan", "1.0.0", dependency,
+                "fixture.dep.Missing", "value()");
+
+        try (ModuleHost host = newHost()) {
+            ActivationResult result = host.activate(consumer);
+
+            assertFalse(result.isSuccess());
+            assertEquals(ModuleState.FAILED, host.state("dep-orphan").orElseThrow());
+            assertTrue(host.services().findAll(CharSequence.class).isEmpty());
+        }
+    }
+
     private ModuleHost newHost() {
         return new ModuleHost(
                 tempDir.resolve("library"),

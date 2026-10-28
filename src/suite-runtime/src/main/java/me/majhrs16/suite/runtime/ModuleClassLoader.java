@@ -29,6 +29,25 @@ public final class ModuleClassLoader extends URLClassLoader {
         this(new URL[]{jar.toUri().toURL()}, apiParent);
     }
 
+    /**
+     * @param jar             module JAR, searched first
+     * @param dependencyJars  shared dependency JARs, searched after the module
+     * @param apiParent       parent that owns the neutral API contracts
+     * @throws IOException if a path cannot be converted to a URL
+     */
+    public ModuleClassLoader(Path jar, List<Path> dependencyJars, ClassLoader apiParent) throws IOException {
+        this(toUrls(jar, dependencyJars), apiParent);
+    }
+
+    private static URL[] toUrls(Path jar, List<Path> dependencyJars) throws IOException {
+        URL[] urls = new URL[dependencyJars.size() + 1];
+        urls[0] = jar.toUri().toURL();
+        for (int i = 0; i < dependencyJars.size(); i++) {
+            urls[i + 1] = dependencyJars.get(i).toUri().toURL();
+        }
+        return urls;
+    }
+
     public ModuleClassLoader(URL[] urls, ClassLoader apiParent) {
         super("suite-module", urls, apiParent);
     }
