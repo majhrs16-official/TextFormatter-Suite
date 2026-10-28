@@ -3,6 +3,8 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-27 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. La implementación está pendiente y se rige por fases con puertas de calidad y un protocolo anti-vaguedad. Ver la sección **ADR-019** más abajo.
+
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
 > **Nota de estado (2026-10-23):** **iFlow no se abandona ni se elimina.** Se divide en dos líneas paralelas: **`iflow-vm`** (VM propia de 32 bits, con las mejoras de la auditoría) e **`iflow-wasm`** (motor WebAssembly sobre Chicory). La especificación técnica de referencia v3 queda en `docs/prompts/diseno/iflow-cpu-implement.md` y recoge los hallazgos `IFLOW-MAN-*` como requisitos de la línea de 32 bits; **no se hereda** al motor Wasm. Las secciones históricas de este plan se conservan, pero la fuente de verdad es este bloque y el estado real.
@@ -320,7 +322,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 | ID | Tema | Decisión requerida |
 |---|---|---|
 | **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y aplicado: `src/iflow-firewall` restaura **literalmente** el motor SpEL de `933bdd3^:src/iflow`; es **alternativa mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) y el host elige con `iflow.engine.kind` |
-| **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🟡 Paridad inmediata aplicada (`gtranslate`/`ltranslate` en `fabric-host`); 📝 ADR-019 propuesto para adapters sin deps a módulos core |
+| **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🔴 **Reabierto como reestructuración integral**: no es un fix de dependencias. Se reescribe ADR-019 para convertir el Manager en orquestador de un runtime de módulos con carga dinámica, hot unload/upgrade real y adapters que solo implementan puertos de plataforma. Implementación pendiente por fases con puertas de calidad; ver ADR-019 |
 | **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ✅ Aceptado: un único `config/suite/messages.yml` para todas las plataformas (`HostPaths`); loader compartido en `host` |
 | **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | ✅ ADR-008 aceptado y verificado: se mantienen `chattranslator` (façade) y `translator` (proveedor); `ChatTranslatorModuleTest` prueba que la façade activa sin backends, que un backend sin façade queda inactivo y que ambos resuelven cuando coexisten |
 
@@ -490,46 +492,577 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 ---
 
-#### ADR-019: Platform adapters como composition roots delgados; módulos descubiertos en runtime
+#### ADR-019: Reestructuración integral — runtime de módulos, hot unload/upgrade y adapters delgados
 
-**Estado:** Propuesto
+**Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
 
-**Contexto**
+**Implementación:** 0% — esta entrada fija la decisión, el diagnóstico y el plan; no se ha modificado código todavía.
 
-- `Hecho verificado`: `spigot-host/build.gradle:42-43` declara `gtranslate` y `ltranslate`; hasta esta iteración `fabric-host` no los declaraba, por lo que `ServiceLoader<TranslatorProvider>` no encontraba proveedores en Fabric y la traducción caía a no-op. La paridad inmediata ya está aplicada (`fabric-host/build.gradle:35-36`).
-- `Hecho verificado`: ambos adapters importan módulos de feature directamente: `sync-*` (`TextFormatterSuitePlugin.java:31-38`, `TextFormatterSuiteMod.java:29-35`), `extension-api`, `observability`, `manager-*` en Spigot.
-- `Hecho verificado`: existe el SPI `Module`/`ModuleDescriptor` en `core-api` y `kernel.ModuleGraph` resuelve `provides`/`requires`; el host compone el runtime en `SuiteHost.bootstrap`.
-- `Requisito`: los adapters deben ser agnósticos a la plataforma y no arrastrar módulos de feature.
-- `Restricción`: Spigot y Fabric necesitan un composition root que construya sinks, listeners y servicios de plataforma; la pregunta es cuánto conoce ese root.
+> **Ubicación:** este ADR vive en `docs/workdir/PLAN.md`. No es una sección de
+> `docs/workdir/ADR.md`; ese archivo es el documento histórico de decisiones base
+> y no se modifica aquí. Se reescribe este ADR en lugar de crear uno nuevo para
+> evitar fragmentar todavía más la arquitectura.
 
-**Consecuencias**
+##### Decisión del usuario (2026-10-27)
+
+- **I-019 no es un arreglo de dependencias**: es una reestructuración de la
+  arquitectura de la suite.
+- El objetivo es **hot unload/upgrade real**, no solo carga inicial de módulos.
+- La solución no es empezar por el loader manteniendo la suite actual. Hay que
+  **romper la suite, desarmar todo, reestructurar lo que debe ir y lo que no, y
+  volver a armarla** como debería haber sido desde el principio.
+- No se aceptan implementaciones a medias, stubs, no-ops, adaptadores de
+  compatibilidad sin fecha de eliminación ni parches que preserven el
+  acoplamiento actual.
+- El Manager debe ser el origen de la composición: actualizar índice, descargar
+  paquetes, resolver dependencias, instalar, **inicializar en memoria**, y
+  gestionar el ciclo de vida completo.
+- Spigot y Fabric no deben conocer la existencia de ningún módulo de feature.
+  Solo implementan una API común entre plataformas y adaptan, en reversa, los
+  eventos de su Minecraft a una representación interna agnóstica.
+
+##### Diagnóstico: por qué el estado actual no puede sostener ese modelo
+
+###### 1. El Manager instala, pero no activa
+
+- `manager-apt/.../ModuleLifecycleAdapter.java:20-29` documenta explícitamente
+  que la arquitectura APT/dpkg instala en disco y **requiere reinicio**; la
+  carga/descarga dinámica **no está soportada**.
+- `ModuleLifecycleAdapter.load()` devuelve el `parent` ClassLoader, no crea uno
+  (`:95-99`).
+- `register()` devuelve `false` y `unregister()`/`unload()` no hacen nada
+  (`:103-117`).
+- `ManagerFacade.discoverAll()` solo llama a
+  `kernel.ModuleLoader.discover(parent)` y deja el TODO explícito:
+  «Package-based module discovery not yet implemented in ModuleLoader»
+  (`ManagerFacade.java:209-216`).
+- `PackageInstaller` mueve archivos a `installRoot` y registra estado; no abre
+  ningún `URLClassLoader` ni instancia servicios
+  (`PackageInstaller.java:610-632`).
+- El destino de instalación es el directorio de datos de la suite
+  (`installRoot = managerDir.getParent()`), no `/plugins` ni `/mods`; por tanto
+  el servidor **no** carga esos JARs automáticamente. Sin un `ModuleHost`, los
+  paquetes instalados quedan inertes.
+
+###### 2. `Module` no tiene ciclo de vida
+
+- `core-api/.../Module.java:8-13` dice: «There is no lifecycle contract and no
+  reflective method cracking: exposing a `ModuleDescriptor` is enough for the
+  dependency graph».
+- Ese contrato sirve para describir, no para cargar, iniciar, detener,
+  desregistrar o descargar.
+- `ServiceLoader` es estático: descubre lo que ya está en el classpath del host,
+  no JARs instalados en `library/packages`, y no permite desregistrar.
+
+###### 3. El Manager arranca después de la suite
+
+- En Spigot, `SuiteHost.bootstrap(...)` se ejecuta en
+  `TextFormatterSuitePlugin.java:297`, antes de inicializar `ManagerFacade` en
+  `:457-474`. Cuando el Manager aparece, la suite ya está construida con todos
+  los features cableados.
+- En Fabric, `TextFormatterSuiteMod.java` **no inicializa `ManagerFacade` en
+  absoluto**, aunque `fabric-host/build.gradle` declara `manager-spi`,
+  `manager-core` y `manager-apt`.
+- Por tanto, hoy el Manager no decide qué módulos forman la suite; solo gestiona
+  archivos de una suite que ya está viva por otras vías.
+
+###### 4. Los adapters y el host conocen los features
+
+- `spigot-host/build.gradle:31-55` declara `sync-*`, `gtranslate`,
+  `ltranslate`, `messages`, `textformatter`, `tester`, `transport`,
+  `observability`, `manager-*`, `inworld` y `extension-api`.
+- `fabric-host/build.gradle:24-44` declara casi lo mismo, con divergencias:
+  falta `sync-http`, sobran `presets` y `manager-*` (no se usan en Java), y no
+  existen `tester` ni `inworld`.
+- `spigot-host` importa módulos de feature directamente
+  (`TextFormatterSuitePlugin.java:3-42`); Fabric también
+  (`TextFormatterSuiteMod.java:3-38`).
+- `gtranslate` y `ltranslate` no se importan en los adapters: solo se necesitan
+  por `ServiceLoader`. Aun así se declaran como `implementation`, lo que
+  demuestra que la lista de dependencias no refleja el uso real.
+- `host/build.gradle:19-30` depende de `textformatter`, `iflow-vm`,
+  `iflow-firewall`, `transport` y `chattranslator`. `SuiteHost.java:100-131`
+  los instancia directamente.
+- `inworld`, `observability`, `extension-api` y `presets` dependen de `host`.
+  Por eso no se puede «mover todo el wiring a `host`»: se crearían ciclos.
+
+###### 5. El grafo del kernel no gobierna el arranque
+
+- `SuiteBootstrap.java:45-132` descubre módulos y resuelve
+  `provides`/`requires`, pero los adapters llaman a `SuiteHost.bootstrap(...)`,
+  no a `SuiteBootstrap`.
+- `SuiteBootstrap` solo se usa en tests de `loadtest`; en producción el grafo
+  es una validación, no la fuente de verdad de la composición.
+
+###### 6. Los módulos actuales son librerías, no plugins/mods autónomos
+
+- Los módulos de feature no tienen `plugin.yml` ni `fabric.mod.json`; solo
+  declaran `META-INF/services/me.majhrs16.suite.api.Module`.
+- Están pensados para ser empaquetados dentro del shadow JAR del adapter, no
+  para ser cargados desde un directorio de módulos.
+- `inworld` es el único feature que importa Bukkit directamente; no puede ser
+  neutral tal como está.
+
+###### 7. La única carga dinámica existente es para extensions
+
+- `ExtensionManager.java:126-127` y `:239-242` ya usan `URLClassLoader` para
+  cargar extensions.
+- Es una prueba de concepto útil, pero está separada del Manager y de los
+  módulos; no hay un modelo común de ciclo de vida, registro de servicios ni
+  descarga.
+
+###### 8. Faltan guardrails
+
+- No hay ningún test o tarea que impida que un adapter vuelva a declarar un
+  módulo de feature.
+- No hay tests de carga/descarga de JARs, aislamiento de classloader,
+  activación fallida, rollback ni fugas de recursos.
+- `library/status` no distingue con suficiente precisión entre instalado,
+  activo, fallido y pendiente de reinicio; la spec lo exige
+  (`manager-v2.md:321`, `:546-548`).
+
+##### Principios no negociables
+
+1. **El core no conoce features.** `core-api`, `kernel`, `manager-*` y
+   `suite-runtime` no importan `sync-*`, `textformatter`, `iflow-*`,
+   `chattranslator`, `gtranslate`, `ltranslate`, `observability`, etc.
+2. **Los adapters solo conocen la plataforma y la API.** `spigot-host` y
+   `fabric-host` dependen de `core-api` + `suite-runtime` + SDK de plataforma.
+3. **El Manager es el orquestador.** Instalar, activar, desactivar, actualizar
+   y reparar pasan por el Manager.
+4. **Instalar no es activar.** El estado instalado y el estado activo se
+   registran por separado; una activación fallida no se marca como éxito.
+5. **El ciclo de vida es obligatorio para hot unload/upgrade.** Sin
+   `start/stop` y liberación de recursos, no se promete hot reload.
+6. **No hay doble camino.** Cuando una feature se migra al runtime, se elimina
+   su cableado compilado en el mismo cambio. No se mantienen dos formas de
+   arrancar.
+7. **No hay stubs silenciosos.** Lo no soportado lanza un error explícito o se
+   marca como `RESTART_REQUIRED`; nunca se devuelve `parent`, `false` o vacío
+   fingiendo éxito.
+8. **La arquitectura se verifica.** Un guard de dependencias/imports falla el
+   build si aparece una violación.
+
+##### Arquitectura objetivo
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│ spigot-host / fabric-host                                            │
+│ - implementa PlatformPorts                                           │
+│ - traduce eventos de plataforma a Message                            │
+│ - registra listeners/comandos y delega en SuiteRuntime               │
+│ - NO importa ningún módulo de feature                                │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │ core-api + suite-runtime
+┌───────────────────────────────▼──────────────────────────────────────┐
+│ suite-runtime                                                        │
+│ - SuiteRuntime: ciclo de vida del conjunto                           │
+│ - ModuleHost: carga, activa, desactiva, actualiza y descarga         │
+│ - ModuleClassLoader: aislamiento por módulo                          │
+│ - ServiceRegistry, EventBus, Scheduler, ResourceTracker              │
+│ - SuiteHost/MessageDispatcher construidos desde servicios            │
+│ - ManagerFacade como orquestador de paquetes                         │
+└───────────────┬───────────────────────────────────┬──────────────────┘
+                │                                   │
+┌───────────────▼───────────────────┐   ┌───────────▼──────────────────┐
+│ core-api + kernel                 │   │ manager-spi / core / apt     │
+│ contratos, mensajes, puertos,     │   │ paquetes, estado, resolver,  │
+│ ModuleActivator, ModuleContext    │   │ instalación, activación      │
+└───────────────▲───────────────────┘   └──────────────────────────────┘
+                │ solo core-api
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ modules/*.jar instalados en library/packages                         │
+│ textformatter, iflow-*, chattranslator, gtranslate, ltranslate,      │
+│ sync-*, observability, presets, messages, ...                        │
+│ implementan ModuleActivator y usan ModuleContext                     │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+No existe una flecha `suite-runtime -> feature`. Las features se descubren
+desde `library/status` y se cargan desde `library/packages`; nunca se importan
+en tiempo de compilación.
+
+##### Contrato de módulo
+
+`Module` se conserva como descriptor (la spec prohíbe convertirlo en una clase
+que el bootstrap instancie reflectivamente). Se añade un contrato de activación
+separado:
+
+```java
+public interface ModuleActivator {
+    ModuleDescriptor descriptor();
+    void start(ModuleContext context) throws Exception;
+    void stop() throws Exception;
+}
+```
+
+El JAR declara:
+
+```text
+META-INF/services/me.majhrs16.suite.api.ModuleActivator
+```
+
+El `ModuleHost` lo descubre con:
+
+```java
+ServiceLoader.load(ModuleActivator.class, moduleClassLoader);
+```
+
+`ModuleContext` no expone Bukkit ni Fabric:
+
+```java
+public interface ModuleContext extends AutoCloseable {
+    String moduleId();
+    Path configDir();
+    PluginLogger logger();
+    ServiceRegistry services();
+    EventBus events();
+    Scheduler scheduler();
+    ResourceTracker resources();
+    PlatformInfo platform();
+}
+```
+
+`ServiceRegistry` sustituye a `ServiceLoader` para servicios vivos:
+
+```java
+public interface ServiceRegistry {
+    <T> Registration register(Class<T> type, T service);
+    <T> Optional<T> find(Class<T> type);
+    <T> List<T> findAll(Class<T> type);
+
+    interface Registration extends AutoCloseable {
+        void close();
+    }
+}
+```
+
+Cada registro queda asociado al `moduleId`; al desactivar el módulo se cierran
+sus registros, se cancelan sus tareas y se liberan sus recursos.
+
+##### `ModuleHost`: carga, activación y hot upgrade
+
+```java
+public final class ModuleHost implements AutoCloseable {
+    public void loadInstalled();                 // lee library/status
+    public ActivationResult activate(String id); // carga JAR + start()
+    public DeactivationResult deactivate(String id);
+    public UpgradeResult upgrade(String id, Path newJar);
+    public RuntimeSnapshot snapshot();
+}
+```
+
+Estados:
+
+```java
+public enum ModuleState {
+    INSTALLED,
+    ACTIVE,
+    FAILED,
+    RESTART_REQUIRED,
+    REMOVED
+}
+```
+
+Reglas del loader:
+
+- Un `ModuleClassLoader` por módulo, con parent común de API.
+- Parent-first para `me.majhrs16.suite.api.*`, `java.*` y librerías compartidas
+  declaradas por el host.
+- Child-first para las clases de implementación del módulo.
+- Acceso a dependencias desde `library/dependencies`.
+- Cierre del classloader al desactivar.
+- Si el classloader no puede cerrarse o quedan hilos/listeners, el estado pasa
+  a `RESTART_REQUIRED`; no se marca como desactivado limpio.
+
+Secuencia de activación:
+
+1. Leer metadatos del paquete (`METADATA/package.list` y `library/status`).
+2. Resolver orden y dependencias con `kernel.ModuleGraph` y
+   `DependencyResolver`.
+3. Crear classloader y alcance de servicios.
+4. Cargar `ModuleActivator`.
+5. Validar descriptor, versión de API, plataforma y capacidades.
+6. Crear `ModuleContext`.
+7. Ejecutar `start()`.
+8. Si falla: cerrar registros, ejecutar `stop()` de limpieza, cerrar
+   classloader y marcar `FAILED`.
+9. Si funciona: confirmar servicios y marcar `ACTIVE`.
+
+Secuencia de hot upgrade:
+
+1. Instalar la nueva versión en una ruta versionada; no sobrescribir la activa.
+2. Crear nuevo classloader y nuevo alcance de servicios.
+3. Ejecutar `start()` de la nueva versión.
+4. Si falla: descartar la nueva versión, mantener la anterior activa y reportar.
+5. Si funciona: detener la versión anterior, intercambiar registros y cerrar el
+   classloader anterior.
+6. Si la versión anterior no libera recursos: mantenerla hasta reinicio, marcar
+   `RESTART_REQUIRED` y no afirmar que el upgrade fue limpio.
+7. Confirmar el cambio en `library/status` solo después de la activación.
+
+Secuencia de desactivación:
+
+1. Ejecutar `stop()`.
+2. Cerrar `ResourceTracker` (listeners, tareas, sockets, executors).
+3. Cerrar registros de servicios del módulo.
+4. Cerrar classloader.
+5. Actualizar estado a `INSTALLED` o `REMOVED`.
+
+##### Manager: instalación y activación separadas
+
+```text
+repo update
+  → actualiza índices
+
+repo install <pkg>
+  → resuelve dependencias y conflictos (Exclude/Provide)
+  → descarga y verifica SHA-256
+  → instala en library/packages
+  → registra INSTALLED en library/status
+  → ModuleHost.activate(...)
+  → registra ACTIVE o FAILED
+
+repo remove <pkg>
+  → ModuleHost.deactivate(...)
+  → elimina archivos y dependencias huérfanas
+  → actualiza library/status
+
+repo upgrade
+  → resuelve y descarga nueva versión
+  → instala en ruta versionada
+  → ModuleHost.upgrade(...)
+  → si falla, rollback a la versión anterior
+  → si no se puede descargar la anterior, RESTART_REQUIRED
+
+arranque
+  → ManagerFacade.initialize()
+  → ModuleHost.loadInstalled()
+  → ModuleHost.activateAll() en orden topológico
+  → SuiteRuntime construye el pipeline desde ServiceRegistry
+```
+
+`library/status` debe distinguir, como mínimo:
+
+- `INSTALLED`: archivos presentes, sin activación confirmada.
+- `ACTIVE`: activación confirmada.
+- `FAILED`: instalación correcta, activación fallida.
+- `RESTART_REQUIRED`: activación/desactivación incompleta que requiere reinicio.
+- `REMOVED`: retirado.
+
+La activación fallida no puede registrarse como correcta
+(`manager-v2.md:546-548`). El estado instalado y el estado activo son campos
+distintos.
+
+##### Clasificación objetivo de módulos
+
+| Categoría | Módulos | Destino |
+|---|---|---|
+| Núcleo técnico | `core-api`, `kernel`, `logger`, `transport`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
+| Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma |
+| Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` | Paquetes instalados por defecto; `Exclude`/`Provide` para motores iFlow |
+| Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api` | Paquetes; dependencias declaradas en `METADATA/package.list` |
+| Plataforma | `inworld` (Bukkit), `tester` (Spigot), handlers Fabric | Adapter o paquete marcado `Platform: bukkit`/`fabric`; nunca en el loader neutral |
+| Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
+| Eliminar | `common-legacy` (sin fuentes `main`), `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, dependencias muertas | Borrar en la fase correspondiente |
+
+Decisión por defecto propuesta: **todo feature es paquete**, incluso
+`textformatter`, `iflow-*`, `chattranslator` y `messages`. El núcleo solo
+contiene contratos, kernel, manager, runtime y adapters. La suite instala un
+conjunto base en el primer arranque; si falta, arranca en modo degradado con
+avisos explícitos, no con una implementación falsa.
+
+##### Reglas de dependencia
+
+```text
+spigot-host / fabric-host
+  → core-api
+  → suite-runtime
+  → SDK de plataforma
+
+suite-runtime
+  → core-api
+  → kernel
+  → manager-spi / manager-core / manager-apt
+  → logger / transport (librerías)
+  ✗ ningún módulo de feature
+
+core-api
+  → JDK
+  ✗ kernel, manager, host, features, plataforma
+
+kernel
+  → core-api
+
+manager-*
+  → core-api
+  → kernel
+  ✗ host, features, plataforma
+
+feature module
+  → core-api (y, si hace falta, APIs de host-core)
+  ✗ otros features salvo dependencia declarada
+  ✗ Bukkit / Fabric / Minecraft
+
+módulo platform-specific
+  → core-api + SDK de plataforma
+  → cargado por un loader de plataforma, no por el loader neutral
+```
+
+##### Qué se elimina, no se envuelve
+
+- `ModuleLifecycleAdapter`: se elimina cuando `ModuleHost` cubra su contrato.
+- `ModuleLifecycle` antiguo: se sustituye por la API de `ModuleHost`; no se
+  mantiene como fachada no-op.
+- `SuiteHost.bootstrap(...)` con features hardcodeados: se sustituye por
+  `SuiteRuntime`; se elimina.
+- `SuiteBootstrap` duplicado: se integra en `SuiteRuntime` o se reduce a helper
+  de grafo; no se mantienen dos bootstraps.
+- `ManagerFacade.discoverAll()` basado en classpath: se elimina; el
+  descubrimiento sale de `library/status` y `library/packages`.
+- Dependencias de features en adapters y `host`: se eliminan.
+- `gtranslate`/`ltranslate` como `implementation` en adapters: pasan a ser
+  paquetes o `runtimeOnly` del runtime, nunca dependencia de compilación del
+  adapter.
+- `presets` y `manager-*` sin uso en Fabric: se usan o se eliminan.
+- `tester` en producción: se mueve a harness o a paquete platform-specific.
+- `common-legacy`: se elimina si sigue sin fuentes `main`.
+- `sync-http` en Fabric: deja de ser una diferencia de adapter; se resuelve
+  como paquete compartido.
+- `ExtensionManager` con loader propio: se unifica con `ModuleHost` o se
+  documenta como subsistema separado con contrato propio. No se mantienen dos
+  loaders sin justificación.
+
+##### Fases, puertas y definición de terminado
+
+Cada fase termina con código, tests, documentación, eliminación del camino
+viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
+
+| Fase | Objetivo | Entregables | Puerta de cierre |
+|---|---|---|---|
+| **F0. Inventario y contrato** | Congelar el estado real y aprobar este ADR | Inventario de módulos, grafo actual, lista de deuda, contratos `ModuleActivator`/`ModuleContext`/`ServiceRegistry`/`PlatformPorts` | ADR aceptado; inventario verificable; ninguna decisión abierta que bloquee F1 |
+| **F1. API de ciclo de vida** | Introducir contratos sin tocar aún el arranque | `ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`; tests de contrato | `core-api` compila sin dependencias de features; tests de API verdes |
+| **F2. ModuleHost POC** | Cargar un JAR real de fixture desde disco | `ModuleClassLoader`, `ModuleHost`, activación/desactivación, orden topológico, aislamiento, cierre de classloader; test de dos versiones de una misma clase | Un JAR de fixture se carga, arranca, detiene y descarga sin classpath de features; sin fugas detectables en el fixture |
+| **F3. Manager + activación** | Unir paquetes con runtime | Instalación en `library/packages`, estado instalado/activo/fallido/reinicio, `repo install/remove/upgrade`, rollback básico | Instalar activa; activación fallida no se marca activa; remover desactiva; tests de `Exclude`/`Provide` y dependencias |
+| **F4. SuiteRuntime y adapters** | Romper el acoplamiento de los adapters | `SuiteRuntime`, `SpigotPlatformPorts`, `FabricPlatformPorts`, traducción de eventos, comandos delegados; eliminar deps de features de los adapters | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
+| **F5. Migrar paquetes base** | Convertir features base en paquetes | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` como `ModuleActivator`; eliminar el cableado compilado | Cada paquete carga desde JAR, registra su servicio y funciona; el camino viejo ya no existe |
+| **F6. Migrar paquetes opcionales** | Convertir el resto de features | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api`; mover `inworld`/`tester` a plataforma o harness | Todos los paquetes se activan desde `library/status`; ningún feature queda compilado en el host |
+| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado coherente en `library/status` |
+| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, firmas/checksums, repositorios de confianza, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
+
+Orden obligatorio: **F0 → F1 → F2 → F3 → F4 → F5/F6 → F7 → F8**. F5 y F6
+pueden solaparse solo si cada paquete tiene su propia puerta y no se deja el
+camino viejo activo.
+
+##### Protocolo anti-vaguedad
+
+Para evitar que el cambio quede a medias:
+
+1. **Una fase, una entrega verificable.** No se abre la siguiente hasta que la
+   anterior tenga su puerta verde.
+2. **Cada fase incluye una lista de eliminación.** Si no se borra el camino
+   viejo, la fase no está terminada.
+3. **Prohibidos los no-ops.** Nada de `return parent`, `return false`, métodos
+   vacíos, `TODO` o `UnsupportedOperationException` silenciosa para aparentar
+   compatibilidad.
+4. **Prohibidos los adaptadores de compatibilidad sin fecha.** Si algo se
+   conserva, tiene que ser con contrato, tests y fecha de eliminación.
+5. **Cada PR incluye tests del nuevo camino y un guard que impida volver al
+   viejo.** El guard debe fallar el build, no solo avisar.
+6. **Cada PR declara qué se elimina.** El mensaje de commit y la descripción
+   deben incluir la sección «Eliminado».
+7. **Si una fase no se puede completar, se revierte.** No se deja código a
+   medias para «completarlo luego».
+8. **No se acepta «paridad inmediata» como cierre de I-019.** I-019 se cierra
+   solo cuando el host no conoce features y el Manager activa módulos.
+9. **No se acepta un `suite-runtime` que dependa de features.** Si depende de
+   ellas, es otro composition root disfrazado.
+10. **No se acepta un loader que solo funcione con módulos en el classpath.**
+    Debe cargar desde `library/packages`.
+11. **No se acepta hot reload sin liberación de recursos.** Si no se puede
+    liberar, se marca `RESTART_REQUIRED`.
+12. **No se acepta marcar `ACTIVE` si `start()` falló.**
+
+##### Criterios de aceptación finales
+
+- [ ] `spigot-host/build.gradle` y `fabric-host/build.gradle` solo declaran
+      `core-api`, `suite-runtime` y SDK de plataforma.
+- [ ] `suite-runtime/build.gradle` no declara ningún módulo de feature.
+- [ ] `host` no declara `textformatter`, `iflow-*`, `chattranslator` ni
+      `transport` como implementaciones; solo APIs.
+- [ ] Los adapters no importan `me.majhrs16.suite.sync*`,
+      `me.majhrs16.suite.textformatter`, `me.majhrs16.suite.iflow*`,
+      `me.majhrs16.suite.chattranslator`, `me.majhrs16.suite.observability`,
+      `me.majhrs16.suite.manager*` ni `me.majhrs16.suite.presets`.
+- [ ] `ModuleHost` carga un JAR desde `library/packages`, lo activa y lo
+      desactiva sin classpath de features.
+- [ ] `library/status` distingue `INSTALLED`, `ACTIVE`, `FAILED` y
+      `RESTART_REQUIRED`.
+- [ ] `repo install` activa; `repo remove` desactiva; `repo upgrade` hace
+      rollback si la nueva versión falla.
+- [ ] Un test de upgrade v1→v2 demuestra que la v1 se detiene y se descarga, y
+      que la v2 queda activa.
+- [ ] Un test de upgrade fallido demuestra que la v1 sigue activa.
+- [ ] Un test de activación fallida demuestra que el paquete no se marca
+      `ACTIVE`.
+- [ ] Un test de arquitectura falla si un adapter vuelve a declarar un feature.
+- [ ] No quedan `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado,
+      `ManagerFacade.discoverAll` por classpath ni dependencias muertas.
+- [ ] `./gradlew build` y `./gradlew checkArchitecture` pasan.
+- [ ] La documentación de módulos explica `ModuleActivator`, `ModuleContext`,
+      `library/packages`, `library/status`, hot upgrade y límites de reinicio.
+
+##### Decisiones abiertas que F0 debe cerrar
+
+1. **Núcleo vs paquetes:** confirmar que todo feature es paquete y que solo
+   `core-api`, `kernel`, `manager-*`, `suite-runtime`, `logger` y `transport`
+   son núcleo técnico.
+2. **`inworld` y `tester`:** decidir si son módulos platform-specific o código
+   del adapter. Propuesta: `inworld` se parte en API neutral + implementación
+   Bukkit/Fabric; `tester` se mueve a harness o paquete Spigot.
+3. **Extensions:** decidir si `ExtensionManager` se unifica con `ModuleHost`
+   (mismo ciclo de vida) o se mantiene como subsistema separado con contrato
+   propio. Propuesta: unificar como `ModuleKind.EXTENSION`.
+4. **Versiones concurrentes:** decidir si se permite coexistencia de versiones.
+   Propuesta: una versión activa por módulo; durante upgrade se solapan v1 y v2
+   solo hasta confirmar el swap.
+5. **Librerías compartidas:** decidir el parent classloader para SnakeYAML,
+   JDA, Adventure y transporte. Propuesta: librerías compartidas en el host,
+   parent-first; los módulos no las empaquetan.
+6. **Metadatos:** decidir si el descriptor autoritativo es
+   `METADATA/package.list` o el JAR. Propuesta: el paquete manda para resolver;
+   el `ModuleDescriptor` del JAR se valida contra él y falla si discrepa.
+7. **Seguridad:** decidir si se exigen firmas además de SHA-256 y qué
+   repositorios son de confianza. Propuesta: SHA-256 obligatorio, firma
+   obligatoria para repositorios remotos, allowlist de repos.
+
+##### Consecuencias
 
 *Positivas*
-- Un adapter que solo depende de `core-api` + una fachada de arranque puede reutilizarse en una plataforma nueva sin recompilar el resto de módulos.
-- El grafo `provides`/`requires` pasa a ser la fuente de verdad de la composición, en vez de listas de dependencias Gradle duplicadas por adapter.
-- Añadir o quitar un sink deja de requerir cambios en dos `build.gradle` y dos clases de arranque.
+- Los adapters dejan de ser composition roots y se vuelven reemplazables.
+- El Manager pasa a ser la fuente de verdad del ciclo de vida.
+- Los módulos se versionan, instalan y actualizan por separado.
+- Hot upgrade/unload se diseña con contrato, no con promesas.
+- La arquitectura se puede verificar automáticamente.
 
 *Negativas*
-- El descubrimiento en runtime exige un classloader aislado, un directorio de módulos y gestión de versiones/colisiones; hoy no existe.
-- Los fallos pasan de compilación a arranque, con peor diagnóstico si el `ModuleDescriptor` está mal declarado.
-- La migración toca ambos adapters y el orden de arranque; es un cambio de alto riesgo sin tests de servidor real (los E2E de plataforma están descartados, `PLAN.md:832`).
+- Es un cambio de alto riesgo que toca todos los módulos.
+- Introduce classloaders, registro de servicios, ciclo de vida y estados de
+  activación: más superficie de fallo.
+- El hot unload real es difícil con Bukkit/Fabric; habrá casos que requieran
+  reinicio.
+- Obliga a borrar código actual, no a envolverlo.
+- Exige tests nuevos y un guard de arquitectura desde la primera fase.
 
-**Alternativas consideradas**
+##### Lo que este ADR no promete
 
-1. **Mantener el composition root con dependencias de compilación (estado actual)**
-   - Ventajas: errores en compilación; arranque determinista; sin classloader propio.
-   - Limitaciones: viola el objetivo de agnosticismo; cada módulo nuevo obliga a editar ambos adapters.
-   - Evaluación: se conserva como estado transitorio.
-
-2. **Descubrimiento total en runtime: adapters dependen solo de `core-api` + fachada del launcher**
-   - Ventajas: agnosticismo real; módulos versionables por separado.
-   - Limitaciones: classloader, aislamiento, hot-reload, diagnóstico y empaquetado (shadow jars) son trabajo no trivial; además `SuiteHost` vive en `host`, así que la fachada del launcher debe extraerse antes.
-   - Evaluación: objetivo a medio plazo; no se aborda sin ADR aceptado y sin un plan de migración por fases.
-
-3. **Extracción por fases: mover el wiring a una fachada en `host` y dejar los adapters con una sola dependencia de arranque**
-   - Ventajas: reduce el conocimiento de los adapters sin introducir classloader; prepara el paso a (2).
-   - Limitaciones: sigue habiendo dependencia de compilación con `host`; no elimina las listas de sinks, solo las centraliza.
-   - Evaluación: **recomendada como siguiente paso**; la paridad Fabric ya está resuelta y este ADR fija el rumbo.
+- No promete que todos los módulos puedan actualizarse sin reinicio.
+- No promete que todos los módulos sean neutrales a la plataforma.
+- No promete compatibilidad con el arranque actual.
+- No promete mantener `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` ni el
+  descubrimiento por classpath.
+- No promete que la primera fase deje la suite funcional: la suite se rompe a
+  propósito y se rearma por fases con puertas de calidad.
 
 ---
 
