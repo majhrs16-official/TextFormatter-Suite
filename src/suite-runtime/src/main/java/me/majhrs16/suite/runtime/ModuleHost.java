@@ -1,0 +1,362 @@
+package me.majhrs16.suite.runtime;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.ServiceLoader;
+import java.util.stream.Stream;
+
+import me.majhrs16.suite.api.Module;
+import me.majhrs16.suite.api.ModuleDescriptor;
+import me.majhrs16.suite.api.runtime.ModuleActivator;
+import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.runtime.ModuleState;
+import me.majhrs16.suite.api.runtime.PlatformInfo;
+import me.majhrs16.suite.api.runtime.ServiceRegistry;
+import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.kernel.Environment;
+import me.majhrs16.suite.kernel.ModuleGraph;
+import me.majhrs16.suite.kernel.ResolutionResult;
+
+/**
+ * Loads module JARs from disk and manages their activation lifecycle.
+ *
+ * <p>F2 scope: discovery under {@code <library>/packages}, one isolated
+ * {@link ModuleClassLoader} per JAR, activation in dependency order, and real
+ * deactivation that closes the classloader and every module-owned resource.
+ * It intentionally does not read {@code library/status} yet; that wiring belongs
+ * to F3.</p>
+ */
+public final class ModuleHost implements AutoCloseable {
+
+    private final Path packagesDir;
+    private final Path configRoot;
+    private final PlatformInfo platform;
+    private final PluginLogger logger;
+    private final Environment environment;
+    private final RuntimeServiceRegistry services;
+    private final RuntimeEventBus events;
+    private final RuntimeScheduler scheduler;
+    private final Map<String, LoadedModule> active = new LinkedHashMap<>();
+    private final Map<String, ModuleState> states = new LinkedHashMap<>();
+
+    /**
+     * @param libraryRoot directory that contains {@code packages/}
+     * @param configRoot  directory under which each module gets its config dir
+     * @param platform    neutral platform information exposed to modules
+     * @param logger      runtime logger
+     */
+    public ModuleHost(Path libraryRoot, Path configRoot, PlatformInfo platform, PluginLogger logger) {
+        this.packagesDir = Objects.requireNonNull(libraryRoot, "libraryRoot").resolve("packages");
+        this.configRoot = Objects.requireNonNull(configRoot, "configRoot");
+        this.platform = Objects.requireNonNull(platform, "platform");
+        this.logger = Objects.requireNonNull(logger, "logger");
+        this.environment = Environment.current();
+        this.services = new RuntimeServiceRegistry();
+        this.events = new RuntimeEventBus(logger);
+        this.scheduler = new RuntimeScheduler(logger);
+    }
+
+    /** @return the runtime-wide service registry, used by the suite runtime. */
+    public ServiceRegistry services() {
+        return services;
+    }
+
+    /** @return the runtime-wide event bus. */
+    public RuntimeEventBus events() {
+        return events;
+    }
+
+    /** @return the runtime-wide scheduler. */
+    public RuntimeScheduler scheduler() {
+        return scheduler;
+    }
+
+    /** @return {@code <library>/packages}. */
+    public Path packagesDir() {
+        return packagesDir;
+    }
+
+    /**
+     * Scans {@code <library>/packages/*.jar}, resolves their descriptors and
+     * activates them in dependency order.
+     *
+     * <p>A JAR that cannot be read or whose descriptor cannot be resolved is
+     * reported as {@link ModuleState#FAILED}; it does not prevent the rest from
+     * activating.</p>
+     *
+     * @return one result per discovered JAR, in activation order
+     */
+    public List<ActivationResult> loadInstalled() {
+        if (!Files.isDirectory(packagesDir)) {
+            return List.of();
+        }
+
+        List<PreparedModule> prepared = new ArrayList<>();
+        List<ActivationResult> failures = new ArrayList<>();
+
+        List<Path> jars;
+        try (Stream<Path> stream = Files.list(packagesDir)) {
+            jars = stream
+                    .filter(path -> path.getFileName().toString().endsWith(".jar"))
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            return List.of(ActivationResult.failed("packages", "Cannot list " + packagesDir, e));
+        }
+
+        for (Path jar : jars) {
+            try {
+                prepared.add(prepare(jar));
+            } catch (Throwable failure) {
+                String name = jar.getFileName().toString();
+                states.put(name, ModuleState.FAILED);
+                failures.add(ActivationResult.failed(name, "Cannot load " + name + ": " + failure.getMessage(), failure));
+            }
+        }
+
+        List<Module> candidates = new ArrayList<>(prepared);
+        ResolutionResult resolution = new ModuleGraph(environment).resolve(candidates);
+        Map<Module, PreparedModule> byModule = new IdentityHashMap<>();
+        for (PreparedModule module : prepared) {
+            byModule.put(module, module);
+        }
+
+        List<ActivationResult> results = new ArrayList<>();
+        for (Module module : resolution.resolved()) {
+            PreparedModule preparedModule = byModule.get(module);
+            results.add(activatePrepared(preparedModule));
+        }
+        for (Module module : resolution.rejected()) {
+            PreparedModule preparedModule = byModule.get(module);
+            String reason = resolution.reasonOf(module);
+            states.put(preparedModule.id, ModuleState.FAILED);
+            closeQuietly(preparedModule, reason);
+            results.add(ActivationResult.failed(preparedModule.id, reason, null));
+        }
+        results.addAll(failures);
+        return List.copyOf(results);
+    }
+
+    /**
+     * Activates a single module JAR.
+     *
+     * @param jar module JAR
+     * @return the activation outcome
+     */
+    public ActivationResult activate(Path jar) {
+        PreparedModule prepared;
+        try {
+            prepared = prepare(jar);
+        } catch (Throwable failure) {
+            String name = jar.getFileName().toString();
+            states.put(name, ModuleState.FAILED);
+            return ActivationResult.failed(name, "Cannot load " + name + ": " + failure.getMessage(), failure);
+        }
+        return activatePrepared(prepared);
+    }
+
+    /**
+     * Deactivates an active module, closes its classloader and releases every
+     * resource it owns.
+     *
+     * @param moduleId module id
+     * @return the deactivation outcome
+     */
+    public DeactivationResult deactivate(String moduleId) {
+        LoadedModule module = active.remove(moduleId);
+        if (module == null) {
+            return new DeactivationResult(moduleId, ModuleState.FAILED,
+                    "Module is not active: " + moduleId, null);
+        }
+
+        Throwable failure = null;
+        try {
+            module.activator.stop();
+        } catch (Throwable stopFailure) {
+            failure = stopFailure;
+        }
+        try {
+            module.context.close();
+        } catch (Throwable closeFailure) {
+            failure = failure == null ? closeFailure : failure;
+        }
+        try {
+            module.classLoader.close();
+        } catch (IOException closeFailure) {
+            failure = failure == null ? closeFailure : failure;
+        }
+
+        if (failure != null) {
+            states.put(moduleId, ModuleState.RESTART_REQUIRED);
+            String message = "Module " + moduleId + " did not release cleanly: " + failure.getMessage();
+            logger.error(message, failure);
+            return DeactivationResult.restartRequired(moduleId, message, failure);
+        }
+
+        states.put(moduleId, ModuleState.INSTALLED);
+        logger.info("Module deactivated: " + moduleId);
+        return DeactivationResult.deactivated(moduleId);
+    }
+
+    /**
+     * @param moduleId module id
+     * @return the last known state, if the module was seen by this host
+     */
+    public Optional<ModuleState> state(String moduleId) {
+        return Optional.ofNullable(states.get(moduleId));
+    }
+
+    /** @return an immutable snapshot of the known module states. */
+    public Map<String, ModuleState> snapshot() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(states));
+    }
+
+    /** @return the ids of currently active modules. */
+    public List<String> activeModules() {
+        return List.copyOf(active.keySet());
+    }
+
+    @Override
+    public void close() {
+        for (String moduleId : new ArrayList<>(active.keySet())) {
+            deactivate(moduleId);
+        }
+        events.close();
+        scheduler.close();
+    }
+
+    private PreparedModule prepare(Path jar) throws Exception {
+        ModuleClassLoader classLoader = new ModuleClassLoader(jar, ModuleActivator.class.getClassLoader());
+        try {
+            List<ModuleActivator> activators = new ArrayList<>();
+            for (ModuleActivator activator : ServiceLoader.load(ModuleActivator.class, classLoader)) {
+                activators.add(activator);
+            }
+            if (activators.isEmpty()) {
+                throw new IllegalStateException(
+                        "No META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator in " + jar);
+            }
+            if (activators.size() > 1) {
+                throw new IllegalStateException(
+                        "Multiple ModuleActivator implementations in " + jar + ": " + activators.size());
+            }
+
+            ModuleActivator activator = activators.get(0);
+            ModuleDescriptor descriptor = activator.descriptor();
+            if (descriptor == null) {
+                throw new IllegalStateException("ModuleActivator.descriptor() returned null in " + jar);
+            }
+
+            String moduleId = descriptor.name();
+            Path configDir = configRoot.resolve(moduleId);
+            Files.createDirectories(configDir);
+            PluginLogger moduleLogger = new PrefixedLogger(logger, moduleId);
+            DefaultModuleContext context = new DefaultModuleContext(
+                    moduleId, configDir, moduleLogger, services, events, scheduler, platform);
+            return new PreparedModule(moduleId, jar, descriptor, activator, classLoader, context);
+        } catch (Throwable failure) {
+            try {
+                classLoader.close();
+            } catch (IOException suppressed) {
+                failure.addSuppressed(suppressed);
+            }
+            if (failure instanceof Exception exception) {
+                throw exception;
+            }
+            throw new IllegalStateException(failure.getMessage(), failure);
+        }
+    }
+
+    private ActivationResult activatePrepared(PreparedModule prepared) {
+        if (active.containsKey(prepared.id)) {
+            String message = "Module already active: " + prepared.id;
+            closeQuietly(prepared, message);
+            return ActivationResult.failed(prepared.id, message, null);
+        }
+
+        try {
+            prepared.activator.start(prepared.context);
+        } catch (Throwable failure) {
+            closeQuietly(prepared, failure.getMessage());
+            states.put(prepared.id, ModuleState.FAILED);
+            logger.error("Module activation failed: " + prepared.id + " (" + failure.getMessage() + ")", failure);
+            return ActivationResult.failed(prepared.id,
+                    "Module activation failed: " + failure.getMessage(), failure);
+        }
+
+        active.put(prepared.id, new LoadedModule(
+                prepared.id, prepared.jar, prepared.activator, prepared.classLoader, prepared.context));
+        states.put(prepared.id, ModuleState.ACTIVE);
+        logger.info("Module activated: " + prepared.id + " " + prepared.descriptor.version());
+        return ActivationResult.activated(prepared.id);
+    }
+
+    private void closeQuietly(PreparedModule prepared, String reason) {
+        try {
+            prepared.context.close();
+        } catch (RuntimeException closeFailure) {
+            logger.error("Failed to close context for " + prepared.id + " (" + reason + ")", closeFailure);
+        }
+        try {
+            prepared.classLoader.close();
+        } catch (IOException closeFailure) {
+            logger.error("Failed to close classloader for " + prepared.id + " (" + reason + ")", closeFailure);
+        }
+    }
+
+    private static final class PreparedModule implements Module {
+
+        private final String id;
+        private final Path jar;
+        private final ModuleDescriptor descriptor;
+        private final ModuleActivator activator;
+        private final ModuleClassLoader classLoader;
+        private final DefaultModuleContext context;
+
+        private PreparedModule(String id, Path jar, ModuleDescriptor descriptor,
+                               ModuleActivator activator, ModuleClassLoader classLoader,
+                               DefaultModuleContext context) {
+            this.id = id;
+            this.jar = jar;
+            this.descriptor = descriptor;
+            this.activator = activator;
+            this.classLoader = classLoader;
+            this.context = context;
+        }
+
+        @Override
+        public ModuleDescriptor descriptor() {
+            return descriptor;
+        }
+    }
+
+    private record LoadedModule(String id, Path jar, ModuleActivator activator,
+                                ModuleClassLoader classLoader, ModuleContext context) {
+    }
+
+    private static final class PrefixedLogger implements PluginLogger {
+
+        private final PluginLogger delegate;
+        private final String prefix;
+
+        private PrefixedLogger(PluginLogger delegate, String moduleId) {
+            this.delegate = delegate;
+            this.prefix = "[" + moduleId + "] ";
+        }
+
+        @Override public void info(String message, Object... args) { delegate.info(prefix + message, args); }
+        @Override public void warn(String message, Object... args) { delegate.warn(prefix + message, args); }
+        @Override public void error(String message, Object... args) { delegate.error(prefix + message, args); }
+        @Override public void error(String message, Throwable throwable) { delegate.error(prefix + message, throwable); }
+        @Override public void debug(String message, Object... args) { delegate.debug(prefix + message, args); }
+    }
+}
