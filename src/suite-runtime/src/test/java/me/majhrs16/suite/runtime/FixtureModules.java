@@ -36,6 +36,22 @@ final class FixtureModules {
     static Path buildJar(Path workDir, String moduleId, String version, String payload,
                          String provides, String requires, boolean failOnStart,
                          boolean appendOrder) throws IOException {
+        return buildJar(workDir, moduleId, version, payload, provides, requires,
+                failOnStart, appendOrder, false);
+    }
+
+    /**
+     * Builds a module whose {@code stop()} throws, to exercise the
+     * {@code RESTART_REQUIRED} path of the host.
+     */
+    static Path buildJarFailingOnStop(Path workDir, String moduleId, String version,
+                                      String payload) throws IOException {
+        return buildJar(workDir, moduleId, version, payload, null, null, false, false, true);
+    }
+
+    private static Path buildJar(Path workDir, String moduleId, String version, String payload,
+                                 String provides, String requires, boolean failOnStart,
+                                 boolean appendOrder, boolean failOnStop) throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
         Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
@@ -48,6 +64,7 @@ final class FixtureModules {
         String requireLine = requires == null ? ""
                 : "builder.require(Requirement.atLeast(\"" + requires + "\", SemVer.of(1, 0, 0)));";
         String failLine = failOnStart ? "throw new IllegalStateException(\"fixture failure\");" : "";
+        String stopLine = failOnStop ? "throw new IllegalStateException(\"fixture stop failure\");" : "";
         String orderLine = appendOrder
                 ? "Files.writeString(context.configDir().resolveSibling(\"activation-order.log\"),"
                     + " \"" + moduleId + "\\n\", StandardOpenOption.CREATE, StandardOpenOption.APPEND);"
@@ -97,7 +114,8 @@ final class FixtureModules {
                     }
 
                     @Override
-                    public void stop() {
+                    public void stop() throws Exception {
+                        STOP_LINE
                     }
 
                     public static final class Payload implements CharSequence {
@@ -125,6 +143,7 @@ final class FixtureModules {
                 .replace("PROVIDE_LINE", provideLine)
                 .replace("REQUIRE_LINE", requireLine)
                 .replace("ORDER_LINE", orderLine)
+                .replace("STOP_LINE", stopLine)
                 .replace("FAIL_LINE", failLine);
 
         Files.writeString(source, java, StandardCharsets.UTF_8);

@@ -3,6 +3,7 @@ package me.majhrs16.suite.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -171,6 +172,34 @@ class ModuleHostTest {
 
             assertTrue(host.deactivate("event-fixture").isClean());
             assertEquals(List.of("event-fixture"), deactivated);
+        }
+    }
+
+    @Test
+    void failedDeactivationStillPublishesEventAndRequiresRestart() throws Exception {
+        Path jar = FixtureModules.buildJarFailingOnStop(tempDir, "stop-fixture", "1.0.0", "stop");
+
+        try (ModuleHost host = newHost()) {
+            List<String> deactivated = new ArrayList<>();
+            host.events().subscribe(ModuleDeactivatedEvent.class,
+                    event -> deactivated.add(event.moduleId()));
+
+            assertTrue(host.activate(jar).isSuccess());
+            assertEquals(1, host.services().findAll(CharSequence.class).size());
+
+            DeactivationResult result = host.deactivate("stop-fixture");
+
+            assertFalse(result.isClean(), "a failed stop() must not report a clean deactivation");
+            assertEquals(ModuleState.RESTART_REQUIRED, result.state());
+            assertNotNull(result.cause(), "the stop() failure must be preserved as the cause");
+            assertEquals(ModuleState.RESTART_REQUIRED, host.state("stop-fixture").orElseThrow());
+            assertEquals(List.of("stop-fixture"), deactivated,
+                    "consumers must be notified even when the module did not release cleanly");
+            assertTrue(host.activeModules().isEmpty());
+            assertTrue(host.services().findAll(CharSequence.class).isEmpty(),
+                    "services must be withdrawn even when stop() fails");
+            assertTrue(Files.exists(tempDir.resolve("config").resolve("stop-fixture").resolve("released.marker")),
+                    "tracked resources must still be released when stop() fails");
         }
     }
 
