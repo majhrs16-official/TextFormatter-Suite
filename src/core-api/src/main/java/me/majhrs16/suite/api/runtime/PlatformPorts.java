@@ -28,6 +28,15 @@ public interface PlatformPorts {
     void deliver(Message message);
 
     /**
+     * Sends a plain feedback line directly to one actor, bypassing the message
+     * pipeline. Used by runtime commands and administrative notices.
+     *
+     * @param recipient actor that receives the line
+     * @param message   plain text, already localized
+     */
+    void send(Actor recipient, String message);
+
+    /**
      * Finds an online actor by name.
      *
      * @param name actor name
@@ -57,6 +66,14 @@ public interface PlatformPorts {
 
         /** @return a short description for the platform help output. */
         String description();
+
+        /**
+         * @return the platform permission required to run this command, or
+         *         {@code null} when the adapter decides
+         */
+        default String permission() {
+            return null;
+        }
 
         /**
          * Executes the command.
