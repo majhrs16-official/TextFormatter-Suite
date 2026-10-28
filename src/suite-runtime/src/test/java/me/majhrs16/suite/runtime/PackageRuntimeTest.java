@@ -335,6 +335,46 @@ class PackageRuntimeTest {
         }
     }
 
+    @Test
+    void installsSyncSocketPackageAndRegistersConfiguredSinks() throws Exception {
+        Path transportZip = packageFromProperty("transport.package");
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path busZip = packageFromProperty("sync-bus.package");
+        Path socketZip = packageFromProperty("sync-socket.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-socket");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("tcp.yml"), """
+                    enabled: true
+                    remoteHost: 127.0.0.1
+                    remotePort: 9
+                    localPort: 0
+                    """);
+            Files.writeString(configDir.resolve("udp.yml"), """
+                    enabled: true
+                    remoteHost: 127.0.0.1
+                    remotePort: 9
+                    localPort: 0
+                    """);
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(socketZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "sync-socket activation failed: " + activation.get(0).message());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertEquals(Set.of("tcp", "udp"), bus.sinkNames());
+
+            fixture.runtime.removeLocal("sync-socket", "2.1.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading sync-socket must unregister both sinks");
+        }
+    }
+
     private static Path packageFromProperty(String name) {
         String packagePath = System.getProperty(name);
         assertNotNull(packagePath, name + " must be set by the build");

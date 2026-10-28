@@ -1,4 +1,4 @@
-# sync-tcpudp — TCP/UDP Sync Sinks
+# sync-socket — TCP/UDP Sync Sinks
 
 > **Purpose**: Implements `SyncSink` SPI for TCP and UDP transport. Uses length-prefixed JSON framing via `MessageCodec` from `transport` module.
 
@@ -9,7 +9,7 @@
 - **TCP sink** — persistent TCP connection with reconnection logic
 - **UDP sink** — datagram-based fire-and-forget delivery
 - **Message framing** — `MessageCodec` encodes/decodes length-prefixed JSON
-- **Module registration** — `SyncTcpUdpModule` registers both sinks
+- **Module registration** — `SyncSocketActivator` registers each configured sink with the running bus
 
 ---
 
@@ -25,10 +25,11 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `SyncSink`, `Message` SPIs |
-| `transport` | Compile | `MessageCodec` for framing |
+| `core-api` | Compile | `SyncSink`, `SyncBus`, `Message` SPIs |
+| `sync-common` | Compile | `SocketConfig` YAML reader (`DEPENDENCY` package) |
+| `transport` | Compile | `MessageCodec` for framing (`DEPENDENCY` package) |
 | `org.json` | Compile | JSON payload handling |
-| `kernel` | Test | Test fixtures |
+| `kernel` / `sync-bus` | Test | Module descriptor and bus fixtures |
 
 ---
 
@@ -36,9 +37,9 @@
 
 | Consumer | Usage |
 |----------|-------|
-| `host` | `SuiteBootstrap` collects `TcpSink` + `UdpSink` |
-| `spigot-host` | Syncs via TCP/UDP |
-| `fabric-host` | Syncs via TCP/UDP |
+| module runtime | Activates `SyncSocketActivator` from the `sync-socket` ZIP |
+| `SyncBus` | Receives the `tcp` and `udp` sinks when their config is usable |
+| `spigot-host` | Legacy wiring: still constructs the sinks until F4b |
 
 ---
 
@@ -49,7 +50,8 @@
 | `TcpSink` | `SyncSink` impl: TCP client, auto-reconnect, length-prefixed JSON |
 | `UdpSink` | `SyncSink` impl: UDP datagram, length-prefixed JSON |
 | `MessageCodec` | Frames messages: `[4-byte length][JSON bytes]` |
-| `SyncTcpUdpModule` | `Module` registering both sinks |
+| `SyncSocketActivator` | Reads `tcp.yml`/`udp.yml`, registers each usable sink with the bus and unregisters it on stop |
+| `SyncSocketModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
 
 ---
 
@@ -65,19 +67,25 @@ TcpSink: socket.write(bytes) with reconnect logic
 UdpSink: datagramSocket.send(bytes)
 ```
 
-**Config** (`HostConfig.sync.tcp` / `sync.udp`):
+**Config** (`config/sync-socket/tcp.yml` / `config/sync-socket/udp.yml`):
 ```yaml
-sync:
-  tcp:
-    enabled: true
-    host: "127.0.0.1"
-    port: 25565
-    reconnect-interval: 5000
-  udp:
-    enabled: true
-    host: "127.0.0.1"
-    port: 25565
+enabled: true
+remoteHost: "127.0.0.1"
+remotePort: 25565
+localPort: 0
 ```
+
+The activator reads the files from its module config directory. A disabled or
+incomplete file is skipped with a log line; the package still activates.
+
+```bash
+./gradlew :src:sync-socket:test
+```
+
+`PackageRuntimeTest.installsSyncSocketPackageAndRegistersConfiguredSinks`
+installs the real `sync-common`, `transport`, `sync-bus` and `sync-socket`
+packages, verifies both sinks are registered, then unloads `sync-socket` and
+checks that the running bus has no sinks left.
 
 ---
 
@@ -85,7 +93,8 @@ sync:
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| `SyncTcpUdpModule` | `SyncTcpUdpModule.java` | `ModuleLoader` → `SuiteBootstrap` |
+| `SyncSocketActivator` | `SyncSocketActivator.java` | Module runtime |
+| `SyncSocketModule` | `SyncSocketModule.java` | Legacy kernel descriptor |
 
 ---
 
@@ -103,7 +112,7 @@ sync:
 1. TcpSink.java                 → TCP SyncSink implementation
 2. UdpSink.java                 → UDP SyncSink implementation
 3. MessageCodec.java            → Framing codec (in transport module)
-4. SyncTcpUdpModule.java        → Module registration
+4. SyncSocketActivator.java     → Package lifecycle and bus registration
 5. test/TcpSinkTest.java        → Usage examples
 6. test/UdpSinkTest.java        → Usage examples
 ```
@@ -112,9 +121,9 @@ sync:
 
 ## 10. Related Modules
 
-- [core-api](../core-api/README.md) — `SyncSink`, `Message` SPIs
+- [core-api](../core-api/README.md) — `SyncSink`, `SyncBus`, `Message` SPIs
+- [sync-common](../sync-common/README.md) — YAML reader and config paths (`DEPENDENCY`)
+- [sync-bus](../sync-bus/README.md) — Fan-out bus that owns the sinks
 - [transport](../transport/README.md) — `MessageCodec` (shared)
-- [host](../host/README.md) — Collects sinks, loads config
-- [kernel](../kernel/README.md) — Loads module
 - [sync-http](../sync-http/README.md) — HTTP sync (sister module)
 - [sync-discord](../sync-discord/README.md) — Discord sync (sister module)

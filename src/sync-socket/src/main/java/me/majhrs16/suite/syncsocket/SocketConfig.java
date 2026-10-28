@@ -40,6 +40,16 @@ public record SocketConfig(boolean enabled, String remoteHost, int remotePort, i
         return load(SyncConfigPaths.udp(dataFolder));
     }
 
+    /** @param configDir carpeta privada del módulo ({@code config/sync-socket}) @return configuración TCP. */
+    public static SocketConfig loadTcpFromConfigDir(Path configDir) {
+        return load(configDir.resolve("tcp.yml"));
+    }
+
+    /** @param configDir carpeta privada del módulo ({@code config/sync-socket}) @return configuración UDP. */
+    public static SocketConfig loadUdpFromConfigDir(Path configDir) {
+        return load(configDir.resolve("udp.yml"));
+    }
+
     private static SocketConfig load(Path file) {
         Map<String, Object> map = SyncYaml.readMap(file);
         return new SocketConfig(

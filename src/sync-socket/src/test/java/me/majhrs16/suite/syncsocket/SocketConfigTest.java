@@ -93,4 +93,27 @@ class SocketConfigTest {
         assertTrue(config.usable());
         assertEquals("legacy", config.remoteHost());
     }
+
+    @Test
+    void loadsTcpAndUdpFromTheModuleConfigDirectory() throws Exception {
+        Path configDir = dir.resolve("config/sync-socket");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("tcp.yml"), """
+            enabled: true
+            remoteHost: 10.0.0.1
+            remotePort: 7000
+            localPort: 0
+            """);
+        Files.writeString(configDir.resolve("udp.yml"), """
+            enabled: true
+            remoteHost: 10.0.0.2
+            remotePort: 7001
+            localPort: 0
+            """);
+
+        assertEquals(new SocketConfig(true, "10.0.0.1", 7000, 0),
+                SocketConfig.loadTcpFromConfigDir(configDir));
+        assertEquals(new SocketConfig(true, "10.0.0.2", 7001, 0),
+                SocketConfig.loadUdpFromConfigDir(configDir));
+    }
 }

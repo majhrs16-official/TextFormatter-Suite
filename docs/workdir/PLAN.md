@@ -1043,7 +1043,13 @@ con libre. `sync-bus` ya es paquete: su contrato `SyncBus` vive en `core-api`,
 `SyncBusActivator` publica el bus en el registro y un sink registrado después de
 `start()` arranca de inmediato; el test de `suite-runtime` instala el ZIP real,
 instala un paquete de sink y comprueba que al descargarlo el bus lo desregistra.
-Quedan `sync-*`, `observability`, `presets`, `extension-api`,
+Las utilidades YAML viven en `sync-common`, un paquete `DEPENDENCY` que los
+sinks declaran en su manifiesto. `sync-socket` ya es paquete: su activador lee
+`tcp.yml`/`udp.yml` de su carpeta privada, registra cada sink usable y los
+desregistra al descargarse; el test instala `sync-common`, `transport`,
+`sync-bus` y `sync-socket`, comprueba los dos sinks y descarga el paquete.
+Quedan `sync-http`, `sync-telegram`, `sync-websocket`, `sync-discord`,
+`sync-velocity`, `observability`, `presets`, `extension-api`,
 `inworld`/`tester` y la retirada del cableado del host.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
