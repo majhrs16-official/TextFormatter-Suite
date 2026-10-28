@@ -645,6 +645,57 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 8. **La arquitectura se verifica.** Un guard de dependencias/imports falla el
    build si aparece una violación.
 
+##### Principios adicionales de diseño del ADR-019
+
+Estos principios complementan los no negociables y definen el modelo de
+dominio del reestructuramiento:
+
+- **C2. `force` significa forzar de verdad.** El parámetro `force` no omite
+  conflictos de forma silenciosa. Si un administrador usa `force`, es porque
+  quiere forzar las cosas y sabe lo que hace. Esto incluye permitir la
+  instalación de paquetes excluyentes si el administrador así lo decide, con
+  la advertencia correspondiente. `force` es una señal de intención
+  deliberada del operador, no un sinónimo de «ignorar problemas».
+
+- **C3. Las librerías compartidas son dependencias, no parte del host.**
+  Las librerías compartidas (SnakeYAML, JDA, Adventure, transporte y otras)
+  no deberían vivir en el host. Son dependencias, paquetes aparte de tipo
+  «dependencia». Es el manager quien se asegura de relocalizar y cargar
+  dichas dependencias para cada paquete tipo módulo. No se deberían compilar
+  dentro del JAR del host ni de los módulos.
+
+- **C4. Los metadatos autoritativos vienen del repositorio, no del JAR.**
+  No se incluye una lista de paquetes dentro del JAR. Eso es trabajo del
+  manager: descargar del repositorio (en el directorio `repo`) el archivo
+  `packages.list`, y a partir de ahí listar la URL de cada ZIP y por ende
+  cada módulo. El manager nunca infiere paquetes mirando el contenido de un
+  JAR; consulta el índice remoto.
+
+- **C6. `library/status` es una BD de programas instalados, no de ejecución.**
+  La presencia de un paquete implica que está instalado y que debe iniciarse.
+  El estado de ejecución (encendido/apagado, fallido, requiere reinicio) no
+  pertenece a `library/status`; si es necesario rastrearlo, se hace en un
+  directorio temporal dentro del directorio del manager, nunca en el estado
+  de instalación.
+
+- **C7. `tester` es un módulo de producción.** El módulo `tester` no es una
+  herramienta de desarrollo excluida del artefacto final. Es un módulo
+  pensado para hacer benchmarking en tiempo de ejecución, además de probar
+  toda la suite en todo el pipeline. Si algo está mal hecho, existe la alta
+  probabilidad de que `tester` detecte el fallo, en qué punto, y cuál es la
+  diferencia vs lo esperado. Para esto, `tester` tiene que simular el envío
+  de un jugador, ir trazando la ejecución manualmente del mensaje, comprobar
+  el resultado de cada etapa inspeccionando directamente el comportamiento
+  del sistema, y lanzar un check si la comprobación de todo el pipeline es
+  correcto. Es complejo, sí. Es potencialmente útil para fallos delicados,
+  sí.
+
+- **C9. Versiones concurrentes al estilo Debian.** A la hora de upgradear,
+  se instalan versiones modernas remplazando al mismo paquete en su versión
+  anterior, repitiendo el mismo proceso con todos los módulos y
+  dependencias, resolviendo el grafo sin más. Esto es normal y es el camino
+  de Debian en cuestión de apt y dpkg.
+
 ##### Arquitectura objetivo
 
 ```text
@@ -1436,3 +1487,13 @@ Las extensiones son módulos simplificados para programación de terceros. No ex
 El módulo `tester` no es harness ni herramienta de desarrollo excluida del artefacto final. Es un módulo de benchmarking en tiempo de ejecución y de prueba del pipeline completo: simula el envío de un jugador, traza la ejecución del mensaje etapa por etapa, inspecciona el comportamiento directo del sistema y lanza un check si la comprobación de todo el pipeline es correcto. Puede detectar fallos delicados, el punto exacto y la diferencia vs lo esperado.
 
 **Consecuencia:** `tester` vive en el directorio de producción y se distribuye como cualquier otro módulo.
+
+---
+
+## Referencias cruzadas al ADR-019
+
+Los siguientes principios se definen en detalle en el ADR-019 (sección «Principios adicionales de diseño del ADR-019») y se resumen aquí para visibilidad desde el PLAN:
+
+- **C7. `tester` es un módulo de producción** — resumen: `tester` no es herramienta de desarrollo excluida del artefacto final; es un módulo de benchmarking en tiempo de ejecución y de prueba del pipeline completo. Ver ADR-019, «Principios adicionales de diseño del ADR-019», punto C7.
+- **C8. Extensiones sin catálogo cerrado** — resumen: no existe un `enum` con todos los módulos posibles. Cualquier repositorio de paquetes de terceros puede otorgar paquetes custom, fuera de lo que hace esta suite. El sistema de descubrimiento debe estar abierto a paquetes arbitrarios declarados en índices remotos. Ver ADR-019, «Principios adicionales de diseño del ADR-019», y P11 de esta sección.
+- **D4. No hay doble camino** — resumen: cuando una funcionalidad se migra al runtime de módulos, su cableado compilado se elimina en el mismo cambio. No se mantienen dos formas de arrancar la suite ni dos mecanismos de descubrimiento de módulos. Ver ADR-019, «Principios no negociables», punto 6, y P7 de esta sección.
