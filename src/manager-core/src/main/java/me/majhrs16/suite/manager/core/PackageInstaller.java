@@ -114,7 +114,7 @@ public final class PackageInstaller {
             checkDependencies(manifest);
 
             // 5. Check package conflicts declared through Exclude
-            checkPackageConflicts(manifest);
+            checkPackageConflicts(manifest, force);
 
             // 6. Check for conflicts (file ownership)
             checkFileConflicts(manifest, force);
@@ -473,15 +473,21 @@ public final class PackageInstaller {
         return false;
     }
 
-    private void checkPackageConflicts(PackageManifest manifest) throws InstallException {
+    private void checkPackageConflicts(PackageManifest manifest, boolean force) throws InstallException {
         List<PackageEntry> packages = manifest.allPackages();
         for (int i = 0; i < packages.size(); i++) {
             PackageEntry pkg = packages.get(i);
             for (int j = i + 1; j < packages.size(); j++) {
                 PackageEntry other = packages.get(j);
                 if (LocalPackageDatabase.conflicts(pkg, other)) {
-                    throw new InstallException("Package conflict inside manifest: "
-                            + pkg.name() + " cannot coexist with " + other.name() + " (Exclude).");
+                    if (force) {
+                        logger.warn("Package conflict inside manifest (force): "
+                                + pkg.name() + " cannot coexist with " + other.name()
+                                + " (Exclude); continuing because force was requested.");
+                    } else {
+                        throw new InstallException("Package conflict inside manifest: "
+                                + pkg.name() + " cannot coexist with " + other.name() + " (Exclude).");
+                    }
                 }
             }
 
@@ -490,9 +496,15 @@ public final class PackageInstaller {
                 String names = conflicts.stream()
                         .map(p -> p.name() + " " + p.version())
                         .collect(Collectors.joining(", "));
-                throw new InstallException("Package conflict: " + pkg.name()
-                        + " cannot coexist with " + names
-                        + " (Exclude). Remove the conflicting package first.");
+                if (force) {
+                    logger.warn("Package conflict (force): " + pkg.name()
+                            + " cannot coexist with " + names
+                            + " (Exclude); continuing because force was requested.");
+                } else {
+                    throw new InstallException("Package conflict: " + pkg.name()
+                            + " cannot coexist with " + names
+                            + " (Exclude). Remove the conflicting package first.");
+                }
             }
         }
     }

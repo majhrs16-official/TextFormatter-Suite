@@ -82,7 +82,7 @@ public final class DependencyResolver {
         
         // Build plan with topological sort
         List<PlanStep> steps = buildInstallPlan(selected);
-        List<PackageEntry> replaced = findReplacedPackages(selected);
+        List<PackageEntry> replaced = findReplacedPackages(selected, force);
         
         return new ResolutionPlan(steps, true, null, replaced);
     }
@@ -510,7 +510,7 @@ public final class DependencyResolver {
         return steps;
     }
 
-    private List<PackageEntry> findReplacedPackages(Map<String, ResolvedPackage> selected) {
+    private List<PackageEntry> findReplacedPackages(Map<String, ResolvedPackage> selected, boolean force) {
         List<PackageEntry> selectedEntries = selected.values().stream()
                 .flatMap(pkg -> pkg.entries().stream())
                 .collect(Collectors.toList());
@@ -521,10 +521,34 @@ public final class DependencyResolver {
             for (int j = i + 1; j < selectedEntries.size(); j++) {
                 PackageEntry second = selectedEntries.get(j);
                 if (LocalPackageDatabase.conflicts(first, second)) {
-                    throw new ResolutionException("Requested packages conflict: "
-                            + first.name() + " excludes " + second.name());
+                    if (force) {
+                        logger.warn("Requested packages conflict (force): "
+                                + first.name() + " excludes " + second.name()
+                                + "; installing both because force was requested");
+                    } else {
+                        throw new ResolutionException("Requested packages conflict: "
+                                + first.name() + " excludes " + second.name());
+                    }
                 }
             }
+        }
+
+        // With force, conflicting installed packages are kept: force means real
+        // coexistence with a warning, not silent removal.
+        if (force) {
+            for (PackageEntry candidate : selectedEntries) {
+                for (PackageEntry installed : localDb.getAllPackages()) {
+                    if (selected.containsKey(installed.name())) {
+                        continue;
+                    }
+                    if (LocalPackageDatabase.conflicts(candidate, installed)) {
+                        logger.warn("Package conflict (force): " + candidate.name()
+                                + " excludes installed " + installed.name() + " "
+                                + installed.version() + "; keeping both");
+                    }
+                }
+            }
+            return List.of();
         }
 
         Map<String, PackageEntry> replaced = new LinkedHashMap<>();

@@ -268,6 +268,31 @@ class PackageInstallerTest {
     }
 
     @Test
+    void install_forceAllowsExcludeConflict() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path firewallZip = tempDir.resolve("iflow-firewall-force.zip");
+        createZipWithMetadata(firewallZip, "iflow-firewall", "2.1.0", "stable",
+                "firewall-force.jar", "firewall".getBytes(), "", "iflow-vm", "iflow");
+        installer.install(firewallZip, false);
+
+        Path vmZip = tempDir.resolve("iflow-vm-force.zip");
+        createZipWithMetadata(vmZip, "iflow-vm", "2.1.0", "stable",
+                "vm-force.jar", "vm".getBytes(), "", "", "iflow");
+
+        // force is a deliberate operator decision: both exclusive packages coexist.
+        installer.install(vmZip, true);
+
+        assertTrue(db.isInstalled("iflow-firewall"));
+        assertTrue(db.isInstalled("iflow-vm"));
+    }
+
+    @Test
     void install_dependencySatisfiedByProvide() throws Exception {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
