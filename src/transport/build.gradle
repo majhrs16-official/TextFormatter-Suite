@@ -67,3 +67,8 @@ configurations.configureEach {
         }
     }
 }
+
+// F6 — shared library package loaded by gtranslate/ltranslate.
+ext.moduleVersion = '2.1.0'
+ext.moduleType = 'DEPENDENCY'
+apply from: rootProject.file('gradle/module-package.gradle')

@@ -3,12 +3,14 @@ package me.majhrs16.suite.chattranslator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import me.majhrs16.suite.api.runtime.EventBus;
 import me.majhrs16.suite.api.runtime.ModuleContext;
@@ -17,13 +19,17 @@ import me.majhrs16.suite.api.runtime.ResourceTracker;
 import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.Translator;
+import me.majhrs16.suite.api.spi.TranslatorManager;
+import me.majhrs16.suite.api.spi.TranslatorProvider;
 import me.majhrs16.suite.api.spi.TranslationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * F5 gate: the chattranslator activator builds its facade and tracks the
- * translation service so deactivation closes its executor.
+ * F5/F6 gate: the chattranslator activator builds its facade, discovers
+ * providers and tracks the service plus lifecycle subscriptions so
+ * deactivation closes the executor and removes listeners.
  */
 class ChatTranslatorActivatorTest {
 
@@ -40,10 +46,61 @@ class ChatTranslatorActivatorTest {
 
         assertTrue(registry.find(ChatTranslator.class).isPresent());
         assertTrue(registry.find(TranslationService.class).isPresent());
-        assertEquals(1, resources.tracked.size());
+        assertEquals(3, resources.tracked.size());
 
         resources.releaseAll();
         assertTrue(resources.isReleased());
+        long activeSubscriptions = resources.tracked.stream()
+                .filter(EventBus.Subscription.class::isInstance)
+                .map(EventBus.Subscription.class::cast)
+                .filter(EventBus.Subscription::isActive)
+                .count();
+        assertEquals(0, activeSubscriptions);
+    }
+
+    @Test
+    void usesConfiguredProviderFromServiceRegistry() throws Exception {
+        Path translators = tempDir.resolve("translators");
+        Files.createDirectories(translators);
+        Files.writeString(translators.resolve("google.yml"), """
+            provider: google
+            active: true
+            """);
+
+        FakeRegistry registry = new FakeRegistry();
+        registry.register(TranslatorProvider.class, new FakeProvider());
+        FakeResources resources = new FakeResources();
+
+        new ChatTranslatorActivator().start(new FakeContext(tempDir, registry, resources));
+
+        TranslatorManager manager = registry.find(TranslatorManager.class).orElseThrow();
+        assertEquals(1, manager.providers().size());
+        assertEquals("google", manager.providers().get(0).name());
+
+        resources.releaseAll();
+    }
+
+    private static final class FakeProvider implements TranslatorProvider {
+
+        @Override
+        public String name() {
+            return "google";
+        }
+
+        @Override
+        public Translator create(Map<String, Object> config) {
+            return new Translator() {
+                @Override public String name() { return "google"; }
+                @Override public String translate(String text, String from, String to) { return text; }
+                @Override public String detect(String text) { return "en"; }
+                @Override public boolean isAvailable() { return true; }
+            };
+        }
+
+        @Override
+        public boolean validateConfig(Map<String, Object> config) {
+            return true;
+        }
     }
 
     private static final class FakeRegistry implements ServiceRegistry {
@@ -107,7 +164,23 @@ class ChatTranslatorActivatorTest {
 
         @Override public String moduleId() { return "chattranslator"; }
         @Override public PluginLogger logger() { return noopLogger(); }
-        @Override public EventBus events() { throw new UnsupportedOperationException(); }
+        @Override public EventBus events() {
+            return new EventBus() {
+                @Override
+                public <E> Subscription subscribe(Class<E> eventType, Consumer<E> listener) {
+                    return new Subscription() {
+                        private boolean active = true;
+
+                        @Override public void unsubscribe() { active = false; }
+                        @Override public boolean isActive() { return active; }
+                    };
+                }
+
+                @Override
+                public void publish(Object event) {
+                }
+            };
+        }
         @Override public Scheduler scheduler() { throw new UnsupportedOperationException(); }
         @Override public PlatformInfo platform() { return PlatformInfo.current("test", "1.0"); }
         @Override public void close() { }

@@ -1,16 +1,16 @@
 # ltranslate — LibreTranslate Provider
 
-> **Purpose**: Implements `TranslatorProvider` SPI from `core-api` for LibreTranslate (self-hosted or cloud). **Clean Architecture**: discovered at runtime via `ServiceLoader` — `host` has no compile-time dependency on this module.
+> **Purpose**: Implements `TranslatorProvider` from `core-api` for LibreTranslate (self-hosted or cloud). The package publishes its provider through the module `ServiceRegistry`; `chattranslator` consumes it without importing this module.
 
 ---
 
 ## 1. Responsibilities
 
 - **LibreTranslate integration** — HTTP calls to LibreTranslate API (self-hosted or public)
-- **TranslatorProvider implementation** — provides `Translator` instances via `ServiceLoader`
+- **TranslatorProvider implementation** — provides `Translator` instances
 - **Translator implementation** — `LTranslate` implements `Translator` interface
-- **Module registration** — `LTranslateModule` registers `TranslatorProvider` SPI
-- **Configuration** — reads endpoint, API key from `TranslatorsConfig` (via `host`)
+- **Runtime registration** — `LTranslateActivator` publishes `TranslatorProvider` in the module `ServiceRegistry`; `LTranslateModule` remains the legacy kernel descriptor
+- **Configuration** — `chattranslator` reads `translators/*.yml` and passes `base-url`/`api-key` to `LTranslateProvider.create(...)`
 - **char[] token handling** — API key stored in `char[]` + `Arrays.fill('\0')` after use
 
 ---
@@ -30,11 +30,13 @@
 | Dependency | Type | Reason |
 |------------|------|--------|
 | `core-api` | Compile | `TranslatorProvider`, `Translator`, `TranslatorManager`, `TranslationException` |
-| `transport` | Compile | `HttpTransport`, `MessageCodec` for HTTP calls |
-| `org.json` | Compile | JSON request/response parsing |
+| `transport` | Compile + `DEPENDENCY` package | `HttpTransport`, `MessageCodec` for HTTP calls; the manager loads `transport.jar` from `library/dependencies` |
+| `org.json` | Compile | JSON request/response parsing (external library; final packaging is F8) |
 | `kernel` | Test | Test fixtures |
 
-> **Clean Architecture**: `host` no longer depends on `ltranslate` at compile-time. Tests use `testImplementation` to make provider available to ServiceLoader during test execution.
+> **Runtime**: the package declares `Dependencies: transport@>=2.1.0` and
+> `LTranslateActivator` registers the provider. The host's legacy compile-time
+> wiring is removed in F6/F4b.
 
 ---
 
@@ -43,8 +45,9 @@
 | Component | Role |
 |-----------|------|
 | `LTranslate` | Main class: `translate(text, source, target) → translated text` |
-| `LTranslateProvider` | Implements `TranslatorProvider`: `getTranslator() → LTranslate` |
-| `LTranslateModule` | `Module` implementation: registers `LTranslateProvider` and `TranslationService` |
+| `LTranslateProvider` | Implements `TranslatorProvider`: creates a configured `LTranslate` |
+| `LTranslateActivator` | Runtime entry point: registers the provider in the module `ServiceRegistry` |
+| `LTranslateModule` | Legacy `Module` implementation for kernel-based loaders |
 
 ---
 
@@ -80,8 +83,9 @@ translators:
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| `LTranslateModule` | `LTranslateModule.java` | `ModuleLoader` → `SuiteBootstrap` |
-| `LTranslateProvider.getTranslator()` | `LTranslateProvider.java` | `TranslatorManager` (core-api) |
+| `LTranslateActivator` | `LTranslateActivator.java` | `ModuleHost` → `PackageRuntime` |
+| `LTranslateModule` | `LTranslateModule.java` | Legacy `ModuleLoader` → `SuiteBootstrap` |
+| `LTranslateProvider.create()` | `LTranslateProvider.java` | `BackendConfig` (chattranslator) |
 | `LTranslate.translate()` | `LTranslate.java` | `TranslationService` impl |
 
 ---
@@ -97,11 +101,11 @@ translators:
 ## 9. Exploration Path
 
 ```
-1. LTranslateModule.java        → Module registration
+1. LTranslateActivator.java     → Runtime registration
 2. LTranslateProvider.java      → TranslatorProvider implementation
 3. LTranslate.java              → Core translation logic
-4. core-api: TranslationService.java → SPI being implemented
-5. core-api: TranslatorProvider.java → SPI being implemented
+4. core-api: TranslatorProvider.java → SPI being implemented
+5. chattranslator: BackendConfig.java → Reads translators/*.yml and creates providers
 6. transport: HttpTransport.java → HTTP client used
 ```
 
@@ -110,10 +114,10 @@ translators:
 ## 10. Related Modules
 
 - [core-api](../core-api/README.md) — Defines `TranslatorProvider`, `TranslationService` SPIs
-- [transport](../transport/README.md) — HTTP transport abstraction
-- [host](../host/README.md) — Wires translation providers, loads config
+- [transport](../transport/README.md) — HTTP transport dependency package
+- [chattranslator](../chattranslator/README.md) — Consumes the provider and loads `translators/*.yml`
 - [gtranslate](../gtranslate/README.md) — Alternative provider (Google)
-- [kernel](../kernel/README.md) — Loads `LTranslateModule`
+- [kernel](../kernel/README.md) — Legacy `ModuleLoader` path
 
 ---
 

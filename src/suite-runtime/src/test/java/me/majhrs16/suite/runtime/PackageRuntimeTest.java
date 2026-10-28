@@ -15,6 +15,9 @@ import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.Translator;
+import me.majhrs16.suite.api.spi.TranslatorManager;
+import me.majhrs16.suite.api.spi.TranslatorProvider;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -245,6 +248,58 @@ class PackageRuntimeTest {
             assertTrue(activation.get(0).isSuccess(),
                     () -> "activation failed: " + activation.get(0).message());
             assertEquals(ModuleState.ACTIVE, fixture.host.state("iflow-wasm").orElseThrow());
+        }
+    }
+
+    @Test
+    void installsTranslationProvidersAndRefreshesChatTranslator() throws Exception {
+        Path transportZip = packageFromProperty("transport.package");
+        Path chatTranslatorZip = packageFromProperty("chattranslator.package");
+        Path gtranslateZip = packageFromProperty("gtranslate.package");
+        Path ltranslateZip = packageFromProperty("ltranslate.package");
+
+        try (Fixture fixture = fixture()) {
+            Path translators = fixture.manager.getManagerDir()
+                    .resolve("config/chattranslator/translators");
+            Files.createDirectories(translators);
+            Files.writeString(translators.resolve("google.yml"), """
+                provider: google
+                active: true
+                """);
+            Files.writeString(translators.resolve("libre.yml"), """
+                provider: libre
+                active: true
+                base-url: https://libre.example
+                """);
+
+            assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty(),
+                    "transport is a dependency package");
+            assertTrue(fixture.runtime.installLocal(chatTranslatorZip, false).get(0).isSuccess());
+            assertTrue(fixture.runtime.installLocal(gtranslateZip, false).get(0).isSuccess());
+            assertTrue(fixture.runtime.installLocal(ltranslateZip, false).get(0).isSuccess());
+
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("gtranslate").orElseThrow());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("ltranslate").orElseThrow());
+
+            List<String> providerNames = fixture.host.services()
+                    .findAll(TranslatorProvider.class).stream()
+                    .map(TranslatorProvider::name)
+                    .toList();
+            assertEquals(Set.of("google", "libre"), Set.copyOf(providerNames));
+
+            TranslatorManager manager = fixture.host.services()
+                    .find(TranslatorManager.class).orElseThrow();
+            List<String> configuredNames = manager.providers().stream()
+                    .map(Translator::name)
+                    .toList();
+            assertEquals(Set.of("google", "libre"), Set.copyOf(configuredNames));
+
+            assertTrue(fixture.host.deactivate("gtranslate").isClean());
+            List<String> afterUnload = manager.providers().stream()
+                    .map(Translator::name)
+                    .toList();
+            assertEquals(Set.of("libre"), Set.copyOf(afterUnload),
+                    "chattranslator must drop the provider of an unloaded module");
         }
     }
 

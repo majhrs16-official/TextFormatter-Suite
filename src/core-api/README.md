@@ -7,6 +7,8 @@
 ## 1. Responsibilities
 
 - Define the **Module** contract and lifecycle (`Module`, `ModuleDescriptor`, `Capability`, `Requirement`, `SemVer`)
+- Define the **runtime lifecycle API** (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`, `ModuleActivatedEvent`, `ModuleDeactivatedEvent`)
+- Define **shared cross-package contracts** (`api.channel.Channel`/`ChannelRegistry`, `api.iflow.Router` and routing value types)
 - Define **message domain types** (`Message`, `ChatMessage`, `Actor`, `Channel`, `MessageType`, `Direction`, `Language`, `ColorMode`, `Formats`, `SoundSpec`)
 - Define **SPI interfaces** for platform/implementation plugins:
   - `ActorDirectory` — resolve actors (players, consoles, etc.) by name/UUID
@@ -23,10 +25,10 @@
 
 ## 2. Non-Responsibilities
 
-- **No implementations** — only interfaces and abstract base classes
+- **No feature implementations** — contracts, value types and small thread-safe utilities only
 - **No platform-specific code** — no Bukkit, Fabric, JDA, HTTP clients, etc.
-- **No configuration loading** — that belongs in `host`
-- **No module loading logic** — that belongs in `kernel`
+- **No configuration loading** — that belongs in the feature packages
+- **No module loading logic** — that belongs in `kernel`/`suite-runtime`
 
 ---
 
@@ -43,9 +45,11 @@
 **All modules** depend on `core-api`:
 - `kernel` — uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
 - `textformatter` — uses `Message`, `Channel`, `TranslationService`, `PlaceholderResolver`
-- `iflow-vm` — uses `Message`, `Channel`, `ActorDirectory` SPI
-- `host` — uses nearly all SPIs and domain types (**Clean Architecture: no compile deps on translators**)
-- `gtranslate`/`ltranslate` — implement `TranslatorProvider` SPI (runtime discovery via ServiceLoader)
+- `iflow-vm`/`iflow-firewall` — use `Message`, `Channel`, `ActorDirectory` and implement the shared `Router` contract
+- `host` — uses nearly all SPIs and domain types (legacy wiring is being removed in F6/F4b)
+- `suite-runtime` — implements the lifecycle API and publishes `ModuleActivatedEvent`/`ModuleDeactivatedEvent`
+- `gtranslate`/`ltranslate` — publish `TranslatorProvider` in the module `ServiceRegistry`
+- `chattranslator` — consumes providers and rebuilds its `TranslatorManager` on lifecycle events
 - `transport` — uses `Message` for codecs
 - Sync modules — implement `SyncSink`
 - `observability` — uses `Message`, `Channel`
@@ -65,6 +69,13 @@
 | `ModuleDescriptor` | Metadata: id, version, capabilities, requirements, main class |
 | `Capability` / `Requirement` | Module dependency declaration (name + version range) |
 | `SemVer` | Semantic version parsing/comparison for requirements |
+| `ModuleActivator` / `ModuleContext` | Runtime entry point and module-scoped view of services, events, scheduler and resources |
+| `ServiceRegistry` | Mutable registry of live services; registrations disappear with their owner |
+| `EventBus` | Scoped publish/subscribe used for runtime lifecycle and feature events |
+| `Scheduler` / `ResourceTracker` | Module-owned tasks and resources; released on deactivation |
+| `ModuleActivatedEvent` / `ModuleDeactivatedEvent` | Lifecycle notifications for hot install/unload consumers |
+| `Channel` / `ChannelRegistry` | Shared channel model and registry in `api.channel` |
+| `Router` / `RouteDecision` / `RouteOutcome` | Shared iFlow routing contract in `api.iflow` |
 | `ActorDirectory` | SPI: resolve `Actor` by name/UUID; platform-specific impl in adapters |
 | `TranslationService` | SPI: high-level translation entry point; `translate(text, targetLang)` |
 | `Translator` | SPI: single translation provider; `translate(text, source, target)` |
@@ -84,15 +95,20 @@
 
 ## 6. Data Flow
 
-`core-api` has no runtime data flow — it defines **contracts** that other modules implement.
+`core-api` defines **contracts and value types**; the runtime data flow is implemented by `suite-runtime` and the feature packages:
 
 ```text
 Platform Adapter (spigot-host/fabric-host)
        ↓ implements
 ActorDirectory ←──────────────────
-TranslationService ←────────────── gtranslate / ltranslate
 SyncSink ←──────────────────────── sync-http, sync-discord, sync-tcpudp, etc.
 PlaceholderResolver ←───────────── Platform adapter
+
+Module package (ModuleActivator)
+       ↓ registers services
+ServiceRegistry → EventBus → consumers
+       ↑
+ModuleActivatedEvent / ModuleDeactivatedEvent
 ```
 
 ---
@@ -100,8 +116,9 @@ PlaceholderResolver ←───────────── Platform adapter
 ## 7. Entry Points
 
 None — this is a contract library. Entry points are in modules that **implement** these interfaces:
-- `kernel.ModuleLoader` loads `Module` implementations
-- `host.SuiteBootstrap` wires implementations
+- `suite-runtime.ModuleHost` loads `ModuleActivator` implementations from package JARs
+- `kernel.ModuleLoader` remains the legacy loader for `Module` implementations
+- `host.SuiteBootstrap` wires the legacy host path
 - Platform adapters provide `ActorDirectory`, `PlaceholderResolver`, `ChatDelivery`
 
 ---
@@ -110,6 +127,8 @@ None — this is a contract library. Entry points are in modules that **implemen
 
 | SPI | How to Extend |
 |-----|---------------|
+| `ModuleActivator` | Implement in a package and register it via `META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator` |
+| `ServiceRegistry` / `EventBus` | Publish services or subscribe to lifecycle events from a `ModuleContext` |
 | `ActorDirectory` | Implement in platform adapter (see `SpigotActorDirectory`, `FabricActorDirectory`) |
 | `TranslationService` / `TranslatorProvider` | Implement in translation module (see `GTranslateProvider`, `LTranslateProvider`) |
 | `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`) |
@@ -121,25 +140,29 @@ None — this is a contract library. Entry points are in modules that **implemen
 ## 9. Exploration Path
 
 ```
-1. Module.java                    → Module contract & lifecycle
+1. Module.java                    → Legacy Module contract & lifecycle
 2. ModuleDescriptor.java          → Module metadata & dependencies
-3. api/message/*.java             → Domain types (Message, Actor, Channel, etc.)
-4. api/spi/ActorDirectory.java    → Actor resolution SPI
-5. api/spi/TranslationService.java → Translation SPI hierarchy
-6. api/spi/SyncSink.java          → Cross-server sync SPI
-7. api/spi/PlaceholderResolver.java → Placeholder resolution SPI
-8. api/event/MessageEvent.java    → Message event type
+3. api/runtime/ModuleActivator.java → Runtime package entry point
+4. api/runtime/ModuleContext.java → Module-scoped services, events, scheduler and resources
+5. api/runtime/ServiceRegistry.java → Live service registry
+6. api/runtime/EventBus.java      → Lifecycle and feature events
+7. api/message/*.java             → Domain types (Message, Actor, Channel, etc.)
+8. api/spi/TranslatorProvider.java → Translation provider SPI
+9. api/iflow/Router.java          → Shared iFlow routing contract
 ```
 
 ---
 
 ## 10. Related Modules
 
-- [kernel](../kernel/README.md) — Loads `Module` implementations
+- [kernel](../kernel/README.md) — Legacy loader for `Module` implementations
+- [suite-runtime](../suite-runtime) — Implements the lifecycle API and package activation
 - [textformatter](../textformatter/README.md) — Consumes `Message`, `Channel`, `TranslationService` and `PlaceholderResolver`
-- [host](../host/README.md) — Wires all SPI implementations (**Clean Architecture: runtime SPI discovery**)
-- [gtranslate](../gtranslate/README.md) — Implements `TranslatorProvider` (SPI)
-- [ltranslate](../ltranslate/README.md) — Implements `TranslatorProvider` (SPI)
+- [host](../host/README.md) — Legacy host wiring (F6/F4b removes feature dependencies)
+- [chattranslator](../chattranslator/README.md) — Consumes `TranslatorProvider` services
+- [gtranslate](../gtranslate/README.md) — Publishes `TranslatorProvider` (SPI)
+- [ltranslate](../ltranslate/README.md) — Publishes `TranslatorProvider` (SPI)
+- [iflow-vm](../iflow-vm/README.md) — Implements the shared `Router` contract
 - [sync-http](../sync-http/README.md) — Implements `SyncSink`
 - [spigot-host](../spigot-host/README.md) — Implements platform SPIs
 - [fabric-host](../fabric-host/README.md) — Implements platform SPIs (compila; no probado en servidor real)

@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -28,7 +29,14 @@ import java.util.ServiceLoader;
 public final class BackendConfig {
 
     private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
-    private static final Map<String, TranslatorProvider> PROVIDER_REGISTRY = discoverProviders();
+
+    /**
+     * Legacy host path only. Module activators pass their providers explicitly,
+     * so they never trigger a ServiceLoader scan against the host classpath.
+     */
+    private static final class ServiceLoaderRegistry {
+        private static final Map<String, TranslatorProvider> INSTANCE = discoverProviders();
+    }
 
     private BackendConfig() {
     }
@@ -44,8 +52,37 @@ public final class BackendConfig {
      * @return TranslatorManager poblado con proveedores activos
      */
     public static TranslatorManager load(Path dir) {
-        Path translatorsDir = resolveTranslatorsDir(dir);
-        List<Provider> providers = readProviders(translatorsDir);
+        return load(resolveTranslatorsDir(dir), ServiceLoaderRegistry.INSTANCE);
+    }
+
+    /**
+     * Loads the configured backends using providers supplied by the runtime
+     * instead of the static {@link ServiceLoader} registry.
+     *
+     * @param dir       suite data directory
+     * @param providers translator providers visible to the calling module
+     * @return populated manager
+     */
+    public static TranslatorManager load(Path dir, Collection<TranslatorProvider> providers) {
+        return load(resolveTranslatorsDir(dir), registryOf(providers));
+    }
+
+    /**
+     * Loads {@code <configDir>/translators/*.yml} for a module-scoped
+     * configuration directory.
+     *
+     * @param configDir module configuration directory
+     * @param providers translator providers visible to the calling module
+     * @return populated manager
+     */
+    public static TranslatorManager loadFromConfigDir(Path configDir,
+                                                      Collection<TranslatorProvider> providers) {
+        return load(configDir.resolve("translators"), registryOf(providers));
+    }
+
+    private static TranslatorManager load(Path translatorsDir,
+                                          Map<String, TranslatorProvider> registry) {
+        List<Provider> providers = readProviders(translatorsDir, registry);
         TranslatorManager manager = new TranslatorManager();
 
         for (Provider p : providers) {
@@ -54,6 +91,15 @@ public final class BackendConfig {
             }
         }
         return manager;
+    }
+
+    private static Map<String, TranslatorProvider> registryOf(
+            Collection<TranslatorProvider> providers) {
+        Map<String, TranslatorProvider> registry = new java.util.HashMap<>();
+        for (TranslatorProvider provider : providers) {
+            registry.putIfAbsent(provider.name(), provider);
+        }
+        return registry;
     }
 
     /** @return el primer directorio de backends existente, o la ruta canónica. */
@@ -86,21 +132,23 @@ public final class BackendConfig {
         return registry;
     }
 
-    private static List<Provider> readProviders(Path translatorsDir) {
+    private static List<Provider> readProviders(Path translatorsDir,
+                                                Map<String, TranslatorProvider> registry) {
         if (!Files.isDirectory(translatorsDir)) {
             return List.of();
         }
         List<Provider> found = new ArrayList<>();
         try (var stream = Files.list(translatorsDir)) {
             stream.filter(p -> p.toString().endsWith(".yml"))
-                .forEach(p -> readProvider(p).ifPresent(found::add));
+                .forEach(p -> readProvider(p, registry).ifPresent(found::add));
         } catch (IOException ignored) {
             return List.of();
         }
         return orderCanonical(found);
     }
 
-    private static java.util.Optional<Provider> readProvider(Path file) {
+    private static java.util.Optional<Provider> readProvider(
+            Path file, Map<String, TranslatorProvider> registry) {
         try {
             Object root = YAML.load(Files.readString(file));
             if (!(root instanceof Map)) {
@@ -112,7 +160,7 @@ public final class BackendConfig {
             String kind = str(map.get("provider"), fileName(file));
             boolean active = bool(map.get("active"), false);
 
-            TranslatorProvider spiProvider = PROVIDER_REGISTRY.get(kind);
+            TranslatorProvider spiProvider = registry.get(kind);
             if (spiProvider == null) {
                 // Unknown provider type - skip with warning
                 return java.util.Optional.empty();

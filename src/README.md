@@ -18,7 +18,8 @@ TextFormatter Suite
 │   ├── iflow-firewall    → motor de reglas SpEL legacy (alternativa mutuamente excluyente a la VM) + grafo del editor
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
-│   ├── transport         → Transport abstraction (HTTP, codecs)
+│   ├── chattranslator    → Translation facade and provider lifecycle
+│   ├── transport         → Transport abstraction (HTTP, codecs; dependency package)
 │   ├── gtranslate        → Google Translate provider
 │   ├── ltranslate        → LibreTranslate provider
 │   ├── observability     → Metrics, health checks, debug endpoints
@@ -97,16 +98,18 @@ TextFormatter Suite
 
 | Module | Purpose | Main Responsibility | Key Classes | Entry Points | README |
 |--------|---------|---------------------|-------------|--------------|--------|
-| `core-api` | Contracts & SPI | Define all platform-agnostic interfaces and shared contracts | `Module`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel`, `ChannelRegistry`, `Router` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
+| `core-api` | Contracts & SPI | Define all platform-agnostic interfaces and shared contracts | `Module`, `ModuleActivator`, `ServiceRegistry`, `ModuleActivatedEvent`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel`, `ChannelRegistry`, `Router` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, placeholders | `DefaultTextFormatter`, `TemplateRenderer`, `TextFormatterActivator` | `TextFormatterActivator` | [textformatter/README.md](textformatter/README.md) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowVmActivator` | [iflow-vm/README.md](iflow-vm/README.md) |
 | `iflow-wasm` | Motor WebAssembly con Chicory (W2) | `WasmModuleLoader`, `WasmContract`, `ValidationResult` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
 | `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
-| `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateModule` | [gtranslate/README.md](gtranslate/README.md) |
-| `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateModule` | [ltranslate/README.md](ltranslate/README.md) |
-| `transport` | Transport layer | HTTP transport, codecs | `HttpTransport`, `Transport`, `MessageCodec` | — | [transport/README.md](transport/README.md) |
+| `chattranslator` | Translation facade | Builds the translator manager from provider services and refreshes it on module lifecycle events | `ChatTranslator`, `ChatTranslatorActivator`, `BackendConfig`, `TranslatorManager` | `ChatTranslatorActivator` | [chattranslator/README.md](chattranslator/README.md) |
+| `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateActivator` | [gtranslate/README.md](gtranslate/README.md) |
+| `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateActivator` | [ltranslate/README.md](ltranslate/README.md) |
+| `transport` | Transport layer (dependency package) | HTTP transport, codecs | `HttpTransport`, `Transport`, `MessageCodec` | `modulePackage` (`DEPENDENCY`) | [transport/README.md](transport/README.md) |
+| `logger` | Logging dependency package | Structured logging shared by modules | `Logger`, `LoggerUtils` | `LoggerModule` (`DEPENDENCY`) | [logger/README.md](logger/README.md) |
 | `observability` | Metrics & health | Prometheus, health checks, endpoints | `Observability`, `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint` | `ObservabilityModule` | [observability/README.md](observability/README.md) |
 | `presets` | Preset catalog | YAML preset import/export and built-in definitions | `PresetManager`, `Preset`, `PresetsModule` | `PresetsModule` | [presets/README.md](presets/README.md) |
 | `manager-spi` | Manager SPI | Coordinates, descriptors, lifecycle, manifest/version parsing | `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Version` | — | [manager-spi/README.md](manager-spi/README.md) |
@@ -223,7 +226,8 @@ TextFormatter Suite
 | Service | Registration Point |
 |---------|-------------------|
 | `ActorDirectory` | `SuiteBootstrap` → platform adapter provides (`SpigotActorDirectory`, `FabricActorDirectory`) |
-| `TranslationService` | `SuiteBootstrap` → `GTranslateProvider` / `LTranslateProvider` registered via modules |
+| `TranslationService` | `chattranslator` package registers the facade/service; `gtranslate`/`ltranslate` packages register `TranslatorProvider` |
+| `ModuleActivatedEvent` / `ModuleDeactivatedEvent` | `ModuleHost` publishes them; modules subscribe through their scoped `EventBus` |
 | `SyncSink` | `SuiteBootstrap` → each sync module registers its `SyncSink` implementation |
 | `Router` | `SuiteBootstrap` → `VmPolicyEngine` |
 | `MessageDispatcher` | `SuiteBootstrap` → `MessageDispatcher` |
@@ -335,7 +339,7 @@ Module.initialize() called in order
 | **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer` |
 | **Shared channel/routing contracts** | `core-api` | `api/channel/Channel`, `api/channel/ChannelRegistry`, `api/iflow/Router` |
 | **Routing/Rules (VM)** | `iflow-vm` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` |
-| **Translation** | `gtranslate`/`ltranslate` | `GTranslateProvider`, `LTranslateProvider` (implement `TranslationService`) |
+| **Translation** | `chattranslator` + `gtranslate`/`ltranslate` | `ChatTranslator`/`TranslationService`; `GTranslateProvider`/`LTranslateProvider` implement `TranslatorProvider` |
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
 | **Observability** | `observability` | `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint`, `DebugEndpoint` |
 | **Presets** | `presets` | `PresetManager`, `Preset` |
@@ -391,4 +395,4 @@ Module.initialize() called in order
 
 ---
 
-*Generated from actual repository state. Last updated: 2026-10-27 (F5 closes the six base packages; shared channel/routing contracts move to core-api and logger becomes the first dependency package).*
+*Generated from actual repository state. Last updated: 2026-10-27 (F5 closes the six base packages; F6 adds transport as a dependency package, gtranslate/ltranslate activators and module lifecycle events for chattranslator).*

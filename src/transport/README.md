@@ -1,6 +1,10 @@
 # transport — Transport Abstraction & HTTP Implementation
 
 > **Purpose**: Defines the `Transport` abstraction and provides `HttpTransport` implementation. Used by sync modules and translation providers for outbound HTTP communication. Uses `HttpURLConnection` (not `java.net.http.HttpClient`) to avoid module accessibility issues in plugin classloaders (Paper/Spigot).
+>
+> **Packaging**: `transport` is a `DEPENDENCY` package. The manager installs
+> `manager/library/dependencies/transport.jar` and exposes it to modules that
+> declare `transport@>=2.1.0`; it is not activated as a feature.
 
 ---
 
@@ -28,7 +32,8 @@
 | Dependency | Type | Reason |
 |------------|------|--------|
 | `core-api` | Compile | `Message` type for codec |
-| `org.json` | Compile | JSON handling in `MessageCodec` |
+| `org.json` | Compile | JSON handling in `MessageCodec` (external library; final packaging is F8) |
+| Manager `DEPENDENCY` store | Runtime | `library/dependencies/transport.jar` for package consumers |
 
 ---
 

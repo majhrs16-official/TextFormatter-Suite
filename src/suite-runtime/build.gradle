@@ -11,6 +11,9 @@ evaluationDependsOn(':src:logger')
 evaluationDependsOn(':src:iflow-vm')
 evaluationDependsOn(':src:iflow-firewall')
 evaluationDependsOn(':src:iflow-wasm')
+evaluationDependsOn(':src:transport')
+evaluationDependsOn(':src:gtranslate')
+evaluationDependsOn(':src:ltranslate')
 
 group = 'me.majhrs16'
 
@@ -35,6 +38,7 @@ dependencies {
     testRuntimeOnly 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     testRuntimeOnly 'com.fasterxml.jackson.core:jackson-annotations:2.17.1'
     testRuntimeOnly 'com.dylibso.chicory:runtime:1.4.0'
+    testRuntimeOnly 'org.json:json:20240303'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -78,6 +82,18 @@ test {
     dependsOn iflowWasmPackage
     systemProperty 'iflow-wasm.package',
             iflowWasmPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def transportPackage = project(':src:transport').tasks.named('modulePackage')
+    dependsOn transportPackage
+    systemProperty 'transport.package',
+            transportPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def gtranslatePackage = project(':src:gtranslate').tasks.named('modulePackage')
+    dependsOn gtranslatePackage
+    systemProperty 'gtranslate.package',
+            gtranslatePackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def ltranslatePackage = project(':src:ltranslate').tasks.named('modulePackage')
+    dependsOn ltranslatePackage
+    systemProperty 'ltranslate.package',
+            ltranslatePackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

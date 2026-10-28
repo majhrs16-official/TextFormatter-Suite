@@ -1,16 +1,19 @@
 package me.majhrs16.suite.chattranslator;
 
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
-import java.util.Set;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
+import me.majhrs16.suite.api.runtime.EventBus;
+import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
-import me.majhrs16.suite.api.spi.Translator;
+import me.majhrs16.suite.api.runtime.ModuleDeactivatedEvent;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslatorProvider;
 import me.majhrs16.suite.api.spi.TranslationService;
@@ -22,6 +25,11 @@ import me.majhrs16.suite.api.spi.TranslationService;
  * and from providers bundled in its own classloader, then registers the facade
  * and its translation service in the module scope. The service owns a thread
  * pool, so it is tracked as a module resource and closed on deactivation.</p>
+ *
+ * <p>Provider packages activate after {@code chattranslator} because they
+ * require it. The activator subscribes to module lifecycle events and rebuilds
+ * the manager when a provider appears or disappears, which keeps the facade
+ * usable across hot installs and unloads.</p>
  */
 public final class ChatTranslatorActivator implements ModuleActivator {
 
@@ -41,55 +49,75 @@ public final class ChatTranslatorActivator implements ModuleActivator {
                 ChatTranslatorConfig.loadFromConfigDir(context.configDir());
 
         TranslatorManager manager = new TranslatorManager();
-        Set<String> names = new HashSet<>();
-        for (TranslatorProvider provider : context.services().findAll(TranslatorProvider.class)) {
-            addProvider(manager, provider, names, context);
-        }
-        for (TranslatorProvider provider : ServiceLoader.load(
-                TranslatorProvider.class, getClass().getClassLoader())) {
-            addProvider(manager, provider, names, context);
-        }
+        refresh(manager, null, context);
 
         TranslationService service = new TranslationService(manager);
-        ChatTranslator translator;
+        ChatTranslator translator = null;
+        EventBus.Subscription onActivated = null;
+        EventBus.Subscription onDeactivated = null;
         try {
             translator = new ChatTranslator(manager, service, config);
+
+            onActivated = context.events().subscribe(ModuleActivatedEvent.class,
+                    event -> refresh(manager, service, context));
+            onDeactivated = context.events().subscribe(ModuleDeactivatedEvent.class,
+                    event -> refresh(manager, service, context));
+
+            context.services().register(TranslatorManager.class, manager);
+            context.services().register(TranslationService.class, service);
+            context.services().register(ChatTranslator.class, translator);
+            context.resources().track(onActivated);
+            context.resources().track(onDeactivated);
+            context.resources().track(translator);
+            context.logger().info("ChatTranslator ready with "
+                    + manager.providers().size() + " providers");
         } catch (RuntimeException failure) {
-            service.close();
+            if (onActivated != null) {
+                onActivated.close();
+            }
+            if (onDeactivated != null) {
+                onDeactivated.close();
+            }
+            if (translator != null) {
+                translator.close();
+            } else {
+                service.close();
+            }
             throw failure;
         }
-
-        context.services().register(TranslatorManager.class, manager);
-        context.services().register(TranslationService.class, service);
-        context.services().register(ChatTranslator.class, translator);
-        context.resources().track(translator);
-        context.logger().info("ChatTranslator ready with " + manager.providers().size() + " providers");
     }
 
     @Override
     public void stop() {
-        // The module scope closes the tracked ChatTranslator and its service.
+        // The module scope closes the tracked subscriptions and ChatTranslator.
     }
 
-    private static void addProvider(TranslatorManager manager, TranslatorProvider provider,
-                                    Set<String> names, ModuleContext context) {
-        if (!names.add(provider.name())) {
-            return;
-        }
+    private static void refresh(TranslatorManager manager, TranslationService service,
+                                ModuleContext context) {
         try {
-            Map<String, Object> providerConfig = Map.of();
-            if (!provider.validateConfig(providerConfig)) {
-                context.logger().debug("Translator provider " + provider.name()
-                        + " is not configured; skipped");
-                return;
+            TranslatorManager refreshed = BackendConfig.loadFromConfigDir(
+                    context.configDir(), providers(context));
+            manager.replaceAll(refreshed.providers());
+            if (service != null) {
+                service.clearCaches();
             }
-            Translator translator = provider.create(providerConfig);
-            if (translator != null) {
-                manager.add(translator);
-            }
-        } catch (Exception failure) {
-            context.logger().warn("Cannot create translator provider " + provider.name()
-                    + ": " + failure.getMessage());
+            context.logger().debug("ChatTranslator refreshed with "
+                    + manager.providers().size() + " providers");
+        } catch (RuntimeException failure) {
+            context.logger().warn("Cannot refresh translation providers: "
+                    + failure.getMessage());
         }
+    }
+
+    private static List<TranslatorProvider> providers(ModuleContext context) {
+        Map<String, TranslatorProvider> byName = new LinkedHashMap<>();
+        for (TranslatorProvider provider : context.services().findAll(TranslatorProvider.class)) {
+            byName.putIfAbsent(provider.name(), provider);
+        }
+        for (TranslatorProvider provider : ServiceLoader.load(
+                TranslatorProvider.class, ChatTranslatorActivator.class.getClassLoader())) {
+            byName.putIfAbsent(provider.name(), provider);
+        }
+        return new ArrayList<>(byName.values());
     }
 }
