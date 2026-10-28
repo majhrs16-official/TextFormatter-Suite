@@ -128,7 +128,7 @@ public final class RuleExpressionEvaluator implements ExpressionEvaluator {
         // Explicit allowlist of allowed class prefixes
         private static final String[] ALLOWED_PREFIXES = {
             "me.majhrs16.suite.api.message.",
-            "me.majhrs16.suite.textformatter.channel.",
+            "me.majhrs16.suite.api.channel.",
             "me.majhrs16.suite.iflow."
         };
 

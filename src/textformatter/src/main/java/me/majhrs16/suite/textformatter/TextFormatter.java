@@ -1,8 +1,8 @@
 package me.majhrs16.suite.textformatter;
 
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.template.Template;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.textformatter.template.TemplateRenderer;

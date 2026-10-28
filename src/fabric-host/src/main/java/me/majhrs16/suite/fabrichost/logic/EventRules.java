@@ -1,8 +1,8 @@
 package me.majhrs16.suite.fabrichost.logic;
 
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 /**
  * Shared logic for typed event dispatch (join/quit/death).

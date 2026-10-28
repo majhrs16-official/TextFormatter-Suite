@@ -2,8 +2,8 @@ package me.majhrs16.suite.spigothost.logic;
 
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import org.junit.jupiter.api.Test;
 

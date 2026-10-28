@@ -8,8 +8,8 @@ import me.majhrs16.suite.api.message.ColorMode;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import java.util.List;
 import java.util.Map;

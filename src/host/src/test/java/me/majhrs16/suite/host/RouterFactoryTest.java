@@ -11,11 +11,11 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.iflow.IflowFirewallModule;
 import me.majhrs16.suite.iflow.IfowVmModule;
-import me.majhrs16.suite.iflow.Router;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.Router;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

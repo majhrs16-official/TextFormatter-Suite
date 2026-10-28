@@ -9,7 +9,7 @@ import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.config.CommandsConfig;
 import me.majhrs16.suite.host.config.CommandsConfigLoader;
 import me.majhrs16.suite.observability.health.HealthCheckRegistry;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 import me.majhrs16.suite.spigothost.TextFormatterSuitePlugin;
 

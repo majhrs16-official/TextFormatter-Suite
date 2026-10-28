@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.channel;
+package me.majhrs16.suite.api.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
 

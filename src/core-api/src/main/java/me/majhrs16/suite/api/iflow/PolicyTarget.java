@@ -1,4 +1,4 @@
-package me.majhrs16.suite.iflow.target;
+package me.majhrs16.suite.api.iflow;
 
 /**
  * Disposition the router applies to a message for one recipient.

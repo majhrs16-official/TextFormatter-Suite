@@ -7,7 +7,7 @@ import me.majhrs16.suite.observability.metrics.MetricsCollector;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import java.io.IOException;
 import java.nio.file.Path;

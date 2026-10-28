@@ -18,7 +18,7 @@ import me.majhrs16.suite.host.config.HostPaths;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.config.MessagesConfig;
 import me.majhrs16.suite.host.config.YamlUserLanguageStore;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.inworld.InWorldHandler;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 import me.majhrs16.suite.manager.apt.ModuleLifecycleAdapter;
@@ -39,7 +39,7 @@ import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
 import me.majhrs16.suite.syncsocket.SocketConfig;
 import me.majhrs16.suite.syncsocket.TcpSink;
 import me.majhrs16.suite.syncsocket.UdpSink;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 
 import java.util.Arrays;
@@ -615,7 +615,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         }
 
         Actor sender = current.directory.actorOf(event.getPlayer());
-        me.majhrs16.suite.textformatter.channel.Channel channel =
+        me.majhrs16.suite.api.channel.Channel channel =
             current.host.channels().resolve(
                 ChannelSelector.select(List.copyOf(current.host.channels().all()),
                     permission -> hasPermission(sender, permission)));

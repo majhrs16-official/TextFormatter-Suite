@@ -7,8 +7,8 @@ import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;

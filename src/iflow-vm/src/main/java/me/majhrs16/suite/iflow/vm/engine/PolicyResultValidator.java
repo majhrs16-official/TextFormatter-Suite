@@ -1,11 +1,11 @@
 package me.majhrs16.suite.iflow.vm.engine;
 
-import me.majhrs16.suite.iflow.RouteDecision;
-import me.majhrs16.suite.iflow.RouteOutcome;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.api.iflow.RouteDecision;
+import me.majhrs16.suite.api.iflow.RouteOutcome;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.VmException;

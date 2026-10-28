@@ -176,7 +176,7 @@ public final class HostServiceRegistry {
      * auto-detection of an unset source language in PROPERTY_READ.
      */
     private java.util.function.Function<String, String> translationDetector;
-    private me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter;
+    private me.majhrs16.suite.api.iflow.RateLimiter rateLimiter;
 
     public HostServiceRegistry() {
         registerBuiltinServices();
@@ -741,7 +741,7 @@ public final class HostServiceRegistry {
 
     /**
      * ROUTE_RATE_LIMIT: computes the backoff for the key in the buffer through the
-     * injected {@link me.majhrs16.suite.iflow.channel.RateLimiter} and journals it.
+     * injected {@link me.majhrs16.suite.api.iflow.RateLimiter} and journals it.
      * Without a limiter the service is {@code UNSUPPORTED}.
      */
     private ServiceResult doRouteRateLimit(ExecutionContext ctx, int argVAddr, int argLength, int options) {
@@ -882,7 +882,7 @@ public final class HostServiceRegistry {
         return this;
     }
 
-    public HostServiceRegistry rateLimiter(me.majhrs16.suite.iflow.channel.RateLimiter rateLimiter) {
+    public HostServiceRegistry rateLimiter(me.majhrs16.suite.api.iflow.RateLimiter rateLimiter) {
         this.rateLimiter = rateLimiter;
         return this;
     }

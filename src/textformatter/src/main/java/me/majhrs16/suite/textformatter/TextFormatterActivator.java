@@ -10,7 +10,7 @@ import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 /**
  * Runtime activator of the {@code textformatter} package.

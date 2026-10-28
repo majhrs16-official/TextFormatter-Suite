@@ -1,7 +1,6 @@
-package me.majhrs16.suite.iflow;
+package me.majhrs16.suite.api.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
 
 /**
  * Immutable outcome of a single {@code (message × recipient)} route decision.

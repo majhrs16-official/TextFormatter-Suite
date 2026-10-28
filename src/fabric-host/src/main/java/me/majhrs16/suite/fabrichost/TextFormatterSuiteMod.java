@@ -1,7 +1,7 @@
 package me.majhrs16.suite.fabrichost;
 
 import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.textformatter.channel.Channel;
+import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
@@ -16,7 +16,7 @@ import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.HostPaths;
 import me.majhrs16.suite.host.config.MessagesConfig;
 import me.majhrs16.suite.host.config.YamlUserLanguageStore;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.fabrichost.logic.ChannelSelector;
 import me.majhrs16.suite.fabrichost.logic.EventRules;
 import me.majhrs16.suite.fabrichost.logic.LangSetting;

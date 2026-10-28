@@ -8,7 +8,7 @@ import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.host.port.ChatDelivery;
-import me.majhrs16.suite.iflow.Router;
+import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.textformatter.TextFormatter;
 
 import java.lang.management.ManagementFactory;

@@ -1,7 +1,7 @@
 package me.majhrs16.suite.spigothost.logic;
 
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import java.util.UUID;
 

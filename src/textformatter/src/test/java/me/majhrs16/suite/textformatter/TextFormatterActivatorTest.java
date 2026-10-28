@@ -16,7 +16,7 @@ import me.majhrs16.suite.api.runtime.ResourceTracker;
 import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

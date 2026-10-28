@@ -9,8 +9,8 @@ import me.majhrs16.suite.api.message.Formats;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterEach;

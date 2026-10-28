@@ -630,8 +630,8 @@ class HostServiceRegistryTest {
             ctx.outputBufferVAddr(), key.length, 0);
         assertEquals(ServiceResult.Status.UNSUPPORTED, noLimiter.status());
 
-        me.majhrs16.suite.iflow.channel.RateLimiter limiter =
-            new me.majhrs16.suite.iflow.channel.RateLimiter();
+        me.majhrs16.suite.api.iflow.RateLimiter limiter =
+            new me.majhrs16.suite.api.iflow.RateLimiter();
         try {
             HostServiceRegistry withLimiter = new HostServiceRegistry().rateLimiter(limiter);
             limiter.tryAcquire("chat", 1); // exhaust the single ticket of the window

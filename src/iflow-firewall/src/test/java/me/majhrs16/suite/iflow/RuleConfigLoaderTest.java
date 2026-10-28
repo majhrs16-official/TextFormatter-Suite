@@ -2,7 +2,7 @@ package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.rule.TransformOp;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

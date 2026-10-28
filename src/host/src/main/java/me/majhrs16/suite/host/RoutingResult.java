@@ -1,8 +1,8 @@
 package me.majhrs16.suite.host;
 
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.RouteDecision;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.api.iflow.RouteDecision;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
 
 import net.kyori.adventure.text.Component;
 

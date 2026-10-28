@@ -1,7 +1,7 @@
 package me.majhrs16.suite.presets;
 
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.host.config.HostConfig;
 
 import java.util.List;

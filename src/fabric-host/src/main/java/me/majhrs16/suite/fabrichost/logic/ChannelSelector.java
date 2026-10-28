@@ -1,6 +1,6 @@
 package me.majhrs16.suite.fabrichost.logic;
 
-import me.majhrs16.suite.textformatter.channel.Channel;
+import me.majhrs16.suite.api.channel.Channel;
 
 import java.util.List;
 import java.util.function.Predicate;

@@ -4,8 +4,8 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Formats;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 
 import net.kyori.adventure.text.Component;

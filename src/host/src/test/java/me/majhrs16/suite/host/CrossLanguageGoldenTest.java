@@ -77,7 +77,7 @@ class CrossLanguageGoldenTest {
                 }));
 
         me.majhrs16.suite.host.SuiteHost host = me.majhrs16.suite.host.SuiteHost.bootstrap(dir,
-            me.majhrs16.suite.iflow.channel.PermissionChecker.ALLOW_ALL, null, quietLogger());
+            me.majhrs16.suite.api.iflow.PermissionChecker.ALLOW_ALL, null, quietLogger());
 
         String[] formats = {
             "<gray>%player_name%: %content%</gray>",
@@ -110,8 +110,8 @@ class CrossLanguageGoldenTest {
                 .content(getContent(i)).translate(false).build();
 
             // Create formatter using ChannelRegistry.builder() (public static method)
-            me.majhrs16.suite.textformatter.channel.ChannelRegistry registry =
-                me.majhrs16.suite.textformatter.channel.ChannelRegistry.builder().build();
+            me.majhrs16.suite.api.channel.ChannelRegistry registry =
+                me.majhrs16.suite.api.channel.ChannelRegistry.builder().build();
 
             // TextFormatters.create returns TextFormatter
             me.majhrs16.suite.textformatter.TextFormatter formatter =

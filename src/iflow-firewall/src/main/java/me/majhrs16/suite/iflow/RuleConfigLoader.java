@@ -4,7 +4,7 @@ import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.rule.TransformOp;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
 
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -63,8 +63,19 @@ public final class RuleConfigLoader {
      * Returns an empty list if the file doesn't exist, is empty or only holds
      * the web-editor graph.
      */
-    public static List<Rule> loadRules(Path configDir, PluginLogger logger) {
-        Path rulesFile = rulesFile(configDir);
+    public static List<Rule> loadRules(Path dataFolder, PluginLogger logger) {
+        return loadRulesFile(rulesFile(dataFolder), logger);
+    }
+
+    /**
+     * Loads {@code <configDir>/rules.yml} for a module-scoped configuration
+     * directory.
+     */
+    public static List<Rule> loadRulesFromConfigDir(Path configDir, PluginLogger logger) {
+        return loadRulesFile(configDir.resolve("rules.yml"), logger);
+    }
+
+    private static List<Rule> loadRulesFile(Path rulesFile, PluginLogger logger) {
         if (!Files.isRegularFile(rulesFile)) {
             if (logger != null) {
                 logger.debug("rules.yml not found at " + rulesFile + "; using empty rule set");

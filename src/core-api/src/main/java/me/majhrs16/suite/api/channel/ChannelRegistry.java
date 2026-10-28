@@ -1,4 +1,4 @@
-package me.majhrs16.suite.textformatter.channel;
+package me.majhrs16.suite.api.channel;
 
 import java.util.ArrayList;
 import java.util.Collection;

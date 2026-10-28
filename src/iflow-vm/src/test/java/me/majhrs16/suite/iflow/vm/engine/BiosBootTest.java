@@ -3,12 +3,12 @@ package me.majhrs16.suite.iflow.vm.engine;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.channel.RateLimiter;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;

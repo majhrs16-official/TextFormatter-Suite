@@ -2,14 +2,17 @@ package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.channel.RateLimiter;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.RateLimiter;
+import me.majhrs16.suite.api.iflow.RouteDecision;
+import me.majhrs16.suite.api.iflow.RouteOutcome;
+import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.iflow.rule.Rule;
 import me.majhrs16.suite.iflow.rule.ScriptSurface;
 import me.majhrs16.suite.iflow.rule.TransformOp;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -124,14 +127,12 @@ public final class DefaultRouter implements Router, AutoCloseable {
         return 0;
     }
 
-    @Override
     public void setRules(Collection<Rule> newRules) {
         List<Rule> ordered = new ArrayList<>(newRules);
         ordered.sort(Comparator.comparingInt(Rule::priority).thenComparing(Rule::id));
         rules.set(List.copyOf(ordered));
     }
 
-    @Override
     public Collection<Rule> rules() {
         return rules.get();
     }

@@ -9,10 +9,10 @@ import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.RoutingResult;
 import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.textformatter.ChannelConfig;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.channel.RateLimiter;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -448,9 +448,9 @@ class EndToEndIntegrationTest {
 
         var recipient = createRecipient("Victim", Language.EN);
 
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.DROP,
+        assertEquals(me.majhrs16.suite.api.iflow.PolicyTarget.DROP,
             router.route(spam, recipient).decision().target());
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.LOG,
+        assertEquals(me.majhrs16.suite.api.iflow.PolicyTarget.LOG,
             router.route(ham, recipient).decision().target());
     }
 
@@ -484,9 +484,9 @@ class EndToEndIntegrationTest {
 
         var recipient = createRecipient("Audience", Language.EN);
 
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.LOG,
+        assertEquals(me.majhrs16.suite.api.iflow.PolicyTarget.LOG,
             router.route(fromStaff, recipient).decision().target());
-        assertEquals(me.majhrs16.suite.iflow.target.PolicyTarget.REJECT,
+        assertEquals(me.majhrs16.suite.api.iflow.PolicyTarget.REJECT,
             router.route(fromRegular, recipient).decision().target());
     }
 

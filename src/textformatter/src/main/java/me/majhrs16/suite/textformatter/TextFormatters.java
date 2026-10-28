@@ -3,7 +3,7 @@ package me.majhrs16.suite.textformatter;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.template.TemplateRenderer;
 
 import java.util.Objects;

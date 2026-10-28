@@ -7,10 +7,10 @@ import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.host.config.HostConfig;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 import org.junit.jupiter.api.*;

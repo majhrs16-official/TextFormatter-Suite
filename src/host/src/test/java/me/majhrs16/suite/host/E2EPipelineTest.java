@@ -12,8 +12,8 @@ import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.port.ChatDelivery;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.RouteDecision;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.RouteDecision;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import net.kyori.adventure.text.Component;

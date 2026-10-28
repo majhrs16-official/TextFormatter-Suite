@@ -2,14 +2,14 @@ package me.majhrs16.suite.iflow.vm.engine;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.iflow.Router;
-import me.majhrs16.suite.iflow.RouteDecision;
-import me.majhrs16.suite.iflow.RouteOutcome;
-import me.majhrs16.suite.iflow.channel.PermissionChecker;
-import me.majhrs16.suite.iflow.channel.RateLimiter;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
-import me.majhrs16.suite.textformatter.channel.Channel;
-import me.majhrs16.suite.textformatter.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.Router;
+import me.majhrs16.suite.api.iflow.RouteDecision;
+import me.majhrs16.suite.api.iflow.RouteOutcome;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.RateLimiter;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
+import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.engine.PolicyResultValidator;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
@@ -569,13 +569,11 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      * @throws UnsupportedOperationException always. iflow VM executes binary programs only.
      * Use {@link #setProgram(ProgramImage)} for hot-reload of .flow files.
      */
-    @Override
     public void setRules(Collection<?> rules) {
         throw new UnsupportedOperationException("iflow VM executes binary .flow programs only. " +
             "Use setProgram(ProgramImage) for hot-reload, or compile rules externally via web editor.");
     }
 
-    @Override
     public Collection<?> rules() {
         return Collections.emptyList();
     }

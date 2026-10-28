@@ -1,7 +1,7 @@
 package me.majhrs16.suite.iflow.rule;
 
 import me.majhrs16.suite.api.message.Direction;
-import me.majhrs16.suite.iflow.target.PolicyTarget;
+import me.majhrs16.suite.api.iflow.PolicyTarget;
 
 import org.junit.jupiter.api.Test;
 
