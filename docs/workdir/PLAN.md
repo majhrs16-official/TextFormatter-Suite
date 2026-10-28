@@ -1082,6 +1082,81 @@ del cableado del host.
 El guard de arquitectura se añadirá cuando la primera rebanada de F4b deje el
 build verde; no se añade un guard que nazca rojo.
 
+##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
+
+**Decisión de arquitectura (2026-10-28):** cada módulo se estructura como un
+hexágono. El núcleo contiene la lógica y los contratos; los adaptadores
+implementan los puertos hacia tecnologías concretas. Ningún módulo neutral
+importa JDA, Velocity, Paper, Bukkit ni Fabric. Ningún adapter de plataforma
+importa paquetes de feature. La frontera es bidireccional y estricta.
+
+Reglas:
+
+1. **Núcleo neutral.** La lógica de `sync-discord`, `sync-velocity`, `inworld`,
+   `tester`, `presets` y `extension-api` vive en clases sin tipos de
+   plataforma. Los puertos se declaran en `core-api` (si los comparten varios
+   módulos) o en el `api` del propio paquete.
+2. **Adaptadores tecnológicos.** JDA, Velocity API, Paper/Bukkit y Fabric viven
+   solo en adaptadores: `adapters/jda`, `adapters/velocity`,
+   `spigot-host`/`fabric-host`. El paquete neutral declara el puerto y el
+   adapter lo implementa; el paquete no depende del adapter.
+3. **Eventos agnósticos.** El adapter de plataforma traduce el evento de
+   Minecraft a un `Message`/evento neutral y lo entrega al runtime. El módulo
+   consume ese evento; nunca registra listeners de Paper/Bukkit.
+4. **Ciclo de vida no bloqueante.** `start()` de un paquete no espera red ni
+   servidores externos. Las conexiones (Discord, Velocity, etc.) se hacen en
+   un adaptador con estado propio, reintentos y `stop()` determinista; la
+   activación del paquete no depende de que el servicio externo esté vivo.
+5. **Sin stubs.** Un paquete no se empaqueta si su operación principal es un
+   no-op. `Preset.apply(...)` debe aplicar de verdad canales, traductores,
+   sync y configuración, con tests de cada efecto, antes de convertir
+   `presets` en paquete.
+6. **Sin compatibilidad indefinida.** No se añaden adaptadores de
+   compatibilidad sin fase de eliminación. `ModuleLifecycleAdapter`,
+   `SuiteHost.bootstrap()` hardcodeado y el cableado de features en adapters
+   se eliminan en F4b, no se conservan como fachada permanente.
+
+Aplicación por módulo:
+
+- **`sync-discord`** — separar `DiscordSink`/lógica neutral, puerto
+  `DiscordConnection` (conectar, enviar, recibir, cerrar) y adapter JDA.
+  Los tests usan un `FakeDiscordConnection`; no hay red ni espera de 30 s.
+  El adapter JDA es un paquete de plataforma/dependencia, no una dependencia
+  de compilación del paquete neutral.
+- **`sync-velocity`** — mismo patrón: lógica neutral de sincronización y
+  adapter `adapters/velocity` que implementa el puerto de mensajería del
+  proxy. El paquete neutral no importa `com.velocitypowered`.
+- **`inworld`** — el dominio de “mensajes en el mundo” es neutral. El registro
+  del listener de Paper y la traducción del evento viven en `spigot-host`.
+  `fabric-host` implementa el mismo puerto con su API. El módulo no importa
+  Paper.
+- **`tester`** — el simulador de jugador y la traza del pipeline son
+  neutrales. La entrega/observación real de eventos vive en el adapter. El
+  módulo no importa Paper; los tests usan un `PlatformPorts` falso.
+- **`presets`** — `HostConfig` se sustituye por un contrato neutral de
+  configuración (o se mueve a `core-api`). `Preset.apply` se implementa y se
+  prueba antes de empaquetar. Sin `host.config` en el paquete.
+- **`extension-api`** — `ExtensionContext` expone un puerto neutral
+  (`dispatch`, `findActor`, `hasPermission`, `translation`, `channels`,
+  `languages`) en vez de `SuiteHost`/`MessageDispatcher`.
+
+Orden de F4b:
+
+1. Declarar puertos y eventos neutrales en `core-api`.
+2. Extraer la lógica neutral de `inworld`, `tester`, `sync-discord`,
+   `sync-velocity`, `presets` y `extension-api`.
+3. Implementar los adaptadores de plataforma/tecnología y el ciclo de vida
+   no bloqueante.
+4. Poner `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` y
+   retirar todos los imports de features.
+5. Añadir `checkArchitecture` y dejarlo verde: adapters sin features,
+   módulos neutrales sin SDK de plataforma, sin stubs.
+
+**Estado:** desarrollo en pausa al 2026-10-28. Al reanudar, empezar por el
+desacople hexagonal de `sync-discord` (puerto + fake + adapter JDA), porque es
+el caso que hoy bloquea la activación por red y el que valida el patrón para
+`sync-velocity`, `inworld` y `tester`.
+
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
 deja el camino viejo activo. F4b se ejecuta después de F5/F6 porque el
