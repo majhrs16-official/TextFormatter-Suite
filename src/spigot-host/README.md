@@ -53,7 +53,7 @@
 | `manager-apt` | Compile | Repository manager & dependency resolver |
 | `inworld` | Compile | In-world integration |
 | `extension-api` | Compile | Extension system |
-| `tester` | Compile | Testing utilities (with Spigot exclusion) |
+| `tester` | Compile | Neutral runtime test package; `SpigotTestProbe` binds it to the live host |
 | `transport` | Compile | Transport layer |
 | `adventure-platform-bukkit` | Compile | Adventure → Bukkit component conversion |
 | `adventure-text-minimessage` | Compile | MiniMessage parsing |

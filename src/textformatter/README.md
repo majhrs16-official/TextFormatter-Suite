@@ -41,9 +41,11 @@
 |----------|-------|
 | `host` | Uses `TextFormatter` during dispatch/rendering |
 | `iflow-vm` | Uses `TextFormatter` for VM transform operations |
-| `presets` | Uses `TextFormatter` and `ChannelRegistry` for preset channels |
-| `spigot-host` | Uses the formatting pipeline via `host` |
+| `tester` | Uses the live formatter through `TestProbe.format(...)` |
+| `spigot-host` | Uses the formatting pipeline via `host` and `SpigotTestProbe` |
 | `fabric-host` | Uses the formatting pipeline via `host` |
+
+The package provides the `channel-api` and `formatter` capabilities.
 
 ---
 

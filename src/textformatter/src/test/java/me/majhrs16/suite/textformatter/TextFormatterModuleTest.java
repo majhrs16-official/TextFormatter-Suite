@@ -46,7 +46,9 @@ class TextFormatterModuleTest {
         assertTrue(descriptor.jvmMin() <= Runtime.version().feature());
 
         Capability channelApi = Capability.of("channel-api", me.majhrs16.suite.api.SemVer.of(2, 1, 0));
+        Capability formatter = Capability.of("formatter", me.majhrs16.suite.api.SemVer.of(2, 1, 0));
         assertTrue(descriptor.provides().contains(channelApi));
+        assertTrue(descriptor.provides().contains(formatter));
     }
 
     @Test

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import me.majhrs16.suite.api.Capability;
+import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.Router;
@@ -32,6 +34,12 @@ class IflowVmActivatorTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void declaresRouterCapabilityForNeutralConsumers() {
+        assertTrue(new IflowVmActivator().descriptor().provides()
+                .contains(Capability.of("router", SemVer.of(2, 1, 0))));
+    }
 
     @Test
     void registersRouterAndTracksTheEngine() {

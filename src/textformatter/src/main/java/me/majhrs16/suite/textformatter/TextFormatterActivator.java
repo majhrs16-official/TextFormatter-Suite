@@ -28,6 +28,7 @@ public final class TextFormatterActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(2, 1, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("channel-api", SemVer.of(2, 1, 0)))
+                .provide(Capability.of("formatter", SemVer.of(2, 1, 0)))
                 .build();
     }
 

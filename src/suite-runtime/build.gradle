@@ -24,6 +24,7 @@ evaluationDependsOn(':src:sync-http')
 evaluationDependsOn(':src:sync-websocket')
 evaluationDependsOn(':src:observability')
 evaluationDependsOn(':src:presets')
+evaluationDependsOn(':src:tester')
 
 group = 'me.majhrs16'
 
@@ -148,6 +149,10 @@ test {
     dependsOn presetsPackage
     systemProperty 'presets.package',
             presetsPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def testerPackage = project(':src:tester').tasks.named('modulePackage')
+    dependsOn testerPackage
+    systemProperty 'tester.package',
+            testerPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

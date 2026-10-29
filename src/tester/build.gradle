@@ -6,60 +6,35 @@ plugins {
 
 group = 'me.majhrs16'
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
-
 repositories {
     mavenLocal()
     mavenCentral()
-    maven { url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
-    maven { url 'https://repo.papermc.io/repository/maven-public/' }
 }
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:kernel')
-    implementation project(':src:host')
-    implementation project(':src:textformatter')
-    implementation project(':src:iflow-vm')
-    implementation project(':src:messages')
-    implementation 'net.kyori:adventure-api:4.17.0'
 
-    // Paper API for runtime (matches spigot-host)
-    compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
-
-    // Test dependencies - need full suite for integration tests
-    testImplementation project(':src:gtranslate')
-    testImplementation project(':src:ltranslate')
-    testImplementation project(':src:sync-discord')
-    testImplementation project(':src:sync-http')
-    testImplementation project(':src:sync-socket')
-    testImplementation project(':src:sync-telegram')
-    testImplementation project(':src:sync-websocket')
-
-    // For Spigot integration tests
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'
-    testImplementation 'org.mockito:mockito-core:5.11.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 21
+    options.release = 17
 }
 
 test {
     useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
 }
 
 publishing {
@@ -80,7 +55,7 @@ jacocoTestReport {
     reports { xml.required = true; html.required = true; csv.required = false }
 }
 
-// Disable dependency verification for test configurations (new test deps)
+// Disable dependency verification for test configurations
 configurations.configureEach {
     if (name in ['testCompileClasspath', 'testRuntimeClasspath']) {
         resolutionStrategy {
@@ -88,3 +63,7 @@ configurations.configureEach {
         }
     }
 }
+
+// F6 — distribution ZIP for the manager
+ext.moduleVersion = '2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

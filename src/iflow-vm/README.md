@@ -10,7 +10,7 @@
 > **Estado**: ✅ Implementada y probada (397 tests)
 >
 > **Tipo**: Módulo funcional (VM interpreted)
-> **Contrato**: Implementa `Router` SPI (`core-api`)
+> **Contrato**: Implementa `Router` SPI (`core-api`) y proporciona la capability `router`
 
 ---
 

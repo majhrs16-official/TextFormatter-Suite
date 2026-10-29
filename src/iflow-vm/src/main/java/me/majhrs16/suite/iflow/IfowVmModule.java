@@ -18,6 +18,7 @@ public final class IfowVmModule implements Module {
             .contractVersion(SemVer.of(2, 1, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("iflow-vm", SemVer.of(2, 1, 0)))
+            .provide(Capability.of("router", SemVer.of(2, 1, 0)))
             .build();
     }
 }

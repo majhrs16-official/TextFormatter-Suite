@@ -195,6 +195,27 @@ class PackageRuntimeTest {
     }
 
     @Test
+    void installsRealTesterPackageAfterFormatterAndRouter() throws Exception {
+        Path loggerZip = packageFromProperty("logger.package");
+        Path textformatterZip = packageFromProperty("textformatter.package");
+        Path vmZip = packageFromProperty("iflow-vm.package");
+        Path testerZip = packageFromProperty("tester.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(loggerZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(textformatterZip, false).get(0).isSuccess());
+            assertTrue(fixture.runtime.installLocal(vmZip, false).get(0).isSuccess());
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(testerZip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("tester").orElseThrow());
+        }
+    }
+
+    @Test
     void installsRealChatTranslatorPackage() throws Exception {
         String packagePath = System.getProperty("chattranslator.package");
         assertNotNull(packagePath, "chattranslator.package must be set by the build");

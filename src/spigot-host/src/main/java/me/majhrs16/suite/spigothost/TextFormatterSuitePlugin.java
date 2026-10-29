@@ -1051,12 +1051,11 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
         Runtime rt = runtime;
         if (rt != null && rt.host != null && rt.dispatcher != null) {
             return new me.majhrs16.suite.tester.TestService(
-rt.host,
-            rt.dispatcher,
-            rt.directory,
-            rt.languages,
-            rt.logger
-        );
+                new SpigotTestProbe(rt.host, rt.dispatcher),
+                rt.directory,
+                rt.languages,
+                rt.logger
+            );
     }
     return null;
 }

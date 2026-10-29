@@ -30,6 +30,7 @@ public final class IflowVmActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(2, 1, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("iflow-vm", SemVer.of(2, 1, 0)))
+                .provide(Capability.of("router", SemVer.of(2, 1, 0)))
                 .require(Requirement.atLeast("channel-api", SemVer.of(2, 1, 0)))
                 .build();
     }

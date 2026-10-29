@@ -97,7 +97,7 @@ TextFormatter Suite
 | `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |
 | `loadtest` | Load testing utilities | — | `fabric-host` |
-| `tester` | Testing utilities (Spigot-dependent) | `core-api` | `spigot-host` |
+| `tester` | Runtime pipeline test service behind the neutral `TestProbe`; packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotTestProbe`), `suite-runtime` |
 
 ---
 
@@ -360,8 +360,6 @@ Module.initialize() called in order
 ## 9. Discrepancies & Known Issues
 
 > ⚠️ **Architectural discrepancy**: `host` depends on `kernel` (for `ModuleLoader`), but `kernel` is conceptually a lower-level module. This is intentional — `host` drives the module loading process. However, it means `kernel` cannot use `host` services (no circular dep).
-
-> ⚠️ **Architectural discrepancy**: `spigot-host` depends on `tester` module (which has Spigot API dependency). This is a test-only dependency leaked into main compile scope (see `build.gradle` line 46-48 with exclusion). Ideally `tester` would be test-only.
 
 > ℹ️ **Velocity split**: `sync-velocity-core` is the neutral sink; `sync-velocity` is the Velocity plugin. Only the plugin imports `com.velocitypowered`.
 

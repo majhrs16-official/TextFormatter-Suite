@@ -2,14 +2,9 @@ package me.majhrs16.suite.tester;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.host.port.ChatDelivery;
-import me.majhrs16.suite.api.iflow.Router;
-import me.majhrs16.suite.textformatter.TextFormatter;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -30,19 +25,18 @@ import java.util.function.Consumer;
 /**
  * Runtime test service that executes automated test scenarios using LIVE server infrastructure.
  * <p>
- * This runs INSIDE the server (Spigot/Fabric) and uses real:
+ * This runs INSIDE the server (Spigot/Fabric) and uses a {@link TestProbe}
+ * backed by the live host:
  * - ActorDirectory (real players online)
- * - MessageDispatcher (real routing + translation + formatting)
- * - ChatDelivery (real delivery to players/console)
- * - SuiteHost (real channels, translators, config)
+ * - routing, translation and formatting through the neutral probe
+ * - real delivery to players/console through the host adapter
  * <p>
  * Tests are triggered via command: {@code /suite test <scenario> [params]}
  * Results are reported to the command sender and server console.
  */
 public final class TestService {
 
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
+    private final TestProbe probe;
     private final ActorDirectory actorDirectory;
     private final UserLanguageStore languageStore;
     private final PluginLogger logger;
@@ -53,13 +47,11 @@ public final class TestService {
     private final AtomicInteger messagesSilenced = new AtomicInteger(0);
     private final AtomicInteger messagesRedirected = new AtomicInteger(0);
 
-    public TestService(SuiteHost host,
-                       MessageDispatcher dispatcher,
+    public TestService(TestProbe probe,
                        ActorDirectory actorDirectory,
                        UserLanguageStore languageStore,
                        PluginLogger logger) {
-        this.host = host;
-        this.dispatcher = dispatcher;
+        this.probe = probe;
         this.actorDirectory = actorDirectory;
         this.languageStore = languageStore;
         this.logger = logger;
@@ -202,17 +194,14 @@ public final class TestService {
     // ============ Wrapper Methods for runFullTestSuite ============
 
     private PerformanceProfiler.PerformanceResult testModuleDiscovery() {
-        try {
-            var modules = host.getClass().getClassLoader().loadClass("me.majhrs16.suite.kernel.ModuleLoader")
-                .getMethod("discover").invoke(null);
-            return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
-        } catch (Exception e) {
-            throw new AssertionError("Module discovery failed: " + e.getMessage());
+        if (probe.discoveredModules() <= 0) {
+            throw new AssertionError("Module discovery returned no modules");
         }
+        return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
     private PerformanceProfiler.PerformanceResult testChannelRegistry() {
-        var channels = host.channels().paths();
+        var channels = probe.channels().paths();
         if (channels.isEmpty()) throw new AssertionError("No channels loaded");
         if (!channels.contains("chat.global")) throw new AssertionError("chat.global missing");
         if (!channels.contains("join")) throw new AssertionError("join channel missing");
@@ -278,7 +267,7 @@ public final class TestService {
             .text("World test")
             .channel("chat.global")
             .build();
-        dispatcher.dispatch(msg);
+        probe.dispatch(msg);
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
@@ -308,7 +297,7 @@ public final class TestService {
             .text("Radius test")
             .channel("chat.global")
             .build();
-        dispatcher.dispatch(msg);
+        probe.dispatch(msg);
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
@@ -350,7 +339,7 @@ public final class TestService {
         runTest("Module Discovery", this::testModuleDiscovery, reporter);
         runTest("Channel Registry", this::testChannelRegistry, reporter);
         runTest("Actor Directory", this::testActorDirectory, reporter);
-        runTest("SuiteHost Components", this::testSuiteHostComponents, reporter);
+        runTest("Runtime Components", this::testRuntimeComponents, reporter);
 
         // Routing & Delivery
         runTest("Basic Chat Routing", this::testBasicChatRouting, reporter);
@@ -511,8 +500,7 @@ public final class TestService {
             .text(text)
             .channel("chat.global")
             .build();
-        var report = dispatcher.dispatch(msg);
-        updateStats(report);
+        updateStats(probe.dispatch(msg));
     }
 
     private void sendChatToChannel(Actor sender, String text, String channel, boolean translate) {
@@ -524,13 +512,12 @@ public final class TestService {
             .text(text)
             .channel(channel)
             .build();
-        var report = dispatcher.dispatch(msg);
-        updateStats(report);
+        updateStats(probe.dispatch(msg));
     }
 
     private void dispatchTypedEvent(me.majhrs16.suite.api.message.MessageType type,
                                      String channelName, Actor subject, String content) {
-        if (host.channels().resolve(channelName) == null) return;
+        if (probe.channels().resolve(channelName) == null) return;
         var msg = me.majhrs16.suite.api.message.Message.builder()
             .type(type)
             .sender(subject)
@@ -539,15 +526,14 @@ public final class TestService {
             .text(content)
             .channel(channelName)
             .build();
-        var report = dispatcher.dispatch(msg);
-        updateStats(report);
+        updateStats(probe.dispatch(msg));
     }
 
-    private void updateStats(me.majhrs16.suite.host.DispatchReport report) {
+    private void updateStats(TestProbe.DispatchOutcome outcome) {
         messagesSent.incrementAndGet();
-        messagesDelivered.addAndGet(report.delivered());
-        messagesSilenced.addAndGet(report.silenced());
-        messagesRedirected.addAndGet(report.redirected());
+        messagesDelivered.addAndGet(outcome.delivered());
+        messagesSilenced.addAndGet(outcome.silenced());
+        messagesRedirected.addAndGet(outcome.redirected());
     }
 
     private void assertDelivered(int expectedMin, String context) {
@@ -565,12 +551,10 @@ public final class TestService {
 
     // ============ New Test Methods ============
 
-    private PerformanceProfiler.PerformanceResult testSuiteHostComponents() {
-        if (host.config() == null) throw new AssertionError("HostConfig missing");
-        if (host.channels() == null) throw new AssertionError("ChannelRegistry missing");
-        if (host.translation() == null) throw new AssertionError("TranslationService missing");
-        if (host.formatter() == null) throw new AssertionError("TextFormatter missing");
-        if (host.router() == null) throw new AssertionError("Router missing");
+    private PerformanceProfiler.PerformanceResult testRuntimeComponents() {
+        if (!probe.ready()) throw new AssertionError("Host runtime is not ready");
+        if (probe.channels() == null) throw new AssertionError("ChannelRegistry missing");
+        if (probe.router() == null) throw new AssertionError("Router missing");
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
@@ -588,9 +572,9 @@ public final class TestService {
             .text("Private message")
             .channel("chat.global")
             .build();
-        var report = dispatcher.dispatch(msg);
-        updateStats(report);
-        if (report.delivered() != 1) throw new AssertionError("Specific routing should deliver to exactly 1 target");
+        var outcome = probe.dispatch(msg);
+        updateStats(outcome);
+        if (outcome.delivered() != 1) throw new AssertionError("Specific routing should deliver to exactly 1 target");
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
@@ -607,8 +591,7 @@ public final class TestService {
             .text("Admin only")
             .channel("chat.global")
             .build();
-        var report = dispatcher.dispatch(msg);
-        updateStats(report);
+        updateStats(probe.dispatch(msg));
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
@@ -804,7 +787,7 @@ public final class TestService {
                 .text("Router hot path " + i)
                 .channel("chat.global")
                 .build();
-            host.router().route(msg, sender).decision();
+            probe.router().route(msg, sender).decision();
         }
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
@@ -814,30 +797,17 @@ public final class TestService {
         if (players.isEmpty()) return PerformanceProfiler.PerformanceResult.skipped("No players");
 
         Actor sender = players.get(0);
-        // Hot path: format 1000 messages using reflection to avoid Component dependency
-        try {
-            var formatter = host.formatter();
-            var formatMethod = formatter.getClass().getMethod("format",
-                me.majhrs16.suite.api.message.Message.class,
-                me.majhrs16.suite.textformatter.template.TemplateContext.class);
-            
-            for (int i = 0; i < 1000; i++) {
-                var msg = me.majhrs16.suite.api.message.Message.builder()
-                    .type(me.majhrs16.suite.api.message.MessageType.CHAT)
-                    .sender(sender)
-                    .direction(me.majhrs16.suite.api.message.Direction.others().channel(me.majhrs16.suite.api.message.Channel.CHAT))
-                    .translate(false)
-                    .text("Format test " + i)
-                    .channel("chat.global")
-                    .build();
-                var ctx = me.majhrs16.suite.textformatter.template.TemplateContext.builder(sender, Language.EN, Language.ES)
-                    .content("Format test " + i)
-                    .translate(false)
-                    .build();
-                formatMethod.invoke(formatter, msg, ctx);
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to invoke formatter via reflection", e);
+        // Hot path: format 1000 messages through the host probe.
+        for (int i = 0; i < 1000; i++) {
+            var msg = me.majhrs16.suite.api.message.Message.builder()
+                .type(me.majhrs16.suite.api.message.MessageType.CHAT)
+                .sender(sender)
+                .direction(me.majhrs16.suite.api.message.Direction.others().channel(me.majhrs16.suite.api.message.Channel.CHAT))
+                .translate(false)
+                .text("Format test " + i)
+                .channel("chat.global")
+                .build();
+            probe.format(msg);
         }
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
@@ -845,7 +815,7 @@ public final class TestService {
     private PerformanceProfiler.PerformanceResult testTranslationHotPath() {
         // Hot path: detect language 1000 times
         for (int i = 0; i < 1000; i++) {
-            host.translation().detect("This is a test message for language detection " + i);
+            probe.detectLanguage("This is a test message for language detection " + i);
         }
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
@@ -889,7 +859,7 @@ public final class TestService {
             .text("To offline player")
             .channel("chat.global")
             .build();
-        dispatcher.dispatch(msg);
+        probe.dispatch(msg);
         return new PerformanceProfiler.PerformanceResult(0, 0, 0, 0);
     }
 
@@ -919,7 +889,7 @@ public final class TestService {
 
     private boolean hasSyncSinks() {
         // Check if any sync sinks are configured
-        return host.channels().paths().stream()
+        return probe.channels().paths().stream()
             .anyMatch(name -> name.startsWith("sync."));
     }
 
@@ -940,8 +910,7 @@ public final class TestService {
 
     // ============ Getters ============
 
-    public SuiteHost getHost() { return host; }
-    public MessageDispatcher getDispatcher() { return dispatcher; }
+    public TestProbe getProbe() { return probe; }
     public ActorDirectory getActorDirectory() { return actorDirectory; }
     public UserLanguageStore getLanguageStore() { return languageStore; }
     public List<TestResult> getTestResults() { return List.copyOf(testResults); }
