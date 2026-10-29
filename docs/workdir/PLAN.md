@@ -5,7 +5,7 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-29 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia y `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator`, que refresca su `TranslatorManager` con los eventos de ciclo de vida. Faltan el resto de paquetes opcionales, la retirada del cableado del host, F4b y F4c (sincronizadores de plataforma). Ver la sección **ADR-019** más abajo.
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia y `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator`, que refresca su `TranslatorManager` con los eventos de ciclo de vida. Faltan el resto de paquetes opcionales, la retirada del cableado del host, F4b, F4c (sincronizadores de plataforma), F4d (API de configuración/comandos registrables) y F4e (raíz de comandos relocalizable). Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
@@ -1021,6 +1021,10 @@ core-api
   → JDK
   ✗ kernel, manager, host, features, plataforma
 
+core-api (api.command / api.config)
+  → JDK
+  ✗ Bukkit / Fabric / host / features
+
 kernel
   → core-api
 
@@ -1059,6 +1063,11 @@ módulo platform-specific
 - Dependencias de features en adapters y `host`: se eliminan.
 - Listeners de chat/join/quit/death en `spigot-host`/`fabric-host`: se mudan a
   `sync-bukkit`/`sync-fabric`; no se conserva el cableado compilado.
+- Árboles de comandos duplicados en `spigot-host` (`DynamicCommandRegistrar`/
+  `DynamicCommand`) y `fabric-host` (Brigadier): se sustituyen por el
+  `CommandRegistry` neutral; el host solo conserva la invocación de primer
+  nivel. Los strings `/suite` hardcodeados se sustituyen por
+  `CommandContext.root()`.
 - `gtranslate`/`ltranslate` como `implementation` en adapters: pasan a ser
   paquetes o `runtimeOnly` del runtime, nunca dependencia de compilación del
   adapter.
@@ -1088,6 +1097,8 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F6. Migrar paquetes opcionales** | Convertir el resto de features y retirar el cableado compilado | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api`; mover `inworld`/`tester` a plataforma o harness; eliminar el cableado de features en el host | Todos los paquetes instalados se activan desde `library/status` + `library/packages`; ningún feature queda compilado en el host |
 | **F4b. Adapters delgados** | Cerrar el acoplamiento de los adapters | `SpigotPlatformPorts`, `FabricPlatformPorts`, cableado de `SuiteRuntime`, guard `checkArchitecture` | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
 | **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
+| **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y el Brigadier de Fabric dejan de duplicar el árbol; tests de registro, desregistro, permisos y colisiones |
+| **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión y cambio de raíz |
 | **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado de instalación coherente y estado runtime en `<manager>/runtime/modules.status` |
 | **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
 
@@ -1217,6 +1228,10 @@ Reglas:
    compatibilidad sin fase de eliminación. `ModuleLifecycleAdapter`,
    `SuiteHost.bootstrap()` hardcodeado y el cableado de features en adapters
    se eliminan en F4b, no se conservan como fachada permanente.
+7. **Comandos y configuración neutrales.** Los módulos registran sus comandos
+   jerárquicos y su configuración por `api.command`/`api.config`; el host solo
+   traduce la invocación de plataforma. La raíz es un `CommandRoot`
+   configurable y los módulos usan paths relativos, nunca `/suite` literal.
 
 Aplicación por módulo:
 
@@ -1269,13 +1284,14 @@ plataforma). Después: el adapter de host de `PresetTarget` y el empaquetado de
 `SuiteRuntime` + `PlatformPorts` (F4b) y la extracción de la captura de eventos
 a `sync-bukkit`/`sync-fabric` (F4c).
 
-Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F4c → F7 → F8**.
+Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F4c → F4d → F4e → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
 deja el camino viejo activo. F4b se ejecuta después de F5/F6 porque el
 adelgazamiento de los adapters depende de que los features ya sean paquetes.
 F4c se ejecuta después de F4b porque los sincronizadores necesitan el host
-delgado y `PlatformPorts`; F7 va después de F4c para probar el unload de
-listeners de plataforma.
+delgado y `PlatformPorts`; F4d/F4e van después de F4c porque la API de comandos
+y la raíz relocalizable se apoyan en un host que ya no define features. F7 va
+después de F4e para probar el unload de listeners, comandos y raíz.
 
 ##### Protocolo anti-vaguedad
 
@@ -1493,6 +1509,110 @@ dirección documentada es **proveedor (`translator`) requiere façade
 pipeline debe degradar a no-op cuando no hay backends instalados.
 
 ---
+
+#### ADR-021: API de configuración y comandos jerárquicos registrables
+
+**Estado:** Aceptado (2026-10-29).
+
+**Contexto**
+
+- `PlatformPorts.Command` solo registra un comando plano: no hay subcomandos,
+  tab completion ni registro por módulo.
+- `SuiteCommand` hardcodea `/suite` y su propio `switch`; `spigot-host`
+  mantiene `DynamicCommandRegistrar`/`DynamicCommand` con un árbol duplicado y
+  `fabric-host` otro árbol Brigadier.
+- Un módulo no puede aportar comandos propios sin tocar el host; al descargarse
+  no hay forma de retirar su subárbol.
+- La configuración de cada módulo no tiene una API neutral: cada paquete lee su
+  YAML y expone comandos a mano.
+
+**Decisión**
+
+1. `core-api` publica `api.command`: `CommandRegistry`, `CommandSpec`,
+   `CommandPath`, `CommandSource`, `CommandContext` y `CommandRegistration`.
+2. `CommandSpec` es un árbol: nombre, aliases, descripción, permiso, uso,
+   argumentos/opciones, hijos y ejecutor. El registro es por módulo y devuelve
+   `CommandRegistration` (`AutoCloseable`).
+3. `ModuleContext.commands()` entrega un registro module-scoped; el runtime
+   cierra todas las inscripciones después de `stop()`. El path por defecto es
+   el namespace del módulo; un path explícito se declara y también se retira al
+   desactivar. Un módulo no puede dejar comandos huérfanos.
+4. `core-api` publica `api.config`: `ConfigRegistry`, `ConfigSection` y
+   `ConfigRegistration`. Un módulo registra su sección (namespace, defaults,
+   esquema, validador y reload) y puede exponer comandos de configuración
+   generados o propios. La configuración persistida no se borra al
+   desregistrar; solo se retira la superficie de comandos/esquema.
+5. `CommandRegistry` es el único punto de composición: los comandos del runtime
+   (`list`, `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma API;
+   el host solo traduce la invocación de plataforma y no define comandos de
+   features.
+6. Conflictos de path/alias fallan explícitamente; no hay override silencioso.
+   La política `force` solo aplica si se define explícitamente y deja warning.
+7. Los comandos son neutrales: no importan Bukkit/Fabric; reciben
+   `CommandSource`/`CommandContext` y responden por `reply`. La tab completion
+   se deriva del árbol.
+8. El árbol de comandos del host (`DynamicCommandRegistrar`/`DynamicCommand` y
+   el Brigadier de Fabric) se elimina o se reduce a un adaptador de invocación;
+   no se mantiene duplicado.
+
+**Consecuencias**
+
+- Cada módulo puede publicar comandos bajo su namespace sin conocer la
+  plataforma.
+- Desactivar un módulo retira su subárbol; reactivarlo lo vuelve a registrar.
+- El host deja de ser dueño del árbol de comandos.
+- Requiere tests de registro/desregistro, colisiones, permisos, tab completion y
+  esquema de configuración.
+- La configuración existente de cada módulo sigue siendo suya; la API
+  estandariza la superficie, no impone un formato de archivo.
+
+---
+
+#### ADR-022: Raíz de comandos relocalizable
+
+**Estado:** Aceptado (2026-10-29).
+
+**Contexto**
+
+- `/suite` está hardcodeado en `SuiteCommand`, mensajes de ayuda,
+  `DynamicCommandRegistrar` y el Brigadier de Fabric.
+- Cambiar a `/suite module` o `/tf` obligaría a tocar todos los módulos y
+  hosts.
+- Los módulos deben registrar rutas relativas, no la raíz.
+
+**Decisión**
+
+1. `CommandRoot` es un value object con segmentos (`["suite"]`,
+   `["suite","module"]`, `["tf"]`) y aliases opcionales. Se declara en
+   `commands.yml` (ruta canónica `config/suite/commands.yml`, `root: [suite]`),
+   no en código.
+2. `CommandRegistry` almacena paths relativos al root. El runtime compone
+   `root + path` al registrar y al resolver. Los módulos nunca ven ni
+   hardcodean `/suite`.
+3. El adaptador de plataforma registra el primer segmento del root y delega el
+   resto al dispatcher neutral. Para roots multi-segmento (`suite module`), el
+   dispatcher consume el prefijo y enruta el resto.
+4. Help, usage y errores usan `CommandContext.root()`; no se concatenan strings
+   `/suite`.
+5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
+   `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
+   permiten mantener `/suite` y `/tf` a la vez. El `base-name` actual se
+   sustituye por `root`; no se conserva como fallback permanente.
+6. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
+   plataforma no permite desregistrar, se marca `RESTART_REQUIRED`. No se
+   mantiene un root viejo activo.
+7. Conflictos de root con comandos existentes fallan explícitamente; no se roba
+   un comando ajeno.
+8. Tests: el mismo árbol de módulo bajo `suite`, `suite module` y `tf`; cambio
+   de root sin recompilar módulos; root multi-segmento; alias; colisión;
+   re-registro/restart.
+
+**Consecuencias**
+
+- Migrar la raíz es configuración, no refactor.
+- Los módulos son independientes del nombre del comando raíz.
+- El host solo necesita un adaptador de invocación de primer nivel.
+- La documentación y los mensajes deben usar `CommandContext.root()`.
 
 ---
 
@@ -1803,6 +1923,18 @@ El directorio `src/` se organiza por capa técnica: `api`, `kernel`, `runtime`, 
 La sección del host que intercepta eventos de Minecraft y los entrega al núcleo agnóstico es, por definición, un sincronizador de plataforma. Se implementa como paquete descargable: `sync-bukkit` para Spigot/Paper y `sync-fabric` para Fabric. Cada host instala solo el paquete compatible con su entorno; ninguno se embebe en el JAR del host.
 
 **Consecuencia:** `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; solo aportan `PlatformPorts` y el bootstrap. Los paquetes `sync-bukkit`/`sync-fabric` registran listeners, traducen a `Message`, despachan por `MessageDispatch` y se desregistran en `stop()`; si la plataforma no permite desregistrar, se marca `RESTART_REQUIRED`.
+
+### P18. Los comandos son un contrato neutral y registrable
+
+Cada módulo publica sus comandos jerárquicos a través de una API neutral (`api.command`) y su configuración a través de `api.config`. El registro devuelve un `CommandRegistration`/`ConfigRegistration` ligado al ciclo de vida del módulo; al desactivarlo, el runtime retira su subárbol y su esquema. El host solo traduce la invocación de plataforma; no define comandos de features ni mantiene un árbol duplicado.
+
+**Consecuencia:** `SuiteCommand` y los comandos del runtime usan la misma API que cualquier módulo. `DynamicCommandRegistrar`/`DynamicCommand` y el Brigadier de Fabric se reducen a un adaptador de invocación; no hay dos formas de registrar comandos.
+
+### P19. La raíz de comandos es configuración, no código
+
+La raíz (`/suite`, `/suite module`, `/tf`, etc.) es un `CommandRoot` configurable. Los módulos registran paths relativos y nunca hardcodean la raíz. El runtime compone `root + path` y expone `CommandContext.root()` para help/usage/errores.
+
+**Consecuencia:** Cambiar la raíz es cambiar `config/suite/commands.yml`; no se recompilan módulos. Si el cambio en caliente no puede desregistrar el comando raíz de la plataforma, se marca `RESTART_REQUIRED`.
 
 ---
 

@@ -668,3 +668,109 @@ solo en el entorno compatible.
 - Los tests de F4c deben cubrir instalación solo en el entorno compatible,
   traducción a `Message`, despacho, desactivación y ausencia de listeners
   huérfanos.
+
+---
+
+## Decisión 2026-10-29 — API de configuración y comandos jerárquicos registrables (ADR-021)
+
+**Estado:** Aceptada. Implementación pendiente en F4d.
+
+**Contexto.** `PlatformPorts.Command` solo registra un comando plano: no hay
+subcomandos, tab completion ni registro por módulo. `SuiteCommand` hardcodea
+`/suite` y su propio `switch`; `spigot-host` mantiene
+`DynamicCommandRegistrar`/`DynamicCommand` con un árbol duplicado y
+`fabric-host` otro árbol Brigadier. Un módulo no puede aportar comandos propios
+sin tocar el host, y al descargarse no hay forma de retirar su subárbol. La
+configuración de cada módulo tampoco tiene una API neutral: cada paquete lee su
+YAML y expone comandos a mano.
+
+**Decisión.**
+
+1. `core-api` publica `api.command`: `CommandRegistry`, `CommandSpec`,
+   `CommandPath`, `CommandSource`, `CommandContext` y `CommandRegistration`.
+   `CommandSpec` es un árbol con nombre, aliases, descripción, permiso, uso,
+   argumentos/opciones, hijos y ejecutor.
+2. El registro es propiedad del módulo y devuelve un `CommandRegistration`
+   (`AutoCloseable`). `ModuleContext.commands()` entrega un registro
+   module-scoped; el runtime cierra todas las inscripciones después de
+   `stop()`. El path por defecto es el namespace del módulo; un path explícito
+   se declara y también se retira al desactivar. Un módulo no puede dejar
+   comandos huérfanos.
+3. `core-api` publica `api.config`: `ConfigRegistry`, `ConfigSection` y
+   `ConfigRegistration`. Un módulo registra su sección (namespace, defaults,
+   esquema, validador y reload) y puede exponer comandos de configuración
+   generados o propios. La configuración persistida no se borra al
+   desregistrar; solo se retira la superficie de comandos/esquema.
+4. `CommandRegistry` es el único punto de composición. Los comandos del runtime
+   (`list`, `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma API;
+   el host solo traduce la invocación de plataforma y no define comandos de
+   features.
+5. Conflictos de path/alias fallan explícitamente; no hay override silencioso.
+   La política `force` solo aplica si se define explícitamente y deja warning.
+6. Los comandos son neutrales: no importan Bukkit/Fabric; reciben
+   `CommandSource`/`CommandContext` y responden por `reply`. La tab completion
+   se deriva del árbol.
+7. El árbol de comandos del host (`DynamicCommandRegistrar`/`DynamicCommand` y
+   el Brigadier de Fabric) se elimina o se reduce a un adaptador de invocación;
+   no se mantiene duplicado.
+
+**Consecuencias.**
+
+- Cada módulo puede publicar comandos bajo su namespace sin conocer la
+  plataforma.
+- Desactivar un módulo retira su subárbol; reactivarlo lo vuelve a registrar.
+- El host deja de ser dueño del árbol de comandos.
+- Requiere tests de registro/desregistro, colisiones, permisos, tab completion y
+  esquema de configuración.
+- La configuración existente de cada módulo sigue siendo suya; la API
+  estandariza la superficie, no impone un formato de archivo.
+
+**Implementación pendiente (F4d).** No se introduce una fachada temporal:
+`SuiteCommand` se migra a la API y los árboles del host se eliminan en la misma
+fase. La puerta exige tests de ciclo de vida, conflictos y permisos.
+
+---
+
+## Decisión 2026-10-29 — Raíz de comandos relocalizable (ADR-022)
+
+**Estado:** Aceptada. Implementación pendiente en F4e.
+
+**Contexto.** `/suite` está hardcodeado en `SuiteCommand`, en los mensajes de
+ayuda, en `DynamicCommandRegistrar` y en el Brigadier de Fabric. Cambiar a
+`/suite module` o `/tf` obligaría a tocar todos los módulos y hosts. Los módulos
+deben registrar rutas relativas, no la raíz.
+
+**Decisión.**
+
+1. `CommandRoot` es un value object con segmentos (`["suite"]`,
+   `["suite","module"]`, `["tf"]`) y aliases opcionales. Se declara en
+   `commands.yml` (ruta canónica `config/suite/commands.yml`), no en código.
+2. `CommandRegistry` almacena paths relativos al root. El runtime compone
+   `root + path` al registrar y al resolver. Los módulos nunca ven ni
+   hardcodean `/suite`.
+3. El adaptador de plataforma registra el primer segmento del root y delega el
+   resto al dispatcher neutral. Para roots multi-segmento (`suite module`), el
+   dispatcher consume el prefijo y enruta el resto.
+4. Help, usage y errores usan `CommandContext.root()`; no se concatenan strings
+   `/suite`.
+5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
+   `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
+   permiten mantener `/suite` y `/tf` a la vez.
+6. El `base-name` actual de `commands.yml` se sustituye por `root`; no se
+   conserva como fallback permanente. La migración y el esquema exacto se
+   documentan en `commands-v2.md` al cerrar F4e.
+7. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
+   plataforma no permite desregistrar, se marca `RESTART_REQUIRED`. No se
+   mantiene un root viejo activo.
+8. Conflictos de root con comandos existentes fallan explícitamente; no se roba
+   un comando ajeno.
+
+**Consecuencias.**
+
+- Migrar la raíz es configuración, no refactor.
+- Los módulos son independientes del nombre del comando raíz.
+- El host solo necesita un adaptador de invocación de primer nivel.
+- La documentación y los mensajes deben usar `CommandContext.root()`.
+- Tests obligatorios: el mismo árbol bajo `suite`, `suite module` y `tf`; root
+  multi-segmento; aliases; colisión; re-registro en caliente o
+  `RESTART_REQUIRED`.
