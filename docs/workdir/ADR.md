@@ -823,12 +823,14 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
 3. **Lenguaje.** Se implementa un **subconjunto C11 freestanding**, no ISO C
    completo. Baseline:
    - tipos: `void`, `_Bool`, `char` (8 bits sin signo), `signed char`, `short`
-     (16), `int`/`long` (32), `long long` (64), punteros de 32 bits, arrays,
-     `struct`, `union`, `enum`, `typedef`, `const`, `volatile`;
-   - expresiones: aritmética, bitwise, shifts, comparaciones, lógica,
-     asignación y compuestas, ternario, coma, casts, `sizeof`, dirección,
-     desreferencia, acceso a miembros, indexación, llamadas, literales de
-     cadena y enteros;
+     (16), `int`/`long` (32), `long long` (64), `float` (IEEE-754 binary32),
+     `double` y `long double` (IEEE-754 binary64), punteros de 32 bits, arrays,
+     `struct`, `union`, `enum`, `typedef`, `const`, `volatile` y `_Atomic`
+     escalar/puntero;
+   - expresiones: aritmética entera y de coma flotante, bitwise, shifts,
+     comparaciones, lógica, asignación y compuestas, ternario, coma, casts,
+     `sizeof`, dirección, desreferencia, acceso a miembros, indexación,
+     llamadas, literales de cadena, enteros y reales;
    - sentencias: bloques, `if`/`else`, `switch`/`case`/`default`, `for`,
      `while`, `do`/`while`, `break`, `continue`, `return`, `goto`/etiquetas y
      declaraciones;
@@ -836,12 +838,39 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
      `_Static_assert`. Las funciones variádicas no son baseline.
    - `volatile` se respeta: no se eliminan, duplican ni reordenan accesos
      volátiles. Es obligatorio para MMIO.
-4. **Exclusiones explícitas.** No son baseline: coma flotante (`float`/
-   `double`), `_Complex`, `_Atomic`, hilos, `setjmp`/`longjmp`, VLA, bitfields,
-   caracteres anchos, `_Generic`, `typeof`, ensamblador inline y funciones
-   variádicas. Un uso no soportado produce un error de compilación con
-   ubicación; nunca se acepta en silencio ni se degrada a otra semántica. Las
-   exclusiones se revisan con ADR propio si una política real las necesita.
+   - `_Atomic` incluye cargas, almacenes, intercambio, comparación-e-intercambio
+     y fetch-add/sub/and/or/xor para tipos escalares y punteros, con las
+     órdenes de memoria de C11. Los agregados atómicos quedan fuera del
+     baseline inicial y se revisan en C4.
+   - ensamblador inline estilo GNU: `asm("...")`, `asm volatile("...")` y la
+     forma extendida `asm volatile("..." : salidas : entradas : clobbers)`.
+     Se soportan operandos `%0`/`%1`, constraints `r`, `m` e `i`, clobbers de
+     registros y `"memory"`/`"cc"`. `asm goto` no es baseline.
+4. **Exclusiones explícitas.** No son baseline: `_Complex`, hilos, `setjmp`/
+   `longjmp`, VLA, bitfields, caracteres anchos, `_Generic`, `typeof` y
+   funciones variádicas. Un uso no soportado produce un error de compilación
+   con ubicación; nunca se acepta en silencio ni se degrada a otra semántica.
+   Las exclusiones se revisan con ADR propio si una política real las necesita.
+   Glosario:
+   - **VLA** (*variable-length array*): array local cuyo tamaño se calcula en
+     runtime, p. ej. `int n; int a[n];`. Exige asignación dinámica de pila y
+     controles de desbordamiento; no es lo mismo que un array de tamaño fijo.
+   - **Bitfields**: campos de bits dentro de `struct`, p. ej.
+     `unsigned flags : 3;`. Su layout es implementation-defined y debe fijarse
+     explícitamente antes de soportarlo.
+   - **Variádicas**: funciones con número variable de argumentos, p. ej.
+     `int f(int n, ...);` y `va_list`/`va_arg`. Requieren ABI de varargs y
+     `<stdarg.h>`.
+   - **`setjmp`/`longjmp`**: salto no local que restaura un contexto guardado;
+     requiere guardar/restaurar registros y pila y complica el unwind.
+   - **`_Complex`**: tipos complejos de C (`float _Complex`, etc.); no se
+     confunden con `_Atomic`.
+   - **Caracteres anchos**: `wchar_t`, `wint_t` y literales `L"..."`; exigen
+     una anchura y codificación fijadas por el target.
+   - **`_Generic`**: selección de expresión por tipo en C11; no es necesario
+     para el subconjunto actual.
+   - **`typeof`**: extensión GNU que obtiene el tipo de una expresión; no es
+     C11 estándar.
 5. **Preprocesador.** Incluye `#include` con rutas de búsqueda, macros de objeto
    y de función, `#`/`##`, `#if`/`#ifdef`/`#ifndef`/`#elif`/`#else`/`#endif`,
    `#undef`, `#error` y `#pragma once`. No hay `#include_next` ni dependencia
@@ -853,6 +882,13 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
      registros de argumento obligatorios;
    - retorno en `R0` (32 bits) o `R1:R0` (64 bits); `struct`/`union` por valor
      usan puntero oculto del llamador y el callee devuelve ese puntero en `R0`;
+   - `float` (32 bits), `double`/`long double` (64 bits) se pasan en pila y se
+     retornan en `R0` o `R1:R0`; el baseline es **soft-float**, sin registros
+     FP obligatorios. Una FPU futura puede acelerar operaciones sin cambiar la
+     ABI;
+   - `_Atomic` escalar/puntero respeta la alineación natural y usa las
+     primitivas atómicas del ISA v3 o los helpers de `libiflow`; no se asume
+     lock-free si el target no lo garantiza;
    - todos los GPR son caller-saved; `SP` y `FP` se preservan; no hay red zone;
    - `char` sin signo, `size_t`/`uintptr_t` de 32 bits, `ptrdiff_t` de 32 bits;
    - símbolos C sin name mangling; `_start` es el entry de `crt0` y el kernel
@@ -862,10 +898,12 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
 7. **Runtime `libiflow`.** Es una biblioteca freestanding enlazada dentro del
    segmento de programa, no un paquete del host. Provee `crt0`, `memcpy`,
    `memmove`, `memset`, `memcmp`, `strlen`, `strcmp`, `strcpy`, `strncpy`,
-   rutinas de 64 bits y un arena allocator explícito (`iflow_alloc`). No provee
-   `stdio`, `printf`, `malloc`/`free` estándar ni `stdlib` hasta que el ABI del
-   kernel defina heap y errores. Una función no implementada falla enlazando;
-   no se añade un stub que devuelva éxito.
+   rutinas de 64 bits, helpers **soft-float** (`__iflow_fadd`, `__iflow_fmul`,
+   conversiones, comparaciones y redondeo IEEE-754), helpers atómicos
+   (`__iflow_atomic_*`) y un arena allocator explícito (`iflow_alloc`). No
+   provee `stdio`, `printf`, `malloc`/`free` estándar ni `stdlib` hasta que el
+   ABI del kernel defina heap y errores. Una función no implementada falla
+   enlazando; no se añade un stub que devuelva éxito.
 8. **Modelo de programa.** El compilador compila un programa completo (una o
    varias unidades `.c` en la misma invocación) a un único `.flowasm` v3. El
    baseline no define un formato de objeto estable ni un linker de objetos
@@ -874,9 +912,11 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
    ejecuta la salida del programa. No hay constructores globales.
 9. **Optimización.** `-O0` es el default y debe ser correcto antes que rápido.
    `-O1` puede aplicar plegado de constantes, propagación local, eliminación de
-   código muerto y peephole, sin explotar comportamiento indefinido ni alterar
-   `volatile`. La salida es determinista: mismo fuente, flags y versión producen
-   los mismos bytes y el mismo orden de símbolos.
+   código muerto y peephole, sin explotar comportamiento indefinido, sin alterar
+   `volatile` y sin reordenar operaciones atómicas. La coma flotante mantiene
+   semántica IEEE-754 por defecto; `-ffast-math` no es baseline. La salida es
+   determinista: mismo fuente, flags y versión producen los mismos bytes y el
+   mismo orden de símbolos.
 10. **Seguridad.** El compilador no corre en el host ni en el servidor. No
     descarga dependencias en tiempo de compilación ni ejecuta código del fuente.
     La ROM resultante es dato no confiable para la VM: se valida por hash,
@@ -884,10 +924,12 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
     puede invocar el compilador en cliente/CI, nunca en el proceso del host.
 11. **Tests.** Deben cubrir lexer, preprocesador, parser, semántica, IR,
     codegen y diagnóstico; golden tests de `.flowasm`; pruebas de ABI, `volatile`,
-    punteros, arrays, structs, `switch`, `goto` y 64 bits; corpus de políticas
-    reales; determinismo byte a byte; y ejecución contra la VM v3 cuando V2/V4
-    estén disponibles. Los casos no soportados tienen tests negativos. No hay
-    E2E en servidores Minecraft.
+    punteros, arrays, structs, `switch`, `goto`, 64 bits, coma flotante
+    (`float`/`double`, redondeo, NaN, cero con signo y conversiones), atómicos
+    (todas las órdenes y fetch/CAS) y ensamblador inline (operandos, clobbers y
+    barreras); corpus de políticas reales; determinismo byte a byte; y ejecución
+    contra la VM v3 cuando V2/V4 estén disponibles. Los casos no soportados
+    tienen tests negativos. No hay E2E en servidores Minecraft.
 
 **Fases V6.**
 
@@ -896,8 +938,8 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
 | **C0 — Contrato** | Subconjunto, gramática, ABI C v3, modelo de runtime y corpus de conformidad | ADR y lista de casos congelados; cada exclusión tiene diagnóstico y test |
 | **C1 — Frontend** | Preprocesador, lexer, parser, AST, análisis semántico y diagnósticos | Tests unitarios y de errores; ninguna construcción no soportada pasa en silencio |
 | **C2 — IR y backend** | IR de tres direcciones, lowering, asignación de registros y emisión `.flowasm` v3 | Golden tests y ensamblado con el assembler v3 |
-| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers de `HOST` v3, punteros/arrays/structs/64 bits | Ejecución en VM v3 con el corpus; sin stubs |
-| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo y diagnóstico de límites | Mismos resultados observables; salida reproducible |
+| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers de `HOST` v3, punteros/arrays/structs/64 bits, soft-float, atómicos y ensamblador inline | Ejecución en VM v3 con el corpus; sin stubs |
+| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo, diagnóstico de límites y agregados atómicos | Mismos resultados observables; salida reproducible |
 | **C5 — Toolchain** | CLI, ejemplos, documentación, CI Node y paquete de herramientas | `npm test`, corpus y build reproducible verdes |
 
 **Criterios de cierre de V6.**
@@ -906,8 +948,9 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
    de contenido) se escriben en C, compilan a `.flowasm` v3 y producen la misma
    decisión y el mismo mensaje observable que su equivalente de referencia.
 2. El corpus cubre punteros, arrays, structs, uniones, `switch`, `goto`,
-   `volatile`, 64 bits y llamadas a `HOST`; los casos no soportados fallan con
-   diagnóstico, no con un artefacto incorrecto.
+   `volatile`, 64 bits, `float`/`double`, atómicos, ensamblador inline y
+   llamadas a `HOST`; los casos no soportados fallan con diagnóstico, no con un
+   artefacto incorrecto.
 3. La salida es determinista y el assembler v3 produce una ROM verificable.
 4. No hay compilación C ni toolchain nativa en el host; no hay stubs de libc.
 5. Tests, documentación y ejemplos están en verde; el ADR se actualiza si cambia
@@ -938,8 +981,10 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
 
 - Los autores pueden escribir políticas en C sin aprender el ISA; el assembler
   sigue disponible para firmware y código de máximo control.
-- No se promete C completo: float, libc estándar, objetos separados y otras
-  funciones quedan fuera hasta que una necesidad real y un ADR los incorporen.
+- No se promete C completo: libc estándar, objetos separados, VLA, bitfields,
+  variádicas, `setjmp`/`longjmp`, `_Complex` y otras funciones quedan fuera
+  hasta que una necesidad real y un ADR los incorporen. `float`/`double`,
+  `_Atomic` e inline asm sí forman parte del baseline.
 - El compilador es una herramienta de build, no un módulo de la suite; el host
   no crece y la frontera de seguridad de la ROM no cambia.
 - V6 no puede empezar antes de V1/V5 y no puede cerrarse antes de V2/V3/V4. El

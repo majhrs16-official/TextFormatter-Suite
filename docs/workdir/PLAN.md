@@ -139,25 +139,39 @@ duplica el formato binario ni la tabla de opcodes.
 
 **Alcance del lenguaje.** Subconjunto C11 freestanding: `void`, `_Bool`,
 `char` sin signo, `signed char`, `short`, `int`/`long` de 32 bits, `long long`
-de 64 bits, punteros de 32 bits, arrays, `struct`, `union`, `enum`, `typedef`,
-`const`, `volatile`, control de flujo completo, funciones, `static`/`extern`,
-`goto`, `switch`, `_Static_assert`, macros de objeto/función, `#include`,
-condicionales y `#`/`##`. `volatile` no se elimina, duplica ni reordena.
+de 64 bits, `float` (binary32), `double`/`long double` (binary64), punteros de
+32 bits, arrays, `struct`, `union`, `enum`, `typedef`, `const`, `volatile`,
+`_Atomic` escalar/puntero, control de flujo completo, funciones,
+`static`/`extern`, `goto`, `switch`, `_Static_assert`, macros de
+objeto/función, `#include`, condicionales, `#`/`##` y ensamblador inline estilo
+GNU (`asm`/`asm volatile` y forma extendida con constraints `r`/`m`/`i`).
+`volatile` no se elimina, duplica ni reordena. `_Atomic` soporta cargas,
+almacenes, intercambio, CAS y fetch-add/sub/and/or/xor con las órdenes de C11;
+los agregados atómicos se revisan en C4.
 
-**Exclusiones explícitas.** `float`/`double`, `_Complex`, `_Atomic`, hilos,
-`setjmp`/`longjmp`, VLA, bitfields, caracteres anchos, `_Generic`, `typeof`,
-ensamblador inline y funciones variádicas. Un uso no soportado falla con
-diagnóstico y ubicación; no se acepta en silencio ni se degrada. Cada exclusión
-se revisa con ADR propio si una política real la necesita.
+**Exclusiones explícitas.** `_Complex`, hilos, `setjmp`/`longjmp`, VLA,
+bitfields, caracteres anchos, `_Generic`, `typeof`, `asm goto` y funciones
+variádicas. Un uso no soportado falla con diagnóstico y ubicación; no se acepta
+en silencio ni se degrada. Glosario:
+**VLA** = array local de tamaño calculado en runtime (`int a[n]`); **bitfields**
+= campos de bits en `struct` (`unsigned f : 3`); **variádicas** = funciones con
+`...` y `va_list`; **`setjmp`/`longjmp`** = salto no local con restauración de
+contexto; **`_Complex`** = tipos complejos, no confundir con `_Atomic`; **anchos**
+= `wchar_t`/`L"..."`; **`_Generic`** = selección por tipo; **`typeof`** =
+extensión GNU que devuelve el tipo de una expresión. Cada exclusión se revisa
+con ADR propio si una política real la necesita.
 
 **ABI y runtime.** La ABI C v3 se congela en V6.0 sobre el ISA v3: little-endian,
 pila de 4 bytes (8 para 64 bits), argumentos en pila de derecha a izquierda,
 limpieza del llamador, retorno en `R0`/`R1:R0`, GPR caller-saved, `SP`/`FP`
 preservados, `struct` por valor con puntero oculto, `char` sin signo y
-`size_t` de 32 bits. `libiflow` es una biblioteca freestanding enlazada en el
-programa: `crt0`, `mem*`, `str*`, rutinas de 64 bits y arena allocator explícito.
-No hay `stdio`, `printf` ni `malloc`/`free` estándar hasta que el kernel defina
-su ABI; lo no implementado falla al enlazar, no se simula.
+`size_t` de 32 bits. `float`/`double` se pasan en pila y se retornan en
+`R0`/`R1:R0`; el baseline es soft-float y una FPU futura no cambia la ABI.
+`libiflow` es una biblioteca freestanding enlazada en el programa: `crt0`,
+`mem*`, `str*`, rutinas de 64 bits, helpers soft-float IEEE-754, helpers
+atómicos y arena allocator explícito. No hay `stdio`, `printf` ni
+`malloc`/`free` estándar hasta que el kernel defina su ABI; lo no implementado
+falla al enlazar, no se simula.
 
 **Modelo de programa.** El baseline compila un programa completo (una o varias
 unidades `.c` en la misma invocación) a un único `.flowasm` v3. No hay formato de
@@ -167,9 +181,11 @@ el estado y ejecuta la salida. No hay constructores globales.
 
 **Optimización.** `-O0` es el default y debe ser correcto antes que rápido.
 `-O1` puede aplicar plegado de constantes, propagación local, eliminación de
-código muerto y peephole, sin explotar comportamiento indefinido ni alterar
-`volatile`. La salida es determinista: mismo fuente, flags y versión producen
-los mismos bytes y el mismo orden de símbolos.
+código muerto y peephole, sin explotar comportamiento indefinido, sin alterar
+`volatile` y sin reordenar operaciones atómicas. La coma flotante mantiene
+semántica IEEE-754 por defecto; `-ffast-math` no es baseline. La salida es
+determinista: mismo fuente, flags y versión producen los mismos bytes y el
+mismo orden de símbolos.
 
 **Fases internas.**
 
@@ -178,8 +194,8 @@ los mismos bytes y el mismo orden de símbolos.
 | **C0 — Contrato** | Subconjunto, gramática, ABI C v3, modelo de runtime y corpus | ADR y casos congelados; cada exclusión con diagnóstico y test |
 | **C1 — Frontend** | Preprocesador, lexer, parser, AST, semántica y diagnósticos | Tests unitarios y negativos; nada no soportado pasa en silencio |
 | **C2 — IR y backend** | IR de tres direcciones, lowering, registros y emisión `.flowasm` v3 | Golden tests y ensamblado con el assembler v3 |
-| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers `HOST` v3, punteros/arrays/structs/64 bits | Ejecución en VM v3 con el corpus; sin stubs |
-| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo y límites | Mismos resultados observables; salida reproducible |
+| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers `HOST` v3, punteros/arrays/structs/64 bits, soft-float, atómicos e inline asm | Ejecución en VM v3 con el corpus; sin stubs |
+| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo, límites y agregados atómicos | Mismos resultados observables; salida reproducible |
 | **C5 — Toolchain** | CLI, ejemplos, documentación, CI Node y paquete | `npm test`, corpus y build reproducible verdes |
 
 **Criterios de cierre.**
@@ -188,8 +204,9 @@ los mismos bytes y el mismo orden de símbolos.
    de contenido) escritas en C compilan y producen la misma decisión y mensaje
    observable que su referencia.
 2. El corpus cubre punteros, arrays, structs, uniones, `switch`, `goto`,
-   `volatile`, 64 bits y llamadas a `HOST`; lo no soportado falla con
-   diagnóstico, no con un artefacto incorrecto.
+   `volatile`, 64 bits, `float`/`double`, atómicos, inline asm y llamadas a
+   `HOST`; lo no soportado falla con diagnóstico, no con un artefacto
+   incorrecto.
 3. La salida es determinista y el assembler v3 produce una ROM verificable.
 4. No hay compilación C ni toolchain nativa en el host; no hay stubs de libc.
 5. Tests, documentación y ejemplos verdes; el ADR se enmienda si cambia el
