@@ -871,6 +871,19 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
      para el subconjunto actual.
    - **`typeof`**: extensión GNU que obtiene el tipo de una expresión; no es
      C11 estándar.
+
+   **Prioridad de extensiones.** Las exclusiones no son permanentes; se
+   incorporan después de V6, con enmienda de este ADR y tests propios:
+
+   1. **Variádicas** y **bitfields** son las primeras candidatas por uso común
+      en C. Variádicas exige ABI de varargs y `<stdarg.h>`; bitfields exige
+      fijar orden de bits, empaquetado, alineación y layout observable.
+   2. **VLA** y **`setjmp`/`longjmp`** solo se incorporan si una política real
+      los necesita. VLA requiere asignación dinámica de pila y comprobación de
+      desbordamiento; `setjmp`/`longjmp` requiere guardar/restaurar contexto y
+      definir el unwind.
+   Los agregados atómicos se revisan antes, en C4, porque no cambian el
+   subconjunto del lenguaje sino el alcance de `_Atomic`.
 5. **Preprocesador.** Incluye `#include` con rutas de búsqueda, macros de objeto
    y de función, `#`/`##`, `#if`/`#ifdef`/`#ifndef`/`#elif`/`#else`/`#endif`,
    `#undef`, `#error` y `#pragma once`. No hay `#include_next` ni dependencia

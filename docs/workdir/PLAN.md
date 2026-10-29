@@ -158,8 +158,18 @@ en silencio ni se degrada. Glosario:
 `...` y `va_list`; **`setjmp`/`longjmp`** = salto no local con restauración de
 contexto; **`_Complex`** = tipos complejos, no confundir con `_Atomic`; **anchos**
 = `wchar_t`/`L"..."`; **`_Generic`** = selección por tipo; **`typeof`** =
-extensión GNU que devuelve el tipo de una expresión. Cada exclusión se revisa
-con ADR propio si una política real la necesita.
+extensión GNU que devuelve el tipo de una expresión.
+
+**Prioridad de extensiones.** Las exclusiones no son permanentes. Después de V6,
+con enmienda de ADR-023 y tests propios:
+
+1. **Variádicas** y **bitfields** primero, por uso común en C. Variádicas exige
+   ABI de varargs y `<stdarg.h>`; bitfields exige fijar orden de bits,
+   empaquetado, alineación y layout.
+2. **VLA** y **`setjmp`/`longjmp`** solo si una política real los necesita. VLA
+   exige asignación dinámica de pila y control de desbordamiento;
+   `setjmp`/`longjmp` exige guardar/restaurar contexto y definir el unwind.
+Los agregados atómicos se revisan antes, en C4.
 
 **ABI y runtime.** La ABI C v3 se congela en V6.0 sobre el ISA v3: little-endian,
 pila de 4 bytes (8 para 64 bits), argumentos en pila de derecha a izquierda,
