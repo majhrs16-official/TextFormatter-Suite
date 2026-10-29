@@ -673,7 +673,7 @@ solo en el entorno compatible.
 
 ## Decisión 2026-10-29 — API de configuración y comandos jerárquicos registrables (ADR-021)
 
-**Estado:** Aceptada. Implementación pendiente en F4d.
+**Estado:** Aceptada. API neutral y comandos del runtime implementados; la retirada de los árboles de host queda ligada a F4b/F4c.
 
 **Contexto.** `PlatformPorts.Command` solo registra un comando plano: no hay
 subcomandos, tab completion ni registro por módulo. `SuiteCommand` hardcodea
@@ -725,15 +725,25 @@ YAML y expone comandos a mano.
 - La configuración existente de cada módulo sigue siendo suya; la API
   estandariza la superficie, no impone un formato de archivo.
 
-**Implementación pendiente (F4d).** No se introduce una fachada temporal:
-`SuiteCommand` se migra a la API y los árboles del host se eliminan en la misma
-fase. La puerta exige tests de ciclo de vida, conflictos y permisos.
+**Implementación (F4d).** `api.command` y `api.config` existen en `core-api`;
+`SuiteRuntime` compone `RuntimeCommandRegistry`/`RuntimeConfigRegistry`;
+`ModuleContext` entrega vistas module-scoped y exige que el árbol del módulo
+esté enraizado en su `moduleId`; `register(CommandPath, CommandSpec)` permite
+declarar una rama explícita y retirarla entera. Los comandos del runtime
+(`help`, `list`, `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma
+API; `CommandOption` declara flags/valores para ayuda y tab completion;
+`ConfigSection.validate` comprueba tipos por defecto y `reload` es explícito, no
+un no-op; `SuiteCommand` se eliminó y el adaptador de plataforma solo necesita
+registrar el comando raíz que delega en el registro neutral. Los tests cubren registro, desregistro por
+ciclo de vida, colisiones, permisos, usage, opciones y tab completion. La eliminación de `DynamicCommandRegistrar`/`DynamicCommand` y del
+Brigadier de Fabric se ejecuta al adelgazar los hosts (F4b/F4c); no se añadió
+una fachada temporal.
 
 ---
 
 ## Decisión 2026-10-29 — Raíz de comandos relocalizable (ADR-022)
 
-**Estado:** Aceptada. Implementación pendiente en F4e.
+**Estado:** Aceptada. `CommandRoot` existe en `api.command` y el dispatcher neutral consume prefijos multi-segmento; la configuración `root`/aliases, el re-registro en caliente y la migración de `commands.yml` quedan en F4e.
 
 **Contexto.** `/suite` está hardcodeado en `SuiteCommand`, en los mensajes de
 ayuda, en `DynamicCommandRegistrar` y en el Brigadier de Fabric. Cambiar a

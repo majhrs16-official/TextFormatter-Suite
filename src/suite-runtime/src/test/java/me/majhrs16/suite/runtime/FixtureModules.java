@@ -153,6 +153,79 @@ final class FixtureModules {
         return jar;
     }
 
+    /**
+     * Builds a module that registers one command subtree and one config section
+     * through its {@link me.majhrs16.suite.api.runtime.ModuleContext}.
+     */
+    static Path buildCommandConfigJar(Path workDir, String moduleId, String version)
+            throws IOException {
+        Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
+        Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
+        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = """
+                package fixture;
+
+                import java.util.List;
+                import me.majhrs16.suite.api.ModuleDescriptor;
+                import me.majhrs16.suite.api.SemVer;
+                import me.majhrs16.suite.api.command.CommandSpec;
+                import me.majhrs16.suite.api.config.ConfigSection;
+                import me.majhrs16.suite.api.config.ConfigValue;
+                import me.majhrs16.suite.api.runtime.ModuleActivator;
+                import me.majhrs16.suite.api.runtime.ModuleContext;
+
+                public final class Activator implements ModuleActivator {
+
+                    @Override
+                    public ModuleDescriptor descriptor() {
+                        return ModuleDescriptor.builder("MODULE_ID")
+                                .version(SemVer.parse("MODULE_VERSION"))
+                                .contractVersion(SemVer.of(2, 1, 0))
+                                .jvmRange(17, 0)
+                                .build();
+                    }
+
+                    @Override
+                    public void start(ModuleContext context) {
+                        context.commands().register(CommandSpec.builder("demo")
+                                .description("demo command")
+                                .child(CommandSpec.builder("echo")
+                                        .description("echo one token")
+                                        .handler(command -> command.reply(
+                                                "echo:" + command.requireArg(0)))
+                                        .build())
+                                .build());
+                        context.config().register(new ConfigSection() {
+                            @Override public String namespace() { return "demo"; }
+
+                            @Override public List<ConfigValue> values() {
+                                return List.of(ConfigValue.of(
+                                        "greeting", String.class, "hola"));
+                            }
+
+                            @Override public void reload() {
+                                context.logger().debug("demo config reloaded");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void stop() {
+                    }
+                }
+                """;
+        java = java.replace("MODULE_ID", moduleId).replace("MODULE_VERSION", version);
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
     static Path buildDependencyJar(Path workDir, String className, String value) throws IOException {
         int dot = className.lastIndexOf('.');
         String packageName = dot < 0 ? "" : className.substring(0, dot);

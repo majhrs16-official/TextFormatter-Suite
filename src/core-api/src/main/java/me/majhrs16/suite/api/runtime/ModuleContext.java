@@ -2,6 +2,8 @@ package me.majhrs16.suite.api.runtime;
 
 import java.nio.file.Path;
 
+import me.majhrs16.suite.api.command.CommandRegistry;
+import me.majhrs16.suite.api.config.ConfigRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 /**
@@ -41,6 +43,28 @@ public interface ModuleContext extends AutoCloseable {
 
     /** @return the resource tracker scoped to this module. */
     ResourceTracker resources();
+
+    /**
+     * @return the command registry scoped to this module; the module must root
+     *         its subtree at {@link #moduleId()} and every registration is
+     *         removed when the context closes
+     * @throws UnsupportedOperationException when the context does not provide
+     *         a command surface (test doubles for unrelated contracts)
+     */
+    default CommandRegistry commands() {
+        throw new UnsupportedOperationException("command registry is not available in this context");
+    }
+
+    /**
+     * @return the configuration registry scoped to this module; the section
+     *         namespace must equal {@link #moduleId()} and every section is
+     *         removed when the context closes
+     * @throws UnsupportedOperationException when the context does not provide
+     *         a configuration surface (test doubles for unrelated contracts)
+     */
+    default ConfigRegistry config() {
+        throw new UnsupportedOperationException("configuration registry is not available in this context");
+    }
 
     /** @return neutral information about the hosting platform. */
     PlatformInfo platform();

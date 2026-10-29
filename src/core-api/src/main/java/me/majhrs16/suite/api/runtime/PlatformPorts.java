@@ -48,6 +48,18 @@ public interface PlatformPorts {
     List<Actor> onlineActors();
 
     /**
+     * Checks a permission on the platform.
+     *
+     * <p>Adapters must implement this with their real permission system. A
+     * permissive default would turn every module command into a public one.</p>
+     *
+     * @param actor      actor whose permission is checked
+     * @param permission permission node
+     * @return {@code true} when the actor has the permission
+     */
+    boolean hasPermission(Actor actor, String permission);
+
+    /**
      * Registers a command exposed by the runtime through the platform.
      *
      * @param command command to register
@@ -82,6 +94,15 @@ public interface PlatformPorts {
          * @param args   arguments after the command name
          */
         void execute(Actor sender, List<String> args);
+
+        /**
+         * Completes the last argument.
+         *
+         * @param sender actor requesting completion
+         * @param args   arguments after the command name
+         * @return completion candidates; never {@code null}
+         */
+        List<String> complete(Actor sender, List<String> args);
     }
 
     /** Handle returned by {@link #registerCommand(Command)}. */

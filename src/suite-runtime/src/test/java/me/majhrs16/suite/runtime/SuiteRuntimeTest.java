@@ -2,6 +2,7 @@ package me.majhrs16.suite.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,7 +95,8 @@ class SuiteRuntimeTest {
             runtime.start();
             PlatformPorts.Registration registration = runtime.registerCommands();
             PlatformPorts.Command command = ports.commands.get("suite");
-            assertEquals("textformatter.suite.admin", command.permission());
+            assertNull(command.permission());
+            assertEquals(List.of("txf"), command.aliases());
 
             Path jar = FixtureModules.buildJar(tempDir, "demo", "1.0.0", "demo",
                     null, null, false, false);
@@ -115,6 +117,52 @@ class SuiteRuntimeTest {
             assertTrue(ports.sent.stream().anyMatch(line -> line.contains("Eliminado: demo")));
 
             registration.close();
+            assertFalse(ports.commands.containsKey("suite"));
+        }
+    }
+
+    @Test
+    void moduleCommandAndConfigFollowModuleLifecycle() throws Exception {
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+            PlatformPorts.Command command = ports.commands.get("suite");
+            Actor console = Actor.unknown("console");
+
+            Path jar = FixtureModules.buildCommandConfigJar(tempDir, "demo", "1.0.0");
+            Path zip = FixtureModules.buildPackageZip(
+                    tempDir, "demo", "1.0.0", "stable", jar, null);
+
+            command.execute(console, List.of("install", zip.toString()));
+            assertTrue(runtime.configs().find("demo").isPresent());
+
+            ports.sent.clear();
+            command.execute(console, List.of("demo", "echo", "hola"));
+            assertTrue(ports.sent.stream().anyMatch(line -> line.equals("echo:hola")));
+
+            runtime.removeLocal("demo", "1.0.0", "stable", false);
+            assertTrue(runtime.configs().find("demo").isEmpty());
+
+            ports.sent.clear();
+            command.execute(console, List.of("demo", "echo", "hola"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.contains("Subcomando desconocido")));
+        }
+    }
+
+    @Test
+    void rootCommandCanBeClosedAndRegisteredAgain() throws Exception {
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            PlatformPorts.Registration first = runtime.registerCommands();
+            assertTrue(ports.commands.containsKey("suite"));
+
+            first.close();
+            assertFalse(ports.commands.containsKey("suite"));
+
+            PlatformPorts.Registration second = runtime.registerCommands();
+            assertTrue(ports.commands.containsKey("suite"));
+            second.close();
             assertFalse(ports.commands.containsKey("suite"));
         }
     }
@@ -156,6 +204,11 @@ class SuiteRuntimeTest {
         @Override
         public List<Actor> onlineActors() {
             return List.of();
+        }
+
+        @Override
+        public boolean hasPermission(Actor actor, String permission) {
+            return true;
         }
 
         @Override

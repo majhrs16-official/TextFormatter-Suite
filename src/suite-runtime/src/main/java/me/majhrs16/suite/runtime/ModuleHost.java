@@ -15,6 +15,7 @@ import java.util.ServiceLoader;
 import java.util.stream.Stream;
 
 import me.majhrs16.suite.api.Capability;
+import me.majhrs16.suite.api.command.CommandRoot;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.Requirement;
@@ -49,6 +50,8 @@ public final class ModuleHost implements AutoCloseable {
     private final RuntimeServiceRegistry services;
     private final RuntimeEventBus events;
     private final RuntimeScheduler scheduler;
+    private final RuntimeCommandRegistry commands;
+    private final RuntimeConfigRegistry configs;
     private final RuntimeStateStore stateStore;
     private final Map<String, LoadedModule> active = new LinkedHashMap<>();
     private final Map<String, ModuleState> states = new LinkedHashMap<>();
@@ -72,11 +75,30 @@ public final class ModuleHost implements AutoCloseable {
      */
     public ModuleHost(Path libraryRoot, Path configRoot, PlatformInfo platform, PluginLogger logger,
                       RuntimeStateStore stateStore) {
+        this(libraryRoot, configRoot, platform, logger, stateStore,
+                new RuntimeCommandRegistry(CommandRoot.suite(), logger),
+                new RuntimeConfigRegistry());
+    }
+
+    /**
+     * @param libraryRoot directory that contains {@code packages/}
+     * @param configRoot  directory under which each module gets its config dir
+     * @param platform    neutral platform information exposed to modules
+     * @param logger      runtime logger
+     * @param stateStore  optional transient store for runtime states
+     * @param commands    runtime-wide command registry
+     * @param configs     runtime-wide configuration registry
+     */
+    public ModuleHost(Path libraryRoot, Path configRoot, PlatformInfo platform, PluginLogger logger,
+                      RuntimeStateStore stateStore, RuntimeCommandRegistry commands,
+                      RuntimeConfigRegistry configs) {
         this.packagesDir = Objects.requireNonNull(libraryRoot, "libraryRoot").resolve("packages");
         this.configRoot = Objects.requireNonNull(configRoot, "configRoot");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.logger = Objects.requireNonNull(logger, "logger");
         this.stateStore = stateStore;
+        this.commands = Objects.requireNonNull(commands, "commands");
+        this.configs = Objects.requireNonNull(configs, "configs");
         this.environment = Environment.current();
         this.services = new RuntimeServiceRegistry();
         this.events = new RuntimeEventBus(logger);
@@ -96,6 +118,16 @@ public final class ModuleHost implements AutoCloseable {
     /** @return the runtime-wide scheduler. */
     public RuntimeScheduler scheduler() {
         return scheduler;
+    }
+
+    /** @return the runtime-wide command registry. */
+    public RuntimeCommandRegistry commands() {
+        return commands;
+    }
+
+    /** @return the runtime-wide configuration registry. */
+    public RuntimeConfigRegistry configs() {
+        return configs;
     }
 
     /** @return {@code <library>/packages}. */
@@ -310,7 +342,8 @@ public final class ModuleHost implements AutoCloseable {
             Files.createDirectories(configDir);
             PluginLogger moduleLogger = new PrefixedLogger(logger, moduleId);
             DefaultModuleContext context = new DefaultModuleContext(
-                    moduleId, configDir, moduleLogger, services, events, scheduler, platform);
+                    moduleId, configDir, moduleLogger, services, events, scheduler,
+                    commands, configs, platform);
             return new PreparedModule(moduleId, jar, descriptor, activator, classLoader, context);
         } catch (Throwable failure) {
             try {

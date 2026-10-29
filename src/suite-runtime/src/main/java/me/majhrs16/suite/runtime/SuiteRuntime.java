@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import me.majhrs16.suite.api.command.CommandRegistry;
+import me.majhrs16.suite.api.command.CommandRoot;
+import me.majhrs16.suite.api.config.ConfigRegistry;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
@@ -46,6 +49,9 @@ public final class SuiteRuntime implements AutoCloseable {
     private ModuleHost moduleHost;
     private PackageRuntime packageRuntime;
     private RuntimeStateStore stateStore;
+    private RuntimeCommandRegistry commands;
+    private RuntimeConfigRegistry configs;
+    private PlatformPorts.Registration commandRegistration;
     private boolean started;
 
     /**
@@ -85,9 +91,12 @@ public final class SuiteRuntime implements AutoCloseable {
         manager.initialize();
 
         stateStore = new RuntimeStateStore(runtimeDir, logger);
+        commands = new RuntimeCommandRegistry(CommandRoot.suite(), logger);
+        configs = new RuntimeConfigRegistry();
         moduleHost = new ModuleHost(
-                libraryRoot, configRoot, ports.info(), logger, stateStore);
+                libraryRoot, configRoot, ports.info(), logger, stateStore, commands, configs);
         packageRuntime = new PackageRuntime(manager, moduleHost, logger);
+        SuiteCommands.register(commands, this);
 
         List<PackageEntry> installed = manager.packageList();
         List<ActivationResult> results = installed.isEmpty()
@@ -107,12 +116,18 @@ public final class SuiteRuntime implements AutoCloseable {
      * call more than once.
      */
     public synchronized void stop() {
+        if (commandRegistration != null) {
+            commandRegistration.close();
+            commandRegistration = null;
+        }
         if (moduleHost != null) {
             moduleHost.close();
         }
         moduleHost = null;
         packageRuntime = null;
         stateStore = null;
+        commands = null;
+        configs = null;
         manager = null;
         started = false;
     }
@@ -127,8 +142,27 @@ public final class SuiteRuntime implements AutoCloseable {
      *
      * @return registration handle
      */
-    public PlatformPorts.Registration registerCommands() {
-        return ports.registerCommand(new SuiteCommand(this, ports, logger));
+    public synchronized PlatformPorts.Registration registerCommands() {
+        ensureStarted();
+        if (commandRegistration == null) {
+            PlatformPorts.Registration delegate =
+                    ports.registerCommand(new RootCommand(commands, ports));
+            commandRegistration = new PlatformPorts.Registration() {
+                @Override
+                public void close() {
+                    try {
+                        delegate.close();
+                    } finally {
+                        synchronized (SuiteRuntime.this) {
+                            if (commandRegistration == this) {
+                                commandRegistration = null;
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        return commandRegistration;
     }
 
     /**
@@ -219,6 +253,18 @@ public final class SuiteRuntime implements AutoCloseable {
     public ServiceRegistry services() {
         ensureStarted();
         return moduleHost.services();
+    }
+
+    /** @return the runtime-wide command registry. */
+    public CommandRegistry commands() {
+        ensureStarted();
+        return commands;
+    }
+
+    /** @return the runtime-wide configuration registry. */
+    public ConfigRegistry configs() {
+        ensureStarted();
+        return configs;
     }
 
     /** @return event bus shared by active modules. */
