@@ -56,6 +56,8 @@ jobs:
             :src:sync-http:build \
             :src:sync-tcpudp:build \
             :src:sync-discord:build \
+            :src:sync-discord-jda:build \
+            :src:sync-discord-jdk:build \
             :src:sync-telegram:build \
             :src:sync-websocket:build \
             :src:sync-velocity:build \

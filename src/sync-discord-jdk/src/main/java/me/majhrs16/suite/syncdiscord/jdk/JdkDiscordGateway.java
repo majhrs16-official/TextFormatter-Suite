@@ -1,7 +1,7 @@
-package me.majhrs16.suite.syncdiscord;
+package me.majhrs16.suite.syncdiscord.jdk;
 
-import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.discord.DiscordListener;
+import me.majhrs16.suite.api.discord.DiscordMessage;
 
 import org.json.JSONObject;
 
@@ -18,21 +18,20 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Minimal Discord Gateway v10 client (WebSocket) driving inbound delivery.
+ * Minimal Discord Gateway v10 client (JDK WebSocket) for the {@code jdk}
+ * adapter.
  *
- * <p>Handles the session lifecycle the suite needs: {@code Hello} → heartbeat
- * scheduler → {@code Identify}, sequence tracking for {@code RESUME}, {@code READY}
- * detection and {@code MESSAGE_CREATE} dispatch to the {@code SyncListener}. Uses
- * the JDK {@link java.net.http.WebSocket}; tests run against a loopback RFC6455
- * stub so no network is required.
+ * <p>Handles {@code Hello} → heartbeat → {@code Identify}, sequence tracking
+ * for {@code RESUME}, {@code READY} detection and {@code MESSAGE_CREATE}
+ * dispatch. It knows nothing about the suite sink; it reports
+ * {@link DiscordMessage} values through {@link DiscordListener}.</p>
  */
-public final class DiscordGateway implements AutoCloseable {
+public final class JdkDiscordGateway implements AutoCloseable {
 
     private final String url;
     private final String token;
     private final int intents;
-    private final me.majhrs16.suite.api.spi.SyncSink owner;
-    private final me.majhrs16.suite.api.spi.SyncListener listener;
+    private final DiscordListener listener;
     private final HttpClient client;
     private final CountDownLatch ready = new CountDownLatch(1);
     private volatile WebSocket socket;
@@ -40,20 +39,17 @@ public final class DiscordGateway implements AutoCloseable {
     private volatile long sequence = -1;
     private volatile boolean closed;
 
-    public DiscordGateway(String gatewayUrl, String token, int intents,
-                          me.majhrs16.suite.api.spi.SyncSink owner,
-                          me.majhrs16.suite.api.spi.SyncListener listener) {
-        this(gatewayUrl, token, intents, owner, listener, HttpClient.newHttpClient());
+    public JdkDiscordGateway(String gatewayUrl, String token, int intents,
+                             DiscordListener listener) {
+        this(gatewayUrl, token, intents, listener, HttpClient.newHttpClient());
     }
 
-    DiscordGateway(String gatewayUrl, String token, int intents,
-                   me.majhrs16.suite.api.spi.SyncSink owner,
-                   me.majhrs16.suite.api.spi.SyncListener listener, HttpClient client) {
+    JdkDiscordGateway(String gatewayUrl, String token, int intents,
+                      DiscordListener listener, HttpClient client) {
         this.url = Objects.requireNonNull(gatewayUrl, "gatewayUrl");
         this.token = Objects.requireNonNull(token, "token");
         this.intents = intents;
-        this.owner = owner;
-        this.listener = listener;
+        this.listener = Objects.requireNonNull(listener, "listener");
         this.client = client;
     }
 
@@ -69,6 +65,11 @@ public final class DiscordGateway implements AutoCloseable {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    /** @return {@code true} when the gateway completed READY/RESUMED. */
+    public boolean isReady() {
+        return ready.getCount() == 0 && !closed;
     }
 
     private final class Frames implements WebSocket.Listener {
@@ -102,6 +103,7 @@ public final class DiscordGateway implements AutoCloseable {
         public void onError(WebSocket webSocket, Throwable error) {
             closed = true;
             ready.countDown();
+            listener.onDisconnect(error == null ? "websocket error" : error.getMessage());
         }
     }
 
@@ -143,11 +145,7 @@ public final class DiscordGateway implements AutoCloseable {
         if (content.isBlank()) {
             return;
         }
-        listener.onMessage(owner, Message.builder()
-            .sender(Actor.unknown(name))
-            .text(content)
-            .channel("discord")
-            .build());
+        listener.onMessage(new DiscordMessage(name, content, data.optLong("channel_id", 0)));
     }
 
     private void startHeartbeat(int interval) {
@@ -189,6 +187,7 @@ public final class DiscordGateway implements AutoCloseable {
     @Override
     public void close() {
         closed = true;
+        ready.countDown();
         if (heartbeats != null) {
             heartbeats.shutdownNow();
         }

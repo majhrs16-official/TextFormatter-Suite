@@ -1,4 +1,4 @@
-package me.majhrs16.suite.syncdiscord;
+package me.majhrs16.suite.syncdiscord.jdk;
 
 import org.json.JSONObject;
 

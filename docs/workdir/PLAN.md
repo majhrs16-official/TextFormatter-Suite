@@ -1058,14 +1058,27 @@ ya es paquete: publica `HealthCheckRegistry` y `Observability`, instala el sink
 Prometheus y sirve `/health`/`/metrics`; `DebugEndpoint` se movió a
 `host.debug` porque necesita estado del host. Las librerías de terceros
 (Java-WebSocket, Gson, org.json, Prometheus, JDA) siguen en el classpath del
-host hasta que F8 las empaquete como `DEPENDENCY`. Quedan `sync-discord`,
-`sync-velocity`, `presets`, `extension-api`, `inworld`/`tester` y la retirada
-del cableado del host.
+host hasta que F8 las empaquete como `DEPENDENCY`.
+
+**`sync-discord` desacoplado (2026-10-29):** el paquete neutral ya no importa
+JDA ni `transport`. Los puertos `DiscordConnection`, `DiscordConnectionFactory`,
+`DiscordSettings`, `DiscordMessage` y `DiscordListener` viven en `core-api`
+(`api.discord`). `DiscordSink` contiene solo la lógica del módulo y resuelve el
+adaptador configurado (`transport: jda|jdk`). Hay dos paquetes adaptadores:
+`sync-discord-jda` (JDA, provee `discord-transport`) y `sync-discord-jdk`
+(WebSocket JDK + REST, provee `discord-transport`). Ambos devuelven de
+`connect()` sin esperar la red; el handshake corre en un hilo daemon y `send()`
+falla rápido si el transporte no está listo. El paquete neutral se activa
+aunque no haya adaptador: se suscribe a `ModuleActivatedEvent` y
+`ModuleDeactivatedEvent`, registra el sink cuando aparece la fábrica configurada
+y lo retira cuando el adaptador se descarga; el orden de instalación deja de
+importar. Tests: fake de `DiscordConnectionFactory` en el paquete neutral,
+servidor WebSocket loopback en el adaptador JDK, y un paquete adaptador falso
+instalado después del paquete neutral en `PackageRuntimeTest` (adjunta y retira
+el sink al instalar/descargar el adaptador). `spigot-host` ya usa `DiscordSink`
++ `JdaDiscordConnectionFactory` en su cableado temporal.
 
 **F6 restante — bloqueado por F4b/F7, no por falta de empaquetado:**
-- `sync-discord` activa JDA con una conexión externa bloqueante de hasta 30 s;
-  empaquetarlo sin un ciclo de vida no bloqueante (F7) haría que la activación
-  dependiera de la red y no es testeable sin un seam de conexión.
 - `sync-velocity` usa la API de Velocity; `inworld` y `tester` usan Paper API.
   Pertenecen a los adapters de plataforma (F4b), no a paquetes neutrales.
 - `presets` y `extension-api` importan `host.config.HostConfig` y
@@ -1152,10 +1165,11 @@ Orden de F4b:
 5. Añadir `checkArchitecture` y dejarlo verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
 
-**Estado:** desarrollo en pausa al 2026-10-28. Al reanudar, empezar por el
-desacople hexagonal de `sync-discord` (puerto + fake + adapter JDA), porque es
-el caso que hoy bloquea la activación por red y el que valida el patrón para
-`sync-velocity`, `inworld` y `tester`.
+**Estado:** `sync-discord` desacoplado al 2026-10-29. El patrón queda validado
+para reutilizarlo en `sync-velocity` (puerto + adapter Velocity), `inworld` y
+`tester` (puertos neutrales + adapters de plataforma). Después: `Preset.apply`
+real y `presets`, el puerto neutral de `extension-api`, y el adelgazamiento de
+`spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts`.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
@@ -1419,7 +1433,9 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | `src:presets` | ✅ OK | 1 | N/A | 60 | N/A | N/A | Pocos tests (<3) |
 | `src:spigot-host` | ✅ OK | 2 | 1438 | 161 | 2.5% | 4.6% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:sync-bus` | ✅ OK | 1 | N/A | 116 | N/A | N/A | Pocos tests (<3) |
-| `src:sync-discord` | ✅ OK | 3 | N/A | 476 | N/A | N/A |  |
+| `src:sync-discord` | ✅ OK | 3 | N/A | 250 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin JDA |
+| `src:sync-discord-jda` | ✅ OK | 1 | N/A | 130 | N/A | N/A | Adaptador JDA; tests sin red |
+| `src:sync-discord-jdk` | ✅ OK | 3 | N/A | 320 | N/A | N/A | Adaptador JDK; tests con WebSocket loopback |
 | `src:sync-http` | ✅ OK | 3 | N/A | 192 | N/A | N/A |  |
 | `src:sync-socket` | ✅ OK | 3 | N/A | 202 | N/A | N/A |  |
 | `src:sync-telegram` | ✅ OK | 2 | N/A | 173 | N/A | N/A | Pocos tests (<3) |
@@ -1468,7 +1484,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | iflow-wasm (WebAssembly + Chicory) | 🧪 W0 validado (loader mínimo); W1 contrato, W2 runtime, W3 integración y W3.5 paridad v3 pendientes | build |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
-| sync-discord | ✅ JDA wired vía DiscordBridge (respeta iFlow) | build |
+| sync-discord | ✅ Paquete neutral + adapters `sync-discord-jda`/`sync-discord-jdk`; `DiscordBridge` usa el sink neutral (respeta iFlow) | build + tests de paquete |
 | sync-telegram | ✅ **SyncBus registered** (HTTP transport, long-poll) | build |
 | sync-http/tcpudp | ✅ **SyncBus registered** (IP pinning SSRF, timeouts) | build |
 | sync-velocity | ✅ **Production-ready** (Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery) | compile |

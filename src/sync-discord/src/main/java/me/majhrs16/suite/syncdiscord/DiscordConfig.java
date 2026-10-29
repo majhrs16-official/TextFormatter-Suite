@@ -18,10 +18,13 @@ import java.util.Map;
  * @param token     token del bot
  * @param channelId canal de destino; {@code 0} = sin canal
  * @param format    plantilla de los mensajes que llegan desde Discord
+ * @param transport adaptador de conexión ({@code jda}, {@code jdk})
  */
-public record DiscordConfig(boolean enabled, String token, long channelId, String format) {
+public record DiscordConfig(boolean enabled, String token, long channelId, String format,
+                            String transport) {
 
     public static final String DEFAULT_FORMAT = "{sender}: {content}";
+    public static final String DEFAULT_TRANSPORT = "jda";
 
     public DiscordConfig {
         token = token == null ? "" : token.trim();
@@ -29,6 +32,7 @@ public record DiscordConfig(boolean enabled, String token, long channelId, Strin
             channelId = 0;
         }
         format = format == null || format.isBlank() ? DEFAULT_FORMAT : format;
+        transport = transport == null || transport.isBlank() ? DEFAULT_TRANSPORT : transport.trim();
     }
 
     /**
@@ -36,12 +40,25 @@ public record DiscordConfig(boolean enabled, String token, long channelId, Strin
      * @return configuración con defaults si el archivo no existe o no es válido
      */
     public static DiscordConfig load(Path dataFolder) {
-        Map<String, Object> map = SyncYaml.readMap(SyncConfigPaths.discord(dataFolder));
+        return loadFile(SyncConfigPaths.discord(dataFolder));
+    }
+
+    /**
+     * @param configDir carpeta privada del módulo ({@code config/sync-discord})
+     * @return configuración con defaults si el archivo no existe o no es válido
+     */
+    public static DiscordConfig loadFromConfigDir(Path configDir) {
+        return loadFile(configDir.resolve("config.yml"));
+    }
+
+    private static DiscordConfig loadFile(Path file) {
+        Map<String, Object> map = SyncYaml.readMap(file);
         return new DiscordConfig(
             SyncYaml.bool(map, "enabled", false),
             SyncYaml.string(map, "token", ""),
             SyncYaml.longValue(map, "channel", 0L),
-            SyncYaml.string(map, "format", DEFAULT_FORMAT)
+            SyncYaml.string(map, "format", DEFAULT_FORMAT),
+            SyncYaml.string(map, "transport", DEFAULT_TRANSPORT)
         );
     }
 

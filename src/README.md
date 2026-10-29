@@ -35,7 +35,9 @@ TextFormatter Suite
 ├── Sync Transports (platform-agnostic)
 │   ├── sync-http         → HTTP webhook sink
 │   ├── sync-tcpudp       → TCP/UDP sinks
-│   ├── sync-discord      → Discord sink (JDA)
+│   ├── sync-discord      → Discord sink (neutral)
+│   ├── sync-discord-jda  → Discord JDA adapter
+│   ├── sync-discord-jdk  → Discord JDK adapter
 │   ├── sync-telegram     → Telegram sink
 │   ├── sync-websocket    → WebSocket sink
 │   ├── sync-velocity     → Velocity proxy sink
@@ -51,7 +53,7 @@ TextFormatter Suite
 - `kernel` depends only on `core-api` — loads modules via SPI
 - `host` is the **integration hub** — wires core-api, textformatter, the installed iFlow engine (`iflow-vm` or `iflow-firewall`; mutually exclusive), translations, transports
 - Platform adapters (`spigot-host`, `fabric-host`) depend on `host` + all sync modules
-- Sync modules depend on `core-api` + `transport` (and `kernel` for tests)
+- Sync modules depend on `core-api`; technology adapters add `transport`, JDA or a platform SDK
 - **No circular dependencies** between core modules
 
 ---
@@ -81,7 +83,9 @@ TextFormatter Suite
 | `performance` | Hotspot detection, profiling, cache/memory optimization | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-http` | HTTP webhook sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-tcpudp` | TCP/UDP sync sinks | `core-api`, `transport` | `spigot-host`, `fabric-host` |
-| `sync-discord` | Discord sync sink (JDA) | `core-api`, `transport` | `spigot-host`, `fabric-host` |
+| `sync-discord` | Neutral Discord sink; selects a `DiscordConnectionFactory` by config | `core-api`, `sync-common` | `spigot-host`, `fabric-host` |
+| `sync-discord-jda` | JDA `discord-transport` adapter (provides the capability) | `core-api`, JDA | `spigot-host` |
+| `sync-discord-jdk` | JDK WebSocket/REST `discord-transport` adapter | `core-api`, `transport` | optional |
 | `sync-telegram` | Telegram sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-websocket` | WebSocket sync sink | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-velocity` | Velocity proxy sync sink | `core-api` | `fabric-host` |

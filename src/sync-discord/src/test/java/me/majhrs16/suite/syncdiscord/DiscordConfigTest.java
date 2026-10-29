@@ -44,6 +44,19 @@ class DiscordConfigTest {
         assertEquals("discord-token", config.token());
         assertEquals(12345L, config.channelId());
         assertEquals(DiscordConfig.DEFAULT_FORMAT, config.format());
+        assertEquals(DiscordConfig.DEFAULT_TRANSPORT, config.transport());
+    }
+
+    @Test
+    void readsTheSelectedTransportAdapter() throws Exception {
+        Files.writeString(canonical(), """
+            enabled: true
+            token: discord-token
+            channel: 12345
+            transport: jdk
+            """);
+
+        assertEquals("jdk", DiscordConfig.load(dir).transport());
     }
 
     @Test

@@ -490,20 +490,4 @@ class EndToEndIntegrationTest {
             router.route(fromRegular, recipient).decision().target());
     }
 
-    @Test
-    @Disabled("Requires valid Discord bot token - cannot run in CI without credentials")
-    void testDiscordSinkStartStop() throws Exception {
-        var sink = new me.majhrs16.suite.syncdiscord.JdaDiscordSink(
-            "", 0L, 
-            new PluginLogger() {
-                @Override public void info(String m, Object... a) {}
-                @Override public void warn(String m, Object... a) {}
-                @Override public void error(String m, Object... a) {}
-                @Override public void error(String m, Throwable t) {}
-                @Override public void debug(String m, Object... a) {}
-            }
-        );
-        sink.start();
-        sink.stop();
-    }
 }

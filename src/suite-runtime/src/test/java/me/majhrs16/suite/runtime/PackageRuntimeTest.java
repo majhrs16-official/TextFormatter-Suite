@@ -336,6 +336,57 @@ class PackageRuntimeTest {
     }
 
     @Test
+    void installsNeutralDiscordPackageWithATransportAdapter() throws Exception {
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path busZip = packageFromProperty("sync-bus.package");
+        Path discordZip = packageFromProperty("sync-discord.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-discord");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("config.yml"), """
+                    enabled: true
+                    token: test-token
+                    channel: 42
+                    transport: fake
+                    """);
+
+            // The neutral package activates before its transport adapter exists.
+            List<ActivationResult> activation = fixture.runtime.installLocal(discordZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "sync-discord activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("sync-discord").orElseThrow());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "without a transport adapter there is no sink to register");
+
+            Path adapterJar = FixtureModules.buildDiscordTransportJar(
+                    tempDir, "discord-fake", "1.0.0");
+            Path adapterZip = FixtureModules.buildPackageZip(
+                    tempDir, "discord-fake", "1.0.0", "stable", adapterJar, null);
+            List<ActivationResult> adapterActivation =
+                    fixture.runtime.installLocal(adapterZip, false);
+            assertTrue(adapterActivation.get(0).isSuccess(),
+                    () -> "discord adapter activation failed: "
+                            + adapterActivation.get(0).message());
+            assertEquals(Set.of("discord"), bus.sinkNames(),
+                    "the sink must attach when the transport adapter appears");
+
+            fixture.runtime.removeLocal("discord-fake", "1.0.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading the transport adapter must remove the sink");
+
+            fixture.runtime.removeLocal("sync-discord", "2.1.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading sync-discord must unregister its sink");
+        }
+    }
+
+    @Test
     void installsSyncSocketPackageAndRegistersConfiguredSinks() throws Exception {
         Path transportZip = packageFromProperty("transport.package");
         Path commonZip = packageFromProperty("sync-common.package");

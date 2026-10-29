@@ -16,6 +16,7 @@ evaluationDependsOn(':src:gtranslate')
 evaluationDependsOn(':src:ltranslate')
 evaluationDependsOn(':src:sync-bus')
 evaluationDependsOn(':src:sync-common')
+evaluationDependsOn(':src:sync-discord')
 evaluationDependsOn(':src:sync-socket')
 evaluationDependsOn(':src:sync-telegram')
 evaluationDependsOn(':src:sync-http')
@@ -113,6 +114,10 @@ test {
     dependsOn syncCommonPackage
     systemProperty 'sync-common.package',
             syncCommonPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def syncDiscordPackage = project(':src:sync-discord').tasks.named('modulePackage')
+    dependsOn syncDiscordPackage
+    systemProperty 'sync-discord.package',
+            syncDiscordPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     def syncSocketPackage = project(':src:sync-socket').tasks.named('modulePackage')
     dependsOn syncSocketPackage
     systemProperty 'sync-socket.package',

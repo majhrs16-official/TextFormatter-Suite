@@ -314,6 +314,90 @@ final class FixtureModules {
         return jar;
     }
 
+    /**
+     * Builds a fake Discord transport package. It provides the
+     * {@code discord-transport} capability and registers a
+     * {@link me.majhrs16.suite.api.discord.DiscordConnectionFactory} whose
+     * connection is already connected and never touches the network.
+     */
+    static Path buildDiscordTransportJar(Path workDir, String moduleId, String version)
+            throws IOException {
+        Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
+        Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
+        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = """
+                package fixture;
+
+                import me.majhrs16.suite.api.Capability;
+                import me.majhrs16.suite.api.ModuleDescriptor;
+                import me.majhrs16.suite.api.SemVer;
+                import me.majhrs16.suite.api.discord.DiscordConnection;
+                import me.majhrs16.suite.api.discord.DiscordConnectionFactory;
+                import me.majhrs16.suite.api.discord.DiscordListener;
+                import me.majhrs16.suite.api.discord.DiscordSettings;
+                import me.majhrs16.suite.api.runtime.ModuleActivator;
+                import me.majhrs16.suite.api.runtime.ModuleContext;
+                import me.majhrs16.suite.api.spi.PluginLogger;
+
+                public final class Activator implements ModuleActivator {
+
+                    @Override
+                    public ModuleDescriptor descriptor() {
+                        return ModuleDescriptor.builder("MODULE_ID")
+                                .version(SemVer.parse("MODULE_VERSION"))
+                                .contractVersion(SemVer.of(2, 1, 0))
+                                .jvmRange(17, 0)
+                                .provide(Capability.of("discord-transport", SemVer.of(2, 1, 0)))
+                                .build();
+                    }
+
+                    @Override
+                    public void start(ModuleContext context) {
+                        context.services().register(
+                                DiscordConnectionFactory.class, new Factory());
+                    }
+
+                    @Override
+                    public void stop() {
+                    }
+
+                    static final class Factory implements DiscordConnectionFactory {
+                        @Override public String name() { return "fake"; }
+
+                        @Override
+                        public DiscordConnection create(DiscordSettings settings, PluginLogger logger) {
+                            return new Connection();
+                        }
+                    }
+
+                    static final class Connection implements DiscordConnection {
+                        private volatile DiscordListener listener;
+                        private volatile boolean connected;
+
+                        @Override public void connect() { connected = true; }
+                        @Override public boolean isConnected() { return connected; }
+                        @Override public void send(String text) { }
+                        @Override public void setListener(DiscordListener listener) {
+                            this.listener = listener;
+                        }
+                        @Override public void close() { connected = false; }
+                    }
+                }
+                """;
+        java = java
+                .replace("MODULE_ID", moduleId)
+                .replace("MODULE_VERSION", version);
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
     private static void compile(Path source, Path classesDir, List<Path> extraClasspath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         StringBuilder classpath = new StringBuilder(System.getProperty("java.class.path"));

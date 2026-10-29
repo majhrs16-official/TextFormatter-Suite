@@ -1,18 +1,20 @@
 package me.majhrs16.suite.spigothost;
 
+import me.majhrs16.suite.api.discord.DiscordSettings;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.syncdiscord.DiscordConfig;
-import me.majhrs16.suite.syncdiscord.JdaDiscordSink;
+import me.majhrs16.suite.syncdiscord.DiscordSink;
+import me.majhrs16.suite.syncdiscord.jda.JdaDiscordConnectionFactory;
 import me.majhrs16.suite.api.spi.SyncBus;
 
 import java.nio.file.Path;
 
 /**
  * Runtime wiring for the Discord border (A9): reads {@code sync/discord.yml}
- * ({@code enabled/token/channel}), owns the {@link JdaDiscordSink} lifecycle
+ * ({@code enabled/token/channel}), owns the {@link DiscordSink} lifecycle
  * and connects both directions:
  *
  * <ul>
@@ -27,12 +29,12 @@ import java.nio.file.Path;
  */
 public final class DiscordBridge {
 
-    private final JdaDiscordSink sink;
+    private final DiscordSink sink;
     private final MessageDispatcher dispatcher;
     private final PluginLogger logger;
     private final SyncBus syncBus;
 
-    private DiscordBridge(JdaDiscordSink sink, MessageDispatcher dispatcher, PluginLogger logger, SyncBus syncBus) {
+    private DiscordBridge(DiscordSink sink, MessageDispatcher dispatcher, PluginLogger logger, SyncBus syncBus) {
         this.sink = sink;
         this.dispatcher = dispatcher;
         this.logger = logger;
@@ -40,7 +42,7 @@ public final class DiscordBridge {
     }
 
     /** @return the underlying Discord sink for registration with SyncBus. */
-    public JdaDiscordSink getSink() {
+    public DiscordSink getSink() {
         return sink;
     }
 
@@ -57,7 +59,10 @@ public final class DiscordBridge {
             logger.warn("Discord channel ID not configured (channel=0); bridge created but will not send messages");
         }
         return new DiscordBridge(
-            new JdaDiscordSink(config.token(), config.channelId(), logger),
+            new DiscordSink(
+                new JdaDiscordConnectionFactory(),
+                new DiscordSettings(config.token(), config.channelId()),
+                logger),
             dispatcher, logger, syncBus);
     }
 
@@ -80,7 +85,7 @@ public final class DiscordBridge {
                 }
             });
             sink.start();
-            logger.info("Discord conectado");
+            logger.info("Discord iniciado (conexión asíncrona)");
         } catch (Exception exception) {
             logger.warn("Discord no conectado: " + exception.getMessage());
         }

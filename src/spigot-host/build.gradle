@@ -33,6 +33,7 @@ dependencies {
     implementation project(':src:iflow-vm')
     implementation project(':src:host')
     implementation project(':src:sync-discord')
+    implementation project(':src:sync-discord-jda')
     implementation project(':src:sync-http')
     implementation project(':src:sync-socket')
     implementation project(':src:sync-telegram')

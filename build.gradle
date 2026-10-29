@@ -434,6 +434,8 @@ subprojects { project ->
                 ':src:presets'        : [line: 0.10, branch: 0.05],
                 ':src:sync-bus'       : [line: 0.10, branch: 0.05],
                 ':src:sync-discord'   : [line: 0.10, branch: 0.05],
+                ':src:sync-discord-jda': [line: 0.10, branch: 0.05],
+                ':src:sync-discord-jdk': [line: 0.10, branch: 0.05],
                 ':src:sync-http'      : [line: 0.10, branch: 0.05],
                 ':src:sync-tcpudp'    : [line: 0.10, branch: 0.05],
                 ':src:sync-telegram'  : [line: 0.10, branch: 0.05],
