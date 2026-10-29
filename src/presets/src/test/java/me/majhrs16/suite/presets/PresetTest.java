@@ -86,9 +86,9 @@ class PresetTest {
         assertEquals(5, applied.rateLimitPerSecond());
         assertTrue(applied.showSender() == false);
         assertEquals(1, applied.messages().size());
-        assertEquals("hello", applied.messages().text(0));
+        assertEquals("hello", applied.messages().format(0));
         assertEquals(1, applied.tooltips().size());
-        assertEquals("tip", applied.tooltips().text(0));
+        assertEquals("tip", applied.tooltips().format(0));
         assertEquals(1, applied.sounds().size());
         assertEquals("bell", applied.sounds().get(0).name());
     }

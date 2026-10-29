@@ -23,7 +23,7 @@ TextFormatter Suite
 │   ├── gtranslate        → Google Translate provider
 │   ├── ltranslate        → LibreTranslate provider
 │   ├── observability     → Metrics, health checks, debug endpoints
-│   ├── presets           → Preset catalog and YAML import/export
+│   ├── presets           → Preset catalog, YAML import/export and canonical file target
 │   ├── manager-spi       → Module manager SPI (coordinates, descriptors, lifecycle)
 │   ├── manager-core      → Package installer + local package database
 │   ├── manager-apt       → Repositories, dependency resolver, APT installer
@@ -65,17 +65,17 @@ TextFormatter Suite
 |-----------|----------------|------------|---------|
 | `core-api` | Core interfaces, SPI, domain types and cross-package contracts (Module, Actor, Channel, ChannelRegistry, Router, TranslationService, SyncSink, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
-| `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `presets`, `spigot-host`, `fabric-host` |
+| `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `spigot-host`, `fabric-host` |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `host`, `spigot-host`, `fabric-host` |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `host` (selección `vm`/`firewall`), web editor |
-| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring; selecciona el motor iFlow instalado con `iflow.engine.kind` | `core-api`, `kernel`, `textformatter`, `iflow-vm`/`iflow-firewall` (alternativos), `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability`, `presets` |
+| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring; selecciona el motor iFlow instalado con `iflow.engine.kind` | `core-api`, `kernel`, `textformatter`, `iflow-vm`/`iflow-firewall` (alternativos), `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `ltranslate` | LibreTranslate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
-| `presets` | Preset catalog and YAML import/export (no execution engine) | `core-api`, `textformatter`, `host` | — (sin consumidor cableado) |
+| `presets` | Preset catalog, YAML import/export and canonical file persistence (no execution engine) | `core-api`, `snakeyaml` | `suite-runtime` (paquete `PACKAGE`); adapter de host pendiente |
 | `manager-spi` | Module manager SPI (coordinates, descriptors, lifecycle, manifest/version parsing) | `core-api` | `manager-core`, `manager-apt`, `spigot-host`, `fabric-host` |
 | `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `spigot-host`, `fabric-host` |
 | `manager-apt` | Repository manager, dependency resolver, APT installer/facade | `core-api`, `kernel`, `manager-spi`, `manager-core` | `spigot-host`, `fabric-host` |
@@ -118,7 +118,7 @@ TextFormatter Suite
 | `transport` | Transport layer (dependency package) | HTTP transport, codecs | `HttpTransport`, `Transport`, `MessageCodec` | `modulePackage` (`DEPENDENCY`) | [transport/README.md](transport/README.md) |
 | `logger` | Logging dependency package | Structured logging shared by modules | `Logger`, `LoggerUtils` | `LoggerModule` (`DEPENDENCY`) | [logger/README.md](logger/README.md) |
 | `observability` | Metrics & health | Prometheus, health checks, endpoints | `Observability`, `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint` | `ObservabilityModule` | [observability/README.md](observability/README.md) |
-| `presets` | Preset catalog | YAML preset import/export and built-in definitions | `PresetManager`, `Preset`, `PresetsModule` | `PresetsModule` | [presets/README.md](presets/README.md) |
+| `presets` | Preset catalog | YAML preset import/export, built-in definitions and canonical file persistence | `PresetManager`, `Preset`, `FilePresetTarget`, `PresetsActivator`, `PresetsModule` | `PresetsActivator` | [presets/README.md](presets/README.md) |
 | `manager-spi` | Manager SPI | Coordinates, descriptors, lifecycle, manifest/version parsing | `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Version` | — | [manager-spi/README.md](manager-spi/README.md) |
 | `manager-core` | Package installer | Local ZIP installation, package database, transactions | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` | — | [manager-core/README.md](manager-core/README.md) |
 | `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` | — | [manager-apt/README.md](manager-apt/README.md) |

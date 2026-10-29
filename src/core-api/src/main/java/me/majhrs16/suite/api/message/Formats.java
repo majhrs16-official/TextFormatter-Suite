@@ -36,7 +36,7 @@ public final class Formats {
     }
 
     public int size() {
-        return texts.length;
+        return Math.max(texts.length, formats.length);
     }
 
     public String text(int index) {
@@ -58,7 +58,7 @@ public final class Formats {
     }
 
     public boolean isEmpty() {
-        return texts.length == 0;
+        return texts.length == 0 && formats.length == 0;
     }
 
     /** Tolerated length accessor for scripts. */

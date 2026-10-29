@@ -94,8 +94,8 @@ public final class Preset {
         Channel.Builder builder = Channel.builder(preset.name())
             .type("EVENT".equalsIgnoreCase(preset.type())
                 ? Channel.Type.EVENT : Channel.Type.CHAT)
-            .messages(Formats.of(toArray(preset.messages())))
-            .tooltips(Formats.of(toArray(preset.tooltips())))
+            .messages(templates(preset.messages()))
+            .tooltips(templates(preset.tooltips()))
             .sounds(toSounds(preset.sounds()))
             .langSource(Language.of(preset.langSource()).orElse(Language.AUTO))
             .langTarget(Language.of(preset.langTarget()).orElse(Language.AUTO))
@@ -105,6 +105,13 @@ public final class Preset {
             .showSender(preset.showSender())
             .rateLimitPerSecond(preset.rateLimitPerSecond());
         return builder.build();
+    }
+
+    private static Formats templates(List<String> values) {
+        String[] formats = toArray(values);
+        return formats.length == 0
+            ? Formats.empty()
+            : new Formats(new String[0], formats);
     }
 
     private static String[] toArray(List<String> values) {

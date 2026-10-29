@@ -23,6 +23,7 @@ evaluationDependsOn(':src:sync-telegram')
 evaluationDependsOn(':src:sync-http')
 evaluationDependsOn(':src:sync-websocket')
 evaluationDependsOn(':src:observability')
+evaluationDependsOn(':src:presets')
 
 group = 'me.majhrs16'
 
@@ -143,6 +144,10 @@ test {
     dependsOn observabilityPackage
     systemProperty 'observability.package',
             observabilityPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def presetsPackage = project(':src:presets').tasks.named('modulePackage')
+    dependsOn presetsPackage
+    systemProperty 'presets.package',
+            presetsPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

@@ -1,5 +1,5 @@
 plugins {
-id 'jacoco'
+    id 'jacoco'
     id 'java'
     id 'maven-publish'
 }
@@ -61,3 +61,7 @@ configurations.configureEach {
         }
     }
 }
+
+// F6 — distribution ZIP for the manager
+ext.moduleVersion = '2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

@@ -7,7 +7,7 @@
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
-> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia y `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator`, que refresca su `TranslatorManager` con los eventos de ciclo de vida. Faltan el resto de paquetes opcionales, la retirada del cableado del host, F4b, F4c (sincronizadores de plataforma), la retirada de los árboles de comandos de host de F4d y F4e (raíz de comandos relocalizable); la API neutral de F4d ya está implementada en `core-api`/`suite-runtime`. Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia, `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator` (que refresca su `TranslatorManager` con los eventos de ciclo de vida) y `presets` ya se empaqueta como `PACKAGE` con `FilePresetTarget` real para config, canales, traductores y sync. Faltan `inworld`/`tester` como módulos neutrales con adapter, la retirada del cableado del host, F4b, F4c (sincronizadores de plataforma), la retirada de los árboles de comandos de host de F4d y F4e (raíz de comandos relocalizable); la API neutral de F4d ya está implementada en `core-api`/`suite-runtime`. Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
@@ -604,7 +604,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 **Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
 
-**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 en curso (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar). Faltan el resto de F6, F4b y F4c (sincronizadores de plataforma).
+**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 en curso (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar; `presets` empaquetado con `FilePresetTarget` real). Faltan `inworld`/`tester`, F4b y F4c (sincronizadores de plataforma).
 
 > **Ubicación:** el detalle operativo de ADR-019 vive en `docs/workdir/PLAN.md`;
 > la decisión de arquitectura se registra también en `docs/workdir/ADR.md`, que
@@ -1298,8 +1298,10 @@ paquete neutral.
 **F6 restante — bloqueado por F4b/F4c/F7, no por falta de empaquetado:**
 - `inworld` y `tester` usan Paper API. Pertenecen a los adapters de plataforma
   (F4b), no a paquetes neutrales.
-- `presets` ya aplica mediante el puerto neutral `PresetTarget`; falta el
-  adapter de host que lo implemente (F4b) antes de empaquetarlo.
+- `presets` ya se empaqueta como `PACKAGE` y aplica mediante el puerto neutral
+  `PresetTarget`; `FilePresetTarget` persiste el layout canónico y
+  `PresetsActivator` publica `PresetManager`. Falta el adapter de host que
+  seleccione el preset y recargue los módulos (F4b).
 - `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
   `ActorDirectory`; no importa `host`.
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
@@ -1390,10 +1392,11 @@ Aplicación por módulo:
 - **`tester`** — el simulador de jugador y la traza del pipeline son
   neutrales. La entrega/observación real de eventos vive en el adapter. El
   módulo no importa Paper; los tests usan un `PlatformPorts` falso.
-- **`presets`** — `Preset.apply(PresetTarget)` ya convierte y aplica config,
-  canales, traductores y sync; `PresetTarget` es el puerto neutral. Falta el
-  adapter de host que persista cada parte antes de empaquetar. Sin
-  `host.config` en el paquete.
+- **`presets`** — `Preset.apply(PresetTarget)` convierte y aplica config,
+  canales, traductores y sync; `PresetTarget` es el puerto neutral y
+  `FilePresetTarget` implementa la persistencia canónica. El paquete ya se
+  empaqueta y activa. Falta el adapter de host que seleccione el preset y
+  recargue los módulos. Sin `host.config` en el paquete.
 - **`extension-api`** — `ExtensionContext` expone un puerto neutral
   (`dispatch`, `findActor`, `hasPermission`, `translation`, `channels`,
   `languages`) en vez de `SuiteHost`/`MessageDispatcher`.
@@ -1412,11 +1415,12 @@ Orden de F4b:
 6. Extraer la captura de eventos a `sync-bukkit`/`sync-fabric` (F4c) y borrar
    los listeners del host en el mismo cambio.
 
-**Estado:** `sync-discord`, `sync-velocity-core`/`sync-velocity`, `Preset.apply` y el puerto neutral
-de `extension-api` completados al 2026-10-29. El patrón queda validado para
-reutilizarlo en `inworld` y `tester` (puertos neutrales + adapters de
-plataforma). Después: el adapter de host de `PresetTarget` y el empaquetado de
-`presets`, el adelgazamiento de `spigot-host`/`fabric-host` sobre
+**Estado:** `sync-discord`, `sync-velocity-core`/`sync-velocity`, `Preset.apply`
+con `FilePresetTarget`, el empaquetado/activación de `presets` y el puerto
+neutral de `extension-api` completados al 2026-10-29. El patrón queda validado
+para reutilizarlo en `inworld` y `tester` (puertos neutrales + adapters de
+plataforma). Después: el adapter de host de `PresetTarget` (selección y
+recarga), el adelgazamiento de `spigot-host`/`fabric-host` sobre
 `SuiteRuntime` + `PlatformPorts` (F4b) y la extracción de la captura de eventos
 a `sync-bukkit`/`sync-fabric` (F4c).
 
@@ -1787,7 +1791,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | `src:messages` | ✅ OK | 1 | 30 | 53 | 93.3% | 75.0% | 18 tests integración |
 | `src:observability` | ✅ OK | 2 | N/A | 105 | N/A | N/A | 15 tests integración |
 | `src:performance` | ✅ OK | 2 | N/A | 135 | N/A | N/A | Pocos tests (<3) |
-| `src:presets` | ✅ OK | 2 | N/A | 320 | N/A | N/A | `Preset.apply(PresetTarget)` real; adapter de host pendiente |
+| `src:presets` | ✅ OK | 5 | N/A | 1152 | N/A | N/A | `Preset.apply` + `FilePresetTarget` reales; paquete y activador probados; adapter de host pendiente |
 | `src:spigot-host` | ✅ OK | 2 | 1438 | 161 | 2.5% | 4.6% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:sync-bus` | ✅ OK | 1 | N/A | 116 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-discord` | ✅ OK | 3 | N/A | 250 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin JDA |
@@ -1852,7 +1856,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | web-editor | ⚠️ gates verdes; UI inestable; auditoría separada diferida | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
-| presets | ✅ standard/rpg/staff/minimal + `Preset.apply(PresetTarget)` real; adapter de host pendiente | tests |
+| presets | ✅ standard/rpg/staff/minimal + `Preset.apply(PresetTarget)` + `FilePresetTarget` real; paquete/activador listos; adapter de host pendiente | tests + paquete |
 | inworld | ✅ **COMPILA** (InWorldHandler con Server param, sign formatting) | tests (26 integración) |
 | observability | ✅ metrics/debug/health (auth token, 127.0.0.1, custom port) | tests (15 integración) |
 | extension-api | ✅ SDK estable | tests |

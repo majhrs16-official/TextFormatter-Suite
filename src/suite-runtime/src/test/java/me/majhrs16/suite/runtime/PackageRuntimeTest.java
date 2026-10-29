@@ -178,6 +178,23 @@ class PackageRuntimeTest {
     }
 
     @Test
+    void installsRealPresetsPackage() throws Exception {
+        Path zip = packageFromProperty("presets.package");
+
+        try (Fixture fixture = fixture()) {
+            List<ActivationResult> activation = fixture.runtime.installLocal(zip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("presets").orElseThrow());
+            assertTrue(Files.isDirectory(
+                    fixture.manager.getManagerDir().resolve("config/presets")),
+                    "the activator must create the custom preset directory");
+        }
+    }
+
+    @Test
     void installsRealChatTranslatorPackage() throws Exception {
         String packagePath = System.getProperty("chattranslator.package");
         assertNotNull(packagePath, "chattranslator.package must be set by the build");
