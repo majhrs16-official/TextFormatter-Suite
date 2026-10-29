@@ -1,37 +1,26 @@
-# sync-velocity — neutral Velocity sink
+# sync-velocity — Velocity plugin adapter
 
-`sync-velocity` is the **application** side of the Velocity edge. It owns the
-queue, retry policy, channel/type mapping, payload codec, metrics and health.
-It contains no Velocity API types.
-
-The Velocity API lives in the plugin adapter:
-
-| Package | Technology | Role |
-|---------|------------|------|
-| [`sync-velocity-velocity`](../sync-velocity-velocity/README.md) | Velocity API 3.4 | Velocity plugin, channel registration, `sendPluginMessage` |
-
-The neutral package activates without an adapter. It listens for
-`ModuleActivatedEvent`/`ModuleDeactivatedEvent` and attaches/detaches the sink
-when a matching `VelocityConnectionFactory` appears or disappears.
+Thin Velocity plugin around the neutral
+[`sync-velocity-core`](../sync-velocity-core/README.md) package. This is the only
+project in the Velocity path that imports `com.velocitypowered`.
 
 ---
 
 ## 1. Responsibilities
 
-- Build the plugin-message payload from a neutral `Message`.
-- Resolve target servers from static config, wildcard, regex or message type.
-- Queue failed sends and retry with exponential backoff.
-- Verify the shared secret on inbound payloads.
-- Expose metrics and health.
-- Never import `com.velocitypowered`.
+- Implement the Velocity plugin lifecycle (`ProxyInitializeEvent` /
+  `ProxyShutdownEvent`).
+- Register and unregister the plugin-message channel.
+- Translate `PluginMessageEvent` payloads into `VelocityListener` callbacks.
+- Resolve target server names and call `sendPluginMessage`.
+- Package the neutral classes into the plugin JAR, because Velocity plugins are
+  loaded by the proxy rather than by the suite module runtime.
 
 ## 2. Non-responsibilities
 
-- No Velocity channel registration or event listener.
-- No Minecraft/Paper/Bukkit code.
-- No routing decisions: `iflow` decides what to sync.
-- No proxy lifecycle: the plugin adapter owns `ProxyInitializeEvent` and
-  `ProxyShutdownEvent`.
+- No queue, retry, mapping, metrics or health logic.
+- No suite routing.
+- No direct `SyncBus` registration.
 
 ---
 
@@ -39,99 +28,42 @@ when a matching `VelocityConnectionFactory` appears or disappears.
 
 | Component | Role |
 |-----------|------|
-| `VelocitySink` | Neutral `SyncSink`: encode/decode, mapping, retry, metrics, health. |
-| `VelocityConfig` | Loads `config/sync-velocity/config.yml`; no Velocity types. |
-| `SyncVelocityActivator` | Resolves `SyncBus` + `VelocityConnectionFactory`, hot attach/detach. |
-| `SyncVelocityModule` | Legacy kernel descriptor, kept for the kernel graph. |
-
-Ports in `core-api` (`me.majhrs16.suite.api.velocity`):
-
-| Type | Role |
-|------|------|
-| `VelocityConnection` | Adapter contract: `start`, `stop`, `servers`, `send`. |
-| `VelocityConnectionFactory` | Adapter discovery by `name()`. |
-| `VelocitySettings` | Channel and subchannel names. |
-| `VelocityListener` | Inbound payload callback. |
+| `VelocityPlugin` | `@Plugin` entry point; wires config, connection and sink. |
+| `VelocityProxyConnection` | `VelocityConnection` implementation over `ProxyServer`. |
+| `VelocityProxyConnectionFactory` | Factory for hosts that expose the adapter as a service. |
+| `Slf4jPluginLogger` | `PluginLogger` backed by slf4j. |
 
 ---
 
 ## 4. Configuration
 
-Canonical path: `config/sync-velocity/config.yml`. The legacy
-`sync/velocity.yml` is read during migration.
+The plugin uses the same neutral config:
+`config/sync-velocity-core/config.yml`, with legacy `sync/velocity.yml` fallback.
+The defaults resource is `defaults/sync/velocity.yml`.
 
-```yaml
-enabled: true
-transport: velocity
-channel: "textformatter:velocity"
-subchannel: "textformatter"
-secret: "optional-shared-secret"
-servers: ["lobby", "survival"]
-mapping: "* -> chat.hub; type:CHAT -> global"
-dynamic-discovery: true
-retry-initial-delay: 5s
-retry-max-delay: 5m
-retry-multiplier: 2.0
-max-retries: 10
-max-queue-size: 10000
-queue-drain-timeout: 30s
-metrics-interval: 1m
-```
-
-Mapping syntax:
-
-- `source -> target` — exact channel match.
-- `regex:pattern -> target` — regex match on channel.
-- `type:CHAT -> target` — match by message type.
-- `* -> target` — wildcard.
-- Multiple rules separated by `;`.
-
-`transport` must match a factory registered by an installed adapter. If it is
-absent, the package stays active without a sink and logs the available names.
+`enabled: false` keeps the plugin loaded but does not start the sink.
 
 ---
 
-## 5. Lifecycle
+## 5. Build
 
-```text
-SyncVelocityActivator.start()
-  → find SyncBus
-  → load config
-  → subscribe to ModuleActivatedEvent / ModuleDeactivatedEvent
-  → tryAttach()
-      → find VelocityConnectionFactory by name
-      → new VelocitySink(connection, config, settings, logger)
-      → bus.register(sink)
-          → sink.start()
-              → connection.start(listener)   (adapter registers channel)
-```
+The Gradle `jar` task builds a self-contained plugin JAR:
 
-`stop()` unsubscribes and unregisters the sink. `VelocitySink.stop()` drains the
-queue, stops the adapter connection and shuts down its daemon executors.
+- neutral `sync-velocity-core`, `core-api`, `sync-common`, `transport` and `org.json`
+  are shaded into the JAR;
+- `velocity-api` is `compileOnly` and provided by the proxy;
+- `velocity-plugin.json` points to
+  `me.majhrs16.suite.syncvelocity.plugin.VelocityPlugin`.
 
 ---
 
 ## 6. Tests
 
-`VelocitySinkTest` uses `FakeConnection`; no proxy and no network:
+`VelocityProxyConnectionTest` uses Mockito to verify:
 
-- start/stop idempotence;
-- disabled config does not touch the transport;
-- mapped send;
-- retry queue;
-- secret verification;
-- health and metrics;
-- config validation.
+- channel and listener registration/unregistration;
+- only the configured channel is forwarded;
+- server discovery and `sendPluginMessage`;
+- idempotent close.
 
-`PackageRuntimeTest.installsNeutralVelocityPackageWithATransportAdapter`
-installs the real package ZIP before a fake adapter package, verifies hot
-attach, adapter unload and package unload.
-
----
-
-## 7. Related modules
-
-- [core-api](../core-api/README.md) — ports and suite contracts
-- [sync-bus](../sync-bus/README.md) — sink lifecycle and fan-out
-- [sync-common](../sync-common/README.md) — YAML/config path helpers
-- [sync-velocity-velocity](../sync-velocity-velocity/README.md) — Velocity plugin adapter
+No real Velocity proxy or network is required.

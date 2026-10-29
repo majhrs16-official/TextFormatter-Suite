@@ -134,7 +134,8 @@ chat:
 | `src/sync-telegram` | 17 | Telegram Bot, long-poll + watermark, `char[]` tokens |
 | `src/sync-http` | 17 | Webhook + REST (`HttpServer`), inbound/outbound |
 | `src/sync-tcpudp` | 17 | TCP/UDP raw, JSON line/datagram |
-| `src/sync-velocity` | 17 | **Production-ready**: async queue, retry/backoff, metrics, health, dynamic discovery, mapping avanzado |
+| `src/sync-velocity-core` | 17 | Neutral Velocity sink: async queue, retry/backoff, metrics, health, dynamic discovery, mapping avanzado |
+| `src/sync-velocity` | 17 | Velocity plugin real: channel registration, `PluginMessageEvent`, `sendPluginMessage` |
 | `src/sync-websocket` | 17 | WebSocket sync (SO_REUSEADDR, auth token, subscriptions, log streaming) |
 | `src/sync-bus` | 17 | **Nuevo**: Pipeline unificado (deduplicación global, aislamiento por sink, retry/backoff, métricas) |
 | `src/host` | 17 | Composition root: `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`) |

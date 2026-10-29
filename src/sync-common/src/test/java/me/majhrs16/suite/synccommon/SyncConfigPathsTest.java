@@ -20,7 +20,7 @@ class SyncConfigPathsTest {
         assertEquals(dir.resolve("config/sync-websocket/config.yml"), SyncConfigPaths.canonicalWebSocket(dir));
         assertEquals(dir.resolve("config/sync-telegram/config.yml"), SyncConfigPaths.canonicalTelegram(dir));
         assertEquals(dir.resolve("config/sync-http/config.yml"), SyncConfigPaths.canonicalHttp(dir));
-        assertEquals(dir.resolve("config/sync-velocity/config.yml"), SyncConfigPaths.canonicalVelocity(dir));
+        assertEquals(dir.resolve("config/sync-velocity-core/config.yml"), SyncConfigPaths.canonicalVelocity(dir));
         assertEquals(dir.resolve("config/sync-socket/tcp.yml"), SyncConfigPaths.canonicalTcp(dir));
         assertEquals(dir.resolve("config/sync-socket/udp.yml"), SyncConfigPaths.canonicalUdp(dir));
     }

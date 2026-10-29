@@ -15,7 +15,7 @@ public final class SyncVelocityModule implements Module {
 
     @Override
     public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.builder("sync-velocity")
+        return ModuleDescriptor.builder("sync-velocity-core")
             .version(SemVer.of(2, 1, 0))
             .contractVersion(SemVer.of(2, 1, 0))
             .jvmRange(17, 0)

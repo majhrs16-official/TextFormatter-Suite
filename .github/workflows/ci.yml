@@ -46,8 +46,8 @@ jobs:
             :src:sync-discord-jdk:build \
             :src:sync-telegram:build \
             :src:sync-websocket:build \
+            :src:sync-velocity-core:build \
             :src:sync-velocity:build \
-            :src:sync-velocity-velocity:build \
             :src:sync-bus:build \
             :src:observability:build \
             :src:extension-api:build \

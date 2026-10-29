@@ -275,7 +275,7 @@ Manages translation providers, caching, fallback.
 ## V
 
 **Velocity**
-Minecraft proxy platform supported via `sync-velocity`.
+Minecraft proxy platform supported via the `sync-velocity-core` sink and the `sync-velocity` proxy plugin.
 
 ## W
 

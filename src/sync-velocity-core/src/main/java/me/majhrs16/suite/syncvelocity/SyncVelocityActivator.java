@@ -19,7 +19,7 @@ import me.majhrs16.suite.api.velocity.VelocityConnectionFactory;
 import java.util.List;
 
 /**
- * Runtime activator of the neutral {@code sync-velocity} package.
+ * Runtime activator of the neutral {@code sync-velocity-core} package.
  *
  * <p>The package activates without a Velocity adapter. It subscribes to module
  * lifecycle events and attaches the sink when a matching
@@ -40,7 +40,7 @@ public final class SyncVelocityActivator implements ModuleActivator {
 
     @Override
     public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.builder("sync-velocity")
+        return ModuleDescriptor.builder("sync-velocity-core")
                 .version(SemVer.of(2, 1, 0))
                 .contractVersion(SemVer.of(2, 1, 0))
                 .jvmRange(17, 0)

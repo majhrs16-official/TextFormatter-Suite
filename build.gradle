@@ -88,7 +88,7 @@ tasks.register('checkArchitecture') {
             'iflow-firewall', 'iflow-wasm', 'logger', 'transport',
             'chattranslator', 'gtranslate', 'ltranslate', 'sync-bus',
             'sync-common', 'sync-discord', 'sync-discord-jdk', 'sync-http',
-            'sync-socket', 'sync-telegram', 'sync-websocket', 'sync-velocity',
+            'sync-socket', 'sync-telegram', 'sync-websocket', 'sync-velocity-core',
             'observability', 'presets', 'extension-api', 'example-extension'
         ]
         def rules = [:]
@@ -96,7 +96,7 @@ tasks.register('checkArchitecture') {
         // The JDA adapter may use JDA, but never host internals.
         rules['sync-discord-jda'] = host
         // The Velocity plugin may use Velocity, but never host internals.
-        rules['sync-velocity-velocity'] = host
+        rules['sync-velocity'] = host
 
         def violations = []
         rules.each { module, prefixes ->
@@ -498,8 +498,8 @@ subprojects { project ->
                 ':src:sync-http'      : [line: 0.10, branch: 0.05],
                 ':src:sync-tcpudp'    : [line: 0.10, branch: 0.05],
                 ':src:sync-telegram'  : [line: 0.10, branch: 0.05],
+                ':src:sync-velocity-core': [line: 0.10, branch: 0.05],
                 ':src:sync-velocity'  : [line: 0.10, branch: 0.05],
-                ':src:sync-velocity-velocity': [line: 0.10, branch: 0.05],
                 ':src:sync-websocket' : [line: 0.10, branch: 0.05],
                 ':src:loadtest'       : [line: 0.10, branch: 0.05],
                 ':src:inworld'        : [line: 0.10, branch: 0.05],

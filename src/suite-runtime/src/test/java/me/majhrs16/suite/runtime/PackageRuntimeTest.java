@@ -391,14 +391,14 @@ class PackageRuntimeTest {
         Path transportZip = packageFromProperty("transport.package");
         Path commonZip = packageFromProperty("sync-common.package");
         Path busZip = packageFromProperty("sync-bus.package");
-        Path velocityZip = packageFromProperty("sync-velocity.package");
+        Path velocityZip = packageFromProperty("sync-velocity-core.package");
 
         try (Fixture fixture = fixture()) {
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-velocity");
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-velocity-core");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -409,8 +409,8 @@ class PackageRuntimeTest {
 
             List<ActivationResult> activation = fixture.runtime.installLocal(velocityZip, false);
             assertTrue(activation.get(0).isSuccess(),
-                    () -> "sync-velocity activation failed: " + activation.get(0).message());
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("sync-velocity").orElseThrow());
+                    () -> "sync-velocity-core activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("sync-velocity-core").orElseThrow());
 
             SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
             assertTrue(bus.sinkNames().isEmpty(),
@@ -432,9 +432,9 @@ class PackageRuntimeTest {
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading the Velocity adapter must remove the sink");
 
-            fixture.runtime.removeLocal("sync-velocity", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-velocity-core", "2.1.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
-                    "unloading sync-velocity must unregister its sink");
+                    "unloading sync-velocity-core must unregister its sink");
         }
     }
 

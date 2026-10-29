@@ -184,7 +184,8 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | `sync-http` | Webhook + REST (`HttpServer` JDK), inbound/outbound | ✅ Probado (7 tests) |
 | `sync-tcpudp` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (7 tests) |
 | `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ✅ Probado (1 test de contrato) |
-| `sync-velocity` | Velocity proxy sink — **production-ready**: async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado |
+| `sync-velocity-core` | Neutral Velocity sink — async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado |
+| `sync-velocity` | Velocity plugin real — registro de canal, `PluginMessageEvent` y `sendPluginMessage` | ✅ Probado |
 
 ### Operación y extensibilidad
 | Módulo | Propósito | Estado |

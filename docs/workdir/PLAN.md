@@ -300,7 +300,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 
 | ID | Acción | Módulos afectados | Criterio de cierre |
 |---|---|---|---|
-| **I-002** | Añadir `require('sync-bus')` a submódulos sync | `sync-discord`, `sync-websocket`, `sync-telegram`, `sync-http`, `sync-velocity` | ✅ `grep -r "require.*sync-bus" src/sync-*/` → 6/6 |
+| **I-002** | Añadir `require('sync-bus')` a submódulos sync | `sync-discord`, `sync-websocket`, `sync-telegram`, `sync-http`, `sync-velocity-core` | ✅ `grep -r "require.*sync-bus" src/sync-*/` → 6/6 |
 | **I-006** | Crear `Module` implementation en `iflow-vm` y `iflow-wasm` | `iflow-vm`, `iflow-wasm` | ✅ `grep -r "implements Module" src/iflow-vm/ src/iflow-wasm/` → YES |
 | **I-007** | Añadir `ModuleDescriptor` a 19 módulos sin él | `host`, `transport`, `messages`, `logger`, `core-api`, `extension-api`, `manager-spi`, `manager-core`, `performance`, `loadtest`, `common-legacy`, `fabric-host`, `spigot-host`, `example-extension`, `kernel`, `iflow-vm`, `iflow-wasm`, `web-editor` | ✅ Cerrado con alcance acotado: core modules con `ModuleDescriptor` (host, kernel, transport, messages, logger, manager-spi, manager-core, manager-apt). Fuera de alcance: platform adapters (clean/hexa), API modules (core-api/extension-api), harness (`performance`, `loadtest`, `tester`), `example-extension` y `web-editor` (diferido). `common-legacy` no tiene fuentes `main` (candidato a eliminar, no a describir) |
 | **I-003** | **CT4:** Integrar `ChatTranslator` en `SuiteHost.bootstrap()` | `host`, `chattranslator`, `spigot-host`, `fabric-host` | ✅ Pipeline real usa `ChatTranslator`; `TranslationService` creado internamente |
@@ -1080,14 +1080,13 @@ instalado después del paquete neutral en `PackageRuntimeTest` (adjunta y retira
 el sink al instalar/descargar el adaptador). `spigot-host` ya usa `DiscordSink`
 + `JdaDiscordConnectionFactory` en su cableado temporal.
 
-**`sync-velocity` desacoplado (2026-10-29):** `sync-velocity` es ahora el
-paquete neutral (cola, retry, mapping, codec, métricas y health) y no importa
-`com.velocitypowered`. Los puertos `VelocityConnection`,
+**`sync-velocity` desacoplado (2026-10-29):** el sink neutral es
+`sync-velocity-core` (cola, retry, mapping, codec, métricas y health) y no
+importa `com.velocitypowered`. Los puertos `VelocityConnection`,
 `VelocityConnectionFactory`, `VelocitySettings` y `VelocityListener` viven en
-`core-api` (`api.velocity`). El plugin Velocity real está en
-`sync-velocity-velocity`, que registra el canal y traduce
-`PluginMessageEvent`; su JAR incluye las clases neutrales porque Velocity carga
-el plugin, no el runtime de la suite. El paquete neutral se activa sin adapter y
+`core-api` (`api.velocity`). El plugin Velocity real es `sync-velocity`, que
+registra el canal y traduce `PluginMessageEvent`; su JAR incluye las clases
+neutrales porque Velocity carga el plugin, no el runtime de la suite. El paquete neutral se activa sin adapter y
 se engancha/desengancha por `ModuleActivatedEvent`/`ModuleDeactivatedEvent`.
 Tests: `VelocitySinkTest` con `FakeConnection`, `VelocityProxyConnectionTest`
 con Mockito y `PackageRuntimeTest` con un adapter falso instalado después del
@@ -1123,7 +1122,7 @@ importa paquetes de feature. La frontera es bidireccional y estricta.
 
 Reglas:
 
-1. **Núcleo neutral.** La lógica de `sync-discord`, `sync-velocity`, `inworld`,
+1. **Núcleo neutral.** La lógica de `sync-discord`, `sync-velocity-core`, `inworld`,
    `tester`, `presets` y `extension-api` vive en clases sin tipos de
    plataforma. Los puertos se declaran en `core-api` (si los comparten varios
    módulos) o en el `api` del propio paquete.
@@ -1154,9 +1153,9 @@ Aplicación por módulo:
   Los tests usan un `FakeDiscordConnection`; no hay red ni espera de 30 s.
   El adapter JDA es un paquete de plataforma/dependencia, no una dependencia
   de compilación del paquete neutral.
-- **`sync-velocity`** — mismo patrón: lógica neutral de sincronización y
-  adapter `adapters/velocity` que implementa el puerto de mensajería del
-  proxy. El paquete neutral no importa `com.velocitypowered`.
+- **`sync-velocity`** — mismo patrón: `sync-velocity-core` contiene la lógica
+  neutral y `sync-velocity` es el plugin/adapter Velocity que implementa el
+  puerto de mensajería del proxy. El núcleo no importa `com.velocitypowered`.
 - **`inworld`** — el dominio de “mensajes en el mundo” es neutral. El registro
   del listener de Paper y la traducción del evento viven en `spigot-host`.
   `fabric-host` implementa el mismo puerto con su API. El módulo no importa
@@ -1176,7 +1175,7 @@ Orden de F4b:
 
 1. Declarar puertos y eventos neutrales en `core-api`.
 2. Extraer la lógica neutral de `inworld`, `tester`, `sync-discord`,
-   `sync-velocity`, `presets` y `extension-api`.
+   `sync-velocity-core`, `presets` y `extension-api`.
 3. Implementar los adaptadores de plataforma/tecnología y el ciclo de vida
    no bloqueante.
 4. Poner `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` y
@@ -1184,7 +1183,7 @@ Orden de F4b:
 5. `checkArchitecture` ya está verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
 
-**Estado:** `sync-discord`, `sync-velocity`, `Preset.apply` y el puerto neutral
+**Estado:** `sync-discord`, `sync-velocity-core`/`sync-velocity`, `Preset.apply` y el puerto neutral
 de `extension-api` completados al 2026-10-29. El patrón queda validado para
 reutilizarlo en `inworld` y `tester` (puertos neutrales + adapters de
 plataforma). Después: el adapter de host de `PresetTarget` y el empaquetado de
@@ -1459,8 +1458,8 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | `src:sync-http` | ✅ OK | 3 | N/A | 192 | N/A | N/A |  |
 | `src:sync-socket` | ✅ OK | 3 | N/A | 202 | N/A | N/A |  |
 | `src:sync-telegram` | ✅ OK | 2 | N/A | 173 | N/A | N/A | Pocos tests (<3) |
-| `src:sync-velocity` | ✅ OK | 1 | N/A | 420 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin Velocity API |
-| `src:sync-velocity-velocity` | ✅ OK | 1 | N/A | 180 | N/A | N/A | Adaptador/plugin Velocity; tests con Mockito |
+| `src:sync-velocity-core` | ✅ OK | 1 | N/A | 420 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin Velocity API |
+| `src:sync-velocity` | ✅ OK | 1 | N/A | 180 | N/A | N/A | Plugin/adapter Velocity real; tests con Mockito |
 | `src:sync-websocket` | ✅ OK | 1 | N/A | 26 | N/A | N/A | Pocos tests (<3) |
 | `src:tester` | ✅ OK | 1 | 570 | 29 | 0.0% | 0.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:textformatter` | ✅ OK | 6 | 282 | 512 | 81.6% | 66.7% |  |
@@ -1508,7 +1507,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | sync-discord | ✅ Paquete neutral + adapters `sync-discord-jda`/`sync-discord-jdk`; `DiscordBridge` usa el sink neutral (respeta iFlow) | build + tests de paquete |
 | sync-telegram | ✅ **SyncBus registered** (HTTP transport, long-poll) | build |
 | sync-http/tcpudp | ✅ **SyncBus registered** (IP pinning SSRF, timeouts) | build |
-| sync-velocity | ✅ Paquete neutral + adapter/plugin `sync-velocity-velocity` (Velocity API 3.4.0, cola async, retry/backoff, métricas, health, dynamic discovery) | build + tests de paquete |
+| sync-velocity | ✅ `sync-velocity-core` neutral + `sync-velocity` plugin real (Velocity API 3.4.0, cola async, retry/backoff, métricas, health, dynamic discovery) | build + tests de paquete |
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
 | spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, TCP/UDP/Telegram, HealthCheckRegistry) | compile |
 | fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents) | compile |
@@ -1537,7 +1536,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
 - ✅ **Security Sprint 3 completado**: char[] tokens + Arrays.fill(), MiniEscape completo (< > \ { } [ ] ( ) # @), PAPI dynamic check, SpEL aislado en `iflow-firewall` con sandbox (ADR-001), SSRF protection (HttpTransport + IP pinning), DependencyVerification (verification-metadata.xml).
 - ✅ **Clean Architecture (Translator SPI)**: `host` ya no depende de `gtranslate`/`ltranslate` en compile-time. Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`). Proveedores se descubren via `ServiceLoader` en runtime. Tests usan `testImplementation` para translators.
-- ✅ **sync-velocity**: ✅ **Production-ready** - Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping
+- ✅ **sync-velocity**: ✅ `sync-velocity-core` neutral + `sync-velocity` plugin real (Velocity API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery, advanced mapping)
 - ✅ **sync-telegram, sync-http, sync-socket**: ✅ **SyncBus registered** - full SyncBus integration with per-sink isolation, retry/backoff
 
 ---

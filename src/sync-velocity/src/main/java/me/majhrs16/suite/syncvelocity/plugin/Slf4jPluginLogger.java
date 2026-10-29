@@ -1,4 +1,4 @@
-package me.majhrs16.suite.syncvelocity.velocity;
+package me.majhrs16.suite.syncvelocity.plugin;
 
 import me.majhrs16.suite.api.spi.PluginLogger;
 

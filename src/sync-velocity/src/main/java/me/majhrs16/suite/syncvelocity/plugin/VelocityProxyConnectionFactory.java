@@ -1,4 +1,4 @@
-package me.majhrs16.suite.syncvelocity.velocity;
+package me.majhrs16.suite.syncvelocity.plugin;
 
 import com.velocitypowered.api.proxy.ProxyServer;
 

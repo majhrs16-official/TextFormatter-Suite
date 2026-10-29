@@ -10,7 +10,7 @@ TextFormatter Suite is a modular, high-performance chat formatting and translati
 
 - **Spigot/Paper**: 1.16.5 - 1.21+
 - **Fabric**: 1.21+ (Fabric Loader 0.16+)
-- **Velocity**: 3.2+ (via sync-velocity module)
+- **Velocity**: 3.2+ (via `sync-velocity` plugin)
 - **BungeeCord**: Planned
 
 ### What Java version is required?
@@ -42,7 +42,7 @@ TextFormatter Suite replaces chat formatting plugins. It may conflict with other
 
 ### Does it work on BungeeCord/Velocity?
 
-- **Velocity**: Yes, via `sync-velocity` module
+- **Velocity**: Yes, via the `sync-velocity-core` sink and the `sync-velocity` proxy plugin
 - **BungeeCord**: Planned for future release
 
 ## Configuration
@@ -154,8 +154,8 @@ intents: [GUILD_MESSAGES, MESSAGE_CONTENT]
 
 ### How do I set up Velocity sync?
 
-1. Install `suite-sync-velocity` on all backend servers
-2. Install Velocity plugin on proxy
+1. Install `suite-sync-velocity-core` on all backend servers
+2. Install the `suite-sync-velocity` plugin on the proxy
 3. Configure same `secret` on all servers
 3. Configure `servers` list and `mapping`
 

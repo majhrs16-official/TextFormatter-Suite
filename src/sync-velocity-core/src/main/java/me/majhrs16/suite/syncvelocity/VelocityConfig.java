@@ -44,7 +44,7 @@ public final class VelocityConfig {
     }
 
     /**
-     * @param configDir carpeta privada del módulo ({@code config/sync-velocity})
+     * @param configDir carpeta privada del módulo ({@code config/sync-velocity-core})
      * @return configuración con defaults si el archivo no existe o no es válido
      */
     public static VelocityConfig loadFromConfigDir(Path configDir) {

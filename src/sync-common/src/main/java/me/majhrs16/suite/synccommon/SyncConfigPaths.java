@@ -53,7 +53,7 @@ public final class SyncConfigPaths {
     }
 
     public static Path canonicalVelocity(Path dataFolder) {
-        return dataFolder.resolve(CONFIG_DIR).resolve("sync-velocity").resolve("config.yml");
+        return dataFolder.resolve(CONFIG_DIR).resolve("sync-velocity-core").resolve("config.yml");
     }
 
     public static Path canonicalTcp(Path dataFolder) {

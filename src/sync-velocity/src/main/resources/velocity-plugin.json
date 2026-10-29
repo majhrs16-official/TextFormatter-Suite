@@ -12,7 +12,7 @@
   "environment": "server",
   "entrypoints": {
     "main": [
-      "me.majhrs16.suite.syncvelocity.velocity.VelocityPlugin"
+      "me.majhrs16.suite.syncvelocity.plugin.VelocityPlugin"
     ]
   },
   "depends": {

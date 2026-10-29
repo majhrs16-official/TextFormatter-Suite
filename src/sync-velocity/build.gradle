@@ -15,19 +15,22 @@ java {
 repositories {
     mavenCentral()
     mavenLocal()
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
 }
 
 dependencies {
+    implementation project(':src:sync-velocity-core')
     implementation project(':src:core-api')
     implementation project(':src:sync-common')
     implementation project(':src:transport')
     implementation 'org.json:json:20240303'
+    compileOnly 'com.velocitypowered:velocity-api:3.4.0'
 
-    testImplementation project(':src:kernel')
-    testImplementation project(':src:sync-bus')
+    testImplementation 'com.velocitypowered:velocity-api:3.4.0'
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'
+    testImplementation 'org.mockito:mockito-core:5.10.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -50,6 +53,19 @@ jacocoTestReport {
     reports { xml.required = true; html.required = true; csv.required = false }
 }
 
+// Velocity plugins are loaded by the proxy, so the plugin JAR must carry the
+// neutral sync-velocity-core classes and their small runtime dependencies. The
+// Velocity API itself stays provided by the proxy.
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    exclude 'META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator'
+    exclude 'META-INF/services/me.majhrs16.suite.api.Module'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
@@ -69,9 +85,3 @@ configurations.configureEach {
         }
     }
 }
-
-// F6 — neutral Velocity sink package. The Velocity plugin adapter lives in
-// src:sync-velocity-velocity and is the only project that imports the Velocity API.
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'sync-common@>=2.1.0,transport@>=2.1.0'
-apply from: rootProject.file('gradle/module-package.gradle')
