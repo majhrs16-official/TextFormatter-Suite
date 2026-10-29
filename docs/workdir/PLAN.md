@@ -1290,6 +1290,17 @@ los módulos neutrales y adaptadores allowlisted, y falla si un módulo neutral
 importa un SDK de plataforma o el host. Los listeners de eventos siguen en los
 hosts; su extracción a `sync-bukkit`/`sync-fabric` es F4c.
 
+**Avance F4b (2026-10-29):** existen `SpigotPlatformPorts` y
+`FabricPlatformPorts` con implementación real de `info`, `deliver`, `send`,
+`findActor`, `onlineActors`, `hasPermission` y `registerCommand`. Spigot usa
+`CommandMap` y permisos Bukkit; Fabric encola comandos hasta que el bootstrap
+engancha el `CommandDispatcher` de Brigadier y usa el nivel de operador 2 como
+regla de permisos mientras no haya proveedor externo. La desregistración de
+comandos está cubierta con tests; Fabric retira los nodos raíz y Spigot retira
+las entradas de `CommandMap`. Estas clases aún no están cableadas en los
+hosts: la sustitución de `SuiteHost`/cableado de features y la retirada de
+`DynamicCommand*`/Brigadier siguen pendientes para cerrar F4b/F4d.
+
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
 **Decisión de arquitectura (2026-10-28):** cada módulo se estructura como un
