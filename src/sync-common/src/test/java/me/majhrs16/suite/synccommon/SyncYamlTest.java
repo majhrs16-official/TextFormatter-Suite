@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -46,6 +48,9 @@ class SyncYamlTest {
             port: "9092"
             ratio: 2.5
             channel: 123456789012
+            servers: [lobby, " survival "]
+            delay: PT5S
+            millis: 250
             """);
 
         Map<String, Object> map = SyncYaml.readMap(file);
@@ -55,6 +60,10 @@ class SyncYamlTest {
         assertEquals(9092, SyncYaml.integer(map, "port", 0));
         assertEquals(2, SyncYaml.integer(map, "ratio", 0));
         assertEquals(123456789012L, SyncYaml.longValue(map, "channel", 0L));
+        assertEquals(2.5, SyncYaml.doubleValue(map, "ratio", 0.0));
+        assertEquals(List.of("lobby", "survival"), SyncYaml.stringList(map, "servers"));
+        assertEquals(Duration.ofSeconds(5), SyncYaml.duration(map, "delay", Duration.ZERO));
+        assertEquals(Duration.ofMillis(250), SyncYaml.duration(map, "millis", Duration.ZERO));
     }
 
     @Test

@@ -17,6 +17,7 @@ evaluationDependsOn(':src:ltranslate')
 evaluationDependsOn(':src:sync-bus')
 evaluationDependsOn(':src:sync-common')
 evaluationDependsOn(':src:sync-discord')
+evaluationDependsOn(':src:sync-velocity')
 evaluationDependsOn(':src:sync-socket')
 evaluationDependsOn(':src:sync-telegram')
 evaluationDependsOn(':src:sync-http')
@@ -118,6 +119,10 @@ test {
     dependsOn syncDiscordPackage
     systemProperty 'sync-discord.package',
             syncDiscordPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def syncVelocityPackage = project(':src:sync-velocity').tasks.named('modulePackage')
+    dependsOn syncVelocityPackage
+    systemProperty 'sync-velocity.package',
+            syncVelocityPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     def syncSocketPackage = project(':src:sync-socket').tasks.named('modulePackage')
     dependsOn syncSocketPackage
     systemProperty 'sync-socket.package',

@@ -1,0 +1,87 @@
+plugins {
+    id 'jacoco'
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    implementation project(':src:sync-velocity')
+    implementation project(':src:core-api')
+    implementation project(':src:sync-common')
+    implementation project(':src:transport')
+    implementation 'org.json:json:20240303'
+    compileOnly 'com.velocitypowered:velocity-api:3.4.0'
+
+    testImplementation 'com.velocitypowered:velocity-api:3.4.0'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
+    testImplementation 'org.mockito:mockito-core:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}
+
+// Velocity plugins are loaded by the proxy, so the plugin JAR must carry the
+// neutral sync-velocity classes and their small runtime dependencies. The
+// Velocity API itself stays provided by the proxy.
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    exclude 'META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator'
+    exclude 'META-INF/services/me.majhrs16.suite.api.Module'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifactId = 'suite-sync-velocity-velocity'
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
+}
+
+configurations.configureEach {
+    if (name in ['testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
+        }
+    }
+}

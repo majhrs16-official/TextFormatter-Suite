@@ -398,6 +398,94 @@ final class FixtureModules {
         return jar;
     }
 
+    /**
+     * Builds a fake Velocity transport package. It provides the
+     * {@code velocity-transport} capability and registers a
+     * {@link me.majhrs16.suite.api.velocity.VelocityConnectionFactory} that
+     * never touches a proxy.
+     */
+    static Path buildVelocityTransportJar(Path workDir, String moduleId, String version)
+            throws IOException {
+        Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
+        Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
+        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = """
+                package fixture;
+
+                import java.util.List;
+
+                import me.majhrs16.suite.api.Capability;
+                import me.majhrs16.suite.api.ModuleDescriptor;
+                import me.majhrs16.suite.api.SemVer;
+                import me.majhrs16.suite.api.runtime.ModuleActivator;
+                import me.majhrs16.suite.api.runtime.ModuleContext;
+                import me.majhrs16.suite.api.spi.PluginLogger;
+                import me.majhrs16.suite.api.velocity.VelocityConnection;
+                import me.majhrs16.suite.api.velocity.VelocityConnectionFactory;
+                import me.majhrs16.suite.api.velocity.VelocityListener;
+                import me.majhrs16.suite.api.velocity.VelocitySettings;
+
+                public final class Activator implements ModuleActivator {
+
+                    @Override
+                    public ModuleDescriptor descriptor() {
+                        return ModuleDescriptor.builder("MODULE_ID")
+                                .version(SemVer.parse("MODULE_VERSION"))
+                                .contractVersion(SemVer.of(2, 1, 0))
+                                .jvmRange(17, 0)
+                                .provide(Capability.of("velocity-transport", SemVer.of(2, 1, 0)))
+                                .build();
+                    }
+
+                    @Override
+                    public void start(ModuleContext context) {
+                        context.services().register(
+                                VelocityConnectionFactory.class, new Factory());
+                    }
+
+                    @Override
+                    public void stop() {
+                    }
+
+                    static final class Factory implements VelocityConnectionFactory {
+                        @Override public String name() { return "fake"; }
+
+                        @Override
+                        public VelocityConnection create(VelocitySettings settings, PluginLogger logger) {
+                            return new Connection();
+                        }
+                    }
+
+                    static final class Connection implements VelocityConnection {
+                        private VelocityListener listener;
+                        private boolean started;
+
+                        @Override public void start(VelocityListener listener) {
+                            this.listener = listener;
+                            this.started = true;
+                        }
+                        @Override public void stop() { this.started = false; }
+                        @Override public List<String> servers() { return List.of("server1"); }
+                        @Override public boolean send(String server, byte[] payload) {
+                            return started && "server1".equals(server);
+                        }
+                    }
+                }
+                """;
+        java = java
+                .replace("MODULE_ID", moduleId)
+                .replace("MODULE_VERSION", version);
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
     private static void compile(Path source, Path classesDir, List<Path> extraClasspath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         StringBuilder classpath = new StringBuilder(System.getProperty("java.class.path"));

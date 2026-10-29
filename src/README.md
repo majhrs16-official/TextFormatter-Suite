@@ -40,7 +40,8 @@ TextFormatter Suite
 │   ├── sync-discord-jdk  → Discord JDK adapter
 │   ├── sync-telegram     → Telegram sink
 │   ├── sync-websocket    → WebSocket sink
-│   ├── sync-velocity     → Velocity proxy sink
+│   ├── sync-velocity     → Velocity proxy sink (neutral)
+│   ├── sync-velocity-velocity → Velocity plugin adapter
 │   └── sync-bus          → Unified fan-out/lifecycle bus
 │
 └── Platform Adapters
@@ -88,7 +89,8 @@ TextFormatter Suite
 | `sync-discord-jdk` | JDK WebSocket/REST `discord-transport` adapter | `core-api`, `transport` | optional |
 | `sync-telegram` | Telegram sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-websocket` | WebSocket sync sink | `core-api` | `spigot-host`, `fabric-host` |
-| `sync-velocity` | Velocity proxy sync sink | `core-api` | `fabric-host` |
+| `sync-velocity` | Neutral Velocity sink; queue, mapping, retry and payload codec | `core-api`, `sync-common`, `transport` | `sync-velocity-velocity`, optional suite hosts |
+| `sync-velocity-velocity` | Velocity plugin adapter; channel registration and `sendPluginMessage` | `sync-velocity`, Velocity API | Velocity proxy |
 | `sync-bus` | Unified fan-out, deduplication, retries and sink lifecycle | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-common` | Shared YAML reader and sync config path resolution (`DEPENDENCY`) | JDK, `snakeyaml` | `sync-*` |
 | `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
@@ -361,7 +363,7 @@ Module.initialize() called in order
 
 > ⚠️ **Architectural discrepancy**: `spigot-host` depends on `tester` module (which has Spigot API dependency). This is a test-only dependency leaked into main compile scope (see `build.gradle` line 46-48 with exclusion). Ideally `tester` would be test-only.
 
-> ⚠️ **Naming inconsistency**: `sync-velocity` exists but is only used by `fabric-host` (Velocity is a proxy, not a Minecraft platform per se). The name suggests it's a sync transport but it's platform-specific.
+> ℹ️ **Velocity split**: `sync-velocity` is the neutral sink; `sync-velocity-velocity` is the Velocity plugin adapter. Only the adapter imports `com.velocitypowered`.
 
 > ⚠️ **Duplicate MessageCodec**: Both `transport` and `sync-http`/`sync-tcpudp`/`sync-discord` have `MessageCodec` classes. The `transport` one is the base abstraction; sync modules have their own (possibly for historical reasons).
 

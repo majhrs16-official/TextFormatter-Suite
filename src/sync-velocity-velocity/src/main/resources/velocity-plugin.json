@@ -1,7 +1,7 @@
 {
   "id": "textformatter-suite-velocity",
   "name": "TextFormatter Suite (Velocity)",
-  "version": "${version}",
+  "version": "2.1.0",
   "description": "Velocity proxy sync module for TextFormatter Suite",
   "authors": ["majhrs16"],
   "contact": {
@@ -12,7 +12,7 @@
   "environment": "server",
   "entrypoints": {
     "main": [
-      "me.majhrs16.suite.syncvelocity.VelocityPlugin"
+      "me.majhrs16.suite.syncvelocity.velocity.VelocityPlugin"
     ]
   },
   "depends": {

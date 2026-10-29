@@ -440,6 +440,7 @@ subprojects { project ->
                 ':src:sync-tcpudp'    : [line: 0.10, branch: 0.05],
                 ':src:sync-telegram'  : [line: 0.10, branch: 0.05],
                 ':src:sync-velocity'  : [line: 0.10, branch: 0.05],
+                ':src:sync-velocity-velocity': [line: 0.10, branch: 0.05],
                 ':src:sync-websocket' : [line: 0.10, branch: 0.05],
                 ':src:loadtest'       : [line: 0.10, branch: 0.05],
                 ':src:inworld'        : [line: 0.10, branch: 0.05],

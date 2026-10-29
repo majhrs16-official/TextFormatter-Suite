@@ -387,6 +387,58 @@ class PackageRuntimeTest {
     }
 
     @Test
+    void installsNeutralVelocityPackageWithATransportAdapter() throws Exception {
+        Path transportZip = packageFromProperty("transport.package");
+        Path commonZip = packageFromProperty("sync-common.package");
+        Path busZip = packageFromProperty("sync-bus.package");
+        Path velocityZip = packageFromProperty("sync-velocity.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
+            assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
+
+            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-velocity");
+            Files.createDirectories(configDir);
+            Files.writeString(configDir.resolve("config.yml"), """
+                    enabled: true
+                    transport: fake
+                    servers: [server1]
+                    mapping: "* -> server1"
+                    """);
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(velocityZip, false);
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "sync-velocity activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("sync-velocity").orElseThrow());
+
+            SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "without a Velocity adapter there is no sink to register");
+
+            Path adapterJar = FixtureModules.buildVelocityTransportJar(
+                    tempDir, "velocity-fake", "1.0.0");
+            Path adapterZip = FixtureModules.buildPackageZip(
+                    tempDir, "velocity-fake", "1.0.0", "stable", adapterJar, null);
+            List<ActivationResult> adapterActivation =
+                    fixture.runtime.installLocal(adapterZip, false);
+            assertTrue(adapterActivation.get(0).isSuccess(),
+                    () -> "velocity adapter activation failed: "
+                            + adapterActivation.get(0).message());
+            assertEquals(Set.of("velocity"), bus.sinkNames(),
+                    "the sink must attach when the Velocity adapter appears");
+
+            fixture.runtime.removeLocal("velocity-fake", "1.0.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading the Velocity adapter must remove the sink");
+
+            fixture.runtime.removeLocal("sync-velocity", "2.1.0", "stable", false);
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "unloading sync-velocity must unregister its sink");
+        }
+    }
+
+    @Test
     void installsSyncSocketPackageAndRegistersConfiguredSinks() throws Exception {
         Path transportZip = packageFromProperty("transport.package");
         Path commonZip = packageFromProperty("sync-common.package");

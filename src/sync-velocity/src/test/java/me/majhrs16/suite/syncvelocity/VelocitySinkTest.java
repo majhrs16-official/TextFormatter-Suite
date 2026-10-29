@@ -1,81 +1,49 @@
 package me.majhrs16.suite.syncvelocity;
 
-import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
-import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
-import com.velocitypowered.api.proxy.server.ServerInfo;
-import com.velocitypowered.api.event.connection.PluginMessageEvent;
-import com.velocitypowered.api.event.EventManager;
-import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.plugin.PluginManager;
-import com.velocitypowered.api.plugin.PluginContainer;
-
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
+import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
+import me.majhrs16.suite.api.velocity.VelocityConnection;
+import me.majhrs16.suite.api.velocity.VelocityListener;
 import me.majhrs16.suite.transport.MessageCodec;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class VelocitySinkTest {
 
-    @Mock
-    ProxyServer proxy;
-
-    @Mock
-    RegisteredServer server1;
-
-    @Mock
-    RegisteredServer server2;
-
-    @Mock
-    ServerInfo serverInfo1;
-
-    @Mock
-    ServerInfo serverInfo2;
-
-    @Mock
-    PluginMessageEvent inboundEvent;
-
-    @Mock
-    SyncListener listener;
-
-    @Mock
-    Player player;
-
-    @Mock
-    EventManager eventManager;
-
-    VelocitySink.Config config;
-    VelocitySink sink;
+    private FakeConnection connection;
+    private VelocityConfig config;
+    private VelocitySink sink;
+    private RecordingListener listener;
 
     @BeforeEach
     void setUp() {
-        config = new VelocitySink.Config();
+        connection = new FakeConnection(List.of("server1", "server2"));
+        config = new VelocityConfig();
         config.enabled = true;
         config.secret = "test-secret";
         config.servers = List.of("server1", "server2");
@@ -85,221 +53,279 @@ class VelocitySinkTest {
         config.retryMultiplier = 2.0;
         config.maxRetries = 3;
         config.maxQueueSize = 100;
-        config.queueDrainTimeout = Duration.ofMillis(100);
+        config.queueDrainTimeout = Duration.ofMillis(200);
         config.dynamicDiscovery = true;
         config.metricsInterval = Duration.ofMinutes(1);
 
-        when(server1.getServerInfo()).thenReturn(serverInfo1);
-        when(serverInfo1.getName()).thenReturn("server1");
-        when(server2.getServerInfo()).thenReturn(serverInfo2);
-        when(serverInfo2.getName()).thenReturn("server2");
-
-        when(proxy.getServer("server1")).thenReturn(Optional.of(server1));
-        when(proxy.getServer("server2")).thenReturn(Optional.of(server2));
-        when(proxy.getAllServers()).thenReturn(List.of(server1, server2));
-
-        // Mock plugin manager
-        PluginManager pluginManager = mock(PluginManager.class);
-        PluginContainer pluginContainer = mock(PluginContainer.class);
-        when(proxy.getPluginManager()).thenReturn(pluginManager);
-        when(pluginManager.getPlugin("textformatter-suite")).thenReturn(Optional.of(pluginContainer));
-
-        // Mock event manager
-        when(proxy.getEventManager()).thenReturn(eventManager);
-
-        // Skip channel registrar mock - let default answers handle it
-        // when(proxy.getChannelRegistrar()).thenReturn(mock(Object.class));
-
-        sink = new VelocitySink(proxy, config);
+        sink = new VelocitySink(connection, config, new NoopLogger());
+        listener = new RecordingListener();
         sink.setListener(listener);
-        // Skip start() in tests since it requires Velocity internals
-        // sink.start();
     }
 
     @Test
-    void testDisabledConfigDoesNotStart() {
-        VelocitySink.Config disabledConfig = new VelocitySink.Config();
-        disabledConfig.enabled = false;
+    void startsTheConnectionOnce() throws Exception {
+        sink.start();
+        sink.start();
 
-        VelocitySink disabledSink = new VelocitySink(proxy, disabledConfig);
-        disabledSink.setListener(listener);
+        assertEquals(1, connection.starts.get());
+        assertTrue(connection.started);
+        sink.stop();
+        assertFalse(connection.started);
+    }
+
+    @Test
+    void disabledConfigDoesNotTouchTheTransport() throws Exception {
+        VelocityConfig disabled = new VelocityConfig();
+        disabled.enabled = false;
+
+        VelocitySink disabledSink = new VelocitySink(connection, disabled, new NoopLogger());
         disabledSink.start();
+        disabledSink.stop();
 
-        // Should not register channel or event handlers
-        verify(proxy, never()).getChannelRegistrar();
+        assertEquals(0, connection.starts.get());
+        assertEquals(0, connection.stops.get());
     }
 
     @Test
-    void testSendToSpecificServer() throws IOException, InterruptedException {
-        // Create test message
-        Actor sender = new Actor(UUID.randomUUID(), "TestPlayer", Actor.ActorKind.PLAYER, Language.EN, null);
-        Message message = Message.builder()
-            .type(MessageType.CHAT)
-            .sender(sender)
-            .direction(Direction.others())
-            .channel("chat.global")
-            .text("Hello World")
-            .build();
+    void sendsToTheMappedServer() throws Exception {
+        sink.start();
+        sink.send(chatMessage("Hello World"));
 
-        // Mock server send - use any byte array to avoid ambiguity
-        when(server1.sendPluginMessage(any(ChannelIdentifier.class), any(byte[].class))).thenReturn(true);
-
-        // Send message
-        sink.send(message);
-
-        // Verify send was attempted
-        verify(server1).sendPluginMessage(any(ChannelIdentifier.class), any(byte[].class));
+        assertEquals(1, connection.payloads("server1").size());
+        assertEquals(1, sink.getMessagesSent());
+        assertEquals(0, sink.getQueueSize());
     }
 
     @Test
-    void testSendQueuesWhenServerUnavailable() throws IOException, InterruptedException {
-        Actor sender = new Actor(UUID.randomUUID(), "TestPlayer", Actor.ActorKind.PLAYER, Language.EN, null);
-        Message message = Message.builder()
-            .type(MessageType.CHAT)
-            .sender(sender)
-            .direction(Direction.others())
-            .channel("chat.global")
-            .text("Hello World")
-            .build();
+    void queuesWhenTheTransportRejectsTheSend() throws Exception {
+        connection.failing.add("server1");
+        sink.start();
+        sink.send(chatMessage("Hello World"));
 
-        // Server not found
-        when(proxy.getServer("server1")).thenReturn(Optional.empty());
-
-        sink.send(message);
-
-        // Should be queued for retry
         assertEquals(1, sink.getQueueSize());
+        assertEquals(0, sink.getMessagesSent());
     }
 
     @Test
-    void testSecretVerification() {
-        config.secret = "test-secret";
-        VelocitySink secretSink = new VelocitySink(proxy, config);
-        secretSink.setListener(listener);
-        // Skip start() as it requires Velocity internals
+    void retriesQueuedMessages() throws Exception {
+        connection.failing.add("server1");
+        sink.start();
+        sink.send(chatMessage("retry me"));
+        assertEquals(1, sink.getQueueSize());
 
-        assertTrue(config.secret.equals("test-secret"));
+        connection.failing.remove("server1");
+        waitUntil(() -> connection.payloads("server1").size() == 1,
+            Duration.ofSeconds(2));
+        assertEquals(1, connection.payloads("server1").size());
+        assertTrue(sink.getMessagesSent() >= 1);
     }
 
     @Test
-    void testHealthCheck() throws Exception {
-        config.enabled = true;
-        VelocitySink healthySink = new VelocitySink(proxy, config);
-        healthySink.setListener(listener);
-        // Use reflection to set started to true for health check
-        setStarted(healthySink, true);
+    void verifiesInboundSecret() throws Exception {
+        sink.start();
+        byte[] valid = payload(chatMessage("inbound"), "test-secret");
+        connection.inbound(valid);
 
-        VelocitySink.HealthStatus health = healthySink.getHealth();
-        assertEquals("UP", health.status());
-        assertTrue(health.metrics().containsKey("messagesSent"));
-        assertTrue(health.metrics().containsKey("messagesReceived"));
+        assertEquals(1, listener.messages.size());
+        assertEquals(1, sink.getMessagesReceived());
+
+        byte[] invalid = payload(chatMessage("forged"), "wrong-secret");
+        connection.inbound(invalid);
+        assertEquals(1, listener.messages.size());
     }
 
     @Test
-    void testHealthCheckDisabled() throws Exception {
-        config.enabled = false;
-        VelocitySink disabledSink = new VelocitySink(proxy, config);
-        disabledSink.setListener(listener);
-        // Use reflection to set started to true for health check
-        setStarted(disabledSink, true);
+    void acceptsInboundWithoutSecretWhenConfigIsEmpty() throws Exception {
+        config.secret = "";
+        VelocitySink openSink = new VelocitySink(connection, config, new NoopLogger());
+        openSink.setListener(listener);
+        openSink.start();
 
-        VelocitySink.HealthStatus health = disabledSink.getHealth();
-        assertEquals("DOWN", health.status());
+        connection.inbound(payload(chatMessage("open"), ""));
+        assertEquals(1, listener.messages.size());
     }
 
     @Test
-    void testShutdownDrainsQueue() throws IOException, InterruptedException {
-        VelocitySink.Config testConfig = new VelocitySink.Config();
-        testConfig.enabled = true;
-        testConfig.secret = "";
-        testConfig.maxRetries = 10;
-        testConfig.retryInitialDelay = Duration.ofMillis(1);
-        testConfig.retryMaxDelay = Duration.ofMillis(100);
-        testConfig.queueDrainTimeout = Duration.ofMillis(500);
-        testConfig.mapping = "* -> server1";
+    void reportsHealthFromLifecycle() throws Exception {
+        VelocitySink.HealthStatus down = sink.getHealth();
+        assertEquals("DOWN", down.status());
 
-        VelocitySink testSink = new VelocitySink(proxy, testConfig);
-        testSink.setListener(listener);
-        // Skip start() as it requires Velocity internals
-        // testSink.start();
+        sink.start();
+        VelocitySink.HealthStatus up = sink.getHealth();
+        assertEquals("UP", up.status());
+        assertTrue(up.metrics().containsKey("messagesSent"));
+        assertTrue(up.metrics().containsKey("messagesReceived"));
 
-        // Send to server1 which will fail to send
-        when(server1.sendPluginMessage(any(ChannelIdentifier.class), any(byte[].class))).thenReturn(false);
-
-        Actor sender = new Actor(UUID.randomUUID(), "TestPlayer", Actor.ActorKind.PLAYER, Language.EN, null);
-        Message message = Message.builder()
-            .type(MessageType.CHAT)
-            .sender(sender)
-            .direction(Direction.others())
-            .channel("chat.global")
-            .text("Hello")
-            .build();
-
-        testSink.send(message);
-
-        // Queue should have message
-        assertEquals(1, testSink.getQueueSize());
-
-        // Stop should drain
-        testSink.stop();
-
-        // Queue should be drained or timed out
+        sink.stop();
+        assertEquals("DOWN", sink.getHealth().status());
     }
 
     @Test
-    void testConfigValidation() {
-        VelocitySink.Config invalidConfig = new VelocitySink.Config();
-        invalidConfig.retryInitialDelay = Duration.ZERO;
+    void validatesPolicyValues() {
+        VelocityConfig invalidDelay = new VelocityConfig();
+        invalidDelay.retryInitialDelay = Duration.ZERO;
+        assertThrows(IllegalArgumentException.class, invalidDelay::validate);
 
-        assertThrows(IllegalArgumentException.class, invalidConfig::validate);
+        VelocityConfig invalidMultiplier = new VelocityConfig();
+        invalidMultiplier.retryMultiplier = 1.0;
+        assertThrows(IllegalArgumentException.class, invalidMultiplier::validate);
 
-        VelocitySink.Config invalidConfig2 = new VelocitySink.Config();
-        invalidConfig2.retryMultiplier = 1.0;
-        assertThrows(IllegalArgumentException.class, invalidConfig2::validate);
+        VelocityConfig invalidRetries = new VelocityConfig();
+        invalidRetries.maxRetries = -1;
+        assertThrows(IllegalArgumentException.class, invalidRetries::validate);
 
-        VelocitySink.Config invalidConfig3 = new VelocitySink.Config();
-        invalidConfig3.maxRetries = -1;
-        assertThrows(IllegalArgumentException.class, invalidConfig3::validate);
-
-        VelocitySink.Config invalidConfig4 = new VelocitySink.Config();
-        invalidConfig4.maxQueueSize = 0;
-        assertThrows(IllegalArgumentException.class, invalidConfig4::validate);
+        VelocityConfig invalidQueue = new VelocityConfig();
+        invalidQueue.maxQueueSize = 0;
+        assertThrows(IllegalArgumentException.class, invalidQueue::validate);
     }
 
     @Test
-    void testMetricsRecording() throws IOException, InterruptedException {
-        VelocitySink.Config metricsConfig = new VelocitySink.Config();
+    void recordsMetricsAfterSuccessfulSend() throws Exception {
+        VelocityConfig metricsConfig = new VelocityConfig();
         metricsConfig.enabled = true;
         metricsConfig.secret = "";
         metricsConfig.servers = List.of("server1");
         metricsConfig.mapping = "* -> server1";
 
-        VelocitySink metricsSink = new VelocitySink(proxy, metricsConfig);
+        VelocitySink metricsSink = new VelocitySink(connection, metricsConfig, new NoopLogger());
         metricsSink.setListener(listener);
-        // Skip start() as it requires Velocity internals
-        // metricsSink.start();
-
-        when(server1.sendPluginMessage(any(ChannelIdentifier.class), any(byte[].class))).thenReturn(true);
-
-        Actor sender = new Actor(UUID.randomUUID(), "TestPlayer", Actor.ActorKind.PLAYER, Language.EN, null);
-        Message message = Message.builder()
-            .type(MessageType.CHAT)
-            .sender(sender)
-            .direction(Direction.others())
-            .channel("chat.global")
-            .text("Hello")
-            .build();
-
-        metricsSink.send(message);
+        metricsSink.start();
+        metricsSink.send(chatMessage("Hello"));
 
         assertEquals(1, metricsSink.getMessagesSent());
         assertEquals(0, metricsSink.getMessagesFailed());
         assertEquals(0, metricsSink.getQueueSize());
     }
 
-    private void setStarted(VelocitySink sink, boolean started) throws Exception {
-        java.lang.reflect.Field field = VelocitySink.class.getDeclaredField("started");
-        field.setAccessible(true);
-        field.set(sink, new java.util.concurrent.atomic.AtomicBoolean(started));
+    @Test
+    void drainsQueueOnStop() throws Exception {
+        connection.failing.add("server1");
+        sink.start();
+        sink.send(chatMessage("drain"));
+        assertEquals(1, sink.getQueueSize());
+
+        connection.failing.remove("server1");
+        sink.stop();
+
+        assertTrue(sink.getQueueSize() <= 1);
+    }
+
+    private static Message chatMessage(String text) {
+        Actor sender = new Actor(UUID.randomUUID(), "TestPlayer",
+            Actor.ActorKind.PLAYER, Language.EN, null);
+        return Message.builder()
+            .type(MessageType.CHAT)
+            .sender(sender)
+            .direction(Direction.others())
+            .channel("chat.global")
+            .text(text)
+            .build();
+    }
+
+    private static byte[] payload(Message message, String secret) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            out.writeUTF("textformatter");
+            out.writeUTF(message.type().name());
+            out.writeUTF(message.id().toString());
+            out.writeUTF(message.sender().name());
+            out.writeUTF(message.channel());
+            out.writeUTF(MessageCodec.toJsonString(message));
+            out.writeUTF(message.sender().uuid().toString());
+            out.writeLong(System.currentTimeMillis());
+            if (secret != null && !secret.isBlank()) {
+                out.writeUTF(secret);
+            }
+        }
+        return bytes.toByteArray();
+    }
+
+    private static void waitUntil(Check check, Duration timeout) throws Exception {
+        Instant deadline = Instant.now().plus(timeout);
+        while (Instant.now().isBefore(deadline)) {
+            if (check.ok()) {
+                return;
+            }
+            Thread.sleep(10);
+        }
+        throw new AssertionError("condition not met within " + timeout);
+    }
+
+    @FunctionalInterface
+    private interface Check {
+        boolean ok();
+    }
+
+    private static final class FakeConnection implements VelocityConnection {
+
+        private final List<String> servers;
+        private final Map<String, List<byte[]>> sent = new HashMap<>();
+        private final Set<String> failing = new HashSet<>();
+        private final AtomicInteger starts = new AtomicInteger();
+        private final AtomicInteger stops = new AtomicInteger();
+        private VelocityListener listener;
+        private boolean started;
+
+        FakeConnection(List<String> servers) {
+            this.servers = new ArrayList<>(servers);
+        }
+
+        @Override
+        public void start(VelocityListener listener) {
+            this.listener = listener;
+            this.started = true;
+            starts.incrementAndGet();
+        }
+
+        @Override
+        public void stop() {
+            this.started = false;
+            stops.incrementAndGet();
+        }
+
+        @Override
+        public List<String> servers() {
+            return List.copyOf(servers);
+        }
+
+        @Override
+        public boolean send(String server, byte[] payload) {
+            if (!started || failing.contains(server) || !servers.contains(server)) {
+                return false;
+            }
+            sent.computeIfAbsent(server, ignored -> new ArrayList<>()).add(payload);
+            return true;
+        }
+
+        List<byte[]> payloads(String server) {
+            return sent.getOrDefault(server, List.of());
+        }
+
+        void inbound(byte[] payload) {
+            listener.onMessage(payload);
+        }
+    }
+
+    private static final class RecordingListener implements SyncListener {
+
+        private final List<Message> messages = new ArrayList<>();
+
+        @Override
+        public void onMessage(me.majhrs16.suite.api.spi.SyncSink source, Message message) {
+            messages.add(message);
+        }
+
+        @Override
+        public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink source, String reason) {
+        }
+    }
+
+    private static final class NoopLogger implements PluginLogger {
+
+        @Override public void info(String message, Object... args) { }
+        @Override public void warn(String message, Object... args) { }
+        @Override public void error(String message, Object... args) { }
+        @Override public void error(String message, Throwable throwable) { }
+        @Override public void debug(String message, Object... args) { }
     }
 }

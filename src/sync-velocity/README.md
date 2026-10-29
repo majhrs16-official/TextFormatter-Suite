@@ -1,137 +1,137 @@
-# sync-velocity — Velocity Proxy Sync Sink (Production-Ready)
+# sync-velocity — neutral Velocity sink
 
-> **Purpose**: Implements `SyncSink` SPI for Velocity proxy plugin message channel. Sends messages across servers connected to the same Velocity proxy. **Production-ready** with async queue, exponential backoff retry, dynamic server discovery, advanced mapping (regex, per-message-type, wildcard), Prometheus-compatible metrics, health checks, and graceful shutdown with queue drain.
+`sync-velocity` is the **application** side of the Velocity edge. It owns the
+queue, retry policy, channel/type mapping, payload codec, metrics and health.
+It contains no Velocity API types.
+
+The Velocity API lives in the plugin adapter:
+
+| Package | Technology | Role |
+|---------|------------|------|
+| [`sync-velocity-velocity`](../sync-velocity-velocity/README.md) | Velocity API 3.4 | Velocity plugin, channel registration, `sendPluginMessage` |
+
+The neutral package activates without an adapter. It listens for
+`ModuleActivatedEvent`/`ModuleDeactivatedEvent` and attaches/detaches the sink
+when a matching `VelocityConnectionFactory` appears or disappears.
 
 ---
 
 ## 1. Responsibilities
 
-- **Velocity plugin message channel** — uses `PluginMessageChannel` for cross-server communication
-- **Module registration** — `SyncVelocityModule` registers sink
-- **Fabric-only** — only used by `fabric-host` (Velocity is a proxy, not a Minecraft platform)
+- Build the plugin-message payload from a neutral `Message`.
+- Resolve target servers from static config, wildcard, regex or message type.
+- Queue failed sends and retry with exponential backoff.
+- Verify the shared secret on inbound payloads.
+- Expose metrics and health.
+- Never import `com.velocitypowered`.
+
+## 2. Non-responsibilities
+
+- No Velocity channel registration or event listener.
+- No Minecraft/Paper/Bukkit code.
+- No routing decisions: `iflow` decides what to sync.
+- No proxy lifecycle: the plugin adapter owns `ProxyInitializeEvent` and
+  `ProxyShutdownEvent`.
 
 ---
 
-## 2. Non-Responsibilities
-
-- **No standalone proxy** — requires Velocity proxy with plugin
-- **No message routing** — `iflow-vm` decides what to sync
-- **Not Fabric-only** — works as a standard Velocity plugin (Java 17+, Velocity API 3.4.0)
-
----
-
-## 3. Dependencies
-
-| Dependency | Type | Reason |
-|------------|------|--------|
-| `core-api` | Compile | `SyncSink`, `Message` SPIs |
-| `transport` | Compile | `MessageCodec` for message serialization |
-| Velocity API | Compile | `PluginMessageChannel`, `ProxyServer`, `RegisteredServer` (3.4.0) |
-| `org.json` | Compile | JSON config parsing |
-| `slf4j` | Compile | Logging |
-
-## 4. Consumers
-
-| Consumer | Usage |
-|----------|-------|
-| `spigot-host` | Syncs across Velocity-connected servers (via Velocity plugin) |
-| `fabric-host` | Syncs across Velocity-connected servers (via Velocity plugin) |
-| Velocity Plugin | Runs as a Velocity plugin (`VelocityPlugin`) |
-
-## 5. Main Components
+## 3. Components
 
 | Component | Role |
 |-----------|------|
-| `VelocitySink` | `SyncSink` impl: async send, retry queue with exponential backoff, dynamic server discovery, advanced mapping (regex/per-type/wildcard), metrics, health checks, graceful shutdown |
-| `VelocityPlugin` | Velocity plugin entry point: registers channel, event handlers, starts sink |
-| `SyncVelocityModule` | `Module` registering sink |
+| `VelocitySink` | Neutral `SyncSink`: encode/decode, mapping, retry, metrics, health. |
+| `VelocityConfig` | Loads `config/sync-velocity/config.yml`; no Velocity types. |
+| `SyncVelocityActivator` | Resolves `SyncBus` + `VelocityConnectionFactory`, hot attach/detach. |
+| `SyncVelocityModule` | Legacy kernel descriptor, kept for the kernel graph. |
+
+Ports in `core-api` (`me.majhrs16.suite.api.velocity`):
+
+| Type | Role |
+|------|------|
+| `VelocityConnection` | Adapter contract: `start`, `stop`, `servers`, `send`. |
+| `VelocityConnectionFactory` | Adapter discovery by `name()`. |
+| `VelocitySettings` | Channel and subchannel names. |
+| `VelocityListener` | Inbound payload callback. |
 
 ---
 
-## 6. Data Flow
+## 4. Configuration
+
+Canonical path: `config/sync-velocity/config.yml`. The legacy
+`sync/velocity.yml` is read during migration.
+
+```yaml
+enabled: true
+transport: velocity
+channel: "textformatter:velocity"
+subchannel: "textformatter"
+secret: "optional-shared-secret"
+servers: ["lobby", "survival"]
+mapping: "* -> chat.hub; type:CHAT -> global"
+dynamic-discovery: true
+retry-initial-delay: 5s
+retry-max-delay: 5m
+retry-multiplier: 2.0
+max-retries: 10
+max-queue-size: 10000
+queue-drain-timeout: 30s
+metrics-interval: 1m
+```
+
+Mapping syntax:
+
+- `source -> target` — exact channel match.
+- `regex:pattern -> target` — regex match on channel.
+- `type:CHAT -> target` — match by message type.
+- `* -> target` — wildcard.
+- Multiple rules separated by `;`.
+
+`transport` must match a factory registered by an installed adapter. If it is
+absent, the package stays active without a sink and logs the available names.
+
+---
+
+## 5. Lifecycle
 
 ```text
-SyncSink.send(message)
-         ↓
-VelocitySink.send(message)
-         ↓
-Serialize message to JSON (MessageCodec)
-         ↓
-Build plugin message payload (subchannel, type, id, sender, channel, json, uuid, timestamp, auth)
-         ↓
-Resolve target servers via mapping config (regex, per-type, wildcard, * -> all)
-         ↓
-For each target: sendAsync(server, data)
-         ↓
-If immediate send fails → queue for retry with exponential backoff
-         ↓
-Retry processor drains queue on schedule
-         ↓
-Velocity proxy forwards to target server(s)
+SyncVelocityActivator.start()
+  → find SyncBus
+  → load config
+  → subscribe to ModuleActivatedEvent / ModuleDeactivatedEvent
+  → tryAttach()
+      → find VelocityConnectionFactory by name
+      → new VelocitySink(connection, config, settings, logger)
+      → bus.register(sink)
+          → sink.start()
+              → connection.start(listener)   (adapter registers channel)
 ```
 
-**Config** (`HostConfig.sync.velocity`):
-```yaml
-sync:
-  velocity:
-    enabled: true
-    secret: "optional-shared-secret"
-    servers: ["lobby", "survival", "creative"]  # static targets
-    mapping: "* -> chat.hub; type:CHAT -> global"  # advanced mapping
-    dynamic-discovery: true
-    retry-initial-delay: 5s
-    retry-max-delay: 5m
-    retry-multiplier: 2.0
-    max-retries: 10
-    max-queue-size: 10000
-    queue-drain-timeout: 30s
-    metrics-interval: 1m
-```
-
-**Mapping Syntax**:
-- `source -> target` — exact channel match
-- `regex:pattern -> target` — regex match on channel
-- `type:CHAT -> target` — match by message type
-- `* -> target` — wildcard (all channels)
-- Multiple mappings separated by `;`
+`stop()` unsubscribes and unregisters the sink. `VelocitySink.stop()` drains the
+queue, stops the adapter connection and shuts down its daemon executors.
 
 ---
 
-## 7. Entry Points
+## 6. Tests
 
-| Entry Point | Location | Called By |
-|-------------|----------|-----------|
-| `VelocityPlugin.onLoad()` | `VelocityPlugin.java` | Velocity proxy load |
-| `VelocityPlugin.onEnable()` | `VelocityPlugin.java` | Velocity proxy enable |
-| `SyncVelocityModule` | `SyncVelocityModule.java` | `ModuleLoader` → `SuiteBootstrap` |
+`VelocitySinkTest` uses `FakeConnection`; no proxy and no network:
 
----
+- start/stop idempotence;
+- disabled config does not touch the transport;
+- mapped send;
+- retry queue;
+- secret verification;
+- health and metrics;
+- config validation.
 
-## 8. Extension Points
-
-- **Custom mapping logic** — extend `resolveTargets()` for per-message server selection
-- **Custom channel** — configure plugin message channel ID via config
-- **Custom auth** — extend secret verification in `handleInbound()`
-- **Additional metrics** — extend `logMetrics()` and `HealthStatus`
-
----
-
-## 9. Exploration Path
-
-```
-1. VelocitySink.java            → SyncSink implementation (async, retry, mapping, metrics, health)
-2. VelocityPlugin.java          → Velocity plugin entry point
-3. SyncVelocityModule.java      → Module registration
-4. Velocity API: PluginMessageChannel → Velocity proxy API used
-```
+`PackageRuntimeTest.installsNeutralVelocityPackageWithATransportAdapter`
+installs the real package ZIP before a fake adapter package, verifies hot
+attach, adapter unload and package unload.
 
 ---
 
-## 10. Related Modules
+## 7. Related modules
 
-- [core-api](../core-api/README.md) — `SyncSink`, `Message` SPIs
-- [transport](../transport/README.md) — `MessageCodec` for serialization
-- [host](../host/README.md) — Collects sinks, loads config
-- [kernel](../kernel/README.md) — Loads module
-- [spigot-host](../spigot-host/README.md) — Consumer via Velocity plugin
-- [fabric-host](../fabric-host/README.md) — Consumer via Velocity plugin (when rewritten)
+- [core-api](../core-api/README.md) — ports and suite contracts
+- [sync-bus](../sync-bus/README.md) — sink lifecycle and fan-out
+- [sync-common](../sync-common/README.md) — YAML/config path helpers
+- [sync-velocity-velocity](../sync-velocity-velocity/README.md) — Velocity plugin adapter

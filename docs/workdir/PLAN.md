@@ -1078,9 +1078,22 @@ instalado después del paquete neutral en `PackageRuntimeTest` (adjunta y retira
 el sink al instalar/descargar el adaptador). `spigot-host` ya usa `DiscordSink`
 + `JdaDiscordConnectionFactory` en su cableado temporal.
 
+**`sync-velocity` desacoplado (2026-10-29):** `sync-velocity` es ahora el
+paquete neutral (cola, retry, mapping, codec, métricas y health) y no importa
+`com.velocitypowered`. Los puertos `VelocityConnection`,
+`VelocityConnectionFactory`, `VelocitySettings` y `VelocityListener` viven en
+`core-api` (`api.velocity`). El plugin Velocity real está en
+`sync-velocity-velocity`, que registra el canal y traduce
+`PluginMessageEvent`; su JAR incluye las clases neutrales porque Velocity carga
+el plugin, no el runtime de la suite. El paquete neutral se activa sin adapter y
+se engancha/desengancha por `ModuleActivatedEvent`/`ModuleDeactivatedEvent`.
+Tests: `VelocitySinkTest` con `FakeConnection`, `VelocityProxyConnectionTest`
+con Mockito y `PackageRuntimeTest` con un adapter falso instalado después del
+paquete neutral.
+
 **F6 restante — bloqueado por F4b/F7, no por falta de empaquetado:**
-- `sync-velocity` usa la API de Velocity; `inworld` y `tester` usan Paper API.
-  Pertenecen a los adapters de plataforma (F4b), no a paquetes neutrales.
+- `inworld` y `tester` usan Paper API. Pertenecen a los adapters de plataforma
+  (F4b), no a paquetes neutrales.
 - `presets` y `extension-api` importan `host.config.HostConfig` y
   `host.SuiteHost`/`MessageDispatcher`; necesitan puertos neutrales (F4b).
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
@@ -1165,10 +1178,10 @@ Orden de F4b:
 5. Añadir `checkArchitecture` y dejarlo verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
 
-**Estado:** `sync-discord` desacoplado al 2026-10-29. El patrón queda validado
-para reutilizarlo en `sync-velocity` (puerto + adapter Velocity), `inworld` y
-`tester` (puertos neutrales + adapters de plataforma). Después: `Preset.apply`
-real y `presets`, el puerto neutral de `extension-api`, y el adelgazamiento de
+**Estado:** `sync-discord` y `sync-velocity` desacoplados al 2026-10-29. El
+patrón queda validado para reutilizarlo en `inworld` y `tester` (puertos
+neutrales + adapters de plataforma). Después: `Preset.apply` real y `presets`,
+el puerto neutral de `extension-api`, y el adelgazamiento de
 `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts`.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
@@ -1439,7 +1452,8 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | `src:sync-http` | ✅ OK | 3 | N/A | 192 | N/A | N/A |  |
 | `src:sync-socket` | ✅ OK | 3 | N/A | 202 | N/A | N/A |  |
 | `src:sync-telegram` | ✅ OK | 2 | N/A | 173 | N/A | N/A | Pocos tests (<3) |
-| `src:sync-velocity` | ✅ OK | 1 | N/A | 305 | N/A | N/A | Pocos tests (<3) |
+| `src:sync-velocity` | ✅ OK | 1 | N/A | 420 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin Velocity API |
+| `src:sync-velocity-velocity` | ✅ OK | 1 | N/A | 180 | N/A | N/A | Adaptador/plugin Velocity; tests con Mockito |
 | `src:sync-websocket` | ✅ OK | 1 | N/A | 26 | N/A | N/A | Pocos tests (<3) |
 | `src:tester` | ✅ OK | 1 | 570 | 29 | 0.0% | 0.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:textformatter` | ✅ OK | 6 | 282 | 512 | 81.6% | 66.7% |  |
@@ -1487,7 +1501,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | sync-discord | ✅ Paquete neutral + adapters `sync-discord-jda`/`sync-discord-jdk`; `DiscordBridge` usa el sink neutral (respeta iFlow) | build + tests de paquete |
 | sync-telegram | ✅ **SyncBus registered** (HTTP transport, long-poll) | build |
 | sync-http/tcpudp | ✅ **SyncBus registered** (IP pinning SSRF, timeouts) | build |
-| sync-velocity | ✅ **Production-ready** (Paper API 3.4.0, async queue, retry/backoff, métricas, health, dynamic discovery) | compile |
+| sync-velocity | ✅ Paquete neutral + adapter/plugin `sync-velocity-velocity` (Velocity API 3.4.0, cola async, retry/backoff, métricas, health, dynamic discovery) | build + tests de paquete |
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
 | spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, TCP/UDP/Telegram, HealthCheckRegistry) | compile |
 | fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents) | compile |

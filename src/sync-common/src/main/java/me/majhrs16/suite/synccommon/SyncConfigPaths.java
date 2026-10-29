@@ -52,6 +52,10 @@ public final class SyncConfigPaths {
         return dataFolder.resolve(CONFIG_DIR).resolve("sync-http").resolve("config.yml");
     }
 
+    public static Path canonicalVelocity(Path dataFolder) {
+        return dataFolder.resolve(CONFIG_DIR).resolve("sync-velocity").resolve("config.yml");
+    }
+
     public static Path canonicalTcp(Path dataFolder) {
         return dataFolder.resolve(CONFIG_DIR).resolve("sync-socket").resolve("tcp.yml");
     }
@@ -80,6 +84,10 @@ public final class SyncConfigPaths {
 
     public static Path http(Path dataFolder) {
         return resolve(canonicalHttp(dataFolder), legacyDir(dataFolder).resolve("http.yml"));
+    }
+
+    public static Path velocity(Path dataFolder) {
+        return resolve(canonicalVelocity(dataFolder), legacyDir(dataFolder).resolve("velocity.yml"));
     }
 
     public static Path tcp(Path dataFolder) {
