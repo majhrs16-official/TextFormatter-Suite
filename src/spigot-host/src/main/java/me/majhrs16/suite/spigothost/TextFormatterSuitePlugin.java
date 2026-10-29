@@ -456,8 +456,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger, 
             extId -> {
                 return new me.majhrs16.suite.extension.ExtensionContext(
-                    reloaded,
-                    dispatcher,
+                    message -> dispatcher.dispatch(message),
+                    reloaded::hasPermission,
+                    dispatcher.getActors(),
                     logger,
                     reloaded.translation(),
                     languages,

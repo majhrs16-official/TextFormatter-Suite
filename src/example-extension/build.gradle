@@ -19,8 +19,6 @@ repositories {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:textformatter')
-    implementation project(':src:host')
     implementation project(':src:extension-api')
 
     testImplementation platform('org.junit:junit-bom:5.10.2')

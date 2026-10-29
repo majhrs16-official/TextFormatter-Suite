@@ -7,7 +7,7 @@
 ## 1. Responsibilities
 
 - **Extension contract** — `Extension` interface: `onEnable()`, `onDisable()`, `getMetadata()`
-- **Extension context** — `ExtensionContext` provides access to host services
+- **Extension context** — `ExtensionContext` provides neutral ports (`MessageDispatch`, `PermissionChecker`, `ActorDirectory`) and suite services
 - **Extension manager** — `ExtensionManager` loads and manages extensions
 - **Extension metadata** — `ExtensionMetadata` (id, version, dependencies, author)
 - **Extension configuration** — `ExtensionConfig` for per-extension settings
@@ -26,7 +26,7 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `Module`, `ModuleDescriptor` concepts |
+| `core-api` | Compile | `MessageDispatch`, `PermissionChecker`, `ActorDirectory`, `ChannelRegistry`, `TranslationService` |
 
 ---
 
@@ -45,7 +45,7 @@
 | Component | Role |
 |-----------|------|
 | `Extension` | Interface: `onEnable(ctx)`, `onDisable()`, `getMetadata()` |
-| `ExtensionContext` | Provides: `SuiteHost`, `Config`, `Logger`, `EventBus` |
+| `ExtensionContext` | Provides: neutral dispatch/permissions/actors, config, logger, channels, translation |
 | `ExtensionManager` | Loads extensions, manages lifecycle |
 | `ExtensionMetadata` | Extension descriptor: id, version, dependencies |
 | `ExtensionConfig` | Per-extension configuration |
@@ -82,7 +82,7 @@ Extension active
 | Extension Point | How to Extend |
 |-----------------|---------------|
 | Custom extension | Implement `Extension`, package as JAR with `extension.yml` |
-| Custom services | Access `SuiteHost` via `ExtensionContext` |
+| Custom services | Use `ExtensionContext.dispatchMessage`, `permissions`, `actors`, `channels` |
 | Custom config | Define `ExtensionConfig` schema |
 
 ---
@@ -103,5 +103,4 @@ Extension active
 
 - [core-api](../core-api/README.md) — Base module concepts
 - [example-extension](../example-extension/README.md) — Example implementation
-- [host](../host/README.md) — Provides `SuiteHost` to context
-- [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Extension hosts
+- [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Bind the neutral ports to platform implementations

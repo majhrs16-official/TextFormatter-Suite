@@ -18,8 +18,6 @@ java {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:host')
-    implementation project(':src:textformatter')
     implementation 'org.yaml:snakeyaml:2.3'
 
     testImplementation project(':src:kernel')

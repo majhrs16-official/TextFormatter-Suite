@@ -1,14 +1,14 @@
 package me.majhrs16.suite.extension;
 
+import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.api.channel.Channel;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -16,6 +16,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,8 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ExtensionContext {
 
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
+    private final MessageDispatch dispatch;
+    private final PermissionChecker permissions;
+    private final ActorDirectory actors;
     private final PluginLogger logger;
     private final TranslationService translation;
     private final UserLanguageStore languages;
@@ -38,26 +40,27 @@ public final class ExtensionContext {
     private final String extensionId;
     private final ConcurrentHashMap<String, Object> sharedState = new ConcurrentHashMap<>();
 
-    public ExtensionContext(SuiteHost host, MessageDispatcher dispatcher,
-                            PluginLogger logger, TranslationService translation,
-                            UserLanguageStore languages, ChannelRegistry channels,
-                            Path dataDirectory, String extensionId) {
-        this.host = host;
-        this.dispatcher = dispatcher;
-        this.logger = logger;
-        this.translation = translation;
-        this.languages = languages;
-        this.channels = channels;
-        this.dataDirectory = dataDirectory;
-        this.extensionId = extensionId;
+    public ExtensionContext(MessageDispatch dispatch, PermissionChecker permissions,
+                            ActorDirectory actors, PluginLogger logger,
+                            TranslationService translation, UserLanguageStore languages,
+                            ChannelRegistry channels, Path dataDirectory, String extensionId) {
+        this.dispatch = Objects.requireNonNull(dispatch, "dispatch");
+        this.permissions = Objects.requireNonNull(permissions, "permissions");
+        this.actors = Objects.requireNonNull(actors, "actors");
+        this.logger = Objects.requireNonNull(logger, "logger");
+        this.translation = Objects.requireNonNull(translation, "translation");
+        this.languages = Objects.requireNonNull(languages, "languages");
+        this.channels = Objects.requireNonNull(channels, "channels");
+        this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
+        this.extensionId = Objects.requireNonNull(extensionId, "extensionId");
     }
 
     // ============================================================
     // Suite Core Access
     // ============================================================
 
-    public SuiteHost host() { return host; }
-    public MessageDispatcher dispatcher() { return dispatcher; }
+    public PermissionChecker permissions() { return permissions; }
+    public ActorDirectory actors() { return actors; }
     public PluginLogger logger() { return logger; }
     public TranslationService translation() { return translation; }
     public UserLanguageStore languages() { return languages; }
@@ -85,7 +88,7 @@ public final class ExtensionContext {
      * The extension's ID is attached for tracking.
      */
     public void dispatchMessage(Message message) {
-        dispatcher.dispatch(message);
+        dispatch.dispatch(message);
     }
 
     // ============================================================
@@ -162,7 +165,7 @@ public final class ExtensionContext {
      * Checks if an actor has a permission.
      */
     public boolean hasPermission(Actor actor, String permission) {
-        return host.hasPermission(actor, permission);
+        return permissions.has(actor, permission);
     }
 
     // ============================================================
@@ -235,9 +238,9 @@ public final class ExtensionContext {
     public java.util.Optional<Actor> findPlayer(String nameOrUuid) {
         try {
             UUID uuid = UUID.fromString(nameOrUuid);
-            return dispatcher.getActors().byUuid(uuid);
+            return actors.byUuid(uuid);
         } catch (IllegalArgumentException ignored) {
-            return dispatcher.getActors().byName(nameOrUuid);
+            return actors.byName(nameOrUuid);
         }
     }
 

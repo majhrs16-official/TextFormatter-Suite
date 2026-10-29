@@ -625,8 +625,9 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             logger, 
             extId -> {
                 return new me.majhrs16.suite.extension.ExtensionContext(
-                    reloaded,
-                    dispatcher,
+                    message -> dispatcher.dispatch(message),
+                    reloaded::hasPermission,
+                    dispatcher.getActors(),
                     logger,
                     reloaded.translation(),
                     finalLanguages,

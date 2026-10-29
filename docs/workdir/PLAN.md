@@ -585,7 +585,9 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 - `host/build.gradle:19-30` depende de `textformatter`, `iflow-vm`,
   `iflow-firewall`, `transport` y `chattranslator`. `SuiteHost.java:100-131`
   los instancia directamente.
-- `inworld`, `observability`, `extension-api` y `presets` dependen de `host`.
+- `inworld` depende de `host`; `observability` y `presets` ya no, y
+  `extension-api` usa puertos neutrales (`MessageDispatch`, `PermissionChecker`,
+  `ActorDirectory`).
   Por eso no se puede «mover todo el wiring a `host`»: se crearían ciclos.
 
 ###### 5. El grafo del kernel no gobierna el arranque
@@ -1096,8 +1098,8 @@ paquete neutral.
   (F4b), no a paquetes neutrales.
 - `presets` ya aplica mediante el puerto neutral `PresetTarget`; falta el
   adapter de host que lo implemente (F4b) antes de empaquetarlo.
-- `extension-api` importa `host.SuiteHost`/`MessageDispatcher`; necesita un
-  puerto neutral (F4b).
+- `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
+  `ActorDirectory`; no importa `host`.
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
   inworld, tester y extensiones directamente. La retirada de ese cableado es
   el primer trabajo de F4b: hosts sobre `SuiteRuntime` + `PlatformPorts`, sin
@@ -1181,12 +1183,12 @@ Orden de F4b:
 5. Añadir `checkArchitecture` y dejarlo verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
 
-**Estado:** `sync-discord` y `sync-velocity` desacoplados y `Preset.apply`
-implementado al 2026-10-29. El patrón queda validado para reutilizarlo en
-`inworld` y `tester` (puertos neutrales + adapters de plataforma). Después: el
-adapter de host de `PresetTarget` y el empaquetado de `presets`, el puerto
-neutral de `extension-api`, y el adelgazamiento de `spigot-host`/`fabric-host`
-sobre `SuiteRuntime` + `PlatformPorts`.
+**Estado:** `sync-discord`, `sync-velocity`, `Preset.apply` y el puerto neutral
+de `extension-api` completados al 2026-10-29. El patrón queda validado para
+reutilizarlo en `inworld` y `tester` (puertos neutrales + adapters de
+plataforma). Después: el adapter de host de `PresetTarget` y el empaquetado de
+`presets`, y el adelgazamiento de `spigot-host`/`fabric-host` sobre
+`SuiteRuntime` + `PlatformPorts`.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
@@ -1428,7 +1430,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | `src:common-legacy` | ✅ OK | 1 | N/A | 30 | N/A | N/A | Pocos tests (<3) |
 | `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
 | `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
-| `src:extension-api` | ✅ OK | 2 | N/A | 132 | N/A | N/A | Pocos tests (<3) |
+| `src:extension-api` | ✅ OK | 3 | N/A | 260 | N/A | N/A | `ExtensionContext` usa puertos neutrales, sin `host` |
 | `src:fabric-host` | ✅ OK | 1 | 840 | 30 | 0.0% | 0.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:gtranslate` | ✅ OK | 3 | N/A | 229 | N/A | N/A |  |
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |

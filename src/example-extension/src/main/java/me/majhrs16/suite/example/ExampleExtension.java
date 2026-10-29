@@ -1,16 +1,9 @@
 package me.majhrs16.suite.example;
 
-import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.api.message.Direction;
-import me.majhrs16.suite.api.message.Formats;
-import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.extension.Extension;
 import me.majhrs16.suite.extension.ExtensionContext;
 import me.majhrs16.suite.extension.ExtensionConfig;
 import me.majhrs16.suite.extension.ExtensionMetadata;
-import me.majhrs16.suite.host.MessageDispatcher;
 
 import java.util.List;
 import java.util.Map;
@@ -78,7 +71,6 @@ public final class ExampleExtension implements Extension {
         // not programmatically. This example demonstrates other extension capabilities.
 
         // Register custom command /suite example
-        MessageDispatcher dispatcher = context.dispatcher();
         // Note: In real implementation, use command registrar
         context.logger().info("[ExampleExtension] Enabled successfully");
 
