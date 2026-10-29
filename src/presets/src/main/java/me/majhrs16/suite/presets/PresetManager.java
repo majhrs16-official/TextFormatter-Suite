@@ -1,9 +1,5 @@
 package me.majhrs16.suite.presets;
 
-import me.majhrs16.suite.api.channel.Channel;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
-import me.majhrs16.suite.host.config.HostConfig;
-
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -365,14 +361,18 @@ public final class PresetManager {
     }
 
     /**
-     * Applies a preset by ID.
+     * Applies a preset by ID through the supplied target.
+     *
+     * @param presetId preset id
+     * @param target   adapter that persists the preset
+     * @return {@code true} when the preset exists and was applied
      */
-    public boolean apply(String presetId, ChannelRegistry registry, HostConfig hostConfig,
-                         List<Channel> channelList) {
+    public boolean apply(String presetId, PresetTarget target) {
         Preset preset = presets.get(presetId);
-        if (preset == null) return false;
-
-        preset.apply(registry, hostConfig, new ArrayList<>());
+        if (preset == null) {
+            return false;
+        }
+        preset.apply(target);
         return true;
     }
 

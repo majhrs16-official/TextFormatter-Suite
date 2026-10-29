@@ -188,22 +188,28 @@ class PresetManagerIntegrationTest {
     }
 
     @Test
-    @DisplayName("apply preset es idempotente")
-    void applyPresetIsIdempotent() {
-        // Apply should not throw even with null params
-        boolean result = presetManager.apply("standard", null, null, List.of());
+    @DisplayName("apply preset aplica todas sus partes")
+    void applyPresetAppliesEveryPart() {
+        RecordingPresetTarget target = new RecordingPresetTarget();
+
+        boolean result = presetManager.apply("standard", target);
+
         assertThat(result).isTrue();
-        
-        // Second apply should also succeed
-        result = presetManager.apply("standard", null, null, List.of());
-        assertThat(result).isTrue();
+        assertThat(target.configs).hasSize(1);
+        assertThat(target.channels).hasSize(5);
+        assertThat(target.translators).hasSize(2);
+        assertThat(target.sync).hasSize(5);
+        assertThat(target.channels.get(0).name()).isEqualTo("chat.global");
+        assertThat(target.channels.get(0).messages().size()).isEqualTo(2);
     }
 
     @Test
     @DisplayName("apply preset inexistente devuelve false")
     void applyNonExistentPresetReturnsFalse() {
-        boolean result = presetManager.apply("non-existent", null, null, List.of());
+        RecordingPresetTarget target = new RecordingPresetTarget();
+        boolean result = presetManager.apply("non-existent", target);
         assertThat(result).isFalse();
+        assertThat(target.channels).isEmpty();
     }
 
     @Test

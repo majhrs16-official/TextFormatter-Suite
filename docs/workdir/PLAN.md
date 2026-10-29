@@ -1094,8 +1094,10 @@ paquete neutral.
 **F6 restante — bloqueado por F4b/F7, no por falta de empaquetado:**
 - `inworld` y `tester` usan Paper API. Pertenecen a los adapters de plataforma
   (F4b), no a paquetes neutrales.
-- `presets` y `extension-api` importan `host.config.HostConfig` y
-  `host.SuiteHost`/`MessageDispatcher`; necesitan puertos neutrales (F4b).
+- `presets` ya aplica mediante el puerto neutral `PresetTarget`; falta el
+  adapter de host que lo implemente (F4b) antes de empaquetarlo.
+- `extension-api` importa `host.SuiteHost`/`MessageDispatcher`; necesita un
+  puerto neutral (F4b).
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
   inworld, tester y extensiones directamente. La retirada de ese cableado es
   el primer trabajo de F4b: hosts sobre `SuiteRuntime` + `PlatformPorts`, sin
@@ -1159,9 +1161,10 @@ Aplicación por módulo:
 - **`tester`** — el simulador de jugador y la traza del pipeline son
   neutrales. La entrega/observación real de eventos vive en el adapter. El
   módulo no importa Paper; los tests usan un `PlatformPorts` falso.
-- **`presets`** — `HostConfig` se sustituye por un contrato neutral de
-  configuración (o se mueve a `core-api`). `Preset.apply` se implementa y se
-  prueba antes de empaquetar. Sin `host.config` en el paquete.
+- **`presets`** — `Preset.apply(PresetTarget)` ya convierte y aplica config,
+  canales, traductores y sync; `PresetTarget` es el puerto neutral. Falta el
+  adapter de host que persista cada parte antes de empaquetar. Sin
+  `host.config` en el paquete.
 - **`extension-api`** — `ExtensionContext` expone un puerto neutral
   (`dispatch`, `findActor`, `hasPermission`, `translation`, `channels`,
   `languages`) en vez de `SuiteHost`/`MessageDispatcher`.
@@ -1178,11 +1181,12 @@ Orden de F4b:
 5. Añadir `checkArchitecture` y dejarlo verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
 
-**Estado:** `sync-discord` y `sync-velocity` desacoplados al 2026-10-29. El
-patrón queda validado para reutilizarlo en `inworld` y `tester` (puertos
-neutrales + adapters de plataforma). Después: `Preset.apply` real y `presets`,
-el puerto neutral de `extension-api`, y el adelgazamiento de
-`spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts`.
+**Estado:** `sync-discord` y `sync-velocity` desacoplados y `Preset.apply`
+implementado al 2026-10-29. El patrón queda validado para reutilizarlo en
+`inworld` y `tester` (puertos neutrales + adapters de plataforma). Después: el
+adapter de host de `PresetTarget` y el empaquetado de `presets`, el puerto
+neutral de `extension-api`, y el adelgazamiento de `spigot-host`/`fabric-host`
+sobre `SuiteRuntime` + `PlatformPorts`.
 
 Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
@@ -1443,7 +1447,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | `src:messages` | ✅ OK | 1 | 30 | 53 | 93.3% | 75.0% | 18 tests integración |
 | `src:observability` | ✅ OK | 2 | N/A | 105 | N/A | N/A | 15 tests integración |
 | `src:performance` | ✅ OK | 2 | N/A | 135 | N/A | N/A | Pocos tests (<3) |
-| `src:presets` | ✅ OK | 1 | N/A | 60 | N/A | N/A | Pocos tests (<3) |
+| `src:presets` | ✅ OK | 2 | N/A | 320 | N/A | N/A | `Preset.apply(PresetTarget)` real; adapter de host pendiente |
 | `src:spigot-host` | ✅ OK | 2 | 1438 | 161 | 2.5% | 4.6% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
 | `src:sync-bus` | ✅ OK | 1 | N/A | 116 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-discord` | ✅ OK | 3 | N/A | 250 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin JDA |
@@ -1508,7 +1512,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | web-editor | ⚠️ gates verdes; UI inestable; auditoría separada diferida | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
-| presets | ✅ standard/rpg/staff/minimal | tests |
+| presets | ✅ standard/rpg/staff/minimal + `Preset.apply(PresetTarget)` real; adapter de host pendiente | tests |
 | inworld | ✅ **COMPILA** (InWorldHandler con Server param, sign formatting) | tests (26 integración) |
 | observability | ✅ metrics/debug/health (auth token, 127.0.0.1, custom port) | tests (15 integración) |
 | extension-api | ✅ SDK estable | tests |

@@ -1,11 +1,13 @@
 package me.majhrs16.suite.presets;
 
 import me.majhrs16.suite.api.channel.Channel;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
-import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.api.message.Formats;
+import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.message.SoundSpec;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A preset is a complete configuration snapshot that can be applied
@@ -56,14 +58,70 @@ public final class Preset {
     public List<PresetSync> sync() { return sync; }
 
     /**
-     * Applies this preset to the given registry and configuration.
+     * Applies every part of this preset through a neutral target.
+     *
+     * <p>The target is the adapter that knows how to persist host settings,
+     * channels, translators and sync transports. This method is the real
+     * application algorithm: it validates and converts each preset entry and
+     * calls the target for each one. A failing target aborts the application
+     * with its exception.</p>
+     *
+     * @param target adapter that persists the preset
      */
-    public void apply(ChannelRegistry registry, HostConfig hostConfig,
-                      List<Channel> channelList) {
-        // Apply config
-        // Apply channels
-        // Apply translators
-        // Apply sync
+    public void apply(PresetTarget target) {
+        Objects.requireNonNull(target, "target");
+        if (config != null) {
+            target.applyConfig(config);
+        }
+        if (channels != null) {
+            for (PresetChannel channel : channels) {
+                target.applyChannel(toChannel(channel));
+            }
+        }
+        if (translators != null) {
+            for (PresetTranslator translator : translators) {
+                target.applyTranslator(translator);
+            }
+        }
+        if (sync != null) {
+            for (PresetSync syncEntry : sync) {
+                target.applySync(syncEntry);
+            }
+        }
+    }
+
+    private static Channel toChannel(PresetChannel preset) {
+        Channel.Builder builder = Channel.builder(preset.name())
+            .type("EVENT".equalsIgnoreCase(preset.type())
+                ? Channel.Type.EVENT : Channel.Type.CHAT)
+            .messages(Formats.of(toArray(preset.messages())))
+            .tooltips(Formats.of(toArray(preset.tooltips())))
+            .sounds(toSounds(preset.sounds()))
+            .langSource(Language.of(preset.langSource()).orElse(Language.AUTO))
+            .langTarget(Language.of(preset.langTarget()).orElse(Language.AUTO))
+            .permission(blankToNull(preset.permission()))
+            .sendPermission(blankToNull(preset.sendPermission()))
+            .receivePermission(blankToNull(preset.receivePermission()))
+            .showSender(preset.showSender())
+            .rateLimitPerSecond(preset.rateLimitPerSecond());
+        return builder.build();
+    }
+
+    private static String[] toArray(List<String> values) {
+        return values == null ? new String[0] : values.toArray(String[]::new);
+    }
+
+    private static List<SoundSpec> toSounds(List<PresetSound> sounds) {
+        if (sounds == null) {
+            return List.of();
+        }
+        return sounds.stream()
+            .map(sound -> new SoundSpec(sound.name(), sound.volume(), sound.pitch()))
+            .toList();
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     // ============================================================
