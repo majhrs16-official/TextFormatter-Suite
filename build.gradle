@@ -68,6 +68,65 @@ subprojects {
     }
 }
 
+// Architecture guard: neutral modules must not import platform SDKs or host
+// internals. Adapters are allowlisted only for the SDK they adapt.
+tasks.register('checkArchitecture') {
+    group = 'verification'
+    description = 'Fails when a neutral module imports a platform SDK or host internals'
+
+    doLast {
+        def platform = [
+            'org.bukkit.', 'io.papermc.', 'com.velocitypowered.',
+            'net.fabricmc.', 'net.minecraft.', 'net.dv8tion.jda.'
+        ]
+        def host = [
+            'me.majhrs16.suite.host.', 'me.majhrs16.suite.spigothost.',
+            'me.majhrs16.suite.fabrichost.'
+        ]
+        def neutral = [
+            'core-api', 'kernel', 'textformatter', 'messages', 'iflow-vm',
+            'iflow-firewall', 'iflow-wasm', 'logger', 'transport',
+            'chattranslator', 'gtranslate', 'ltranslate', 'sync-bus',
+            'sync-common', 'sync-discord', 'sync-discord-jdk', 'sync-http',
+            'sync-socket', 'sync-telegram', 'sync-websocket', 'sync-velocity',
+            'observability', 'presets', 'extension-api', 'example-extension'
+        ]
+        def rules = [:]
+        neutral.each { rules[it] = platform + host }
+        // The JDA adapter may use JDA, but never host internals.
+        rules['sync-discord-jda'] = host
+        // The Velocity plugin may use Velocity, but never host internals.
+        rules['sync-velocity-velocity'] = host
+
+        def violations = []
+        rules.each { module, prefixes ->
+            def sourceDir = rootProject.file("src/${module}/src/main/java")
+            if (!sourceDir.isDirectory()) return
+            sourceDir.eachFileRecurse { file ->
+                if (!file.name.endsWith('.java')) return
+                file.eachLine { line, number ->
+                    def trimmed = line.trim()
+                    if (!trimmed.startsWith('import ')) return
+                    prefixes.each { prefix ->
+                        if (trimmed.startsWith("import ${prefix}")) {
+                            violations << "${sourceDir.toPath().relativize(file.toPath())}:${number}: ${trimmed}"
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!violations.isEmpty()) {
+            throw new GradleException(
+                "Architecture violations (neutral module importing platform/host):\n" +
+                violations.sort().join('\n'))
+        }
+        println "Architecture check passed: ${rules.size()} neutral/adapter modules scanned"
+    }
+}
+
+tasks.named('check') { dependsOn 'checkArchitecture' }
+
 // Aggregate task used by README/CI: builds every subproject, including tests.
 tasks.register('buildAll') {
     description = 'Build all subprojects (includes tests)'

@@ -1109,8 +1109,9 @@ paquete neutral.
 9 paquetes de feature (`sync-socket`, `sync-websocket`, `sync-telegram`,
 `sync-discord`, `sync-http`, `syncbus`, `observability`, `inworld`,
 `extension`) y `fabric-host` al menos 7 (sin `sync-http` ni `inworld`).
-El guard de arquitectura se añadirá cuando la primera rebanada de F4b deje el
-build verde; no se añade un guard que nazca rojo.
+El guard de arquitectura (`checkArchitecture`) ya existe y está verde: escanea
+los módulos neutrales y adaptadores allowlisted, y falla si un módulo neutral
+importa un SDK de plataforma o el host.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
@@ -1180,7 +1181,7 @@ Orden de F4b:
    no bloqueante.
 4. Poner `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` y
    retirar todos los imports de features.
-5. Añadir `checkArchitecture` y dejarlo verde: adapters sin features,
+5. `checkArchitecture` ya está verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
 
 **Estado:** `sync-discord`, `sync-velocity`, `Preset.apply` y el puerto neutral
@@ -1250,7 +1251,7 @@ Para evitar que el cambio quede a medias:
 - [ ] Un test de arquitectura falla si un adapter vuelve a declarar un feature.
 - [ ] No quedan `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado,
       `ManagerFacade.discoverAll` por classpath ni dependencias muertas.
-- [ ] `./gradlew build` y `./gradlew checkArchitecture` pasan.
+- [x] `./gradlew build` y `./gradlew checkArchitecture` pasan.
 - [ ] La documentación de módulos explica `ModuleActivator`, `ModuleContext`,
       `library/packages`, `library/status`, hot upgrade y límites de reinicio.
 

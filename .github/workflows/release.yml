@@ -77,6 +77,7 @@ jobs:
             :src:messages:build \
             :src:tester:build \
             :src:common-legacy:build \
+            checkArchitecture \
             -Pversion="${{ steps.version.outputs.version }}" \
             --no-daemon
 

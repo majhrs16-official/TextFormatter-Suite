@@ -63,6 +63,7 @@ jobs:
             :src:messages:build \
             :src:tester:build \
             :src:common-legacy:build \
+            checkArchitecture \
             --no-daemon
 
       - name: Verify dependency lockfiles
