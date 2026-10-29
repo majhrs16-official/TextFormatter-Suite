@@ -3,9 +3,9 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-27 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-10-29 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia y `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator`, que refresca su `TranslatorManager` con los eventos de ciclo de vida. Faltan el resto de paquetes opcionales, la retirada del cableado del host y F4b. Ver la sección **ADR-019** más abajo.
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia y `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator`, que refresca su `TranslatorManager` con los eventos de ciclo de vida. Faltan el resto de paquetes opcionales, la retirada del cableado del host, F4b y F4c (sincronizadores de plataforma). Ver la sección **ADR-019** más abajo.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
@@ -498,7 +498,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 **Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
 
-**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 en curso (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar). Faltan el resto de F6 y F4b.
+**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 en curso (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar). Faltan el resto de F6, F4b y F4c (sincronizadores de plataforma).
 
 > **Ubicación:** este ADR vive en `docs/workdir/PLAN.md`. No es una sección de
 > `docs/workdir/ADR.md`; ese archivo es el documento histórico de decisiones base
@@ -631,7 +631,8 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
    `suite-runtime` no importan `sync-*`, `textformatter`, `iflow-*`,
    `chattranslator`, `gtranslate`, `ltranslate`, `observability`, etc.
 2. **Los adapters solo conocen la plataforma y la API.** `spigot-host` y
-   `fabric-host` dependen de `core-api` + `suite-runtime` + SDK de plataforma.
+   `fabric-host` son bootstrap y dependen de `core-api` + `suite-runtime` + SDK
+   de plataforma. La captura de eventos vive en `sync-bukkit`/`sync-fabric`.
 3. **El Manager es el orquestador.** Instalar, activar, desactivar, actualizar
    y reparar pasan por el Manager.
 4. **Instalar no es activar.** El estado instalado y el estado activo se
@@ -698,14 +699,64 @@ dominio del reestructuramiento:
   dependencias, resolviendo el grafo sin más. Esto es normal y es el camino
   de Debian en cuestión de apt y dpkg.
 
+- **C10. La captura de eventos de plataforma es un sincronizador descargable.**
+  El bloque del host que registra listeners de plataforma, traduce el evento a
+  `Message` y lo entrega al núcleo no pertenece al host. Es un paquete de
+  plataforma: `sync-bukkit` para Spigot/Paper y `sync-fabric` para Fabric. Cada
+  entorno descarga únicamente el sincronizador compatible; ninguno se embebe en
+  el JAR del host.
+
+##### Decisión 2026-10-29 — sincronizadores de plataforma
+
+La captura de eventos de Minecraft deja de ser código compilado en
+`spigot-host`/`fabric-host`. El bloque que hoy registra
+`AsyncPlayerChatEvent`/`ServerMessageEvents.CHAT_MESSAGE`, traduce el evento y
+lo manda al núcleo agnóstico se convierte en un paquete de plataforma:
+
+| Paquete | Entorno | Responsabilidad |
+|---|---|---|
+| `sync-bukkit` | Spigot/Paper/Purpur (API Bukkit/Paper) | Registra los listeners de chat/join/quit/death, traduce el evento a `Message` y lo despacha por `MessageDispatch`. |
+| `sync-fabric` | Fabric Loader/Minecraft compatible | Igual, usando `ServerMessageEvents` y la API de Fabric. |
+
+Reglas de la decisión:
+
+1. **El host queda como bootstrap.** `spigot-host`/`fabric-host` construyen
+   `PlatformPorts`, arrancan `SuiteRuntime`, publican los servicios neutrales y
+   registran comandos. No contienen `@EventHandler`, no registran
+   `ServerMessageEvents.CHAT_MESSAGE`, no traducen eventos y no importan
+   features.
+2. **Son paquetes, no código embebido.** `sync-bukkit` y `sync-fabric` se
+   descargan e instalan como cualquier paquete. `packages.list` declara su
+   plataforma/entorno y el Manager instala solo el compatible con
+   `PlatformInfo`; un paquete incompatible no se activa.
+3. **Son adaptadores de plataforma.** Pueden importar Bukkit/Paper o Fabric,
+   pero no features, no `host` concreto y no otros sincronizadores. Consumen
+   `MessageDispatch`, `ActorDirectory`, `PermissionChecker`,
+   `UserLanguageStore` y los puertos neutrales que necesiten desde
+   `ServiceRegistry`.
+4. **Ciclo de vida real.** El paquete registra sus listeners en `start()` y los
+   desregistra en `stop()`. Si la API de la plataforma no permite desregistrar
+   un listener, la desactivación se marca `RESTART_REQUIRED`; no se deja un
+   listener huérfano ni se finge que el unload fue limpio.
+5. **La traducción termina en `Message`.** El sincronizador no decide formato,
+   routing, traducción, canales ni entrega. Solo convierte el evento de
+   plataforma a la representación neutral y la inyecta en el pipeline. No es un
+   `SyncSink`: es una fuente de eventos local; el fan-out a sinks lo hace
+   `sync-bus`.
+6. **El guard lo verifica.** `checkArchitecture` permite el SDK de plataforma
+   solo en `sync-bukkit`, `sync-fabric` y el bootstrap del host; falla si un
+   módulo neutral o un adapter de feature importa Bukkit/Paper/Fabric.
+7. **No hay doble camino.** Al cerrar F4c se borran los listeners de los hosts.
+   No se conserva un fallback compilado ni una activación implícita.
+
 ##### Arquitectura objetivo
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │ spigot-host / fabric-host                                            │
-│ - implementa PlatformPorts                                           │
-│ - traduce eventos de plataforma a Message                            │
-│ - registra listeners/comandos y delega en SuiteRuntime               │
+│ - bootstrap del runtime                                              │
+│ - implementa PlatformPorts y registra comandos                       │
+│ - NO registra listeners de eventos ni traduce mensajes               │
 │ - NO importa ningún módulo de feature                                │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ core-api + suite-runtime
@@ -730,6 +781,9 @@ dominio del reestructuramiento:
 │ textformatter, iflow-*, chattranslator, gtranslate, ltranslate,      │
 │ sync-*, observability, presets, messages, ...                        │
 │ implementan ModuleActivator y usan ModuleContext                     │
+│                                                                      │
+│ sync-bukkit / sync-fabric: paquetes de plataforma, uno por entorno   │
+│ registran listeners, traducen a Message y despachan al pipeline      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -929,11 +983,12 @@ distintos y viven en archivos distintos.
 | Categoría | Módulos | Destino |
 |---|---|---|
 | Núcleo técnico | `core-api`, `kernel`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
-| Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma |
+| Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma; bootstrap sin listeners de eventos |
+| Sincronizadores de plataforma | `sync-bukkit`, `sync-fabric` | Paquetes de plataforma descargables; capturan eventos, traducen a `Message` y despachan; el Manager instala solo el compatible; no se embeben en el host |
 | Paquetes de dependencia | `logger`, `transport`, SnakeYAML, JDA, Adventure y demás librerías compartidas | Paquetes de tipo dependencia; el manager los descarga, verifica, relocaliza y carga por módulo (C3) |
 | Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` | Paquetes instalados por defecto; `Exclude`/`Provide` para motores iFlow |
 | Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api` | Paquetes; dependencias declaradas en `METADATA/package.list` |
-| Plataforma | `inworld` (Bukkit), handlers Fabric | Adapter o paquete marcado `Platform: bukkit`/`fabric`; nunca en el loader neutral |
+| Plataforma | `inworld` (Bukkit) | Adapter o paquete marcado `Platform: bukkit`; nunca en el loader neutral |
 | Producción auxiliar | `tester` (Spigot) | Módulo de producción: benchmarking en runtime y traza del pipeline completo (C7); no es harness |
 | Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
 | Eliminar | `common-legacy` (sin fuentes `main`), `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, dependencias muertas | Borrar en la fase correspondiente |
@@ -941,8 +996,10 @@ distintos y viven en archivos distintos.
 Decisión por defecto: **todo feature es paquete**, incluso `textformatter`,
 `iflow-*`, `chattranslator` y `messages`. El núcleo solo contiene contratos,
 kernel, manager y runtime; `logger` y `transport` son paquetes de dependencia,
-no código del host. La suite instala un conjunto base en el primer arranque; si
-falta, arranca en modo degradado con avisos explícitos, no con una
+no código del host. Los hosts no contienen listeners de eventos: `sync-bukkit`
+y `sync-fabric` se instalan como paquetes de plataforma y el Manager elige el
+compatible con el entorno. La suite instala un conjunto base en el primer
+arranque; si falta, arranca en modo degradado con avisos explícitos, no con una
 implementación falsa.
 
 ##### Reglas de dependencia
@@ -977,9 +1034,15 @@ feature module
   ✗ otros features salvo dependencia declarada
   ✗ Bukkit / Fabric / Minecraft
 
+sync-bukkit / sync-fabric
+  → core-api
+  → SDK de plataforma (Bukkit/Paper o Fabric)
+  → MessageDispatch / ActorDirectory / PermissionChecker / UserLanguageStore
+  ✗ features, host concreto, otros sync
+
 módulo platform-specific
   → core-api + SDK de plataforma
-  → cargado por un loader de plataforma, no por el loader neutral
+  → el SDK lo provee el host; el loader neutral no importa la plataforma
 ```
 
 ##### Qué se elimina, no se envuelve
@@ -994,6 +1057,8 @@ módulo platform-specific
 - `ManagerFacade.discoverAll()` basado en classpath: se elimina; el
   descubrimiento sale de `library/status` y `library/packages`.
 - Dependencias de features en adapters y `host`: se eliminan.
+- Listeners de chat/join/quit/death en `spigot-host`/`fabric-host`: se mudan a
+  `sync-bukkit`/`sync-fabric`; no se conserva el cableado compilado.
 - `gtranslate`/`ltranslate` como `implementation` en adapters: pasan a ser
   paquetes o `runtimeOnly` del runtime, nunca dependencia de compilación del
   adapter.
@@ -1022,6 +1087,7 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F5. Migrar paquetes base** | Convertir features base en paquetes cargables | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` como `ModuleActivator`; contratos compartidos en `core-api` | ✅ Los seis paquetes base se instalan desde ZIP y activan; `ChannelRegistry`/`Channel` y `Router`/`RouteDecision`/`RouteOutcome`/`PolicyTarget`/`PermissionChecker`/`RateLimiter` viven en `core-api`; `logger` se carga como paquete de dependencia desde `library/dependencies`; tests reales verdes. El cableado compilado del host se retira en F6 |
 | **F6. Migrar paquetes opcionales** | Convertir el resto de features y retirar el cableado compilado | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `extension-api`; mover `inworld`/`tester` a plataforma o harness; eliminar el cableado de features en el host | Todos los paquetes instalados se activan desde `library/status` + `library/packages`; ningún feature queda compilado en el host |
 | **F4b. Adapters delgados** | Cerrar el acoplamiento de los adapters | `SpigotPlatformPorts`, `FabricPlatformPorts`, cableado de `SuiteRuntime`, guard `checkArchitecture` | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
+| **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
 | **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado de instalación coherente y estado runtime en `<manager>/runtime/modules.status` |
 | **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
 
@@ -1032,7 +1098,8 @@ activa. El classloader resuelve JARs de paquetes `DEPENDENCY` desde
 `library/dependencies`; `logger` es el primer paquete de dependencia real de
 `iflow-vm`. Los contratos que cruzan módulos viven en `core-api`
 (`api.channel`, `api.iflow`) y los motores publican el servicio `Router`. La
-retirada del cableado compilado del host pertenece a F6/F4b.
+retirada del cableado compilado del host pertenece a F6/F4b; los listeners de
+eventos se mudan a `sync-bukkit`/`sync-fabric` en F4c.
 
 **F6 en curso:** `transport` se empaqueta como `DEPENDENCY`; `gtranslate` y
 `ltranslate` tienen `ModuleActivator`, declaran `transport@>=2.1.0` y publican
@@ -1092,7 +1159,7 @@ Tests: `VelocitySinkTest` con `FakeConnection`, `VelocityProxyConnectionTest`
 con Mockito y `PackageRuntimeTest` con un adapter falso instalado después del
 paquete neutral.
 
-**F6 restante — bloqueado por F4b/F7, no por falta de empaquetado:**
+**F6 restante — bloqueado por F4b/F4c/F7, no por falta de empaquetado:**
 - `inworld` y `tester` usan Paper API. Pertenecen a los adapters de plataforma
   (F4b), no a paquetes neutrales.
 - `presets` ya aplica mediante el puerto neutral `PresetTarget`; falta el
@@ -1102,7 +1169,8 @@ paquete neutral.
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
   inworld, tester y extensiones directamente. La retirada de ese cableado es
   el primer trabajo de F4b: hosts sobre `SuiteRuntime` + `PlatformPorts`, sin
-  imports de features.
+  imports de features. La captura de eventos de chat/join/quit/death se muda a
+  `sync-bukkit`/`sync-fabric` en F4c, no se queda en el host.
 
 **F4b — punto de partida medido:** `spigot-host` importa directamente al menos
 9 paquetes de feature (`sync-socket`, `sync-websocket`, `sync-telegram`,
@@ -1110,7 +1178,8 @@ paquete neutral.
 `extension`) y `fabric-host` al menos 7 (sin `sync-http` ni `inworld`).
 El guard de arquitectura (`checkArchitecture`) ya existe y está verde: escanea
 los módulos neutrales y adaptadores allowlisted, y falla si un módulo neutral
-importa un SDK de plataforma o el host.
+importa un SDK de plataforma o el host. Los listeners de eventos siguen en los
+hosts; su extracción a `sync-bukkit`/`sync-fabric` es F4c.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
@@ -1128,11 +1197,14 @@ Reglas:
    módulos) o en el `api` del propio paquete.
 2. **Adaptadores tecnológicos.** JDA, Velocity API, Paper/Bukkit y Fabric viven
    solo en adaptadores: `adapters/jda`, `adapters/velocity`,
-   `spigot-host`/`fabric-host`. El paquete neutral declara el puerto y el
-   adapter lo implementa; el paquete no depende del adapter.
-3. **Eventos agnósticos.** El adapter de plataforma traduce el evento de
-   Minecraft a un `Message`/evento neutral y lo entrega al runtime. El módulo
-   consume ese evento; nunca registra listeners de Paper/Bukkit.
+   `sync-bukkit`, `sync-fabric` y el bootstrap de `spigot-host`/`fabric-host`.
+   El paquete neutral declara el puerto y el adapter lo implementa; el paquete
+   no depende del adapter.
+3. **Eventos agnósticos.** El sincronizador de plataforma
+   (`sync-bukkit`/`sync-fabric`) traduce el evento de Minecraft a un
+   `Message`/evento neutral y lo entrega al runtime. El módulo consume ese
+   evento; nunca registra listeners de Paper/Bukkit. El host solo aporta
+   `PlatformPorts` y el bootstrap.
 4. **Ciclo de vida no bloqueante.** `start()` de un paquete no espera red ni
    servidores externos. Las conexiones (Discord, Velocity, etc.) se hacen en
    un adaptador con estado propio, reintentos y `stop()` determinista; la
@@ -1156,6 +1228,10 @@ Aplicación por módulo:
 - **`sync-velocity`** — mismo patrón: `sync-velocity-core` contiene la lógica
   neutral y `sync-velocity` es el plugin/adapter Velocity que implementa el
   puerto de mensajería del proxy. El núcleo no importa `com.velocitypowered`.
+- **`sync-bukkit` / `sync-fabric`** — paquetes de plataforma descargables.
+  Registran los listeners de chat/join/quit/death, traducen el evento a
+  `Message` y lo despachan por `MessageDispatch`; no contienen features ni
+  lógica de formato, routing, traducción o entrega. El host no los embebe.
 - **`inworld`** — el dominio de “mensajes en el mundo” es neutral. El registro
   del listener de Paper y la traducción del evento viven en `spigot-host`.
   `fabric-host` implementa el mismo puerto con su API. El módulo no importa
@@ -1182,18 +1258,24 @@ Orden de F4b:
    retirar todos los imports de features.
 5. `checkArchitecture` ya está verde: adapters sin features,
    módulos neutrales sin SDK de plataforma, sin stubs.
+6. Extraer la captura de eventos a `sync-bukkit`/`sync-fabric` (F4c) y borrar
+   los listeners del host en el mismo cambio.
 
 **Estado:** `sync-discord`, `sync-velocity-core`/`sync-velocity`, `Preset.apply` y el puerto neutral
 de `extension-api` completados al 2026-10-29. El patrón queda validado para
 reutilizarlo en `inworld` y `tester` (puertos neutrales + adapters de
 plataforma). Después: el adapter de host de `PresetTarget` y el empaquetado de
-`presets`, y el adelgazamiento de `spigot-host`/`fabric-host` sobre
-`SuiteRuntime` + `PlatformPorts`.
+`presets`, el adelgazamiento de `spigot-host`/`fabric-host` sobre
+`SuiteRuntime` + `PlatformPorts` (F4b) y la extracción de la captura de eventos
+a `sync-bukkit`/`sync-fabric` (F4c).
 
-Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F7 → F8**.
+Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F4c → F7 → F8**.
 F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
 deja el camino viejo activo. F4b se ejecuta después de F5/F6 porque el
 adelgazamiento de los adapters depende de que los features ya sean paquetes.
+F4c se ejecuta después de F4b porque los sincronizadores necesitan el host
+delgado y `PlatformPorts`; F7 va después de F4c para probar el unload de
+listeners de plataforma.
 
 ##### Protocolo anti-vaguedad
 
@@ -1622,7 +1704,7 @@ Esta sección recopila los principios técnicos de diseño, costumbres del proye
 
 ### P1. El Manager es el origen de la composición
 
-El Manager de paquetes es quien actualiza índices, descarga artefactos, resuelve dependencias, instala, **inicializa en memoria** y gestiona el ciclo de vida completo de los módulos. Los adaptadores de plataforma (Spigot/Fabric) no son composition roots ni conocen la existencia de los módulos de feature. Solo implementan puertos de plataforma y traducen, en reversa, los eventos de su Minecraft a una representación interna agnóstica.
+El Manager de paquetes es quien actualiza índices, descarga artefactos, resuelve dependencias, instala, **inicializa en memoria** y gestiona el ciclo de vida completo de los módulos. Los adaptadores de plataforma (Spigot/Fabric) no son composition roots ni conocen la existencia de los módulos de feature. Solo implementan puertos de plataforma; la captura y traducción de eventos vive en los paquetes `sync-bukkit`/`sync-fabric`.
 
 **Consecuencia:** `spigot-host` y `fabric-host` dependen solo de la API del núcleo + runtime de módulos + SDK de plataforma. Ninguna dependencia a `sync-*`, `textformatter`, `iflow-*`, `chattranslator`, `gtranslate`, `ltranslate`, `observability`, `manager-*` ni `presets`.
 
@@ -1634,9 +1716,9 @@ La base de datos local (`library/status`) es un catálogo de programas instalado
 
 ### P3. Los adaptadores de plataforma son delgados
 
-Spigot y Fabric no deben conocer la existencia de ningún módulo de feature. Su propósito es simplemente implementar una API común entre plataformas y adaptar en reversa los eventos de cada Minecraft a una representación interna agnóstica. El cableado de sinks, listeners y servicios de plataforma vive en el runtime de módulos (`suite-runtime`), no en el adapter.
+Spigot y Fabric no deben conocer la existencia de ningún módulo de feature. Su propósito es simplemente implementar una API común entre plataformas y arrancar el runtime. La captura de eventos de Minecraft y su traducción a una representación interna agnóstica vive en paquetes de plataforma (`sync-bukkit`/`sync-fabric`), no en el adapter. El cableado de sinks y servicios de plataforma vive en el runtime de módulos (`suite-runtime`).
 
-**Consecuencia:** El adapter se reduce a crear `PlatformPorts`, traducir eventos a `Message` y delegar en `SuiteRuntime`.
+**Consecuencia:** El adapter se reduce a crear `PlatformPorts`, arrancar `SuiteRuntime` y delegar; los listeners y la traducción de eventos se cargan como paquetes `sync-bukkit`/`sync-fabric`.
 
 ### P4. Código arbitrario: seguridad compartida (sandbox + dueño del repo)
 
@@ -1714,7 +1796,13 @@ Cada bug debe tener un test que demuestre que está resuelto. No se considera ce
 
 El directorio `src/` se organiza por capa técnica: `api`, `kernel`, `runtime`, `platform` y `packages`. `platform` contiene cada plataforma de Minecraft soportada; `kernel` contiene cada feature agnóstico, base, primario o importante para la arquitectura del sistema; `packages` contiene cada módulo independiente entre sí.
 
-**Consecuencia:** `spigot-host` y `fabric-host` viven en `platform/`. Los módulos de feature viven en `packages/`. Los contratos del núcleo viven en `api/` y `kernel/`.
+**Consecuencia:** `spigot-host` y `fabric-host` viven en `platform/`. Los módulos de feature viven en `packages/`. Los contratos del núcleo viven en `api/` y `kernel/`. `sync-bukkit` y `sync-fabric` son paquetes de plataforma: viven bajo `platform/` y se distribuyen como ZIP descargable, no dentro del JAR del host.
+
+### P17. Los eventos de plataforma se capturan en `sync-<plataforma>`
+
+La sección del host que intercepta eventos de Minecraft y los entrega al núcleo agnóstico es, por definición, un sincronizador de plataforma. Se implementa como paquete descargable: `sync-bukkit` para Spigot/Paper y `sync-fabric` para Fabric. Cada host instala solo el paquete compatible con su entorno; ninguno se embebe en el JAR del host.
+
+**Consecuencia:** `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; solo aportan `PlatformPorts` y el bootstrap. Los paquetes `sync-bukkit`/`sync-fabric` registran listeners, traducen a `Message`, despachan por `MessageDispatch` y se desregistran en `stop()`; si la plataforma no permite desregistrar, se marca `RESTART_REQUIRED`.
 
 ---
 
@@ -1725,3 +1813,4 @@ Los siguientes principios se definen en detalle en el ADR-019 (sección «Princi
 - **C7. `tester` es un módulo de producción** — resumen: `tester` no es herramienta de desarrollo excluida del artefacto final; es un módulo de benchmarking en tiempo de ejecución y de prueba del pipeline completo. Ver ADR-019, «Principios adicionales de diseño del ADR-019», punto C7.
 - **C8. Extensiones sin catálogo cerrado** — resumen: no existe un `enum` con todos los módulos posibles. Cualquier repositorio de paquetes de terceros puede otorgar paquetes custom, fuera de lo que hace esta suite. El sistema de descubrimiento debe estar abierto a paquetes arbitrarios declarados en índices remotos. Ver ADR-019, «Principios adicionales de diseño del ADR-019», y P11 de esta sección.
 - **D4. No hay doble camino** — resumen: cuando una funcionalidad se migra al runtime de módulos, su cableado compilado se elimina en el mismo cambio. No se mantienen dos formas de arrancar la suite ni dos mecanismos de descubrimiento de módulos. Ver ADR-019, «Principios no negociables», punto 6, y P7 de esta sección.
+- **C10. Sincronizadores de plataforma descargables** — resumen: la captura de eventos de Minecraft vive en `sync-bukkit`/`sync-fabric`, no en el host; el Manager instala solo el compatible y los hosts quedan como bootstrap. Ver ADR-019, «Principios adicionales de diseño del ADR-019», punto C10, y P17 de esta sección.
