@@ -39,7 +39,7 @@ Estas son las costumbres de código y de diseño que guían el trabajo diario. L
 
 ## C1. Documento vivo
 
-El PLAN y los documentos de diseño se reescriben, podan y actualizan constantemente. Solo lo vigente permanece en el documento activo. El historial de git conserva todo lo necesario; no se acumula histórico cerrado en los documentos activos.
+El PLAN, `docs/workdir/ADR.md` y los documentos de diseño son documentos vivos: se reescriben, podan y actualizan constantemente. `docs/workdir/ADR.md` es el registro vivo de decisiones de arquitectura y se actualiza en el mismo cambio que introduce una decisión estructural; no se trata como un archivo histórico. El PLAN resume el estado, las fases y el detalle operativo. Solo lo vigente permanece en el documento activo. El historial de git conserva todo lo necesario; no se acumula histórico cerrado en los documentos activos.
 
 ## C2. Romper para reestructurar
 

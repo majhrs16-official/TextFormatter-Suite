@@ -1,6 +1,7 @@
 # ADR — TextFormatter Suite v2.1
 
-Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño)
+Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño) · Última actualización: 2026-10-29
+> **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura. El estado operativo y las fases viven en `PLAN.md`.
 > **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` para estado actual.
 
 ## Contexto
@@ -613,3 +614,57 @@ consumidor de SpEL es el motor legacy opcional de `iflow-firewall`.
 `iflow-firewall`, SPI de expresión dentro del módulo, `RouterFactory` sin adaptador, `FirewallConfig`
 tolera el esquema legacy, selección de motor en `HostConfig`/`ConfigLoader`, y documentación de
 exclusividad (PLAN, ADR, storage, README, wiki). `./gradlew build` pasa.
+
+---
+
+## Decisión 2026-10-29 — Sincronizadores de plataforma `sync-bukkit` y `sync-fabric`
+
+**Contexto.** `spigot-host` y `fabric-host` interceptaban eventos de Minecraft
+(chat, join, quit y death), los traducían y los entregaban al núcleo. Ese bloque
+no es bootstrap del host: es sincronización de plataforma. Mantenerlo dentro del
+JAR del host impide que el Manager lo instale, versione, reemplace o descargue
+solo en el entorno compatible.
+
+**Decisión.**
+
+1. La captura de eventos se mueve a dos paquetes de plataforma descargables:
+   `sync-bukkit` para Spigot/Paper/Purpur y `sync-fabric` para Fabric. No se
+   embeben en el JAR de `spigot-host` ni en el de `fabric-host`.
+2. `spigot-host`/`fabric-host` quedan como bootstrap: construyen
+   `PlatformPorts`, arrancan `SuiteRuntime`, publican servicios neutrales y
+   registran comandos. No contienen `@EventHandler`, no registran
+   `ServerMessageEvents.CHAT_MESSAGE`, no traducen eventos y no importan
+   features.
+3. `packages.list` declara la plataforma/entorno del paquete. El Manager
+   instala solo el compatible con `PlatformInfo`; un paquete incompatible no se
+   activa.
+4. `sync-bukkit`/`sync-fabric` pueden importar el SDK de su plataforma, pero no
+   features, no un `host` concreto y no otros sincronizadores. Consumen
+   `MessageDispatch`, `ActorDirectory`, `PermissionChecker`,
+   `UserLanguageStore` y los puertos neutrales que necesiten desde
+   `ServiceRegistry`.
+5. Traducen el evento de plataforma a `Message` y lo despachan por
+   `MessageDispatch`. No son `SyncSink`: son fuentes de eventos locales; el
+   fan-out a sinks lo hace `sync-bus`. No deciden formato, routing, traducción,
+   canales ni entrega.
+6. Registran sus listeners en `start()` y los retiran en `stop()`. Si la API de
+   la plataforma no permite desregistrar, la desactivación se marca
+   `RESTART_REQUIRED`; no se deja un listener huérfano.
+7. `checkArchitecture` permite el SDK de plataforma solo en `sync-bukkit`,
+   `sync-fabric` y el bootstrap del host; falla si un módulo neutral o un
+   adapter de feature importa Bukkit/Paper/Fabric.
+8. No hay doble camino: al cerrar F4c se eliminan los listeners de los hosts. No
+   se conserva un fallback compilado ni una activación implícita.
+
+**Consecuencias.**
+
+- El host deja de ser composition root de eventos; su única responsabilidad de
+  plataforma es `PlatformPorts` y el arranque del runtime.
+- Cada entorno descarga su propio sincronizador; no existe un paquete universal
+  de captura de eventos.
+- Se añade la fase F4c al PLAN, después de F4b (hosts delgados) y antes de F7
+  (hot upgrade/unload real). El detalle operativo vive en `PLAN.md`, sección
+  «Decisión 2026-10-29 — sincronizadores de plataforma».
+- Los tests de F4c deben cubrir instalación solo en el entorno compatible,
+  traducción a `Message`, despacho, desactivación y ausencia de listeners
+  huérfanos.

@@ -500,10 +500,10 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 **Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 en curso (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar). Faltan el resto de F6, F4b y F4c (sincronizadores de plataforma).
 
-> **Ubicación:** este ADR vive en `docs/workdir/PLAN.md`. No es una sección de
-> `docs/workdir/ADR.md`; ese archivo es el documento histórico de decisiones base
-> y no se modifica aquí. Se reescribe este ADR en lugar de crear uno nuevo para
-> evitar fragmentar todavía más la arquitectura.
+> **Ubicación:** el detalle operativo de ADR-019 vive en `docs/workdir/PLAN.md`;
+> la decisión de arquitectura se registra también en `docs/workdir/ADR.md`, que
+> es el documento vivo de ADRs. Se reescribe este ADR en lugar de crear uno
+> nuevo para evitar fragmentar todavía más la arquitectura.
 
 ##### Decisión del usuario (2026-10-27)
 
