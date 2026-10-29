@@ -784,3 +784,165 @@ deben registrar rutas relativas, no la raíz.
 - Tests obligatorios: el mismo árbol bajo `suite`, `suite module` y `tf`; root
   multi-segmento; aliases; colisión; re-registro en caliente o
   `RESTART_REQUIRED`.
+
+---
+
+## Decisión 2026-10-29 — Compilador C para iFlow VM (ADR-023)
+
+**Estado:** Aceptada. Diseño congelado; implementación pendiente en la fase V6,
+después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
+(integración) y V5 (assembler v3). No se implementa contra el ISA v2 de 16 bits.
+
+**Contexto.**
+
+- La línea `iflow-vm` v3 es una máquina de 32 bits con ROM, BIOS, bootloader,
+  kernel, ISA jerárquica, ABI `HOST` v3 y memoria paginada. La especificación de
+  referencia es `docs/prompts/diseno/iflow-cpu-implement.md`.
+- `tools/iflow-compiler/` solo ensambla `.flowasm` v2 a `.flow` v2. No hay
+  frontend C, ni ABI C, ni runtime freestanding para la arquitectura v3.
+- Escribir políticas en ensamblador es una barrera real para autores y para el
+  editor. Un compilador C permite expresar políticas, firmware y utilidades sin
+  convertir el ensamblador en el único lenguaje de autoría.
+- El compilador no pertenece al host: es una herramienta offline/CI. El servidor
+  solo carga ROM ya compilada y verificada; no compila C en runtime.
+- El compilador debe ser determinista, auditable y no depender de una toolchain
+  nativa externa (Clang/LLVM, GCC, TinyCC) para producir el artefacto.
+
+**Decisión.**
+
+1. **Herramienta separada.** Se añade `tools/iflow-c/` con el CLI `iflow-cc`,
+   implementado en TypeScript sobre Node.js 18+, igual que el assembler actual.
+   No sustituye a `tools/iflow-compiler/`: el compilador C emite `.flowasm` v3 y
+   el assembler v3 sigue siendo el único codificador de instrucciones y el único
+   productor de ROM. No se duplica la tabla de opcodes ni el formato binario.
+2. **Pipeline.** El compilador ejecuta: preprocesador → lexer → parser →
+   análisis semántico → AST tipado → IR de tres direcciones → optimización
+   local → lowering al target → asignación de registros → emisión de
+   `.flowasm` v3. El assembler v3 resuelve símbolos, relocaciones, TOC, hash y
+   segmentos de la ROM.
+3. **Lenguaje.** Se implementa un **subconjunto C11 freestanding**, no ISO C
+   completo. Baseline:
+   - tipos: `void`, `_Bool`, `char` (8 bits sin signo), `signed char`, `short`
+     (16), `int`/`long` (32), `long long` (64), punteros de 32 bits, arrays,
+     `struct`, `union`, `enum`, `typedef`, `const`, `volatile`;
+   - expresiones: aritmética, bitwise, shifts, comparaciones, lógica,
+     asignación y compuestas, ternario, coma, casts, `sizeof`, dirección,
+     desreferencia, acceso a miembros, indexación, llamadas, literales de
+     cadena y enteros;
+   - sentencias: bloques, `if`/`else`, `switch`/`case`/`default`, `for`,
+     `while`, `do`/`while`, `break`, `continue`, `return`, `goto`/etiquetas y
+     declaraciones;
+   - funciones con prototipos, `static`, `extern`, `inline` como pista y
+     `_Static_assert`. Las funciones variádicas no son baseline.
+   - `volatile` se respeta: no se eliminan, duplican ni reordenan accesos
+     volátiles. Es obligatorio para MMIO.
+4. **Exclusiones explícitas.** No son baseline: coma flotante (`float`/
+   `double`), `_Complex`, `_Atomic`, hilos, `setjmp`/`longjmp`, VLA, bitfields,
+   caracteres anchos, `_Generic`, `typeof`, ensamblador inline y funciones
+   variádicas. Un uso no soportado produce un error de compilación con
+   ubicación; nunca se acepta en silencio ni se degrada a otra semántica. Las
+   exclusiones se revisan con ADR propio si una política real las necesita.
+5. **Preprocesador.** Incluye `#include` con rutas de búsqueda, macros de objeto
+   y de función, `#`/`##`, `#if`/`#ifdef`/`#ifndef`/`#elif`/`#else`/`#endif`,
+   `#undef`, `#error` y `#pragma once`. No hay `#include_next` ni dependencia
+   del preprocesador del sistema.
+6. **ABI C v3.** Se congela en V6.0 sobre el ISA v3 que fije V1. Baseline:
+   - little-endian único, alineación natural, pila de 4 bytes (8 para 64 bits)
+     que crece hacia abajo;
+   - argumentos en pila de derecha a izquierda; el llamador limpia; sin
+     registros de argumento obligatorios;
+   - retorno en `R0` (32 bits) o `R1:R0` (64 bits); `struct`/`union` por valor
+     usan puntero oculto del llamador y el callee devuelve ese puntero en `R0`;
+   - todos los GPR son caller-saved; `SP` y `FP` se preservan; no hay red zone;
+   - `char` sin signo, `size_t`/`uintptr_t` de 32 bits, `ptrdiff_t` de 32 bits;
+   - símbolos C sin name mangling; `_start` es el entry de `crt0` y el kernel
+     salta a él; `main` es la función del programa.
+   Cualquier cambio de ABI requiere enmendar este ADR; no se mantienen dos ABI
+   C en paralelo.
+7. **Runtime `libiflow`.** Es una biblioteca freestanding enlazada dentro del
+   segmento de programa, no un paquete del host. Provee `crt0`, `memcpy`,
+   `memmove`, `memset`, `memcmp`, `strlen`, `strcmp`, `strcpy`, `strncpy`,
+   rutinas de 64 bits y un arena allocator explícito (`iflow_alloc`). No provee
+   `stdio`, `printf`, `malloc`/`free` estándar ni `stdlib` hasta que el ABI del
+   kernel defina heap y errores. Una función no implementada falla enlazando;
+   no se añade un stub que devuelva éxito.
+8. **Modelo de programa.** El compilador compila un programa completo (una o
+   varias unidades `.c` en la misma invocación) a un único `.flowasm` v3. El
+   baseline no define un formato de objeto estable ni un linker de objetos
+   separado; si V6.4 demuestra que hace falta, se añade con ADR. El loader v3
+   inicializa `.data` y zeroa `.bss`; `crt0` llama a `main`, recibe el estado y
+   ejecuta la salida del programa. No hay constructores globales.
+9. **Optimización.** `-O0` es el default y debe ser correcto antes que rápido.
+   `-O1` puede aplicar plegado de constantes, propagación local, eliminación de
+   código muerto y peephole, sin explotar comportamiento indefinido ni alterar
+   `volatile`. La salida es determinista: mismo fuente, flags y versión producen
+   los mismos bytes y el mismo orden de símbolos.
+10. **Seguridad.** El compilador no corre en el host ni en el servidor. No
+    descarga dependencias en tiempo de compilación ni ejecuta código del fuente.
+    La ROM resultante es dato no confiable para la VM: se valida por hash,
+    segmentos, permisos y límites como cualquier otro artefacto. El editor web
+    puede invocar el compilador en cliente/CI, nunca en el proceso del host.
+11. **Tests.** Deben cubrir lexer, preprocesador, parser, semántica, IR,
+    codegen y diagnóstico; golden tests de `.flowasm`; pruebas de ABI, `volatile`,
+    punteros, arrays, structs, `switch`, `goto` y 64 bits; corpus de políticas
+    reales; determinismo byte a byte; y ejecución contra la VM v3 cuando V2/V4
+    estén disponibles. Los casos no soportados tienen tests negativos. No hay
+    E2E en servidores Minecraft.
+
+**Fases V6.**
+
+| Fase | Entregable | Puerta |
+|---|---|---|
+| **C0 — Contrato** | Subconjunto, gramática, ABI C v3, modelo de runtime y corpus de conformidad | ADR y lista de casos congelados; cada exclusión tiene diagnóstico y test |
+| **C1 — Frontend** | Preprocesador, lexer, parser, AST, análisis semántico y diagnósticos | Tests unitarios y de errores; ninguna construcción no soportada pasa en silencio |
+| **C2 — IR y backend** | IR de tres direcciones, lowering, asignación de registros y emisión `.flowasm` v3 | Golden tests y ensamblado con el assembler v3 |
+| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers de `HOST` v3, punteros/arrays/structs/64 bits | Ejecución en VM v3 con el corpus; sin stubs |
+| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo y diagnóstico de límites | Mismos resultados observables; salida reproducible |
+| **C5 — Toolchain** | CLI, ejemplos, documentación, CI Node y paquete de herramientas | `npm test`, corpus y build reproducible verdes |
+
+**Criterios de cierre de V6.**
+
+1. Al menos tres políticas reales (rate limit, routing de canal y transformación
+   de contenido) se escriben en C, compilan a `.flowasm` v3 y producen la misma
+   decisión y el mismo mensaje observable que su equivalente de referencia.
+2. El corpus cubre punteros, arrays, structs, uniones, `switch`, `goto`,
+   `volatile`, 64 bits y llamadas a `HOST`; los casos no soportados fallan con
+   diagnóstico, no con un artefacto incorrecto.
+3. La salida es determinista y el assembler v3 produce una ROM verificable.
+4. No hay compilación C ni toolchain nativa en el host; no hay stubs de libc.
+5. Tests, documentación y ejemplos están en verde; el ADR se actualiza si cambia
+   el subconjunto o la ABI.
+
+**Alternativas consideradas.**
+
+1. **Clang/LLVM con un backend propio para iFlow.** Ventajas: frontend C
+   completo y optimizador maduro. Limitaciones: exige escribir y mantener un
+   target LLVM, una toolchain nativa enorme y un ABI propio; contradice la
+   independencia de toolchain y multiplica la superficie de build. Evaluación:
+   **descartada**.
+2. **Portar TinyCC o chibicc y sustituir su backend.** Ventajas: frontend C
+   probado y código compacto. Limitaciones: introduce un compilador nativo en C,
+   dependencias de build y supuestos x86; el port del backend sigue siendo
+   trabajo nuevo y difícil de auditar desde TypeScript. Evaluación: **descartada
+   como baseline**; se usa chibicc solo como referencia de arquitectura.
+3. **Compilar C a WebAssembly y traducir a `.flow`.** Ventajas: reutiliza
+   Clang/WASI y el motor Wasm. Limitaciones: no es la arquitectura v3, añade un
+   traductor Wasm→flow, pierde el ABI nativo y duplica semántica. Evaluación:
+   **descartada**.
+4. **Compilador propio en TypeScript con backend de pila (elegido).** Ventajas:
+   una sola toolchain, determinista, auditable, sin dependencias nativas y
+   alineado con el assembler existente. Limitaciones: implementar C es costoso;
+   se mitiga con subconjunto, fases y corpus. Evaluación: **aceptada**.
+
+**Consecuencias.**
+
+- Los autores pueden escribir políticas en C sin aprender el ISA; el assembler
+  sigue disponible para firmware y código de máximo control.
+- No se promete C completo: float, libc estándar, objetos separados y otras
+  funciones quedan fuera hasta que una necesidad real y un ADR los incorporen.
+- El compilador es una herramienta de build, no un módulo de la suite; el host
+  no crece y la frontera de seguridad de la ROM no cambia.
+- V6 no puede empezar antes de V1/V5 y no puede cerrarse antes de V2/V3/V4. El
+  orden evita implementar un backend contra un ISA o un ABI que aún no existen.
+- El mantenimiento del compilador es deuda explícita del proyecto; cada
+  exclusión y cada limitación debe estar documentada y probada.

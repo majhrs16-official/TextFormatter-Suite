@@ -5,6 +5,8 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-29 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (26 tests), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
+> **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
+
 > **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada y F6 en curso**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 está en curso: `transport` ya se empaqueta como dependencia y `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator`, que refresca su `TranslatorManager` con los eventos de ciclo de vida. Faltan el resto de paquetes opcionales, la retirada del cableado del host, F4b, F4c (sincronizadores de plataforma), la retirada de los árboles de comandos de host de F4d y F4e (raíz de comandos relocalizable); la API neutral de F4d ya está implementada en `core-api`/`suite-runtime`. Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
@@ -120,7 +122,83 @@ Reglas de diseño:
 | **V2 — Núcleo** | CPU/MMU/bus de 32 bits, arranque BIOS/kernel, fixtures actualizados | Tests de memoria, privilegios y arranque |
 | **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
 | **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
-| **V5 — Herramientas** | Compilador `.flowasm`, firmware, ejemplos y validador | Build reproducible + tests |
+| **V5 — Herramientas de ensamblado** | Assembler `.flowasm` v3, firmware, ejemplos y validador | Build reproducible + tests |
+| **V6 — Compilador C** | Compilador C11 freestanding a `.flowasm` v3, `libiflow` y ejemplos | Corpus C compila, ejecuta en VM v3 y produce el mismo resultado observable; tests y determinismo |
+
+#### V6 — Compilador C (ADR-023)
+
+**Estado:** diseño aceptado; implementación pendiente. No se inicia antes de
+V1 (ISA/ABI v3) y V5 (assembler v3); la ejecución del corpus requiere V2/V3/V4.
+No se implementa contra el ISA v2 de 16 bits ni se reutiliza su ABI `HOST` v2.
+
+**Objetivo.** Permitir que las políticas de iFlow se escriban en C sin perder el
+control de bajo nivel del ensamblador. El compilador es una herramienta offline
+(`tools/iflow-c/`, CLI `iflow-cc`) escrita en TypeScript; emite `.flowasm` v3 y
+el assembler v3 sigue siendo el único codificador y productor de ROM. No se
+duplica el formato binario ni la tabla de opcodes.
+
+**Alcance del lenguaje.** Subconjunto C11 freestanding: `void`, `_Bool`,
+`char` sin signo, `signed char`, `short`, `int`/`long` de 32 bits, `long long`
+de 64 bits, punteros de 32 bits, arrays, `struct`, `union`, `enum`, `typedef`,
+`const`, `volatile`, control de flujo completo, funciones, `static`/`extern`,
+`goto`, `switch`, `_Static_assert`, macros de objeto/función, `#include`,
+condicionales y `#`/`##`. `volatile` no se elimina, duplica ni reordena.
+
+**Exclusiones explícitas.** `float`/`double`, `_Complex`, `_Atomic`, hilos,
+`setjmp`/`longjmp`, VLA, bitfields, caracteres anchos, `_Generic`, `typeof`,
+ensamblador inline y funciones variádicas. Un uso no soportado falla con
+diagnóstico y ubicación; no se acepta en silencio ni se degrada. Cada exclusión
+se revisa con ADR propio si una política real la necesita.
+
+**ABI y runtime.** La ABI C v3 se congela en V6.0 sobre el ISA v3: little-endian,
+pila de 4 bytes (8 para 64 bits), argumentos en pila de derecha a izquierda,
+limpieza del llamador, retorno en `R0`/`R1:R0`, GPR caller-saved, `SP`/`FP`
+preservados, `struct` por valor con puntero oculto, `char` sin signo y
+`size_t` de 32 bits. `libiflow` es una biblioteca freestanding enlazada en el
+programa: `crt0`, `mem*`, `str*`, rutinas de 64 bits y arena allocator explícito.
+No hay `stdio`, `printf` ni `malloc`/`free` estándar hasta que el kernel defina
+su ABI; lo no implementado falla al enlazar, no se simula.
+
+**Modelo de programa.** El baseline compila un programa completo (una o varias
+unidades `.c` en la misma invocación) a un único `.flowasm` v3. No hay formato de
+objeto estable ni linker de objetos separado; si V6.4 lo necesita, se añade con
+ADR. El loader inicializa `.data` y zeroa `.bss`; `crt0` llama a `main`, recibe
+el estado y ejecuta la salida. No hay constructores globales.
+
+**Optimización.** `-O0` es el default y debe ser correcto antes que rápido.
+`-O1` puede aplicar plegado de constantes, propagación local, eliminación de
+código muerto y peephole, sin explotar comportamiento indefinido ni alterar
+`volatile`. La salida es determinista: mismo fuente, flags y versión producen
+los mismos bytes y el mismo orden de símbolos.
+
+**Fases internas.**
+
+| Fase | Entregable | Puerta |
+|---|---|---|
+| **C0 — Contrato** | Subconjunto, gramática, ABI C v3, modelo de runtime y corpus | ADR y casos congelados; cada exclusión con diagnóstico y test |
+| **C1 — Frontend** | Preprocesador, lexer, parser, AST, semántica y diagnósticos | Tests unitarios y negativos; nada no soportado pasa en silencio |
+| **C2 — IR y backend** | IR de tres direcciones, lowering, registros y emisión `.flowasm` v3 | Golden tests y ensamblado con el assembler v3 |
+| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers `HOST` v3, punteros/arrays/structs/64 bits | Ejecución en VM v3 con el corpus; sin stubs |
+| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo y límites | Mismos resultados observables; salida reproducible |
+| **C5 — Toolchain** | CLI, ejemplos, documentación, CI Node y paquete | `npm test`, corpus y build reproducible verdes |
+
+**Criterios de cierre.**
+
+1. Al menos tres políticas reales (rate limit, routing de canal y transformación
+   de contenido) escritas en C compilan y producen la misma decisión y mensaje
+   observable que su referencia.
+2. El corpus cubre punteros, arrays, structs, uniones, `switch`, `goto`,
+   `volatile`, 64 bits y llamadas a `HOST`; lo no soportado falla con
+   diagnóstico, no con un artefacto incorrecto.
+3. La salida es determinista y el assembler v3 produce una ROM verificable.
+4. No hay compilación C ni toolchain nativa en el host; no hay stubs de libc.
+5. Tests, documentación y ejemplos verdes; el ADR se enmienda si cambia el
+   subconjunto o la ABI.
+
+**Por qué no ahora.** V6 depende de un ISA v3, un ABI `HOST` v3 y un assembler
+v3 que aún no existen. Implementarlo antes obligaría a inventar el contrato o a
+clonar el ISA v2; ambas cosas contradicen la regla de no crear un segundo
+camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 
 ### Fases de `chattranslator` (Facade de traducción unificada)
 
@@ -289,6 +367,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5); no se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
 6. **ChatTranslator CT4:** ✅ **COMPLETADO** — `ChatTranslator` integrado en `SuiteHost.bootstrap()`; `spigot-host`/`fabric-host` actualizados; `BackendConfig` carga backends vía SPI; tests pasan.
 7. **ChatTranslator CT5:** ⏸️ diferido con el editor web; el backend de configuración ya está listo.
+8. **V6 — Compilador C:** diseño en ADR-023; no se inicia antes de V1/V5. La implementación empieza por C0 (subconjunto y ABI) cuando el ISA v3 esté congelado; no se adelanta contra el ISA v2.
 
 ---
 
@@ -1822,9 +1901,10 @@ export JAVA_HOME=/opt/javac/x64/21
 ./gradlew --offline build
 ```
 
-> 🧱 **Toolchain de iFlow VM (2026-10-23).** `tools/iflow-compiler/` y `:src:iflow-vm:test` son la
-> base de `iflow-vm`; se conservan y evolucionan a 32 bits. En paralelo, `iflow-wasm` usa Chicory y
-> artefactos `.wasm`, no `.flow`.
+> 🧱 **Toolchain de iFlow VM (2026-10-23, actualizado 2026-10-29).** `tools/iflow-compiler/` y
+> `:src:iflow-vm:test` son la base de `iflow-vm`; se conservan y evolucionan a 32 bits. El compilador
+> C de V6 vivirá en `tools/iflow-c/` y emitirá `.flowasm` v3; no sustituye al assembler. En paralelo,
+> `iflow-wasm` usa Chicory y artefactos `.wasm`, no `.flow`.
 
 ### Criterio de uso
 
@@ -1954,6 +2034,20 @@ Cada módulo publica sus comandos jerárquicos a través de una API neutral (`ap
 La raíz (`/suite`, `/suite module`, `/tf`, etc.) es un `CommandRoot` configurable. Los módulos registran paths relativos y nunca hardcodean la raíz. El runtime compone `root + path` y expone `CommandContext.root()` para help/usage/errores.
 
 **Consecuencia:** Cambiar la raíz es cambiar `config/suite/commands.yml`; no se recompilan módulos. Si el cambio en caliente no puede desregistrar el comando raíz de la plataforma, se marca `RESTART_REQUIRED`.
+
+### P20. El compilador C es una herramienta offline del guest
+
+El compilador C de iFlow VM (`tools/iflow-c/`) es una herramienta de build/CI,
+no un módulo del host ni un servicio de runtime. Emite `.flowasm` v3 y el
+assembler v3 produce la ROM; el servidor solo carga artefactos ya compilados y
+verificados. No se compila C en el proceso del host ni se añade una toolchain
+nativa al servidor.
+
+**Consecuencia:** El host no crece con Clang/GCC/TinyCC ni con un compilador
+propio. La superficie de seguridad sigue siendo la validación de la ROM (hash,
+segmentos, permisos y límites). El editor puede invocar el compilador en
+cliente/CI, nunca en el host. Un cambio de subconjunto, ABI o formato de salida
+requiere enmendar ADR-023.
 
 ---
 
