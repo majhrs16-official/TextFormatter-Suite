@@ -23,7 +23,6 @@ dependencies {
     implementation project(':src:iflow-firewall')
     implementation project(':src:transport')
     implementation project(':src:chattranslator')
-    implementation project(':src:presets')
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-plain:4.17.0'
     implementation 'org.yaml:snakeyaml:2.2'

@@ -135,6 +135,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `PlaceholderResolver` | Implement in platform adapter (see `SpigotPlaceholderResolver`, `FabricPlaceholderResolver`) |
 | `MessageRenderer` | Implement in the formatter package (`TextFormatterMessageRenderer`); adapters consume plain text without importing textformatter |
 | `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters without importing `MessageDispatcher`/`DispatchReport` |
+| `PresetService` | Neutral preset application port; `presets` implements it and the host resolves it from the runtime without importing the package |
 | `UserLanguageStore` | Implement in `host` (see `YamlUserLanguageStore`) |
 
 ---
@@ -150,6 +151,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 6. api/runtime/EventBus.java      → Lifecycle and feature events
 7. api/message/*.java             → Domain types (Message, Actor, Channel, etc.)
 8. api/spi/TranslatorProvider.java → Translation provider SPI
+9. api/spi/PresetService.java → Neutral preset application port
 9. api/iflow/Router.java          → Shared iFlow routing contract
 ```
 

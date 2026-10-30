@@ -1304,10 +1304,10 @@ paquete neutral.
   `spigot-host`. `tester` también es neutral (`TestProbe`) y su adapter Spigot
   (`SpigotTestProbe`) vive en `spigot-host`.
 - `presets` ya se empaqueta como `PACKAGE` y aplica mediante el puerto neutral
-  `PresetTarget`; `FilePresetTarget` persiste el layout canónico y
-  `PresetsActivator` publica `PresetManager`. `HostPresetApplier` ya
-  selecciona, persiste y recarga el runtime; falta exponerlo por comando
-  (F4d/F4e).
+  `PresetTarget`; `FilePresetTarget` persiste el layout canónico,
+  `PresetsActivator` publica `PresetManager` y `PresetService`, y
+  `DefaultPresetService` selecciona, persiste y recarga el runtime. Falta
+  exponerlo por comando (F4d/F4e).
 - `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
   `ActorDirectory`; no importa `host`.
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
@@ -1350,10 +1350,14 @@ neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
 `SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`.
 `core-api` añade `DispatchOutcome` y `MessageDispatch.dispatchAndReport(...)`;
 `SuiteHost` expone `renderer()` y `messageDispatch(dispatcher)` como adaptadores
-transitorios mientras el host siga construyendo el pipeline. También se añadió
-`host.preset.HostPresetApplier`, que selecciona un preset, lo persiste con
-`FilePresetTarget` y solo entonces invoca la recarga del runtime; la selección
-por comando sigue pendiente de F4d/F4e. En Fabric, `FabricInWorldHandler` dejó
+transitorios mientras el host siga construyendo el pipeline. `SuiteRuntime`
+publica `MessageDispatch` como servicio neutral enlazado a
+`PlatformPorts.deliver`, de modo que los paquetes lo resuelven sin conocer el
+dispatcher del host. También se añadió el puerto neutral `PresetService` en
+`core-api`; `presets` lo implementa con `DefaultPresetService` y lo registra en
+su `ModuleContext`, así el host deja de importar `presets` para seleccionar,
+persistir y recargar un preset. La selección por comando sigue pendiente de
+F4d/F4e. En Fabric, `FabricInWorldHandler` dejó
 de ser un handler duplicado con stubs: ahora implementa `InWorldPlatform`,
 delega en `InWorldHandler` y registra los callbacks una sola vez con una
 instancia activa intercambiable; `unregister()` desengancha el adapter al
@@ -1430,8 +1434,9 @@ Aplicación por módulo:
 - **`presets`** — `Preset.apply(PresetTarget)` convierte y aplica config,
   canales, traductores y sync; `PresetTarget` es el puerto neutral y
   `FilePresetTarget` implementa la persistencia canónica. El paquete ya se
-  empaqueta y activa. Falta el adapter de host que seleccione el preset y
-  recargue los módulos. Sin `host.config` en el paquete.
+  empaqueta y activa; `DefaultPresetService` implementa el puerto neutral
+  `PresetService` y el host lo resuelve del runtime. Sin `host.config` en el
+  paquete.
 - **`extension-api`** — `ExtensionContext` expone un puerto neutral
   (`dispatch`, `findActor`, `hasPermission`, `translation`, `channels`,
   `languages`) en vez de `SuiteHost`/`MessageDispatcher`.
@@ -1457,7 +1462,8 @@ neutral de `tester` con `TestProbe`/`SpigotTestProbe`, el empaquetado neutral
 de `inworld` con `InWorldHandler`/`InWorldPlatform`/`SpigotInWorldListener` y
 el puerto neutral de `extension-api` y el puerto `MessageRenderer` con su
 implementación en `textformatter` completados al 2026-10-30. Después: el
-adapter de host de `PresetTarget` (selección y recarga), el adelgazamiento de
+adapter de host de `PresetTarget` (selección y recarga) ya resuelto como
+`PresetService`, el adelgazamiento de
 `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` (F4b) y la
 extracción de la captura de eventos a `sync-bukkit`/`sync-fabric` (F4c).
 

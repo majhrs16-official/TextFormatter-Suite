@@ -16,9 +16,11 @@ import java.util.Optional;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
+import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -168,6 +170,25 @@ class SuiteRuntimeTest {
     }
 
     @Test
+    void publishesMessageDispatchThroughPlatformPorts() throws Exception {
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            MessageDispatch dispatch = runtime.services()
+                .find(MessageDispatch.class)
+                .orElseThrow();
+            Message message = Message.builder()
+                .type(MessageType.CHAT)
+                .text("hello")
+                .channel("chat")
+                .build();
+
+            dispatch.dispatch(message);
+
+            assertEquals(List.of(message), ports.delivered);
+        }
+    }
+
+    @Test
     void exposesAdapterPlatformServicesBeforeModulesActivate() throws Exception {
         try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
             runtime.registerPlatformService(PluginLogger.class, logger);
@@ -191,6 +212,7 @@ class SuiteRuntimeTest {
     private static final class FakePorts implements PlatformPorts {
 
         private final List<String> sent = new ArrayList<>();
+        private final List<Message> delivered = new ArrayList<>();
         private final Map<String, Command> commands = new LinkedHashMap<>();
 
         @Override
@@ -200,7 +222,7 @@ class SuiteRuntimeTest {
 
         @Override
         public void deliver(Message message) {
-            // The F4a tests exercise the command path, not message delivery.
+            delivered.add(message);
         }
 
         @Override

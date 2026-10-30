@@ -35,7 +35,6 @@
 | `textformatter` | Compile | `TextFormatter`, `ChannelRegistry` |
 | `iflow-vm` | Compile | `Router` for message routing |
 | `transport` | Compile | `HttpTransport` for webhook sync |
-| `presets` | Compile | `PresetManager`/`FilePresetTarget` for host preset application |
 | `gson` | Compile | Config schema generation |
 | `snakeyaml` | Compile | YAML config parsing |
 | `adventure-text-minimessage` | Compile | Message formatting in config |
@@ -75,7 +74,6 @@
 | `YamlUserLanguageStore` | Implements `UserLanguageStore` SPI (persists to YAML) |
 | `ConfigSchemaGenerator` | Generates `paths.json` + `schema-v2.2.md` for web editor |
 | `ChatDelivery` | SPI (in `host.port`): `deliver(actor, message)` — platform adapters implement |
-| `HostPresetApplier` | Selects a preset, persists it through `FilePresetTarget` and invokes the runtime reload callback only after success |
 
 ---
 

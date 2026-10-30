@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.spi.PresetService;
 
 /**
  * Runtime activator of the {@code presets} package.
@@ -32,6 +33,7 @@ public final class PresetsActivator implements ModuleActivator {
     public void start(ModuleContext context) {
         manager = new PresetManager(context.configDir());
         context.services().register(PresetManager.class, manager);
+        context.services().register(PresetService.class, new DefaultPresetService(manager));
         context.logger().info("Preset catalog ready: " + manager.listAll().size() + " presets");
     }
 

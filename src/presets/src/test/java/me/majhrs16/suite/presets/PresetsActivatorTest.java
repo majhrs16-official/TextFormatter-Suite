@@ -7,6 +7,7 @@ import me.majhrs16.suite.api.runtime.ResourceTracker;
 import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.PresetService;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,6 +35,7 @@ class PresetsActivatorTest {
         PresetManager manager = registry.find(PresetManager.class).orElseThrow();
         assertThat(manager.get("standard")).isPresent();
         assertThat(manager.get("rpg")).isPresent();
+        assertThat(registry.find(PresetService.class)).isPresent();
         assertThat(configDir).isDirectory();
     }
 

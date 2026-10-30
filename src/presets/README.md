@@ -42,7 +42,7 @@ The distribution is a `PACKAGE` with no package dependencies; `core-api` is prov
 
 ## 4. Consumers
 
-`suite-runtime` installs the distribution ZIP and activates `PresetsActivator`. The host adapter is `host.preset.HostPresetApplier`: it selects a preset, calls `PresetManager.apply(id, new FilePresetTarget(suiteDir))`, and only after success invokes the runtime reload callback. Command wiring for selecting a preset belongs to F4d/F4e.
+`suite-runtime` installs the distribution ZIP and activates `PresetsActivator`. The activator publishes both `PresetManager` and the neutral `PresetService` port; the latter selects a preset, calls `PresetManager.apply(id, new FilePresetTarget(suiteDir))`, and only after success invokes the runtime reload callback. The host resolves `PresetService` from the service registry, so it does not import the presets package. Command wiring for selecting a preset belongs to F4d/F4e.
 
 ---
 
@@ -55,7 +55,8 @@ The distribution is a `PACKAGE` with no package dependencies; `core-api` is prov
 | `PresetTarget` | Neutral port implemented by a persistence adapter |
 | `FilePresetTarget` | Real file-backed target for the canonical `config/...` layout |
 | `PresetApplyException` | Explicit failure when a preset cannot be persisted or contains an unsupported sync type |
-| `PresetsActivator` | `ModuleActivator`; creates the catalog and registers `PresetManager` |
+| `DefaultPresetService` | Implements `api.spi.PresetService`; applies the catalog through `FilePresetTarget` and reloads only after success |
+| `PresetsActivator` | `ModuleActivator`; creates the catalog and registers `PresetManager` plus `PresetService` |
 | `PresetsModule` | `Module` descriptor; provides the `presets` capability |
 
 ---
@@ -87,6 +88,7 @@ Channel templates are persisted from `Formats.formatList()` (falling back to `te
 | `PresetManager.exportToYaml()` | `PresetManager.java` | Tests / host preset commands |
 | `PresetManager.apply(id, target)` | `PresetManager.java` | Host adapter after the user selects a preset |
 | `FilePresetTarget` | `FilePresetTarget.java` | Host adapter or tests |
+| `PresetService` | `DefaultPresetService.java` | Host resolves it from `ServiceRegistry` after activation |
 | `PresetsActivator.start()` | `PresetsActivator.java` | `ModuleHost` when the package activates |
 | `PresetsModule.descriptor()` | `PresetsModule.java` | Kernel SPI discovery |
 
@@ -94,7 +96,7 @@ Channel templates are persisted from `Formats.formatList()` (falling back to `te
 
 ## 8. Limitations
 
-- `HostPresetApplier` in `host` now calls `PresetManager.apply` and reloads modules after success; the package itself is installed and activated by `suite-runtime`.
+- `DefaultPresetService` applies through `PresetManager.apply` and reloads modules only after success; the package itself is installed and activated by `suite-runtime`.
 - `FilePresetTarget` writes the canonical configuration files but deliberately does not reload the host.
 - Preset rules with SpEL conditions/actions were removed with the rest of the inline expression engine.
 - `presets` has no platform commands yet; command registration belongs to the host adapter.
@@ -110,7 +112,8 @@ Channel templates are persisted from `Formats.formatList()` (falling back to `te
 - Merge semantics that preserve unrelated YAML keys
 - Explicit rejection of unknown sync types
 - Channel templates written as formats
-- `PresetsActivator` publishing `PresetManager` in the module scope
+- `PresetsActivator` publishing `PresetManager` and `PresetService` in the module scope
+- `DefaultPresetService` applying a preset through `FilePresetTarget` and reloading only after success
 - Real distribution packaging through `modulePackage`
 
 ---

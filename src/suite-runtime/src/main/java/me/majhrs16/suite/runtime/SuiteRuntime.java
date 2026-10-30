@@ -14,6 +14,7 @@ import me.majhrs16.suite.api.config.ConfigRegistry;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
+import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.manager.apt.AptInstaller;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
@@ -121,6 +122,8 @@ public final class SuiteRuntime implements AutoCloseable {
         configs = new RuntimeConfigRegistry();
         moduleHost = new ModuleHost(
                 libraryRoot, configRoot, ports.info(), logger, stateStore, commands, configs);
+        platformRegistrations.add(moduleHost.services().register(
+            MessageDispatch.class, ports::deliver));
         registerPendingPlatformServices();
         packageRuntime = new PackageRuntime(manager, moduleHost, logger);
         SuiteCommands.register(commands, this);
