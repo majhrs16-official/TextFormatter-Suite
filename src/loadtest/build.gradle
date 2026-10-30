@@ -21,6 +21,8 @@ dependencies {
     implementation project(':src:core-render')
     implementation project(':src:textformatter')
     implementation project(':src:iflow-vm')
+    implementation project(':src:iflow-firewall')
+    implementation project(':src:chattranslator')
     implementation project(':src:host')
     implementation project(':src:transport')
     implementation project(':src:kernel')

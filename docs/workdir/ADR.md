@@ -1045,9 +1045,9 @@ conocer tipos del formateador.
 
 ## Decisión 2026-10-30 — adapters delgados sobre SuiteRuntime (ADR-025)
 
-**Estado:** Aceptada e implementada parcialmente (F4b). Los adapters Spigot y
-Fabric ya son bootstrap neutral; la retirada física del bootstrap heredado del
-módulo `host` queda como cierre de F4b.
+**Estado:** Aceptada e implementada (F4b cerrado). Los adapters Spigot y
+Fabric son bootstrap neutral y el bootstrap heredado se retiró del módulo
+`host`.
 
 **Contexto.** Los adapters construían `SuiteHost`, `MessageDispatcher`, sinks,
 observability, in-world y extensiones directamente. Eso duplicaba el cableado,
@@ -1068,9 +1068,11 @@ paquete no fuera la única vía de composición.
    `defaultLanguage()` sin publicar `HostConfig` a los adapters.
 5. La captura de eventos de chat/join/quit/death no pertenece al host: se
    implementará en `sync-bukkit`/`sync-fabric` (F4c).
-6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`
-   sigue existiendo solo para tests/loadtest y debe desaparecer antes de cerrar
-   F4b.
+6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`,
+   `SuiteBootstrap`, `RouterFactory`, `IflowEngineSelector` y `ConfigValidator`
+   se retiraron del módulo `host`. Los tests y benchmarks cablean las
+   implementaciones reales con fixtures locales (`HostFixture`), fuera del
+   classpath de producción.
 
 **Consecuencias.**
 
@@ -1078,5 +1080,5 @@ paquete no fuera la única vía de composición.
   producción.
 - Los adapters pueden compilar contra `core-api`, `core-render`,
   `suite-runtime` y el SDK de plataforma.
-- El módulo `host` conserva temporalmente dependencias de feature por el
-  bootstrap heredado; es deuda explícita de F4b/F8, no un camino de producción.
+- El `runtimeClasspath` de `suite-runtime` ya no arrastra paquetes de feature;
+  `host` solo depende de `core-api`, `core-render`, SnakeYAML y Gson.

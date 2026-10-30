@@ -1383,7 +1383,7 @@ público de `SuiteHost` recibe `HostConfig`, `ChannelRegistry`,
 construir el pipeline desde `ServiceRegistry`. `SuiteHost.bootstrap(...)`
 permanece solo como camino de arranque heredado y se elimina al cerrar F4b.
 
-**Avance F4b (2026-10-30, adapters delgados):** `spigot-host` y `fabric-host`
+**Cierre F4b (2026-10-30, adapters delgados):** `spigot-host` y `fabric-host`
 ya no construyen features ni importan `host`, `kernel`, `manager` o paquetes
 de feature. Su bootstrap crea `SpigotPlatformPorts`/`FabricPlatformPorts`,
 registra en `SuiteRuntime` los puertos del adapter (`ChatDelivery`,
@@ -1395,11 +1395,16 @@ importan el paquete `inworld`. `YamlUserLanguageStore` pasó a `suite-runtime`.
 `SuiteRuntime.defaultLanguage()` expone el idioma por defecto sin publicar
 `HostConfig`. `checkArchitecture` ahora escanea también `spigot-host` y
 `fabric-host` y falla si importan features, `host`, `kernel` o `manager`.
-Quedan para cerrar F4b: retirar `SuiteHost.bootstrap(...)`/`SuiteBootstrap`/
-`RouterFactory` del módulo `host` y mover sus tests/loadtest a un fixture
-neutral; hasta entonces `host` conserva dependencias de feature como camino
-heredado de tests. La captura de eventos de chat/join/quit/death se elimina de
-los hosts y se implementará en `sync-bukkit`/`sync-fabric` en F4c.
+
+Se retiraron `SuiteHost.bootstrap(...)`, `SuiteBootstrap`, `RouterFactory`,
+`IflowEngineSelector` y `ConfigValidator` del módulo `host`; `host` ya no
+depende de `textformatter`, `chattranslator`, `iflow-vm`, `iflow-firewall`,
+`transport` ni `kernel`. Los tests de `host` y `loadtest` usan fixtures
+locales (`HostFixture`) que cablean las implementaciones reales solo en el
+classpath de pruebas/benchmarks. El `runtimeClasspath` de `suite-runtime` ya
+no arrastra paquetes de feature. La captura de eventos de chat/join/quit/death
+se eliminó de los hosts y se implementará en `sync-bukkit`/`sync-fabric` en
+F4c.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 

@@ -84,7 +84,7 @@ translators:
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
 | `LTranslateActivator` | `LTranslateActivator.java` | `ModuleHost` → `PackageRuntime` |
-| `LTranslateModule` | `LTranslateModule.java` | Legacy `ModuleLoader` → `SuiteBootstrap` |
+| `LTranslateModule` | `LTranslateModule.java` | Legacy `ModuleLoader`; runtime activates the provider through `TranslatorProvider` |
 | `LTranslateProvider.create()` | `LTranslateProvider.java` | `BackendConfig` (chattranslator) |
 | `LTranslate.translate()` | `LTranslate.java` | `TranslationService` impl |
 

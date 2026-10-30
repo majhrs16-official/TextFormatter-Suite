@@ -66,7 +66,7 @@ Observability exports metrics
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| Module (if any) | — | `ModuleLoader` → `SuiteBootstrap` |
+| Module (if any) | — | `ModuleLoader` (legacy descriptor); no runtime activator |
 
 ---
 

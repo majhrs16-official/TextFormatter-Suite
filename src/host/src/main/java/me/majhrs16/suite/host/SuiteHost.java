@@ -10,31 +10,20 @@ import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.render.MessageComponentRenderer;
-import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.api.iflow.RouteDecision;
 import me.majhrs16.suite.api.iflow.RouteOutcome;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.PolicyTarget;
-import me.majhrs16.suite.textformatter.TextFormatter;
-import me.majhrs16.suite.textformatter.TextFormatterMessageRenderer;
-import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
-import me.majhrs16.suite.textformatter.ChannelConfig;
-import me.majhrs16.suite.textformatter.ChannelConfig.LoadResult;
-import me.majhrs16.suite.chattranslator.BackendConfig;
-import me.majhrs16.suite.api.spi.TranslatorManager;
 
 import net.kyori.adventure.text.Component;
 
-import java.nio.file.Path;
 import java.util.Objects;
-import java.util.ServiceLoader;
 
 /**
- * Platform-neutral facade that assembles the suite from its file layout and
- * exposes the one-call pipeline used by Spigot/Fabric hosts:
+ * Platform-neutral facade over the already-resolved message pipeline:
  *
  * <pre>{@code
  *   RoutingResult r = host.deliver(message, recipient);
@@ -42,9 +31,11 @@ import java.util.ServiceLoader;
  *   else if (r.redirect) console.sendMessage(r.rendered());
  * }</pre>
  *
- * <p>This is the glue the module jars alone must not contain: it wires
- * {@link TranslationService} + {@link Router} + {@link MessageComponentRenderer}
- * and resolves the recipient's language for rendering.</p>
+ * <p>{@code SuiteRuntime} constructs this facade from the services published
+ * by the active packages: {@link TranslationService}, {@link Router},
+ * {@link MessageComponentRenderer}, {@link MessageRenderer},
+ * {@link ChannelRegistry} and {@link ChatDelivery}. The host itself never
+ * imports a feature package.</p>
  */
 public final class SuiteHost {
 
@@ -88,62 +79,6 @@ public final class SuiteHost {
         this.renderer = Objects.requireNonNull(renderer, "renderer");
         this.logger = logger;
         this.chatDelivery = chatDelivery;
-    }
-
-    /**
-     * Bootstraps from a config directory following the suite layout.
-     * Loads ChatTranslator configuration and backends from chattranslator/ directory.
-     */
-    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      PluginLogger logger) {
-        return bootstrap(configDir, permissions, null, logger);
-    }
-
-    /**
-     * Bootstraps with an external placeholder resolver (e.g. PlaceholderAPI
-     * on Spigot); {@code null} keeps built-in variables only.
-     */
-    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
-                                      PluginLogger logger) {
-        return bootstrap(configDir, permissions, placeholders, logger, ServiceLoader.load(ChatDelivery.class).findFirst().orElse(null));
-    }
-
-    /**
-     * Bootstraps with an explicitly provided {@link ChatDelivery} implementation.
-     * Loads chattranslator config and backends, creates ChatTranslator facade.
-     */
-    public static SuiteHost bootstrap(Path configDir, PermissionChecker permissions,
-                                      me.majhrs16.suite.api.spi.PlaceholderResolver placeholders,
-                                      PluginLogger logger,
-                                      ChatDelivery chatDelivery) {
-        ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(configDir, logger);
-        if (!configResult.isValid() && logger != null) {
-            for (String err : configResult.errors()) {
-                logger.error("Config error: " + err);
-            }
-        }
-        LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(configDir);
-        if (!channelsResult.isValid() && logger != null) {
-            for (String err : channelsResult.errors()) {
-                logger.error("Channel config error: " + err);
-            }
-        }
-        HostConfig config = configResult.config();
-        ChannelRegistry channels = channelsResult.config();
-
-        // Load translation backends from the translator package configuration.
-        TranslatorManager translatorManager = BackendConfig.load(configDir);
-        TranslationService translationService = new TranslationService(translatorManager);
-
-        // Select the iFlow runtime (vm by default, firewall via iflow.engine.kind)
-        Router router = RouterFactory.create(config, configDir, channels, permissions,
-            placeholders, translationService, logger);
-
-        TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
-        TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
-        return new SuiteHost(config, channels, translationService, router,
-                renderer, renderer, logger, chatDelivery);
     }
 
     public HostConfig config() {
@@ -255,7 +190,7 @@ public final class SuiteHost {
 
     /**
      * Checks if an actor has a permission.
-     * Delegates to the PermissionChecker provided at bootstrap.
+     * Delegates to the {@link PermissionChecker} supplied by the runtime.
      */
     public boolean hasPermission(Actor actor, String permission) {
         return router.hasPermission(actor, permission);

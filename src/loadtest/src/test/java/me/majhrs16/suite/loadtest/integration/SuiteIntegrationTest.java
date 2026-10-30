@@ -1,12 +1,13 @@
 package me.majhrs16.suite.loadtest.integration;
 
+import me.majhrs16.suite.loadtest.HostFixture;
+
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.SuiteBootstrap;
 import me.majhrs16.suite.host.RoutingResult;
 import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
@@ -74,7 +75,7 @@ class SuiteIntegrationTest {
         TranslationService translation = new TranslationService(tm);
 
         // Create host
-        host = SuiteBootstrap.bootstrap(tempDir, (PermissionChecker) (actor, perm) -> true, null, logger);
+        host = HostFixture.bootstrap(tempDir, (PermissionChecker) (actor, perm) -> true, null, logger);
     }
 
     @AfterAll

@@ -90,7 +90,7 @@ class SuiteHostTest {
     @Test
     void routesAndRendersEndToEnd() throws Exception {
         writeDefaultLayout();
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             null, quietLogger());
 
         Message message = Message.builder()
@@ -109,7 +109,7 @@ class SuiteHostTest {
     @Test
     void dropRuleSilencesDelivery() throws Exception {
         writeDefaultLayout();
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_DROP);
 
@@ -126,7 +126,7 @@ class SuiteHostTest {
     @Test
     void rejectSetsConnectionLostMarkerDecision() throws Exception {
         writeDefaultLayout();
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REJECT);
 
@@ -143,7 +143,7 @@ class SuiteHostTest {
     @Test
     void redirectGoesToConsole() throws Exception {
         writeDefaultLayout();
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL,
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL,
             null, quietLogger());
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
 
@@ -166,7 +166,7 @@ class SuiteHostTest {
               - '<gray><tr>%content%</tr></gray>'
             """);
         PermissionChecker onlySenderCanSend = (actor, permission) -> !permission.equals("cht.chat.send");
-        SuiteHost host = SuiteHost.bootstrap(dir, onlySenderCanSend,
+        SuiteHost host = HostFixture.bootstrap(dir, onlySenderCanSend,
             null, quietLogger());
 
         RoutingResult echo = host.deliver(

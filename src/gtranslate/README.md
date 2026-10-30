@@ -84,7 +84,7 @@ translators:
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
 | `GTranslateActivator` | `GTranslateActivator.java` | `ModuleHost` → `PackageRuntime` |
-| `GTranslateModule` | `GTranslateModule.java` | Legacy `ModuleLoader` → `SuiteBootstrap` |
+| `GTranslateModule` | `GTranslateModule.java` | Legacy `ModuleLoader`; runtime activates the provider through `TranslatorProvider` |
 | `GTranslateProvider.create()` | `GTranslateProvider.java` | `BackendConfig` (chattranslator) |
 | `GTranslate.translate()` | `GTranslate.java` | `TranslationService` impl |
 

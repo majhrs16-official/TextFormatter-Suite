@@ -111,7 +111,7 @@ TextFormatter Suite
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowVmActivator` | [iflow-vm/README.md](iflow-vm/README.md) |
 | `iflow-wasm` | Motor WebAssembly con Chicory (W2) | `WasmModuleLoader`, `WasmContract`, `ValidationResult` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
-| `host` | Shared host logic | Bootstrap, dispatch, config | `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` | `SuiteBootstrap.initialize()` | [host/README.md](host/README.md) |
+| `host` | Neutral pipeline | Dispatch, config, message catalog | `SuiteHost`, `MessageDispatcher`, `ConfigLoader`, `HostPaths` | `SuiteRuntime` builds `SuiteHost` | [host/README.md](host/README.md) |
 | `chattranslator` | Translation facade | Builds the translator manager from provider services and refreshes it on module lifecycle events | `ChatTranslator`, `ChatTranslatorActivator`, `BackendConfig`, `TranslatorManager` | `ChatTranslatorActivator` | [chattranslator/README.md](chattranslator/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateActivator` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateActivator` | [ltranslate/README.md](ltranslate/README.md) |
@@ -123,8 +123,8 @@ TextFormatter Suite
 | `manager-core` | Package installer | Local ZIP installation, package database, transactions | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` | — | [manager-core/README.md](manager-core/README.md) |
 | `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` | — | [manager-apt/README.md](manager-apt/README.md) |
 | `extension-api` | Extension system | Extension lifecycle & context | `Extension`, `ExtensionContext`, `ExtensionManager` | — | [extension-api/README.md](extension-api/README.md) |
-| `spigot-host` | Bukkit/Paper plugin | Platform adapter for Bukkit | `TextFormatterSuitePlugin`, `SpigotActorDirectory`, `DynamicCommandRegistrar` | `TextFormatterSuitePlugin.onEnable()` | [spigot-host/README.md](spigot-host/README.md) |
-| `fabric-host` | Fabric mod | Platform adapter for Fabric | `TextFormatterSuiteMod`, `FabricActorDirectory`, `FabricChatDelivery` | `TextFormatterSuiteMod.onInitialize()` | [fabric-host/README.md](fabric-host/README.md) |
+| `spigot-host` | Bukkit/Paper plugin | Thin platform adapter | `TextFormatterSuitePlugin`, `SpigotPlatformPorts`, `SpigotActorDirectory`, `SpigotChatDelivery` | `TextFormatterSuitePlugin.onEnable()` | [spigot-host/README.md](spigot-host/README.md) |
+| `fabric-host` | Fabric mod | Thin platform adapter | `TextFormatterSuiteMod`, `FabricPlatformPorts`, `FabricActorDirectory`, `FabricChatDelivery` | `TextFormatterSuiteMod.onInitialize()` | [fabric-host/README.md](fabric-host/README.md) |
 
 ---
 
@@ -132,11 +132,11 @@ TextFormatter Suite
 
 ### Understand Startup & Bootstrap
 ```
-→ src/host/README.md#entry-points
-  → SuiteBootstrap.java (host)
-  → SuiteHost.java (host)
+→ src/suite-runtime/README.md
+  → SuiteRuntime.java (suite-runtime)
   → TextFormatterSuitePlugin.java (spigot-host)
   → TextFormatterSuiteMod.java (fabric-host)
+  → SuiteHost.java (host)
 ```
 
 ### Understand Message Formatting Pipeline
@@ -174,7 +174,7 @@ TextFormatter Suite
 ```
 → src/host/README.md#configuration
   → ConfigLoader.java, HostConfig.java, CommandsConfig.java
-  → SpigotConfigValidator.java / ConfigValidator.java (platform-specific)
+  → HostPaths.java (canonical layout)
 ```
 
 ### Understand Sync / Cross-server Communication
@@ -218,39 +218,39 @@ TextFormatter Suite
 ### Platform Entry Points
 | Platform | Entry Point | Responsibility |
 |----------|-------------|----------------|
-| **Bukkit/Paper** | `TextFormatterSuitePlugin.onEnable()` | Plugin bootstrap, register commands/listeners, init `SuiteBootstrap` |
-| **Fabric** | `TextFormatterSuiteMod.onInitialize()` | Mod bootstrap, register event handlers, init `SuiteBootstrap` |
+| **Bukkit/Paper** | `TextFormatterSuitePlugin.onEnable()` | Create `PlatformPorts`, register adapter services, start `SuiteRuntime` |
+| **Fabric** | `TextFormatterSuiteMod.onInitialize()` | Create `PlatformPorts`, register adapter services, start `SuiteRuntime` |
 
 ### Bootstrap & Initialization
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
-| `SuiteBootstrap` | `host` | Core initialization: load modules, wire services, create `SuiteHost` |
-| `SuiteHost` | `host` | Runtime host: holds services, dispatches messages, manages lifecycle |
+| `SuiteRuntime` | `suite-runtime` | Composition root: installs packages, builds `SuiteHost`, publishes commands and `MessageDispatch` |
+| `SuiteHost` | `host` | Neutral pipeline: holds services and dispatches messages |
 | `ModuleLoader` | `kernel` | Discovers and loads `Module` implementations via SPI |
 | `ModuleGraph` | `kernel` | Resolves module dependency graph |
 
 ### Service Registration
 | Service | Registration Point |
 |---------|-------------------|
-| `ActorDirectory` | `SuiteBootstrap` → platform adapter provides (`SpigotActorDirectory`, `FabricActorDirectory`) |
+| `ActorDirectory` | Platform adapter registers it in `SuiteRuntime` before `start()` (`SpigotActorDirectory`, `FabricActorDirectory`) |
 | `TranslationService` | `chattranslator` package registers the facade/service; `gtranslate`/`ltranslate` packages register `TranslatorProvider` |
 | `ModuleActivatedEvent` / `ModuleDeactivatedEvent` | `ModuleHost` publishes them; modules subscribe through their scoped `EventBus` |
-| `SyncSink` | `SuiteBootstrap` → each sync module registers its `SyncSink` implementation |
-| `Router` | `SuiteBootstrap` → `VmPolicyEngine` |
-| `MessageDispatcher` | `SuiteBootstrap` → `MessageDispatcher` |
-| `ConfigValidator` | Platform-specific: `SpigotConfigValidator` / `ConfigValidator` |
+| `SyncSink` | Each sync package registers its `SyncSink` implementation |
+| `Router` | The active iFlow engine package registers it |
+| `MessageDispatcher` | `SuiteRuntime` builds it from the active pipeline |
+| `ConfigValidator` | Removed; each package validates its own configuration |
 
 ### Command Registration
 | Platform | Registration |
 |----------|--------------|
-| Bukkit | `DynamicCommandRegistrar` registers `DynamicCommand` instances |
-| Fabric | Command registration via Fabric API in `TextFormatterSuiteMod` |
+| Bukkit | `SuiteRuntime.registerCommands()` → `SpigotPlatformPorts` → `CommandMap` |
+| Fabric | `SuiteRuntime.registerCommands()` → `FabricPlatformPorts` → Brigadier |
 
 ### Event/Listener Registration
 | Platform | Registration |
 |----------|--------------|
-| Bukkit | `TextFormatterSuitePlugin` registers listeners for chat, join, quit, etc. |
-| Fabric | `TextFormatterSuiteMod` registers event handlers via Fabric API |
+| Bukkit | Event capture belongs to `sync-bukkit` (F4c); the host has no chat listeners |
+| Fabric | Event capture belongs to `sync-fabric` (F4c); the host has no chat listeners |
 
 ---
 
@@ -265,7 +265,7 @@ TextFormatter Suite
 | Sync modules → `core-api` + `transport` | Sync modules implement `SyncSink` SPI | `core-api` must not depend on sync modules | Transport abstraction |
 | `manager-apt`/`manager-core` → `manager-spi` | Implementations depend on the SPI | SPI must not depend on implementations | Standard API/impl separation |
 
-> ⚠️ **Observed architectural issue**: `host` depends on `kernel` for `ModuleLoader` during bootstrap. This is intentional — `host` drives module loading. However, `kernel` tests use `host` classes (`SuiteBootstrapTest` doesn't exist but `kernel` tests exist in isolation).
+> ℹ️ **Current boundary**: `host` no longer depends on `kernel` or feature modules. `suite-runtime` owns package discovery and `SuiteHost` assembly.
 
 ---
 
@@ -275,17 +275,17 @@ TextFormatter Suite
 ```
 Platform Entry Point (Plugin.onEnable / Mod.onInitialize)
          ↓
-SuiteBootstrap.initialize()
+PlatformPorts + adapter services registered
          ↓
-ModuleLoader.load() → discovers Module implementations
+SuiteRuntime.start()
          ↓
-ModuleGraph.resolve() → orders by dependencies
+PackageRuntime installs/activates packages
          ↓
-Modules initialized → register services (ActorDirectory, TranslationService, SyncSink, Router, etc.)
+ServiceRegistry: ChannelRegistry, TranslationService, Router, renderers, ChatDelivery
          ↓
-SuiteHost created with wired services
+SuiteRuntime builds SuiteHost and publishes MessageDispatch
          ↓
-Platform-specific config validation & command/listener registration
+runtime.registerCommands() → platform root command
          ↓
 Ready
 ```
@@ -313,11 +313,11 @@ Platform-specific delivery → ChatDelivery.deliver()
 ```
 Config File (YAML)
          ↓
-ConfigLoader.load() → HostConfig / CommandsConfig / TranslatorsConfig
+ConfigLoader.load() → HostConfig
          ↓
-ConfigValidator.validate() [platform-specific]
+Packages load their own canonical config (config/<package>/...)
          ↓
-SuiteBootstrap applies config → services configured
+SuiteRuntime builds SuiteHost with the active services
          ↓
 ConfigSchemaGenerator (host) → generates web-editor schema
 ```
@@ -341,7 +341,7 @@ Module.initialize() called in order
 
 | Area | Primary Module | Key Files |
 |------|----------------|-----------|
-| **Configuration** | `host` | `ConfigLoader`, `HostConfig`, `ConfigValidator`, `ConfigSchemaGenerator` |
+| **Configuration** | `host` | `ConfigLoader`, `HostConfig`, `HostPaths`, `ConfigSchemaGenerator` |
 | **Module System** | `kernel` | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` |
 | **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer` |
 | **Shared channel/routing contracts** | `core-api` | `api/channel/Channel`, `api/channel/ChannelRegistry`, `api/iflow/Router` |
@@ -350,8 +350,8 @@ Module.initialize() called in order
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
 | **Observability** | `observability` | `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint`, `DebugEndpoint` |
 | **Presets** | `presets` | `PresetManager`, `Preset` |
-| **Platform: Bukkit** | `spigot-host` | `TextFormatterSuitePlugin`, `SpigotActorDirectory`, `SpigotChatDelivery`, `DynamicCommandRegistrar` |
-| **Platform: Fabric** | `fabric-host` | `TextFormatterSuiteMod`, `FabricActorDirectory`, `FabricChatDelivery` |
+| **Platform: Bukkit** | `spigot-host` | `TextFormatterSuitePlugin`, `SpigotPlatformPorts`, `SpigotActorDirectory`, `SpigotChatDelivery` |
+| **Platform: Fabric** | `fabric-host` | `TextFormatterSuiteMod`, `FabricPlatformPorts`, `FabricActorDirectory`, `FabricChatDelivery` |
 | **Module Manager** | `manager-apt` | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` |
 | **Extensions** | `extension-api` | `Extension`, `ExtensionManager`, `ExtensionContext` |
 
@@ -359,7 +359,7 @@ Module.initialize() called in order
 
 ## 9. Discrepancies & Known Issues
 
-> ⚠️ **Architectural discrepancy**: `host` depends on `kernel` (for `ModuleLoader`), but `kernel` is conceptually a lower-level module. This is intentional — `host` drives the module loading process. However, it means `kernel` cannot use `host` services (no circular dep).
+> ℹ️ **Current boundary**: `host` is feature-free and does not depend on `kernel`; package discovery and lifecycle live in `suite-runtime`/`kernel`.
 
 > ℹ️ **Velocity split**: `sync-velocity-core` is the neutral sink; `sync-velocity` is the Velocity plugin. Only the plugin imports `com.velocitypowered`.
 
@@ -379,12 +379,12 @@ Module.initialize() called in order
 | Understand module loading | `kernel/src/main/java/me/majhrs16/suite/kernel/ModuleLoader.java` | `ModuleGraph.java` |
 | Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `core-api/src/main/java/me/majhrs16/suite/api/channel/ChannelRegistry.java` |
 | Understand routing (VM) | `iflow-vm/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java` |
-| Understand bootstrap | `host/src/main/java/me/majhrs16/suite/host/SuiteBootstrap.java` | `SuiteHost.java`, `MessageDispatcher.java` |
+| Understand bootstrap | `suite-runtime/src/main/java/me/majhrs16/suite/runtime/SuiteRuntime.java` | `SuiteHost.java`, `MessageDispatcher.java` |
 | Understand Spigot integration | `spigot-host/src/main/java/me/majhrs16/suite/spigothost/TextFormatterSuitePlugin.java` | `SpigotActorDirectory.java`, `SpigotChatDelivery.java` |
 | Understand Fabric integration | `fabric-host/src/main/java/me/majhrs16/suite/fabrichost/TextFormatterSuiteMod.java` | `FabricActorDirectory.java`, `FabricChatDelivery.java` |
 | Understand translation | `gtranslate/src/main/java/me/majhrs16/suite/gtranslate/GTranslateProvider.java` | `core-api/src/main/java/me/majhrs16/suite/api/spi/TranslationService.java` |
 | Understand sync | `transport/src/main/java/me/majhrs16/suite/transport/Transport.java` | Any `sync-*/SyncSink.java` |
-| Understand config | `host/src/main/java/me/majhrs16/suite/host/config/ConfigLoader.java` | `HostConfig.java`, `ConfigValidator.java` |
+| Understand config | `host/src/main/java/me/majhrs16/suite/host/config/ConfigLoader.java` | `HostConfig.java`, `HostPaths.java` |
 
 ---
 

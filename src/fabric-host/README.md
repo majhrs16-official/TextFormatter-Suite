@@ -1,197 +1,95 @@
-# fabric-host — Fabric Mod Platform Adapter
+# fabric-host — bootstrap Fabric
 
-> **Purpose**: Fabric mod implementation. Targets Fabric Loader 0.16+, Fabric API 0.100.5, Minecraft 1.21 and Yarn mappings, and requires a **Java 21** toolchain (the Fabric 1.21 baseline). Built with the `fabric-loom` plugin.
+> **Purpose**: adaptador de plataforma Fabric. Crea los puertos nativos,
+> registra los servicios del adapter y arranca `SuiteRuntime`. La captura de
+> eventos de chat/join/quit/death pertenece a `sync-fabric` (F4c).
 
 ---
 
 ## 1. Responsibilities
 
-- **Mod entry point** — `TextFormatterSuiteMod` implements `ModInitializer`
-- **Platform SPI implementations**:
-  - `FabricActorDirectory` — resolves players/console by name/UUID
-  - `FabricChatDelivery` — delivers formatted messages to players (Adventure Platform Fabric)
-  - `FabricPlaceholderResolver` — resolves placeholders (Fabric-specific)
-  - `ConfigValidator` — validates config against Fabric specifics
-- **Event handlers** — chat, join, quit, command via Fabric API
-- **Bootstrap extension** — extends `SuiteBootstrap` with Fabric-specific wiring
+- **Entry point** — `TextFormatterSuiteMod implements ModInitializer`.
+- **Lifecycle** — `SERVER_STARTING` crea el runtime; `SERVER_STOPPING` lo
+  cierra.
+- **Command bridge** — `CommandRegistrationCallback` enlaza el
+  `CommandDispatcher` de Brigadier con `FabricPlatformPorts`.
+- **Platform ports** — `FabricPlatformPorts` implementa `info`, `deliver`,
+  `send`, `findActor`, `onlineActors`, `hasPermission` y `registerCommand`.
+- **Adapter services**:
+  - `FabricActorDirectory` — jugadores/consola y su idioma.
+  - `FabricChatDelivery` — componentes Adventure y sonidos nativos.
+  - `FabricPlaceholderResolver` — passthrough (Fabric no tiene PlaceholderAPI).
+- **Runtime bootstrap** — registra `ChatDelivery`, `ActorDirectory`,
+  `PermissionChecker`, `UserLanguageStore`, `PlaceholderResolver` y
+  `PluginLogger`, y llama a `runtime.start()`.
+- **In-world adapter** — `FabricInWorldHandler` consume `InWorldService` y
+  `MessageRenderer`.
 
----
+## 2. Non-responsibilities
 
-## 2. Non-Responsibilities
-
-- **No core formatting logic** — delegates to `textformatter` via `host`
-- **No routing logic** — delegates to `iflow-vm` via `host`
-- **No translation logic** — delegates to `gtranslate`/`ltranslate` via `host`
-- **No sync logic** — delegates to sync modules via `host`
-- **No module loading** — delegates to `kernel` via `host`
-
----
+- **No features** — no importa `textformatter`, `chattranslator`, `iflow-*`,
+  `messages`, `presets`, `tester`, `inworld` ni sinks.
+- **No eventos de chat/join/quit/death** — pertenecen a `sync-fabric` (F4c).
+- **No bootstrap heredado** — `SuiteHost.bootstrap`/`SuiteBootstrap` fueron
+  retirados.
+- **No JDA** — el bridge Discord del host se eliminó; vive en paquetes de sync.
 
 ## 3. Dependencies
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | All SPIs (via Maven coordinates) |
-| `kernel` | Compile | Module loading |
-| `host` | Compile | Bootstrap, dispatch, config |
-| `iflow-vm` | Compile | Routing |
-| `textformatter` | Compile | Formatting |
-| `sync-discord` | Compile | Discord sync |
-| `sync-velocity` | Compile | Velocity sync |
-| `sync-websocket` | Compile | WebSocket sync |
-| `gtranslate` | Compile | Google Translate |
-| `ltranslate` | Compile | LibreTranslate |
-| `messages` | Compile | Message catalog |
-| `observability` | Compile | Metrics |
-| `manager-spi` | Compile | Module manager SPI |
-| `manager-core` | Compile | Package installer & local database |
-| `manager-apt` | Compile | Repository manager & dependency resolver |
-| `presets` | Compile | Preset management |
-| `inworld` | Compile | In-world integration |
-| `extension-api` | Compile | Extension system |
-| `loadtest` | Compile | Load testing |
-| `performance` | Compile | Performance profiling |
-| `adventure-text-minimessage` | Compile | MiniMessage parsing |
-| `adventure-api` | Compile | Adventure components |
-| `adventure-text-serializer-gson` | Compile | Gson serialization |
-| `adventure-platform-fabric` | Compile | Adventure → Fabric component conversion |
-| `net.dv8tion:JDA` | Compile | Discord integration |
-| `fabric-loader` | ModImplementation | Fabric Loader |
-| `fabric-api` | ModImplementation | Fabric API |
-| `minecraft` | Minecraft | Minecraft 1.21 |
-| `yarn mappings` | Mappings | Yarn 1.21+build.1 |
+| `core-api` | Compile | Contratos neutrales |
+| `core-render` | Compile | `ChatDelivery` |
+| `suite-runtime` | Compile | Composition root |
+| `adventure-api` | Compile | Componentes |
+| `adventure-text-serializer-gson` | Compile | Conversión a `Text` de Fabric |
+| `fabric-loader` / `fabric-api` | Compile | SDK de Fabric |
+| Minecraft/Yarn | Compile | SDK de Minecraft |
 
-> **Build note**: uses `fabric-loom` (`minecraft`, `mappings` and `modImplementation` configurations). The first build downloads and remaps Minecraft 1.21, so it is heavier and requires network access.
-
----
-
-## 4. Consumers
-
-| Consumer | Usage |
-|----------|-------|
-| — (leaf) | Final mod artifact; no modules depend on this |
-
----
-
-## 5. Main Components
+## 4. Main Components
 
 | Component | Role |
 |-----------|------|
-| `TextFormatterSuiteMod` | Main mod class: `onInitialize()`, bootstrap |
-| `FabricActorDirectory` | `ActorDirectory` impl: `ServerPlayerEntity` lookup |
-| `FabricChatDelivery` | `ChatDelivery` impl: Adventure Platform Fabric → `player.sendMessage()` |
-| `FabricPlaceholderResolver` | `PlaceholderResolver` impl: Fabric-specific placeholders |
-| `ConfigValidator` | Validates config: channels, formats, permissions |
-| `ChannelSelector` | Selects channel based on event context |
-| `EventRules` | Event cancellation/modification rules |
-| `LangSetting` | Player language preference management |
-| `FabricInWorldHandler` | Fabric adapter for the neutral `InWorldHandler`; registers callbacks once and delegates to the active instance |
-| `DiscordBridge` | Discord integration (shared logic with Spigot) |
+| `TextFormatterSuiteMod` | Entry point y ciclo de vida |
+| `FabricPlatformPorts` | `PlatformPorts` sobre Fabric/Brigadier |
+| `FabricActorDirectory` | `ActorDirectory` |
+| `FabricChatDelivery` | `ChatDelivery` |
+| `FabricPlaceholderResolver` | `PlaceholderResolver` |
+| `FabricInWorldHandler` | Adapter de `InWorldService` |
 
----
+## 5. Data Flow
 
-## 6. Data Flow
-
-### Bootstrap
 ```text
-TextFormatterSuiteMod.onInitialize()
-         ↓
-create SuiteBootstrap (host) with Fabric classloader
-         ↓
-SuiteBootstrap.initialize() → loads all modules
-         ↓
-Register Fabric-specific SPIs:
-  - ActorDirectory → FabricActorDirectory
-  - ChatDelivery → FabricChatDelivery
-  - PlaceholderResolver → FabricPlaceholderResolver
-  - ConfigValidator → ConfigValidator
-         ↓
-ConfigLoader.load() → validate via ConfigValidator
-         ↓
-Register Fabric event handlers:
-  - ChatEvent → onChat()
-  - ServerPlayConnectionEvents.JOIN → onJoin()
-  - ServerPlayConnectionEvents.DISCONNECT → onQuit()
-  - CommandRegistrationCallback → register commands
-         ↓
-Mod ready
+onInitialize()
+  ↓
+SERVER_STARTING → YamlUserLanguageStore + FabricActorDirectory
+  ↓
+FabricPlatformPorts
+  ↓
+new SuiteRuntime(folder, ports, logger)
+  ↓
+registerPlatformService(...)
+  ↓
+runtime.start() → activa paquetes y construye SuiteHost
+  ↓
+runtime.registerCommands() → cola hasta el CommandDispatcher
+  ↓
+CommandRegistrationCallback → bindDispatcher
+  ↓
+SERVER_STOPPING → runtime.close()
 ```
 
-### Chat Event Processing
-```text
-ChatEvent (Fabric)
-         ↓
-onChat(event)
-         ↓
-FabricActorDirectory.getActor(player) → Actor
-         ↓
-MessageDispatcher.dispatch(rawMessage, actor, channel)
-         ↓ (host pipeline: route → format → translate → sync)
-         ↓
-FabricChatDelivery.deliver(recipients, formattedMessage)
-         ↓
-Adventure component → Fabric component → player.sendMessage()
-```
+## 6. Exploration path
 
----
+1. `TextFormatterSuiteMod.java`
+2. `FabricPlatformPorts.java`
+3. `FabricChatDelivery.java`
+4. `FabricActorDirectory.java`
+5. `FabricInWorldHandler.java`
 
-## 7. Entry Points
+## 7. Related modules
 
-| Entry Point | Location | Trigger |
-|-------------|----------|---------|
-| `TextFormatterSuiteMod.onInitialize()` | `TextFormatterSuiteMod.java` | Mod load |
-| `ChatEvent` handler | `TextFormatterSuiteMod.java` | Player chat |
-| `ServerPlayConnectionEvents.JOIN` | `TextFormatterSuiteMod.java` | Player join |
-| `ServerPlayConnectionEvents.DISCONNECT` | `TextFormatterSuiteMod.java` | Player quit |
-| `CommandRegistrationCallback` | `TextFormatterSuiteMod.java` | Command registration |
-
----
-
-## 8. Extension Points
-
-| Extension Point | How to Extend |
-|-----------------|---------------|
-| Custom commands | Register via `CommandRegistrationCallback` in `onInitialize()` |
-| Custom placeholders | Extend `FabricPlaceholderResolver` |
-| Custom chat delivery | Implement `ChatDelivery` (host.port), replace in bootstrap |
-| Custom config validation | Extend `ConfigValidator` |
-| Additional event handlers | Register in `onInitialize()` after bootstrap |
-
----
-
-## 9. Exploration Path
-
-```
-1. TextFormatterSuiteMod.java       → Mod entry point, bootstrap
-2. FabricActorDirectory.java        → ActorDirectory implementation
-3. FabricChatDelivery.java          → ChatDelivery implementation
-4. FabricPlaceholderResolver.java   → PlaceholderResolver implementation
-5. ConfigValidator.java             → Config validation
-6. ChannelSelector.java             → Channel selection logic
-7. EventRules.java                  → Event handling rules
-8. LangSetting.java                 → Language settings
-9. DiscordBridge.java               → Discord integration
-10. host/SuiteBootstrap.java        → Shared bootstrap (parent)
-```
-
----
-
-## 10. Build Notes
-
-- **Included in build** — `fabric-host` is included in `settings.gradle`.
-- **Fabric APIs** — uses `ServerCommandSource`, `FabricAudiences`, Fabric events and Brigadier native commands.
-- **Fabric Loom** — `fabric-loom` resolves and remaps Minecraft 1.21 (network + first-build cost).
-- **Java 21** — requires a Java 21 toolchain (Fabric 1.21 baseline); this matches the CI JDK (21).
-
----
-
-## 11. Related Modules
-
-- [core-api](../core-api/README.md) — All SPIs implemented here
-- [host](../host/README.md) — Shared bootstrap & pipeline
-- [kernel](../kernel/README.md) — Module loading
-- [textformatter](../textformatter/README.md) — Formatting
-- [iflow](../iflow/README.md) — Routing
-- [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation
-- [sync-discord](../sync-discord/README.md) / [sync-velocity](../sync-velocity/README.md) / [sync-websocket](../sync-websocket/README.md) — Sync
-- [spigot-host](../spigot-host/README.md) — Bukkit equivalent
+- [host](../host/README.md)
+- [suite-runtime](../suite-runtime/README.md)
+- [core-render](../core-render/README.md)
+- [spigot-host](../spigot-host/README.md)

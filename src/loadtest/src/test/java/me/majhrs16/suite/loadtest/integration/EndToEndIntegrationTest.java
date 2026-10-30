@@ -1,5 +1,7 @@
 package me.majhrs16.suite.loadtest.integration;
 
+import me.majhrs16.suite.loadtest.HostFixture;
+
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.MessageType;
@@ -23,7 +25,6 @@ import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationException;
 import me.majhrs16.suite.host.config.ConfigLoader;
-import me.majhrs16.suite.host.SuiteBootstrap;
 
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Test;
@@ -90,7 +91,7 @@ class EndToEndIntegrationTest {
         TranslatorManager tm = new TranslatorManager().add(dummyTranslator);
         TranslationService translation = new TranslationService(tm);
         
-        host = SuiteBootstrap.bootstrap(
+        host = HostFixture.bootstrap(
             tempDir, 
             (actor, perm) -> true, 
             null, 
@@ -295,7 +296,7 @@ class EndToEndIntegrationTest {
             @Override public boolean available() { return false; }
         };
         
-        SuiteHost testHost = SuiteHost.bootstrap(
+        SuiteHost testHost = HostFixture.bootstrap(
             tempDir,
             (actor, perm) -> true,
             noopResolver,
@@ -367,7 +368,7 @@ class EndToEndIntegrationTest {
             @Override public boolean available() { return false; }
         };
         
-        SuiteHost testHost = SuiteHost.bootstrap(
+        SuiteHost testHost = HostFixture.bootstrap(
             tempDir,
             (actor, perm) -> true,
             noopResolver,

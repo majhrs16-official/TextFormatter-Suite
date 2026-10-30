@@ -1,5 +1,7 @@
 package me.majhrs16.suite.loadtest.benchmark;
 
+import me.majhrs16.suite.loadtest.HostFixture;
+
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.MessageType;
@@ -170,7 +172,7 @@ public class MessageProcessingBenchmark {
             }
         };
 
-        host = SuiteHost.bootstrap(tempDir, permissions, mockPlaceholders, mockLogger, mockDelivery);
+        host = HostFixture.bootstrap(tempDir, permissions, mockPlaceholders, mockLogger, mockDelivery);
 
         // Create mock ActorDirectory
         ActorDirectory mockActorDirectory = new ActorDirectory() {

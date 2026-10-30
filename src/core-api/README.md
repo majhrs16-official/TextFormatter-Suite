@@ -118,7 +118,7 @@ ModuleActivatedEvent / ModuleDeactivatedEvent
 None — this is a contract library. Entry points are in modules that **implement** these interfaces:
 - `suite-runtime.ModuleHost` loads `ModuleActivator` implementations from package JARs
 - `kernel.ModuleLoader` remains the legacy loader for `Module` implementations
-- `host.SuiteBootstrap` wires the legacy host path
+- `SuiteRuntime` builds the pipeline from `ServiceRegistry`
 - Platform adapters provide `ActorDirectory`, `PlaceholderResolver`, `ChatDelivery`
 
 ---

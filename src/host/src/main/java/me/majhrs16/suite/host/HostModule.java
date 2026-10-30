@@ -7,7 +7,8 @@ import me.majhrs16.suite.api.SemVer;
 
 /**
  * SPI provider for the Host core module: provides the {@code host-core} capability.
- * The host core provides the SuiteHost bootstrap, configuration loading, and pipeline assembly.
+ * The host core provides the neutral {@code SuiteHost} pipeline, configuration
+ * loading and message dispatch. It no longer bootstraps features.
  */
 public final class HostModule implements Module {
 

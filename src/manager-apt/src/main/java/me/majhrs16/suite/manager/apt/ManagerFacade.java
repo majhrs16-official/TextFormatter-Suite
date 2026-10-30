@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 /**
  * New Module Manager facade - replaces ModuleLifecycle with APT/dpkg architecture.
- * Integrates with existing TxF runtime via SuiteBootstrap.
+ * Integrates with the existing suite runtime via `SuiteRuntime`.
  */
 public final class ManagerFacade {
 
@@ -204,7 +204,7 @@ public final class ManagerFacade {
     }
 
     /**
-     * Discovers all modules registered via this lifecycle (for SuiteBootstrap).
+     * Discovers all modules registered via this lifecycle (for `SuiteRuntime`).
      */
     public List<me.majhrs16.suite.api.Module> discoverAll(ClassLoader parent) {
         ensureInitialized();

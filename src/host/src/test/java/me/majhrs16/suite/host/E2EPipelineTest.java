@@ -162,7 +162,7 @@ class E2EPipelineTest {
             """);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
-        SuiteHost host = SuiteHost.bootstrap(dir, permissions, null, quietLogger());
+        SuiteHost host = HostFixture.bootstrap(dir, permissions, null, quietLogger());
         return new MessageDispatcher(host, new TestDirectory(online, CONSOLE), delivery, permissions, quietLogger());
     }
 
@@ -241,7 +241,7 @@ class E2EPipelineTest {
         writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
         // Route staff messages to the console via a VM policy program
         PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
 
@@ -283,7 +283,7 @@ class E2EPipelineTest {
         writeConfig();
         writeChannel("join", "<green>✦ %player_name% joined</green>", null);
 
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
         MessageDispatcher dispatcher = new MessageDispatcher(
             host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
             delivery, PermissionChecker.ALLOW_ALL, quietLogger());
@@ -319,7 +319,7 @@ class E2EPipelineTest {
                 pitch: 1.0
             """);
 
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
         MessageDispatcher dispatcher = new MessageDispatcher(
             host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
             delivery, PermissionChecker.ALLOW_ALL, quietLogger());
@@ -412,7 +412,7 @@ class E2EPipelineTest {
             """);
         writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
 
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
         MessageDispatcher dispatcher = new MessageDispatcher(
             host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
             delivery, PermissionChecker.ALLOW_ALL, quietLogger());
@@ -456,7 +456,7 @@ class E2EPipelineTest {
         writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", null);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", null);
 
-        SuiteHost host = SuiteHost.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
+        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
         // Redirect chat to the "staff" channel via a VM policy program
         PolicyPrograms.setChannelRedirect(host, "staff");
 

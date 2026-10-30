@@ -1,193 +1,106 @@
-# host — Shared Bootstrap, Dispatch & Configuration
+# host — Pipeline neutral, despacho y configuración
 
-> **Purpose**: Platform-agnostic integration hub. Wires all core modules (`textformatter`, `iflow-vm`, translations, transports), loads configuration, and provides the `SuiteHost` runtime. Platform adapters (`spigot-host`, `fabric-host`) extend this.
+> **Purpose**: núcleo neutral que `SuiteRuntime` usa para construir el pipeline
+> de mensajes. Ya no arranca módulos ni conoce features: recibe los servicios
+> resueltos desde el `ServiceRegistry` del runtime.
 
 ---
 
 ## 1. Responsibilities
 
-- **Bootstrap** — `SuiteBootstrap`: loads modules via `kernel`, wires services, creates `SuiteHost`
-- **Message dispatch** — `MessageDispatcher`: routes → formats → translates → syncs → delivers
-- **Configuration loading** — YAML config → `HostConfig`, `CommandsConfig`, `TranslatorsConfig`, `MessagesConfig`
-- **Config validation** — `ConfigValidator` SPI (platform-specific implementations)
-- **Service registry** — holds `ActorDirectory`, `TranslationService`, `SyncSink[]`, `Router`, `TextFormatter`, `PlaceholderResolver`
-- **User language store** — `YamlUserLanguageStore` implements `UserLanguageStore` SPI
-- **Schema generation** — `ConfigSchemaGenerator` generates web-editor schema from config paths
+- **Pipeline** — `SuiteHost` combina `ChannelRegistry`, `TranslationService`,
+  `Router`, `MessageRenderer`, `MessageComponentRenderer`, `PluginLogger` y
+  `ChatDelivery`.
+- **Message dispatch** — `MessageDispatcher` enruta, renderiza, traduce,
+  entrega al destinatario y publica copias de auditoría.
+- **Configuration loading** — `ConfigLoader` lee `config/suite/config.yml` y
+  produce `HostConfig`; `HostPaths` resuelve el layout canónico.
+- **Message catalog** — `MessagesConfig` carga `config/suite/messages.yml` con
+  fallback a los recursos.
+- **Schema generation** — `ConfigSchemaGenerator` genera el esquema del editor
+  web desde las rutas de configuración.
+- **Debug endpoint** — `DebugEndpoint` expone simulación y estado para
+  diagnóstico.
 
----
+## 2. Non-responsibilities
 
-## 2. Non-Responsibilities
-
-- **No platform-specific code** — no Bukkit/Fabric APIs
-- **No command registration** — platform adapters handle that
-- **No event listening** — platform adapters handle that
-- **No module implementations** — only wires modules loaded by `kernel`
-- **No expression engine** — policy logic lives in iFlow VM programs (`.flow`); templates only substitute placeholders
-
----
+- **No arranca paquetes** — eso lo hace `SuiteRuntime`/`PackageRuntime`.
+- **No construye features** — no importa `textformatter`, `chattranslator`,
+  `iflow-*`, `transport` ni `kernel`.
+- **No registra comandos ni listeners de plataforma** — eso pertenece a
+  `suite-runtime`, `sync-bukkit`/`sync-fabric` y a los adapters.
+- **No valida configuración de features** — cada paquete valida la suya.
 
 ## 3. Dependencies
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | All SPIs, domain types |
-| `kernel` | Compile | `ModuleLoader` for module discovery |
-| `textformatter` | Compile | `TextFormatter`, `ChannelRegistry` |
-| `iflow-vm` | Compile | `Router` for message routing |
-| `transport` | Compile | `HttpTransport` for webhook sync |
-| `gson` | Compile | Config schema generation |
-| `snakeyaml` | Compile | YAML config parsing |
-| `adventure-text-minimessage` | Compile | Message formatting in config |
-| `gtranslate` | Test | `GTranslateProvider` for translation tests |
-| `ltranslate` | Test | `LTranslateProvider` for translation tests |
-
-> **Clean Architecture**: `host` no longer has compile-time dependencies on translation providers (`gtranslate`, `ltranslate`). Translators are discovered at runtime via `ServiceLoader` using the `TranslatorProvider` SPI (`core-api`). Tests use `testImplementation` to make providers available to ServiceLoader during test execution.
-
----
+| `core-api` | Compile | Tipos neutrales, SPIs y contratos |
+| `core-render` | Compile | `ChatDelivery`, `MessageComponentRenderer` y Adventure |
+| `snakeyaml` | Compile | Lectura de YAML |
+| `gson` | Compile | Generación del esquema del editor |
+| `textformatter`, `chattranslator`, `iflow-*`, `transport` | Test only | Fixtures de `HostFixture`; no están en producción |
 
 ## 4. Consumers
 
 | Consumer | Usage |
 |----------|-------|
-| `spigot-host` | Extends `SuiteBootstrap`, provides platform SPIs |
-| `fabric-host` | Extends `SuiteBootstrap`; compila, no probado en servidor real |
-| `observability` | Uses `host` services for metrics |
-| `manager-apt` | Module management facade wired by the platform hosts |
-
----
+| `suite-runtime` | Construye `SuiteHost` desde los servicios activos |
+| `observability` | Consulta métricas del pipeline |
+| `host` tests / `loadtest` | Usan `HostFixture` para cablear features reales en pruebas |
 
 ## 5. Main Components
 
 | Component | Role |
 |-----------|------|
-| `SuiteBootstrap` | Main bootstrap: `initialize() → SuiteHost`; loads modules, wires services |
-| `SuiteHost` | Runtime host: holds service references, lifecycle management |
-| `MessageDispatcher` | Core pipeline: route → format → translate → sync → deliver |
-| `DispatchReport` | Result of dispatch: success, transformations, sync results |
-| `RoutingResult` | Result from `Router` |
-| `ConfigLoader` | Loads YAML → `HostConfig`, `CommandsConfig`, `TranslatorsConfig`, `MessagesConfig` |
-| `HostConfig` | Root config: channels, formats, sync, translators, modules |
-| `CommandsConfig` | Command definitions (aliases, permissions, etc.) |
-| `TranslatorsConfig` | Translation provider config (API keys, endpoints) |
-| `MessagesConfig` | Message catalog configuration |
-| `ConfigValidator` | SPI: `validate(config) → errors[]` (platform-specific) |
-| `YamlUserLanguageStore` | Implements `UserLanguageStore` SPI (persists to YAML) |
-| `ConfigSchemaGenerator` | Generates `paths.json` + `schema-v2.2.md` for web editor |
-| `ChatDelivery` | SPI (in `host.port`): `deliver(actor, message)` — platform adapters implement |
-
----
+| `SuiteHost` | Facade del pipeline; constructor neutral y `deliver(...)` |
+| `MessageDispatcher` | Route → format → translate → sync → deliver |
+| `RoutingResult` | Resultado de una entrega (entregado, silenciado, redirigido) |
+| `DispatchReport` | Contadores de una operación de despacho |
+| `ConfigLoader` | Carga `HostConfig` desde YAML |
+| `HostPaths` | Layout canónico `config/<paquete>/...` con fallback legacy |
+| `MessagesConfig` | Catálogo de mensajes con defaults empaquetados |
+| `ConfigSchemaGenerator` | Esquema para el editor web |
+| `DebugEndpoint` | Endpoint HTTP de simulación/estado |
 
 ## 6. Data Flow
 
-### Bootstrap Flow
 ```text
-Platform Adapter (Plugin/Mod)
-         ↓
-SuiteBootstrap.initialize(classLoader)
-         ↓
-ModuleLoader.load() → discovers all Module implementations
-         ↓
-ModuleGraph.resolve() → topological order
-         ↓
-Module.initialize(Environment) for each
-         ↓
-Services registered:
-  - ActorDirectory (from platform adapter)
-  - TranslationService (discovered via ServiceLoader: TranslatorProvider SPI)
-  - SyncSink[] (from sync-* modules)
-  - Router (from iflow module)
-  - TextFormatter (from textformatter module)
-  - PlaceholderResolver (from platform adapter)
-  - UserLanguageStore (YamlUserLanguageStore)
-         ↓
-ConfigLoader.load() → HostConfig + validators
-         ↓
-SuiteHost created with all services
-         ↓
-Platform adapter registers commands, listeners, validators
+SuiteRuntime
+  ├─ ServiceRegistry: ChannelRegistry, TranslationService, Router,
+  │                   MessageRenderer, MessageComponentRenderer,
+  │                   ChatDelivery, ActorDirectory, PermissionChecker
+  ↓
+new SuiteHost(config, channels, translation, router, renderers, logger, delivery)
+  ↓
+host.deliver(Message, recipient)
+  ↓
+Router.route(...) → MessageDispatcher
+  ↓
+MessageRenderer / MessageComponentRenderer
+  ↓
+ChatDelivery.deliver(...) / deliverConsole(...)
 ```
 
-### Message Dispatch Flow
-```text
-MessageDispatcher.dispatch(rawMessage, sender, channel)
-         ↓
-Router.route(message, actor, channel) → RouteDecision
-         ↓ (if ALLOW/TRANSFORM)
-TextFormatter.format(message, channel, context) → formatted
-         ↓ (if translation needed)
-TranslationService.translate(formatted, targetLang) → translated
-         ↓
-For each SyncSink: sink.send(message) → cross-server
-         ↓
-ChatDelivery.deliver(recipient, message) → platform-specific send
-```
+## 7. Entry points
 
-### Configuration Flow
-```text
-config.yml (YAML)
-         ↓
-ConfigLoader.load() → HostConfig / CommandsConfig / TranslatorsConfig
-         ↓
-ConfigValidator.validate(config) → errors (platform-specific)
-         ↓
-SuiteBootstrap applies config:
-  - ChannelRegistry ← channels from HostConfig
-  - TranslatorManager ← translators from TranslatorsConfig (ServiceLoader discovery)
-  - SyncSink config ← sync section
-         ↓
-ConfigSchemaGenerator.generate() → web-editor schema files
-```
+- `SuiteRuntime` construye el host tras activar los paquetes.
+- `MessageDispatcher` es el punto de entrada de mensajes ya normalizados.
+- `DebugEndpoint` es el punto de entrada HTTP de diagnóstico.
 
----
+## 8. Exploration path
 
-## 7. Entry Points
+1. `SuiteHost.java`
+2. `MessageDispatcher.java`
+3. `RoutingResult.java` y `DispatchReport.java`
+4. `config/ConfigLoader.java` y `config/HostPaths.java`
+5. `config/MessagesConfig.java`
+6. `debug/DebugEndpoint.java`
 
-| Entry Point | Location | Called By |
-|-------------|----------|-----------|
-| `SuiteBootstrap.initialize(classLoader)` | `SuiteBootstrap.java:58` | `TextFormatterSuitePlugin.onEnable()` (spigot), `TextFormatterSuiteMod.onInitialize()` (fabric) |
-| `MessageDispatcher.dispatch()` | `MessageDispatcher.java` | Platform chat event handlers |
-| `ConfigLoader.load()` | `ConfigLoader.java` | `SuiteBootstrap.initialize()` |
+## 9. Related modules
 
----
-
-## 8. Extension Points
-
-| Extension Point | How to Extend |
-|-----------------|---------------|
-| Custom `ConfigValidator` | Implement `ConfigValidator` SPI, platform adapter provides |
-| Custom `ChatDelivery` | Implement `ChatDelivery` (in `host.port`), platform adapter provides |
-| Custom `UserLanguageStore` | Implement `UserLanguageStore` SPI (core-api) |
-| Additional config sections | Extend `HostConfig` + `ConfigLoader` + schema generator |
-| Additional sync sinks | Implement `SyncSink` (core-api), register via module |
-
----
-
-## 9. Exploration Path
-
-```
-1. SuiteBootstrap.java              → Main bootstrap logic
-2. SuiteHost.java                   → Runtime host & service holder
-3. MessageDispatcher.java           → Message pipeline orchestration
-4. DispatchReport.java / RoutingResult.java → Dispatch results
-5. ConfigLoader.java                → YAML loading
-6. HostConfig.java / CommandsConfig.java / TranslatorsConfig.java → Config models
-7. ConfigValidator.java             → Validation SPI
-8. YamlUserLanguageStore.java       → Language persistence
-9. ChatDelivery.java (host.port)    → Delivery SPI
-10. ConfigSchemaGenerator.java      → Web-editor schema generation
-```
-
----
-
-## 10. Related Modules
-
-- [core-api](../core-api/README.md) — All SPIs and domain types
-- [kernel](../kernel/README.md) — Module loading
-- [textformatter](../textformatter/README.md) — Formatting pipeline
-- [iflow](../iflow/README.md) — Routing
-- [gtranslate](../gtranslate/README.md) / [ltranslate](../ltranslate/README.md) — Translation (SPI providers, runtime discovery)
-- [transport](../transport/README.md) — HTTP transport for sync
-- [spigot-host](../spigot-host/README.md) — Bukkit platform adapter
-- [fabric-host](../fabric-host/README.md) — Fabric platform adapter (compila; no probado en servidor real)
-- [observability](../observability/README.md) — Metrics on host services
-- [presets](../presets/README.md) — Preset management using host config
+- [core-api](../core-api/README.md)
+- [core-render](../core-render/README.md)
+- [suite-runtime](../suite-runtime/README.md)
+- [spigot-host](../spigot-host/README.md)
+- [fabric-host](../fabric-host/README.md)

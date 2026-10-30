@@ -79,7 +79,7 @@ ResolutionResult { status, modules[], errors[] }
 
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
-| `ModuleLoader.load(classLoader)` | `ModuleLoader.java:42` | `SuiteBootstrap.initialize()` (host), platform adapters |
+| `ModuleLoader.load(classLoader)` | `ModuleLoader.java:42` | `SuiteRuntime`/`PackageRuntime`, platform adapters |
 
 ---
 
