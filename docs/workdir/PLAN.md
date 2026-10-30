@@ -1305,8 +1305,9 @@ paquete neutral.
   (`SpigotTestProbe`) vive en `spigot-host`.
 - `presets` ya se empaqueta como `PACKAGE` y aplica mediante el puerto neutral
   `PresetTarget`; `FilePresetTarget` persiste el layout canónico y
-  `PresetsActivator` publica `PresetManager`. Falta el adapter de host que
-  seleccione el preset y recargue los módulos (F4b).
+  `PresetsActivator` publica `PresetManager`. `HostPresetApplier` ya
+  selecciona, persiste y recarga el runtime; falta exponerlo por comando
+  (F4d/F4e).
 - `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
   `ActorDirectory`; no importa `host`.
 - `spigot-host` y `fabric-host` siguen construyendo sinks, observability,
@@ -1349,8 +1350,11 @@ neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
 `SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`.
 `core-api` añade `DispatchOutcome` y `MessageDispatch.dispatchAndReport(...)`;
 `SuiteHost` expone `renderer()` y `messageDispatch(dispatcher)` como adaptadores
-transitorios mientras el host siga construyendo el pipeline. La retirada
-completa de `SuiteHost` del adapter pertenece al cierre de F4b.
+transitorios mientras el host siga construyendo el pipeline. También se añadió
+`host.preset.HostPresetApplier`, que selecciona un preset, lo persiste con
+`FilePresetTarget` y solo entonces invoca la recarga del runtime; la selección
+por comando sigue pendiente de F4d/F4e. La retirada completa de `SuiteHost` del
+adapter pertenece al cierre de F4b.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 

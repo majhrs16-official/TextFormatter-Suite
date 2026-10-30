@@ -42,7 +42,7 @@ The distribution is a `PACKAGE` with no package dependencies; `core-api` is prov
 
 ## 4. Consumers
 
-`suite-runtime` installs the distribution ZIP and activates `PresetsActivator`. The host still needs a thin adapter that selects a preset, calls `PresetManager.apply(id, new FilePresetTarget(suiteDir))`, and then reloads the affected modules. That host wiring belongs to F4b and is not part of this package.
+`suite-runtime` installs the distribution ZIP and activates `PresetsActivator`. The host adapter is `host.preset.HostPresetApplier`: it selects a preset, calls `PresetManager.apply(id, new FilePresetTarget(suiteDir))`, and only after success invokes the runtime reload callback. Command wiring for selecting a preset belongs to F4d/F4e.
 
 ---
 
@@ -94,7 +94,7 @@ Channel templates are persisted from `Formats.formatList()` (falling back to `te
 
 ## 8. Limitations
 
-- The host adapter that calls `PresetManager.apply` and reloads modules is still pending (F4b); the package itself is installed and activated by `suite-runtime`.
+- `HostPresetApplier` in `host` now calls `PresetManager.apply` and reloads modules after success; the package itself is installed and activated by `suite-runtime`.
 - `FilePresetTarget` writes the canonical configuration files but deliberately does not reload the host.
 - Preset rules with SpEL conditions/actions were removed with the rest of the inline expression engine.
 - `presets` has no platform commands yet; command registration belongs to the host adapter.
