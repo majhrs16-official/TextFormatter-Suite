@@ -12,6 +12,7 @@ import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.extension.ExtensionManager;
 import me.majhrs16.suite.host.DispatchReport;
 import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.kernel.ModuleLoader;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostPaths;
@@ -1051,7 +1052,15 @@ private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
         Runtime rt = runtime;
         if (rt != null && rt.host != null && rt.dispatcher != null) {
             return new me.majhrs16.suite.tester.TestService(
-                new SpigotTestProbe(rt.host, rt.dispatcher),
+                new SpigotTestProbe(
+                    rt.host.channels(),
+                    rt.host.router(),
+                    rt.host.renderer(),
+                    rt.host.messageDispatch(rt.dispatcher),
+                    rt.host.translation(),
+                    () -> ModuleLoader.discover(rt.host.getClass().getClassLoader()).size(),
+                    rt.host.config().defaultLanguage()
+                ),
                 rt.directory,
                 rt.languages,
                 rt.logger

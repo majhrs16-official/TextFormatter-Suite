@@ -44,7 +44,7 @@ The distribution is a `PACKAGE` with no package dependencies. Its descriptor req
 | `suite-runtime` | Installs/activates the `tester` package and publishes `TestServiceFactory` |
 | Future `fabric-host` | Must implement its own `TestProbe`; no platform types enter this package |
 
-The host still constructs the service directly while F4b is open. The package already exposes the neutral factory for the final host wiring.
+The host still constructs the service directly while F4b is open. The package already exposes the neutral factory for the final host wiring; `SpigotTestProbe` now binds only `ChannelRegistry`, `Router`, `MessageRenderer`, `MessageDispatch` and `TranslationService`.
 
 ---
 
@@ -54,7 +54,7 @@ The host still constructs the service directly while F4b is open. The package al
 |-----------|------|
 | `TestService` | Scenario runner, benchmarks and report generation |
 | `TestProbe` | Neutral port to routing, channels, formatting, translation and dispatch |
-| `TestProbe.DispatchOutcome` | Delivered/silenced/redirected counters |
+| `DispatchOutcome` (`core-api`) | Delivered/silenced/redirected counters shared with the dispatch port |
 | `TestServiceFactory` | Creates `TestService` for a host adapter |
 | `TesterActivator` | `ModuleActivator`; registers the factory and declares capabilities |
 | `TesterModule` | `Module` descriptor for SPI discovery |

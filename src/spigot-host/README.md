@@ -89,6 +89,7 @@
 | `EventRules` | Event cancellation/modification rules |
 | `LangSetting` | Player language preference management |
 | `SpigotInWorldListener` | Bukkit adapter for `inworld`; consumes neutral `MessageRenderer` and `MessageDispatch` instead of `SuiteHost` |
+| `SpigotTestProbe` | Binds the neutral `TestProbe` port to `ChannelRegistry`, `Router`, `MessageRenderer`, `MessageDispatch` and `TranslationService` |
 
 ---
 

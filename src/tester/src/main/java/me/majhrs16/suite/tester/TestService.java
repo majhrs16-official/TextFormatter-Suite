@@ -3,6 +3,7 @@ package me.majhrs16.suite.tester;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 
@@ -529,7 +530,7 @@ public final class TestService {
         updateStats(probe.dispatch(msg));
     }
 
-    private void updateStats(TestProbe.DispatchOutcome outcome) {
+    private void updateStats(DispatchOutcome outcome) {
         messagesSent.incrementAndGet();
         messagesDelivered.addAndGet(outcome.delivered());
         messagesSilenced.addAndGet(outcome.silenced());

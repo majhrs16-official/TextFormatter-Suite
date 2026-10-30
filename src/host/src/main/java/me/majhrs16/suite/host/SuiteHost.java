@@ -4,6 +4,8 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
+import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
@@ -31,6 +33,7 @@ import me.majhrs16.suite.api.spi.TranslationService;
 import net.kyori.adventure.text.Component;
 
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.ServiceLoader;
 
 /**
@@ -164,6 +167,29 @@ public final class SuiteHost {
     /** @return neutral plain-text renderer backed by this host's formatter. */
     public MessageRenderer renderer() {
         return renderer;
+    }
+
+    /**
+     * Binds a concrete dispatcher to the neutral {@link MessageDispatch} port.
+     *
+     * <p>Adapters use this instead of importing {@link MessageDispatcher} and
+     * {@link DispatchReport}.</p>
+     */
+    public MessageDispatch messageDispatch(MessageDispatcher dispatcher) {
+        Objects.requireNonNull(dispatcher, "dispatcher");
+        return new MessageDispatch() {
+            @Override
+            public void dispatch(Message message) {
+                dispatcher.dispatch(message);
+            }
+
+            @Override
+            public DispatchOutcome dispatchAndReport(Message message) {
+                DispatchReport report = dispatcher.dispatch(message);
+                return new DispatchOutcome(
+                    report.delivered(), report.silenced(), report.redirected());
+            }
+        };
     }
 
     /**

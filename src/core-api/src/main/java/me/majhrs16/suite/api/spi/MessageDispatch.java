@@ -14,4 +14,15 @@ public interface MessageDispatch {
 
     /** Routes and delivers {@code message}; the implementation decides threading. */
     void dispatch(Message message);
+
+    /**
+     * Routes and delivers {@code message}, returning the observed counters.
+     *
+     * <p>The default keeps the port functional for simple adapters; hosts that
+     * can report delivery override it.</p>
+     */
+    default DispatchOutcome dispatchAndReport(Message message) {
+        dispatch(message);
+        return DispatchOutcome.none();
+    }
 }

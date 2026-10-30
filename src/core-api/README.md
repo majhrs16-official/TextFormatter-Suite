@@ -134,6 +134,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`) |
 | `PlaceholderResolver` | Implement in platform adapter (see `SpigotPlaceholderResolver`, `FabricPlaceholderResolver`) |
 | `MessageRenderer` | Implement in the formatter package (`TextFormatterMessageRenderer`); adapters consume plain text without importing textformatter |
+| `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters without importing `MessageDispatcher`/`DispatchReport` |
 | `UserLanguageStore` | Implement in `host` (see `YamlUserLanguageStore`) |
 
 ---

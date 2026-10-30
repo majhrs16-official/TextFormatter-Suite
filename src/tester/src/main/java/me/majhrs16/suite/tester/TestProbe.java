@@ -3,6 +3,7 @@ package me.majhrs16.suite.tester;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
 
 /**
  * Neutral port between the runtime test service and the platform host.
@@ -34,12 +35,4 @@ public interface TestProbe {
 
     /** Detects the language of a text through the live translator. */
     String detectLanguage(String text);
-
-    /** Counters reported by the host after one dispatch pass. */
-    record DispatchOutcome(int delivered, int silenced, int redirected) {
-
-        public static DispatchOutcome none() {
-            return new DispatchOutcome(0, 0, 0);
-        }
-    }
 }

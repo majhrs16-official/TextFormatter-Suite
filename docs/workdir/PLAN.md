@@ -1343,9 +1343,14 @@ hosts: la sustitución de `SuiteHost`/cableado de features y la retirada de
 `TextFormatterMessageRenderer` y lo registra en su `ModuleContext`.
 `SpigotInWorldListener` ya consume `MessageRenderer` + `MessageDispatch` en vez
 de `SuiteHost`/`MessageDispatcher`/`TemplateContext`, por lo que el adapter de
-in-world deja de importar tipos de feature. `SuiteHost` expone `renderer()`
-como adaptador transitorio mientras el host siga construyendo el pipeline; la
-retirada completa de `SuiteHost` del adapter pertenece al cierre de F4b.
+in-world deja de importar tipos de feature. `SpigotTestProbe` también quedó
+neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
+`MessageDispatch`, `TranslationService` y un contador de módulos, sin importar
+`SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`.
+`core-api` añade `DispatchOutcome` y `MessageDispatch.dispatchAndReport(...)`;
+`SuiteHost` expone `renderer()` y `messageDispatch(dispatcher)` como adaptadores
+transitorios mientras el host siga construyendo el pipeline. La retirada
+completa de `SuiteHost` del adapter pertenece al cierre de F4b.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
