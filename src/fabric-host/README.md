@@ -85,6 +85,7 @@
 | `ChannelSelector` | Selects channel based on event context |
 | `EventRules` | Event cancellation/modification rules |
 | `LangSetting` | Player language preference management |
+| `FabricInWorldHandler` | Fabric adapter for the neutral `InWorldHandler`; registers callbacks once and delegates to the active instance |
 | `DiscordBridge` | Discord integration (shared logic with Spigot) |
 
 ---

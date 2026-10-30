@@ -24,6 +24,7 @@ import me.majhrs16.suite.fabrichost.validator.FabricConfigValidator;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.extension.ExtensionManager;
 import me.majhrs16.suite.fabrichost.FabricInWorldHandler;
+import me.majhrs16.suite.inworld.InWorldHandler;
 import me.majhrs16.suite.messages.MessagesCatalog;
 import me.majhrs16.suite.observability.Observability;
 import me.majhrs16.suite.syncbus.DefaultSyncBus;
@@ -203,7 +204,8 @@ public final class TextFormatterSuiteMod implements ModInitializer {
             }
             if (inworldHandler != null) {
                 try {
-                    logger.debug("InWorldHandler cleanup");
+                    inworldHandler.unregister();
+                    logger.debug("InWorldHandler unregistered");
                 } catch (Exception e) {
                     logger.warn("Error cleaning InWorldHandler: " + e.getMessage());
                 }
@@ -612,11 +614,15 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             logger.warn("Failed to start DebugEndpoint: " + e.getMessage());
         }
 
-        // Initialize FabricInWorldHandler
-        FabricInWorldHandler inworldHandler = new FabricInWorldHandler(reloaded, dispatcher,
+        // Initialize the neutral in-world domain and its Fabric adapter.
+        FabricInWorldHandler inworldHandler = new FabricInWorldHandler(
+            new InWorldHandler(reloaded.channels(), logger),
+            reloaded.renderer(),
+            dispatcher::dispatch,
             SERVER,
-            reloaded.channels(), logger,
-            reloaded.translation(), finalLanguages);
+            logger,
+            finalLanguages,
+            reloaded.config().defaultLanguage());
         inworldHandler.registerListeners();
 
         // Reload extensions

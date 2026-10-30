@@ -1,243 +1,214 @@
 package me.majhrs16.suite.fabrichost;
 
 import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.spi.MessageDispatch;
+import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.api.channel.Channel;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.inworld.InWorldHandler;
+import me.majhrs16.suite.inworld.InWorldPlatform;
 
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.ClickEvent;
 import net.minecraft.text.Text;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Predicate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Fabric implementation of in-world interactions handler.
- * Handles signs, containers, books, and click/hover events using Fabric APIs.
+ * Fabric adapter for the neutral in-world domain.
+ *
+ * <p>Extracts Fabric events, supplies live actors and delegates message
+ * construction to {@link InWorldHandler}. Formatting and delivery stay in the
+ * host pipeline through neutral ports.</p>
  */
-public final class FabricInWorldHandler {
+public final class FabricInWorldHandler implements InWorldPlatform {
 
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
-    private final ChannelRegistry channels;
-    private final PluginLogger logger;
-    private final TranslationService translation;
-    private final UserLanguageStore languages;
+    private static final AtomicBoolean REGISTERED = new AtomicBoolean();
+    private static final AtomicReference<FabricInWorldHandler> ACTIVE =
+        new AtomicReference<>();
+
+    private final InWorldHandler handler;
+    private final MessageRenderer renderer;
+    private final MessageDispatch dispatch;
     private final MinecraftServer server;
+    private final PluginLogger logger;
+    private final UserLanguageStore languages;
+    private final Language defaultLanguage;
 
-    // Sign cache
-    private final Map<BlockPos, SignData> signCache = new ConcurrentHashMap<>();
-    
-    // Chest/book cache
-    private final Map<BlockPos, ContainerData> containerCache = new ConcurrentHashMap<>();
-    
-    // Glossary cache
-    private final Map<String, String> glossary = new ConcurrentHashMap<>();
-
-    // RADIUS channel cache
-    private final Map<UUID, RadiusData> radiusCache = new ConcurrentHashMap<>();
-
-    public FabricInWorldHandler(SuiteHost host, MessageDispatcher dispatcher,
+    public FabricInWorldHandler(InWorldHandler handler,
+                                MessageRenderer renderer,
+                                MessageDispatch dispatch,
                                 MinecraftServer server,
-                                ChannelRegistry channels, PluginLogger logger,
-                                TranslationService translation, UserLanguageStore languages) {
-        this.host = host;
-        this.server = server;
-        this.dispatcher = dispatcher;
-        this.channels = channels;
-        this.logger = logger;
-        this.translation = translation;
-        this.languages = languages;
+                                PluginLogger logger,
+                                UserLanguageStore languages,
+                                Language defaultLanguage) {
+        this.handler = Objects.requireNonNull(handler, "handler");
+        this.renderer = Objects.requireNonNull(renderer, "renderer");
+        this.dispatch = Objects.requireNonNull(dispatch, "dispatch");
+        this.server = Objects.requireNonNull(server, "server");
+        this.logger = Objects.requireNonNull(logger, "logger");
+        this.languages = Objects.requireNonNull(languages, "languages");
+        this.defaultLanguage = defaultLanguage;
     }
 
     /**
-     * Register Fabric event listeners for in-world interactions.
-     * Should be called during mod initialization.
+     * Registers the Fabric event callbacks for in-world interactions.
+     *
+     * <p>Fabric does not expose a server-side sign-edit callback; sign text
+     * changes arrive through {@link #processSignChange(ServerPlayerEntity,
+     * BlockPos, String[])}, which callers can invoke from their own sign
+     * editor integration.</p>
      */
     public void registerListeners() {
-        // Sign change events
-        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-            if (world.isClient()) return net.minecraft.util.ActionResult.PASS;
-            // We'll handle sign editing differently in Fabric
-            return net.minecraft.util.ActionResult.PASS;
+        ACTIVE.set(this);
+        if (!REGISTERED.compareAndSet(false, true)) {
+            return;
+        }
+
+        UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+            FabricInWorldHandler current = ACTIVE.get();
+            if (current == null || world.isClient()
+                || !(player instanceof ServerPlayerEntity serverPlayer)) {
+                return ActionResult.PASS;
+            }
+            current.handleUseBlock(serverPlayer, world, hand, hitResult);
+            return ActionResult.PASS;
         });
 
-        // Block break events for signs
-        net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
-            if (world.isClient()) return true;
-            // Handle sign breaking
-            if (signCache.containsKey(pos)) {
-                signCache.remove(pos);
-                logger.debug("Suite sign broken at " + pos);
+        PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
+            FabricInWorldHandler current = ACTIVE.get();
+            if (current != null && !world.isClient()) {
+                current.logger.debug("Suite in-world block broken at " + pos);
             }
             return true;
         });
 
-        // Note: For full sign editing, book reading, chest opening, etc.,
-        // we would need to use Fabric's event system or mixins.
-        // This is a minimal implementation for compilation.
-        logger.info("FabricInWorldHandler registered (minimal implementation)");
+        logger.info("FabricInWorldHandler registered");
     }
 
-    // ============================================================
-    // Sign Handling
-    // ============================================================
+    /** Detaches this instance from the Fabric callbacks registered by the mod. */
+    public void unregister() {
+        ACTIVE.compareAndSet(this, null);
+    }
 
-    /**
-     * Processes a sign text change. Called from sign editor screen or command.
-     */
-    public void processSignChange(ServerPlayerEntity player, BlockPos pos, String[] lines) {
-        if (!isSuiteSign(pos)) return;
-
-        String channelName = getSignChannel(pos);
-        if (channelName == null) return;
-
-        Channel channel = channels.resolve(channelName);
-        if (channel == null) return;
-
-        Actor actor = new Actor(player.getUuid(), player.getName().getString(),
-            Actor.ActorKind.PLAYER, getPlayerLanguage(player), player);
-
-        for (int i = 0; i < lines.length; i++) {
-            String original = lines[i];
-            if (original == null || original.isBlank()) continue;
-
-            Message message = Message.builder()
-                .type(MessageType.SIGN)
-                .sender(actor)
-                .direction(Direction.all())
-                .translate(true)
-                .text(original)
-                .channel(channelName)
-                .build();
-
-            dispatcher.dispatch(message);
-
-            // Get formatted result (simplified)
-            String formatted = getFormattedMessage(message, original);
-            lines[i] = formatted;
+    private void handleUseBlock(ServerPlayerEntity player, World world, Hand hand,
+                                BlockHitResult hitResult) {
+        BlockPos pos = hitResult.getBlockPos();
+        String blockKey = world.getBlockState(pos).getBlock().getTranslationKey()
+            .toLowerCase(Locale.ROOT);
+        if (blockKey.contains("chest")
+            || blockKey.contains("barrel")
+            || blockKey.contains("shulker")) {
+            handleChestOpen(player, pos);
         }
 
-        signCache.put(pos, new SignData(channelName, lines));
+        ItemStack stack = player.getStackInHand(hand);
+        if (stack.isOf(Items.WRITTEN_BOOK) || stack.isOf(Items.WRITABLE_BOOK)) {
+            handleBookRead(player, stack);
+        }
+    }
+
+    /**
+     * Processes a sign text change through the neutral domain.
+     *
+     * <p>Called by the platform sign-editor integration when the suite owns the
+     * sign. Each non-empty line becomes a message; the formatted line is written
+     * back to {@code lines}.</p>
+     */
+    public void processSignChange(ServerPlayerEntity player, BlockPos pos, String[] lines) {
+        String world = worldName(player.getServerWorld());
+        String channelName = handler.signChannel(world, pos.getX(), pos.getY(), pos.getZ())
+            .orElse(null);
+        if (channelName == null) {
+            return;
+        }
+
+        Actor actor = actor(player);
+        for (int i = 0; i < lines.length; i++) {
+            String original = lines[i];
+            Optional<Message> message = handler.signMessage(actor, channelName, original);
+            if (message.isEmpty()) {
+                continue;
+            }
+            dispatch.dispatch(message.get());
+            lines[i] = format(message.get(), original);
+        }
+
+        handler.cacheSign(world, pos.getX(), pos.getY(), pos.getZ(), channelName, lines);
         logger.debug("Suite sign updated at " + pos + " for channel " + channelName);
     }
 
-    private boolean isSuiteSign(BlockPos pos) {
-        return signCache.containsKey(pos) || isConfiguredSign(pos);
-    }
-
-    private boolean isConfiguredSign(BlockPos pos) {
-        return channels.paths().stream()
-            .anyMatch(name -> name.startsWith("sign."));
-    }
-
-    private String getSignChannel(BlockPos pos) {
-        for (String name : channels.paths()) {
-            if (name.startsWith("sign.")) {
-                Channel ch = channels.resolve(name);
-                // Check if this location matches the sign's configured location
-                // This would be stored in the channel config or signCache
-            }
-        }
-        return null;
-    }
-
-    private Language getPlayerLanguage(ServerPlayerEntity player) {
-        Optional<String> langOpt = languages.languageOf(player.getUuid());
-        if (langOpt.isPresent()) {
-            Optional<Language> lang = Language.of(langOpt.get());
-            if (lang.isPresent()) return lang.get();
-        }
-        return Language.AUTO;
-    }
-
-    private String getFormattedMessage(Message message, String original) {
-        // This would use the host's renderer to format
-        // For now return original
-        return original;
-    }
-
     // ============================================================
-    // Chest / Container Interactions
+    // Chest / Container / Book Interactions
     // ============================================================
 
     public void handleChestOpen(ServerPlayerEntity player, BlockPos pos) {
-        String channelName = "container.chest";
-        if (!channels.paths().contains(channelName)) return;
-
-        Channel channel = channels.resolve(channelName);
-        if (channel == null) return;
-
-        Actor actor = new Actor(player.getUuid(), player.getName().getString(),
-            Actor.ActorKind.PLAYER, getPlayerLanguage(player), player);
-
-        String content = "Chest opened at " + pos.getX() + ", " + 
-                         pos.getY() + ", " + pos.getZ();
-
-        Message message = Message.builder()
-            .type(MessageType.CONTAINER)
-            .sender(actor)
-            .direction(Direction.all())
-            .translate(true)
-            .text(content)
-            .channel(channelName)
-            .build();
-
-        dispatcher.dispatch(message);
-        containerCache.put(pos, new ContainerData(channelName, System.currentTimeMillis()));
+        String world = worldName(player.getServerWorld());
+        handler.containerMessage(actor(player), "container.chest", world,
+                pos.getX(), pos.getY(), pos.getZ())
+            .ifPresent(dispatch::dispatch);
     }
 
     public void handleContainerOpen(ServerPlayerEntity player, BlockPos pos) {
         handleChestOpen(player, pos);
     }
 
-    public void handleBookRead(ServerPlayerEntity player, net.minecraft.item.ItemStack book) {
-        String channelName = "book.read";
-        if (!channels.paths().contains(channelName)) return;
-
-        Channel channel = channels.resolve(channelName);
-        if (channel == null) return;
-
-        Actor actor = new Actor(player.getUuid(), player.getName().getString(),
-            Actor.ActorKind.PLAYER, getPlayerLanguage(player), player);
-
-        String content = "Book read: " + book.getName().getString();
-
-        Message message = Message.builder()
-            .type(MessageType.BOOK)
-            .sender(actor)
-            .direction(Direction.all())
-            .translate(true)
-            .text(content)
-            .channel(channelName)
-            .build();
-
-        dispatcher.dispatch(message);
+    public void handleBookRead(ServerPlayerEntity player, ItemStack book) {
+        handler.bookMessage(actor(player), "book.read",
+                book.getName().getString(), List.of())
+            .ifPresent(dispatch::dispatch);
     }
 
     // ============================================================
     // WORLD / RADIUS Channels
     // ============================================================
 
-    public List<Actor> getPlayersInRadius(BlockPos center, double radius) {
+    @Override
+    public List<Actor> playersInWorld(String worldName) {
         List<Actor> players = new ArrayList<>();
         for (ServerWorld world : server.getWorlds()) {
+            if (!worldName(world).equals(worldName)) {
+                continue;
+            }
+            for (ServerPlayerEntity player : world.getPlayers()) {
+                players.add(actor(player));
+            }
+        }
+        return players;
+    }
+
+    @Override
+    public List<Actor> playersInRadius(String worldName, double x, double y,
+                                       double z, double radius) {
+        BlockPos center = BlockPos.ofFloored(x, y, z);
+        List<Actor> players = new ArrayList<>();
+        for (ServerWorld world : server.getWorlds()) {
+            if (!worldName(world).equals(worldName)) {
+                continue;
+            }
             for (ServerPlayerEntity player : world.getPlayers()) {
                 if (player.getBlockPos().isWithinDistance(center, radius)) {
-                    players.add(new Actor(player.getUuid(), player.getName().getString(),
-                        Actor.ActorKind.PLAYER, getPlayerLanguage(player), player));
+                    players.add(actor(player));
                 }
             }
         }
@@ -245,12 +216,15 @@ public final class FabricInWorldHandler {
     }
 
     public List<Actor> getPlayersInWorld(String worldName) {
+        return playersInWorld(worldName);
+    }
+
+    public List<Actor> getPlayersInRadius(BlockPos center, double radius) {
         List<Actor> players = new ArrayList<>();
         for (ServerWorld world : server.getWorlds()) {
-            if (world.getRegistryKey().getValue().toString().equals(worldName)) {
-                for (ServerPlayerEntity player : world.getPlayers()) {
-                    players.add(new Actor(player.getUuid(), player.getName().getString(),
-                        Actor.ActorKind.PLAYER, getPlayerLanguage(player), player));
+            for (ServerPlayerEntity player : world.getPlayers()) {
+                if (player.getBlockPos().isWithinDistance(center, radius)) {
+                    players.add(actor(player));
                 }
             }
         }
@@ -258,49 +232,52 @@ public final class FabricInWorldHandler {
     }
 
     // ============================================================
-    // Click / Hover Interactions
+    // Formatting and click actions
     // ============================================================
 
-    public void handleClick(Actor actor, String action, String value) {
-        switch (action) {
-            case "open_url" -> openUrl(actor, value);
-            case "run_command" -> runCommand(actor, value);
-            case "suggest_command" -> suggestCommand(actor, value);
-            case "change_page" -> changePage(actor, value);
-            case "copy_to_clipboard" -> copyToClipboard(actor, value);
+    @Override
+    public String format(Message message, String content) {
+        try {
+            return renderer.render(message, content, message.sender(), defaultLanguage);
+        } catch (Exception e) {
+            logger.warn("Failed to format in-world message: " + e.getMessage());
+            return content;
         }
+    }
+
+    @Override
+    public void openUrl(Actor actor, String url) {
+        sendClick(actor, url, ClickEvent.Action.OPEN_URL, url);
+    }
+
+    @Override
+    public void runCommand(Actor actor, String command) {
+        if (actor.handle() instanceof ServerPlayerEntity player) {
+            server.getCommandManager().executeWithPrefix(player.getCommandSource(), command);
+        }
+    }
+
+    @Override
+    public void suggestCommand(Actor actor, String command) {
+        sendClick(actor, command, ClickEvent.Action.SUGGEST_COMMAND, command);
+    }
+
+    @Override
+    public void changePage(Actor actor, String page) {
+        sendClick(actor, "Page " + page, ClickEvent.Action.CHANGE_PAGE, page);
+    }
+
+    @Override
+    public void copyToClipboard(Actor actor, String text) {
+        sendClick(actor, text, ClickEvent.Action.COPY_TO_CLIPBOARD, text);
+    }
+
+    public void handleClick(Actor actor, String action, String value) {
+        handler.handleClick(this, actor, action, value);
     }
 
     public String getHoverText(Actor actor, String key) {
-        return glossary.getOrDefault(key, "");
-    }
-
-    private void openUrl(Actor actor, String url) {
-        if (actor.handle() instanceof ServerPlayerEntity player) {
-            player.sendMessage(Text.literal("<click:open_url:'" + url + "'><hover:show_text:'Click to open'>" + url + "</hover></click>"));
-        }
-    }
-
-    private void runCommand(Actor actor, String command) {
-        if (actor.handle() instanceof ServerPlayerEntity player) {
-            // In Fabric, we'd use server.getCommandManager().executeWithPrefix(...)
-        }
-    }
-
-    private void suggestCommand(Actor actor, String command) {
-        if (actor.handle() instanceof ServerPlayerEntity player) {
-            player.sendMessage(Text.literal("<click:suggest_command:'" + command + "'><hover:show_text:'Click to suggest'>" + command + "</hover></click>"));
-        }
-    }
-
-    private void changePage(Actor actor, String page) {
-        // For book/page navigation
-    }
-
-    private void copyToClipboard(Actor actor, String text) {
-        if (actor.handle() instanceof ServerPlayerEntity player) {
-            player.sendMessage(Text.literal("<click:copy_to_clipboard:'" + text + "'><hover:show_text:'Click to copy'>" + text + "</hover></click>"));
-        }
+        return handler.getHoverText(actor, key);
     }
 
     // ============================================================
@@ -308,64 +285,51 @@ public final class FabricInWorldHandler {
     // ============================================================
 
     public void addGlossaryEntry(String key, String definition) {
-        glossary.put(key, definition);
+        handler.addGlossaryEntry(key, definition);
     }
 
     public String getGlossaryEntry(String key) {
-        return glossary.get(key);
+        return handler.getGlossaryEntry(key);
     }
 
     public void clearGlossary() {
-        glossary.clear();
+        handler.clearGlossary();
     }
-
-    // ============================================================
-    // RADIUS Channel Management
-    // ============================================================
 
     public void updateRadiusCache(UUID playerId, BlockPos location, double radius) {
-        radiusCache.put(playerId, new RadiusData(location, radius, System.currentTimeMillis()));
+        handler.updateRadiusCache(playerId, "", location.getX(), location.getY(),
+            location.getZ(), radius);
     }
 
-    public Optional<RadiusData> getRadiusData(UUID playerId) {
-        return Optional.ofNullable(radiusCache.get(playerId));
+    public Optional<InWorldHandler.RadiusData> getRadiusData(UUID playerId) {
+        return handler.getRadiusData(playerId);
     }
 
     // ============================================================
-    // Data Classes
+    // Helpers
     // ============================================================
 
-    private static class SignData {
-        final String channelName;
-        final String[] lines;
-        final long timestamp;
-
-        SignData(String channelName, String[] lines) {
-            this.channelName = channelName;
-            this.lines = lines;
-            this.timestamp = System.currentTimeMillis();
+    private void sendClick(Actor actor, String label, ClickEvent.Action action,
+                           String value) {
+        if (actor.handle() instanceof ServerPlayerEntity player) {
+            Text text = Text.literal(label)
+                .styled(style -> style.withClickEvent(new ClickEvent(action, value)));
+            player.sendMessage(text);
         }
     }
 
-    private static class ContainerData {
-        final String channelName;
-        final long timestamp;
-
-        ContainerData(String channelName, long timestamp) {
-            this.channelName = channelName;
-            this.timestamp = timestamp;
-        }
+    private Actor actor(ServerPlayerEntity player) {
+        return new Actor(player.getUuid(), player.getName().getString(),
+            Actor.ActorKind.PLAYER, languageOf(player), player);
     }
 
-    private static class RadiusData {
-        final BlockPos center;
-        final double radius;
-        final long timestamp;
+    private Language languageOf(ServerPlayerEntity player) {
+        return languages.languageOf(player.getUuid())
+            .flatMap(Language::of)
+            .orElse(Language.AUTO);
+    }
 
-        RadiusData(BlockPos center, double radius, long timestamp) {
-            this.center = center;
-            this.radius = radius;
-            this.timestamp = timestamp;
-        }
+    private static String worldName(ServerWorld world) {
+        return world.getRegistryKey().getValue().toString();
     }
 }

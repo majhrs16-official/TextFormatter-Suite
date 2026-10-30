@@ -1353,8 +1353,12 @@ neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
 transitorios mientras el host siga construyendo el pipeline. También se añadió
 `host.preset.HostPresetApplier`, que selecciona un preset, lo persiste con
 `FilePresetTarget` y solo entonces invoca la recarga del runtime; la selección
-por comando sigue pendiente de F4d/F4e. La retirada completa de `SuiteHost` del
-adapter pertenece al cierre de F4b.
+por comando sigue pendiente de F4d/F4e. En Fabric, `FabricInWorldHandler` dejó
+de ser un handler duplicado con stubs: ahora implementa `InWorldPlatform`,
+delega en `InWorldHandler` y registra los callbacks una sola vez con una
+instancia activa intercambiable; `unregister()` desengancha el adapter al
+cerrar el runtime. La retirada completa de `SuiteHost` del adapter pertenece
+al cierre de F4b.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
