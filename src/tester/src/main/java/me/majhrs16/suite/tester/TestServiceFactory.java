@@ -2,6 +2,7 @@ package me.majhrs16.suite.tester;
 
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.TestProbe;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 
 /**

@@ -8,7 +8,7 @@ import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.tester.TestProbe;
+import me.majhrs16.suite.api.spi.TestProbe;
 
 import java.util.function.IntSupplier;
 

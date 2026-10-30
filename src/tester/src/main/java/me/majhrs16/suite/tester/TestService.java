@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.TestProbe;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 
 import java.lang.management.ManagementFactory;

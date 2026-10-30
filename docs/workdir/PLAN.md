@@ -1347,7 +1347,8 @@ de `SuiteHost`/`MessageDispatcher`/`TemplateContext`, por lo que el adapter de
 in-world deja de importar tipos de feature. `SpigotTestProbe` también quedó
 neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
 `MessageDispatch`, `TranslationService` y un contador de módulos, sin importar
-`SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`.
+`SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`; su
+puerto `TestProbe` vive ahora en `core-api` (`api.spi`), no en `tester`.
 `core-api` añade `DispatchOutcome` y `MessageDispatch.dispatchAndReport(...)`;
 `SuiteHost` expone `renderer()` y `messageDispatch(dispatcher)` como adaptadores
 transitorios mientras el host siga construyendo el pipeline. `SuiteRuntime`

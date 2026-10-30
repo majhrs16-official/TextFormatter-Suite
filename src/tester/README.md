@@ -8,7 +8,7 @@
 
 - **Runtime scenarios** — module discovery, channel registry, actor directory, chat, world/radius/specific routing, permissions, join/quit/death/advancement events, translation and formatting hot paths
 - **Benchmarking** — concurrency, stress, burst and performance profiling
-- **Neutral probe** — `TestProbe` exposes only `ChannelRegistry`, `Router`, dispatch counters, formatting and language detection
+- **Neutral probe** — `TestProbe` (in `core-api`) exposes only `ChannelRegistry`, `Router`, dispatch counters, formatting and language detection
 - **Service factory** — `TestServiceFactory` builds `TestService` from the host adapter's probe, actor directory, language store and logger
 - **Runtime activation** — `TesterActivator` publishes the factory as a scoped service without starting threads, sockets or server work
 - **Module descriptor** — `TesterModule` declares the `test-service` capability
@@ -53,7 +53,7 @@ The host still constructs the service directly while F4b is open. The package al
 | Component | Role |
 |-----------|------|
 | `TestService` | Scenario runner, benchmarks and report generation |
-| `TestProbe` | Neutral port to routing, channels, formatting, translation and dispatch |
+| `TestProbe` | Neutral port (in `core-api`) to routing, channels, formatting, translation and dispatch |
 | `DispatchOutcome` (`core-api`) | Delivered/silenced/redirected counters shared with the dispatch port |
 | `TestServiceFactory` | Creates `TestService` for a host adapter |
 | `TesterActivator` | `ModuleActivator`; registers the factory and declares capabilities |
@@ -115,7 +115,7 @@ TestServiceFactory ──→ TestService ─────────────
 ## 10. Exploration Path
 
 ```
-1. TestProbe.java          → Neutral host port
+1. TestProbe.java          → Neutral host port (`core-api`)
 2. TestService.java        → Scenarios, benchmarks and reports
 3. TestServiceFactory.java → Host-facing construction
 4. TesterActivator.java    → Runtime activation and service registration

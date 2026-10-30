@@ -1,9 +1,8 @@
-package me.majhrs16.suite.tester;
+package me.majhrs16.suite.api.spi;
 
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.spi.DispatchOutcome;
 
 /**
  * Neutral port between the runtime test service and the platform host.
