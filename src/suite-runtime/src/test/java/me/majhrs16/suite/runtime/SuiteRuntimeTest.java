@@ -168,6 +168,18 @@ class SuiteRuntimeTest {
     }
 
     @Test
+    void exposesAdapterPlatformServicesBeforeModulesActivate() throws Exception {
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.registerPlatformService(PluginLogger.class, logger);
+            runtime.start();
+
+            assertTrue(runtime.services().find(PluginLogger.class).isPresent());
+            assertThrows(IllegalStateException.class,
+                () -> runtime.registerPlatformService(String.class, "late"));
+        }
+    }
+
+    @Test
     void operationsBeforeStartFailExplicitly() {
         SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger);
 

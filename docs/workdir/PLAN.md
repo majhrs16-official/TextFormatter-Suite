@@ -1357,8 +1357,11 @@ por comando sigue pendiente de F4d/F4e. En Fabric, `FabricInWorldHandler` dejó
 de ser un handler duplicado con stubs: ahora implementa `InWorldPlatform`,
 delega en `InWorldHandler` y registra los callbacks una sola vez con una
 instancia activa intercambiable; `unregister()` desengancha el adapter al
-cerrar el runtime. La retirada completa de `SuiteHost` del adapter pertenece
-al cierre de F4b.
+cerrar el runtime. `SuiteRuntime.registerPlatformService(...)` permite además
+inyectar los puertos del adapter (`ActorDirectory`, `ChatDelivery`,
+`PermissionChecker`, `UserLanguageStore`) antes de que se activen los paquetes;
+el registro se cierra en `stop()` y se rechaza después de `start()`. La retirada
+completa de `SuiteHost` del adapter pertenece al cierre de F4b.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 

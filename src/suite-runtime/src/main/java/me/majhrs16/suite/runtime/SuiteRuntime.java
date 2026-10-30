@@ -2,6 +2,8 @@ package me.majhrs16.suite.runtime;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +54,9 @@ public final class SuiteRuntime implements AutoCloseable {
     private RuntimeCommandRegistry commands;
     private RuntimeConfigRegistry configs;
     private PlatformPorts.Registration commandRegistration;
+    private final Map<Class<?>, Object> pendingPlatformServices = new LinkedHashMap<>();
+    private final List<ServiceRegistry.Registration> platformRegistrations =
+        new ArrayList<>();
     private boolean started;
 
     /**
@@ -68,6 +73,27 @@ public final class SuiteRuntime implements AutoCloseable {
         this.runtimeDir = managerDir.resolve("runtime");
         this.ports = Objects.requireNonNull(ports, "ports");
         this.logger = Objects.requireNonNull(logger, "logger");
+    }
+
+    /**
+     * Registers an adapter-provided platform service before modules activate.
+     *
+     * <p>Packages resolve these ports from the shared {@link ServiceRegistry}
+     * during activation. Registration after {@link #start()} is rejected
+     * because modules have already run their {@code start()} hooks.</p>
+     *
+     * @param type    service contract
+     * @param service adapter implementation
+     * @param <T>     service type
+     */
+    public synchronized <T> void registerPlatformService(Class<T> type, T service) {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(service, "service");
+        if (started) {
+            throw new IllegalStateException(
+                "register platform services before start()");
+        }
+        pendingPlatformServices.put(type, service);
     }
 
     /**
@@ -95,6 +121,7 @@ public final class SuiteRuntime implements AutoCloseable {
         configs = new RuntimeConfigRegistry();
         moduleHost = new ModuleHost(
                 libraryRoot, configRoot, ports.info(), logger, stateStore, commands, configs);
+        registerPendingPlatformServices();
         packageRuntime = new PackageRuntime(manager, moduleHost, logger);
         SuiteCommands.register(commands, this);
 
@@ -111,6 +138,17 @@ public final class SuiteRuntime implements AutoCloseable {
         started = true;
     }
 
+    private void registerPendingPlatformServices() {
+        for (Map.Entry<Class<?>, Object> entry : pendingPlatformServices.entrySet()) {
+            platformRegistrations.add(registerTyped(
+                entry.getKey(), entry.getValue()));
+        }
+    }
+
+    private <T> ServiceRegistry.Registration registerTyped(Class<T> type, Object service) {
+        return moduleHost.services().register(type, type.cast(service));
+    }
+
     /**
      * Deactivates every active module and releases runtime resources. Safe to
      * call more than once.
@@ -120,6 +158,10 @@ public final class SuiteRuntime implements AutoCloseable {
             commandRegistration.close();
             commandRegistration = null;
         }
+        for (ServiceRegistry.Registration registration : platformRegistrations) {
+            registration.close();
+        }
+        platformRegistrations.clear();
         if (moduleHost != null) {
             moduleHost.close();
         }
