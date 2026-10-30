@@ -1371,6 +1371,18 @@ inyectar los puertos del adapter (`ActorDirectory`, `ChatDelivery`,
 el registro se cierra en `stop()` y se rechaza después de `start()`. La retirada
 completa de `SuiteHost` del adapter pertenece al cierre de F4b.
 
+**Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
+`core-render` con el puerto `MessageComponentRenderer` (Adventure, sin
+dependencias de features). `textformatter` lo implementa con
+`TextFormatterMessageRenderer` y lo registra junto a `MessageRenderer`;
+`SuiteHost` ya construye el pipeline contra ese puerto y no guarda
+`TextFormatter` ni `ChatTranslator` como tipos de feature. El constructor
+público de `SuiteHost` recibe `HostConfig`, `ChannelRegistry`,
+`TranslationService`, `Router`, `MessageComponentRenderer`, `MessageRenderer`,
+`PluginLogger` y `ChatDelivery`, que es la forma que usará `SuiteRuntime` al
+construir el pipeline desde `ServiceRegistry`. `SuiteHost.bootstrap(...)`
+permanece solo como camino de arranque heredado y se elimina al cerrar F4b.
+
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
 **Decisión de arquitectura (2026-10-28):** cada módulo se estructura como un

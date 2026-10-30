@@ -7,6 +7,8 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -29,6 +31,25 @@ class TextFormatterMessageRendererTest {
             .build();
 
         String rendered = renderer.render(message, "Hello", actor, Language.EN);
+
+        assertTrue(rendered.contains("Hello"));
+    }
+
+    @Test
+    void rendersRichComponentWithResolvedLanguages() {
+        TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(
+            TextFormatters.create(ChannelRegistry.builder().build()));
+        Actor actor = new Actor(UUID.randomUUID(), "Steve",
+            Actor.ActorKind.PLAYER, Language.ES, null);
+        Message message = Message.builder()
+            .type(MessageType.CHAT)
+            .sender(actor)
+            .text("Hello")
+            .channel("chat")
+            .build();
+
+        String rendered = PlainTextComponentSerializer.plainText()
+            .serialize(renderer.render(message, actor, Language.EN, Language.ES));
 
         assertTrue(rendered.contains("Hello"));
     }

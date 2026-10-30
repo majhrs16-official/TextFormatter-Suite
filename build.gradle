@@ -84,7 +84,7 @@ tasks.register('checkArchitecture') {
             'me.majhrs16.suite.fabrichost.'
         ]
         def neutral = [
-            'core-api', 'kernel', 'textformatter', 'tester', 'inworld', 'messages',
+            'core-api', 'core-render', 'kernel', 'textformatter', 'tester', 'inworld', 'messages',
             'iflow-vm', 'iflow-firewall', 'iflow-wasm', 'logger', 'transport',
             'chattranslator', 'gtranslate', 'ltranslate', 'sync-bus',
             'sync-common', 'sync-discord', 'sync-discord-jdk', 'sync-http',

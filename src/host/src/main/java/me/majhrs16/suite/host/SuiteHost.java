@@ -9,7 +9,7 @@ import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.api.iflow.RouteDecision;
@@ -23,12 +23,8 @@ import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.ChannelConfig.LoadResult;
-import me.majhrs16.suite.textformatter.template.TemplateContext;
-import me.majhrs16.suite.chattranslator.ChatTranslator;
-import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
 import me.majhrs16.suite.chattranslator.BackendConfig;
 import me.majhrs16.suite.api.spi.TranslatorManager;
-import me.majhrs16.suite.api.spi.TranslationService;
 
 import net.kyori.adventure.text.Component;
 
@@ -47,37 +43,49 @@ import java.util.ServiceLoader;
  * }</pre>
  *
  * <p>This is the glue the module jars alone must not contain: it wires
- * {@link TranslationService} + {@link Router} + {@link TextFormatter} and
- * resolves the recipient's language for rendering.</p>
+ * {@link TranslationService} + {@link Router} + {@link MessageComponentRenderer}
+ * and resolves the recipient's language for rendering.</p>
  */
 public final class SuiteHost {
 
     private final HostConfig config;
     private final ChannelRegistry channels;
     private final TranslationService translation;
-    private final ChatTranslator chatTranslator;
     private final Router router;
-    private final TextFormatter formatter;
+    private final MessageComponentRenderer componentRenderer;
     private final MessageRenderer renderer;
     private final PluginLogger logger;
     private final ChatDelivery chatDelivery;
 
-    SuiteHost(HostConfig config,
-              ChannelRegistry channels,
-              TranslationService translation,
-              ChatTranslator chatTranslator,
-              Router router,
-              TextFormatter formatter,
-              MessageRenderer renderer,
-              PluginLogger logger,
-              ChatDelivery chatDelivery) {
-        this.config = config;
-        this.channels = channels;
-        this.translation = translation;
-        this.chatTranslator = chatTranslator;
-        this.router = router;
-        this.formatter = formatter;
-        this.renderer = renderer;
+    /**
+     * Creates the pipeline from already-resolved neutral services.
+     *
+     * <p>This is the constructor the runtime uses after activating packages;
+     * no feature type is required to build the pipeline.</p>
+     *
+     * @param config            resolved host configuration
+     * @param channels          channel registry supplied by the formatter package
+     * @param translation       translation service supplied by the translator package
+     * @param router            iFlow router supplied by the selected engine package
+     * @param componentRenderer rich renderer supplied by the formatter package
+     * @param renderer          plain renderer supplied by the formatter package
+     * @param logger            runtime logger
+     * @param chatDelivery      platform output port
+     */
+    public SuiteHost(HostConfig config,
+                     ChannelRegistry channels,
+                     TranslationService translation,
+                     Router router,
+                     MessageComponentRenderer componentRenderer,
+                     MessageRenderer renderer,
+                     PluginLogger logger,
+                     ChatDelivery chatDelivery) {
+        this.config = Objects.requireNonNull(config, "config");
+        this.channels = Objects.requireNonNull(channels, "channels");
+        this.translation = Objects.requireNonNull(translation, "translation");
+        this.router = Objects.requireNonNull(router, "router");
+        this.componentRenderer = Objects.requireNonNull(componentRenderer, "componentRenderer");
+        this.renderer = Objects.requireNonNull(renderer, "renderer");
         this.logger = logger;
         this.chatDelivery = chatDelivery;
     }
@@ -124,20 +132,18 @@ public final class SuiteHost {
         HostConfig config = configResult.config();
         ChannelRegistry channels = channelsResult.config();
 
-        // Load ChatTranslator configuration and backends
-        ChatTranslatorConfig.Config chatTranslatorConfig = ChatTranslatorConfig.load(configDir);
+        // Load translation backends from the translator package configuration.
         TranslatorManager translatorManager = BackendConfig.load(configDir);
         TranslationService translationService = new TranslationService(translatorManager);
-        ChatTranslator chatTranslator = new ChatTranslator(translatorManager, translationService, chatTranslatorConfig);
 
         // Select the iFlow runtime (vm by default, firewall via iflow.engine.kind)
         Router router = RouterFactory.create(config, configDir, channels, permissions,
             placeholders, translationService, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
-        MessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
-        return new SuiteHost(config, channels, translationService, chatTranslator, router,
-                formatter, renderer, logger, chatDelivery);
+        TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
+        return new SuiteHost(config, channels, translationService, router,
+                renderer, renderer, logger, chatDelivery);
     }
 
     public HostConfig config() {
@@ -152,16 +158,13 @@ public final class SuiteHost {
         return translation;
     }
 
-    public ChatTranslator chatTranslator() {
-        return chatTranslator;
-    }
-
     public Router router() {
         return router;
     }
 
-    public TextFormatter formatter() {
-        return formatter;
+    /** @return neutral rich renderer backed by this host's formatter. */
+    public MessageComponentRenderer componentRenderer() {
+        return componentRenderer;
     }
 
     /** @return neutral plain-text renderer backed by this host's formatter. */
@@ -225,12 +228,7 @@ public final class SuiteHost {
     }
 
     private Component renderFor(Message message, Actor recipient, Language lang) {
-        TemplateContext context = TemplateContext.builder(
-                message.sender(), effectiveSource(message), lang)
-            .content(message.text())
-            .translate(message.shouldTranslate())
-            .build();
-        return formatter.format(message, context);
+        return componentRenderer.render(message, recipient, effectiveSource(message), lang);
     }
 
     private Language effectiveSource(Message message) {

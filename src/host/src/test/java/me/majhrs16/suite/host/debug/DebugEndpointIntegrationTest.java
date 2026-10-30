@@ -58,7 +58,6 @@ class DebugEndpointIntegrationTest {
         when(host.config().defaultLanguage()).thenReturn(Language.EN);
         when(host.translation()).thenReturn(mock(me.majhrs16.suite.api.spi.TranslationService.class));
         when(host.translation().activeName()).thenReturn("google");
-        when(host.formatter()).thenReturn(mock(me.majhrs16.suite.textformatter.DefaultTextFormatter.class));
 
         Channel channel = mock(Channel.class);
         when(channel.name()).thenReturn("chat.global");

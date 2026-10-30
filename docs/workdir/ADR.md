@@ -1004,3 +1004,39 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
   orden evita implementar un backend contra un ISA o un ABI que aún no existen.
 - El mantenimiento del compilador es deuda explícita del proyecto; cada
   exclusión y cada limitación debe estar documentada y probada.
+
+---
+
+## Decisión 2026-10-30 — puerto neutral de renderizado enriquecido (ADR-024)
+
+**Estado:** Aceptada e implementada. `core-render` publica
+`MessageComponentRenderer`; `textformatter` lo implementa y `SuiteHost` ya no
+depende de `TextFormatter` ni de `ChatTranslator` para renderizar.
+
+**Contexto.** El pipeline de `SuiteHost` seguía compilado contra
+`TextFormatter` y `TemplateContext`, ambos del paquete `textformatter`. Eso
+impedía que `SuiteRuntime` construyera el pipeline desde `ServiceRegistry` sin
+crear una flecha `suite-runtime -> feature`, y obligaba a los adapters a
+conocer tipos del formateador.
+
+**Decisión.**
+
+1. `core-render` es un módulo neutral separado de `core-api` porque su contrato
+   usa `net.kyori.adventure.text.Component`. `core-api` sigue sin dependencias.
+2. `MessageComponentRenderer` recibe `Message`, `Actor`, idioma de origen e
+   idioma de destino ya resueltos. No decide routing, permisos ni entrega.
+3. `TextFormatterMessageRenderer` implementa `MessageRenderer` (texto plano) y
+   `MessageComponentRenderer` (componente enriquecido). `textformatter` registra
+   ambas interfaces en su `ModuleContext`.
+4. `SuiteHost` recibe el renderizador por constructor. Su constructor público
+   solo usa puertos neutrales y configuración del host, de modo que el runtime
+   puede ensamblarlo después de activar los paquetes.
+5. `SuiteHost.bootstrap(...)` queda como camino heredado de arranque y se
+   elimina al cerrar F4b; no se añade una fachada nueva ni un segundo pipeline.
+
+**Consecuencias.**
+
+- El pipeline deja de importar tipos de `textformatter` y `chattranslator`.
+- `checkArchitecture` escanea `core-render` como módulo neutral.
+- La construcción real del pipeline desde `ServiceRegistry` y la retirada del
+  bootstrap heredado son el siguiente paso de F4b.

@@ -9,6 +9,7 @@ pluginManagement {
 rootProject.name = 'textformatter-suite'
 
 include 'src:core-api'
+include 'src:core-render'
 include 'src:kernel'
 include 'src:suite-runtime'
 include 'src:logger'

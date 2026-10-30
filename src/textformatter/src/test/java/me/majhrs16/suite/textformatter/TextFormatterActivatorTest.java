@@ -15,6 +15,7 @@ import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.ResourceTracker;
 import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
+import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
@@ -40,6 +41,7 @@ class TextFormatterActivatorTest {
         assertTrue(Files.isDirectory(context.configDir().resolve("channels")));
         assertTrue(registry.find(TextFormatter.class).isPresent());
         assertTrue(registry.find(MessageRenderer.class).isPresent());
+        assertTrue(registry.find(MessageComponentRenderer.class).isPresent());
         assertTrue(registry.find(ChannelRegistry.class).isPresent());
     }
 

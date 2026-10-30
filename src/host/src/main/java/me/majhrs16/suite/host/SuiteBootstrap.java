@@ -18,8 +18,6 @@ import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.textformatter.ChannelConfig.LoadResult;
-import me.majhrs16.suite.chattranslator.ChatTranslator;
-import me.majhrs16.suite.chattranslator.ChatTranslatorConfig;
 import me.majhrs16.suite.chattranslator.BackendConfig;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 
@@ -91,11 +89,9 @@ public final class SuiteBootstrap {
         }
         ChannelRegistry channels = channelsResult.config();
 
-        // Load ChatTranslator configuration and backends
-        ChatTranslatorConfig.Config chatTranslatorConfig = ChatTranslatorConfig.load(configDir);
+        // Load translation backends from the translator package configuration.
         TranslatorManager translatorManager = BackendConfig.load(configDir);
         TranslationService translationService = new TranslationService(translatorManager);
-        ChatTranslator chatTranslator = new ChatTranslator(translatorManager, translationService, chatTranslatorConfig);
 
         // 2. Discover and resolve modules via kernel (descriptors only).
         // iFlow engines are mutually exclusive; keep only the configured one.
@@ -121,8 +117,9 @@ public final class SuiteBootstrap {
             placeholders, translationService, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
-        return new SuiteHost(config, channels, translationService, chatTranslator, router,
-                formatter, new TextFormatterMessageRenderer(formatter), logger, chatDelivery);
+        TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
+        return new SuiteHost(config, channels, translationService, router,
+                renderer, renderer, logger, chatDelivery);
     }
 
     /**
