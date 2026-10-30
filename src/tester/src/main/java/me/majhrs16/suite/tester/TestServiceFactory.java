@@ -3,6 +3,7 @@ package me.majhrs16.suite.tester;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TestProbe;
+import me.majhrs16.suite.api.spi.TestRunnerFactory;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 
 /**
@@ -12,8 +13,9 @@ import me.majhrs16.suite.api.spi.UserLanguageStore;
  * {@link TestProbe}, actor directory, language store and logger. The factory
  * itself has no platform dependency.</p>
  */
-public final class TestServiceFactory {
+public final class TestServiceFactory implements TestRunnerFactory {
 
+    @Override
     public TestService create(TestProbe probe,
                               ActorDirectory actorDirectory,
                               UserLanguageStore languageStore,

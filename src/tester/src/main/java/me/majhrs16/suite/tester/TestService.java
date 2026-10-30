@@ -6,6 +6,7 @@ import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TestProbe;
+import me.majhrs16.suite.api.spi.TestRunner;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 
 import java.lang.management.ManagementFactory;
@@ -36,7 +37,7 @@ import java.util.function.Consumer;
  * Tests are triggered via command: {@code /suite test <scenario> [params]}
  * Results are reported to the command sender and server console.
  */
-public final class TestService {
+public final class TestService implements TestRunner {
 
     private final TestProbe probe;
     private final ActorDirectory actorDirectory;
@@ -330,6 +331,7 @@ public final class TestService {
      * Runs a full automated test suite with performance profiling.
      * Reports progress and results to the given consumer (command sender / console).
      */
+    @Override
     public void runFullTestSuite(Consumer<String> reporter) {
         reporter.accept("§a=== TextFormatter Suite: Automated Runtime Test Suite ===");
         long startTotal = System.currentTimeMillis();
@@ -448,8 +450,9 @@ public final class TestService {
     }
 
     /** Stress test with concurrent messages. */
-    public PerformanceProfiler.PerformanceResult runStressTest(int numPlayers, int msgsPerPlayer) {
-        return runStressTestInternal(numPlayers, msgsPerPlayer);
+    @Override
+    public void runStressTest(int numPlayers, int msgsPerPlayer) {
+        runStressTestInternal(numPlayers, msgsPerPlayer);
     }
 
     private PerformanceProfiler.PerformanceResult runStressTestInternal(int numPlayers, int msgsPerPlayer) {
@@ -646,6 +649,7 @@ public final class TestService {
     }
 
     /** Concurrency test with multiple threads. */
+    @Override
     public void runConcurrencyTest(int threads, int msgsPerThread) {
         runConcurrencyTestInternal(threads, msgsPerThread);
     }

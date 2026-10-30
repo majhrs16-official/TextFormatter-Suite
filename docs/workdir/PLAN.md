@@ -1349,6 +1349,9 @@ neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
 `MessageDispatch`, `TranslationService` y un contador de módulos, sin importar
 `SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`; su
 puerto `TestProbe` vive ahora en `core-api` (`api.spi`), no en `tester`.
+`TestRunner` y `TestRunnerFactory` también están en `core-api`: `tester`
+publica la factoría y el adapter solo resolverá el contrato neutral cuando el
+host monte el runtime.
 `core-api` añade `DispatchOutcome` y `MessageDispatch.dispatchAndReport(...)`;
 `SuiteHost` expone `renderer()` y `messageDispatch(dispatcher)` como adaptadores
 transitorios mientras el host siga construyendo el pipeline. `SuiteRuntime`

@@ -6,11 +6,13 @@ import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.spi.TestProbe;
+import me.majhrs16.suite.api.spi.TestRunnerFactory;
 
 /**
  * Runtime activator of the {@code tester} package.
  *
- * <p>Publishes a {@link TestServiceFactory}; the host adapter supplies the
+ * <p>Publishes a {@link TestRunnerFactory}; the host adapter supplies the
  * live {@link TestProbe} when a command asks for the test service. Activation
  * does not start threads, open sockets or depend on an online server.</p>
  */
@@ -34,7 +36,7 @@ public final class TesterActivator implements ModuleActivator {
     @Override
     public void start(ModuleContext context) {
         factory = new TestServiceFactory();
-        context.services().register(TestServiceFactory.class, factory);
+        context.services().register(TestRunnerFactory.class, factory);
         context.logger().info("Test service factory ready");
     }
 

@@ -9,6 +9,7 @@ import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TestProbe;
+import me.majhrs16.suite.api.spi.TestRunnerFactory;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,13 +28,13 @@ class TesterActivatorTest {
     Path tempDir;
 
     @Test
-    void publishesTheTestServiceFactoryWithoutStartingPlatformWork() {
+    void publishesTheTestRunnerFactoryWithoutStartingPlatformWork() {
         FakeRegistry registry = new FakeRegistry();
 
         new TesterActivator().start(new FakeContext(tempDir, registry));
 
-        assertThat(registry.find(TestServiceFactory.class)).isPresent();
-        assertThat(registry.find(TestServiceFactory.class).orElseThrow().create(
+        assertThat(registry.find(TestRunnerFactory.class)).isPresent();
+        assertThat(registry.find(TestRunnerFactory.class).orElseThrow().create(
             new FakeProbe(), new FakeActors(), new FakeLanguages(), noopLogger()))
             .isNotNull();
     }

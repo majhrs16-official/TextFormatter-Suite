@@ -44,7 +44,7 @@ The distribution is a `PACKAGE` with no package dependencies. Its descriptor req
 | `suite-runtime` | Installs/activates the `tester` package and publishes `TestServiceFactory` |
 | Future `fabric-host` | Must implement its own `TestProbe`; no platform types enter this package |
 
-The host still constructs the service directly while F4b is open. The package already exposes the neutral factory for the final host wiring; `SpigotTestProbe` now binds only `ChannelRegistry`, `Router`, `MessageRenderer`, `MessageDispatch` and `TranslationService`.
+The host still constructs the service directly while F4b is open. The package already exposes the neutral `TestRunnerFactory` for the final host wiring; `SpigotTestProbe` now binds only `ChannelRegistry`, `Router`, `MessageRenderer`, `MessageDispatch` and `TranslationService`.
 
 ---
 
@@ -53,9 +53,9 @@ The host still constructs the service directly while F4b is open. The package al
 | Component | Role |
 |-----------|------|
 | `TestService` | Scenario runner, benchmarks and report generation |
+| `TestServiceFactory` | Implements `api.spi.TestRunnerFactory`; creates a `TestRunner` bound to the live probe, actors, languages and logger |
 | `TestProbe` | Neutral port (in `core-api`) to routing, channels, formatting, translation and dispatch |
 | `DispatchOutcome` (`core-api`) | Delivered/silenced/redirected counters shared with the dispatch port |
-| `TestServiceFactory` | Creates `TestService` for a host adapter |
 | `TesterActivator` | `ModuleActivator`; registers the factory and declares capabilities |
 | `TesterModule` | `Module` descriptor for SPI discovery |
 | `PerformanceProfiler` | Timing/memory helper used by the scenarios |

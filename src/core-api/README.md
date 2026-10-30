@@ -137,6 +137,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters without importing `MessageDispatcher`/`DispatchReport` |
 | `PresetService` | Neutral preset application port; `presets` implements it and the host resolves it from the runtime without importing the package |
 | `TestProbe` | Neutral live-runtime probe; `tester` owns the scenarios and `spigot-host` implements the adapter without importing `tester` |
+| `TestRunner` / `TestRunnerFactory` | Neutral test execution contract and factory; `tester` implements them so platform commands never import the package |
 | `UserLanguageStore` | Implement in `host` (see `YamlUserLanguageStore`) |
 
 ---
@@ -154,6 +155,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 8. api/spi/TranslatorProvider.java → Translation provider SPI
 9. api/spi/PresetService.java → Neutral preset application port
 10. api/spi/TestProbe.java → Neutral live-runtime test probe
+11. api/spi/TestRunner.java → Neutral test execution contract
 9. api/iflow/Router.java          → Shared iFlow routing contract
 ```
 
