@@ -12,6 +12,8 @@ import me.majhrs16.suite.inworld.InWorldPlatform;
 
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.WrittenBookContentComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.MinecraftServer;
@@ -174,8 +176,13 @@ public final class FabricInWorldHandler implements InWorldPlatform {
     }
 
     public void handleBookRead(ServerPlayerEntity player, ItemStack book) {
+        WrittenBookContentComponent content =
+            book.get(DataComponentTypes.WRITTEN_BOOK_CONTENT);
+        List<String> pages = content == null
+            ? List.of()
+            : content.getPages(false).stream().map(Text::getString).toList();
         handler.bookMessage(actor(player), "book.read",
-                book.getName().getString(), List.of())
+                book.getName().getString(), pages)
             .ifPresent(dispatch::dispatch);
     }
 
