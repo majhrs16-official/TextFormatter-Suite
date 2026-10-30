@@ -9,6 +9,7 @@
 - **Template rendering** — parse and render MiniMessage templates with built-in and external placeholders
 - **Channel registry** — manage named channels with per-channel format configuration
 - **Formatting pipeline** — `TextFormatter` interface orchestrating template + channel lookup
+- **Neutral plain-text port** — `MessageRenderer` lets platform adapters render lines without importing textformatter types
 - **Translation spans** — translate `<tr>...</tr>` content through `TranslationService`
 - **Module registration** — `TextFormatterModule` registers the module descriptor for the kernel
 
@@ -42,7 +43,7 @@
 | `host` | Uses `TextFormatter` during dispatch/rendering |
 | `iflow-vm` | Uses `TextFormatter` for VM transform operations |
 | `tester` | Uses the live formatter through `TestProbe.format(...)` |
-| `spigot-host` | Uses the formatting pipeline via `host` and `SpigotTestProbe` |
+| `spigot-host` | Renders in-world lines through the neutral `MessageRenderer` port |
 | `fabric-host` | Uses the formatting pipeline via `host` |
 
 The package provides the `channel-api` and `formatter` capabilities.
@@ -56,6 +57,7 @@ The package provides the `channel-api` and `formatter` capabilities.
 | `TextFormatter` | Interface: `format(message, channel, context) → formatted message` |
 | `DefaultTextFormatter` | Default implementation: template → channel format |
 | `TextFormatters` | Factory/utilities for creating formatters |
+| `TextFormatterMessageRenderer` | Implements the neutral `MessageRenderer` port with `TextFormatter` + plain-text serialization |
 | `Template` | Parsed MiniMessage template (immutable) |
 | `TemplateRenderer` | Renders `Template` with `TemplateContext` (placeholders + variables) |
 | `TemplateContext` | Context for rendering: placeholders, variables, actor info |

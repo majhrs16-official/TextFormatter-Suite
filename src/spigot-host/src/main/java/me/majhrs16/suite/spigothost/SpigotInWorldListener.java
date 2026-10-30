@@ -3,16 +3,13 @@ package me.majhrs16.suite.spigothost;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.spi.MessageDispatch;
+import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.inworld.InWorldHandler;
 import me.majhrs16.suite.inworld.InWorldPlatform;
-import me.majhrs16.suite.textformatter.template.TemplateContext;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
@@ -41,24 +38,27 @@ import java.util.UUID;
 public final class SpigotInWorldListener implements Listener, InWorldPlatform {
 
     private final InWorldHandler handler;
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
+    private final MessageRenderer renderer;
+    private final MessageDispatch dispatch;
     private final Server server;
     private final PluginLogger logger;
     private final UserLanguageStore languages;
+    private final Language defaultLanguage;
 
     public SpigotInWorldListener(InWorldHandler handler,
-                                 SuiteHost host,
-                                 MessageDispatcher dispatcher,
+                                 MessageRenderer renderer,
+                                 MessageDispatch dispatch,
                                  Server server,
                                  PluginLogger logger,
-                                 UserLanguageStore languages) {
+                                 UserLanguageStore languages,
+                                 Language defaultLanguage) {
         this.handler = handler;
-        this.host = host;
-        this.dispatcher = dispatcher;
+        this.renderer = renderer;
+        this.dispatch = dispatch;
         this.server = server;
         this.logger = logger;
         this.languages = languages;
+        this.defaultLanguage = defaultLanguage;
     }
 
     // ============================================================
@@ -81,7 +81,7 @@ public final class SpigotInWorldListener implements Listener, InWorldPlatform {
             String original = lines[i];
             Optional<Message> message = handler.signMessage(actor, channelName, original);
             if (message.isEmpty()) continue;
-            dispatcher.dispatch(message.get());
+            dispatch.dispatch(message.get());
             event.setLine(i, format(message.get(), original));
         }
 
@@ -111,14 +111,14 @@ public final class SpigotInWorldListener implements Listener, InWorldPlatform {
             || material.contains("SHULKER")) {
             handler.containerMessage(actor, "container.chest", world,
                     loc.getBlockX(), loc.getBlockY(), loc.getBlockZ())
-                .ifPresent(dispatcher::dispatch);
+                .ifPresent(dispatch::dispatch);
         }
 
         ItemStack item = event.getItem();
         if (item != null && item.getType().name().contains("WRITTEN_BOOK")
             && item.getItemMeta() instanceof BookMeta bookMeta) {
             handler.bookMessage(actor, "book.read", bookMeta.getTitle(), bookMeta.getPages())
-                .ifPresent(dispatcher::dispatch);
+                .ifPresent(dispatch::dispatch);
         }
     }
 
@@ -160,20 +160,7 @@ public final class SpigotInWorldListener implements Listener, InWorldPlatform {
     @Override
     public String format(Message message, String content) {
         try {
-            Language source = message.langSource() != null
-                && message.langSource() != Language.AUTO
-                ? message.langSource()
-                : host.config().defaultLanguage();
-            Language target = message.resolvedSourceLanguage() != null
-                ? message.resolvedSourceLanguage()
-                : source;
-
-            TemplateContext context = TemplateContext.builder(message.sender(), source, target)
-                .content(content)
-                .translate(message.shouldTranslate())
-                .build();
-            Component formatted = host.formatter().format(message, context);
-            return PlainTextComponentSerializer.plainText().serialize(formatted);
+            return renderer.render(message, content, message.sender(), defaultLanguage);
         } catch (Exception e) {
             logger.warn("Failed to format in-world message: " + e.getMessage());
             return content;

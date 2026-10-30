@@ -8,6 +8,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
@@ -51,6 +52,8 @@ public final class TextFormatterActivator implements ModuleActivator {
         TextFormatter formatter = TextFormatters.create(
                 loaded.config(), translation, placeholders, context.logger());
         context.services().register(TextFormatter.class, formatter);
+        context.services().register(MessageRenderer.class,
+                new TextFormatterMessageRenderer(formatter));
         context.services().register(ChannelRegistry.class, loaded.config());
         context.logger().info("TextFormatter ready with " + loaded.config().paths().size() + " channels");
     }

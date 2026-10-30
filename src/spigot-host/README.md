@@ -88,6 +88,7 @@
 | `ChannelSelector` | Selects channel based on event context |
 | `EventRules` | Event cancellation/modification rules |
 | `LangSetting` | Player language preference management |
+| `SpigotInWorldListener` | Bukkit adapter for `inworld`; consumes neutral `MessageRenderer` and `MessageDispatch` instead of `SuiteHost` |
 
 ---
 

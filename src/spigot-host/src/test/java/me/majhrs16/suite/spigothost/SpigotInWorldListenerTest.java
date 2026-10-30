@@ -48,7 +48,8 @@ class SpigotInWorldListenerTest {
             null,
             server,
             noopLogger(),
-            noLanguages());
+            noLanguages(),
+            Language.EN);
     }
 
     @Test

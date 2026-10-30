@@ -4,6 +4,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
@@ -15,6 +16,7 @@ import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.textformatter.TextFormatter;
+import me.majhrs16.suite.textformatter.TextFormatterMessageRenderer;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.ChannelConfig;
@@ -53,6 +55,7 @@ public final class SuiteHost {
     private final ChatTranslator chatTranslator;
     private final Router router;
     private final TextFormatter formatter;
+    private final MessageRenderer renderer;
     private final PluginLogger logger;
     private final ChatDelivery chatDelivery;
 
@@ -62,6 +65,7 @@ public final class SuiteHost {
               ChatTranslator chatTranslator,
               Router router,
               TextFormatter formatter,
+              MessageRenderer renderer,
               PluginLogger logger,
               ChatDelivery chatDelivery) {
         this.config = config;
@@ -70,6 +74,7 @@ public final class SuiteHost {
         this.chatTranslator = chatTranslator;
         this.router = router;
         this.formatter = formatter;
+        this.renderer = renderer;
         this.logger = logger;
         this.chatDelivery = chatDelivery;
     }
@@ -127,7 +132,9 @@ public final class SuiteHost {
             placeholders, translationService, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
-        return new SuiteHost(config, channels, translationService, chatTranslator, router, formatter, logger, chatDelivery);
+        MessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
+        return new SuiteHost(config, channels, translationService, chatTranslator, router,
+                formatter, renderer, logger, chatDelivery);
     }
 
     public HostConfig config() {
@@ -152,6 +159,11 @@ public final class SuiteHost {
 
     public TextFormatter formatter() {
         return formatter;
+    }
+
+    /** @return neutral plain-text renderer backed by this host's formatter. */
+    public MessageRenderer renderer() {
+        return renderer;
     }
 
     /**

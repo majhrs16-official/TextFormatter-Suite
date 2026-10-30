@@ -13,6 +13,7 @@ import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ModuleLoader;
 import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.textformatter.TextFormatter;
+import me.majhrs16.suite.textformatter.TextFormatterMessageRenderer;
 import me.majhrs16.suite.textformatter.TextFormatters;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.textformatter.ChannelConfig;
@@ -120,7 +121,8 @@ public final class SuiteBootstrap {
             placeholders, translationService, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translationService, placeholders, logger);
-        return new SuiteHost(config, channels, translationService, chatTranslator, router, formatter, logger, chatDelivery);
+        return new SuiteHost(config, channels, translationService, chatTranslator, router,
+                formatter, new TextFormatterMessageRenderer(formatter), logger, chatDelivery);
     }
 
     /**

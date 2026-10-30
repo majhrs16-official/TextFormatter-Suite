@@ -1338,6 +1338,15 @@ las entradas de `CommandMap`. Estas clases aún no están cableadas en los
 hosts: la sustitución de `SuiteHost`/cableado de features y la retirada de
 `DynamicCommand*`/Brigadier siguen pendientes para cerrar F4b/F4d.
 
+**Avance F4b (2026-10-30):** `core-api` declara el puerto neutral
+`MessageRenderer` para renderizado plano; `textformatter` lo implementa con
+`TextFormatterMessageRenderer` y lo registra en su `ModuleContext`.
+`SpigotInWorldListener` ya consume `MessageRenderer` + `MessageDispatch` en vez
+de `SuiteHost`/`MessageDispatcher`/`TemplateContext`, por lo que el adapter de
+in-world deja de importar tipos de feature. `SuiteHost` expone `renderer()`
+como adaptador transitorio mientras el host siga construyendo el pipeline; la
+retirada completa de `SuiteHost` del adapter pertenece al cierre de F4b.
+
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
 **Decisión de arquitectura (2026-10-28):** cada módulo se estructura como un
@@ -1430,7 +1439,8 @@ Orden de F4b:
 con `FilePresetTarget`, el empaquetado/activación de `presets`, el empaquetado
 neutral de `tester` con `TestProbe`/`SpigotTestProbe`, el empaquetado neutral
 de `inworld` con `InWorldHandler`/`InWorldPlatform`/`SpigotInWorldListener` y
-el puerto neutral de `extension-api` completados al 2026-10-30. Después: el
+el puerto neutral de `extension-api` y el puerto `MessageRenderer` con su
+implementación en `textformatter` completados al 2026-10-30. Después: el
 adapter de host de `PresetTarget` (selección y recarga), el adelgazamiento de
 `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` (F4b) y la
 extracción de la captura de eventos a `sync-bukkit`/`sync-fabric` (F4c).

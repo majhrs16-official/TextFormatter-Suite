@@ -446,7 +446,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         // Reload the neutral in-world domain and its Spigot listener.
         InWorldHandler inworldHandler = new InWorldHandler(reloaded.channels(), logger);
         SpigotInWorldListener inworldListener = new SpigotInWorldListener(
-            inworldHandler, reloaded, dispatcher, getServer(), logger, languages);
+            inworldHandler, reloaded.renderer(), dispatcher::dispatch, getServer(), logger,
+            languages, reloaded.config().defaultLanguage());
         getServer().getPluginManager().registerEvents(inworldListener, this);
 
         // Reload extensions
