@@ -3,6 +3,7 @@ package me.majhrs16.suite.inworld;
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
+import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 
 /**
@@ -23,6 +24,7 @@ public final class InWorldModule implements Module {
             .provide(Capability.of("channel-world", SemVer.of(2, 1, 0)))
             .provide(Capability.of("channel-radius", SemVer.of(2, 1, 0)))
             .provide(Capability.of("click-hover", SemVer.of(2, 1, 0)))
+            .require(Requirement.atLeast("channel-api", SemVer.of(2, 1, 0)))
             .build();
     }
 }

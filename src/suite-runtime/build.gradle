@@ -25,6 +25,7 @@ evaluationDependsOn(':src:sync-websocket')
 evaluationDependsOn(':src:observability')
 evaluationDependsOn(':src:presets')
 evaluationDependsOn(':src:tester')
+evaluationDependsOn(':src:inworld')
 
 group = 'me.majhrs16'
 
@@ -153,6 +154,10 @@ test {
     dependsOn testerPackage
     systemProperty 'tester.package',
             testerPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
+    def inworldPackage = project(':src:inworld').tasks.named('modulePackage')
+    dependsOn inworldPackage
+    systemProperty 'inworld.package',
+            inworldPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     testLogging {
         events 'passed', 'skipped', 'failed'
     }

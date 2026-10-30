@@ -84,8 +84,8 @@ tasks.register('checkArchitecture') {
             'me.majhrs16.suite.fabrichost.'
         ]
         def neutral = [
-            'core-api', 'kernel', 'textformatter', 'tester', 'messages', 'iflow-vm',
-            'iflow-firewall', 'iflow-wasm', 'logger', 'transport',
+            'core-api', 'kernel', 'textformatter', 'tester', 'inworld', 'messages',
+            'iflow-vm', 'iflow-firewall', 'iflow-wasm', 'logger', 'transport',
             'chattranslator', 'gtranslate', 'ltranslate', 'sync-bus',
             'sync-common', 'sync-discord', 'sync-discord-jdk', 'sync-http',
             'sync-socket', 'sync-telegram', 'sync-websocket', 'sync-velocity-core',
@@ -472,13 +472,14 @@ subprojects { project ->
                 ':src:logger'         : [line: 0.70, branch: 0.50],
                 ':src:messages'       : [line: 0.70, branch: 0.50],
                 ':src:textformatter'  : [line: 0.70, branch: 0.50],
+                ':src:tester'         : [line: 0.70, branch: 0.50],
+                ':src:inworld'        : [line: 0.70, branch: 0.50],
 
                 // Módulos con cobertura baja → progresivos (T2 objetivo: 30/15)
                 ':src:host'           : [line: 0.30, branch: 0.15],
                 ':src:spigot-host'    : [line: 0.15, branch: 0.10],
                 ':src:transport'      : [line: 0.15, branch: 0.10],
                 ':src:fabric-host'    : [line: 0.10, branch: 0.05],
-                ':src:tester'         : [line: 0.10, branch: 0.05],
 
                 // Módulos sin reporte aún → umbrales mínimos (T2 objetivo: 10/5)
                 ':src:core-api'       : [line: 0.10, branch: 0.05],
@@ -502,7 +503,6 @@ subprojects { project ->
                 ':src:sync-velocity'  : [line: 0.10, branch: 0.05],
                 ':src:sync-websocket' : [line: 0.10, branch: 0.05],
                 ':src:loadtest'       : [line: 0.10, branch: 0.05],
-                ':src:inworld'        : [line: 0.10, branch: 0.05],
                 ':src:iflow-wasm'     : [line: 0.10, branch: 0.05],
                 ':src:example-extension': [line: 0.10, branch: 0.05],
                 ':src:common-legacy'  : [line: 0.10, branch: 0.05],

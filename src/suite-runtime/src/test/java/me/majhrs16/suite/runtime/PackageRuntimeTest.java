@@ -216,6 +216,24 @@ class PackageRuntimeTest {
     }
 
     @Test
+    void installsRealInWorldPackageAfterChannelApi() throws Exception {
+        Path textformatterZip = packageFromProperty("textformatter.package");
+        Path inworldZip = packageFromProperty("inworld.package");
+
+        try (Fixture fixture = fixture()) {
+            assertTrue(fixture.runtime.installLocal(textformatterZip, false)
+                    .get(0).isSuccess());
+
+            List<ActivationResult> activation = fixture.runtime.installLocal(inworldZip, false);
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess(),
+                    () -> "activation failed: " + activation.get(0).message());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("inworld").orElseThrow());
+        }
+    }
+
+    @Test
     void installsRealChatTranslatorPackage() throws Exception {
         String packagePath = System.getProperty("chattranslator.package");
         assertNotNull(packagePath, "chattranslator.package must be set by the build");

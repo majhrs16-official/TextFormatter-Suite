@@ -1,5 +1,5 @@
 plugins {
-id 'jacoco'
+    id 'jacoco'
     id 'java'
     id 'maven-publish'
 }
@@ -9,36 +9,26 @@ group = 'me.majhrs16'
 repositories {
     mavenLocal()
     mavenCentral()
-    maven { url 'https://repo.papermc.io/repository/maven-public/' }
 }
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:textformatter')
-    implementation project(':src:iflow-vm')
-    implementation project(':src:host')
-    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
-    implementation 'net.kyori:adventure-api:4.17.0'
-    compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
-    testImplementation 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
 
     testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'
-    testImplementation 'org.mockito:mockito-core:5.12.0'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 17
 }
 
 test {
@@ -46,6 +36,12 @@ test {
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
 }
 
 publishing {
@@ -71,3 +67,7 @@ configurations.configureEach {
         }
     }
 }
+
+// F6 — distribution ZIP for the manager
+ext.moduleVersion = '2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

@@ -80,7 +80,7 @@ TextFormatter Suite
 | `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `spigot-host`, `fabric-host` |
 | `manager-apt` | Repository manager, dependency resolver, APT installer/facade | `core-api`, `kernel`, `manager-spi`, `manager-core` | `spigot-host`, `fabric-host` |
 | `extension-api` | Extension system API (Extension, ExtensionContext, ExtensionManager) | `core-api` | `example-extension`, `spigot-host`, `fabric-host` |
-| `inworld` | In-world integration module | `core-api` | `spigot-host`, `fabric-host` |
+| `inworld` | Neutral in-world domain (signs, containers, books, WORLD/RADIUS, click/hover); packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotInWorldListener`), `suite-runtime` |
 | `performance` | Hotspot detection, profiling, cache/memory optimization | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-http` | HTTP webhook sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-tcpudp` | TCP/UDP sync sinks | `core-api`, `transport` | `spigot-host`, `fabric-host` |

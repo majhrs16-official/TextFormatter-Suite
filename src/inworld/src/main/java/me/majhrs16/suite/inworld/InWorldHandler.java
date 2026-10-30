@@ -1,409 +1,202 @@
 package me.majhrs16.suite.inworld;
 
-import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.api.message.Direction;
-import me.majhrs16.suite.api.message.Language;
-import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.api.message.Actor;
+import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.message.MessageType;
+import me.majhrs16.suite.api.spi.PluginLogger;
 
-import org.bukkit.Location;
-import org.bukkit.block.Block;
-import org.bukkit.block.Sign;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.block.SignChangeEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.BookMeta;
-import org.bukkit.inventory.meta.ItemMeta;
-
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Handles in-world interactions: signs, chests, books, and click/hover events.
+ * Neutral in-world domain: sign/container/book message construction, channel
+ * resolution, glossary, radius cache and click dispatch.
+ *
+ * <p>The class never imports Paper, Bukkit or the host. The platform adapter
+ * extracts events, supplies actors and formats the resulting {@link Message};
+ * this class only decides what the suite should do.</p>
  */
-public final class InWorldHandler implements Listener {
+public final class InWorldHandler {
 
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
     private final ChannelRegistry channels;
     private final PluginLogger logger;
-    private final TranslationService translation;
-    private final UserLanguageStore languages;
-    private final org.bukkit.Server server;
 
-    // Sign cache
-    private final Map<Location, SignData> signCache = new ConcurrentHashMap<>();
-    
-    // Chest/book cache
-    private final Map<Location, ContainerData> containerCache = new ConcurrentHashMap<>();
-    
-    // Glossary cache
+    private final Map<LocationKey, SignData> signCache = new ConcurrentHashMap<>();
+    private final Map<LocationKey, ContainerData> containerCache = new ConcurrentHashMap<>();
     private final Map<String, String> glossary = new ConcurrentHashMap<>();
-
-    // RADIUS channel cache
     private final Map<UUID, RadiusData> radiusCache = new ConcurrentHashMap<>();
 
-    public InWorldHandler(SuiteHost host, MessageDispatcher dispatcher,
-                          org.bukkit.Server server,
-                          ChannelRegistry channels, PluginLogger logger,
-                          TranslationService translation, UserLanguageStore languages) {
-        this.host = host;
-        this.server = server;
-        this.dispatcher = dispatcher;
-        this.channels = channels;
-        this.logger = logger;
-        this.translation = translation;
-        this.languages = languages;
+    public InWorldHandler(ChannelRegistry channels, PluginLogger logger) {
+        this.channels = Objects.requireNonNull(channels, "channels");
+        this.logger = Objects.requireNonNull(logger, "logger");
     }
 
     // ============================================================
     // Sign Handling
     // ============================================================
 
-    @EventHandler
-    public void onSignChange(SignChangeEvent event) {
-        Player player = event.getPlayer();
-        Sign sign = (Sign) event.getBlock().getState();
-        Location loc = sign.getLocation();
-        
-        // Check if this sign is managed by the suite
-        if (!isSuiteSign(loc)) return;
-
-        // Get the channel associated with this sign
-        String channelName = getSignChannel(loc);
-        if (channelName == null) return;
-
-        Channel channel = channels.resolve(channelName);
-        if (channel == null) return;
-
-        // Process each line through the formatter
-        String[] lines = event.getLines();
-        for (int i = 0; i < lines.length; i++) {
-            String original = lines[i];
-            if (original == null || original.isBlank()) continue;
-
-            // Create message for formatting
-            Actor actor = new Actor(player.getUniqueId(), player.getName(),
-                Actor.ActorKind.PLAYER, getPlayerLanguage(player), player);
-            
-            Message message = Message.builder()
-                .type(MessageType.SIGN)
-                .sender(actor)
-                .direction(Direction.all())
-                .translate(true)
-                .text(original)
-                .channel(channelName)
-                .build();
-
-            // Dispatch through the pipeline
-            dispatcher.dispatch(message);
-
-            // Get formatted result
-            String formatted = getFormattedMessage(message, original);
-            event.setLine(i, formatted);
-        }
-
-        // Cache sign data
-        signCache.put(loc, new SignData(channelName, event.getLines()));
-        logger.debug("Suite sign updated at " + loc + " for channel " + channelName);
-    }
-
     /**
-     * Checks if a sign at location is managed by the suite.
+     * Resolves the configured suite sign at a block position.
+     *
+     * @return the channel name, or empty when the position is not a suite sign
      */
-    private boolean isSuiteSign(Location loc) {
-        // Check if there's a sign configuration for this location
-        // Could be based on a config file or a marker
-        return signCache.containsKey(loc) || isConfiguredSign(loc);
-    }
-
-    private boolean isConfiguredSign(Location loc) {
-        // Check config for sign locations
-        // For now, check if there's a sign channel configured
-        return channels.paths().stream()
-            .anyMatch(name -> name.startsWith("sign."));
-    }
-
-    private String getSignChannel(Location loc) {
-        // Find which sign channel this location belongs to
+    public Optional<String> signChannel(String world, int x, int y, int z) {
         for (String name : channels.paths()) {
-            if (name.startsWith("sign.")) {
-                Channel ch = channels.resolve(name);
-                // Check channel config for sign location
-                String signLoc = ch.signLocation();
-                if (signLoc != null && !signLoc.isBlank()) {
-                    try {
-                        String[] parts = signLoc.split(",");
-                        if (parts.length >= 3) {
-                            int x = Integer.parseInt(parts[0].trim());
-                            int y = Integer.parseInt(parts[1].trim());
-                            int z = Integer.parseInt(parts[2].trim());
-                            String worldName = parts.length > 3 ? parts[3].trim() : loc.getWorld().getName();
-                            if (loc.getBlockX() == x && loc.getBlockY() == y && loc.getBlockZ() == z 
-                                && loc.getWorld().getName().equals(worldName)) {
-                                return name;
-                            }
-                        }
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
+            if (!name.startsWith("sign.")) continue;
+            Channel channel = channels.resolve(name);
+            if (channel == null) continue;
+            String signLoc = channel.signLocation();
+            if (signLoc == null || signLoc.isBlank()) continue;
+            if (matchesLocation(signLoc, world, x, y, z)) {
+                return Optional.of(name);
             }
         }
-        return null;
+        return Optional.empty();
     }
 
-    private Language getPlayerLanguage(Player player) {
-        Optional<String> langOpt = languages.languageOf(player.getUniqueId());
-        if (langOpt.isPresent()) {
-            Optional<Language> lang = Language.of(langOpt.get());
-            if (lang.isPresent()) return lang.get();
-        }
-        Optional<String> fallback = languages.languageOf(player.getUniqueId());
-        if (fallback.isPresent()) {
-            Optional<Language> lang = Language.of(fallback.get());
-            if (lang.isPresent()) return lang.get();
-        }
-        return Language.AUTO;
-    }
-
-    private String getFormattedMessage(Message message, String original) {
-        // Use the host's formatter to render the message
+    private static boolean matchesLocation(String signLoc, String world,
+                                           int x, int y, int z) {
         try {
-            Language lang = message.resolvedSourceLanguage() != null 
-                ? message.resolvedSourceLanguage() 
-                : (message.langSource() != null && message.langSource() != Language.AUTO 
-                    ? message.langSource() 
-                    : host.config().defaultLanguage());
-            
-            // Render using the channel's format for the sender (initiator)
-            var ctx = me.majhrs16.suite.textformatter.template.TemplateContext.builder(
-                    message.sender(), 
-                    message.langSource() != null && message.langSource() != Language.AUTO 
-                        ? message.langSource() 
-                        : host.config().defaultLanguage(), 
-                    lang)
-                .content(original)
-                .translate(message.shouldTranslate())
-                .build();
-            
-            net.kyori.adventure.text.Component formatted = host.formatter().format(message, ctx);
-            return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(formatted);
-        } catch (Exception e) {
-            logger.warn("Failed to format sign message: " + e.getMessage());
-            return original;
+            String[] parts = signLoc.split(",");
+            if (parts.length < 3) return false;
+            int sx = Integer.parseInt(parts[0].trim());
+            int sy = Integer.parseInt(parts[1].trim());
+            int sz = Integer.parseInt(parts[2].trim());
+            String sw = parts.length > 3 ? parts[3].trim() : world;
+            return sx == x && sy == y && sz == z
+                && Objects.equals(sw, world);
+        } catch (NumberFormatException ignored) {
+            return false;
         }
     }
 
-    // ============================================================
-    // Chest / Container Interactions
-    // ============================================================
-
-    @EventHandler
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        
-        Block block = event.getClickedBlock();
-        if (block == null) return;
-
-        BlockData data = block.getBlockData();
-        String material = data.getMaterial().name();
-
-        // Check for chest interaction
-        if (material.contains("CHEST")) {
-            handleChestOpen(event.getPlayer(), block.getLocation());
-        }
-
-        // Check for barrel, shulker box, etc.
-        if (material.contains("BARREL") || material.contains("SHULKER")) {
-            handleContainerOpen(event.getPlayer(), block.getLocation());
-        }
-
-        // Check for book interaction (written book in hand)
-        if (event.getItem() != null && event.getItem().getType().name().contains("WRITTEN_BOOK")) {
-            handleBookRead(event.getPlayer(), event.getItem());
-        }
+    /** @return whether the position is a cached or configured suite sign. */
+    public boolean isSuiteSign(String world, int x, int y, int z) {
+        return signCache.containsKey(new LocationKey(world, x, y, z))
+            || signChannel(world, x, y, z).isPresent();
     }
 
-    private void handleChestOpen(Player player, Location loc) {
-        String channelName = "container.chest";
-        if (!channels.paths().contains(channelName)) return;
+    /** Builds the message for one non-empty sign line. */
+    public Optional<Message> signMessage(Actor actor, String channelName, String text) {
+        if (channelName == null || channelName.isBlank()) return Optional.empty();
+        if (text == null || text.isBlank()) return Optional.empty();
+        if (!hasChannel(channelName)) return Optional.empty();
+        return Optional.of(Message.builder()
+            .type(MessageType.SIGN)
+            .sender(actor)
+            .direction(Direction.all())
+            .translate(true)
+            .text(text)
+            .channel(channelName)
+            .build());
+    }
 
-        Channel channel = channels.resolve(channelName);
-        if (channel == null) return;
+    /** Stores the last rendered sign content for diagnostics and reuse. */
+    public void cacheSign(String world, int x, int y, int z,
+                          String channelName, String[] lines) {
+        signCache.put(new LocationKey(world, x, y, z),
+            new SignData(channelName, lines, System.currentTimeMillis()));
+    }
 
-        Actor actor = new Actor(player.getUniqueId(), player.getName(),
-            Actor.ActorKind.PLAYER, getPlayerLanguage(player), player);
+    // ============================================================
+    // Chest / Container / Book Interactions
+    // ============================================================
 
-        String content = "Chest opened at " + loc.getBlockX() + ", " + 
-                         loc.getBlockY() + ", " + loc.getBlockZ();
-
-        Message message = Message.builder()
+    /** Builds the message emitted when a player opens a container. */
+    public Optional<Message> containerMessage(Actor actor, String channelName,
+                                              String world, int x, int y, int z) {
+        if (!hasChannel(channelName)) return Optional.empty();
+        String content = "Chest opened at " + x + ", " + y + ", " + z;
+        containerCache.put(new LocationKey(world, x, y, z),
+            new ContainerData(channelName, System.currentTimeMillis()));
+        return Optional.of(Message.builder()
             .type(MessageType.CONTAINER)
             .sender(actor)
             .direction(Direction.all())
             .translate(true)
             .text(content)
             .channel(channelName)
-            .build();
-
-        dispatcher.dispatch(message);
-        containerCache.put(loc, new ContainerData(channelName, System.currentTimeMillis()));
+            .build());
     }
 
-    private void handleContainerOpen(Player player, Location loc) {
-        // Similar to chest but for other container types
-        handleChestOpen(player, loc);
-    }
-
-    private void handleBookRead(Player player, ItemStack book) {
-        if (!book.hasItemMeta()) return;
-        ItemMeta meta = book.getItemMeta();
-        if (!(meta instanceof BookMeta bookMeta)) return;
-
-        String channelName = "book.read";
-        if (!channels.paths().contains(channelName)) return;
-
-        Channel channel = channels.resolve(channelName);
-        if (channel == null) return;
-
-        Actor actor = new Actor(player.getUniqueId(), player.getName(),
-            Actor.ActorKind.PLAYER, getPlayerLanguage(player), player);
-
-        String content = "Book read: " + bookMeta.getTitle();
-        for (String page : bookMeta.getPages()) {
-            content += "\n" + page;
+    /** Builds the message emitted when a player reads a written book. */
+    public Optional<Message> bookMessage(Actor actor, String channelName,
+                                         String title, List<String> pages) {
+        if (!hasChannel(channelName)) return Optional.empty();
+        StringBuilder content = new StringBuilder("Book read: ")
+            .append(title == null ? "" : title);
+        if (pages != null) {
+            for (String page : pages) {
+                content.append('\n').append(page == null ? "" : page);
+            }
         }
-
-        Message message = Message.builder()
+        return Optional.of(Message.builder()
             .type(MessageType.BOOK)
             .sender(actor)
             .direction(Direction.all())
             .translate(true)
-            .text(content)
+            .text(content.toString())
             .channel(channelName)
-            .build();
-
-        dispatcher.dispatch(message);
+            .build());
     }
 
     // ============================================================
     // WORLD / RADIUS Channels
     // ============================================================
 
-    /**
-     * Gets players within a radius for RADIUS channels.
-     */
-    public List<Actor> getPlayersInRadius(Location center, double radius) {
-        List<Actor> players = new ArrayList<>();
-        for (Player p : center.getWorld().getPlayers()) {
-            if (p.getLocation().distanceSquared(center) <= radius * radius) {
-                players.add(new Actor(p.getUniqueId(), p.getName(),
-                    Actor.ActorKind.PLAYER, getPlayerLanguage(p), p));
-            }
-        }
-        return players;
+    public List<Actor> getPlayersInRadius(InWorldPlatform platform, String world,
+                                          double x, double y, double z,
+                                          double radius) {
+        Objects.requireNonNull(platform, "platform");
+        return platform.playersInRadius(world, x, y, z, radius);
     }
 
-    /**
-     * Gets players in a specific world for WORLD channels.
-     */
-    public List<Actor> getPlayersInWorld(String worldName) {
-        List<Actor> players = new ArrayList<>();
-        for (Player p : server.getWorld(worldName).getPlayers()) {
-            players.add(new Actor(p.getUniqueId(), p.getName(),
-                Actor.ActorKind.PLAYER, getPlayerLanguage(p), p));
-        }
-        return players;
+    public List<Actor> getPlayersInWorld(InWorldPlatform platform, String world) {
+        Objects.requireNonNull(platform, "platform");
+        return platform.playersInWorld(world);
     }
 
     // ============================================================
     // Click / Hover Interactions
     // ============================================================
 
-    /**
-     * Handles click events on items with hover text.
-     */
-    public void handleClick(Actor actor, String action, String value) {
-        // Handle click events like opening URLs, running commands, etc.
+    /** Delegates a click action to the platform adapter. */
+    public void handleClick(InWorldPlatform platform, Actor actor,
+                            String action, String value) {
+        Objects.requireNonNull(platform, "platform");
         switch (action) {
-            case "open_url" -> openUrl(actor, value);
-            case "run_command" -> runCommand(actor, value);
-            case "suggest_command" -> suggestCommand(actor, value);
-            case "change_page" -> changePage(actor, value);
-            case "copy_to_clipboard" -> copyToClipboard(actor, value);
+            case "open_url" -> platform.openUrl(actor, value);
+            case "run_command" -> platform.runCommand(actor, value);
+            case "suggest_command" -> platform.suggestCommand(actor, value);
+            case "change_page" -> platform.changePage(actor, value);
+            case "copy_to_clipboard" -> platform.copyToClipboard(actor, value);
+            default -> logger.debug("Unknown in-world click action: " + action);
         }
     }
 
-    /**
-     * Handles hover events to show additional information.
-     */
     public String getHoverText(Actor actor, String key) {
-        // Return glossary entry, translation preview, etc.
         return glossary.getOrDefault(key, "");
-    }
-
-    private void openUrl(Actor actor, String url) {
-        // Send clickable URL to player
-        if (actor.handle() instanceof Player player) {
-            player.sendMessage("<click:open_url:'" + url + "'><hover:show_text:'Click to open'>" + url + "</hover></click>");
-        }
-    }
-
-    private void runCommand(Actor actor, String command) {
-        if (actor.handle() instanceof Player player) {
-            player.performCommand(command);
-        }
-    }
-
-    private void suggestCommand(Actor actor, String command) {
-        if (actor.handle() instanceof Player player) {
-            player.sendMessage("<click:suggest_command:'" + command + "'><hover:show_text:'Click to suggest'>" + command + "</hover></click>");
-        }
-    }
-
-    private void changePage(Actor actor, String page) {
-        // For book/page navigation
-    }
-
-    private void copyToClipboard(Actor actor, String text) {
-        if (actor.handle() instanceof Player player) {
-            player.sendMessage("<click:copy_to_clipboard:'" + text + "'><hover:show_text:'Click to copy'>" + text + "</hover></click>");
-        }
     }
 
     // ============================================================
     // Glossary / Cache
     // ============================================================
 
-    /**
-     * Adds a glossary entry for hover tooltips.
-     */
     public void addGlossaryEntry(String key, String definition) {
         glossary.put(key, definition);
     }
 
-    /**
-     * Gets a glossary entry for hover display.
-     */
     public String getGlossaryEntry(String key) {
         return glossary.get(key);
     }
 
-    /**
-     * Clears the glossary cache.
-     */
     public void clearGlossary() {
         glossary.clear();
     }
@@ -412,59 +205,37 @@ public final class InWorldHandler implements Listener {
     // RADIUS Channel Management
     // ============================================================
 
-    public void updateRadiusCache(UUID playerId, Location location, double radius) {
-        radiusCache.put(playerId, new RadiusData(location, radius, System.currentTimeMillis()));
+    public void updateRadiusCache(UUID playerId, String world,
+                                  double x, double y, double z, double radius) {
+        radiusCache.put(playerId, new RadiusData(
+            world, x, y, z, radius, System.currentTimeMillis()));
     }
 
     public Optional<RadiusData> getRadiusData(UUID playerId) {
         return Optional.ofNullable(radiusCache.get(playerId));
     }
 
-    /**
-     * Unregisters this listener from the plugin manager.
-     */
-    public void unregister() {
-        // Note: In Bukkit/Spigot, listeners are unregistered automatically when the plugin disables,
-        // but during reload we need to manually unregister to avoid duplicate listeners.
-        // This method is called from the plugin's Runtime.close() during reload.
-        // The actual unregistration is handled by the plugin manager when the handler is re-registered.
+    private boolean hasChannel(String name) {
+        return name != null && channels.paths().contains(name);
     }
 
     // ============================================================
     // Data Classes
     // ============================================================
 
-    private static class SignData {
-        final String channelName;
-        final String[] lines;
-        final long timestamp;
-
-        SignData(String channelName, String[] lines) {
-            this.channelName = channelName;
-            this.lines = lines;
-            this.timestamp = System.currentTimeMillis();
+    public record SignData(String channelName, String[] lines, long timestamp) {
+        public SignData {
+            lines = lines == null ? new String[0] : lines.clone();
         }
     }
 
-    private static class ContainerData {
-        final String channelName;
-        final long timestamp;
-
-        ContainerData(String channelName, long timestamp) {
-            this.channelName = channelName;
-            this.timestamp = timestamp;
-        }
+    public record ContainerData(String channelName, long timestamp) {
     }
 
-    private static class RadiusData {
-        final Location center;
-        final double radius;
-        final long timestamp;
+    public record RadiusData(String world, double x, double y, double z,
+                             double radius, long timestamp) {
+    }
 
-        RadiusData(Location center, double radius, long timestamp) {
-            this.center = center;
-            this.radius = radius;
-            this.timestamp = timestamp;
-        }
+    private record LocationKey(String world, int x, int y, int z) {
     }
 }

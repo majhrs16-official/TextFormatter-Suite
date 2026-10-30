@@ -109,7 +109,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             final me.majhrs16.suite.extension.ExtensionManager extensionManager;
             final ManagerFacade managerFacade;
             final ModuleLifecycle moduleLifecycle;
-            final InWorldHandler inworldHandler;
+            final SpigotInWorldListener inworldListener;
             final SyncBus syncBus;
             final PluginLogger logger;
 
@@ -121,7 +121,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                     me.majhrs16.suite.extension.ExtensionManager extensionManager,
                     ManagerFacade managerFacade,
                     ModuleLifecycle moduleLifecycle,
-                    InWorldHandler inworldHandler,
+                    SpigotInWorldListener inworldListener,
                     SyncBus syncBus,
                     PluginLogger logger) {
                 this.host = host;
@@ -135,7 +135,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                 this.extensionManager = extensionManager;
                 this.managerFacade = managerFacade;
                 this.moduleLifecycle = moduleLifecycle;
-                this.inworldHandler = inworldHandler;
+                this.inworldListener = inworldListener;
                 this.syncBus = syncBus;
                 this.logger = logger;
             }
@@ -144,7 +144,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             public MessageDispatcher dispatcher() { return dispatcher; }
             public UserLanguageStore languages() { return languages; }
             public PluginLogger logger() { return logger; }
-            public InWorldHandler inworldHandler() { return inworldHandler; }
+            public SpigotInWorldListener inworldListener() { return inworldListener; }
             public SyncBus syncBus() { return syncBus; }
             public ManagerFacade managerFacade() { return managerFacade; }
             public ModuleLifecycle moduleLifecycle() { return moduleLifecycle; }
@@ -193,13 +193,13 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
                         logger.warn("Error closing ManagerFacade: " + e.getMessage());
                     }
                 }
-                if (inworldHandler != null) {
+                if (inworldListener != null) {
                     try {
                         // Unregister from plugin manager to avoid duplicate listeners on reload
-                        org.bukkit.event.HandlerList.unregisterAll(inworldHandler);
-                        logger.debug("InWorldHandler unregistered from plugin manager");
+                        org.bukkit.event.HandlerList.unregisterAll(inworldListener);
+                        logger.debug("In-world listener unregistered from plugin manager");
                     } catch (Exception e) {
-                        logger.warn("Error unregistering InWorldHandler: " + e.getMessage());
+                        logger.warn("Error unregistering in-world listener: " + e.getMessage());
                     }
                 }
                 if (dispatcher != null) {
@@ -443,12 +443,11 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             logger.warn("Failed to start DebugEndpoint: " + e.getMessage());
         }
 
-        // Reload InWorldHandler
-        InWorldHandler inworldHandler = new InWorldHandler(reloaded, dispatcher,
-            getServer(),
-            reloaded.channels(), logger,
-            reloaded.translation(), languages);
-        getServer().getPluginManager().registerEvents(inworldHandler, this);
+        // Reload the neutral in-world domain and its Spigot listener.
+        InWorldHandler inworldHandler = new InWorldHandler(reloaded.channels(), logger);
+        SpigotInWorldListener inworldListener = new SpigotInWorldListener(
+            inworldHandler, reloaded, dispatcher, getServer(), logger, languages);
+        getServer().getPluginManager().registerEvents(inworldListener, this);
 
         // Reload extensions
         Path extensionsDir = getDataFolder().toPath().resolve("extensions");
@@ -492,7 +491,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
         ModuleLifecycle moduleLifecycle = new ModuleLifecycleAdapter(managerFacade, logger);
 
         // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, debugEndpoint, extensionManager, managerFacade, moduleLifecycle, inworldHandler, syncBus, logger);
+        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, debugEndpoint, extensionManager, managerFacade, moduleLifecycle, inworldListener, syncBus, logger);
     }
 
     private boolean hasPermission(Actor actor, String permission) {

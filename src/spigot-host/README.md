@@ -51,7 +51,7 @@
 | `manager-spi` | Compile | Module manager SPI |
 | `manager-core` | Compile | Package installer & local database |
 | `manager-apt` | Compile | Repository manager & dependency resolver |
-| `inworld` | Compile | In-world integration |
+| `inworld` | Compile | Neutral in-world domain; `SpigotInWorldListener` owns Bukkit events |
 | `extension-api` | Compile | Extension system |
 | `tester` | Compile | Neutral runtime test package; `SpigotTestProbe` binds it to the live host |
 | `transport` | Compile | Transport layer |
