@@ -1,717 +1,182 @@
 package me.majhrs16.suite.fabrichost;
 
-import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.channel.Channel;
-import me.majhrs16.suite.api.message.Direction;
-import me.majhrs16.suite.api.message.Language;
-import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.api.spi.SyncListener;
-import me.majhrs16.suite.api.spi.SyncSink;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.config.HostPaths;
-import me.majhrs16.suite.host.config.MessagesConfig;
-import me.majhrs16.suite.host.config.YamlUserLanguageStore;
-import me.majhrs16.suite.api.iflow.PermissionChecker;
-import me.majhrs16.suite.fabrichost.logic.ChannelSelector;
-import me.majhrs16.suite.fabrichost.logic.EventRules;
-import me.majhrs16.suite.fabrichost.logic.LangSetting;
-import me.majhrs16.suite.fabrichost.validator.FabricConfigValidator;
-import me.majhrs16.suite.messages.MessagesCatalog;
-import me.majhrs16.suite.extension.ExtensionManager;
-import me.majhrs16.suite.fabrichost.FabricInWorldHandler;
-import me.majhrs16.suite.inworld.InWorldHandler;
-import me.majhrs16.suite.messages.MessagesCatalog;
-import me.majhrs16.suite.observability.Observability;
-import me.majhrs16.suite.syncbus.DefaultSyncBus;
-import me.majhrs16.suite.synccommon.SyncConfigPaths;
-import me.majhrs16.suite.api.spi.SyncBus;
-import me.majhrs16.suite.synctelegram.TelegramConfig;
-import me.majhrs16.suite.synctelegram.TelegramSink;
-import me.majhrs16.suite.syncwebsocket.WebSocketSyncConfig;
-import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
-import me.majhrs16.suite.syncsocket.SocketConfig;
-import me.majhrs16.suite.syncsocket.TcpSink;
-import me.majhrs16.suite.syncsocket.UdpSink;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.entity.damage.DamageSource;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.inworld.InWorldService;
+import me.majhrs16.suite.api.render.ChatDelivery;
+import me.majhrs16.suite.api.runtime.PlatformPorts;
+import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.MessageRenderer;
+import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.runtime.SuiteRuntime;
+import me.majhrs16.suite.runtime.YamlUserLanguageStore;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.arguments.BoolArgumentType;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.command.ServerCommandSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Predicate;
-import java.util.Set;
-import java.util.HashSet;
-
 /**
- * How the vanilla chat event is claimed/suppressed.
- */
-enum ClaimMode {
-    /** Cancel the event entirely (vanilla chat suppressed). */
-    CANCEL_EVENT,
-    /** Clear recipients list (vanilla chat sent to nobody). */
-    CLEAR_RECIPIENTS,
-    /** Don't suppress vanilla (both suite and vanilla chat appear). */
-    NONE
-}
-
-/**
- * Composition root of the TextFormatter Suite on Fabric: bootstraps
- * {@link SuiteHost} + {@link MessageDispatcher} from the suite file layout
- * and routes events through the modern engine instead of the legacy core.
+ * Thin Fabric bootstrap of the suite runtime.
  *
- * <p>Threading: chat events fire on the server thread; translation,
- * routing and rendering run on that thread and delivery uses
- * {@link FabricAudiences} directly.</p>
- *
- * <p>Non-chat events (join/quit/death) are dispatched when a channel with
- * the conventional name exists in the registry ({@code join}, {@code quit},
- * {@code death}): presence IS configuration.</p>
- *
- * <p>Per-user language persists in {@code storage.yml} via
- * {@link YamlUserLanguageStore}; {@code /suite lang} manages it. The value
- * {@code off} maps to {@link Language#AUTO}, which disables translation for
- * that user both as sender and as receiver.</p>
- *
- * <p>Debug logging: launch with {@code -Dtextformattersuite.debug=true}
- * (JVM property, not hot-reloadable).</p>
+ * <p>Creates the platform ports, registers the adapter-owned services and
+ * starts {@link SuiteRuntime}. Feature wiring and event capture live in
+ * packages ({@code sync-fabric} owns the latter), not here.</p>
  */
 public final class TextFormatterSuiteMod implements ModInitializer {
 
-    /**
-     * Immutable wiring snapshot; swapped atomically on reload.
-     */
-    private static final class Runtime implements AutoCloseable {
-        final SuiteHost host;
-        final MessageDispatcher dispatcher;
-        final FabricActorDirectory directory;
-        final UserLanguageStore languages;
-        final DiscordBridge bridge;
-        final WebSocketSyncSink wsSink;
-        final Observability observability;
-        final me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint;
-        final ExtensionManager extensionManager;
-        final FabricInWorldHandler inworldHandler;
-        final SyncBus syncBus;
-        final PluginLogger logger;
-        final ExecutorService eventExecutor;
-
-        Runtime(SuiteHost host, MessageDispatcher dispatcher,
-                FabricActorDirectory directory, UserLanguageStore languages,
-                DiscordBridge bridge, WebSocketSyncSink wsSink,
-                Observability observability,
-                me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint,
-                ExtensionManager extensionManager,
-                FabricInWorldHandler inworldHandler,
-                SyncBus syncBus,
-                PluginLogger logger) {
-            this.host = host;
-            this.dispatcher = dispatcher;
-            this.directory = directory;
-            this.languages = languages;
-            this.bridge = bridge;
-            this.wsSink = wsSink;
-            this.observability = observability;
-            this.debugEndpoint = debugEndpoint;
-            this.extensionManager = extensionManager;
-            this.inworldHandler = inworldHandler;
-            this.syncBus = syncBus;
-            this.logger = logger;
-            this.eventExecutor = new ThreadPoolExecutor(
-                2, 8, 60L, TimeUnit.SECONDS,
-                new java.util.concurrent.LinkedBlockingQueue<>(1000),
-                r -> {
-                    Thread t = new Thread(r, "fabric-event-worker");
-                    t.setDaemon(true);
-                    return t;
-                },
-                new ThreadPoolExecutor.CallerRunsPolicy()
-            );
-        }
-
-        @Override
-        public void close() {
-            if (syncBus != null) {
-                try {
-                    syncBus.close();
-                } catch (Exception e) {
-                    logger.warn("Error closing SyncBus: " + e.getMessage());
-                }
-            }
-            if (wsSink != null) {
-                try {
-                    wsSink.stop();
-                } catch (Exception e) {
-                    logger.warn("Error closing WebSocket sink: " + e.getMessage());
-                }
-            }
-            if (observability != null) {
-                try {
-                    observability.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping Observability: " + e.getMessage());
-                }
-            }
-            if (debugEndpoint != null) {
-                try {
-                    debugEndpoint.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping DebugEndpoint: " + e.getMessage());
-                }
-            }
-            if (extensionManager != null) {
-                try {
-                    extensionManager.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping ExtensionManager: " + e.getMessage());
-                }
-            }
-            if (inworldHandler != null) {
-                try {
-                    inworldHandler.unregister();
-                    logger.debug("InWorldHandler unregistered");
-                } catch (Exception e) {
-                    logger.warn("Error cleaning InWorldHandler: " + e.getMessage());
-                }
-            }
-            if (dispatcher != null) {
-                try {
-                    dispatcher.close();
-                } catch (Exception e) {
-                    logger.warn("Error closing MessageDispatcher: " + e.getMessage());
-                }
-            }
-            // Close the router (which closes the RateLimiter)
-            if (host != null && host.router() != null && host.router() instanceof AutoCloseable) {
-                try {
-                    ((AutoCloseable) host.router()).close();
-                    logger.debug("Router (RateLimiter) closed");
-                } catch (Exception e) {
-                    logger.warn("Error closing Router: " + e.getMessage());
-                }
-            }
-            if (host != null && host.translation() != null) {
-                try {
-                    host.translation().close();
-                    logger.debug("TranslationService closed");
-                } catch (Exception e) {
-                    logger.warn("Error closing TranslationService: " + e.getMessage());
-                }
-            }
-            if (bridge != null) {
-                try {
-                    bridge.stop();
-                } catch (Exception e) {
-                    logger.warn("Error stopping DiscordBridge: " + e.getMessage());
-                }
-            }
-            if (eventExecutor != null) {
-                try {
-                    eventExecutor.shutdown();
-                    if (!eventExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
-                        eventExecutor.shutdownNow();
-                    }
-                    logger.debug("Event executor shut down");
-                } catch (Exception e) {
-                    logger.warn("Error shutting down event executor: " + e.getMessage());
-                }
-            }
-        }
-    }
-
-    private static MinecraftServer SERVER;
-    private static volatile UserLanguageStore LANGUAGE_STORE;
-    private static volatile Runtime RUNTIME;
-    private static volatile MessagesConfig MESSAGES;
-    private static final Set<UUID> recentlyDead = ConcurrentHashMap.newKeySet();
     private static final Logger LOGGER = LoggerFactory.getLogger("TextFormatterSuite");
+    private static final AtomicReference<CommandDispatcher<ServerCommandSource>> PENDING_DISPATCHER =
+            new AtomicReference<>();
 
-    /** Fallback messages if missing from messages.yml. */
-    private static final Map<String, String> BUILT_IN_MESSAGES = Map.ofEntries(
-        Map.entry("prefix", "[suite] "),
-        Map.entry("not-initialized", "[suite] no inicializado"),
-        Map.entry("usage", "[suite] uso: /suite <lang|reload|status|toggle|reset>"),
-        Map.entry("enabled", "[suite] activo: {} canales, traductor '{}'"),
-        Map.entry("reload-ok", "[suite] recargado: {} canales, traductor '{}'"),
-        Map.entry("reload-error", "[suite] error al recargar: {}"),
-        Map.entry("status.channels", "[suite] canales: {}"),
-        Map.entry("status.translator", "[suite] traductor activo: {}"),
-        Map.entry("status.knobs", "[suite] engine.parallel: {} · sonido: {} · claim: {}"),
-        Map.entry("lang.current", "[suite] tu idioma: {}"),
-        Map.entry("lang.updated", "[suite] idioma actualizado: {}"),
-        Map.entry("lang.invalid", "[suite] valor inválido: usa auto | off | <código> (ej. es, en, zh-CN)"),
-        Map.entry("lang.other-admin", "[suite] setear el idioma de otro requiere admin"),
-        Map.entry("lang.player-offline", "[suite] jugador no conectado: {}"),
-        Map.entry("lang.console", "[suite] consola no tiene idioma; usa /suite lang <jugador> <valor>"),
-        Map.entry("toggle.current", "[suite] traducción: {}"),
-        Map.entry("reset.ok", "[suite] configs restauradas (respaldo en backup/); storage.yml intacto"),
-        Map.entry("reset.error", "[suite] error al recargar: {}"),
-        Map.entry("test.service-unavailable", "[suite] servicio de tests no disponible"),
-        Map.entry("test.starting", "[suite] iniciando test: {}"),
-        Map.entry("test.unknown", "[suite] test desconocido: {}"),
-        Map.entry("test.error", "[suite] error en test: {}"),
-        Map.entry("module.list.empty", "[suite] no hay módulos instalados"),
-        Map.entry("module.install.started", "[suite] instalando módulo {} v{}"),
-        Map.entry("module.update.started", "[suite] actualizando módulo {} v{}"),
-        Map.entry("module.remove.started", "[suite] removiendo módulo {}"),
-        Map.entry("module.info", "[suite] info módulo: {}"),
-        Map.entry("suite.update.started", "[suite] actualizando suite ({})"),
-        Map.entry("file.default-created", "[suite] creado default: {}"),
-        Map.entry("file.create-failed", "[suite] error creando {}: {}"),
-        Map.entry("file.reset-failed", "[suite] error restaurando configs: {}")
-    );
+    private static MinecraftServer server;
+    private static SuiteRuntime runtime;
+    private static FabricPlatformPorts ports;
+    private static FabricInWorldHandler inworldHandler;
+    private static PlatformPorts.Registration commandRegistration;
 
     @Override
     public void onInitialize() {
-        ServerLifecycleEvents.SERVER_STARTED.register(this::onServerStarted);
+        ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPING.register(this::onServerStopping);
-
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            Runtime current = RUNTIME;
-            if (current == null) return;
-            current.eventExecutor.submit(() -> {
-                Runtime rt = RUNTIME;
-                if (rt != null) {
-                    dispatchTyped(rt, MessageType.JOIN, EventRules.CHANNEL_JOIN,
-                        rt.directory.actorOf(handler.player), handler.player.getName().getString());
-                }
-            });
-        });
-
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            Runtime current = RUNTIME;
-            if (current == null) return;
-            current.eventExecutor.submit(() -> {
-                Runtime rt = RUNTIME;
-                if (rt != null) {
-                    dispatchTyped(rt, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
-                        rt.directory.actorOf(handler.player), handler.player.getName().getString());
-                }
-            });
-        });
-
-        // Death event - using mixin or alternative approach for Fabric 1.21
-        // PlayerDeathEvents.AFTER_DEATH.register((damageSource, player) -> {
-        //     Runtime current = RUNTIME;
-        //     if (current == null) return;
-        //     String vanilla = damageSource.getDeathMessage() != null
-        //         ? damageSource.getDeathMessage().getString()
-        //         : player.getName().getString();
-        //     dispatchTyped(current, MessageType.DEATH, EventRules.CHANNEL_DEATH,
-        //         current.directory.actorOf(player), vanilla);
-        // });
-
-        // Chat message event
-        ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
-            Runtime current = RUNTIME;
-            if (current == null || current.dispatcher == null) {
-                return;
-            }
-
-            // Capture all data needed for async processing
-            // Offload to eventExecutor to avoid blocking main thread on HTTP translations
-            final var snapshot = current;
-            final var senderActor = snapshot.directory.actorOf(sender);
-            final var channels = List.copyOf(snapshot.host.channels().all());
-            final var text = message.getContent().getString();
-            final var claimMode = snapshot.host.config().claimMode();
-
-            snapshot.eventExecutor.submit(() -> {
-                Runtime rt = RUNTIME;
-                if (rt == null || rt.dispatcher == null) {
-                    return;
-                }
-                // Re-validate runtime hasn't changed during async execution
-                if (rt != snapshot) {
-                    // Runtime was reloaded, use fresh snapshot
-                    return;
-                }
-
-                // Apply claim mode to suppress vanilla chat
-                // CANCEL_EVENT: Try to cancel the event using Fabric API
-                // Note: Fabric API doesn't expose a cancel() method on ServerMessageEvents.Parameters
-                // The best we can do is document this limitation
-                if (claimMode == me.majhrs16.suite.host.config.HostConfig.ClaimMode.CANCEL_EVENT) {
-                    // Fabric API doesn't expose a cancel() method on ServerMessageEvents.Parameters
-                    // This is a known limitation - vanilla chat will appear alongside suite chat
-                }
-                // CLEAR_RECIPIENTS not directly supported in Fabric API
-                // NONE: do nothing, both vanilla and suite chat appear
-
-                Channel channel = rt.host.channels().resolve(
-                    ChannelSelector.select(channels,
-                        permission -> hasPermission(senderActor, permission)));
-                String channelPath = channel.name();
-                boolean senderOff = isOff(rt, senderActor);
-
-                if (channel.showSender()) {
-                    dispatch(rt, MessageType.CHAT, senderActor, Direction.initiator(),
-                        channelPath, text, !senderOff);
-                }
-                Message broadcast = buildBroadcast(rt, MessageType.CHAT, senderActor,
-                    channelPath, text, !senderOff);
-                rt.dispatcher.dispatch(broadcast);
-                mirror(rt, broadcast);
-            });
-        });
-
-        // Death event - tick-based detection for Fabric 1.21
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
-            Runtime current = RUNTIME;
-            if (current == null) return;
-            
-for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-                    if (!player.isAlive() && !recentlyDead.contains(player.getUuid())) {
-                        // Player just died
-                        recentlyDead.add(player.getUuid());
-                        String vanilla = player.getDamageTracker().getDeathMessage() != null
-                            ? player.getDamageTracker().getDeathMessage().getString()
-                            : player.getName().getString();
-                        current.eventExecutor.submit(() -> {
-                            Runtime rt = RUNTIME;
-                            if (rt != null) {
-                                dispatchTyped(rt, MessageType.DEATH, EventRules.CHANNEL_DEATH,
-                                    rt.directory.actorOf(player), vanilla);
-                            }
-                        });
-                    } else if (player.isAlive() && recentlyDead.contains(player.getUuid())) {
-                    // Player respawned
-                    recentlyDead.remove(player.getUuid());
-                }
-            }
-        });
-
-// Register /suite command using Brigadier - simplified for compilation
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            LiteralArgumentBuilder<ServerCommandSource> suiteCmd = LiteralArgumentBuilder.<ServerCommandSource>literal("suite")
-                .requires(source -> source.hasPermissionLevel(2))
-                .executes(ctx -> {
-                    ctx.getSource().sendFeedback(() -> Text.literal("TextFormatter Suite loaded"), false);
-                    return 1;
-                });
-            dispatcher.register(suiteCmd);
+            FabricPlatformPorts current = ports;
+            if (current == null) {
+                PENDING_DISPATCHER.set(dispatcher);
+            } else {
+                current.bindDispatcher(dispatcher);
+            }
         });
     }
 
-    private void onServerStarted(MinecraftServer server) {
-        SERVER = server;
-        reloadSuite();
-        LOGGER.info(MESSAGES.format("enabled",
-            RUNTIME.host.channels().paths().size(),
-            RUNTIME.host.translation().activeName()));
-    }
-
-    private void onServerStopping(MinecraftServer server) {
-        Runtime current = RUNTIME;
-        if (current != null) {
-            try {
-                current.close();
-            } catch (Exception e) {
-                LOGGER.warn("Error during shutdown: " + e.getMessage());
-            }
-        }
-        recentlyDead.clear();
-        RUNTIME = null;
-        SERVER = null;
-    }
-
-    /** Re-reads the whole file layout from disk (save → apply). */
-    public static void reloadSuite() {
-        if (SERVER == null) return;
-        
-        // Close old runtime first
-        Runtime oldRuntime = RUNTIME;
-        if (oldRuntime != null) {
-            try {
-                oldRuntime.close();
-            } catch (Exception e) {
-                LOGGER.warn("Error closing old runtime: " + e.getMessage());
-            }
-        }
-        
-        Path folder = SERVER.getRunDirectory().resolve("textformatter-suite");
+    private void onServerStarting(MinecraftServer startedServer) {
+        server = startedServer;
+        Path folder = startedServer.getRunDirectory().resolve("textformatter-suite");
         copyDefaultsIfMissing(folder);
         PluginLogger logger = logger();
-        PermissionChecker permissions = TextFormatterSuiteMod::hasPermission;
-        MESSAGES = MessagesConfig.load(folder, "/defaults/messages.yml");
-        SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions,
-            new FabricPlaceholderResolver(), logger);
 
-        // Validate configuration structure
-        FabricConfigValidator.validate(reloaded.config(), logger, folder);
+        UserLanguageStore languages = new YamlUserLanguageStore(folder);
+        FabricActorDirectory directory = new FabricActorDirectory(startedServer, languages);
+        AtomicReference<SuiteRuntime> runtimeRef = new AtomicReference<>();
+        FabricPlatformPorts createdPorts = new FabricPlatformPorts(
+                startedServer,
+                directory,
+                message -> {
+                    SuiteRuntime current = runtimeRef.get();
+                    if (current == null) {
+                        throw new IllegalStateException("SuiteRuntime is not available yet");
+                    }
+                    current.messageDispatch().dispatch(message);
+                },
+                startedServer.getVersion());
 
-        UserLanguageStore languages = LANGUAGE_STORE;
-        if (languages == null) {
-            languages = new YamlUserLanguageStore(folder);
-            LANGUAGE_STORE = languages;
-        }
-        final UserLanguageStore finalLanguages = languages;
-        FabricActorDirectory dirs = new FabricActorDirectory(SERVER, languages);
-        FabricChatDelivery delivery = new FabricChatDelivery(SERVER);
-        MessageDispatcher dispatcher =
-            new MessageDispatcher(reloaded, dirs, delivery, permissions, logger);
-        // Initialize SyncBus first
-        SyncBus syncBus = new DefaultSyncBus(logger);
-
-        WebSocketSyncSink wsSink = null;
-        try {
-            WebSocketSyncConfig wsConfig = WebSocketSyncConfig.load(folder);
-            if (wsConfig.usable()) {
-                String bindAddress = System.getProperty("textformattersuite.ws.bind", wsConfig.bind());
-                wsSink = new WebSocketSyncSink(wsConfig.port(), wsConfig.token(), logger, bindAddress);
-                logger.info("WebSocket sync sink created on " + bindAddress + ":" + wsConfig.port());
-            } else if (wsConfig.enabled()) {
-                logger.warn("WebSocket sync is enabled but no auth token configured! Refusing to start without token.");
-            } else {
-                logger.info("WebSocket sync sink is disabled (enabled: false in config)");
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create WebSocket sync sink: " + e.getMessage());
-        }
-
-        // Register WebSocket sink if available
-        if (wsSink != null) {
-            syncBus.register(wsSink);
-            logger.debug("SyncBus: registered WebSocket sink");
-        }
-
-        // Create DiscordBridge with SyncBus for outbound mirroring
-        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger, syncBus);
-        if (bridge != null) {
-            // Register Discord sink with SyncBus
-            if (bridge.getSink() != null) {
-                syncBus.register(bridge.getSink());
-                logger.debug("SyncBus: registered Discord sink");
-            }
-            bridge.start();
-        }
-
-        syncBus.setInboundListener(new me.majhrs16.suite.api.spi.SyncListener() {
-            @Override
-            public void onMessage(me.majhrs16.suite.api.spi.SyncSink sink, Message message) {
-                dispatcher.dispatch(message);
-            }
-
-            @Override
-            public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink sink, String reason) {
-                logger.warn("SyncBus: sink '" + sink.name() + "' disconnected: " + reason);
-            }
-        });
-
-        // Initialize TCP Sync Sink
-        TcpSink tcpSink = null;
-        try {
-            SocketConfig tcpConfig = SocketConfig.loadTcp(folder);
-            if (tcpConfig.usable()) {
-                tcpSink = new TcpSink(tcpConfig.remoteHost(), tcpConfig.remotePort(), tcpConfig.localPort());
-                logger.info("TCP sync sink created: " + tcpConfig.remoteHost() + ":" + tcpConfig.remotePort());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create TCP sync sink: " + e.getMessage());
-        }
-
-        // Initialize UDP Sync Sink
-        UdpSink udpSink = null;
-        try {
-            SocketConfig udpConfig = SocketConfig.loadUdp(folder);
-            if (udpConfig.usable()) {
-                udpSink = new UdpSink(udpConfig.remoteHost(), udpConfig.remotePort(), udpConfig.localPort());
-                logger.info("UDP sync sink created: " + udpConfig.remoteHost() + ":" + udpConfig.remotePort());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create UDP sync sink: " + e.getMessage());
-        }
-
-        // Initialize Telegram Sync Sink
-        TelegramSink telegramSink = null;
-        try {
-            TelegramConfig telegramConfig = TelegramConfig.load(folder);
-            if (telegramConfig.usable()) {
-                telegramSink = new TelegramSink(telegramConfig.token(), telegramConfig.chatId(),
-                    new me.majhrs16.suite.transport.HttpTransport());
-                logger.info("Telegram sync sink created for chat " + telegramConfig.chatId());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create Telegram sync sink: " + e.getMessage());
-        }
-
-        // Register all sinks with SyncBus
-        if (wsSink != null) {
-            syncBus.register(wsSink);
-            logger.debug("SyncBus: registered WebSocket sink");
-        }
-        if (tcpSink != null) {
-            syncBus.register(tcpSink);
-            logger.debug("SyncBus: registered TCP sink");
-        }
-        if (udpSink != null) {
-            syncBus.register(udpSink);
-            logger.debug("SyncBus: registered UDP sink");
-        }
-        if (telegramSink != null) {
-            syncBus.register(telegramSink);
-            logger.debug("SyncBus: registered Telegram sink");
-        }
+        SuiteRuntime created = new SuiteRuntime(folder, createdPorts, logger);
+        runtimeRef.set(created);
+        created.registerPlatformService(ChatDelivery.class, new FabricChatDelivery(startedServer));
+        created.registerPlatformService(ActorDirectory.class, directory);
+        created.registerPlatformService(PermissionChecker.class, createdPorts::hasPermission);
+        created.registerPlatformService(UserLanguageStore.class, languages);
+        created.registerPlatformService(PlaceholderResolver.class, new FabricPlaceholderResolver());
+        created.registerPlatformService(PluginLogger.class, logger);
 
         try {
-            syncBus.start();
-            logger.info("SyncBus started with " + syncBus.sinkNames().size() + " sink(s): " + syncBus.sinkNames());
-        } catch (Exception e) {
-            logger.error("Failed to start SyncBus: " + e.getMessage(), e);
+            created.start();
+        } catch (IOException failure) {
+            LOGGER.error("Cannot start the suite runtime", failure);
+            return;
         }
 
-        // Initialize Observability module
-        Observability observability = null;
-        me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint = null;
-        try {
-            observability = Observability.createDefault(logger);
-            observability.start();
-            logger.info("Observability metrics started (metrics:" + observability.getMetricsEndpoint().getPort() + ")");
-        } catch (Exception e) {
-            logger.warn("Failed to start Observability module: " + e.getMessage());
+        ports = createdPorts;
+        runtime = created;
+        CommandDispatcher<ServerCommandSource> pending = PENDING_DISPATCHER.getAndSet(null);
+        if (pending != null) {
+            createdPorts.bindDispatcher(pending);
         }
-        try {
-            debugEndpoint = new me.majhrs16.suite.host.debug.DebugEndpoint(
-                reloaded, dispatcher, reloaded.channels(), logger, null, 9091);
-            debugEndpoint.start();
-        } catch (Exception e) {
-            logger.warn("Failed to start DebugEndpoint: " + e.getMessage());
-        }
+        commandRegistration = created.registerCommands();
+        registerInWorld(created, logger, languages);
+        LOGGER.info("TextFormatter Suite runtime started");
+    }
 
-        // Initialize the neutral in-world domain and its Fabric adapter.
-        FabricInWorldHandler inworldHandler = new FabricInWorldHandler(
-            new InWorldHandler(reloaded.channels(), logger),
-            reloaded.renderer(),
-            dispatcher::dispatch,
-            SERVER,
-            logger,
-            finalLanguages,
-            reloaded.config().defaultLanguage());
+    private void onServerStopping(MinecraftServer stoppingServer) {
+        if (commandRegistration != null) {
+            commandRegistration.close();
+            commandRegistration = null;
+        }
+        if (inworldHandler != null) {
+            inworldHandler.unregister();
+            inworldHandler = null;
+        }
+        if (runtime != null) {
+            runtime.close();
+            runtime = null;
+        }
+        ports = null;
+        server = null;
+        PENDING_DISPATCHER.set(null);
+    }
+
+    /** @return the neutral runtime, or {@code null} while the server is off. */
+    public static SuiteRuntime runtime() {
+        return runtime;
+    }
+
+    private static void registerInWorld(SuiteRuntime created, PluginLogger logger,
+                                        UserLanguageStore languages) {
+        InWorldService handler = created.services().find(InWorldService.class).orElse(null);
+        MessageRenderer renderer = created.services().find(MessageRenderer.class).orElse(null);
+        if (handler == null || renderer == null || server == null) {
+            logger.debug("In-world package is not active; callbacks not registered");
+            return;
+        }
+        inworldHandler = new FabricInWorldHandler(
+                handler, renderer, created.messageDispatch(), server, logger,
+                languages, created.defaultLanguage());
         inworldHandler.registerListeners();
-
-        // Reload extensions
-        Path extensionsDir = folder.resolve("extensions");
-        ExtensionManager extensionManager = new ExtensionManager(
-            logger, 
-            extId -> {
-                return new me.majhrs16.suite.extension.ExtensionContext(
-                    message -> dispatcher.dispatch(message),
-                    reloaded::hasPermission,
-                    dispatcher.getActors(),
-                    logger,
-                    reloaded.translation(),
-                    finalLanguages,
-                    reloaded.channels(),
-                    folder,
-                    extId
-                );
-            }, 
-            folder.resolve("extensions"),
-            me.majhrs16.suite.api.SemVer.parse("2.1.0")
-        );
-        extensionManager.start();
-
-        RUNTIME = new Runtime(reloaded, dispatcher, dirs, finalLanguages, bridge, wsSink, observability, debugEndpoint, extensionManager, inworldHandler, syncBus, logger);
-        
-        if (bridge != null) {
-            bridge.start();
-        }
-        if (wsSink != null) {
-            wsSink.setListener(new SyncListener() {
-                @Override
-                public void onMessage(SyncSink sink, Message message) {
-                    dispatcher.dispatch(message);
-                }
-
-                @Override
-                public void onDisconnect(SyncSink sink, String reason) {
-                    logger.warn("WebSocket sink '" + sink.name() + "' disconnected: " + reason);
-                }
-            });
-            try {
-                wsSink.start();
-            } catch (IOException e) {
-                logger.warn("Failed to start WebSocket sink: " + e.getMessage());
-            }
-        }
     }
 
-    private static boolean hasPermission(Actor actor, String permission) {
-        if (permission == null) return true;
-        ServerPlayerEntity player = actor == null ? null : actor.handle();
-        return player != null && player.hasPermissionLevel(2);
-    }
-
-    /**
-     * First-boot experience: copies the bundled {@code defaults/} tree
-     * (config.yml, channels/, translators/) into the data folder. Existing
-     * user files are never overwritten.
-     */
     private static void copyDefaultsIfMissing(Path folder) {
         try (var stream = TextFormatterSuiteMod.class.getResourceAsStream("/defaults/config.yml")) {
-            if (stream == null) return;
-        } catch (IOException ignored) { return; }
-        // storage.md: cada módulo escribe en config/<modulo>/. Si ya existe la
-        // ruta heredada no se duplica el archivo (evita configs divergentes).
+            if (stream == null) {
+                return;
+            }
+        } catch (IOException ignored) {
+            return;
+        }
         copyResourceIfMissing(folder, "defaults/config.yml",
-            HostPaths.canonicalSuiteConfig(folder), folder.resolve("config.yml"));
+                folder.resolve("config/suite/config.yml"), folder.resolve("config.yml"));
         for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
             copyResourceIfMissing(folder, "defaults/channels/" + name + ".yml",
-                folder.resolve("config/textformatter/channels/" + name + ".yml"),
-                folder.resolve("channels/" + name + ".yml"));
+                    folder.resolve("config/textformatter/channels/" + name + ".yml"),
+                    folder.resolve("channels/" + name + ".yml"));
         }
         copyResourceIfMissing(folder, "defaults/translators/google.yml",
-            folder.resolve("config/chattranslator/translators/google.yml"),
-            folder.resolve("translators/google.yml"));
+                folder.resolve("config/chattranslator/translators/google.yml"),
+                folder.resolve("translators/google.yml"));
         copyResourceIfMissing(folder, "defaults/messages.yml",
-            HostPaths.canonicalSuiteMessages(folder), folder.resolve("messages.yml"));
+                folder.resolve("config/suite/messages.yml"), folder.resolve("messages.yml"));
         copyResourceIfMissing(folder, "defaults/sync/discord.yml",
-            SyncConfigPaths.canonicalDiscord(folder), folder.resolve("sync/discord.yml"));
+                folder.resolve("config/sync-discord/config.yml"), folder.resolve("sync/discord.yml"));
         copyResourceIfMissing(folder, "defaults/sync/websocket.yml",
-            SyncConfigPaths.canonicalWebSocket(folder), folder.resolve("sync/websocket.yml"));
+                folder.resolve("config/sync-websocket/config.yml"), folder.resolve("sync/websocket.yml"));
         copyResourceIfMissing(folder, "defaults/inworld.yml",
-            folder.resolve("config/inworld/config.yml"), folder.resolve("inworld.yml"));
+                folder.resolve("config/inworld/config.yml"), folder.resolve("inworld.yml"));
         copyResourceIfMissing(folder, "defaults/rules.yml",
-            folder.resolve("config/iflow-firewall/rules.yml"), folder.resolve("rules.yml"));
+                folder.resolve("config/iflow-firewall/rules.yml"), folder.resolve("rules.yml"));
     }
 
-    /** Copia el default solo si no existe ya ni la ruta canónica ni la heredada. */
     private static void copyResourceIfMissing(Path folder, String resourcePath, Path canonical, Path legacy) {
         if (Files.exists(canonical) || (legacy != null && Files.exists(legacy))) {
             return;
@@ -719,160 +184,37 @@ for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
         copyResource(folder, resourcePath, canonical);
     }
 
-    /** /suite reset: mueve configs de usuario a backup/<ts>/ y regenera defaults. */
-    private static boolean resetConfigs(Path folder) {
-        try {
-            String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-            Path backupDir = folder.resolve("backup").resolve(stamp);
-            for (String name : List.of("config.yml", "messages.yml", "rules.yml", "inworld.yml")) {
-                Path p = folder.resolve(name);
-                if (Files.exists(p)) {
-                    Files.createDirectories(backupDir);
-                    Files.move(p, backupDir.resolve(name), StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            for (String sub : List.of("channels", "translators", "sync")) {
-                Path dirPath = folder.resolve(sub);
-                if (Files.isDirectory(dirPath)) {
-                    Path target = backupDir.resolve(sub);
-                    Files.createDirectories(target.getParent());
-                    Files.move(dirPath, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            // Directorios de config por módulo (storage.md)
-            for (String mod : List.of(
-                    "suite", "chattranslator", "sync-bus", "sync-discord", "sync-websocket",
-                    "sync-telegram", "sync-http", "sync-socket", "inworld", "observability",
-                    "iflow-firewall", "textformatter")) {
-                Path dirPath = folder.resolve("config").resolve(mod);
-                if (Files.isDirectory(dirPath)) {
-                    Path target = backupDir.resolve("config").resolve(mod);
-                    Files.createDirectories(target.getParent());
-                    Files.move(dirPath, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            copyDefaultsIfMissing(folder);
-            return true;
-        } catch (IOException exception) {
-            LOGGER.warn(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.reset-failed", exception.getMessage()));
-            return false;
-        }
-    }
-
     private static void copyResource(Path folder, String resourcePath, Path target) {
-        if (Files.exists(target)) return;
+        if (Files.exists(target)) {
+            return;
+        }
         try (var in = TextFormatterSuiteMod.class.getResourceAsStream("/" + resourcePath)) {
-            if (in == null) return;
+            if (in == null) {
+                return;
+            }
             Files.createDirectories(target.getParent());
             Files.copy(in, target);
-            if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.default-created", folder.relativize(target)));
+            LOGGER.info("Default file created: {}", folder.relativize(target));
         } catch (IOException exception) {
-            if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.create-failed", target, exception.getMessage()));
+            LOGGER.warn("Cannot create {}: {}", target, exception.getMessage());
         }
     }
 
     private static PluginLogger logger() {
         return new PluginLogger() {
-            @Override public void info(String m, Object... a) { if (SERVER != null) LOGGER.info(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-            @Override public void warn(String m, Object... a) { if (SERVER != null) LOGGER.warn(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-            @Override public void error(String m, Object... a) { if (SERVER != null) LOGGER.error(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-            @Override public void error(String m, Throwable t) { if (SERVER != null) LOGGER.error(MessagesCatalog.getInstance().format(Locale.ENGLISH, m) + " :: " + t); }
-            @Override public void debug(String m, Object... a) { if (isDebug() && SERVER != null) LOGGER.info("[debug] " + MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
+            @Override public void info(String m, Object... a) { LOGGER.info(format(m, a)); }
+            @Override public void warn(String m, Object... a) { LOGGER.warn(format(m, a)); }
+            @Override public void error(String m, Object... a) { LOGGER.error(format(m, a)); }
+            @Override public void error(String m, Throwable t) { LOGGER.error(format(m), t); }
+            @Override public void debug(String m, Object... a) {
+                if (Boolean.getBoolean("textformattersuite.debug")) {
+                    LOGGER.info("[debug] " + format(m, a));
+                }
+            }
         };
     }
 
-    private static boolean isDebug() {
-        return Boolean.getBoolean("textformattersuite.debug");
-    }
-
     private static String format(String message, Object... args) {
-        return MessagesCatalog.getInstance().format(Locale.ENGLISH, message, args);
-    }
-
-    // -- dispatch helpers ---------------------------------------------------
-
-    private static void dispatch(Runtime current, MessageType type, Actor sender,
-                                 Direction direction, String channelPath, String text) {
-        dispatch(current, type, sender, direction, channelPath, text, true);
-    }
-
-    private static void dispatch(Runtime current, MessageType type, Actor sender,
-                                 Direction direction, String channelPath, String text,
-                                 boolean translate) {
-        Message message = Message.builder()
-            .type(type)
-            .sender(sender)
-            .direction(direction)
-            .translate(translate)
-            .text(text)
-            .channel(channelPath)
-            .build();
-        current.dispatcher.dispatch(message);
-    }
-
-    private static Message buildBroadcast(Runtime current, MessageType type, Actor sender,
-                                         String channelPath, String text, boolean translate) {
-        return Message.builder()
-            .type(type)
-            .sender(sender)
-            .direction(Direction.others())
-            .translate(translate)
-            .text(text)
-            .channel(channelPath)
-            .build();
-    }
-
-    private static void mirror(Runtime current, Message sent) {
-        if (current.bridge != null) {
-            current.bridge.mirror(sent);
-        }
-    }
-
-    /**
-     * Eventos tipados (join/quit/death): solo se despachan si el canal
-     * convencional existe en el registro (presencia = configuración).
-     */
-    private static void dispatchTyped(Runtime current, MessageType type, String channelName,
-                                      Actor subject, String content) {
-        if (!EventRules.typedEventEnabled(current.host.channels(), channelName)) {
-            return;
-        }
-        boolean senderOff = isOff(current, subject);
-        Message message = Message.builder()
-            .type(type)
-            .sender(subject)
-            .direction(Direction.all())
-            .translate(!senderOff)
-            .text(content)
-            .channel(channelName)
-            .build();
-        current.dispatcher.dispatch(message);
-        mirror(current, message);
-    }
-
-    /** @return whether this user disabled translation ({@code /suite lang off}). */
-    private static boolean isOff(Runtime current, Actor actor) {
-        return !EventRules.shouldTranslate(current.languages,
-            actor == null ? null : actor.uuid());
-    }
-
-    private static int handleLang(CommandContext<ServerCommandSource> ctx, String value) {
-        Runtime r = RUNTIME;
-        if (r == null) {
-            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("not-initialized")), false);
-            return 0;
-        }
-        if (!(ctx.getSource().getEntity() instanceof ServerPlayerEntity player)) {
-            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.console")), false);
-            return 0;
-        }
-        String normalized = LangSetting.normalize(value);
-        if (!LangSetting.isValid(normalized)) {
-            ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.invalid")), false);
-            return 0;
-        }
-        r.languages.save(player.getUuid(), normalized);
-        ctx.getSource().sendFeedback(() -> Text.literal(MESSAGES.format("lang.updated", LangSetting.display(normalized))), false);
-        return 1;
+        return args == null || args.length == 0 ? message : String.format(message, args);
     }
 }

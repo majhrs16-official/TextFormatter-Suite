@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.inworld.InWorldService;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
 
@@ -42,6 +43,7 @@ public final class InWorldActivator implements ModuleActivator {
                 "inworld requires the channel-api capability"));
         handler = new InWorldHandler(channels, context.logger());
         context.services().register(InWorldHandler.class, handler);
+        context.services().register(InWorldService.class, handler);
         context.logger().info("In-world domain ready");
     }
 

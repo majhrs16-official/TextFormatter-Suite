@@ -3,7 +3,7 @@ package me.majhrs16.suite.host;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;

@@ -27,7 +27,7 @@ import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 
 import net.kyori.adventure.text.Component;
 

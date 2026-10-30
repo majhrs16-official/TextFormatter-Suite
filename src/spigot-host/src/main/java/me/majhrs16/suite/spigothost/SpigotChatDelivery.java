@@ -3,7 +3,7 @@ package me.majhrs16.suite.spigothost;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import net.kyori.adventure.text.Component;

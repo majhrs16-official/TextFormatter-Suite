@@ -1040,3 +1040,43 @@ conocer tipos del formateador.
 - `checkArchitecture` escanea `core-render` como módulo neutral.
 - La construcción real del pipeline desde `ServiceRegistry` y la retirada del
   bootstrap heredado son el siguiente paso de F4b.
+
+---
+
+## Decisión 2026-10-30 — adapters delgados sobre SuiteRuntime (ADR-025)
+
+**Estado:** Aceptada e implementada parcialmente (F4b). Los adapters Spigot y
+Fabric ya son bootstrap neutral; la retirada física del bootstrap heredado del
+módulo `host` queda como cierre de F4b.
+
+**Contexto.** Los adapters construían `SuiteHost`, `MessageDispatcher`, sinks,
+observability, in-world y extensiones directamente. Eso duplicaba el cableado,
+arrastraba features al classpath del host y hacía que instalar/descargar un
+paquete no fuera la única vía de composición.
+
+**Decisión.**
+
+1. `spigot-host` y `fabric-host` solo crean `PlatformPorts`, registran los
+   puertos propiedad del adapter y arrancan `SuiteRuntime`. El comando raíz se
+   registra con `runtime.registerCommands()`.
+2. Los adapters no importan `host`, `kernel`, `manager` ni paquetes de feature.
+   `checkArchitecture` lo verifica para los 32 módulos neutrales/adapter.
+3. `ChatDelivery` vive en `core-render` porque su contrato usa Adventure.
+   `InWorldPlatform` e `InWorldService` viven en `core-api`; el paquete
+   `inworld` implementa y publica el servicio, y el adapter solo ve el puerto.
+4. `YamlUserLanguageStore` vive en `suite-runtime`; `SuiteRuntime` expone
+   `defaultLanguage()` sin publicar `HostConfig` a los adapters.
+5. La captura de eventos de chat/join/quit/death no pertenece al host: se
+   implementará en `sync-bukkit`/`sync-fabric` (F4c).
+6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`
+   sigue existiendo solo para tests/loadtest y debe desaparecer antes de cerrar
+   F4b.
+
+**Consecuencias.**
+
+- Instalar o descargar un paquete es la única forma de cambiar features en
+  producción.
+- Los adapters pueden compilar contra `core-api`, `core-render`,
+  `suite-runtime` y el SDK de plataforma.
+- El módulo `host` conserva temporalmente dependencias de feature por el
+  bootstrap heredado; es deuda explícita de F4b/F8, no un camino de producción.

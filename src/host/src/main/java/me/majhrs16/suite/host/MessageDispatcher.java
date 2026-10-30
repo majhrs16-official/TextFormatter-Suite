@@ -6,7 +6,7 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.iflow.RouteDecision;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.PolicyTarget;

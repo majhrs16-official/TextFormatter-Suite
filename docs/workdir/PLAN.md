@@ -1383,6 +1383,24 @@ público de `SuiteHost` recibe `HostConfig`, `ChannelRegistry`,
 construir el pipeline desde `ServiceRegistry`. `SuiteHost.bootstrap(...)`
 permanece solo como camino de arranque heredado y se elimina al cerrar F4b.
 
+**Avance F4b (2026-10-30, adapters delgados):** `spigot-host` y `fabric-host`
+ya no construyen features ni importan `host`, `kernel`, `manager` o paquetes
+de feature. Su bootstrap crea `SpigotPlatformPorts`/`FabricPlatformPorts`,
+registra en `SuiteRuntime` los puertos del adapter (`ChatDelivery`,
+`ActorDirectory`, `PermissionChecker`, `UserLanguageStore`, `PlaceholderResolver`
+y `PluginLogger`) y delega el arranque, los paquetes y el comando raíz al
+runtime. `ChatDelivery` se movió a `core-render` y `InWorldPlatform`/
+`InWorldService` a `core-api`, de modo que los adapters de in-world tampoco
+importan el paquete `inworld`. `YamlUserLanguageStore` pasó a `suite-runtime`.
+`SuiteRuntime.defaultLanguage()` expone el idioma por defecto sin publicar
+`HostConfig`. `checkArchitecture` ahora escanea también `spigot-host` y
+`fabric-host` y falla si importan features, `host`, `kernel` o `manager`.
+Quedan para cerrar F4b: retirar `SuiteHost.bootstrap(...)`/`SuiteBootstrap`/
+`RouterFactory` del módulo `host` y mover sus tests/loadtest a un fixture
+neutral; hasta entonces `host` conserva dependencias de feature como camino
+heredado de tests. La captura de eventos de chat/join/quit/death se elimina de
+los hosts y se implementará en `sync-bukkit`/`sync-fabric` en F4c.
+
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
 **Decisión de arquitectura (2026-10-28):** cada módulo se estructura como un

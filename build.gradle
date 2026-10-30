@@ -98,6 +98,24 @@ tasks.register('checkArchitecture') {
         // The Velocity plugin may use Velocity, but never host internals.
         rules['sync-velocity'] = host
 
+        // F4b: the platform adapters only know core-api/core-render/suite-runtime.
+        // They must not import host internals, the kernel/manager, or any feature.
+        def adapterForbidden = [
+            'me.majhrs16.suite.host.', 'me.majhrs16.suite.kernel.',
+            'me.majhrs16.suite.manager.', 'me.majhrs16.suite.textformatter.',
+            'me.majhrs16.suite.tester.', 'me.majhrs16.suite.inworld.',
+            'me.majhrs16.suite.messages.', 'me.majhrs16.suite.iflow.',
+            'me.majhrs16.suite.chattranslator.', 'me.majhrs16.suite.gtranslate.',
+            'me.majhrs16.suite.ltranslate.', 'me.majhrs16.suite.syncbus.',
+            'me.majhrs16.suite.synccommon.', 'me.majhrs16.suite.syncdiscord.',
+            'me.majhrs16.suite.synchttp.', 'me.majhrs16.suite.syncsocket.',
+            'me.majhrs16.suite.synctelegram.', 'me.majhrs16.suite.syncwebsocket.',
+            'me.majhrs16.suite.syncvelocity.', 'me.majhrs16.suite.observability.',
+            'me.majhrs16.suite.presets.', 'me.majhrs16.suite.extension.'
+        ]
+        rules['spigot-host'] = adapterForbidden
+        rules['fabric-host'] = adapterForbidden
+
         def violations = []
         rules.each { module, prefixes ->
             def sourceDir = rootProject.file("src/${module}/src/main/java")

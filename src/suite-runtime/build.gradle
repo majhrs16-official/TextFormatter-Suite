@@ -41,6 +41,7 @@ dependencies {
     implementation project(':src:manager-spi')
     implementation project(':src:manager-core')
     implementation project(':src:manager-apt')
+    implementation 'org.yaml:snakeyaml:2.2'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'

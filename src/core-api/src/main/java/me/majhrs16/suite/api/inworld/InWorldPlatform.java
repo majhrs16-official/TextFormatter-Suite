@@ -1,4 +1,4 @@
-package me.majhrs16.suite.inworld;
+package me.majhrs16.suite.api.inworld;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
@@ -9,7 +9,7 @@ import java.util.List;
  * Platform side of the neutral in-world domain.
  *
  * <p>The host adapter supplies players, formatting and click actions. The
- * {@link InWorldHandler} owns channel resolution, message construction and
+ * {@code inworld} package owns channel resolution, message construction and
  * caches; this port keeps Bukkit/Paper/Fabric out of the package.</p>
  */
 public interface InWorldPlatform {

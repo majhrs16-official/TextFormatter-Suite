@@ -2,6 +2,7 @@ package me.majhrs16.suite.inworld;
 
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.inworld.InWorldPlatform;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;

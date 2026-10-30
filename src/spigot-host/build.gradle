@@ -29,44 +29,18 @@ configurations.all {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:kernel')
-    implementation project(':src:iflow-vm')
-    implementation project(':src:host')
-    implementation project(':src:sync-discord')
-    implementation project(':src:sync-discord-jda')
-    implementation project(':src:sync-http')
-    implementation project(':src:sync-socket')
-    implementation project(':src:sync-telegram')
-    implementation project(':src:sync-websocket')
-    implementation project(':src:sync-common')
-    implementation project(':src:sync-bus')
-    
-    implementation project(':src:gtranslate')
-    implementation project(':src:ltranslate')
-    implementation project(':src:messages')
-    implementation project(':src:textformatter')
-    implementation(project(':src:tester')) {
-        exclude group: 'org.spigotmc', module: 'spigot-api'
-    }
-    implementation project(':src:transport')
-    implementation project(':src:observability')
-    implementation project(':src:manager-spi')
-    implementation project(':src:manager-core')
-    implementation project(':src:manager-apt')
-    implementation project(':src:inworld')
-    implementation project(':src:extension-api')
-    
+    implementation project(':src:core-render')
+    implementation project(':src:suite-runtime')
+
     implementation 'net.kyori:adventure-platform-bukkit:4.3.2'
-    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-api:4.17.0'
-    implementation 'net.dv8tion:JDA:6.4.2'
-    implementation 'org.yaml:snakeyaml:2.2'
 
     compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
     compileOnly 'me.clip:placeholderapi:2.11.6'
 
     testImplementation 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
     testImplementation 'me.clip:placeholderapi:2.11.6'
+    testImplementation project(':src:inworld')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.24.2'

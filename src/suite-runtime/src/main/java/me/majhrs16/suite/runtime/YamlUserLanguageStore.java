@@ -1,4 +1,4 @@
-package me.majhrs16.suite.host.config;
+package me.majhrs16.suite.runtime;
 
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 

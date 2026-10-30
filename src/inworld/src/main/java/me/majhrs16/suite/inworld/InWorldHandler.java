@@ -2,6 +2,8 @@ package me.majhrs16.suite.inworld;
 
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.inworld.InWorldPlatform;
+import me.majhrs16.suite.api.inworld.InWorldService;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Message;
@@ -23,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * extracts events, supplies actors and formats the resulting {@link Message};
  * this class only decides what the suite should do.</p>
  */
-public final class InWorldHandler {
+public final class InWorldHandler implements InWorldService {
 
     private final ChannelRegistry channels;
     private final PluginLogger logger;
@@ -47,6 +49,7 @@ public final class InWorldHandler {
      *
      * @return the channel name, or empty when the position is not a suite sign
      */
+    @Override
     public Optional<String> signChannel(String world, int x, int y, int z) {
         for (String name : channels.paths()) {
             if (!name.startsWith("sign.")) continue;
@@ -84,6 +87,7 @@ public final class InWorldHandler {
     }
 
     /** Builds the message for one non-empty sign line. */
+    @Override
     public Optional<Message> signMessage(Actor actor, String channelName, String text) {
         if (channelName == null || channelName.isBlank()) return Optional.empty();
         if (text == null || text.isBlank()) return Optional.empty();
@@ -99,6 +103,7 @@ public final class InWorldHandler {
     }
 
     /** Stores the last rendered sign content for diagnostics and reuse. */
+    @Override
     public void cacheSign(String world, int x, int y, int z,
                           String channelName, String[] lines) {
         signCache.put(new LocationKey(world, x, y, z),
@@ -110,6 +115,7 @@ public final class InWorldHandler {
     // ============================================================
 
     /** Builds the message emitted when a player opens a container. */
+    @Override
     public Optional<Message> containerMessage(Actor actor, String channelName,
                                               String world, int x, int y, int z) {
         if (!hasChannel(channelName)) return Optional.empty();
@@ -127,6 +133,7 @@ public final class InWorldHandler {
     }
 
     /** Builds the message emitted when a player reads a written book. */
+    @Override
     public Optional<Message> bookMessage(Actor actor, String channelName,
                                          String title, List<String> pages) {
         if (!hasChannel(channelName)) return Optional.empty();
@@ -168,6 +175,7 @@ public final class InWorldHandler {
     // ============================================================
 
     /** Delegates a click action to the platform adapter. */
+    @Override
     public void handleClick(InWorldPlatform platform, Actor actor,
                             String action, String value) {
         Objects.requireNonNull(platform, "platform");
@@ -181,6 +189,7 @@ public final class InWorldHandler {
         }
     }
 
+    @Override
     public String getHoverText(Actor actor, String key) {
         return glossary.getOrDefault(key, "");
     }

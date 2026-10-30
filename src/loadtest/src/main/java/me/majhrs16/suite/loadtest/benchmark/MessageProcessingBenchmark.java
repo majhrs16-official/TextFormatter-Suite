@@ -18,7 +18,7 @@ import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.config.ConfigLoader;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.message.SoundSpec;
 import me.majhrs16.suite.textformatter.template.MiniEscape;
 import me.majhrs16.suite.api.spi.ActorDirectory;

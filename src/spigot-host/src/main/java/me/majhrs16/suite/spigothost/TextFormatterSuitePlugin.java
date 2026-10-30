@@ -1,592 +1,201 @@
 package me.majhrs16.suite.spigothost;
 
-import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Channel;
-import me.majhrs16.suite.api.message.Direction;
-import me.majhrs16.suite.api.message.Language;
-import me.majhrs16.suite.api.message.Message;
-import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.extension.ExtensionManager;
-import me.majhrs16.suite.host.DispatchReport;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.kernel.ModuleLoader;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.config.ConfigLoader;
-import me.majhrs16.suite.host.config.HostPaths;
-import me.majhrs16.suite.host.config.HostConfig;
-import me.majhrs16.suite.host.config.MessagesConfig;
-import me.majhrs16.suite.host.config.YamlUserLanguageStore;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
 import me.majhrs16.suite.api.iflow.PermissionChecker;
-import me.majhrs16.suite.inworld.InWorldHandler;
-import me.majhrs16.suite.manager.apt.ManagerFacade;
-import me.majhrs16.suite.manager.apt.ModuleLifecycleAdapter;
-import me.majhrs16.suite.manager.ModuleLifecycle;
-import me.majhrs16.suite.messages.MessagesCatalog;
-import me.majhrs16.suite.spigothost.command.DynamicCommandRegistrar;
-import me.majhrs16.suite.spigothost.logic.ChannelSelector;
-import me.majhrs16.suite.spigothost.logic.EventRules;
-import me.majhrs16.suite.spigothost.logic.LangSetting;
-import me.majhrs16.suite.syncbus.DefaultSyncBus;
-import me.majhrs16.suite.synccommon.SyncConfigPaths;
-import me.majhrs16.suite.api.spi.SyncBus;
-import me.majhrs16.suite.synchttp.HttpSink;
-import me.majhrs16.suite.synctelegram.TelegramConfig;
-import me.majhrs16.suite.synctelegram.TelegramSink;
-import me.majhrs16.suite.syncwebsocket.WebSocketSyncConfig;
-import me.majhrs16.suite.syncwebsocket.WebSocketSyncSink;
-import me.majhrs16.suite.syncsocket.SocketConfig;
-import me.majhrs16.suite.syncsocket.TcpSink;
-import me.majhrs16.suite.syncsocket.UdpSink;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
-
-
-import java.util.Arrays;
-import java.util.function.Consumer;
+import me.majhrs16.suite.api.inworld.InWorldService;
+import me.majhrs16.suite.api.render.ChatDelivery;
+import me.majhrs16.suite.api.runtime.PlatformPorts;
+import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.MessageRenderer;
+import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.runtime.SuiteRuntime;
+import me.majhrs16.suite.runtime.YamlUserLanguageStore;
 
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.Bukkit;
+import org.bukkit.command.CommandMap;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
-
 /**
- * Composition root of the TextFormatter Suite on Spigot: bootstraps
- * {@link SuiteHost} + {@link MessageDispatcher} from the suite file layout
- * and routes events through the modern engine instead of the legacy core.
+ * Thin Spigot bootstrap of the suite runtime.
  *
- * <p>Threading: {@link AsyncPlayerChatEvent} fires off-main; translation,
- * routing and rendering run on that async thread and delivery hops back to
- * main inside {@link SpigotChatDelivery}. How the vanilla event is claimed
- * is configurable ({@code chat.claim-mode}: {@code cancel-event} or
- * {@code clear-recipients}); the engine owns every copy either way
- * (echo + broadcast are independent messages, echo gated by the channel's
- * {@code show-sender}).</p>
+ * <p>This class only creates the platform ports, registers the adapter-owned
+ * services and starts {@link SuiteRuntime}. It contains no feature wiring:
+ * formatters, translators, routers, sinks and commands live in packages and
+ * are resolved by the runtime.</p>
  *
- * <p>Non-chat events (join/quit/death) are dispatched when a channel with
- * the conventional name exists in the registry ({@code join}, {@code quit},
- * {@code death}): presence IS configuration.</p>
- *
- * <p>Per-user language persists in {@code storage.yml} via
- * {@link YamlUserLanguageStore}; {@code /suite lang} manages it. The value
- * {@code off} maps to {@link Language#AUTO}, which disables translation for
- * that user both as sender and as receiver.</p>
- *
- * <p>Debug logging: launch with {@code -Dtextformattersuite.debug=true}
- * (JVM property, not hot-reloadable).</p>
+ * <p>Event capture (chat/join/quit/death) belongs to {@code sync-bukkit}; it is
+ * intentionally absent here.</p>
  */
-public final class TextFormatterSuitePlugin extends JavaPlugin implements Listener {
-
-/** Immutable wiring snapshot; swapped atomically on reload. */
-        public static final class Runtime implements AutoCloseable {
-            final SuiteHost host;
-            final MessageDispatcher dispatcher;
-            final SpigotActorDirectory directory;
-            final UserLanguageStore languages;
-            final DiscordBridge bridge;
-            final WebSocketSyncSink wsSink;
-            final me.majhrs16.suite.observability.Observability observability;
-            final me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint;
-            final me.majhrs16.suite.extension.ExtensionManager extensionManager;
-            final ManagerFacade managerFacade;
-            final ModuleLifecycle moduleLifecycle;
-            final SpigotInWorldListener inworldListener;
-            final SyncBus syncBus;
-            final PluginLogger logger;
-
-            Runtime(SuiteHost host, MessageDispatcher dispatcher,
-                    SpigotActorDirectory directory, UserLanguageStore languages,
-                    DiscordBridge bridge, WebSocketSyncSink wsSink,
-                    me.majhrs16.suite.observability.Observability observability,
-                    me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint,
-                    me.majhrs16.suite.extension.ExtensionManager extensionManager,
-                    ManagerFacade managerFacade,
-                    ModuleLifecycle moduleLifecycle,
-                    SpigotInWorldListener inworldListener,
-                    SyncBus syncBus,
-                    PluginLogger logger) {
-                this.host = host;
-                this.dispatcher = dispatcher;
-                this.directory = directory;
-                this.languages = languages;
-                this.bridge = bridge;
-                this.wsSink = wsSink;
-                this.observability = observability;
-                this.debugEndpoint = debugEndpoint;
-                this.extensionManager = extensionManager;
-                this.managerFacade = managerFacade;
-                this.moduleLifecycle = moduleLifecycle;
-                this.inworldListener = inworldListener;
-                this.syncBus = syncBus;
-                this.logger = logger;
-            }
-
-            public SuiteHost host() { return host; }
-            public MessageDispatcher dispatcher() { return dispatcher; }
-            public UserLanguageStore languages() { return languages; }
-            public PluginLogger logger() { return logger; }
-            public SpigotInWorldListener inworldListener() { return inworldListener; }
-            public SyncBus syncBus() { return syncBus; }
-            public ManagerFacade managerFacade() { return managerFacade; }
-            public ModuleLifecycle moduleLifecycle() { return moduleLifecycle; }
-
-            @Override
-            public void close() {
-                if (syncBus != null) {
-                    try {
-                        syncBus.close();
-                    } catch (Exception e) {
-                        logger.warn("Error closing SyncBus: " + e.getMessage());
-                    }
-                }
-                if (wsSink != null) {
-                    try {
-                        wsSink.stop();
-                    } catch (Exception e) {
-                        logger.warn("Error closing WebSocket sink: " + e.getMessage());
-                    }
-                }
-                if (observability != null) {
-                    try {
-                        observability.stop();
-                    } catch (Exception e) {
-                        logger.warn("Error stopping Observability: " + e.getMessage());
-                    }
-                }
-                if (debugEndpoint != null) {
-                    try {
-                        debugEndpoint.stop();
-                    } catch (Exception e) {
-                        logger.warn("Error stopping DebugEndpoint: " + e.getMessage());
-                    }
-                }
-                if (extensionManager != null) {
-                    try {
-                        extensionManager.stop();
-                    } catch (Exception e) {
-                        logger.warn("Error stopping ExtensionManager: " + e.getMessage());
-                    }
-                }
-                if (managerFacade != null) {
-                    try {
-                        logger.debug("ManagerFacade cleanup");
-                    } catch (Exception e) {
-                        logger.warn("Error closing ManagerFacade: " + e.getMessage());
-                    }
-                }
-                if (inworldListener != null) {
-                    try {
-                        // Unregister from plugin manager to avoid duplicate listeners on reload
-                        org.bukkit.event.HandlerList.unregisterAll(inworldListener);
-                        logger.debug("In-world listener unregistered from plugin manager");
-                    } catch (Exception e) {
-                        logger.warn("Error unregistering in-world listener: " + e.getMessage());
-                    }
-                }
-                if (dispatcher != null) {
-                    try {
-                        dispatcher.close();
-                    } catch (Exception e) {
-                        logger.warn("Error closing MessageDispatcher: " + e.getMessage());
-                    }
-                }
-                // Close the router (which closes the RateLimiter)
-                if (host != null && host.router() != null && host.router() instanceof AutoCloseable) {
-                    try {
-                        ((AutoCloseable) host.router()).close();
-                        logger.debug("Router (RateLimiter) closed");
-                    } catch (Exception e) {
-                        logger.warn("Error closing Router: " + e.getMessage());
-                    }
-                }
-                if (host != null && host.translation() != null) {
-                    try {
-                        host.translation().close();
-                        logger.debug("TranslationService closed");
-                    } catch (Exception e) {
-                        logger.warn("Error closing TranslationService: " + e.getMessage());
-                    }
-                }
-                if (bridge != null) {
-                    try {
-                        bridge.stop();
-                    } catch (Exception e) {
-                        logger.warn("Error stopping DiscordBridge: " + e.getMessage());
-                    }
-                }
-            }
-        }
+public final class TextFormatterSuitePlugin extends JavaPlugin {
 
     private BukkitAudiences audiences;
-    private volatile UserLanguageStore languageStore;
-    private volatile Runtime runtime;
-    private volatile MessagesConfig messages;
-    private DynamicCommandRegistrar commandRegistrar;
+    private SuiteRuntime runtime;
+    private PlatformPorts.Registration commandRegistration;
+    private SpigotInWorldListener inworldListener;
 
     @Override
     public void onEnable() {
         audiences = BukkitAudiences.create(this);
-        reloadSuite();
-        getServer().getPluginManager().registerEvents(this, this);
+        PluginLogger logger = logger();
+        Path folder = getDataFolder().toPath();
+        copyDefaultsIfMissing(folder);
 
-        // Inicializar sistema de comandos dinámicos
-        this.commandRegistrar = new DynamicCommandRegistrar(this, getDataFolder().toPath());
+        AtomicReference<SuiteRuntime> runtimeRef = new AtomicReference<>();
+        UserLanguageStore languages = new YamlUserLanguageStore(folder);
+        SpigotActorDirectory directory = new SpigotActorDirectory(languages);
 
+        SpigotPlatformPorts ports = new SpigotPlatformPorts(
+                this,
+                audiences,
+                directory,
+                message -> {
+                    SuiteRuntime current = runtimeRef.get();
+                    if (current == null) {
+                        throw new IllegalStateException("SuiteRuntime is not available yet");
+                    }
+                    current.messageDispatch().dispatch(message);
+                },
+                commandMap(),
+                getServer().getVersion(),
+                getName().toLowerCase(java.util.Locale.ROOT));
 
+        SuiteRuntime created = new SuiteRuntime(folder, ports, logger);
+        runtimeRef.set(created);
+        created.registerPlatformService(ChatDelivery.class, new SpigotChatDelivery(this, audiences));
+        created.registerPlatformService(ActorDirectory.class, directory);
+        created.registerPlatformService(PermissionChecker.class, ports::hasPermission);
+        created.registerPlatformService(UserLanguageStore.class, languages);
+        created.registerPlatformService(PlaceholderResolver.class, new SpigotPlaceholderResolver());
+        created.registerPlatformService(PluginLogger.class, logger);
 
+        try {
+            created.start();
+        } catch (IOException failure) {
+            getLogger().severe("Cannot start the suite runtime: " + failure.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
-        getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "enabled",
-            runtime.host.channels().paths().size(),
-            runtime.host.translation().activeName()));
+        runtime = created;
+        commandRegistration = created.registerCommands();
+        registerInWorld(created, logger, languages);
+        getLogger().info("TextFormatter Suite runtime started");
     }
 
     @Override
     public void onDisable() {
-        Runtime current = runtime;
-        if (current != null) {
-            try {
-                current.close();
-            } catch (Exception e) {
-                getLogger().severe("Error during shutdown: " + e.getMessage());
-            }
+        if (commandRegistration != null) {
+            commandRegistration.close();
+            commandRegistration = null;
+        }
+        if (inworldListener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(inworldListener);
+            inworldListener = null;
+        }
+        if (runtime != null) {
+            runtime.close();
+            runtime = null;
         }
         if (audiences != null) {
             audiences.close();
             audiences = null;
         }
-        runtime = null;
     }
 
-    /** Re-reads the whole file layout from disk (save → apply). */
-    public void reloadSuite() {
-        // Close old runtime first
-        Runtime oldRuntime = runtime;
-        if (oldRuntime != null) {
-            try {
-                oldRuntime.close();
-            } catch (Exception e) {
-                getLogger().warning("Error closing old runtime: " + e.getMessage());
-            }
-        }
+    /** @return the neutral runtime, or {@code null} while the plugin is off. */
+    public SuiteRuntime runtime() {
+        return runtime;
+    }
 
-        Path folder = getDataFolder().toPath();
-        copyDefaultsIfMissing(folder);
-        PluginLogger logger = logger();
-        // Validación estructural de config (Item 18 FASE 3)
-        ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(folder, logger);
-        if (!configResult.isValid()) {
-            for (String err : configResult.errors()) {
-                logger.error("Config error: " + err);
-            }
+    private void registerInWorld(SuiteRuntime created, PluginLogger logger,
+                                 UserLanguageStore languages) {
+        InWorldService handler = created.services().find(InWorldService.class).orElse(null);
+        MessageRenderer renderer = created.services().find(MessageRenderer.class).orElse(null);
+        if (handler == null || renderer == null) {
+            logger.debug("In-world package is not active; listener not registered");
+            return;
         }
-        me.majhrs16.suite.host.config.ConfigValidator.validate(
-            configResult.config(),
-            logger,
-            folder);
-        PermissionChecker permissions = this::hasPermission;
-        this.messages = MessagesConfig.load(folder, "/defaults/messages.yml");
-        SuiteHost reloaded = SuiteHost.bootstrap(folder, permissions,
-            new SpigotPlaceholderResolver(), logger);
-        final UserLanguageStore languages;
-        if (languageStore == null) {
-            languages = new YamlUserLanguageStore(folder);
-            languageStore = languages;
-        } else {
-            languages = languageStore;
-        }
-        SpigotActorDirectory dirs = new SpigotActorDirectory(languages);
-        SpigotChatDelivery delivery = new SpigotChatDelivery(this, audiences);
-        MessageDispatcher dispatcher =
-            new MessageDispatcher(reloaded, dirs, delivery, permissions, logger);
-        // Initialize SyncBus first
-        SyncBus syncBus = new DefaultSyncBus(logger);
-
-        // Initialize WebSocket Sync Sink (check enabled field)
-        WebSocketSyncSink wsSink = null;
-        try {
-            WebSocketSyncConfig wsConfig = WebSocketSyncConfig.load(folder);
-            if (wsConfig.usable()) {
-                // SECURITY: system property overrides the configured bind address
-                String bindAddress = System.getProperty("textformattersuite.ws.bind", wsConfig.bind());
-                wsSink = new WebSocketSyncSink(wsConfig.port(), wsConfig.token(), logger, bindAddress);
-                logger.info("WebSocket sync sink created on " + bindAddress + ":" + wsConfig.port());
-            } else if (wsConfig.enabled()) {
-                logger.warn("WebSocket sync is enabled but no auth token configured! Refusing to start without token.");
-            } else {
-                logger.info("WebSocket sync sink is disabled (enabled: false in config)");
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create WebSocket sync sink: " + e.getMessage());
-        }
-
-        // Create DiscordBridge with SyncBus for outbound mirroring
-        DiscordBridge bridge = DiscordBridge.create(folder, dispatcher, logger, syncBus);
-        if (bridge != null) {
-            // Register Discord sink with SyncBus
-            if (bridge.getSink() != null) {
-                syncBus.register(bridge.getSink());
-                logger.debug("SyncBus: registered Discord sink");
-            }
-            bridge.start();
-        }
-
-        // Initialize TCP Sync Sink
-        TcpSink tcpSink = null;
-        try {
-            SocketConfig tcpConfig = SocketConfig.loadTcp(folder);
-            if (tcpConfig.usable()) {
-                tcpSink = new TcpSink(tcpConfig.remoteHost(), tcpConfig.remotePort(), tcpConfig.localPort());
-                logger.info("TCP sync sink created: " + tcpConfig.remoteHost() + ":" + tcpConfig.remotePort());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create TCP sync sink: " + e.getMessage());
-        }
-
-        // Initialize UDP Sync Sink
-        UdpSink udpSink = null;
-        try {
-            SocketConfig udpConfig = SocketConfig.loadUdp(folder);
-            if (udpConfig.usable()) {
-                udpSink = new UdpSink(udpConfig.remoteHost(), udpConfig.remotePort(), udpConfig.localPort());
-                logger.info("UDP sync sink created: " + udpConfig.remoteHost() + ":" + udpConfig.remotePort());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create UDP sync sink: " + e.getMessage());
-        }
-
-        // Initialize Telegram Sync Sink
-        TelegramSink telegramSink = null;
-        try {
-            TelegramConfig telegramConfig = TelegramConfig.load(folder);
-            if (telegramConfig.usable()) {
-                telegramSink = new TelegramSink(telegramConfig.token(), telegramConfig.chatId(),
-                    new me.majhrs16.suite.transport.HttpTransport());
-                logger.info("Telegram sync sink created for chat " + telegramConfig.chatId());
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to create Telegram sync sink: " + e.getMessage());
-        }
-
-        // Register all sinks with SyncBus
-        if (wsSink != null) {
-            syncBus.register(wsSink);
-            logger.debug("SyncBus: registered WebSocket sink");
-        }
-        if (tcpSink != null) {
-            syncBus.register(tcpSink);
-            logger.debug("SyncBus: registered TCP sink");
-        }
-        if (udpSink != null) {
-            syncBus.register(udpSink);
-            logger.debug("SyncBus: registered UDP sink");
-        }
-        if (telegramSink != null) {
-            syncBus.register(telegramSink);
-            logger.debug("SyncBus: registered Telegram sink");
-        }
-
-        // Set inbound listener to route through dispatcher
-        syncBus.setInboundListener(new me.majhrs16.suite.api.spi.SyncListener() {
-            @Override
-            public void onMessage(me.majhrs16.suite.api.spi.SyncSink sink, Message message) {
-                dispatcher.dispatch(message);
-            }
-
-            @Override
-            public void onDisconnect(me.majhrs16.suite.api.spi.SyncSink sink, String reason) {
-                logger.warn("SyncBus: sink '" + sink.name() + "' disconnected: " + reason);
-            }
-        });
-
-        // Start SyncBus (starts all registered sinks)
-        try {
-            syncBus.start();
-            logger.info("SyncBus started with " + syncBus.sinkNames().size() + " sink(s): " + syncBus.sinkNames());
-        } catch (Exception e) {
-            logger.error("Failed to start SyncBus: " + e.getMessage(), e);
-        }
-
-        // Initialize Observability module
-        me.majhrs16.suite.observability.Observability observability = null;
-        me.majhrs16.suite.host.debug.DebugEndpoint debugEndpoint = null;
-        try {
-            observability = me.majhrs16.suite.observability.Observability.createDefault(logger);
-            observability.start();
-            logger.info("Observability metrics started (metrics:" + observability.getMetricsEndpoint().getPort() + ")");
-        } catch (Exception e) {
-            logger.warn("Failed to start Observability module: " + e.getMessage());
-        }
-        try {
-            debugEndpoint = new me.majhrs16.suite.host.debug.DebugEndpoint(
-                reloaded, dispatcher, reloaded.channels(), logger, null, 9091);
-            debugEndpoint.start();
-        } catch (Exception e) {
-            logger.warn("Failed to start DebugEndpoint: " + e.getMessage());
-        }
-
-        // Reload the neutral in-world domain and its Spigot listener.
-        InWorldHandler inworldHandler = new InWorldHandler(reloaded.channels(), logger);
-        SpigotInWorldListener inworldListener = new SpigotInWorldListener(
-            inworldHandler, reloaded.renderer(), dispatcher::dispatch, getServer(), logger,
-            languages, reloaded.config().defaultLanguage());
+        inworldListener = new SpigotInWorldListener(
+                handler, renderer, created.messageDispatch(), getServer(), logger,
+                languages, created.defaultLanguage());
         getServer().getPluginManager().registerEvents(inworldListener, this);
-
-        // Reload extensions
-        Path extensionsDir = getDataFolder().toPath().resolve("extensions");
-        me.majhrs16.suite.extension.ExtensionManager extensionManager = new ExtensionManager(
-            logger, 
-            extId -> {
-                return new me.majhrs16.suite.extension.ExtensionContext(
-                    message -> dispatcher.dispatch(message),
-                    reloaded::hasPermission,
-                    dispatcher.getActors(),
-                    logger,
-                    reloaded.translation(),
-                    languages,
-                    reloaded.channels(),
-                    folder,
-                    extId
-                );
-            }, 
-            folder.resolve("extensions"),
-            me.majhrs16.suite.api.SemVer.parse("2.1.0") // running core API version
-        );
-        extensionManager.start();
-
-        // Initialize ManagerFacade (APT/dpkg architecture)
-        Path managerDir = folder.resolve("manager");
-        String platform = "spigot";
-        String arch = System.getProperty("os.arch", "x64");
-        String os = System.getProperty("os.name", "linux").toLowerCase(java.util.Locale.ROOT);
-        int javaVersion = Integer.parseInt(System.getProperty("java.version").split("\\.")[0]);
-        
-        ManagerFacade managerFacade = new ManagerFacade(managerDir, logger, platform, arch, os, javaVersion);
-        try {
-            managerFacade.initialize();
-        } catch (IOException e) {
-            logger.error("Failed to initialize ManagerFacade: " + e.getMessage(), e);
-            throw new RuntimeException("ManagerFacade initialization failed", e);
-        }
-        logger.info("ManagerFacade initialized at " + managerDir);
-
-        // Create compatibility adapter for old ModuleLifecycle API
-        ModuleLifecycle moduleLifecycle = new ModuleLifecycleAdapter(managerFacade, logger);
-
-        // Create new runtime with all resources
-        this.runtime = new Runtime(reloaded, dispatcher, dirs, languages, bridge, wsSink, observability, debugEndpoint, extensionManager, managerFacade, moduleLifecycle, inworldListener, syncBus, logger);
     }
 
-    private boolean hasPermission(Actor actor, String permission) {
-        if (permission == null) {
-            return true;
+    private CommandMap commandMap() {
+        try {
+            Field field = Bukkit.getServer().getClass().getDeclaredField("commandMap");
+            field.setAccessible(true);
+            return (CommandMap) field.get(Bukkit.getServer());
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot access the Bukkit command map", failure);
         }
-        Player player = actor == null ? null : actor.handle();
-        return player != null && player.hasPermission(permission);
+    }
+
+    private PluginLogger logger() {
+        return new PluginLogger() {
+            @Override public void info(String m, Object... a) { getLogger().info(format(m, a)); }
+            @Override public void warn(String m, Object... a) { getLogger().warning(format(m, a)); }
+            @Override public void error(String m, Object... a) { getLogger().severe(format(m, a)); }
+            @Override public void error(String m, Throwable t) { getLogger().severe(format(m) + " :: " + t); }
+            @Override public void debug(String m, Object... a) {
+                if (isDebug()) {
+                    getLogger().info("[debug] " + format(m, a));
+                }
+            }
+        };
+    }
+
+    private static String format(String message, Object... args) {
+        return args == null || args.length == 0 ? message : String.format(message, args);
+    }
+
+    private boolean isDebug() {
+        return Boolean.getBoolean("textformattersuite.debug");
     }
 
     /**
-     * First-boot experience: copies the bundled {@code defaults/} tree
-     * (config.yml, channels/, translators/) into the data folder. Existing
-     * user files are never overwritten.
+     * First-boot experience: copies the bundled {@code defaults/} tree into the
+     * canonical per-package configuration paths. Existing user files are never
+     * overwritten.
      */
     private void copyDefaultsIfMissing(Path folder) {
-        try (var stream = getClass().getResourceAsStream("/defaults/config.yml")) {
-            if (stream == null) {
-                return;
-            }
-        } catch (IOException ignored) {
-            return;
-        }
-        // storage.md: cada módulo escribe en config/<modulo>/. Si ya existe la
-        // ruta heredada no se duplica el archivo (evita configs divergentes).
         copyResourceIfMissing(folder, "defaults/config.yml",
-            HostPaths.canonicalSuiteConfig(folder), folder.resolve("config.yml"));
+                folder.resolve("config/suite/config.yml"), folder.resolve("config.yml"));
         for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
             copyResourceIfMissing(folder, "defaults/channels/" + name + ".yml",
-                folder.resolve("config/textformatter/channels/" + name + ".yml"),
-                folder.resolve("channels/" + name + ".yml"));
+                    folder.resolve("config/textformatter/channels/" + name + ".yml"),
+                    folder.resolve("channels/" + name + ".yml"));
         }
         copyResourceIfMissing(folder, "defaults/translators/google.yml",
-            folder.resolve("config/chattranslator/translators/google.yml"),
-            folder.resolve("translators/google.yml"));
+                folder.resolve("config/chattranslator/translators/google.yml"),
+                folder.resolve("translators/google.yml"));
         copyResourceIfMissing(folder, "defaults/messages.yml",
-            HostPaths.canonicalSuiteMessages(folder), folder.resolve("messages.yml"));
+                folder.resolve("config/suite/messages.yml"), folder.resolve("messages.yml"));
         copyResourceIfMissing(folder, "defaults/sync/discord.yml",
-            SyncConfigPaths.canonicalDiscord(folder), folder.resolve("sync/discord.yml"));
+                folder.resolve("config/sync-discord/config.yml"), folder.resolve("sync/discord.yml"));
         copyResourceIfMissing(folder, "defaults/sync/websocket.yml",
-            SyncConfigPaths.canonicalWebSocket(folder), folder.resolve("sync/websocket.yml"));
+                folder.resolve("config/sync-websocket/config.yml"), folder.resolve("sync/websocket.yml"));
         copyResourceIfMissing(folder, "defaults/inworld.yml",
-            folder.resolve("config/inworld/config.yml"), folder.resolve("inworld.yml"));
+                folder.resolve("config/inworld/config.yml"), folder.resolve("inworld.yml"));
         copyResourceIfMissing(folder, "defaults/rules.yml",
-            folder.resolve("config/iflow-firewall/rules.yml"), folder.resolve("rules.yml"));
+                folder.resolve("config/iflow-firewall/rules.yml"), folder.resolve("rules.yml"));
     }
 
-    /** Copia el default solo si no existe ya ni la ruta canónica ni la heredada. */
     private void copyResourceIfMissing(Path folder, String resourcePath, Path canonical, Path legacy) {
         if (Files.exists(canonical) || (legacy != null && Files.exists(legacy))) {
             return;
         }
         copyResource(folder, resourcePath, canonical);
-    }
-
-    /** /suite reset: mueve configs de usuario a backup/{@code <ts>}/ y regenera defaults. */
-    public boolean resetConfigs(Path folder) {
-        try {
-            String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-            Path backupDir = folder.resolve("backup").resolve(stamp);
-            for (String name : List.of("config.yml", "messages.yml", "rules.yml", "inworld.yml")) {
-                Path p = folder.resolve(name);
-                if (Files.exists(p)) {
-                    Files.createDirectories(backupDir);
-                    Files.move(p, backupDir.resolve(name), StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            for (String sub : List.of("channels", "translators", "sync")) {
-                Path dirPath = folder.resolve(sub);
-                if (Files.isDirectory(dirPath)) {
-                    Path target = backupDir.resolve(sub);
-                    Files.createDirectories(target.getParent());
-                    Files.move(dirPath, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            // Nuevos directorios de config por módulo (architecture v3)
-            for (String mod : List.of(
-                    "suite", "chattranslator", "sync-bus", "sync-discord", "sync-websocket",
-                    "sync-telegram", "sync-http", "sync-socket", "inworld", "observability",
-                    "iflow-firewall", "textformatter")) {
-                Path dirPath = folder.resolve("config").resolve(mod);
-                if (Files.isDirectory(dirPath)) {
-                    Path target = backupDir.resolve("config").resolve(mod);
-                    Files.createDirectories(target.getParent());
-                    Files.move(dirPath, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            copyDefaultsIfMissing(folder);
-            return true;
-        } catch (IOException exception) {
-            getLogger().warning(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.reset-failed", exception.getMessage()));
-            return false;
-        }
     }
 
     private void copyResource(Path folder, String resourcePath, Path target) {
@@ -599,496 +208,9 @@ public final class TextFormatterSuitePlugin extends JavaPlugin implements Listen
             }
             Files.createDirectories(target.getParent());
             Files.copy(in, target);
-            getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.default-created", folder.relativize(target)));
+            getLogger().info("Default file created: " + folder.relativize(target));
         } catch (IOException exception) {
-            getLogger().warning(MessagesCatalog.getInstance().format(Locale.ENGLISH, "file.create-failed", target, exception.getMessage()));
+            getLogger().warning("Cannot create " + target + ": " + exception.getMessage());
         }
-    }
-
-    private PluginLogger logger() {
-        return new PluginLogger() {
-            @Override public void info(String m, Object... a) { getLogger().info(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-            @Override public void warn(String m, Object... a) { getLogger().warning(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-            @Override public void error(String m, Object... a) { getLogger().severe(MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-            @Override public void error(String m, Throwable t) { getLogger().severe(MessagesCatalog.getInstance().format(Locale.ENGLISH, m) + " :: " + t); }
-            @Override public void debug(String m, Object... a) { if (isDebug()) getLogger().info("[debug] " + MessagesCatalog.getInstance().format(Locale.ENGLISH, m, a)); }
-        };
-    }
-
-    private boolean isDebug() {
-        return Boolean.getBoolean("textformattersuite.debug");
-    }
-
-    // -- events -----------------------------------------------------------
-
-    /** Claim-first: igual que el legacy (LOWEST) para ganar antes que otros plugins. */
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onChat(AsyncPlayerChatEvent event) {
-        Runtime current = runtime;
-        if (current == null || current.dispatcher == null) {
-            return;
-        }
-        switch (current.host.config().claimMode()) {
-            case CANCEL_EVENT -> event.setCancelled(true);
-            case CLEAR_RECIPIENTS -> event.getRecipients().clear();
-        }
-
-        Actor sender = current.directory.actorOf(event.getPlayer());
-        me.majhrs16.suite.api.channel.Channel channel =
-            current.host.channels().resolve(
-                ChannelSelector.select(List.copyOf(current.host.channels().all()),
-                    permission -> hasPermission(sender, permission)));
-        String channelPath = channel.name();
-        boolean senderOff = isOff(current, sender);
-
-        // Emisor: eco con Direction.initiator() (solo el emisor lo ve)
-        // Emisor con lang off → su mensaje no se traduce para nadie.
-        if (channel.showSender()) {
-            Message initiatorMsg = build(current, MessageType.CHAT, sender, Direction.initiator(),
-                channelPath, event.getMessage(), !senderOff);
-            DispatchReport initiatorReport = current.dispatcher.dispatch(initiatorMsg);
-            mirror(current, initiatorMsg, initiatorReport);
-        }
-
-        // Broadcast a los demás (incluye consola via Direction.others() + CONSOLE)
-        // NOTA: Direction.others() no incluye consola, necesitamos agregarla
-        Message broadcast = buildBroadcast(current, MessageType.CHAT, sender,
-            channelPath, event.getMessage(), !senderOff);
-        DispatchReport broadcastReport = current.dispatcher.dispatch(broadcast);
-        mirror(current, broadcast, broadcastReport);
-
-        // También enviar a consola si no está ya en los receptores
-        if (current.host.config().logChatToConsole()) {
-            Message consoleMsg = dispatchToConsole(current, MessageType.CHAT, sender,
-                channelPath, event.getMessage(), !senderOff);
-            current.dispatcher.dispatch(consoleMsg);
-        }
-    }
-
-private Message buildBroadcast(Runtime current, MessageType type, Actor sender,
-                                String channelPath, String text, boolean translate) {
-        return Message.builder()
-            .type(type)
-            .sender(sender)
-            .direction(Direction.others().channel(Channel.CHAT))
-            .translate(translate)
-            .text(text)
-            .channel(channelPath)
-            .build();
-    }
-
-    private void mirror(Runtime current, Message sent) {
-        if (current.bridge != null) {
-            current.bridge.mirror(sent, DispatchReport.none("no-report"));
-        }
-    }
-
-    private void mirror(Runtime current, Message sent, DispatchReport report) {
-        if (current.bridge != null) {
-            current.bridge.mirror(sent, report);
-        }
-    }
-
-    /** Canal convencional {@code join}; presencia en el registro = activado. */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onJoin(PlayerJoinEvent event) {
-        Runtime current = runtime;
-        if (current == null) {
-            return;
-        }
-        // Offload to async to avoid blocking main thread on HTTP translations
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
-            Runtime rt = runtime;
-            if (rt != null) {
-                dispatchTyped(rt, MessageType.JOIN, EventRules.CHANNEL_JOIN,
-                    rt.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
-            }
-        });
-    }
-
-    /** Canal convencional {@code quit}. */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onQuit(PlayerQuitEvent event) {
-        Runtime current = runtime;
-        if (current == null) {
-            return;
-        }
-        // Offload to async to avoid blocking main thread on HTTP translations
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
-            Runtime rt = runtime;
-            if (rt != null) {
-                dispatchTyped(rt, MessageType.LEAVE, EventRules.CHANNEL_QUIT,
-                    rt.directory.actorOf(event.getPlayer()), event.getPlayer().getName());
-            }
-        });
-    }
-
-    /** Canal convencional {@code death}; %content% = mensaje vanilla de muerte. */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onDeath(PlayerDeathEvent event) {
-        Runtime current = runtime;
-        if (current == null) {
-            return;
-        }
-        String vanilla = event.getDeathMessage() == null
-            ? event.getEntity().getName()
-            : event.getDeathMessage();
-        // Offload to async to avoid blocking main thread on HTTP translations
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
-            Runtime rt = runtime;
-            if (rt != null) {
-                dispatchTyped(rt, MessageType.DEATH, EventRules.CHANNEL_DEATH,
-                    rt.directory.actorOf(event.getEntity()), vanilla);
-            }
-        });
-    }
-
-    private void dispatch(Runtime current, MessageType type, Actor sender,
-                          Direction direction, String channelPath, String text) {
-        build(current, type, sender, direction, channelPath, text, true);
-    }
-
-    private Message build(Runtime current, MessageType type, Actor sender,
-                         Direction direction, String channelPath, String text,
-                         boolean translate) {
-        return Message.builder()
-            .type(type)
-            .sender(sender)
-            .direction(direction.channel(Channel.CHAT))
-            .translate(translate)
-            .text(text)
-            .channel(channelPath)
-            .build();
-    }
-
-    private Message dispatchToConsole(Runtime current, MessageType type, Actor sender,
-                                       String channelPath, String text, boolean translate) {
-        Message message = Message.builder()
-            .type(type)
-            .sender(sender)
-            .direction(Direction.console())
-            .translate(translate)
-            .text(text)
-            .channel(channelPath)
-            .build();
-        return message;
-    }
-
-    /**
-     * Eventos tipados (join/quit/death): solo se despachan si el canal
-     * convencional existe en el registro (presencia = configuración).
-     * Una única unidad ALL para todos; el emisor con idioma {@code off}
-     * no traduce su mensaje.
-     */
-    private void dispatchTyped(Runtime current, MessageType type, String channelName,
-                               Actor subject, String content) {
-        if (!EventRules.typedEventEnabled(current.host.channels(), channelName)) {
-            return;
-        }
-        boolean senderOff = isOff(current, subject);
-        Message message = Message.builder()
-            .type(type)
-            .sender(subject)
-            .direction(Direction.all())
-            .translate(!senderOff)
-            .text(content)
-            .channel(channelName)
-            .build();
-        DispatchReport report = current.dispatcher.dispatch(message);
-        mirror(current, message, report);
-    }
-
-    /** @return whether this user disabled translation ({@code /suite lang off}). */
-    private boolean isOff(Runtime current, Actor actor) {
-        return !EventRules.shouldTranslate(current.languages,
-            actor == null ? null : actor.uuid());
-    }
-
-    // -- commands ----------------------------------------------------------
-
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Delegar al sistema de comandos dinámicos
-        if (commandRegistrar != null) {
-            return commandRegistrar.onCommand(sender, command, label, args);
-        }
-        // Fallback al sistema legacy si el registrador no está listo
-        Runtime current = runtime;
-        if (current == null || current.host == null) {
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "not-initialized"));
-            return true;
-        }
-        SuiteHost host = current.host;
-        String sub = args.length == 0 ? "status" : args[0];
-        switch (sub) {
-            case "reload" -> {
-                try {
-                    reloadSuite();
-                    Runtime fresh = runtime;
-                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reload-ok",
-                        fresh != null ? fresh.host.channels().paths().size() : 0,
-                        fresh != null ? fresh.host.translation().activeName() : "?"));
-                } catch (RuntimeException exception) {
-                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reload-error", exception.getMessage()));
-                }
-                return true;
-            }
-            case "lang" -> {
-                return handleLang(current, sender, Arrays.copyOfRange(args, 1, args.length));
-            }
-            case "toggle" -> {
-                return handleToggle(current, sender, Arrays.copyOfRange(args, 1, args.length));
-            }
-            case "reset" -> {
-                if (sender instanceof Player p && !p.hasPermission("textformattersuite.admin")) {
-                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
-                    return true;
-                }
-                if (!sender.hasPermission("textformattersuite.admin")) {
-                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
-                    return true;
-                }
-                try {
-                    if (resetConfigs(getDataFolder().toPath())) {
-                        reloadSuite();
-                        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reset.ok"));
-                    } else {
-                        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reset.error", "ver log"));
-                    }
-                } catch (RuntimeException exception) {
-                    sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "reset.error", exception.getMessage()));
-                }
-                return true;
-            }
-            case "status" -> {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "status.channels", host.channels().paths()));
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "status.translator",
-                    host.translation().activeName()));
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "status.knobs",
-                    host.config().engineParallel(), host.config().soundEnabled(),
-                    host.config().claimMode().name().toLowerCase(Locale.ROOT)
-                        .replace('_', '-')));
-                return true;
-            }
-            case "test" -> {
-                return handleTest(current, sender, Arrays.copyOfRange(args, 1, args.length));
-            }
-            default -> {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "usage"));
-                return true;
-            }
-        }
-    }
-
-    /**
-     * {@code /suite lang} — muestra tu ajuste.
-     * {@code /suite lang <auto|off|código>} — setea el propio.
-     * {@code /suite lang <jugador> <auto|off|código>} — admin.
-     */
-    private boolean handleLang(Runtime current, CommandSender sender, String[] args) {
-        Player self = sender instanceof Player player ? player : null;
-        if (self == null && args.length == 0) {
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.console"));
-            return true;
-        }
-        if (args.length == 0) {
-            String current2 = LangSetting.normalize(current.languages
-                .languageOf(self.getUniqueId()).orElse(MessagesCatalog.getInstance().format(Locale.ENGLISH, "auto")));
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.current", LangSetting.display(current2)));
-            return true;
-        }
-
-        UUID target;
-        String value;
-        if (args.length == 1) {
-            target = self == null ? null : self.getUniqueId();
-            value = LangSetting.normalize(args[0]);
-        } else {
-            if (self == null || !self.hasPermission("textformattersuite.admin")) {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
-                return true;
-            }
-            Player other = getServer().getPlayerExact(args[0]);
-            if (other == null) {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.player-offline", args[0]));
-                return true;
-            }
-            target = other.getUniqueId();
-            value = LangSetting.normalize(args[1]);
-        }
-        if (target == null || !LangSetting.isValid(value)) {
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.invalid"));
-            return true;
-        }
-        current.languages.save(target, value);
-        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.updated", LangSetting.display(value)));
-        return true;
-    }
-
-    /**
-     * {@code /suite toggle} — alterna tu traducción entre off y auto.
-     * {@code /suite toggle <jugador>} — admin.
-     */
-    private boolean handleToggle(Runtime current, CommandSender sender, String[] args) {
-        Player self = sender instanceof Player player ? player : null;
-        UUID target;
-        if (args.length == 0) {
-            target = self == null ? null : self.getUniqueId();
-        } else {
-            boolean admin = self == null
-                ? sender.hasPermission("textformattersuite.admin")
-                : self.hasPermission("textformattersuite.admin");
-            if (!admin) {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
-                return true;
-            }
-            Player other = getServer().getPlayerExact(args[0]);
-            if (other == null) {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.player-offline", args[0]));
-                return true;
-            }
-            target = other.getUniqueId();
-        }
-        if (target == null) {
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.console"));
-            return true;
-        }
-        String flipped = LangSetting.flip(
-            current.languages.languageOf(target).orElse(MessagesCatalog.getInstance().format(Locale.ENGLISH, "auto")));
-        current.languages.save(target, flipped);
-        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "toggle.current",
-            LangSetting.display(flipped).startsWith("off") ? "off" : "auto"));
-        return true;
-
-    }
-
-    /**
-     * {@code /suite test} — ejecuta la suite de tests automatizada en runtime.
-     * {@code /suite test full} — suite completa (default).
-     * {@code /suite test stress <players> <msgs>} — stress test.
-     * {@code /suite test concurrency <threads> <msgs>} — test de concurrencia.
-     * {@code /suite test routing} — tests de enrutamiento.
-     * {@code /suite test events} — tests de eventos.
-     * {@code /suite test perf} — profiling de hot paths.
-     * {@code /suite test sync} — tests de sinks de sincronización.
-     */
-    private boolean handleTest(Runtime current, CommandSender sender, String[] args) {
-        if (!sender.hasPermission("textformattersuite.admin")) {
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "lang.other-admin"));
-            return true;
-        }
-
-        var testService = getTestService();
-        if (testService == null) {
-            sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.service-unavailable"));
-            return true;
-        }
-
-        String sub = args.length == 0 ? "full" : args[0];
-
-        sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.starting", sub));
-
-        // Run async to not block main thread
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
-            var reporter = (Consumer<String>) line -> {
-                getServer().getScheduler().runTask(this, () -> sender.sendMessage(line));
-            };
-
-            try {
-                switch (sub) {
-                    case "full" -> testService.runFullTestSuite(reporter);
-                    case "stress" -> {
-                        int players = args.length > 1 ? Integer.parseInt(args[1]) : 5;
-                        int msgs = args.length > 2 ? Integer.parseInt(args[2]) : 20;
-                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§6[TEST] Stress Test (" + players + " players, " + msgs + " msgs each)..."));
-                        testService.runStressTest(players, msgs);
-                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§a[PASS] Stress Test complete"));
-                    }
-                    case "concurrency" -> {
-                        int threads = args.length > 1 ? Integer.parseInt(args[1]) : 10;
-                        int msgs = args.length > 2 ? Integer.parseInt(args[2]) : 20;
-                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§6[TEST] Concurrency Test (" + threads + " threads, " + msgs + " msgs each)..."));
-                        testService.runConcurrencyTest(threads, msgs);
-                        reporter.accept(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.output", "§a[PASS] Concurrency Test complete"));
-                    }
-                    default -> sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.unknown", sub));
-                }
-            } catch (Exception e) {
-                sender.sendMessage(MessagesCatalog.getInstance().format(Locale.ENGLISH, "test.error", e.getMessage()));
-                Runtime rt = runtime;
-                if (rt != null && rt.logger != null) {
-                    rt.logger.error("Test error: " + sub, e);
-                }
-            }
-        });
-        return true;
-    }
-
-    public boolean handleTest(SuiteHost host, CommandSender sender, String type) {
-        // Create a temporary runtime with the given host
-        Runtime rt = runtime;
-        Runtime temp = new Runtime(
-            host,
-            rt != null ? rt.dispatcher : null,
-            rt != null ? rt.directory : null,
-            rt != null ? rt.languages : null,
-            rt != null ? rt.bridge : null,
-            null, // wsSink
-            null, // observability
-            null, // debugEndpoint
-            null, // extensionManager
-            null, // managerFacade
-            null, // moduleLifecycle
-            null, // inworldHandler
-            null, // syncBus
-            rt != null ? rt.logger : null
-        );
-        String[] args = type.equals("full") ? new String[0] : new String[]{type};
-        return handleTest(temp, sender, args);
-    }
-
-    private me.majhrs16.suite.tester.TestService getTestService() {
-        // Get TestService from current runtime
-        Runtime rt = runtime;
-        if (rt != null && rt.host != null && rt.dispatcher != null) {
-            return new me.majhrs16.suite.tester.TestService(
-                new SpigotTestProbe(
-                    rt.host.channels(),
-                    rt.host.router(),
-                    rt.host.renderer(),
-                    rt.host.messageDispatch(rt.dispatcher),
-                    rt.host.translation(),
-                    () -> ModuleLoader.discover(rt.host.getClass().getClassLoader()).size(),
-                    rt.host.config().defaultLanguage()
-                ),
-                rt.directory,
-                rt.languages,
-                rt.logger
-            );
-    }
-    return null;
-}
-
-/** Getter para el runtime actual (usado por DynamicCommandRegistrar). */
-    public Runtime getRuntime() {
-        return runtime;
-    }
-
-    /** Getter para el módulo de observabilidad. */
-    public me.majhrs16.suite.observability.Observability getObservability() {
-        Runtime rt = runtime;
-        return rt != null ? rt.observability : null;
-    }
-
-    /** Getter para el ManagerFacade. */
-    public ManagerFacade getManagerFacade() {
-        Runtime rt = runtime;
-        return rt != null ? rt.managerFacade : null;
-    }
-
-    /** Getter para el ModuleLifecycle (compatibilidad). */
-    public ModuleLifecycle getModuleLifecycle() {
-        Runtime rt = runtime;
-        return rt != null ? rt.moduleLifecycle : null;
     }
 }

@@ -59,5 +59,6 @@ org.slf4j:slf4j-api:2.0.6=testRuntimeClasspath
 org.springframework:spring-core:6.1.12=runtimeClasspath,testRuntimeClasspath
 org.springframework:spring-expression:6.1.12=runtimeClasspath,testRuntimeClasspath
 org.springframework:spring-jcl:6.1.12=runtimeClasspath,testRuntimeClasspath
+org.yaml:snakeyaml:2.2=compileClasspath,testCompileClasspath
 org.yaml:snakeyaml:2.3=runtimeClasspath,testRuntimeClasspath
 empty=annotationProcessor,testAnnotationProcessor

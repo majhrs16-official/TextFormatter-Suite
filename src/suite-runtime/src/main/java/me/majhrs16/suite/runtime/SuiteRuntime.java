@@ -29,7 +29,7 @@ import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.manager.apt.AptInstaller;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 import me.majhrs16.suite.manager.core.PackageInstaller;
@@ -418,6 +418,11 @@ public final class SuiteRuntime implements AutoCloseable {
     public MessageDispatch messageDispatch() {
         ensureStarted();
         return messageDispatch;
+    }
+
+    /** @return the default language configured for the runtime. */
+    public me.majhrs16.suite.api.message.Language defaultLanguage() {
+        return host().config().defaultLanguage();
     }
 
     /** @return {@code true} when every required pipeline service is active. */

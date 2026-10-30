@@ -7,8 +7,8 @@ import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.inworld.InWorldHandler;
-import me.majhrs16.suite.inworld.InWorldPlatform;
+import me.majhrs16.suite.api.inworld.InWorldService;
+import me.majhrs16.suite.api.inworld.InWorldPlatform;
 
 import org.bukkit.Location;
 import org.bukkit.Server;
@@ -32,12 +32,12 @@ import java.util.UUID;
  * Spigot adapter for the neutral in-world domain.
  *
  * <p>Extracts Bukkit events, supplies live actors and delegates message
- * construction to {@link InWorldHandler}. Formatting and delivery stay in the
+ * construction to {@link InWorldService}. Formatting and delivery stay in the
  * host pipeline.</p>
  */
 public final class SpigotInWorldListener implements Listener, InWorldPlatform {
 
-    private final InWorldHandler handler;
+    private final InWorldService handler;
     private final MessageRenderer renderer;
     private final MessageDispatch dispatch;
     private final Server server;
@@ -45,7 +45,7 @@ public final class SpigotInWorldListener implements Listener, InWorldPlatform {
     private final UserLanguageStore languages;
     private final Language defaultLanguage;
 
-    public SpigotInWorldListener(InWorldHandler handler,
+    public SpigotInWorldListener(InWorldService handler,
                                  MessageRenderer renderer,
                                  MessageDispatch dispatch,
                                  Server server,

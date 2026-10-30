@@ -22,39 +22,16 @@ repositories {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:kernel')
-    implementation project(':src:textformatter')
-    implementation project(':src:iflow-vm')
-    implementation project(':src:host')
-    implementation project(':src:sync-discord')
-    implementation project(':src:sync-common')
-    implementation project(':src:sync-bus')
-    implementation project(':src:sync-websocket')
-    implementation project(':src:sync-socket')
-    implementation project(':src:sync-telegram')
-    // Proveedores de traducción descubiertos por ServiceLoader (paridad con spigot-host)
-    implementation project(':src:gtranslate')
-    implementation project(':src:ltranslate')
-    implementation project(':src:transport')
-    implementation project(':src:messages')
-    implementation project(':src:observability')
-    implementation project(':src:extension-api')
-    implementation project(':src:inworld')
-    implementation project(':src:manager-spi')
-    implementation project(':src:manager-core')
-    implementation project(':src:manager-apt')
+    implementation project(':src:core-render')
+    implementation project(':src:suite-runtime')
 
     minecraft 'com.mojang:minecraft:1.21'
     mappings 'net.fabricmc:yarn:1.21+build.1:v2'
     modImplementation 'net.fabricmc:fabric-loader:0.16.10'
     modImplementation 'net.fabricmc.fabric-api:fabric-api:0.100.5+1.21'
 
-    implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     implementation 'net.kyori:adventure-api:4.17.0'
     implementation 'net.kyori:adventure-text-serializer-gson:4.17.0'
-    implementation 'net.kyori:adventure-platform-fabric:5.14.2'
-    implementation 'net.dv8tion:JDA:6.4.2'
-    implementation 'org.yaml:snakeyaml:2.2'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'

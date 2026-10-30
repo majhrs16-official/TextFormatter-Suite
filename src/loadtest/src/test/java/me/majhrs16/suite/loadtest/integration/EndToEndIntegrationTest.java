@@ -7,7 +7,7 @@ import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.RoutingResult;
-import me.majhrs16.suite.host.port.ChatDelivery;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;

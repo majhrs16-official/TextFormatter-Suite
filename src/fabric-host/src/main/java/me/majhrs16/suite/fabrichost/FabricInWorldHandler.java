@@ -7,8 +7,8 @@ import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
-import me.majhrs16.suite.inworld.InWorldHandler;
-import me.majhrs16.suite.inworld.InWorldPlatform;
+import me.majhrs16.suite.api.inworld.InWorldService;
+import me.majhrs16.suite.api.inworld.InWorldPlatform;
 
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Fabric adapter for the neutral in-world domain.
  *
  * <p>Extracts Fabric events, supplies live actors and delegates message
- * construction to {@link InWorldHandler}. Formatting and delivery stay in the
+ * construction to {@link InWorldService}. Formatting and delivery stay in the
  * host pipeline through neutral ports.</p>
  */
 public final class FabricInWorldHandler implements InWorldPlatform {
@@ -49,7 +49,7 @@ public final class FabricInWorldHandler implements InWorldPlatform {
     private static final AtomicReference<FabricInWorldHandler> ACTIVE =
         new AtomicReference<>();
 
-    private final InWorldHandler handler;
+    private final InWorldService handler;
     private final MessageRenderer renderer;
     private final MessageDispatch dispatch;
     private final MinecraftServer server;
@@ -57,7 +57,7 @@ public final class FabricInWorldHandler implements InWorldPlatform {
     private final UserLanguageStore languages;
     private final Language defaultLanguage;
 
-    public FabricInWorldHandler(InWorldHandler handler,
+    public FabricInWorldHandler(InWorldService handler,
                                 MessageRenderer renderer,
                                 MessageDispatch dispatch,
                                 MinecraftServer server,
@@ -285,31 +285,6 @@ public final class FabricInWorldHandler implements InWorldPlatform {
 
     public String getHoverText(Actor actor, String key) {
         return handler.getHoverText(actor, key);
-    }
-
-    // ============================================================
-    // Glossary / Cache
-    // ============================================================
-
-    public void addGlossaryEntry(String key, String definition) {
-        handler.addGlossaryEntry(key, definition);
-    }
-
-    public String getGlossaryEntry(String key) {
-        return handler.getGlossaryEntry(key);
-    }
-
-    public void clearGlossary() {
-        handler.clearGlossary();
-    }
-
-    public void updateRadiusCache(UUID playerId, BlockPos location, double radius) {
-        handler.updateRadiusCache(playerId, "", location.getX(), location.getY(),
-            location.getZ(), radius);
-    }
-
-    public Optional<InWorldHandler.RadiusData> getRadiusData(UUID playerId) {
-        return handler.getRadiusData(playerId);
     }
 
     // ============================================================

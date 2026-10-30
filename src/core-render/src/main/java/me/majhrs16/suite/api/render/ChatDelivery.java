@@ -1,4 +1,4 @@
-package me.majhrs16.suite.host.port;
+package me.majhrs16.suite.api.render;
 
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
@@ -8,8 +8,8 @@ import net.kyori.adventure.text.Component;
 
 /**
  * Output port the platform host implements to push rendered output into
- * Minecraft. Lives beside {@code RoutingResult} (not in {@code core-api})
- * because its contract carries Adventure {@link Component}s — core-api stays
+ * Minecraft. Lives in {@code core-render} (not in {@code core-api}) because
+ * its contract carries Adventure {@link Component}s — core-api stays
  * dependency-free.
  *
  * <p>Implementations decide threading: the engine may call from any thread,
