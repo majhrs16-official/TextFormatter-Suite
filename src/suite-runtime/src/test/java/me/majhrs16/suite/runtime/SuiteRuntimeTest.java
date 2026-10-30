@@ -14,14 +14,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
+import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
+import me.majhrs16.suite.api.message.SoundSpec;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
+import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.host.port.ChatDelivery;
+
+import net.kyori.adventure.text.Component;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -170,7 +179,7 @@ class SuiteRuntimeTest {
     }
 
     @Test
-    void publishesMessageDispatchThroughPlatformPorts() throws Exception {
+    void dispatchWithoutActivePackagesFailsExplicitly() throws Exception {
         try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
             runtime.start();
             MessageDispatch dispatch = runtime.services()
@@ -182,10 +191,51 @@ class SuiteRuntimeTest {
                 .channel("chat")
                 .build();
 
-            dispatch.dispatch(message);
-
-            assertEquals(List.of(message), ports.delivered);
+            assertFalse(runtime.pipelineAvailable());
+            assertTrue(runtime.pipelineError().contains("missing service"));
+            assertThrows(IllegalStateException.class, () -> dispatch.dispatch(message));
         }
+    }
+
+    @Test
+    void buildsMessagePipelineFromActivePackagesAndDispatches() throws Exception {
+        FakeDelivery delivery = new FakeDelivery();
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.registerPlatformService(ChatDelivery.class, delivery);
+            runtime.registerPlatformService(ActorDirectory.class, new FakeActors());
+            runtime.registerPlatformService(PermissionChecker.class, PermissionChecker.ALLOW_ALL);
+            runtime.start();
+
+            assertTrue(runtime.installLocal(packageFromProperty("logger.package"), false).isEmpty());
+            assertTrue(runtime.installLocal(packageFromProperty("textformatter.package"), false)
+                    .get(0).isSuccess());
+            assertTrue(runtime.installLocal(packageFromProperty("chattranslator.package"), false)
+                    .get(0).isSuccess());
+            assertTrue(runtime.installLocal(packageFromProperty("iflow-vm.package"), false)
+                    .get(0).isSuccess());
+
+            assertTrue(runtime.pipelineAvailable(), runtime::pipelineError);
+            Actor sender = Actor.unknown("Steve").withLanguage(Language.EN);
+            Message message = Message.builder()
+                .type(MessageType.CHAT)
+                .sender(sender)
+                .direction(Direction.initiator())
+                .text("hello")
+                .channel("chat")
+                .build();
+
+            runtime.messageDispatch().dispatch(message);
+
+            assertEquals(1, delivery.delivered.size());
+            assertEquals("Steve", delivery.delivered.get(0).message().sender().name());
+        }
+    }
+
+    private static Path packageFromProperty(String name) {
+        String path = System.getProperty(name);
+        assertTrue(path != null && Files.isRegularFile(Path.of(path)),
+                name + " must point to a built distribution");
+        return Path.of(path);
     }
 
     @Test
@@ -207,6 +257,58 @@ class SuiteRuntimeTest {
         assertThrows(IllegalStateException.class, runtime::snapshot);
         assertThrows(IllegalStateException.class,
                 () -> runtime.installLocal(tempDir.resolve("missing.zip"), false));
+    }
+
+    private record Delivered(Actor recipient, Component rendered, Message message) {}
+
+    private static final class FakeDelivery implements ChatDelivery {
+
+        private final List<Delivered> delivered = new ArrayList<>();
+
+        @Override
+        public void deliver(Actor recipient, Component rendered, Message original) {
+            delivered.add(new Delivered(recipient, rendered, original));
+        }
+
+        @Override
+        public void deliverConsole(Component rendered) {
+            // Not used by the initiator-only assertion.
+        }
+
+        @Override
+        public void playSound(Actor recipient, SoundSpec sound) {
+            // No-op: sounds are not part of this pipeline assertion.
+        }
+
+        @Override
+        public boolean hasSound(String soundName) {
+            return true;
+        }
+    }
+
+    private static final class FakeActors implements ActorDirectory {
+
+        private static final Actor CONSOLE = Actor.console("Console", Language.EN);
+
+        @Override
+        public List<Actor> onlinePlayers() {
+            return List.of();
+        }
+
+        @Override
+        public Optional<Actor> byUuid(java.util.UUID uuid) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<Actor> byName(String name) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Actor console() {
+            return CONSOLE;
+        }
     }
 
     private static final class FakePorts implements PlatformPorts {

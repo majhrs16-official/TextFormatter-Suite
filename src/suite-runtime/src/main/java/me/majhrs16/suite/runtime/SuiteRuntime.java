@@ -8,14 +8,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.command.CommandRoot;
 import me.majhrs16.suite.api.config.ConfigRegistry;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.iflow.Router;
+import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
+import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.MessageDispatch;
+import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.TranslationService;
+import me.majhrs16.suite.host.DispatchReport;
+import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.host.SuiteHost;
+import me.majhrs16.suite.host.config.ConfigLoader;
+import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.host.port.ChatDelivery;
 import me.majhrs16.suite.manager.apt.AptInstaller;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 import me.majhrs16.suite.manager.core.PackageInstaller;
@@ -58,6 +72,10 @@ public final class SuiteRuntime implements AutoCloseable {
     private final Map<Class<?>, Object> pendingPlatformServices = new LinkedHashMap<>();
     private final List<ServiceRegistry.Registration> platformRegistrations =
         new ArrayList<>();
+    private final RuntimeMessageDispatch messageDispatch = new RuntimeMessageDispatch();
+    private SuiteHost host;
+    private MessageDispatcher dispatcher;
+    private String pipelineError = "pipeline has not been built";
     private boolean started;
 
     /**
@@ -123,7 +141,7 @@ public final class SuiteRuntime implements AutoCloseable {
         moduleHost = new ModuleHost(
                 libraryRoot, configRoot, ports.info(), logger, stateStore, commands, configs);
         platformRegistrations.add(moduleHost.services().register(
-            MessageDispatch.class, ports::deliver));
+            MessageDispatch.class, messageDispatch));
         registerPendingPlatformServices();
         packageRuntime = new PackageRuntime(manager, moduleHost, logger);
         SuiteCommands.register(commands, this);
@@ -139,6 +157,7 @@ public final class SuiteRuntime implements AutoCloseable {
             }
         }
         started = true;
+        rebuildPipeline();
     }
 
     private void registerPendingPlatformServices() {
@@ -153,10 +172,77 @@ public final class SuiteRuntime implements AutoCloseable {
     }
 
     /**
+     * Builds the message pipeline from the services published by active
+     * packages and the ports supplied by the adapter.
+     *
+     * <p>If a required package is not active the pipeline is left explicitly
+     * unavailable; {@link #messageDispatch()} and {@link #host()} fail with the
+     * missing service list instead of silently dropping messages. Installing or
+     * removing packages rebuilds the pipeline.</p>
+     */
+    private synchronized void rebuildPipeline() {
+        closePipeline();
+        try {
+            ConfigLoader.LoadResult<HostConfig> configResult =
+                    ConfigLoader.loadConfig(dataDir, logger);
+            if (!configResult.isValid()) {
+                for (String error : configResult.errors()) {
+                    logger.error("Config error: " + error);
+                }
+            }
+            HostConfig config = configResult.config();
+            ChannelRegistry channels = requireService(ChannelRegistry.class);
+            TranslationService translation = requireService(TranslationService.class);
+            Router router = requireService(Router.class);
+            MessageComponentRenderer componentRenderer =
+                    requireService(MessageComponentRenderer.class);
+            MessageRenderer renderer = requireService(MessageRenderer.class);
+            ChatDelivery delivery = requireService(ChatDelivery.class);
+            ActorDirectory actors = requireService(ActorDirectory.class);
+            PermissionChecker permissions = requireService(PermissionChecker.class);
+
+            SuiteHost builtHost = new SuiteHost(
+                    config, channels, translation, router,
+                    componentRenderer, renderer, logger, delivery);
+            MessageDispatcher builtDispatcher = new MessageDispatcher(
+                    builtHost, actors, delivery, permissions, logger);
+
+            host = builtHost;
+            dispatcher = builtDispatcher;
+            messageDispatch.bind(builtDispatcher);
+            pipelineError = null;
+            logger.info("Message pipeline ready: "
+                    + channels.paths().size() + " channel(s), router "
+                    + router.getClass().getSimpleName());
+        } catch (RuntimeException failure) {
+            pipelineError = failure.getMessage() == null
+                    ? failure.getClass().getSimpleName()
+                    : failure.getMessage();
+            messageDispatch.fail(pipelineError);
+            logger.warn("Message pipeline unavailable: " + pipelineError);
+        }
+    }
+
+    private <T> T requireService(Class<T> type) {
+        return moduleHost.services().find(type).orElseThrow(() ->
+                new IllegalStateException("missing service " + type.getName()));
+    }
+
+    private synchronized void closePipeline() {
+        messageDispatch.unbind();
+        if (dispatcher != null) {
+            dispatcher.close();
+            dispatcher = null;
+        }
+        host = null;
+    }
+
+    /**
      * Deactivates every active module and releases runtime resources. Safe to
      * call more than once.
      */
     public synchronized void stop() {
+        closePipeline();
         if (commandRegistration != null) {
             commandRegistration.close();
             commandRegistration = null;
@@ -221,7 +307,9 @@ public final class SuiteRuntime implements AutoCloseable {
     public List<ActivationResult> installLocal(Path zipPath, boolean force)
             throws PackageInstaller.InstallException {
         ensureStarted();
-        return packageRuntime.installLocal(zipPath, force);
+        List<ActivationResult> result = packageRuntime.installLocal(zipPath, force);
+        rebuildPipeline();
+        return result;
     }
 
     /**
@@ -239,7 +327,10 @@ public final class SuiteRuntime implements AutoCloseable {
                                                               String channel,
                                                               boolean force) {
         ensureStarted();
-        return packageRuntime.installFromRepositories(packages, version, channel, force);
+        AptInstaller.InstallResult result =
+                packageRuntime.installFromRepositories(packages, version, channel, force);
+        rebuildPipeline();
+        return result;
     }
 
     /**
@@ -249,7 +340,9 @@ public final class SuiteRuntime implements AutoCloseable {
      */
     public AptInstaller.InstallResult upgrade() {
         ensureStarted();
-        return packageRuntime.upgrade();
+        AptInstaller.InstallResult result = packageRuntime.upgrade();
+        rebuildPipeline();
+        return result;
     }
 
     /**
@@ -265,6 +358,7 @@ public final class SuiteRuntime implements AutoCloseable {
             throws PackageInstaller.InstallException {
         ensureStarted();
         packageRuntime.removeLocal(name, version, channel, autoRemove);
+        rebuildPipeline();
     }
 
     /**
@@ -279,7 +373,10 @@ public final class SuiteRuntime implements AutoCloseable {
     public AptInstaller.RemoveResult removeFromRepositories(String name, String version,
                                                             String channel, boolean autoRemove) {
         ensureStarted();
-        return packageRuntime.removeFromRepositories(name, version, channel, autoRemove);
+        AptInstaller.RemoveResult result =
+                packageRuntime.removeFromRepositories(name, version, channel, autoRemove);
+        rebuildPipeline();
+        return result;
     }
 
     /** @return runtime state per known module. */
@@ -298,6 +395,41 @@ public final class SuiteRuntime implements AutoCloseable {
     public ServiceRegistry services() {
         ensureStarted();
         return moduleHost.services();
+    }
+
+    /**
+     * @return the message pipeline assembled from the active packages and the
+     *         adapter ports
+     * @throws IllegalStateException if the pipeline is unavailable
+     */
+    public SuiteHost host() {
+        ensureStarted();
+        SuiteHost current = host;
+        if (current == null) {
+            throw new IllegalStateException("Message pipeline unavailable: " + pipelineError);
+        }
+        return current;
+    }
+
+    /**
+     * @return the neutral dispatch entry point; calls fail explicitly while the
+     *         pipeline is unavailable
+     */
+    public MessageDispatch messageDispatch() {
+        ensureStarted();
+        return messageDispatch;
+    }
+
+    /** @return {@code true} when every required pipeline service is active. */
+    public boolean pipelineAvailable() {
+        ensureStarted();
+        return host != null;
+    }
+
+    /** @return why the pipeline is unavailable, or {@code null} when ready. */
+    public String pipelineError() {
+        ensureStarted();
+        return pipelineError;
     }
 
     /** @return the runtime-wide command registry. */
@@ -355,6 +487,52 @@ public final class SuiteRuntime implements AutoCloseable {
     private void ensureStarted() {
         if (!started) {
             throw new IllegalStateException("SuiteRuntime is not started");
+        }
+    }
+
+    /**
+     * Stable {@link MessageDispatch} handle published before packages activate.
+     * It is rebound after every pipeline rebuild, so packages keep the same
+     * service reference across hot installs and unloads.
+     */
+    private static final class RuntimeMessageDispatch implements MessageDispatch {
+
+        private volatile MessageDispatcher dispatcher;
+        private volatile String error = "pipeline has not been built";
+
+        private void bind(MessageDispatcher next) {
+            dispatcher = next;
+            error = null;
+        }
+
+        private void unbind() {
+            dispatcher = null;
+            error = "pipeline is being rebuilt";
+        }
+
+        private void fail(String reason) {
+            dispatcher = null;
+            error = reason;
+        }
+
+        private MessageDispatcher require() {
+            MessageDispatcher current = dispatcher;
+            if (current == null) {
+                throw new IllegalStateException("Message pipeline unavailable: " + error);
+            }
+            return current;
+        }
+
+        @Override
+        public void dispatch(me.majhrs16.suite.api.message.Message message) {
+            require().dispatch(message);
+        }
+
+        @Override
+        public DispatchOutcome dispatchAndReport(me.majhrs16.suite.api.message.Message message) {
+            DispatchReport report = require().dispatch(message);
+            return new DispatchOutcome(
+                    report.delivered(), report.silenced(), report.redirected());
         }
     }
 }

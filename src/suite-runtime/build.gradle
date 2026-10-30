@@ -35,6 +35,8 @@ repositories {
 
 dependencies {
     implementation project(':src:core-api')
+    implementation project(':src:core-render')
+    implementation project(':src:host')
     implementation project(':src:kernel')
     implementation project(':src:manager-spi')
     implementation project(':src:manager-core')
@@ -43,6 +45,7 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core:3.25.3'
+    testImplementation 'net.kyori:adventure-api:4.17.0'
     testRuntimeOnly 'net.kyori:adventure-text-minimessage:4.17.0'
     testRuntimeOnly 'net.kyori:adventure-text-serializer-plain:4.17.0'
     testRuntimeOnly 'org.yaml:snakeyaml:2.2'

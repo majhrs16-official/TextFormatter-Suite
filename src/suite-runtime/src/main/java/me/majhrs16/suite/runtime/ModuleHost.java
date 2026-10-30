@@ -1,6 +1,9 @@
 package me.majhrs16.suite.runtime;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -11,7 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.ServiceLoader;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 import me.majhrs16.suite.api.Capability;
@@ -318,10 +322,7 @@ public final class ModuleHost implements AutoCloseable {
         ModuleClassLoader classLoader = new ModuleClassLoader(
                 jar, dependencyJars, ModuleActivator.class.getClassLoader());
         try {
-            List<ModuleActivator> activators = new ArrayList<>();
-            for (ModuleActivator activator : ServiceLoader.load(ModuleActivator.class, classLoader)) {
-                activators.add(activator);
-            }
+            List<ModuleActivator> activators = loadActivators(jar, classLoader);
             if (activators.isEmpty()) {
                 throw new IllegalStateException(
                         "No META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator in " + jar);
@@ -356,6 +357,49 @@ public final class ModuleHost implements AutoCloseable {
             }
             throw new IllegalStateException(failure.getMessage(), failure);
         }
+    }
+
+    /**
+     * Reads the activator declarations from the module JAR itself.
+     *
+     * <p>{@link java.util.ServiceLoader} also sees the host classpath, so a
+     * feature JAR present on the runtime classpath would be mistaken for a
+     * module activator. The module JAR is the only authority here.</p>
+     */
+    private static List<ModuleActivator> loadActivators(Path jar, ModuleClassLoader classLoader)
+            throws ReflectiveOperationException, IOException {
+        String service = "META-INF/services/" + ModuleActivator.class.getName();
+        List<String> names = new ArrayList<>();
+        try (JarFile jarFile = new JarFile(jar.toFile())) {
+            JarEntry entry = jarFile.getJarEntry(service);
+            if (entry != null) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        jarFile.getInputStream(entry), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        int comment = line.indexOf('#');
+                        if (comment >= 0) {
+                            line = line.substring(0, comment);
+                        }
+                        line = line.trim();
+                        if (!line.isEmpty()) {
+                            names.add(line);
+                        }
+                    }
+                }
+            }
+        }
+
+        List<ModuleActivator> activators = new ArrayList<>(names.size());
+        for (String name : names) {
+            Class<?> type = Class.forName(name, true, classLoader);
+            if (!ModuleActivator.class.isAssignableFrom(type)) {
+                throw new IllegalStateException(
+                        name + " is not a " + ModuleActivator.class.getName() + " in " + jar);
+            }
+            activators.add((ModuleActivator) type.getDeclaredConstructor().newInstance());
+        }
+        return activators;
     }
 
     private ActivationResult activatePrepared(PreparedModule prepared) {

@@ -33,6 +33,21 @@ class ModuleHostTest {
     Path tempDir;
 
     @Test
+    void ignoresActivatorsPublishedByTheRuntimeClasspath() throws Exception {
+        Path jar = FixtureModules.buildJar(tempDir, "classpath-fixture", "1.0.0", "fixture",
+                null, null, false, false);
+
+        try (ModuleHost host = newHost()) {
+            assertTrue(host.activate(jar).isSuccess(),
+                    "only the activator declared by the module JAR may be loaded");
+            assertEquals(List.of("classpath-fixture"), host.activeModules());
+            assertEquals(List.of("fixture"),
+                    host.services().findAll(CharSequence.class).stream()
+                            .map(CharSequence::toString).toList());
+        }
+    }
+
+    @Test
     void activatesTwoVersionsOfTheSameClassInIsolatedClassLoaders() throws Exception {
         Path v1 = FixtureModules.buildJar(tempDir, "fixture-v1", "1.0.0", "v1", null, null, false, false);
         Path v2 = FixtureModules.buildJar(tempDir, "fixture-v2", "2.0.0", "v2", null, null, false, false);
