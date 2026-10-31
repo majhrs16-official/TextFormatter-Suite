@@ -1,29 +1,22 @@
 # manager-spi — Module Manager SPI
 
-> **Purpose**: Defines the contracts shared by the module manager: module identity,
-> the lifecycle SPI, and the package metadata/manifest parsers used by both the
-> local (dpkg-style) and remote (apt-style) layers.
+> **Purpose**: Defines the package metadata and manifest contracts shared by the
+> local (dpkg-style) and remote (apt-style) manager layers. Live module
+> lifecycle belongs to `suite-runtime`; this module has no legacy lifecycle
+> bridge.
 
 ---
 
 ## 1. Responsibilities
 
-- **Module identity and compatibility** — `ModuleCoordinate` (group:artifact:version:classifier),
-  `ModuleDescriptor` (metadata), `Environment` (platform, Java/Minecraft versions,
-  installed modules, capabilities). They bridge the legacy `ModuleLifecycle` API with the
-  package system.
-- **Lifecycle SPI** — `ModuleLifecycle`: `resolve`, `download`, `relocate`, `load`,
-  `register`, `unregister`, `unload`, `checkUpdates`, `updateSuite`, `verifyChecksum`,
-  `getLoadedModules`, `discoverAvailableModules`, `discoverAll`, plus the
-  `ResolvedModule` / `ResolutionResult` value types.
-- **Package metadata** — `PackageEntry` (one package in a manifest or status database),
-  `FileEntry` (one file in a package inventory), `PackageType`
+- **Package metadata** — `PackageEntry` (one package in a manifest or status
+  database), `FileEntry` (one file in a package inventory), `PackageType`
   (`PACKAGE`, `DEPENDENCY`, `METAPACKAGE`) and `PlatformCompatibility`
   (shared platform-family matching).
 - **Parsers and serializers** — `ManifestParser` (remote index `packages.list`,
   `METADATA/package.list`, `library/status`, `DependencySpec`), `RepoConfigParser`
-  (`repo.yml` → `RepositoryConfig`), `Version` (SemVer 2.0.0 parsing, comparison and
-  `satisfies(rangeSpec)`).
+  (`repo.yml` → `RepositoryConfig`), `Version` (SemVer 2.0.0 parsing, comparison
+  and `satisfies(rangeSpec)`).
 
 ---
 
@@ -31,8 +24,10 @@
 
 - **No implementation** — interfaces and immutable data types only.
 - **No network code** — repository access lives in `manager-apt`.
-- **No installation** — ZIP extraction and the local database live in `manager-core`.
-- **No module loading** — `kernel` loads modules.
+- **No installation** — ZIP extraction and the local database live in
+  `manager-core`.
+- **No module lifecycle** — `ModuleHost` in `suite-runtime` loads, activates,
+  upgrades and unloads modules.
 
 ---
 
@@ -49,7 +44,7 @@
 | Consumer | Usage |
 |----------|-------|
 | `manager-core` | Package entries, manifests, versions and the local DB format |
-| `manager-apt` | Repository config, manifests, versions and the lifecycle contracts |
+| `manager-apt` | Repository config, manifests, versions and package metadata |
 | `spigot-host` | Compile dependency; wires the manager through `ManagerFacade` |
 | `fabric-host` | Compile dependency |
 
@@ -59,10 +54,6 @@
 
 | Component | Role |
 |-----------|------|
-| `ModuleCoordinate` | Coordinate: group, artifact, version, classifier |
-| `ModuleDescriptor` | Module metadata (name, author, Java/platform requirements, ...) |
-| `Environment` | Manager runtime context (platform, Java/Minecraft versions, capabilities) |
-| `ModuleLifecycle` | Lifecycle SPI and its resolution value types |
 | `PackageEntry` | One package record in a manifest or `library/status` (includes optional `Exclude`/`Provide`) |
 | `FileEntry` | One file record in a package inventory |
 | `PackageType` | `PACKAGE`, `DEPENDENCY`, `METAPACKAGE` |
@@ -76,9 +67,9 @@
 
 ## 6. Data Flow
 
-Contracts only — there is no runtime flow in this module. `manager-core` implements the
-local package format and `manager-apt` implements the lifecycle adapter and repository
-resolution.
+Contracts only — there is no runtime flow in this module. `manager-core`
+implements the local package format and `manager-apt` implements repository
+resolution and installation orchestration.
 
 ---
 
@@ -91,13 +82,11 @@ None — SPI and data types only.
 ## 8. Exploration Path
 
 ```
-1. ModuleLifecycle.java            → Lifecycle SPI
-2. ModuleCoordinate.java           → Coordinate model
-3. ModuleDescriptor.java           → Module metadata
-4. spi/ManifestParser.java         → Package list / status format
-5. spi/RepoConfigParser.java       → repo.yml
-6. spi/Version.java                → SemVer and ranges
-7. spi/PlatformCompatibility.java  → Platform-family matching
+1. spi/ManifestParser.java         → Package list / status format
+2. spi/RepoConfigParser.java       → repo.yml
+3. spi/Version.java                → SemVer and ranges
+4. spi/PlatformCompatibility.java  → Platform-family matching
+5. spi/PackageEntry.java           → Installed/available package record
 ```
 
 ---
@@ -107,5 +96,5 @@ None — SPI and data types only.
 - [core-api](../core-api/README.md) — Base `Module`, `SemVer` and domain types
 - [manager-core](../manager-core/README.md) — Local installer and package database
 - [manager-apt](../manager-apt/README.md) — Repositories, dependency resolution and facade
-- [kernel](../kernel/README.md) — Local module loading
+- [ModuleHost](../suite-runtime/src/main/java/me/majhrs16/suite/runtime/ModuleHost.java) — Live module lifecycle and hot upgrades
 - [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Consumers

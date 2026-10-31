@@ -419,17 +419,18 @@ public final class SuiteRuntime implements AutoCloseable {
     }
 
     /**
-     * Installs a local distribution ZIP and activates its modules.
+     * Installs a local distribution ZIP and activates or hot-upgrades its
+     * modules.
      *
      * @param zipPath distribution ZIP
      * @param force   force conflicting packages
-     * @return activation results
+     * @return one change per activated or upgraded module
      * @throws PackageInstaller.InstallException if installation fails
      */
-    public List<ActivationResult> installLocal(Path zipPath, boolean force)
+    public List<PackageChange> installLocal(Path zipPath, boolean force)
             throws PackageInstaller.InstallException {
         ensureStarted();
-        List<ActivationResult> result = packageRuntime.installLocal(zipPath, force);
+        List<PackageChange> result = packageRuntime.installLocal(zipPath, force);
         rebuildPipeline();
         return result;
     }

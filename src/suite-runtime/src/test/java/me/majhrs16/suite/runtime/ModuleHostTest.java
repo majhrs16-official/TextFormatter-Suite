@@ -191,6 +191,129 @@ class ModuleHostTest {
     }
 
     @Test
+    void upgradesAnActiveModuleInANewClassLoaderAndClosesTheOldOne() throws Exception {
+        Path v1 = FixtureModules.buildJar(tempDir, "upgrade-fixture", "1.0.0", "v1",
+                null, null, false, false);
+        Path v2 = FixtureModules.buildJar(tempDir, "upgrade-fixture", "2.0.0", "v2",
+                null, null, false, false);
+
+        try (ModuleHost host = newHost()) {
+            assertTrue(host.activate(v1).isSuccess());
+            CharSequence before = host.services().find(CharSequence.class).orElseThrow();
+            ModuleClassLoader oldLoader = (ModuleClassLoader) before.getClass().getClassLoader();
+
+            UpgradeResult result = host.upgrade("upgrade-fixture", v2, List.of());
+
+            assertTrue(result.isSuccess(), () -> "upgrade failed: " + result.message());
+            assertEquals("1.0.0", result.previousVersion());
+            assertEquals("2.0.0", result.newVersion());
+            assertFalse(result.rolledBack());
+            assertEquals(ModuleState.ACTIVE, host.state("upgrade-fixture").orElseThrow());
+            assertEquals(List.of("upgrade-fixture"), host.activeModules());
+
+            CharSequence after = host.services().find(CharSequence.class).orElseThrow();
+            assertEquals("v2", after.toString());
+            assertNotSame(before.getClass(), after.getClass(),
+                    "the new version must come from a different classloader");
+            assertTrue(oldLoader.isClosed(),
+                    "the previous classloader must be closed after a successful upgrade");
+            assertTrue(Files.exists(tempDir.resolve("config")
+                    .resolve("upgrade-fixture").resolve("released.marker")),
+                    "the previous version must run its resource cleanup");
+        }
+    }
+
+    @Test
+    void loadInstalledActivatesOnlyTheHighestInstalledVersion() throws Exception {
+        Path v1 = FixtureModules.buildJar(tempDir, "duplicate-fixture", "1.0.0", "v1",
+                null, null, false, false);
+        Path v2 = FixtureModules.buildJar(tempDir, "duplicate-fixture", "2.0.0", "v2",
+                null, null, false, false);
+        Path packages = tempDir.resolve("library/packages");
+        Files.createDirectories(packages);
+        Files.copy(v1, packages.resolve("duplicate-fixture-1.0.0.jar"));
+        Files.copy(v2, packages.resolve("duplicate-fixture-2.0.0.jar"));
+
+        try (ModuleHost host = newHost()) {
+            List<ActivationResult> results = host.loadInstalled();
+
+            assertEquals(1, results.size());
+            assertTrue(results.get(0).isSuccess());
+            assertEquals(List.of("duplicate-fixture"), host.activeModules());
+            assertEquals("v2", host.services().find(CharSequence.class)
+                    .orElseThrow().toString());
+        }
+    }
+
+    @Test
+    void failedUpgradeRestoresThePreviousVersion() throws Exception {
+        Path v1 = FixtureModules.buildJar(tempDir, "rollback-fixture", "1.0.0", "v1",
+                null, null, false, false);
+        Path v2 = FixtureModules.buildJar(tempDir, "rollback-fixture", "2.0.0", "v2",
+                null, null, true, false);
+
+        try (ModuleHost host = newHost()) {
+            assertTrue(host.activate(v1).isSuccess());
+            CharSequence before = host.services().find(CharSequence.class).orElseThrow();
+            ModuleClassLoader oldLoader = (ModuleClassLoader) before.getClass().getClassLoader();
+
+            UpgradeResult result = host.upgrade("rollback-fixture", v2, List.of());
+
+            assertFalse(result.isSuccess());
+            assertTrue(result.rolledBack(), "the previous version must be restored");
+            assertEquals(ModuleState.ACTIVE, result.state());
+            assertEquals(ModuleState.ACTIVE, host.state("rollback-fixture").orElseThrow());
+            assertEquals(List.of("rollback-fixture"), host.activeModules());
+            assertTrue(oldLoader.isClosed());
+            assertEquals("v1", host.services().find(CharSequence.class)
+                    .orElseThrow().toString(),
+                    "the restored module must serve the previous payload");
+            assertNotNull(result.cause());
+        }
+    }
+
+    @Test
+    void leakedModuleThreadMarksDeactivationAsRestartRequired() throws Exception {
+        Path jar = FixtureModules.buildJarLeakingThread(
+                tempDir, "thread-leak-fixture", "1.0.0");
+
+        try (ModuleHost host = newHost()) {
+            assertTrue(host.activate(jar).isSuccess());
+
+            DeactivationResult result = host.deactivate("thread-leak-fixture");
+
+            assertFalse(result.isClean());
+            assertEquals(ModuleState.RESTART_REQUIRED, result.state());
+            assertNotNull(result.cause());
+            assertTrue(result.cause().getMessage().contains("fixture-leak-thread-leak-fixture"),
+                    () -> "unexpected cause: " + result.cause().getMessage());
+            assertTrue(host.activeModules().isEmpty());
+            assertTrue(host.services().findAll(CharSequence.class).isEmpty());
+        } finally {
+            stopLeakedThread("fixture-leak-thread-leak-fixture");
+        }
+    }
+
+    @Test
+    void failingResourceCleanupMarksDeactivationAsRestartRequired() throws Exception {
+        Path jar = FixtureModules.buildJarFailingResourceRelease(
+                tempDir, "resource-leak-fixture", "1.0.0");
+
+        try (ModuleHost host = newHost()) {
+            assertTrue(host.activate(jar).isSuccess());
+
+            DeactivationResult result = host.deactivate("resource-leak-fixture");
+
+            assertFalse(result.isClean());
+            assertEquals(ModuleState.RESTART_REQUIRED, result.state());
+            assertNotNull(result.cause());
+            assertTrue(host.activeModules().isEmpty());
+            assertTrue(host.services().findAll(CharSequence.class).isEmpty(),
+                    "services must be withdrawn even when a resource fails to close");
+        }
+    }
+
+    @Test
     void failedDeactivationStillPublishesEventAndRequiresRestart() throws Exception {
         Path jar = FixtureModules.buildJarFailingOnStop(tempDir, "stop-fixture", "1.0.0", "stop");
 
@@ -224,5 +347,15 @@ class ModuleHostTest {
                 tempDir.resolve("config"),
                 PlatformInfo.current("test", "1.0"),
                 FixtureModules.logger());
+    }
+
+    private static void stopLeakedThread(String name) throws InterruptedException {
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            if (thread.getName().equals(name)) {
+                thread.interrupt();
+                thread.join(2_000L);
+                return;
+            }
+        }
     }
 }

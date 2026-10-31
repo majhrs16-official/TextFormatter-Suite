@@ -142,7 +142,7 @@ chat:
 | `src/messages` | 17 | i18n EN/ES, `MessagesCatalog` singleton |
 | `src/tester` | 17 | 25 runtime tests + `PerformanceProfiler` |
 | `src/transport` | 17 | `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`) |
-| `src/manager-spi` | 17 | Module Manager SPI: `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Environment`, manifest/version parsing |
+| `src/manager-spi` | 17 | Package metadata, manifests, versions, repository config and platform matching |
 | `src/manager-core` | 17 | Package installer, local package database, transaction log |
 | `src/manager-apt` | 17 | Repository manager, dependency resolver, APT facade/installer |
 | `src/presets` | 17 | Preset catalog (standard, rpg, staff, minimal) + YAML import/export; no execution engine |

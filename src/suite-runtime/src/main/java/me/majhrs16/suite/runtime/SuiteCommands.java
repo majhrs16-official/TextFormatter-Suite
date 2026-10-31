@@ -127,16 +127,20 @@ final class SuiteCommands {
                     if (!zip.isAbsolute()) {
                         zip = runtime.dataDir().resolve(zip);
                     }
-                    List<ActivationResult> results = runtime.installLocal(zip, false);
+                    List<PackageChange> results = runtime.installLocal(zip, false);
                     if (results.isEmpty()) {
                         context.reply("El paquete se instaló pero no contenía módulos activables.");
                         return;
                     }
-                    for (ActivationResult result : results) {
-                        context.reply(result.isSuccess()
-                                ? "Activado: " + result.moduleId()
-                                : "Instalado pero no activado: " + result.moduleId()
-                                        + " (" + result.message() + ")");
+                    for (PackageChange result : results) {
+                        if (result.isSuccess()) {
+                            context.reply(result.upgraded()
+                                    ? "Actualizado: " + result.moduleId()
+                                    : "Activado: " + result.moduleId());
+                        } else {
+                            context.reply("Instalado pero no activado: " + result.moduleId()
+                                    + " (" + result.message() + ")");
+                        }
                     }
                 })
                 .build();

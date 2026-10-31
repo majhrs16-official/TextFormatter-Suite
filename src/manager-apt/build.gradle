@@ -18,7 +18,6 @@ java {
 
 dependencies {
     implementation project(':src:core-api')
-    implementation project(':src:kernel')
     implementation project(':src:manager-spi')
     implementation project(':src:manager-core')
     implementation 'com.google.code.gson:gson:2.10.1'

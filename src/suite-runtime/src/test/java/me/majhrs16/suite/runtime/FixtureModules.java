@@ -49,12 +49,134 @@ final class FixtureModules {
         return buildJar(workDir, moduleId, version, payload, null, null, false, false, true);
     }
 
+    /**
+     * Builds a module that leaves a daemon thread alive after {@code stop()}.
+     * The thread is created from the lifecycle thread, so it inherits the
+     * module's thread group and the host can detect it.
+     */
+    static Path buildJarLeakingThread(Path workDir, String moduleId, String version)
+            throws IOException {
+        String startBody = """
+                context.services().register(CharSequence.class, new Payload("leaky"));
+                Thread leaked = new Thread(() -> {
+                    try {
+                        Thread.sleep(60_000L);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                }, "fixture-leak-MODULE_ID");
+                leaked.setDaemon(true);
+                leaked.start();
+                """;
+        return buildSpecialJar(workDir, moduleId, version, startBody);
+    }
+
+    /**
+     * Builds a module whose tracked resource throws while being released.
+     */
+    static Path buildJarFailingResourceRelease(Path workDir, String moduleId, String version)
+            throws IOException {
+        String startBody = """
+                context.services().register(CharSequence.class, new Payload("resource"));
+                context.resources().track(new AutoCloseable() {
+                    @Override
+                    public void close() {
+                        throw new IllegalStateException("fixture resource failure");
+                    }
+                });
+                """;
+        return buildSpecialJar(workDir, moduleId, version, startBody);
+    }
+
+    /**
+     * Builds a module that corrupts another installed JAR and then fails on
+     * start. Used to force a runtime compensation failure after an earlier
+     * module in the same batch was already upgraded.
+     */
+    static Path buildJarCorruptingFileAndFailing(Path workDir, String moduleId,
+                                                 String version, String victimFile)
+            throws IOException {
+        String startBody = """
+                Path packages = context.configDir().getParent().getParent()
+                        .resolve("library/packages");
+                Files.writeString(packages.resolve("VICTIM"), "corrupt");
+                throw new IllegalStateException("fixture failure after corrupting " + "VICTIM");
+                """.replace("VICTIM", victimFile);
+        return buildSpecialJar(workDir, moduleId, version, startBody);
+    }
+
+    private static Path buildSpecialJar(Path workDir, String moduleId, String version,
+                                        String startBody) throws IOException {
+        Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
+        Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
+        Path source = sourceDir.resolve("fixture").resolve("Activator.java");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classesDir);
+
+        String java = """
+                package fixture;
+
+                import java.nio.file.Files;
+                import java.nio.file.Path;
+                import me.majhrs16.suite.api.ModuleDescriptor;
+                import me.majhrs16.suite.api.SemVer;
+                import me.majhrs16.suite.api.runtime.ModuleActivator;
+                import me.majhrs16.suite.api.runtime.ModuleContext;
+
+                public final class Activator implements ModuleActivator {
+
+                    @Override
+                    public ModuleDescriptor descriptor() {
+                        return ModuleDescriptor.builder("MODULE_ID")
+                                .version(SemVer.parse("MODULE_VERSION"))
+                                .contractVersion(SemVer.of(2, 1, 0))
+                                .jvmRange(17, 0)
+                                .build();
+                    }
+
+                    @Override
+                    public void start(ModuleContext context) throws Exception {
+                        START_BODY
+                    }
+
+                    @Override
+                    public void stop() {
+                    }
+
+                    public static final class Payload implements CharSequence {
+
+                        private final String value;
+
+                        public Payload(String value) {
+                            this.value = value;
+                        }
+
+                        @Override public int length() { return value.length(); }
+                        @Override public char charAt(int index) { return value.charAt(index); }
+                        @Override public CharSequence subSequence(int start, int end) {
+                            return value.subSequence(start, end);
+                        }
+                        @Override public String toString() { return value; }
+                    }
+                }
+                """;
+        java = java.replace("MODULE_ID", moduleId)
+                .replace("MODULE_VERSION", version)
+                .replace("START_BODY", startBody.replace("MODULE_ID", moduleId));
+        Files.writeString(source, java, StandardCharsets.UTF_8);
+
+        compile(source, classesDir, List.of());
+        writeJar(classesDir, jar, "fixture.Activator\n");
+        return jar;
+    }
+
     private static Path buildJar(Path workDir, String moduleId, String version, String payload,
                                  String provides, String requires, boolean failOnStart,
                                  boolean appendOrder, boolean failOnStop) throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
-        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
         Path source = sourceDir.resolve("fixture").resolve("Activator.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesDir);
@@ -161,7 +283,7 @@ final class FixtureModules {
             throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
-        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
         Path source = sourceDir.resolve("fixture").resolve("Activator.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesDir);
@@ -255,7 +377,7 @@ final class FixtureModules {
                                         String dependencyField) throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
-        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
         Path source = sourceDir.resolve("fixture").resolve("Activator.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesDir);
@@ -305,7 +427,7 @@ final class FixtureModules {
                              String sinkName) throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
-        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
         Path source = sourceDir.resolve("fixture").resolve("Activator.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesDir);
@@ -397,7 +519,7 @@ final class FixtureModules {
             throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
-        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
         Path source = sourceDir.resolve("fixture").resolve("Activator.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesDir);
@@ -481,7 +603,7 @@ final class FixtureModules {
             throws IOException {
         Path sourceDir = workDir.resolve("fixture-src-" + moduleId);
         Path classesDir = workDir.resolve("fixture-classes-" + moduleId);
-        Path jar = workDir.resolve("fixture-" + moduleId + ".jar");
+        Path jar = workDir.resolve("fixture-" + moduleId + "-" + version + ".jar");
         Path source = sourceDir.resolve("fixture").resolve("Activator.java");
         Files.createDirectories(source.getParent());
         Files.createDirectories(classesDir);
@@ -600,13 +722,107 @@ final class FixtureModules {
     static Path buildPackageZip(Path workDir, String packageName, String version, String channel,
                                 Path moduleJar, String dependencies) throws IOException {
         return buildPackageZip(workDir, packageName, version, channel, moduleJar, dependencies,
-                "PACKAGE", "manager/library/packages/" + packageName + ".jar");
+                "PACKAGE", "manager/library/packages/" + packageName + "-" + version + ".jar");
     }
 
     static Path buildDependencyPackageZip(Path workDir, String packageName, String version,
                                           String channel, Path dependencyJar) throws IOException {
         return buildPackageZip(workDir, packageName, version, channel, dependencyJar, null,
-                "DEPENDENCY", "manager/library/dependencies/" + packageName + ".jar");
+                "DEPENDENCY", "manager/library/dependencies/" + packageName + "-" + version + ".jar");
+    }
+
+    static Path buildPackageZipWithJars(Path workDir, String packageName, String version,
+                                        String channel, List<Path> moduleJars) throws IOException {
+        StringBuilder files = new StringBuilder();
+        List<String> jarPaths = new ArrayList<>();
+        for (int i = 0; i < moduleJars.size(); i++) {
+            Path moduleJar = moduleJars.get(i);
+            byte[] jarBytes = Files.readAllBytes(moduleJar);
+            String jarPath = "manager/library/packages/" + packageName + "-"
+                    + version + "-" + i + ".jar";
+            jarPaths.add(jarPath);
+            files.append("  ").append(jarPath).append('\t')
+                    .append(jarBytes.length).append('\t')
+                    .append(sha256(jarBytes)).append('\t')
+                    .append(packageName).append('\n');
+        }
+
+        String manifest = "Name: " + packageName + "\n"
+                + "Version: " + version + "\n"
+                + "Channel: " + channel + "\n"
+                + "Type: PACKAGE\n"
+                + "Dependencies: \n"
+                + "Arch: none\n"
+                + "Platform: common\n"
+                + "URL: \n"
+                + "OS: none\n"
+                + "SHA256: \n"
+                + "Size: 0\n"
+                + "Files: \n"
+                + files;
+
+        Path zip = workDir.resolve("package-" + packageName + "-multi.zip");
+        try (ZipOutputStream zipOut = new ZipOutputStream(Files.newOutputStream(zip))) {
+            zipOut.putNextEntry(new ZipEntry("METADATA/package.list"));
+            zipOut.write(manifest.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+            for (int i = 0; i < moduleJars.size(); i++) {
+                zipOut.putNextEntry(new ZipEntry(jarPaths.get(i)));
+                zipOut.write(Files.readAllBytes(moduleJars.get(i)));
+                zipOut.closeEntry();
+            }
+        }
+        return zip;
+    }
+
+    record ModulePackage(String name, String version, Path jar) { }
+
+    /**
+     * Builds one distribution ZIP with several PACKAGE blocks. Used to prove
+     * that a local install is a transaction across every module it contains.
+     */
+    static Path buildMultiPackageZip(Path workDir, String zipName, String channel,
+                                     List<ModulePackage> packages) throws IOException {
+        StringBuilder manifest = new StringBuilder();
+        for (int i = 0; i < packages.size(); i++) {
+            ModulePackage pkg = packages.get(i);
+            byte[] jarBytes = Files.readAllBytes(pkg.jar());
+            String jarPath = "manager/library/packages/" + pkg.name()
+                    + "-" + pkg.version() + ".jar";
+            if (i > 0) {
+                manifest.append("\n\n");
+            }
+            manifest.append("Name: ").append(pkg.name()).append('\n')
+                    .append("Version: ").append(pkg.version()).append('\n')
+                    .append("Channel: ").append(channel).append('\n')
+                    .append("Type: PACKAGE\n")
+                    .append("Dependencies: \n")
+                    .append("Arch: none\n")
+                    .append("Platform: common\n")
+                    .append("URL: \n")
+                    .append("OS: none\n")
+                    .append("SHA256: \n")
+                    .append("Size: 0\n")
+                    .append("Files: \n")
+                    .append("  ").append(jarPath).append('\t').append(jarBytes.length)
+                    .append('\t').append(sha256(jarBytes)).append('\t')
+                    .append(pkg.name()).append('\n');
+        }
+
+        Path zip = workDir.resolve(zipName);
+        try (ZipOutputStream zipOut = new ZipOutputStream(Files.newOutputStream(zip))) {
+            zipOut.putNextEntry(new ZipEntry("METADATA/package.list"));
+            zipOut.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
+            zipOut.closeEntry();
+            for (ModulePackage pkg : packages) {
+                String jarPath = "manager/library/packages/" + pkg.name()
+                        + "-" + pkg.version() + ".jar";
+                zipOut.putNextEntry(new ZipEntry(jarPath));
+                zipOut.write(Files.readAllBytes(pkg.jar()));
+                zipOut.closeEntry();
+            }
+        }
+        return zip;
     }
 
     private static Path buildPackageZip(Path workDir, String packageName, String version,

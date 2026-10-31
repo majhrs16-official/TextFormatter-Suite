@@ -5,13 +5,16 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-31 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-31):** **F4c, F4d y F4e cerradas.** `sync-bukkit` y
-> `sync-fabric` son paquetes de plataforma descargables con listeners,
+> **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas.** `sync-bukkit`
+> y `sync-fabric` son paquetes de plataforma descargables con listeners,
 > configuración y ciclo de vida propios; `PackageRuntime` filtra por plataforma
 > y los hosts ya no capturan eventos ni mantienen árboles de comandos. Los
 > comandos viven en `api.command`, la raíz se carga de
 > `config/suite/commands.yml` (`root`/`aliases`) y los hosts solo registran el
-> adaptador raíz. El siguiente trabajo es F7.
+> adaptador raíz. El hot upgrade conserva la versión anterior en una ruta
+> versionada hasta que el runtime confirma la nueva, hace rollback si el
+> arranque falla y detecta hilos, recursos, registros y classloaders filtrados.
+> El siguiente trabajo es F8.
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
@@ -637,110 +640,23 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
   Solo implementan una API común entre plataformas y adaptan, en reversa, los
   eventos de su Minecraft a una representación interna agnóstica.
 
-##### Diagnóstico: por qué el estado actual no puede sostener ese modelo
+##### Estado vigente (F7 cerrado)
 
-###### 1. El Manager instala, pero no activa
-
-- `manager-apt/.../ModuleLifecycleAdapter.java:20-29` documenta explícitamente
-  que la arquitectura APT/dpkg instala en disco y **requiere reinicio**; la
-  carga/descarga dinámica **no está soportada**.
-- `ModuleLifecycleAdapter.load()` devuelve el `parent` ClassLoader, no crea uno
-  (`:95-99`).
-- `register()` devuelve `false` y `unregister()`/`unload()` no hacen nada
-  (`:103-117`).
-- `ManagerFacade.discoverAll()` solo llama a
-  `kernel.ModuleLoader.discover(parent)` y deja el TODO explícito:
-  «Package-based module discovery not yet implemented in ModuleLoader»
-  (`ManagerFacade.java:209-216`).
-- `PackageInstaller` mueve archivos a `installRoot` y registra estado; no abre
-  ningún `URLClassLoader` ni instancia servicios
-  (`PackageInstaller.java:610-632`).
-- El destino de instalación es el directorio de datos de la suite
-  (`installRoot = managerDir.getParent()`), no `/plugins` ni `/mods`; por tanto
-  el servidor **no** carga esos JARs automáticamente. Sin un `ModuleHost`, los
-  paquetes instalados quedan inertes.
-
-###### 2. `Module` no tiene ciclo de vida
-
-- `core-api/.../Module.java:8-13` dice: «There is no lifecycle contract and no
-  reflective method cracking: exposing a `ModuleDescriptor` is enough for the
-  dependency graph».
-- Ese contrato sirve para describir, no para cargar, iniciar, detener,
-  desregistrar o descargar.
-- `ServiceLoader` es estático: descubre lo que ya está en el classpath del host,
-  no JARs instalados en `library/packages`, y no permite desregistrar.
-
-###### 3. El Manager arranca después de la suite
-
-- En Spigot, `SuiteHost.bootstrap(...)` se ejecuta en
-  `TextFormatterSuitePlugin.java:297`, antes de inicializar `ManagerFacade` en
-  `:457-474`. Cuando el Manager aparece, la suite ya está construida con todos
-  los features cableados.
-- En Fabric, `TextFormatterSuiteMod.java` **no inicializa `ManagerFacade` en
-  absoluto**, aunque `fabric-host/build.gradle` declara `manager-spi`,
-  `manager-core` y `manager-apt`.
-- Por tanto, hoy el Manager no decide qué módulos forman la suite; solo gestiona
-  archivos de una suite que ya está viva por otras vías.
-
-###### 4. Los adapters y el host conocen los features
-
-- `spigot-host/build.gradle:31-55` declara `sync-*`, `gtranslate`,
-  `ltranslate`, `messages`, `textformatter`, `tester`, `transport`,
-  `observability`, `manager-*`, `inworld` y `extension-api`.
-- `fabric-host/build.gradle:24-44` declara casi lo mismo, con divergencias:
-  falta `sync-http`, sobran `presets` y `manager-*` (no se usan en Java), y no
-  existen `tester` ni `inworld`.
-- `spigot-host` importa módulos de feature directamente
-  (`TextFormatterSuitePlugin.java:3-42`); Fabric también
-  (`TextFormatterSuiteMod.java:3-38`).
-- `gtranslate` y `ltranslate` no se importan en los adapters: solo se necesitan
-  por `ServiceLoader`. Aun así se declaran como `implementation`, lo que
-  demuestra que la lista de dependencias no refleja el uso real.
-- `host/build.gradle:19-30` depende de `textformatter`, `iflow-vm`,
-  `iflow-firewall`, `transport` y `chattranslator`. `SuiteHost.java:100-131`
-  los instancia directamente.
-- `inworld` ya no depende de `host`: es un paquete neutral que solo usa
-  `core-api`; el listener Bukkit vive en `spigot-host`
-  (`SpigotInWorldListener`). `observability` y `presets` tampoco dependen de
-  `host`, y `extension-api` usa puertos neutrales (`MessageDispatch`,
-  `PermissionChecker`, `ActorDirectory`).
-  Por eso no se puede «mover todo el wiring a `host`»: se crearían ciclos.
-
-###### 5. El grafo del kernel no gobierna el arranque
-
-- `SuiteBootstrap.java:45-132` descubre módulos y resuelve
-  `provides`/`requires`, pero los adapters llaman a `SuiteHost.bootstrap(...)`,
-  no a `SuiteBootstrap`.
-- `SuiteBootstrap` solo se usa en tests de `loadtest`; en producción el grafo
-  es una validación, no la fuente de verdad de la composición.
-
-###### 6. Los módulos actuales son librerías, no plugins/mods autónomos
-
-- Los módulos de feature no tienen `plugin.yml` ni `fabric.mod.json`; solo
-  declaran `META-INF/services/me.majhrs16.suite.api.Module`.
-- Están pensados para ser empaquetados dentro del shadow JAR del adapter, no
-  para ser cargados desde un directorio de módulos.
-- Ningún feature importa Bukkit/Paper en `src/main`: `inworld` es neutral y su
-  listener Bukkit vive en `spigot-host`. El resto de features tampoco importa
-  SDK de plataforma.
-
-###### 7. La única carga dinámica existente es para extensions
-
-- `ExtensionManager.java:126-127` y `:239-242` ya usan `URLClassLoader` para
-  cargar extensions.
-- Es una prueba de concepto útil, pero está separada del Manager y de los
-  módulos; no hay un modelo común de ciclo de vida, registro de servicios ni
-  descarga.
-
-###### 8. Faltan guardrails
-
-- No hay ningún test o tarea que impida que un adapter vuelva a declarar un
-  módulo de feature.
-- No hay tests de carga/descarga de JARs, aislamiento de classloader,
-  activación fallida, rollback ni fugas de recursos.
-- `library/status` no distingue con suficiente precisión entre instalado,
-  activo, fallido y pendiente de reinicio; la spec lo exige
-  (`manager-v2.md:321`, `:546-548`).
+- El Manager instala y registra paquetes; `SuiteRuntime` construye el
+  `ModuleHost`, activa los módulos desde `library/packages` y mantiene el
+  estado runtime separado de `library/status`.
+- `spigot-host` y `fabric-host` solo construyen `PlatformPorts`, registran los
+  puertos del adapter y arrancan `SuiteRuntime`; no importan features.
+- `sync-bukkit`/`sync-fabric` traducen eventos de plataforma y despachan por
+  `MessageDispatch`; el fan-out vive en `sync-bus`.
+- Los comandos y la configuración son APIs module-scoped; la raíz se configura
+  en `commands.yml` y se recarga en caliente con `RESTART_REQUIRED` cuando el
+  registro de plataforma no permite reemplazarla.
+- `ModuleHost` prepara la versión nueva, detiene la anterior, arranca la nueva y
+  compensa lotes en orden inverso. Una compensación fallida conserva ambas
+  versiones y marca `RESTART_REQUIRED`.
+- Un `PACKAGE` contiene exactamente un JAR de módulo; las librerías compartidas
+  son paquetes `DEPENDENCY`.
 
 ##### Principios no negociables
 
@@ -972,9 +888,9 @@ sus registros, se cancelan sus tareas y se liberan sus recursos.
 public final class ModuleHost implements AutoCloseable {
     public List<ActivationResult> loadInstalled();  // escanea library/packages
     public ActivationResult activate(Path jarPath); // carga JAR + start()
+    public UpgradeResult upgrade(String id, Path newJar, List<Path> dependencyJars);
     public DeactivationResult deactivate(String id);
     public Map<String, ModuleState> snapshot();
-    // upgrade(id, newJar) llega en F7
 }
 ```
 
@@ -1025,19 +941,44 @@ Secuencia de activación:
    classloader y marcar `FAILED`.
 9. Si funciona: confirmar servicios y marcar `ACTIVE`.
 
-Secuencia de hot upgrade:
+Secuencia de hot upgrade (ADR-026):
 
-1. Instalar la nueva versión en una ruta versionada; no sobrescribir la activa.
-2. Crear nuevo classloader y nuevo alcance de servicios.
-3. Ejecutar `start()` de la nueva versión.
-4. Si falla: descartar la nueva versión, mantener la anterior activa y reportar.
-5. Si funciona: detener la versión anterior, intercambiar registros y cerrar el
-   classloader anterior.
-6. Si la versión anterior no libera recursos: mantenerla hasta reinicio, marcar
-   `RESTART_REQUIRED` y no afirmar que el upgrade fue limpio.
-7. Confirmar la instalación en `library/status` solo después de que la nueva
-   versión quede activa; el estado runtime se anota en
-   `<manager>/runtime/modules.status`.
+1. Instalar la nueva versión en una ruta versionada
+   (`<id>-<version>.jar`); no sobrescribir la activa.
+2. Preparar el classloader, el descriptor y el `ModuleContext` de la nueva
+   versión, sin ejecutar `start()` todavía.
+3. Detener la versión anterior y liberar sus recursos, registros, listeners,
+   tareas, sockets y classloader.
+4. Si la versión anterior no libera limpio: no arrancar la nueva, marcar
+   `RESTART_REQUIRED` y conservar ambos paquetes hasta el reinicio.
+5. Arrancar la nueva versión. Si falla, preparar y arrancar de nuevo el JAR
+   anterior (rollback) y eliminar la versión nueva instalada.
+6. Si un lote incluye varios módulos y uno falla, recorrer en orden inverso los
+   módulos ya actualizados, restaurar sus JAR anteriores y verificar que cada
+   uno quedó `ACTIVE`. Solo entonces autorizar el borrado de los archivos
+   nuevos. Esta regla vale tanto para `repo upgrade` como para un ZIP local con
+   varios paquetes.
+7. Si la compensación no puede verificar todas las restauraciones, devolver
+   `keepBoth`: conservar ambas versiones, marcar los módulos afectados
+   `RESTART_REQUIRED` y no borrar ningún artefacto.
+8. Si la nueva versión arranca y la compensación no fue necesaria, el runtime
+   confirma el upgrade; solo entonces el manager borra la versión anterior de
+   `library/status` y del disco.
+9. El estado runtime se anota en `<manager>/runtime/modules.status`; un
+   rollback exitoso deja la versión anterior `ACTIVE`, no `FAILED`.
+
+No se arrancan las dos versiones a la vez: comparten `moduleId`, namespaces de
+servicios/configuración, rutas de comandos y grupo de hilos. La coexistencia de
+classloaders se usa para preparar la nueva versión, no para registrarla antes de
+detener la anterior.
+
+Invariante de paquete: un `PACKAGE` contiene exactamente un JAR de módulo. Las
+librerías adicionales van en `DEPENDENCY`. `PackageRuntime` valida la
+cardinalidad antes de activar o actualizar; cero o más de un JAR es un error
+explícito, nunca una elección silenciosa del primero. Esta regla existe porque
+la activación y el upgrade deben tener la misma capacidad; si en el futuro se
+quiere soportar varios módulos por paquete, se implementa en ambas rutas y se
+prueba, no se asume.
 
 Secuencia de desactivación:
 
@@ -1069,9 +1010,11 @@ repo remove <pkg>
 repo upgrade
   → resuelve y descarga nueva versión
   → instala en ruta versionada
-  → ModuleHost.upgrade(...)
-  → si falla, rollback a la versión anterior
-  → si no se puede descargar la anterior, RESTART_REQUIRED en el estado runtime
+  → PackageUpgradeListener.beforeRemovingOld(...)
+  → ModuleHost.upgrade(...) dentro del callback
+  → si falla, rollback a la versión anterior y borrar la nueva
+  → si la limpieza falla, RESTART_REQUIRED en el estado runtime
+  → si el runtime confirma, borrar la versión anterior
 
 arranque
   → ManagerFacade.initialize()
@@ -1107,7 +1050,8 @@ distintos y viven en archivos distintos.
 | Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `inworld`, `extension-api` | Paquetes neutrales; dependencias declaradas en `METADATA/package.list` |
 | Producción auxiliar | `tester` (`PACKAGE` neutral + `TestProbe`) | Módulo de producción: benchmarking en runtime y traza del pipeline completo (C7); no es harness |
 | Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
-| Eliminar | `common-legacy` (sin fuentes `main`), `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, dependencias muertas | Borrar en la fase correspondiente |
+| Retirado | `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, descubrimiento por classpath y cableado de features en adapters | Eliminados en F4b/F7; no se restauran |
+| Pendiente de retirada | `common-legacy` (sin fuentes `main`, solo test de sanidad) | Se elimina en F8 |
 
 Decisión por defecto: **todo feature es paquete**, incluso `textformatter`,
 `iflow-*`, `chattranslator` y `messages`. El núcleo solo contiene contratos,
@@ -1167,33 +1111,33 @@ módulo platform-specific
 
 ##### Qué se elimina, no se envuelve
 
-- `ModuleLifecycleAdapter`: se elimina cuando `ModuleHost` cubra su contrato.
-- `ModuleLifecycle` antiguo: se sustituye por la API de `ModuleHost`; no se
-  mantiene como fachada no-op.
-- `SuiteHost.bootstrap(...)` con features hardcodeados: se sustituye por
-  `SuiteRuntime`; se elimina.
-- `SuiteBootstrap` duplicado: se integra en `SuiteRuntime` o se reduce a helper
-  de grafo; no se mantienen dos bootstraps.
-- `ManagerFacade.discoverAll()` basado en classpath: se elimina; el
+- `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
+  `ModuleDescriptor` de `manager-spi` y `Environment`: eliminados en F7. La
+  metadata vive en `me.majhrs16.suite.api.ModuleDescriptor` y el ciclo de vida
+  en `ModuleActivator`/`ModuleContext`/`ModuleHost`.
+- `SuiteHost.bootstrap(...)` con features hardcodeados y `SuiteBootstrap`
+  duplicado: eliminados; `SuiteRuntime` es el único composition root.
+- `ManagerFacade.discoverAll()` basado en classpath: eliminado; el
   descubrimiento sale de `library/status` y `library/packages`.
-- Dependencias de features en adapters y `host`: se eliminan.
-- Listeners de chat/join/quit/death en `spigot-host`/`fabric-host`: se mudan a
-  `sync-bukkit`/`sync-fabric`; no se conserva el cableado compilado.
+- Dependencias de features en adapters y `host`: eliminadas o limitadas a
+  `testImplementation`; ningún host importa features de producción.
+- Listeners de chat/join/quit/death en `spigot-host`/`fabric-host`: movidos a
+  `sync-bukkit`/`sync-fabric` en F4c.
 - Árboles de comandos duplicados en `spigot-host` (`DynamicCommandRegistrar`/
-  `DynamicCommand`) y `fabric-host` (Brigadier): se sustituyeron por el
+  `DynamicCommand`) y `fabric-host` (Brigadier): sustituidos por el
   `CommandRegistry` neutral en F4d; el host solo conserva la invocación de
   primer nivel. Los strings `/suite` hardcodeados se sustituyen por
   `CommandContext.root()`.
-- `gtranslate`/`ltranslate` como `implementation` en adapters: pasan a ser
-  paquetes o `runtimeOnly` del runtime, nunca dependencia de compilación del
-  adapter.
-- `presets` y `manager-*` sin uso en Fabric: se usan o se eliminan.
+- `gtranslate`/`ltranslate` como `implementation` en adapters: son paquetes
+  neutrales; no son dependencia de compilación del adapter.
+- `presets` y `manager-*` sin uso en Fabric: `manager-*` vive en el runtime;
+  `presets` es un paquete neutral.
 - `tester` sigue siendo paquete de producción (C7): ya se empaqueta como
   `PACKAGE` neutral; el adapter Spigot vive en `spigot-host` y Fabric deberá
   implementar su `TestProbe`. Nunca se mueve a harness.
-- `common-legacy`: se elimina si sigue sin fuentes `main`.
-- `sync-http` en Fabric: deja de ser una diferencia de adapter; se resuelve
-  como paquete compartido.
+- `common-legacy`: no tiene fuentes `main`; solo conserva un test de sanidad y
+  se elimina en F8.
+- `sync-http` en Fabric: es un paquete compartido, no una diferencia de adapter.
 - `ExtensionManager` con loader propio: se unifica con `ModuleHost` o se
   documenta como subsistema separado con contrato propio. No se mantienen dos
   loaders sin justificación.
@@ -1216,7 +1160,7 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | ✅ `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
 | **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | ✅ Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y `CommandsConfig*` no existen; el Brigadier de Fabric queda como adaptador de invocación; tests de registro, desregistro, permisos, colisiones y tab completion |
 | **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | ✅ El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión, cambio de raíz, restauración y `RESTART_REQUIRED` |
-| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado de instalación coherente y estado runtime en `<manager>/runtime/modules.status` |
+| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, compensación de lotes, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, rutas de JAR versionadas y hook transaccional manager/runtime | ✅ Upgrade exitoso y fallido con rollback; lote con un módulo ya actualizado y otro fallido compensa el primero antes de borrar archivos; si la compensación falla se conservan ambas versiones y se marca `RESTART_REQUIRED`; hilo filtrado, recurso que falla y tarea en ejecución producen `RESTART_REQUIRED`; un `PACKAGE` con más de un JAR se rechaza; estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados |
 | **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
 
 **F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,
@@ -1341,9 +1285,10 @@ paquete neutral.
 - F4b y F4c están cerradas: `spigot-host`/`fabric-host` ya no construyen
   sinks, observability, inworld, extensiones ni features; solo registran sus
   puertos y arrancan `SuiteRuntime`. La captura de eventos vive en
-  `sync-bukkit`/`sync-fabric`. Los árboles de comandos de host y la raíz
-  configurable se cerraron en F4d/F4e; quedan el hot upgrade/unload real (F7) y
-  el empaquetado de librerías de terceros como `DEPENDENCY` (F8).
+  `sync-bukkit`/`sync-fabric`. Los árboles de comandos de host, la raíz
+  configurable y el hot upgrade/unload real se cerraron en F4d/F4e/F7; queda el
+  empaquetado de librerías de terceros como `DEPENDENCY` y la revisión de
+  seguridad de F8.
 
 **F4b — punto de partida medido:** `spigot-host` importa directamente al menos
 9 paquetes de feature (`sync-socket`, `sync-websocket`, `sync-telegram`,
@@ -1496,7 +1441,7 @@ Reglas:
 6. **Sin compatibilidad indefinida.** No se añaden adaptadores de
    compatibilidad sin fase de eliminación. `ModuleLifecycleAdapter`,
    `SuiteHost.bootstrap()` hardcodeado y el cableado de features en adapters
-   se eliminan en F4b, no se conservan como fachada permanente.
+   se eliminaron en F4b/F7; no se conservan como fachada permanente.
 7. **Comandos y configuración neutrales.** Los módulos registran sus comandos
    jerárquicos y su configuración por `api.command`/`api.config`; el host solo
    traduce la invocación de plataforma. La raíz es un `CommandRoot`
@@ -1601,12 +1546,13 @@ Para evitar que el cambio quede a medias:
 
 ##### Criterios de aceptación finales
 
-- [ ] `spigot-host/build.gradle` y `fabric-host/build.gradle` solo declaran
-      `core-api`, `suite-runtime` y SDK de plataforma.
-- [ ] `suite-runtime/build.gradle` no declara ningún módulo de feature.
-- [ ] `host` no declara `textformatter`, `iflow-*`, `chattranslator` ni
-      `transport` como implementaciones; solo APIs.
-- [ ] Los adapters no importan `me.majhrs16.suite.sync*`,
+- [x] `spigot-host/build.gradle` y `fabric-host/build.gradle` solo declaran
+      `core-api`, `core-render`, `suite-runtime` y SDK de plataforma.
+- [x] `suite-runtime/build.gradle` no declara ningún módulo de feature como
+      implementación; las dependencias de features son solo de test.
+- [x] `host` no declara `textformatter`, `iflow-*`, `chattranslator` ni
+      `transport` como implementaciones; solo APIs (las de test son fixtures).
+- [x] Los adapters no importan `me.majhrs16.suite.sync*`,
       `me.majhrs16.suite.textformatter`, `me.majhrs16.suite.iflow*`,
       `me.majhrs16.suite.chattranslator`, `me.majhrs16.suite.observability`,
       `me.majhrs16.suite.manager*` ni `me.majhrs16.suite.presets`.
@@ -1615,18 +1561,19 @@ Para evitar que el cambio quede a medias:
 - [x] `library/status` registra solo la instalación; el estado runtime
       (`ACTIVE`, `FAILED`, `RESTART_REQUIRED`) vive en
       `<manager>/runtime/modules.status`, nunca en `library/status`.
-- [ ] `repo install` activa; `repo remove` desactiva; `repo upgrade` hace
-      rollback si la nueva versión falla.
-- [ ] Un test de upgrade v1→v2 demuestra que la v1 se detiene y se descarga, y
+- [x] `package install` activa y `package remove` desactiva; `repo upgrade`
+      usa el listener transaccional probado en `PackageRuntimeTest`.
+- [x] Un test de upgrade v1→v2 demuestra que la v1 se detiene y se descarga, y
       que la v2 queda activa.
-- [ ] Un test de upgrade fallido demuestra que la v1 sigue activa.
+- [x] Un test de upgrade fallido demuestra que la v1 sigue activa.
 - [x] Un test de activación fallida demuestra que el paquete no se marca
       `ACTIVE`.
-- [ ] Un test de arquitectura falla si un adapter vuelve a declarar un feature.
-- [ ] No quedan `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado,
+- [x] Un test de arquitectura falla si un adapter vuelve a declarar un feature
+      o reintroduce un árbol de comandos.
+- [x] No quedan `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado,
       `ManagerFacade.discoverAll` por classpath ni dependencias muertas.
 - [x] `./gradlew build` y `./gradlew checkArchitecture` pasan.
-- [ ] La documentación de módulos explica `ModuleActivator`, `ModuleContext`,
+- [x] La documentación de módulos explica `ModuleActivator`, `ModuleContext`,
       `library/packages`, `library/status`, hot upgrade y límites de reinicio.
 
 ##### Decisiones cerradas por F0 (2026-10-27)
@@ -1688,11 +1635,12 @@ cerrada con ellas y F1 puede empezar.
 
 - No promete que todos los módulos puedan actualizarse sin reinicio.
 - No promete que todos los módulos sean neutrales a la plataforma.
-- No promete compatibilidad con el arranque actual.
-- No promete mantener `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` ni el
-  descubrimiento por classpath.
-- No promete que la primera fase deje la suite funcional: la suite se rompe a
-  propósito y se rearma por fases con puertas de calidad.
+- No promete compatibilidad con ningún bootstrap anterior; los caminos
+  retirados no se restauran como fachada.
+- No promete que todos los módulos liberen recursos en todos los escenarios;
+  cuando no pueden, el estado es `RESTART_REQUIRED`, no un éxito fingido.
+- No promete que la suite haya quedado funcional sin pasar por las puertas de
+  calidad de cada fase.
 
 ---
 
@@ -2144,7 +2092,7 @@ El objetivo es descargar, instalar, activar y desactivar módulos en caliente, c
 
 Cuando una funcionalidad se migra al runtime de módulos, su cableado compilado se elimina en el mismo cambio. No se mantienen dos formas de arrancar la suite ni dos mecanismos de descubrimiento de módulos.
 
-**Consecuencia:** `ModuleLifecycleAdapter`, `SuiteHost.bootstrap()` hardcodeado y `ManagerFacade.discoverAll()` por classpath se eliminan cuando el runtime de módulos los sustituye.
+**Consecuencia:** `ModuleLifecycleAdapter`, `SuiteHost.bootstrap()` hardcodeado y `ManagerFacade.discoverAll()` por classpath fueron eliminados cuando el runtime de módulos los sustituyó.
 
 ### P8. Las librerías compartidas son paquetes de dependencia
 

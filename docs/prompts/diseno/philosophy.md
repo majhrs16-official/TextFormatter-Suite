@@ -85,6 +85,21 @@ La presencia de un paquete en `library/status` implica que está instalado. El e
 
 El directorio `src/` se organiza por capa técnica: `api`, `kernel`, `runtime`, `platform` y `packages`. `platform` contiene cada plataforma de Minecraft soportada; `kernel` contiene cada feature agnóstico, base, primario o importante para la arquitectura del sistema; `packages` contiene cada módulo independiente entre sí.
 
+## C13. Hipótesis con evidencia, no supuestos cómodos
+
+Una hipótesis no es una decisión. Frases como «probablemente solo haya uno», «no merece la pena», «debería ser suficiente» o «es un caso marginal» no cierran una fase ni justifican dejar una capacidad a medias. Antes de aceptar una hipótesis hay que citar la evidencia verificable: una especificación, un invariante validado, una prueba o el código real que lo demuestra. Si no hay evidencia, el estado correcto es **desconocido**, no **verdadero**.
+
+No se simplifica un problema solo porque la reducción parezca obvia. Que algo «probablemente» sea pequeño, único o poco frecuente no autoriza a recortar la implementación ni a dejar una rama sin cubrir. El ADR y el PLAN se siguen al pie de la letra; si el código real no permite cumplirlos, o si aparece un riesgo de inconsistencia entre lo documentado y lo implementado, se detiene el trabajo y se pregunta antes de elegir una salida. La pregunta es parte del proceso, no una pérdida de tiempo.
+
+Toda desviación respecto al ADR o al PLAN requiere justificación explícita y aprobación antes de implementarse. Si una decisión documentada resulta técnicamente inviable, incompleta o incompatible con el código real, se registra la discrepancia, se presentan las alternativas y sus consecuencias, y se espera autorización. Nunca se adapta silenciosamente el alcance, la arquitectura o las garantías para hacer que una implementación parezca terminada.
+
+Esto obliga a dos disciplinas concretas:
+
+1. **Paridad de capacidades.** Si una ruta admite una cardinalidad, una variante o un estado, las rutas que la sustituyen deben admitir lo mismo o rechazarlo explícitamente. No se puede activar varios JAR de un paquete y luego actualizar solo el primero; no se puede aceptar una dependencia al instalar y descartarla al actualizar. La asimetría silenciosa es un bug de arquitectura.
+2. **Invariantes validados o soporte completo.** Cuando aparece una asimetría, se elige una de dos salidas: implementar la capacidad completa en todas las rutas, o declarar un invariante formal, validarlo en la frontera y fallar con un mensaje explícito cuando se incumpla. Lo que no se permite es asumir que la entrada siempre cumplirá el invariante sin comprobarlo.
+
+La misma regla se aplica al estado de recuperación. Un rollback no es exitoso porque el código lo diga: hay que verificar que cada versión anterior quedó activa y que cada versión nueva quedó fuera. Si la compensación falla, no se finge éxito ni se borran artefactos que aún pueden hacer falta: se conservan ambos lados y se marca `RESTART_REQUIRED` con una causa verificable. Los estados `FAILED`, `RESTART_REQUIRED` y «desconocido» existen para decir la verdad, no para decorar logs.
+
 ---
 
 # Principios de Diseño del Proyecto

@@ -3,6 +3,7 @@ package me.majhrs16.suite.manager.apt;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.manager.core.LocalPackageDatabase;
 import me.majhrs16.suite.manager.core.PackageInstaller;
+import me.majhrs16.suite.manager.spi.PackageEntry;
 import me.majhrs16.suite.manager.spi.RepositoryConfig;
 
 import okhttp3.OkHttpClient;
@@ -131,9 +132,17 @@ public final class AptInstaller {
 
     /**
      * Upgrades all installed packages (equivalent to `apt upgrade`).
-     * Installs new version FIRST, then removes old version (atomic upgrade).
+     *
+     * <p>The new files are installed first. The runtime listener then decides
+     * whether the new module version is live; the manager removes the old
+     * files only after the listener commits. If the listener rejects the new
+     * version, the files installed by that step are removed and the old
+     * version remains installed.</p>
+     *
+     * @param listener runtime hook invoked before removing old versions
      */
-    public InstallResult upgrade() {
+    public InstallResult upgrade(PackageUpgradeListener listener) {
+        Objects.requireNonNull(listener, "listener");
         logger.info("APT upgrade");
         
         DependencyResolver.ResolutionPlan plan;
@@ -146,36 +155,99 @@ public final class AptInstaller {
         if (plan.steps().isEmpty()) {
             return new InstallResult(true, List.of(), "No packages to upgrade");
         }
-        
+
+        Map<String, PackageEntry> before = latestByKey(database.getAllPackages());
         List<String> upgraded = new ArrayList<>();
         for (DependencyResolver.PlanStep step : plan.steps()) {
             RepositoryManager.PackageCandidate candidate = step.candidate();
+            List<PackageEntry> entries;
             try {
-                // Download and install new version FIRST
                 Path zipPath = downloadPackage(candidate);
-                List<me.majhrs16.suite.manager.spi.PackageEntry> entries = installer.install(zipPath, true);
-                
-                // Only remove old version AFTER successful installation
-                for (me.majhrs16.suite.manager.spi.PackageEntry entry : entries) {
-                    Optional<me.majhrs16.suite.manager.spi.PackageEntry> oldEntry = 
-                        database.getLatestInstalled(entry.name(), entry.channel());
-                    if (oldEntry.isPresent() && !oldEntry.get().version().equals(entry.version())) {
-                        logger.info("Removing old version " + oldEntry.get().version() + " of " + entry.name());
-                        try {
-                            installer.remove(oldEntry.get().name(), oldEntry.get().version(), oldEntry.get().channel(), false);
-                        } catch (Exception e) {
-                            logger.warn("Failed to remove old version of " + entry.name() + ": " + e.getMessage());
-                            // Don't fail the upgrade if old version removal fails
-                        }
-                    }
-                    upgraded.add(entry.name() + " " + entry.version());
-                }
+                entries = installer.install(zipPath, true);
             } catch (Exception e) {
-                return new InstallResult(false, upgraded, "Failed to upgrade " + candidate.name() + ": " + e.getMessage());
+                return new InstallResult(false, upgraded,
+                        "Failed to install " + candidate.name() + ": " + e.getMessage());
+            }
+
+            List<PackageEntry> oldEntries = new ArrayList<>();
+            for (PackageEntry entry : entries) {
+                PackageEntry old = before.get(packageKey(entry));
+                if (old != null && !old.version().equals(entry.version())) {
+                    oldEntries.add(old);
+                }
+            }
+
+            if (!oldEntries.isEmpty()) {
+                PackageUpgradeListener.Decision decision;
+                try {
+                    decision = listener.beforeRemovingOld(List.copyOf(oldEntries), List.copyOf(entries));
+                } catch (RuntimeException failure) {
+                    rollbackEntries(entries);
+                    return new InstallResult(false, upgraded,
+                            "Runtime rejected upgrade of " + candidate.name() + ": "
+                                    + failure.getMessage());
+                }
+                if (decision != null && decision.keepBoth()) {
+                    String reason = decision.message() == null
+                            ? "runtime compensation failed"
+                            : decision.message();
+                    return new InstallResult(false, upgraded,
+                            "Failed to upgrade " + candidate.name() + ": " + reason
+                                    + "; both versions kept, restart required");
+                }
+                if (decision == null || !decision.commit()) {
+                    rollbackEntries(entries);
+                    String reason = decision == null || decision.message() == null
+                            ? "runtime rejected the new version"
+                            : decision.message();
+                    return new InstallResult(false, upgraded,
+                            "Failed to upgrade " + candidate.name() + ": " + reason);
+                }
+            }
+
+            for (PackageEntry old : oldEntries) {
+                try {
+                    logger.info("Removing old version " + old.version() + " of " + old.name());
+                    installer.remove(old.name(), old.version(), old.channel(), false);
+                } catch (Exception e) {
+                    logger.warn("Failed to remove old version of " + old.name() + ": " + e.getMessage());
+                }
+            }
+            for (PackageEntry entry : entries) {
+                upgraded.add(entry.name() + " " + entry.version());
             }
         }
         
         return new InstallResult(true, upgraded, null);
+    }
+
+    private void rollbackEntries(List<PackageEntry> entries) {
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            PackageEntry entry = entries.get(i);
+            try {
+                installer.remove(entry.name(), entry.version(), entry.channel(), false);
+            } catch (Exception failure) {
+                logger.warn("Failed to roll back " + entry.name() + " "
+                        + entry.version() + ": " + failure.getMessage());
+            }
+        }
+    }
+
+    private static Map<String, PackageEntry> latestByKey(List<PackageEntry> entries) {
+        Map<String, PackageEntry> latest = new LinkedHashMap<>();
+        for (PackageEntry entry : entries) {
+            String key = packageKey(entry);
+            PackageEntry current = latest.get(key);
+            if (current == null || me.majhrs16.suite.manager.spi.Version.parse(entry.version())
+                    .compareTo(me.majhrs16.suite.manager.spi.Version.parse(current.version())) > 0) {
+                latest.put(key, entry);
+            }
+        }
+        return latest;
+    }
+
+    private static String packageKey(PackageEntry entry) {
+        return entry.name() + "\0" + entry.channel();
     }
 
     /**

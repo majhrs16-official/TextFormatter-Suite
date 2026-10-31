@@ -123,6 +123,19 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
     }
 
     /**
+     * @param owner module id
+     * @return {@code true} when the owner still has a live command subtree
+     */
+    public boolean hasOwner(String owner) {
+        for (Registered registered : commands.values()) {
+            if (registered.owner.equals(owner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Removes every registration owned by {@code owner}.
      *
      * @param owner module id

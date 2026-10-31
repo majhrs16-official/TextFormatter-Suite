@@ -24,7 +24,7 @@ TextFormatter Suite
 │   ├── ltranslate        → LibreTranslate provider
 │   ├── observability     → Metrics, health checks, debug endpoints
 │   ├── presets           → Preset catalog, YAML import/export and canonical file target
-│   ├── manager-spi       → Module manager SPI (coordinates, descriptors, lifecycle)
+│   ├── manager-spi       → Package metadata, manifests, versions and repository config
 │   ├── manager-core      → Package installer + local package database
 │   ├── manager-apt       → Repositories, dependency resolver, APT installer
 │   ├── extension-api     → Extension system API
@@ -70,7 +70,7 @@ TextFormatter Suite
 | Directory | Responsibility | Depends On | Used By |
 |-----------|----------------|------------|---------|
 | `core-api` | Core interfaces, SPI, domain types and cross-package contracts (Module, Actor, Channel, ChannelRegistry, Router, TranslationService, SyncSink, MessageRenderer, CommandRegistry, etc.) | — | **All modules** |
-| `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `suite-runtime`, `manager-core`, `manager-apt`, test fixtures |
+| `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `suite-runtime`, `manager-core`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `spigot-host`, `fabric-host` |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `host`, `spigot-host`, `fabric-host` |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
@@ -82,9 +82,9 @@ TextFormatter Suite
 | `ltranslate` | LibreTranslate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
 | `presets` | Preset catalog, YAML import/export and canonical file persistence (no execution engine) | `core-api`, `snakeyaml` | `suite-runtime` (paquete `PACKAGE`), `host` (`HostPresetApplier`) |
-| `manager-spi` | Module manager SPI (coordinates, descriptors, lifecycle, manifest/version parsing) | `core-api` | `manager-core`, `manager-apt`, `spigot-host`, `fabric-host` |
-| `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `spigot-host`, `fabric-host` |
-| `manager-apt` | Repository manager, dependency resolver, APT installer/facade | `core-api`, `kernel`, `manager-spi`, `manager-core` | `spigot-host`, `fabric-host` |
+| `manager-spi` | Package metadata, manifests, versions and repository config | `core-api` | `manager-core`, `manager-apt`, `suite-runtime`, hosts |
+| `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `suite-runtime` |
+| `manager-apt` | Repository manager, dependency resolver, APT installer/facade and two-phase upgrade hook | `core-api`, `manager-spi`, `manager-core` | `suite-runtime` |
 | `extension-api` | Extension system API (Extension, ExtensionContext, ExtensionManager) | `core-api` | `example-extension`, `spigot-host`, `fabric-host` |
 | `inworld` | Neutral in-world domain (signs, containers, books, WORLD/RADIUS, click/hover); packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotInWorldListener`), `suite-runtime` |
 | `performance` | Hotspot detection, profiling, cache/memory optimization | `core-api` | `spigot-host`, `fabric-host` |
@@ -127,9 +127,9 @@ TextFormatter Suite
 | `logger` | Logging dependency package | Structured logging shared by modules | `Logger`, `LoggerUtils` | `LoggerModule` (`DEPENDENCY`) | [logger/README.md](logger/README.md) |
 | `observability` | Metrics & health | Prometheus, health checks, endpoints | `Observability`, `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint` | `ObservabilityModule` | [observability/README.md](observability/README.md) |
 | `presets` | Preset catalog | YAML preset import/export, built-in definitions and canonical file persistence | `PresetManager`, `Preset`, `FilePresetTarget`, `PresetsActivator`, `PresetsModule` | `PresetsActivator` | [presets/README.md](presets/README.md) |
-| `manager-spi` | Manager SPI | Coordinates, descriptors, lifecycle, manifest/version parsing | `ModuleCoordinate`, `ModuleDescriptor`, `ModuleLifecycle`, `Version` | — | [manager-spi/README.md](manager-spi/README.md) |
+| `manager-spi` | Manager SPI | Package metadata, manifest/version parsing, repository config | `PackageEntry`, `ManifestParser`, `Version`, `PlatformCompatibility` | — | [manager-spi/README.md](manager-spi/README.md) |
 | `manager-core` | Package installer | Local ZIP installation, package database, transactions | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` | — | [manager-core/README.md](manager-core/README.md) |
-| `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller` | — | [manager-apt/README.md](manager-apt/README.md) |
+| `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade, two-phase upgrades | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller`, `PackageUpgradeListener` | — | [manager-apt/README.md](manager-apt/README.md) |
 | `extension-api` | Extension system | Extension lifecycle & context | `Extension`, `ExtensionContext`, `ExtensionManager` | — | [extension-api/README.md](extension-api/README.md) |
 | `spigot-host` | Bukkit/Paper plugin | Thin platform adapter | `TextFormatterSuitePlugin`, `SpigotPlatformPorts`, `SpigotActorDirectory`, `SpigotChatDelivery` | `TextFormatterSuitePlugin.onEnable()` | [spigot-host/README.md](spigot-host/README.md) |
 | `fabric-host` | Fabric mod | Thin platform adapter | `TextFormatterSuiteMod`, `FabricPlatformPorts`, `FabricActorDirectory`, `FabricChatDelivery` | `TextFormatterSuiteMod.onInitialize()` | [fabric-host/README.md](fabric-host/README.md) |
@@ -293,7 +293,7 @@ PlatformPorts + adapter services registered
          ↓
 SuiteRuntime.start()
          ↓
-PackageRuntime installs/activates packages
+PackageRuntime installs/activates packages and hot-upgrades active ones
          ↓
 ServiceRegistry: ChannelRegistry, TranslationService, Router, renderers, ChatDelivery
          ↓

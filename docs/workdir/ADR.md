@@ -1104,3 +1104,86 @@ paquete no fuera la única vía de composición.
   `suite-runtime` y el SDK de plataforma.
 - El `runtimeClasspath` de `suite-runtime` ya no arrastra paquetes de feature;
   `host` solo depende de `core-api`, `core-render`, SnakeYAML y Gson.
+
+---
+
+## Decisión 2026-10-31 — hot upgrade transaccional y descarga real (ADR-026)
+
+**Estado:** Aceptada e implementada (F7 cerrado). Sustituye la secuencia
+optimista de `PLAN.md` que arrancaba la versión nueva antes de detener la
+anterior.
+
+**Contexto.** `ModuleHost` sabía activar y desactivar, pero no sustituir una
+versión activa. El manager instalaba la versión nueva y borraba la anterior
+antes de que el runtime pudiera confirmar el arranque; el empaquetado usaba
+`library/packages/<id>.jar`, así que dos versiones no podían coexistir en disco.
+Además, una desactivación podía cerrar el classloader y dejar hilos, recursos,
+listeners o registros apuntando a clases muertas sin que el estado lo reflejara.
+
+**Decisión.**
+
+1. El empaquetado usa `library/packages/<id>-<version>.jar` y
+   `library/dependencies/<id>-<version>.jar`. La versión anterior permanece en
+   disco hasta que el runtime confirma el upgrade.
+2. `ModuleHost.upgrade(id, newJar, dependencyJars)` prepara el classloader de la
+   versión nueva, detiene la anterior, arranca la nueva y, si el arranque falla,
+   vuelve a preparar y arrancar el JAR anterior. No arranca las dos versiones a
+   la vez: comparten `moduleId`, namespaces de servicios/configuración, rutas de
+   comandos y grupo de hilos, así que la coexistencia colisionaría en lugar de
+   demostrar aislamiento.
+3. El manager invoca `PackageUpgradeListener.beforeRemovingOld(old, new)` antes
+   de borrar la versión anterior. El runtime activa las nuevas versiones dentro
+   de ese callback y devuelve `allow()`, `rollback(...)` o `keepBoth(...)`.
+4. El callback es transaccional dentro de su lote. `PackageRuntime` registra
+   cada módulo que ya actualizó; si una versión posterior falla, recorre ese
+   registro en orden inverso, vuelve a preparar y arrancar el JAR anterior y
+   verifica que el módulo quedó `ACTIVE`. Solo cuando toda la compensación es
+   limpia devuelve `rollback(...)` y permite al manager borrar los archivos
+   nuevos.
+5. Si la compensación falla, no se finge un rollback: se devuelve
+   `keepBoth(...)`, el manager conserva ambas versiones en disco, los módulos
+   afectados se marcan `RESTART_REQUIRED` y el operador recibe la causa. Los
+   archivos nuevos no se borran porque pueden seguir en uso; los antiguos
+   tampoco, porque son la única vía de recuperación. La misma transacción se
+   aplica a la instalación local de un ZIP con varios paquetes, no solo al
+   callback de `repo upgrade`.
+6. `PackageRuntime` devuelve `PackageChange`/`UpgradeResult` con
+   `success`, `state`, `upgraded` y `rolledBack` separados. Un upgrade fallido
+   con rollback puede terminar con la versión anterior `ACTIVE` sin mentir
+   diciendo que el cambio se aplicó.
+7. La desactivación valida cuatro fugas antes de declarar `INSTALLED`:
+   fallo de `ResourceTracker`, registros de owner restantes, classloader no
+   cerrado e hilos vivos en el `ThreadGroup` del módulo. Cualquier fuga produce
+   `RESTART_REQUIRED`. Los hilos de `start`/`stop` se ejecutan dentro del grupo
+   del módulo para que la detección sea posible. Las tareas del scheduler que
+   siguen ejecutándose también cuentan como owner vivo.
+8. Un upgrade de una dependencia compartida se rechaza si algún módulo activo
+   la usa (directa o transitivamente); el mensaje exige reiniciar. Borrar el JAR
+   anterior mientras un classloader activo puede cargarlo después es peor que
+   bloquear el upgrade.
+9. Un paquete `PACKAGE` contiene exactamente un JAR de módulo. Las librerías
+   adicionales van en paquetes `DEPENDENCY`. `PackageRuntime` valida la
+   cardinalidad antes de activar o actualizar y rechaza el paquete si declara
+   cero o más de un JAR; nunca elige el primero en silencio.
+10. `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
+    `ModuleDescriptor` y `Environment` de `manager-spi`, junto con
+    `ManagerFacade.discoverAll()`/`getLoadedModules()`, se eliminan. El
+    descubrimiento por classpath ya no es una vía de producción.
+
+**Consecuencias.**
+
+- El manager conserva la propiedad de los hechos de instalación; el runtime
+  conserva la propiedad del estado vivo. Ninguno simula el estado del otro.
+- Un upgrade fallido deja el sistema en una de tres situaciones verificables:
+  versión anterior activa y nueva eliminada; `RESTART_REQUIRED` con la anterior
+  activa si la limpieza de la nueva falló; o `RESTART_REQUIRED` con ambas
+  versiones conservadas si la compensación no pudo restaurar un módulo previo.
+- La atomicidad no depende de que el lote contenga un solo paquete. Si un lote
+  con varios módulos falla a mitad, los módulos ya actualizados se compensan
+  antes de autorizar el borrado de archivos nuevos.
+- `manager-apt` deja de depender de `kernel`.
+- Las dependencias compartidas no se actualizan en caliente mientras estén en
+  uso; el reinicio es la vía segura.
+- La regla de evidencia de C13 aplica a este ADR: no se puede asumir que un
+  paquete tendrá un JAR, que una dependencia no estará en uso ni que una
+  compensación funcionará. Cada una se valida y se prueba.

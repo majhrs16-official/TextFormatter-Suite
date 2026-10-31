@@ -82,6 +82,21 @@ public final class RuntimeServiceRegistry implements ServiceRegistry {
 
     /**
      * @param owner module id
+     * @return {@code true} when the owner still has live registrations
+     */
+    public boolean hasOwner(String owner) {
+        for (List<Entry> entries : services.values()) {
+            for (Entry entry : entries) {
+                if (entry.owner.equals(owner)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param owner module id
      * @return the module-scoped view of this registry
      */
     public ServiceRegistry scope(String owner) {

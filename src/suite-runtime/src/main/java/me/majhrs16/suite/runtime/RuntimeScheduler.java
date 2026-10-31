@@ -11,6 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.spi.PluginLogger;
@@ -27,6 +28,7 @@ public final class RuntimeScheduler implements AutoCloseable {
     private final ScheduledExecutorService executor;
     private final PluginLogger logger;
     private final Map<String, Set<Handle>> tasksByOwner = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> runningByOwner = new ConcurrentHashMap<>();
 
     public RuntimeScheduler(PluginLogger logger) {
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -43,6 +45,19 @@ public final class RuntimeScheduler implements AutoCloseable {
      */
     public Scheduler scope(String owner) {
         return new ScopedScheduler(owner);
+    }
+
+    /**
+     * @param owner module id
+     * @return {@code true} when the owner still has live tasks
+     */
+    public boolean hasOwner(String owner) {
+        Set<Handle> handles = tasksByOwner.get(owner);
+        if (handles != null && !handles.isEmpty()) {
+            return true;
+        }
+        AtomicInteger running = runningByOwner.get(owner);
+        return running != null && running.get() > 0;
     }
 
     /**
@@ -115,10 +130,18 @@ public final class RuntimeScheduler implements AutoCloseable {
 
         private Runnable guarded(Runnable task) {
             return () -> {
+                runningByOwner.compute(owner, (ignored, current) -> {
+                    AtomicInteger running = current == null ? new AtomicInteger() : current;
+                    running.incrementAndGet();
+                    return running;
+                });
                 try {
                     task.run();
                 } catch (RuntimeException failure) {
                     logger.error("Scheduled task for module " + owner + " failed", failure);
+                } finally {
+                    runningByOwner.computeIfPresent(owner, (ignored, current) ->
+                            current.decrementAndGet() == 0 ? null : current);
                 }
             };
         }

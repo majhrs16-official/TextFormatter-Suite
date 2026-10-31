@@ -89,7 +89,7 @@ class SuiteRuntimeTest {
             Path zip = FixtureModules.buildPackageZip(
                     tempDir, "demo", "1.0.0", "stable", jar, null);
 
-            List<ActivationResult> activation = runtime.installLocal(zip, false);
+            List<PackageChange> activation = runtime.installLocal(zip, false);
 
             assertEquals(1, activation.size());
             assertTrue(activation.get(0).isSuccess());

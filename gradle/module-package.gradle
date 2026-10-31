@@ -11,9 +11,12 @@ def moduleType = project.findProperty('moduleType') ?: 'PACKAGE'
 def moduleDependencies = project.findProperty('moduleDependencies') ?: ''
 def modulePlatform = project.findProperty('modulePlatform') ?: 'common'
 def moduleJarTaskName = project.findProperty('moduleJarTaskName') ?: 'jar'
+// Versioned JAR paths let a hot upgrade keep the active version on disk until
+// the new module has started. The manager removes the old package afterwards.
+def moduleJarName = "${moduleId}-${moduleVersion}.jar"
 def moduleJarPath = moduleType == 'DEPENDENCY'
-        ? "manager/library/dependencies/${moduleId}.jar"
-        : "manager/library/packages/${moduleId}.jar"
+        ? "manager/library/dependencies/${moduleJarName}"
+        : "manager/library/packages/${moduleJarName}"
 def moduleJarTask = tasks.named(moduleJarTaskName)
 
 tasks.register('generateModuleManifest') {
@@ -55,6 +58,6 @@ tasks.register('modulePackage', Zip) {
         into(moduleType == 'DEPENDENCY'
                 ? 'manager/library/dependencies'
                 : 'manager/library/packages')
-        rename { "${moduleId}.jar" }
+        rename { moduleJarName }
     }
 }

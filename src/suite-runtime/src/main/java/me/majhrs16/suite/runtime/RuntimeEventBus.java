@@ -84,6 +84,19 @@ public final class RuntimeEventBus implements EventBus {
 
     /**
      * @param owner module id
+     * @return {@code true} when the owner still has live subscriptions
+     */
+    public boolean hasOwner(String owner) {
+        for (Entry entry : subscriptions) {
+            if (entry.isActive() && entry.owner.equals(owner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param owner module id
      * @return the module-scoped view of this bus
      */
     public EventBus scope(String owner) {

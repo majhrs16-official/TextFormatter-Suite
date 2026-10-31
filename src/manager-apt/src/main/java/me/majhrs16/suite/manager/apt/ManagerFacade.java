@@ -13,11 +13,13 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
- * New Module Manager facade - replaces ModuleLifecycle with APT/dpkg architecture.
- * Integrates with the existing suite runtime via `SuiteRuntime`.
+ * Package manager facade for the APT/dpkg architecture.
+ *
+ * <p>It owns installation facts and repository operations. Live module state
+ * belongs to {@code suite-runtime}; hot upgrades cross that boundary through
+ * {@link PackageUpgradeListener}.</p>
  */
 public final class ManagerFacade {
 
@@ -114,10 +116,13 @@ public final class ManagerFacade {
 
     /**
      * Upgrades all packages (`/suite repo upgrade`).
+     *
+     * @param listener runtime hook that activates the new versions before the
+     *                 old files are removed
      */
-    public AptInstaller.InstallResult repoUpgrade() {
+    public AptInstaller.InstallResult repoUpgrade(PackageUpgradeListener listener) {
         ensureInitialized();
-        return aptInstaller.upgrade();
+        return aptInstaller.upgrade(listener);
     }
 
     /**
@@ -201,46 +206,6 @@ public final class ManagerFacade {
             }
         }
         return updates;
-    }
-
-    /**
-     * Discovers all modules registered via this lifecycle (for `SuiteRuntime`).
-     */
-    public List<me.majhrs16.suite.api.Module> discoverAll(ClassLoader parent) {
-        ensureInitialized();
-        List<me.majhrs16.suite.api.Module> modules = new ArrayList<>();
-        // Discover from kernel (core modules)
-        modules.addAll(me.majhrs16.suite.kernel.ModuleLoader.discover(parent));
-        // Note: Package-based module discovery not yet implemented in ModuleLoader
-        return modules;
-    }
-
-    /**
-     * Gets the list of currently loaded/installed modules (for compatibility).
-     */
-    public List<me.majhrs16.suite.manager.ModuleDescriptor> getLoadedModules() {
-        ensureInitialized();
-        return database.getAllPackages().stream()
-                .map(this::toModuleDescriptor)
-                .collect(Collectors.toList());
-    }
-
-    private me.majhrs16.suite.manager.ModuleDescriptor toModuleDescriptor(PackageEntry entry) {
-        return new me.majhrs16.suite.manager.ModuleDescriptor(
-                new me.majhrs16.suite.manager.ModuleCoordinate("me.majhrs16", entry.name(), me.majhrs16.suite.api.SemVer.parse(entry.version()), null),
-                entry.name(),
-                "",
-                "TextFormatter Suite Team",
-                "https://github.com/majhrs16-official/TextFormatter-Suite",
-                "GPL-3.0",
-                me.majhrs16.suite.api.SemVer.of(2, 1, 0),
-                "17", "21",
-                List.of(platform),
-                entry.dependencies(),
-                Set.of(),
-                Set.of(),
-                Map.of("channel", entry.channel(), "type", entry.type().name())
-        );
     }
 
     public LocalPackageDatabase getDatabase() { return database; }

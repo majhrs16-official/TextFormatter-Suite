@@ -40,7 +40,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; 4 tests de ciclo y entrega |
 | **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: bootstrap neutral, comandos con raíz configurable, fat-jar shadow; **compila con Paper API 1.21.4** |
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
-| **Module Manager (runtime)** | ⚠️ Núcleo completado, releases descartados | GitHub/local/HTTP downloader, version resolver (semver ranges + env compat), dependency resolver (module.yml), relocator (fixed), ClassLoader aislado parent-last, SHA256 obligatorio, `register()` SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation obligatoria; **decisión: no habrá GitHub Releases públicos** (ver `PLAN.md`) |
+| **Module Manager (runtime)** | ✅ Núcleo y hot upgrade probados | Repositorios HTTP/file, resolver SemVer y dependencias, SHA-256 obligatorio, JARs versionados, classloader aislado, activación/desactivación real, hot upgrade con rollback y detección de hilos/recursos/registros filtrados; `packages.list` es la metadata autoritativa; **no hay GitHub Releases públicos** (ver `PLAN.md`) |
 | **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
 | **Presets** | ✅ Catálogo probado | Standard/RPG/Staff/Minimal, import/export YAML; 2 tests; sin motor de ejecución (placeholder) |
 | **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
@@ -190,7 +190,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Operación y extensibilidad
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `manager-spi` | SPI del Module Manager: `ModuleCoordinate`, `ModuleDescriptor`, `Environment`, `ModuleLifecycle`, manifiestos y versiones | ✅ Probado |
+| `manager-spi` | Metadata de paquetes, manifiestos, versiones, configuración de repositorios y compatibilidad de plataforma | ✅ Probado |
 | `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado (25 tests) |
 | `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo probado (14 tests) |
 | `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado (6 tests) |

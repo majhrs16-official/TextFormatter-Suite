@@ -57,6 +57,19 @@ public final class RuntimeConfigRegistry implements ConfigRegistry {
     }
 
     /**
+     * @param owner module id
+     * @return {@code true} when the owner still has a live config section
+     */
+    public boolean hasOwner(String owner) {
+        for (Registered registered : sections.values()) {
+            if (registered.owner.equals(owner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Removes every section owned by {@code owner}.
      *
      * @param owner module id

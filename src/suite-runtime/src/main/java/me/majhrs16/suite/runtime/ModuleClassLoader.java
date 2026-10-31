@@ -5,6 +5,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Isolated classloader for one installed module JAR.
@@ -24,6 +25,8 @@ public final class ModuleClassLoader extends URLClassLoader {
             "sun.",
             "com.sun.",
             "me.majhrs16.suite.api.");
+
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     public ModuleClassLoader(Path jar, ClassLoader apiParent) throws IOException {
         this(new URL[]{jar.toUri().toURL()}, apiParent);
@@ -81,5 +84,16 @@ public final class ModuleClassLoader extends URLClassLoader {
             }
         }
         return false;
+    }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+        closed.set(true);
+    }
+
+    /** @return {@code true} after the underlying classloader was closed. */
+    public boolean isClosed() {
+        return closed.get();
     }
 }

@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Stream;
@@ -25,7 +28,6 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
-import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.runtime.ModuleDeactivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
@@ -43,8 +45,18 @@ import me.majhrs16.suite.kernel.ResolutionResult;
  * deactivation that closes the classloader and every module-owned resource.
  * Runtime states are persisted separately from {@code library/status} when a
  * {@link RuntimeStateStore} is supplied.</p>
+ *
+ * <p>Hot upgrades prepare the new JAR in a second classloader before touching
+ * the active version. The previous version is stopped, the new one starts, and
+ * a failed start re-prepares the previous JAR from disk. This ordering is
+ * deliberate: both versions share the same module id, service namespaces,
+ * command paths and config namespace, so starting them simultaneously would
+ * collide instead of proving isolation.</p>
  */
 public final class ModuleHost implements AutoCloseable {
+
+    private static final long THREAD_RELEASE_TIMEOUT_MS = 1_000L;
+    private static final AtomicLong THREAD_GROUP_SEQUENCE = new AtomicLong();
 
     private final Path packagesDir;
     private final Path configRoot;
@@ -151,11 +163,12 @@ public final class ModuleHost implements AutoCloseable {
      *
      * <p>A JAR that cannot be read or whose descriptor cannot be resolved is
      * reported as {@link ModuleState#FAILED}; it does not prevent the rest from
-     * activating.</p>
+     * activating. When two JARs declare the same module id (for example after a
+     * crash during an upgrade), only the highest version is activated.</p>
      *
-     * @return one result per discovered JAR, in activation order
+     * @return one result per discovered module, in activation order
      */
-    public List<ActivationResult> loadInstalled() {
+    public synchronized List<ActivationResult> loadInstalled() {
         if (!Files.isDirectory(packagesDir)) {
             return List.of();
         }
@@ -183,10 +196,11 @@ public final class ModuleHost implements AutoCloseable {
             }
         }
 
-        List<Module> candidates = new ArrayList<>(prepared);
+        List<PreparedModule> selected = selectHighestVersions(prepared);
+        List<Module> candidates = new ArrayList<>(selected);
         ResolutionResult resolution = new ModuleGraph(environment).resolve(candidates);
         Map<Module, PreparedModule> byModule = new IdentityHashMap<>();
-        for (PreparedModule module : prepared) {
+        for (PreparedModule module : selected) {
             byModule.put(module, module);
         }
 
@@ -198,9 +212,12 @@ public final class ModuleHost implements AutoCloseable {
         for (Module module : resolution.rejected()) {
             PreparedModule preparedModule = byModule.get(module);
             String reason = resolution.reasonOf(module);
-            setState(preparedModule.id, ModuleState.FAILED);
-            closeQuietly(preparedModule, reason);
-            results.add(ActivationResult.failed(preparedModule.id, reason, null));
+            ReleaseReport release = closeQuietly(preparedModule, false, reason);
+            ModuleState state = release.isClean() ? ModuleState.FAILED : ModuleState.RESTART_REQUIRED;
+            setState(preparedModule.id, state);
+            results.add(state == ModuleState.FAILED
+                    ? ActivationResult.failed(preparedModule.id, reason, null)
+                    : ActivationResult.restartRequired(preparedModule.id, reason, release.failure()));
         }
         results.addAll(failures);
         return List.copyOf(results);
@@ -228,7 +245,7 @@ public final class ModuleHost implements AutoCloseable {
      * @param dependencyJars  shared dependency JARs
      * @return the activation outcome
      */
-    public ActivationResult activate(Path jar, List<Path> dependencyJars) {
+    public synchronized ActivationResult activate(Path jar, List<Path> dependencyJars) {
         Objects.requireNonNull(dependencyJars, "dependencyJars");
         PreparedModule prepared;
         try {
@@ -242,42 +259,134 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /**
+     * Replaces an active module with a new JAR.
+     *
+     * <p>The new JAR is prepared in a second classloader first. The active
+     * version is then stopped, the new version starts, and a failed start
+     * re-prepares and starts the previous JAR. The caller owns the installation
+     * transaction: it must keep the previous JAR on disk until this method
+     * returns success and must remove the new package when it does not.</p>
+     *
+     * @param moduleId       active module id
+     * @param newJar         new module JAR
+     * @param dependencyJars shared dependency JARs for the new version
+     * @return upgrade outcome, including whether the previous version was
+     *         restored
+     */
+    public synchronized UpgradeResult upgrade(String moduleId, Path newJar, List<Path> dependencyJars) {
+        Objects.requireNonNull(moduleId, "moduleId");
+        Objects.requireNonNull(newJar, "newJar");
+        Objects.requireNonNull(dependencyJars, "dependencyJars");
+
+        LoadedModule previous = active.get(moduleId);
+        if (previous == null) {
+            ModuleState state = states.getOrDefault(moduleId, ModuleState.FAILED);
+            return UpgradeResult.failed(moduleId, null, null, state, false,
+                    "Module is not active: " + moduleId, null);
+        }
+        String previousVersion = previous.descriptor.version().toString();
+
+        PreparedModule next;
+        try {
+            next = prepare(newJar, dependencyJars);
+        } catch (Throwable failure) {
+            return UpgradeResult.failed(moduleId, previousVersion, null, ModuleState.ACTIVE,
+                    false, "Cannot prepare new version of " + moduleId + ": "
+                    + failure.getMessage(), failure);
+        }
+        String newVersion = next.descriptor.version().toString();
+        if (!next.id.equals(moduleId)) {
+            ReleaseReport release = closeQuietly(next, false, "descriptor id mismatch");
+            return UpgradeResult.failed(moduleId, previousVersion, newVersion,
+                    release.isClean() ? ModuleState.ACTIVE : ModuleState.RESTART_REQUIRED,
+                    false, "New JAR declares module " + next.id + " instead of " + moduleId,
+                    release.failure());
+        }
+
+        String unsatisfied = unsatisfiedRequirement(next.descriptor);
+        if (unsatisfied != null) {
+            ReleaseReport release = closeQuietly(next, false, "unsatisfied requirement");
+            return UpgradeResult.failed(moduleId, previousVersion, newVersion,
+                    release.isClean() ? ModuleState.ACTIVE : ModuleState.RESTART_REQUIRED,
+                    false, unsatisfied, release.failure());
+        }
+
+        active.remove(moduleId);
+        ReleaseReport oldRelease = release(previous.runtime(), true, "upgrade");
+        events.publish(new ModuleDeactivatedEvent(moduleId));
+        if (!oldRelease.isClean()) {
+            setState(moduleId, ModuleState.RESTART_REQUIRED);
+            closeQuietly(next, false, "upgrade aborted");
+            String message = "Module " + moduleId + " did not release before the upgrade: "
+                    + oldRelease.failure().getMessage();
+            logger.error(message, oldRelease.failure());
+            return UpgradeResult.restartRequired(moduleId, previousVersion, newVersion,
+                    message, oldRelease.failure());
+        }
+
+        ActivationResult activation = activatePrepared(next);
+        if (activation.isSuccess()) {
+            logger.info("Module upgraded: " + moduleId + " " + previousVersion + " -> " + newVersion);
+            return UpgradeResult.upgraded(moduleId, previousVersion, newVersion);
+        }
+
+        PreparedModule rollback;
+        try {
+            rollback = prepare(previous.jar, previous.dependencyJars);
+        } catch (Throwable failure) {
+            String message = "New version of " + moduleId + " failed and the previous version "
+                    + "cannot be prepared: " + failure.getMessage();
+            setState(moduleId, ModuleState.RESTART_REQUIRED);
+            logger.error(message, failure);
+            return UpgradeResult.failed(moduleId, previousVersion, newVersion,
+                    ModuleState.RESTART_REQUIRED, false, message, failure);
+        }
+
+        ActivationResult restored = activatePrepared(rollback);
+        if (!restored.isSuccess()) {
+            String message = "New version of " + moduleId + " failed and the previous version "
+                    + "could not be restored: " + restored.message();
+            logger.error(message, restored.cause());
+            return UpgradeResult.failed(moduleId, previousVersion, newVersion,
+                    restored.state(), false, message, restored.cause());
+        }
+
+        ModuleState finalState = activation.state() == ModuleState.RESTART_REQUIRED
+                ? ModuleState.RESTART_REQUIRED
+                : ModuleState.ACTIVE;
+        if (finalState == ModuleState.RESTART_REQUIRED) {
+            setState(moduleId, ModuleState.RESTART_REQUIRED);
+        }
+        String message = "New version " + newVersion + " of " + moduleId
+                + " failed; previous version " + previousVersion + " was restored: "
+                + activation.message();
+        logger.warn(message);
+        return UpgradeResult.failed(moduleId, previousVersion, newVersion,
+                finalState, true, message, activation.cause());
+    }
+
+    /**
      * Deactivates an active module, closes its classloader and releases every
      * resource it owns.
      *
      * @param moduleId module id
      * @return the deactivation outcome
      */
-    public DeactivationResult deactivate(String moduleId) {
+    public synchronized DeactivationResult deactivate(String moduleId) {
         LoadedModule module = active.remove(moduleId);
         if (module == null) {
             return new DeactivationResult(moduleId, ModuleState.FAILED,
                     "Module is not active: " + moduleId, null);
         }
 
-        Throwable failure = null;
-        try {
-            module.activator.stop();
-        } catch (Throwable stopFailure) {
-            failure = stopFailure;
-        }
-        try {
-            module.context.close();
-        } catch (Throwable closeFailure) {
-            failure = failure == null ? closeFailure : failure;
-        }
-        try {
-            module.classLoader.close();
-        } catch (IOException closeFailure) {
-            failure = failure == null ? closeFailure : failure;
-        }
-
-        if (failure != null) {
+        ReleaseReport release = release(module.runtime(), true, "deactivation");
+        if (!release.isClean()) {
             setState(moduleId, ModuleState.RESTART_REQUIRED);
             events.publish(new ModuleDeactivatedEvent(moduleId));
-            String message = "Module " + moduleId + " did not release cleanly: " + failure.getMessage();
-            logger.error(message, failure);
-            return DeactivationResult.restartRequired(moduleId, message, failure);
+            String message = "Module " + moduleId + " did not release cleanly: "
+                    + release.failure().getMessage();
+            logger.error(message, release.failure());
+            return DeactivationResult.restartRequired(moduleId, message, release.failure());
         }
 
         setState(moduleId, ModuleState.INSTALLED);
@@ -290,22 +399,40 @@ public final class ModuleHost implements AutoCloseable {
      * @param moduleId module id
      * @return the last known state, if the module was seen by this host
      */
-    public Optional<ModuleState> state(String moduleId) {
+    public synchronized Optional<ModuleState> state(String moduleId) {
         return Optional.ofNullable(states.get(moduleId));
     }
 
     /** @return an immutable snapshot of the known module states. */
-    public Map<String, ModuleState> snapshot() {
+    public synchronized Map<String, ModuleState> snapshot() {
         return Collections.unmodifiableMap(new LinkedHashMap<>(states));
     }
 
     /** @return the ids of currently active modules. */
-    public List<String> activeModules() {
+    public synchronized List<String> activeModules() {
         return List.copyOf(active.keySet());
     }
 
+    /**
+     * Marks a known module as requiring a restart without pretending it was
+     * cleanly unloaded.
+     *
+     * <p>Package upgrades use this when runtime compensation fails and both
+     * package versions must stay on disk for recovery.</p>
+     *
+     * @param moduleId module id
+     * @param reason   human-readable cause
+     */
+    public synchronized void requireRestart(String moduleId, String reason) {
+        Objects.requireNonNull(moduleId, "moduleId");
+        if (active.containsKey(moduleId) || states.containsKey(moduleId)) {
+            setState(moduleId, ModuleState.RESTART_REQUIRED);
+            logger.error("Module " + moduleId + " requires restart: " + reason);
+        }
+    }
+
     @Override
-    public void close() {
+    public synchronized void close() {
         closing = true;
         for (String moduleId : new ArrayList<>(active.keySet())) {
             deactivate(moduleId);
@@ -352,7 +479,11 @@ public final class ModuleHost implements AutoCloseable {
             DefaultModuleContext context = new DefaultModuleContext(
                     moduleId, configDir, moduleLogger, services, events, scheduler,
                     commands, configs, platform, () -> closing);
-            return new PreparedModule(moduleId, jar, descriptor, activator, classLoader, context);
+            ThreadGroup threadGroup = new ThreadGroup(
+                    "suite-module-" + moduleId + "-" + descriptor.version()
+                            + "-" + THREAD_GROUP_SEQUENCE.incrementAndGet());
+            return new PreparedModule(moduleId, jar, descriptor, activator, classLoader,
+                    context, threadGroup, List.copyOf(dependencyJars));
         } catch (Throwable failure) {
             try {
                 classLoader.close();
@@ -364,6 +495,24 @@ public final class ModuleHost implements AutoCloseable {
             }
             throw new IllegalStateException(failure.getMessage(), failure);
         }
+    }
+
+    private List<PreparedModule> selectHighestVersions(List<PreparedModule> prepared) {
+        Map<String, PreparedModule> selected = new LinkedHashMap<>();
+        for (PreparedModule candidate : prepared) {
+            PreparedModule current = selected.get(candidate.id);
+            if (current == null) {
+                selected.put(candidate.id, candidate);
+                continue;
+            }
+            if (candidate.descriptor.version().compareTo(current.descriptor.version()) > 0) {
+                selected.put(candidate.id, candidate);
+                closeQuietly(current, false, "superseded by " + candidate.descriptor.version());
+            } else {
+                closeQuietly(candidate, false, "superseded by " + current.descriptor.version());
+            }
+        }
+        return new ArrayList<>(selected.values());
     }
 
     /**
@@ -412,30 +561,46 @@ public final class ModuleHost implements AutoCloseable {
     private ActivationResult activatePrepared(PreparedModule prepared) {
         if (active.containsKey(prepared.id)) {
             String message = "Module already active: " + prepared.id;
-            closeQuietly(prepared, message);
+            ReleaseReport release = closeQuietly(prepared, false, message);
+            if (!release.isClean()) {
+                setState(prepared.id, ModuleState.RESTART_REQUIRED);
+                return ActivationResult.restartRequired(prepared.id, message, release.failure());
+            }
             return ActivationResult.failed(prepared.id, message, null);
         }
 
         String unsatisfied = unsatisfiedRequirement(prepared.descriptor);
         if (unsatisfied != null) {
-            closeQuietly(prepared, unsatisfied);
-            setState(prepared.id, ModuleState.FAILED);
-            return ActivationResult.failed(prepared.id, unsatisfied, null);
+            ReleaseReport release = closeQuietly(prepared, false, unsatisfied);
+            ModuleState state = release.isClean() ? ModuleState.FAILED : ModuleState.RESTART_REQUIRED;
+            setState(prepared.id, state);
+            return state == ModuleState.FAILED
+                    ? ActivationResult.failed(prepared.id, unsatisfied, null)
+                    : ActivationResult.restartRequired(prepared.id, unsatisfied, release.failure());
         }
 
         try {
-            prepared.activator.start(prepared.context);
+            runInModuleThread(prepared.threadGroup, prepared.classLoader,
+                    "suite-module-" + prepared.id + "-start",
+                    () -> prepared.activator.start(prepared.context));
         } catch (Throwable failure) {
-            closeQuietly(prepared, failure.getMessage());
-            setState(prepared.id, ModuleState.FAILED);
-            logger.error("Module activation failed: " + prepared.id + " (" + failure.getMessage() + ")", failure);
-            return ActivationResult.failed(prepared.id,
-                    "Module activation failed: " + failure.getMessage(), failure);
+            ReleaseReport release = release(prepared.runtime(), true, "activation failure");
+            ModuleState state = release.isClean() ? ModuleState.FAILED : ModuleState.RESTART_REQUIRED;
+            setState(prepared.id, state);
+            logger.error("Module activation failed: " + prepared.id
+                    + " (" + failure.getMessage() + ")", failure);
+            return state == ModuleState.FAILED
+                    ? ActivationResult.failed(prepared.id,
+                            "Module activation failed: " + failure.getMessage(), failure)
+                    : ActivationResult.restartRequired(prepared.id,
+                            "Module activation failed and did not release cleanly: "
+                                    + release.failure().getMessage(), release.failure());
         }
 
         active.put(prepared.id, new LoadedModule(
                 prepared.id, prepared.jar, prepared.descriptor, prepared.activator,
-                prepared.classLoader, prepared.context));
+                prepared.classLoader, prepared.context, prepared.threadGroup,
+                prepared.dependencyJars));
         setState(prepared.id, ModuleState.ACTIVE);
         events.publish(new ModuleActivatedEvent(prepared.id, prepared.descriptor));
         logger.info("Module activated: " + prepared.id + " " + prepared.descriptor.version());
@@ -467,17 +632,126 @@ public final class ModuleHost implements AutoCloseable {
         return null;
     }
 
-    private void closeQuietly(PreparedModule prepared, String reason) {
-        try {
-            prepared.context.close();
-        } catch (RuntimeException closeFailure) {
-            logger.error("Failed to close context for " + prepared.id + " (" + reason + ")", closeFailure);
+    private ReleaseReport closeQuietly(PreparedModule prepared, boolean stopActivator, String reason) {
+        return release(prepared.runtime(), stopActivator, reason);
+    }
+
+    private ReleaseReport release(ModuleRuntime runtime, boolean stopActivator, String reason) {
+        Throwable failure = null;
+        if (stopActivator) {
+            try {
+                runInModuleThread(runtime.threadGroup, runtime.classLoader,
+                        "suite-module-" + runtime.id + "-stop",
+                        runtime.activator::stop);
+            } catch (Throwable stopFailure) {
+                failure = stopFailure;
+            }
         }
         try {
-            prepared.classLoader.close();
+            runtime.context.close();
+        } catch (Throwable closeFailure) {
+            failure = first(failure, closeFailure);
+        }
+        failure = first(failure, runtime.context.releaseFailure());
+        try {
+            runtime.classLoader.close();
         } catch (IOException closeFailure) {
-            logger.error("Failed to close classloader for " + prepared.id + " (" + reason + ")", closeFailure);
+            failure = first(failure, closeFailure);
         }
+        if (runtime.context.hasOwnedRegistrations()) {
+            failure = first(failure, new IllegalStateException(
+                    "module registrations survived context close"));
+        }
+
+        List<String> leakedThreads = awaitNoThreads(runtime.threadGroup);
+        if (!leakedThreads.isEmpty()) {
+            failure = first(failure, new IllegalStateException(
+                    "module threads still alive: " + String.join(", ", leakedThreads)));
+        }
+
+        if (failure != null) {
+            logger.error("Module " + runtime.id + " did not release cleanly ("
+                    + reason + "): " + failure.getMessage(), failure);
+        }
+        return new ReleaseReport(failure, leakedThreads);
+    }
+
+    private static Throwable first(Throwable current, Throwable candidate) {
+        return current == null ? candidate : current;
+    }
+
+    private static void runInModuleThread(ThreadGroup group, ClassLoader classLoader,
+                                          String name, ThrowingRunnable action) throws Exception {
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread thread = new Thread(group, () -> {
+            try {
+                action.run();
+            } catch (Throwable thrown) {
+                failure.set(thrown);
+            }
+        }, name);
+        thread.setContextClassLoader(classLoader);
+        thread.setDaemon(true);
+        thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw interrupted;
+        }
+        Throwable thrown = failure.get();
+        if (thrown instanceof Exception exception) {
+            throw exception;
+        }
+        if (thrown instanceof Error error) {
+            throw error;
+        }
+        if (thrown != null) {
+            throw new IllegalStateException(thrown);
+        }
+    }
+
+    private static List<String> awaitNoThreads(ThreadGroup group) {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(THREAD_RELEASE_TIMEOUT_MS);
+        List<String> active = activeThreads(group);
+        while (!active.isEmpty() && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(25L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            active = activeThreads(group);
+        }
+        return active;
+    }
+
+    private static List<String> activeThreads(ThreadGroup group) {
+        Thread[] threads = new Thread[Math.max(1, group.activeCount() + 8)];
+        int count = group.enumerate(threads, true);
+        List<String> names = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            if (threads[i] != null && threads[i].isAlive()) {
+                names.add(threads[i].getName());
+            }
+        }
+        return List.copyOf(names);
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private record ReleaseReport(Throwable failure, List<String> leakedThreads) {
+        private boolean isClean() {
+            return failure == null && leakedThreads.isEmpty();
+        }
+    }
+
+    private record ModuleRuntime(String id, ModuleActivator activator,
+                                 ModuleClassLoader classLoader, DefaultModuleContext context,
+                                 ThreadGroup threadGroup) {
     }
 
     private static final class PreparedModule implements Module {
@@ -488,16 +762,25 @@ public final class ModuleHost implements AutoCloseable {
         private final ModuleActivator activator;
         private final ModuleClassLoader classLoader;
         private final DefaultModuleContext context;
+        private final ThreadGroup threadGroup;
+        private final List<Path> dependencyJars;
 
         private PreparedModule(String id, Path jar, ModuleDescriptor descriptor,
                                ModuleActivator activator, ModuleClassLoader classLoader,
-                               DefaultModuleContext context) {
+                               DefaultModuleContext context, ThreadGroup threadGroup,
+                               List<Path> dependencyJars) {
             this.id = id;
             this.jar = jar;
             this.descriptor = descriptor;
             this.activator = activator;
             this.classLoader = classLoader;
             this.context = context;
+            this.threadGroup = threadGroup;
+            this.dependencyJars = dependencyJars;
+        }
+
+        private ModuleRuntime runtime() {
+            return new ModuleRuntime(id, activator, classLoader, context, threadGroup);
         }
 
         @Override
@@ -508,7 +791,12 @@ public final class ModuleHost implements AutoCloseable {
 
     private record LoadedModule(String id, Path jar, ModuleDescriptor descriptor,
                                 ModuleActivator activator, ModuleClassLoader classLoader,
-                                ModuleContext context) {
+                                DefaultModuleContext context, ThreadGroup threadGroup,
+                                List<Path> dependencyJars) {
+
+        private ModuleRuntime runtime() {
+            return new ModuleRuntime(id, activator, classLoader, context, threadGroup);
+        }
     }
 
     private static final class PrefixedLogger implements PluginLogger {

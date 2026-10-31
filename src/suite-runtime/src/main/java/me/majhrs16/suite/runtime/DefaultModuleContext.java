@@ -28,7 +28,7 @@ final class DefaultModuleContext implements ModuleContext {
     private final ServiceRegistry services;
     private final EventBus events;
     private final Scheduler scheduler;
-    private final ResourceTracker resources;
+    private final DefaultResourceTracker resources;
     private final PlatformInfo platform;
     private final BooleanSupplier shuttingDown;
     private final CommandRegistry commands;
@@ -87,5 +87,18 @@ final class DefaultModuleContext implements ModuleContext {
         runtimeServices.removeOwner(moduleId);
         runtimeCommands.removeOwner(moduleId);
         runtimeConfigs.removeOwner(moduleId);
+    }
+
+    /** @return the first resource cleanup failure, or {@code null}. */
+    Throwable releaseFailure() {
+        return resources.failure().orElse(null);
+    }
+
+    boolean hasOwnedRegistrations() {
+        return runtimeScheduler.hasOwner(moduleId)
+                || runtimeEvents.hasOwner(moduleId)
+                || runtimeServices.hasOwner(moduleId)
+                || runtimeCommands.hasOwner(moduleId)
+                || runtimeConfigs.hasOwner(moduleId);
     }
 }

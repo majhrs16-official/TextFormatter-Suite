@@ -3,7 +3,9 @@ package me.majhrs16.suite.runtime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import me.majhrs16.suite.api.runtime.ResourceTracker;
 import me.majhrs16.suite.api.spi.PluginLogger;
@@ -19,6 +21,7 @@ public final class DefaultResourceTracker implements ResourceTracker {
     private final PluginLogger logger;
     private final List<Runnable> cleanups = new ArrayList<>();
     private final AtomicBoolean released = new AtomicBoolean();
+    private final AtomicReference<Throwable> failure = new AtomicReference<>();
 
     public DefaultResourceTracker(PluginLogger logger) {
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -59,8 +62,9 @@ public final class DefaultResourceTracker implements ResourceTracker {
         for (int i = pending.size() - 1; i >= 0; i--) {
             try {
                 pending.get(i).run();
-            } catch (RuntimeException failure) {
-                logger.error("Resource cleanup failed", failure);
+            } catch (RuntimeException cleanupFailure) {
+                this.failure.compareAndSet(null, cleanupFailure);
+                logger.error("Resource cleanup failed", cleanupFailure);
             }
         }
     }
@@ -68,5 +72,13 @@ public final class DefaultResourceTracker implements ResourceTracker {
     @Override
     public boolean isReleased() {
         return released.get();
+    }
+
+    /**
+     * @return the first cleanup failure, when a tracked resource could not be
+     *         released; empty when every cleanup succeeded
+     */
+    Optional<Throwable> failure() {
+        return Optional.ofNullable(failure.get());
     }
 }

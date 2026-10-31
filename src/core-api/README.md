@@ -46,7 +46,7 @@
 - `kernel` — uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
 - `textformatter` — uses `Message`, `Channel`, `TranslationService`, `PlaceholderResolver`
 - `iflow-vm`/`iflow-firewall` — use `Message`, `Channel`, `ActorDirectory` and implement the shared `Router` contract
-- `host` — uses nearly all SPIs and domain types (legacy wiring is being removed in F6/F4b)
+- `host` — uses the neutral SPI and domain types; production feature wiring was removed in F4b/F6
 - `suite-runtime` — implements the lifecycle API and publishes `ModuleActivatedEvent`/`ModuleDeactivatedEvent`
 - `gtranslate`/`ltranslate` — publish `TranslatorProvider` in the module `ServiceRegistry`
 - `chattranslator` — consumes providers and rebuilds its `TranslatorManager` on lifecycle events
@@ -54,7 +54,7 @@
 - Sync modules — implement `SyncSink`
 - `observability` — uses `Message`, `Channel`
 - `presets` — uses `Message`, `Channel`
-- `manager-spi`/`manager-core`/`manager-apt` — use `ModuleDescriptor`, `ModuleCoordinate`
+- `manager-spi`/`manager-core`/`manager-apt` — use the package model and `me.majhrs16.suite.api.ModuleDescriptor`; the duplicate legacy descriptors were removed in F7
 - `extension-api` — uses `Module` concepts
 - `spigot-host` — implements all SPIs
 - `fabric-host` — implements platform SPIs (compila; no probado en servidor real)

@@ -60,9 +60,9 @@
 - ✅ Example extension
 
 #### FASE 12: Module Manager (F12) — Núcleo Completado
-- ✅ ModuleCoordinate/Descriptor/Environment
-- ✅ ModuleLifecycle SPI
-- ✅ DefaultModuleLifecycle implementation
+- ✅ ModuleCoordinate/Descriptor/Environment (retirados en F7; la API vigente es `me.majhrs16.suite.api.ModuleDescriptor`)
+- ✅ ModuleLifecycle SPI (retirado en F7; la API vigente es `ModuleActivator`/`ModuleContext`)
+- ✅ DefaultModuleLifecycle implementation (sustituida por `ModuleHost`/`SuiteRuntime`)
 - ✅ GitHub releases downloader (con soporte local/HTTP/File)
 - ✅ Version resolver (semver ranges + env compatibility)
 - ✅ Dependency resolver (parsing module.yml from JAR)
@@ -185,7 +185,7 @@
 - ✅ **TXF-AUD-002**: Fabric chat offload a executor async (evita bloqueo main thread 30s)
 - ✅ **TXF-AUD-003**: Spigot shadowJar fat-jar con módulos proyecto (auto-contenido)
 - ✅ **TXF-AUD-004**: TransactionLog recovery por último estado por operationId
-- ✅ **TXF-AUD-005**: ModuleLifecycleAdapter no-ops en lugar de UnsupportedOperationException
+- ✅ **TXF-AUD-005**: ModuleLifecycleAdapter no-ops en lugar de UnsupportedOperationException (adaptador retirado en F7)
 - ✅ **TXF-AUD-006**: IPv6 SSRF binario (fc00::/7, fe80::/10, ::1/128, ff00::/8) + bracket URLs
 - ✅ **TXF-AUD-007**: Tests PackageInstaller con fixtures ZIP reales (SHA256, duplicados, force)
 - ✅ **TXF-AUD-008**: /debug/simulate endpoint para Gatling (procesa pipeline completo)

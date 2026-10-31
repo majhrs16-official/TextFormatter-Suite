@@ -21,6 +21,10 @@ public record ActivationResult(String moduleId, ModuleState state, String messag
         return new ActivationResult(moduleId, ModuleState.FAILED, message, cause);
     }
 
+    public static ActivationResult restartRequired(String moduleId, String message, Throwable cause) {
+        return new ActivationResult(moduleId, ModuleState.RESTART_REQUIRED, message, cause);
+    }
+
     /** @return {@code true} only when the module really started. */
     public boolean isSuccess() {
         return state == ModuleState.ACTIVE;
