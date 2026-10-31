@@ -144,9 +144,26 @@ tasks.register('checkArchitecture') {
             }
         }
 
+        // F4d: the hosts may only keep the platform invocation adapter. The
+        // legacy command tree and its configuration loader must not return.
+        def legacyCommandNames = [
+            'CommandsConfig.java', 'CommandsConfigLoader.java', 'CommandExecutor.java'
+        ]
+        ['host', 'spigot-host', 'fabric-host'].each { module ->
+            def sourceDir = rootProject.file("src/${module}/src/main/java")
+            if (!sourceDir.isDirectory()) return
+            sourceDir.eachFileRecurse { file ->
+                if (!file.name.endsWith('.java')) return
+                if (file.name.startsWith('DynamicCommand') ||
+                        legacyCommandNames.contains(file.name)) {
+                    violations << "${sourceDir.toPath().relativize(file.toPath())}: legacy host command tree must not exist"
+                }
+            }
+        }
+
         if (!violations.isEmpty()) {
             throw new GradleException(
-                "Architecture violations (neutral module importing platform/host):\n" +
+                "Architecture violations (neutral module importing platform/host or legacy host command tree):\n" +
                 violations.sort().join('\n'))
         }
         println "Architecture check passed: ${rules.size()} neutral/adapter modules scanned"

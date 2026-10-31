@@ -86,6 +86,41 @@ class RuntimeCommandRegistryTest {
     }
 
     @Test
+    void enforcesEveryPermissionOnTheMatchedPath() {
+        registry.register("admin", CommandSpec.builder("admin")
+                .permission("demo.admin")
+                .child(CommandSpec.builder("public")
+                        .handler(context -> context.reply("ok"))
+                        .build())
+                .build());
+
+        Source denied = new Source();
+        CommandResult result = registry.dispatch(denied, List.of("admin", "public"));
+        assertEquals(CommandResult.Status.DENIED, result.status());
+        assertEquals("No tienes permiso para ejecutar /suite admin.", result.message());
+        assertTrue(denied.replies.isEmpty());
+        assertTrue(registry.complete(denied, List.of("admin", "")).isEmpty());
+
+        Source allowed = new Source("demo.admin");
+        assertTrue(registry.dispatch(allowed, List.of("admin", "public")).handled());
+        assertEquals(List.of("ok"), allowed.replies);
+        assertEquals(List.of("public"), registry.complete(allowed, List.of("admin", "")));
+    }
+
+    @Test
+    void dispatchesAndCompletesTopLevelAliases() {
+        registry.register("demo", CommandSpec.builder("demo")
+                .alias("d")
+                .handler(context -> context.reply("ok"))
+                .build());
+
+        Source source = new Source();
+        assertTrue(registry.dispatch(source, List.of("d")).handled());
+        assertEquals(List.of("ok"), source.replies);
+        assertTrue(registry.complete(source, List.of("d")).contains("d"));
+    }
+
+    @Test
     void reportsUsageAndErrorsWithoutLeakingThem() {
         registry.register("demo", CommandSpec.builder("demo")
                 .usage("<arg>")

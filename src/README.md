@@ -59,6 +59,7 @@ TextFormatter Suite
 - `suite-runtime` is the composition root — it builds the pipeline from installed packages and owns package lifecycle
 - Platform adapters (`spigot-host`, `fabric-host`) depend only on `core-api`, `core-render`, `suite-runtime` and their SDK
 - Event capture lives in downloadable `sync-bukkit`/`sync-fabric` packages, not in the host JAR
+- Commands live in the neutral `api.command` tree; the hosts only register the root adapter (F4d)
 - Sync modules depend on `core-api`; technology adapters add `transport`, JDA or a platform SDK
 - **No circular dependencies** between core modules
 
@@ -68,8 +69,8 @@ TextFormatter Suite
 
 | Directory | Responsibility | Depends On | Used By |
 |-----------|----------------|------------|---------|
-| `core-api` | Core interfaces, SPI, domain types and cross-package contracts (Module, Actor, Channel, ChannelRegistry, Router, TranslationService, SyncSink, MessageRenderer, etc.) | — | **All modules** |
-| `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `host`, `spigot-host`, `fabric-host`, test fixtures |
+| `core-api` | Core interfaces, SPI, domain types and cross-package contracts (Module, Actor, Channel, ChannelRegistry, Router, TranslationService, SyncSink, MessageRenderer, CommandRegistry, etc.) | — | **All modules** |
+| `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `suite-runtime`, `manager-core`, `manager-apt`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `spigot-host`, `fabric-host` |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `host`, `spigot-host`, `fabric-host` |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
@@ -182,7 +183,7 @@ TextFormatter Suite
 ### Understand Configuration
 ```
 → src/host/README.md#configuration
-  → ConfigLoader.java, HostConfig.java, CommandsConfig.java
+  → ConfigLoader.java, HostConfig.java
   → HostPaths.java (canonical layout)
 ```
 
@@ -252,8 +253,9 @@ TextFormatter Suite
 ### Command Registration
 | Platform | Registration |
 |----------|--------------|
-| Bukkit | `SuiteRuntime.registerCommands()` → `SpigotPlatformPorts` → `CommandMap` |
-| Fabric | `SuiteRuntime.registerCommands()` → `FabricPlatformPorts` → Brigadier |
+| Neutral | `api.command` tree owned by `RuntimeCommandRegistry`; modules register through `ModuleContext.commands()` |
+| Bukkit | `SuiteRuntime.registerCommands()` → `SpigotPlatformPorts` → `CommandMap` (root adapter only) |
+| Fabric | `SuiteRuntime.registerCommands()` → `FabricPlatformPorts` → Brigadier (root adapter only) |
 
 ### Event/Listener Registration
 | Platform | Registration |
@@ -409,4 +411,4 @@ Module.initialize() called in order
 
 ---
 
-*Generated from actual repository state. Last updated: 2026-10-31 (F4b/F4c closed: feature-free hosts, `PlatformHandle`, downloadable `sync-bukkit`/`sync-fabric` packages, shared neutral event helpers in `sync-common`, and platform-filtered package activation).*
+*Generated from actual repository state. Last updated: 2026-10-31 (F4b/F4c/F4d closed: feature-free hosts, `PlatformHandle`, downloadable `sync-bukkit`/`sync-fabric` packages, shared neutral event helpers in `sync-common`, platform-filtered package activation, and the neutral `api.command` tree with no host command tree).*

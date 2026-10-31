@@ -32,6 +32,8 @@
 - **No eventos de chat/join/quit/death** — pertenecen a `sync-fabric` (F4c).
 - **No bootstrap heredado** — `SuiteHost.bootstrap`/`SuiteBootstrap` fueron
   retirados.
+- **No árbol de comandos duplicado** — F4d lo eliminó; Brigadier solo adapta
+  la invocación y la tab completion.
 - **No JDA** — el bridge Discord del host se eliminó; vive en paquetes de sync.
 
 ## 3. Dependencies

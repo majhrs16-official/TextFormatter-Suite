@@ -155,6 +155,9 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
 
         CommandSpec spec = registered.spec;
         CommandPath path = CommandPath.of(spec.name());
+        if (!permitted(source, spec)) {
+            return denied(path);
+        }
         int index = 1;
         while (index < tokens.size()) {
             Optional<CommandSpec> child = spec.child(tokens.get(index));
@@ -164,6 +167,9 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
             spec = child.get();
             path = path.child(spec.name());
             index++;
+            if (!permitted(source, spec)) {
+                return denied(path);
+            }
         }
 
         if (spec.handler().isEmpty()) {
@@ -172,10 +178,6 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
                         + tokens.get(index) + ". Usa /" + root.display() + " help.");
             }
             return CommandResult.usage(usage(path, spec));
-        }
-        if (spec.permission() != null && !source.hasPermission(spec.permission())) {
-            return CommandResult.denied("No tienes permiso para ejecutar /"
-                    + path.display() + ".");
         }
 
         CommandContext context = new CommandContext(
@@ -210,7 +212,7 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
                     .map(Registered::spec).toList()), first);
         }
         Registered registered = findRoot(first);
-        if (registered == null) {
+        if (registered == null || !permitted(source, registered.spec)) {
             return List.of();
         }
 
@@ -221,8 +223,14 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
             if (child.isEmpty()) {
                 break;
             }
+            if (!permitted(source, child.get())) {
+                return List.of();
+            }
             spec = child.get();
             index++;
+        }
+        if (!permitted(source, spec)) {
+            return List.of();
         }
 
         String partial = tokens.get(tokens.size() - 1);
@@ -249,6 +257,16 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
             return filter(spec.arguments().get(argumentIndex).suggestions(), partial);
         }
         return List.of();
+    }
+
+    private boolean permitted(me.majhrs16.suite.api.command.CommandSource source,
+                              CommandSpec spec) {
+        return spec.permission() == null || source.hasPermission(spec.permission());
+    }
+
+    private CommandResult denied(CommandPath path) {
+        return CommandResult.denied("No tienes permiso para ejecutar /"
+                + root.display() + " " + path.display() + ".");
     }
 
     private void checkAvailable(String token) {

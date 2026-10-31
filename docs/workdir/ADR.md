@@ -686,7 +686,7 @@ servidores reales.
 
 ## Decisión 2026-10-29 — API de configuración y comandos jerárquicos registrables (ADR-021)
 
-**Estado:** Aceptada. API neutral y comandos del runtime implementados; la retirada de los árboles de host queda ligada a F4d.
+**Estado:** Aceptada e implementada (F4d cerrada el 2026-10-31).
 
 **Contexto.** `PlatformPorts.Command` solo registra un comando plano: no hay
 subcomandos, tab completion ni registro por módulo. `SuiteCommand` hardcodea
@@ -748,9 +748,12 @@ API; `CommandOption` declara flags/valores para ayuda y tab completion;
 `ConfigSection.validate` comprueba tipos por defecto y `reload` es explícito, no
 un no-op; `SuiteCommand` se eliminó y el adaptador de plataforma solo necesita
 registrar el comando raíz que delega en el registro neutral. Los tests cubren registro, desregistro por
-ciclo de vida, colisiones, permisos, usage, opciones y tab completion. La eliminación de `DynamicCommandRegistrar`/`DynamicCommand` y del
-Brigadier de Fabric se ejecuta al retirar los árboles de host en F4d; no se añadió
-una fachada temporal.
+ciclo de vida, aliases, colisiones, permisos por ancestro, usage, opciones y tab
+completion. La eliminación física de `DynamicCommandRegistrar`/`DynamicCommand`,
+`CommandsConfig`/`CommandsConfigLoader`/`CommandExecutor` y de los restos de
+eventos de los hosts se completó en F4d; el Brigadier de Fabric queda como
+adaptador de invocación. `RuntimeCommandRegistry` comprueba el permiso de cada
+nodo del path y oculta de la tab completion los subárboles no permitidos.
 
 ---
 
@@ -758,10 +761,11 @@ una fachada temporal.
 
 **Estado:** Aceptada. `CommandRoot` existe en `api.command` y el dispatcher neutral consume prefijos multi-segmento; la configuración `root`/aliases, el re-registro en caliente y la migración de `commands.yml` quedan en F4e.
 
-**Contexto.** `/suite` está hardcodeado en `SuiteCommand`, en los mensajes de
-ayuda, en `DynamicCommandRegistrar` y en el Brigadier de Fabric. Cambiar a
-`/suite module` o `/tf` obligaría a tocar todos los módulos y hosts. Los módulos
-deben registrar rutas relativas, no la raíz.
+**Contexto.** El literal `/suite` sigue hardcodeado en la raíz por defecto y en
+los mensajes de ayuda. Los árboles de host ya se retiraron en F4d; el Brigadier
+de Fabric solo adapta la invocación. Cambiar a `/suite module` o `/tf` obligaría
+a tocar la configuración y los mensajes, no los módulos. Los módulos deben
+registrar rutas relativas, no la raíz.
 
 **Decisión.**
 

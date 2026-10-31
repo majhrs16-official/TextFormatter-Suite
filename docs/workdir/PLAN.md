@@ -5,14 +5,16 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-31 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-31):** **F4c cerrada.** `sync-bukkit` y
+> **Nota de estado (2026-10-31):** **F4c y F4d cerradas.** `sync-bukkit` y
 > `sync-fabric` son paquetes de plataforma descargables con listeners,
 > configuración y ciclo de vida propios; `PackageRuntime` filtra por plataforma
-> y los hosts ya no capturan eventos. El siguiente trabajo es F4d.
+> y los hosts ya no capturan eventos ni mantienen árboles de comandos. Los
+> comandos viven en `api.command` y los hosts solo registran el adaptador raíz.
+> El siguiente trabajo es F4e.
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
-> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada, F6 de paquetes neutrales completada, F4b y F4c cerradas**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 de paquetes neutrales está completada: `transport` ya se empaqueta como dependencia, `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator` (que refresca su `TranslatorManager` con los eventos de ciclo de vida) y `presets` ya se empaqueta como `PACKAGE` con `FilePresetTarget` real para config, canales, traductores y sync, `tester` ya es un `PACKAGE` neutral con `TestProbe`, `TestServiceFactory` y adapter Spigot, e `inworld` también es un `PACKAGE` neutral con `InWorldHandler`/`InWorldPlatform` y el listener Bukkit en `spigot-host`. Quedan F4d (retirada de los árboles de comandos de host) y F4e (raíz de comandos relocalizable); la API neutral de F4d ya está implementada en `core-api`/`suite-runtime`. Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
+> **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada, F6 de paquetes neutrales completada, F4b, F4c y F4d cerradas**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 de paquetes neutrales está completada: `transport` ya se empaqueta como dependencia, `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator` (que refresca su `TranslatorManager` con los eventos de ciclo de vida) y `presets` ya se empaqueta como `PACKAGE` con `FilePresetTarget` real para config, canales, traductores y sync, `tester` ya es un `PACKAGE` neutral con `TestProbe`, `TestServiceFactory` y adapter Spigot, e `inworld` también es un `PACKAGE` neutral con `InWorldHandler`/`InWorldPlatform` y el listener Bukkit en `spigot-host`. Queda F4e (raíz de comandos relocalizable); la API neutral y la retirada de los árboles de comandos de host de F4d ya están cerradas. Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
 
 > **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
@@ -609,7 +611,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
 **Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
 
-**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 de paquetes neutrales completada (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar; `presets` empaquetado con `FilePresetTarget` real; `tester` empaquetado con `TestProbe` neutral; `inworld` empaquetado con `InWorldHandler`/`InWorldPlatform` y el listener Bukkit en `spigot-host`). F4b y F4c están cerradas; F4d/F4e siguen pendientes.
+**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 de paquetes neutrales completada (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar; `presets` empaquetado con `FilePresetTarget` real; `tester` empaquetado con `TestProbe` neutral; `inworld` empaquetado con `InWorldHandler`/`InWorldPlatform` y el listener Bukkit en `spigot-host`). F4b, F4c y F4d están cerradas; F4e sigue pendiente.
 
 > **Ubicación:** el detalle operativo de ADR-019 vive en `docs/workdir/PLAN.md`;
 > la decisión de arquitectura se registra también en `docs/workdir/ADR.md`, que
@@ -1177,9 +1179,9 @@ módulo platform-specific
 - Listeners de chat/join/quit/death en `spigot-host`/`fabric-host`: se mudan a
   `sync-bukkit`/`sync-fabric`; no se conserva el cableado compilado.
 - Árboles de comandos duplicados en `spigot-host` (`DynamicCommandRegistrar`/
-  `DynamicCommand`) y `fabric-host` (Brigadier): se sustituyen por el
-  `CommandRegistry` neutral; el host solo conserva la invocación de primer
-  nivel. Los strings `/suite` hardcodeados se sustituyen por
+  `DynamicCommand`) y `fabric-host` (Brigadier): se sustituyeron por el
+  `CommandRegistry` neutral en F4d; el host solo conserva la invocación de
+  primer nivel. Los strings `/suite` hardcodeados se sustituyen por
   `CommandContext.root()`.
 - `gtranslate`/`ltranslate` como `implementation` en adapters: pasan a ser
   paquetes o `runtimeOnly` del runtime, nunca dependencia de compilación del
@@ -1211,7 +1213,7 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F6. Migrar paquetes opcionales** | Convertir el resto de features y retirar el cableado compilado | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `tester`, `inworld`, `extension-api`; neutralizar `inworld` y mover su listener a `spigot-host`; eliminar el cableado de features en el host | Todos los paquetes instalados se activan desde `library/status` + `library/packages`; ningún feature queda compilado en el host |
 | **F4b. Adapters delgados** | Cerrar el acoplamiento de los adapters | `SpigotPlatformPorts`, `FabricPlatformPorts`, cableado de `SuiteRuntime`, guard `checkArchitecture` | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
 | **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | ✅ `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
-| **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y el Brigadier de Fabric dejan de duplicar el árbol; tests de registro, desregistro, permisos y colisiones |
+| **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | ✅ Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y `CommandsConfig*` no existen; el Brigadier de Fabric queda como adaptador de invocación; tests de registro, desregistro, permisos, colisiones y tab completion |
 | **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión y cambio de raíz |
 | **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets | Test de upgrade exitoso y fallido; sin hilos/classloaders filtrados en fixture; estado de instalación coherente y estado runtime en `<manager>/runtime/modules.status` |
 | **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
@@ -1254,24 +1256,29 @@ Prometheus y sirve `/health`/`/metrics`; `DebugEndpoint` se movió a
 (Java-WebSocket, Gson, org.json, Prometheus, JDA) siguen en el classpath del
 host hasta que F8 las empaquete como `DEPENDENCY`.
 
-**F4d — API neutral completada (2026-10-29):** `core-api` publica
-`api.command` (`CommandRoot`, `CommandPath`, `CommandSpec`, `CommandOption`,
-`CommandSource`, `CommandContext`, `CommandRegistry`, `CommandRegistration`) y
-`api.config` (`ConfigRegistry`, `ConfigSection`, `ConfigRegistration`).
-`SuiteRuntime` crea `RuntimeCommandRegistry`/`RuntimeConfigRegistry`,
-`ModuleContext` entrega vistas module-scoped, exige que el árbol del módulo
-esté enraizado en su `moduleId` y que la sección de configuración use ese mismo
-namespace; `register(CommandPath, CommandSpec)` permite una rama explícita.
-Los comandos del runtime (`help`, `list`, `state`, `install`, `remove`,
-`upgrade`, `repo`) son nodos normales del mismo árbol. `SuiteCommand` se
-eliminó; el host solo necesita registrar el comando raíz que delega en el
-registro neutral, y ese registro puede cerrarse y volver a abrirse. Tests:
-contrato de API, dispatch jerárquico, colisiones, permisos, usage, opciones, tab
-completion y desregistro al desactivar un módulo. Queda pendiente la eliminación
-física de `DynamicCommandRegistrar`/`DynamicCommand` y del Brigadier de Fabric,
-que se ejecuta al adelgazar los hosts en F4b/F4c; no se añadió una fachada
-temporal. Esta entrega es la parte neutral de F4d: la fase no se cierra hasta
-que F4b/F4c permitan retirar los árboles de host.
+**F4d cerrada (2026-10-31):** `core-api` publica `api.command`
+(`CommandRoot`, `CommandPath`, `CommandSpec`, `CommandOption`, `CommandSource`,
+`CommandContext`, `CommandRegistry`, `CommandRegistration`) y `api.config`
+(`ConfigRegistry`, `ConfigSection`, `ConfigRegistration`). `SuiteRuntime` crea
+`RuntimeCommandRegistry`/`RuntimeConfigRegistry`; `ModuleContext` entrega
+vistas module-scoped, exige que el árbol del módulo esté enraizado en su
+`moduleId` y que la sección de configuración use ese mismo namespace;
+`register(CommandPath, CommandSpec)` permite una rama explícita. Los comandos
+del runtime (`help`, `list`, `state`, `install`, `remove`, `upgrade`, `repo`)
+son nodos normales del mismo árbol. `SuiteCommand` se eliminó; el host solo
+registra el comando raíz que delega en el registro neutral, y ese registro puede
+cerrarse y volver a abrirse.
+
+Se eliminaron físicamente `CommandsConfig`, `CommandsConfigLoader` y
+`CommandExecutor` del módulo `host`, junto con los restos muertos
+`ChannelSelector`/`EventRules`/`SpigotScheduler` de los hosts. `SpigotPlatformPorts`
+y `FabricPlatformPorts` conservan únicamente el adaptador de invocación: el
+Brigadier de Fabric ya no contiene un árbol de features. `RuntimeCommandRegistry`
+valida el permiso de cada nodo del path, no solo del nodo final, y oculta de la
+tab completion los subárboles no permitidos. Tests: contrato de API, dispatch
+jerárquico, aliases, colisiones, permisos por ancestro, usage, opciones, tab
+completion, desregistro explícito y desregistro por ciclo de vida. La fase queda
+cerrada; F4e añade la raíz configurable y el re-registro en caliente.
 
 **`sync-discord` desacoplado (2026-10-29):** el paquete neutral ya no importa
 JDA ni `transport`. Los puertos `DiscordConnection`, `DiscordConnectionFactory`,
@@ -1303,7 +1310,7 @@ Tests: `VelocitySinkTest` con `FakeConnection`, `VelocityProxyConnectionTest`
 con Mockito y `PackageRuntimeTest` con un adapter falso instalado después del
 paquete neutral.
 
-**F6 restante — bloqueado por F4d/F4e/F7/F8, no por falta de empaquetado:**
+**F6 restante — bloqueado por F4e/F7/F8, no por falta de empaquetado:**
 - `inworld` ya es un `PACKAGE` neutral (`InWorldHandler`/`InWorldPlatform`) y
   se empaqueta; el adapter Bukkit (`SpigotInWorldListener`) vive en
   `spigot-host`. `tester` también es neutral (`TestProbe`) y su adapter Spigot
@@ -1312,14 +1319,14 @@ paquete neutral.
   `PresetTarget`; `FilePresetTarget` persiste el layout canónico,
   `PresetsActivator` publica `PresetManager` y `PresetService`, y
   `DefaultPresetService` selecciona, persiste y recarga el runtime. Falta
-  exponerlo por comando (F4d/F4e).
+  exponerlo por comando (F4e).
 - `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
   `ActorDirectory`; no importa `host`.
 - F4b y F4c están cerradas: `spigot-host`/`fabric-host` ya no construyen
   sinks, observability, inworld, extensiones ni features; solo registran sus
   puertos y arrancan `SuiteRuntime`. La captura de eventos vive en
   `sync-bukkit`/`sync-fabric`. Queda la retirada de los árboles de comandos de
-  host (F4d/F4e), el hot upgrade/unload real (F7) y el empaquetado de
+  host (F4e), el hot upgrade/unload real (F7) y el empaquetado de
   librerías de terceros como `DEPENDENCY` (F8).
 
 **F4b — punto de partida medido:** `spigot-host` importa directamente al menos
@@ -1329,8 +1336,8 @@ paquete neutral.
 (sin `sync-http` ni `inworld`).
 El guard de arquitectura (`checkArchitecture`) ya existe y está verde: escanea
 los módulos neutrales y adaptadores allowlisted, y falla si un módulo neutral
-importa un SDK de plataforma o el host. Los listeners de eventos siguen en los
-hosts; su extracción a `sync-bukkit`/`sync-fabric` es F4c.
+importa un SDK de plataforma o el host. Los listeners de eventos se extrajeron a
+`sync-bukkit`/`sync-fabric` en F4c; los hosts no los contienen.
 
 **Avance F4b (2026-10-29):** existen `SpigotPlatformPorts` y
 `FabricPlatformPorts` con implementación real de `info`, `deliver`, `send`,
@@ -1339,9 +1346,10 @@ hosts; su extracción a `sync-bukkit`/`sync-fabric` es F4c.
 engancha el `CommandDispatcher` de Brigadier y usa el nivel de operador 2 como
 regla de permisos mientras no haya proveedor externo. La desregistración de
 comandos está cubierta con tests; Fabric retira los nodos raíz y Spigot retira
-las entradas de `CommandMap`. Estas clases aún no están cableadas en los
-hosts: la sustitución de `SuiteHost`/cableado de features y la retirada de
-`DynamicCommand*`/Brigadier siguen pendientes para cerrar F4b/F4d.
+las entradas de `CommandMap`. Ya están cableadas en los hosts; la sustitución de
+`SuiteHost`/cableado de features se cerró en F4b y la retirada de
+`DynamicCommand*`/`CommandsConfig*` se cerró en F4d. El Brigadier de Fabric queda
+solo como adaptador de invocación.
 
 **Avance F4b (2026-10-30):** `core-api` declara el puerto neutral
 `MessageRenderer` para renderizado plano; `textformatter` lo implementa con
@@ -1365,7 +1373,7 @@ dispatcher del host. También se añadió el puerto neutral `PresetService` en
 `core-api`; `presets` lo implementa con `DefaultPresetService` y lo registra en
 su `ModuleContext`, así el host deja de importar `presets` para seleccionar,
 persistir y recargar un preset. La selección por comando sigue pendiente de
-F4d/F4e. En Fabric, `FabricInWorldHandler` dejó
+F4e. En Fabric, `FabricInWorldHandler` dejó
 de ser un handler duplicado con stubs: ahora implementa `InWorldPlatform`,
 delega en `InWorldHandler` y registra los callbacks una sola vez con una
 instancia activa intercambiable; `unregister()` desengancha el adapter al
@@ -1828,10 +1836,10 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 
 **Contexto**
 
-- `/suite` está hardcodeado en `SuiteCommand`, mensajes de ayuda,
-  `DynamicCommandRegistrar` y el Brigadier de Fabric.
-- Cambiar a `/suite module` o `/tf` obligaría a tocar todos los módulos y
-  hosts.
+- El literal `/suite` sigue hardcodeado en la raíz por defecto y en los
+  mensajes de ayuda; los árboles de host ya se retiraron en F4d.
+- Cambiar a `/suite module` o `/tf` obligaría a tocar la configuración y los
+  mensajes, no los módulos.
 - Los módulos deben registrar rutas relativas, no la raíz.
 
 **Decisión**
@@ -1965,8 +1973,8 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | sync-http/tcpudp | ✅ **SyncBus registered** (IP pinning SSRF, timeouts) | build |
 | sync-velocity | ✅ `sync-velocity-core` neutral + `sync-velocity` plugin real (Velocity API 3.4.0, cola async, retry/backoff, métricas, health, dynamic discovery) | build + tests de paquete |
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
-| spigot-host | ✅ **COMPILA** (DynamicCommand, Registrar, Plugin, DiscordBridge, WS, TCP/UDP/Telegram, HealthCheckRegistry) | compile |
-| fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents) | compile |
+| spigot-host | ✅ **COMPILA** (Plugin, SpigotPlatformPorts, SpigotActorDirectory, SpigotChatDelivery, SpigotInWorldListener) | compile |
+| fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, FabricPlatformPorts, FabricActorDirectory, FabricChatDelivery, FabricInWorldHandler) | compile |
 | web-editor | ⚠️ gates verdes; UI inestable; auditoría separada diferida | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
@@ -1984,7 +1992,7 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 | performance | ✅ profiling (CPU/heap/hotspot/cache/memory) | tests |
 
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
-- ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (Fabric 1.21 + Fabric API 0.100.5, Brigadier, ServerMessageEvents, ServerTickEvents, **completo y funcional**).
+- ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (Fabric 1.21 + Fabric API 0.100.5), con la captura de eventos en `sync-bukkit`/`sync-fabric` y los comandos en `api.command`.
 - ⚠️ **Web editor**: gates verdes (StateStore, diffing, validación incremental, paths.json; 108 tests unitarios + integración), pero la UI no se considera estable; queda diferido a una auditoría separada (ver «Decisiones de alcance vigentes»).
 - ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
 - ✅ **Suite corriendo en Fabric** (mod `TextFormatterSuite` instalable, thin-jar construido, Fabric 1.21 + Fabric API 0.100.5).
@@ -2183,7 +2191,7 @@ La sección del host que intercepta eventos de Minecraft y los entrega al núcle
 
 Cada módulo publica sus comandos jerárquicos a través de una API neutral (`api.command`) y su configuración a través de `api.config`. El registro devuelve un `CommandRegistration`/`ConfigRegistration` ligado al ciclo de vida del módulo; al desactivarlo, el runtime retira su subárbol y su esquema. El host solo traduce la invocación de plataforma; no define comandos de features ni mantiene un árbol duplicado.
 
-**Consecuencia:** `SuiteCommand` y los comandos del runtime usan la misma API que cualquier módulo. `DynamicCommandRegistrar`/`DynamicCommand` y el Brigadier de Fabric se reducen a un adaptador de invocación; no hay dos formas de registrar comandos.
+**Consecuencia:** `SuiteCommand` y los comandos del runtime usan la misma API que cualquier módulo. `DynamicCommandRegistrar`/`DynamicCommand` y `CommandsConfig*` se eliminaron en F4d; el Brigadier de Fabric queda como adaptador de invocación y no hay dos formas de registrar comandos.
 
 ### P19. La raíz de comandos es configuración, no código
 
