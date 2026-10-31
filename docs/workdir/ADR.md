@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v2.1
 
-Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño) · Última actualización: 2026-10-29
+Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño) · Última actualización: 2026-10-31
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura. El estado operativo y las fases viven en `PLAN.md`.
 > **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` para estado actual.
 
@@ -656,6 +656,19 @@ solo en el entorno compatible.
 8. No hay doble camino: al cerrar F4c se eliminan los listeners de los hosts. No
    se conserva un fallback compilado ni una activación implícita.
 
+**Estado:** Aceptada e implementada (F4c cerrada el 2026-10-31).
+
+**Implementación (F4c).** `core-api` publica `PlatformHandle` (handle opaco que
+los hosts registran antes de `start()`) y `ModuleContext.isShuttingDown()`.
+`sync-common` concentra `ChannelSelector`, `EventRules`, `EventMessages` y
+`SyncEventProcessor`, compartidos por ambas plataformas. `sync-bukkit` captura
+chat/join/quit/death y aplica `claim-mode`; `sync-fabric` captura los eventos
+equivalentes de Fabric API y detecta muertes en el tick. `PackageRuntime`
+filtra por `PlatformCompatibility` y `checkArchitecture` permite el SDK solo en
+los dos paquetes y en los hosts. Los ZIP declaran `Platform: spigot` y
+`Platform: fabric`. La validación es compilación + tests; no hay E2E en
+servidores reales.
+
 **Consecuencias.**
 
 - El host deja de ser composition root de eventos; su única responsabilidad de
@@ -673,7 +686,7 @@ solo en el entorno compatible.
 
 ## Decisión 2026-10-29 — API de configuración y comandos jerárquicos registrables (ADR-021)
 
-**Estado:** Aceptada. API neutral y comandos del runtime implementados; la retirada de los árboles de host queda ligada a F4b/F4c.
+**Estado:** Aceptada. API neutral y comandos del runtime implementados; la retirada de los árboles de host queda ligada a F4d.
 
 **Contexto.** `PlatformPorts.Command` solo registra un comando plano: no hay
 subcomandos, tab completion ni registro por módulo. `SuiteCommand` hardcodea
@@ -736,7 +749,7 @@ API; `CommandOption` declara flags/valores para ayuda y tab completion;
 un no-op; `SuiteCommand` se eliminó y el adaptador de plataforma solo necesita
 registrar el comando raíz que delega en el registro neutral. Los tests cubren registro, desregistro por
 ciclo de vida, colisiones, permisos, usage, opciones y tab completion. La eliminación de `DynamicCommandRegistrar`/`DynamicCommand` y del
-Brigadier de Fabric se ejecuta al adelgazar los hosts (F4b/F4c); no se añadió
+Brigadier de Fabric se ejecuta al retirar los árboles de host en F4d; no se añadió
 una fachada temporal.
 
 ---
@@ -1060,14 +1073,14 @@ paquete no fuera la única vía de composición.
    puertos propiedad del adapter y arrancan `SuiteRuntime`. El comando raíz se
    registra con `runtime.registerCommands()`.
 2. Los adapters no importan `host`, `kernel`, `manager` ni paquetes de feature.
-   `checkArchitecture` lo verifica para los 32 módulos neutrales/adapter.
+   `checkArchitecture` lo verifica para los 34 módulos neutrales/adapter.
 3. `ChatDelivery` vive en `core-render` porque su contrato usa Adventure.
    `InWorldPlatform` e `InWorldService` viven en `core-api`; el paquete
    `inworld` implementa y publica el servicio, y el adapter solo ve el puerto.
 4. `YamlUserLanguageStore` vive en `suite-runtime`; `SuiteRuntime` expone
    `defaultLanguage()` sin publicar `HostConfig` a los adapters.
 5. La captura de eventos de chat/join/quit/death no pertenece al host: se
-   implementará en `sync-bukkit`/`sync-fabric` (F4c).
+   implementó en `sync-bukkit`/`sync-fabric` (F4c).
 6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`,
    `SuiteBootstrap`, `RouterFactory`, `IflowEngineSelector` y `ConfigValidator`
    se retiraron del módulo `host`. Los tests y benchmarks cablean las

@@ -21,7 +21,7 @@
   - `FabricPlaceholderResolver` — passthrough (Fabric no tiene PlaceholderAPI).
 - **Runtime bootstrap** — registra `ChatDelivery`, `ActorDirectory`,
   `PermissionChecker`, `UserLanguageStore`, `PlaceholderResolver` y
-  `PluginLogger`, y llama a `runtime.start()`.
+  `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **In-world adapter** — `FabricInWorldHandler` consume `InWorldService` y
   `MessageRenderer`.
 

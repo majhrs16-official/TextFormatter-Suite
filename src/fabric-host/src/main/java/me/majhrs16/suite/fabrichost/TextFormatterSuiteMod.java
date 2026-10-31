@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.inworld.InWorldService;
 import me.majhrs16.suite.api.render.ChatDelivery;
+import me.majhrs16.suite.api.runtime.PlatformHandle;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageRenderer;
@@ -91,6 +92,7 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         created.registerPlatformService(UserLanguageStore.class, languages);
         created.registerPlatformService(PlaceholderResolver.class, new FabricPlaceholderResolver());
         created.registerPlatformService(PluginLogger.class, logger);
+        created.registerPlatformService(PlatformHandle.class, (PlatformHandle) () -> startedServer);
 
         try {
             created.start();

@@ -1,0 +1,70 @@
+plugins {
+    id 'jacoco'
+    id 'java'
+    id 'maven-publish'
+}
+
+group = 'me.majhrs16'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    implementation project(':src:core-api')
+    implementation project(':src:sync-common')
+
+    compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
+
+    testImplementation 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            artifactId = 'suite-sync-bukkit'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = rootProject.layout.buildDirectory.dir('repo').get().asFile.toURI()
+        }
+    }
+}
+
+// F4c — platform event capture package. The host JAR never contains this code.
+ext.moduleVersion = '2.1.0'
+ext.modulePlatform = 'spigot'
+ext.moduleDependencies = 'sync-common@>=2.1.0'
+apply from: rootProject.file('gradle/module-package.gradle')

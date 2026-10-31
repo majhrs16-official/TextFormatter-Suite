@@ -1,7 +1,7 @@
 # sync-common — Shared Sync Configuration Utilities
 
-> **Purpose**: Dependency package with the YAML reader and configuration-path
-> resolver shared by `sync-bus` and every `sync-*` sink package.
+> **Purpose**: Dependency package with the YAML reader, configuration-path
+> resolver and neutral event-processing helpers shared by `sync-*` packages.
 
 ---
 
@@ -13,12 +13,16 @@
   explicit fallbacks.
 - Resolve the canonical `config/sync-*/` paths and the legacy `sync/*.yml`
   fallback used during migration.
+- Provide the platform-neutral event helpers used by `sync-bukkit` and
+  `sync-fabric`: channel selection, translation gating, `Message` construction
+  and dispatch.
 
 ---
 
 ## 2. Non-Responsibilities
 
 - No sink lifecycle, transport or message delivery.
+- No platform SDK types: Bukkit/Fabric events stay in their platform package.
 - No validation of semantic fields (tokens, ports, chat ids): each sink module
   owns its schema and its `usable()` rule.
 
@@ -28,6 +32,7 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
+| `core-api` | Compile | `Message`, `ChannelRegistry`, `MessageDispatch`, `ActorDirectory` |
 | `snakeyaml` | Compile | Safe YAML parsing |
 | JDK | Compile | `Path`, `Files` |
 
@@ -46,7 +51,8 @@ declared dependency scope.
 | `sync-socket` | `SocketConfig` |
 | `sync-telegram` | `TelegramConfig` |
 | `sync-websocket` | `WebSocketSyncConfig` |
-| `spigot-host` / `fabric-host` | Legacy path resolution until F4b |
+| `sync-bukkit` | `SyncEventProcessor`, `EventRules`, `ChannelSelector` |
+| `sync-fabric` | `SyncEventProcessor`, `EventRules`, `ChannelSelector` |
 
 ---
 
@@ -56,6 +62,10 @@ declared dependency scope.
 |-----------|------|
 | `SyncYaml` | Tolerant YAML reader and scalar coercion helpers |
 | `SyncConfigPaths` | Canonical and legacy configuration path resolution |
+| `ChannelSelector` | Chooses the first permitted `CHAT` channel, with `chat` fallback |
+| `EventRules` | Conventional event channels and `off` translation gating |
+| `EventMessages` | Builds neutral `Message` values for chat and typed events |
+| `SyncEventProcessor` | Dispatches chat/join/quit/death through `MessageDispatch` |
 
 ---
 
@@ -68,3 +78,5 @@ declared dependency scope.
 `SyncYamlTest` covers missing/scalar/invalid YAML and scalar coercion.
 `SyncConfigPathsTest` covers canonical paths, legacy fallback and canonical
 destination selection.
+`SyncEventProcessorTest` covers chat fan-out, console copy, `off` translation,
+channel fallback and typed-event gating.

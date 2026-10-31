@@ -1,6 +1,7 @@
 package me.majhrs16.suite.manager.apt;
 
 import me.majhrs16.suite.manager.spi.PackageType;
+import me.majhrs16.suite.manager.spi.PlatformCompatibility;
 import me.majhrs16.suite.manager.spi.Version;
 import me.majhrs16.suite.manager.core.LocalPackageDatabase;
 import me.majhrs16.suite.manager.core.PackageInstaller;
@@ -426,10 +427,7 @@ public final class DependencyResolver {
     }
     
     private boolean isPlatformCompatible(String pkgPlatform) {
-        if ("common".equalsIgnoreCase(pkgPlatform) || "any".equalsIgnoreCase(pkgPlatform) || pkgPlatform.isBlank()) {
-            return true;
-        }
-        return pkgPlatform.equalsIgnoreCase(currentPlatform);
+        return PlatformCompatibility.matches(pkgPlatform, currentPlatform);
     }
     
     private boolean isOsCompatible(String pkgOs) {

@@ -1,0 +1,74 @@
+plugins {
+    id 'fabric-loom'
+    id 'java'
+    id 'jacoco'
+}
+
+group = 'me.majhrs16'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven { url 'https://maven.fabricmc.net/' }
+    maven { url 'https://libraries.minecraft.net/' }
+}
+
+dependencies {
+    implementation project(':src:core-api')
+    implementation project(':src:sync-common')
+
+    minecraft 'com.mojang:minecraft:1.21'
+    mappings 'net.fabricmc:yarn:1.21+build.1:v2'
+    modImplementation 'net.fabricmc:fabric-loader:0.16.10'
+    modImplementation 'net.fabricmc.fabric-api:fabric-api:0.100.5+1.21'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+// Loom generates local remapped mods whose checksums cannot exist in the
+// remote verification metadata. Keep verification disabled only here.
+configurations.configureEach {
+    if (name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+tasks.jar {
+    archiveClassifier = 'thin'
+}
+
+tasks.named('test') { finalizedBy 'jacocoTestReport' }
+jacocoTestReport {
+    dependsOn test
+    reports { xml.required = true; html.required = true; csv.required = false }
+}
+
+// F4c — Fabric event capture package. remapJar is the production artifact
+// loaded by the Fabric mod classloader; the thin jar is not distributed.
+ext.moduleVersion = '2.1.0'
+ext.modulePlatform = 'fabric'
+ext.moduleDependencies = 'sync-common@>=2.1.0'
+ext.moduleJarTaskName = 'remapJar'
+apply from: rootProject.file('gradle/module-package.gradle')

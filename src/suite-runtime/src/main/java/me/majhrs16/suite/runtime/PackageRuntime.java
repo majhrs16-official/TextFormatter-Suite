@@ -20,6 +20,7 @@ import me.majhrs16.suite.manager.core.PackageInstaller;
 import me.majhrs16.suite.manager.spi.FileEntry;
 import me.majhrs16.suite.manager.spi.ManifestParser;
 import me.majhrs16.suite.manager.spi.PackageEntry;
+import me.majhrs16.suite.manager.spi.PlatformCompatibility;
 import me.majhrs16.suite.manager.spi.PackageType;
 
 /**
@@ -163,6 +164,11 @@ public final class PackageRuntime {
         Set<Path> seen = new HashSet<>();
         for (PackageEntry entry : orderByDependencies(entries)) {
             if (entry.type() == PackageType.DEPENDENCY) {
+                continue;
+            }
+            if (!PlatformCompatibility.matches(entry.platform(), moduleHost.platform().name())) {
+                logger.info("Package " + entry.name() + " is for platform " + entry.platform()
+                        + "; not activated on " + moduleHost.platform().name());
                 continue;
             }
             List<Path> dependencyJars = dependencyJars(entry, installed);

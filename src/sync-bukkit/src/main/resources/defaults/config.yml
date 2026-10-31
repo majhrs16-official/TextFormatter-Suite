@@ -1,0 +1,8 @@
+enabled: true
+# How the package claims the vanilla chat event:
+#   cancel-event      cancel it and let the suite deliver every copy
+#   clear-recipients  keep the event alive but remove its player recipients
+#   none              leave vanilla chat untouched (duplicate output)
+claim-mode: cancel-event
+# Send an extra chat copy to the server console.
+log-chat-to-console: true

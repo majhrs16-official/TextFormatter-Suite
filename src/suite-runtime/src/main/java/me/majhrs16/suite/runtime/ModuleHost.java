@@ -58,6 +58,7 @@ public final class ModuleHost implements AutoCloseable {
     private final RuntimeConfigRegistry configs;
     private final RuntimeStateStore stateStore;
     private final Map<String, LoadedModule> active = new LinkedHashMap<>();
+    private volatile boolean closing;
     private final Map<String, ModuleState> states = new LinkedHashMap<>();
 
     /**
@@ -107,6 +108,11 @@ public final class ModuleHost implements AutoCloseable {
         this.services = new RuntimeServiceRegistry();
         this.events = new RuntimeEventBus(logger);
         this.scheduler = new RuntimeScheduler(logger);
+    }
+
+    /** @return neutral information about the hosting platform. */
+    public PlatformInfo platform() {
+        return platform;
     }
 
     /** @return the runtime-wide service registry, used by the suite runtime. */
@@ -300,6 +306,7 @@ public final class ModuleHost implements AutoCloseable {
 
     @Override
     public void close() {
+        closing = true;
         for (String moduleId : new ArrayList<>(active.keySet())) {
             deactivate(moduleId);
         }
@@ -344,7 +351,7 @@ public final class ModuleHost implements AutoCloseable {
             PluginLogger moduleLogger = new PrefixedLogger(logger, moduleId);
             DefaultModuleContext context = new DefaultModuleContext(
                     moduleId, configDir, moduleLogger, services, events, scheduler,
-                    commands, configs, platform);
+                    commands, configs, platform, () -> closing);
             return new PreparedModule(moduleId, jar, descriptor, activator, classLoader, context);
         } catch (Throwable failure) {
             try {

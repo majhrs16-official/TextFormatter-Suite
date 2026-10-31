@@ -70,6 +70,14 @@ public interface ModuleContext extends AutoCloseable {
     PlatformInfo platform();
 
     /**
+     * @return {@code true} when the whole runtime is shutting down rather than
+     *         deactivating one module for a hot update or removal
+     */
+    default boolean isShuttingDown() {
+        return false;
+    }
+
+    /**
      * Releases the module scope. Called by the runtime, not by the module.
      */
     @Override

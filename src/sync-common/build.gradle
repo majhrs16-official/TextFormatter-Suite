@@ -18,6 +18,7 @@ repositories {
 }
 
 dependencies {
+    implementation project(':src:core-api')
     implementation 'org.yaml:snakeyaml:2.2'
 
     testImplementation platform('org.junit:junit-bom:5.10.2')

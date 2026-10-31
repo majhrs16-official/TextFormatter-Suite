@@ -2,6 +2,7 @@ package me.majhrs16.suite.runtime;
 
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.config.ConfigRegistry;
@@ -29,6 +30,7 @@ final class DefaultModuleContext implements ModuleContext {
     private final Scheduler scheduler;
     private final ResourceTracker resources;
     private final PlatformInfo platform;
+    private final BooleanSupplier shuttingDown;
     private final CommandRegistry commands;
     private final ConfigRegistry configs;
     private final RuntimeServiceRegistry runtimeServices;
@@ -45,7 +47,8 @@ final class DefaultModuleContext implements ModuleContext {
                          RuntimeScheduler scheduler,
                          RuntimeCommandRegistry commands,
                          RuntimeConfigRegistry configs,
-                         PlatformInfo platform) {
+                         PlatformInfo platform,
+                         BooleanSupplier shuttingDown) {
         this.moduleId = Objects.requireNonNull(moduleId, "moduleId");
         this.configDir = Objects.requireNonNull(configDir, "configDir");
         this.logger = Objects.requireNonNull(logger, "logger");
@@ -55,6 +58,7 @@ final class DefaultModuleContext implements ModuleContext {
         this.runtimeCommands = Objects.requireNonNull(commands, "commands");
         this.runtimeConfigs = Objects.requireNonNull(configs, "configs");
         this.platform = Objects.requireNonNull(platform, "platform");
+        this.shuttingDown = Objects.requireNonNull(shuttingDown, "shuttingDown");
         this.services = services.scope(moduleId);
         this.events = events.scope(moduleId);
         this.scheduler = scheduler.scope(moduleId);
@@ -73,6 +77,7 @@ final class DefaultModuleContext implements ModuleContext {
     @Override public CommandRegistry commands() { return commands; }
     @Override public ConfigRegistry config() { return configs; }
     @Override public PlatformInfo platform() { return platform; }
+    @Override public boolean isShuttingDown() { return shuttingDown.getAsBoolean(); }
 
     @Override
     public void close() {

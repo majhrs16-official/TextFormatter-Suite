@@ -17,7 +17,7 @@
   - `SpigotPlaceholderResolver` — PlaceholderAPI + placeholders internos.
 - **Runtime bootstrap** — crea `SuiteRuntime`, registra `ChatDelivery`,
   `ActorDirectory`, `PermissionChecker`, `UserLanguageStore`,
-  `PlaceholderResolver` y `PluginLogger`, y llama a `runtime.start()`.
+  `PlaceholderResolver`, `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **Root command** — `runtime.registerCommands()` registra el árbol neutral en
   el `CommandMap`; `plugin.yml` ya no declara `/suite`.
 - **In-world adapter** — `SpigotInWorldListener` consume `InWorldService` y

@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import me.majhrs16.suite.api.iflow.Router;
@@ -20,6 +21,9 @@ import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslatorProvider;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
+import me.majhrs16.suite.manager.spi.FileEntry;
+import me.majhrs16.suite.manager.spi.PackageEntry;
+import me.majhrs16.suite.manager.spi.PackageType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -61,6 +65,30 @@ class PackageRuntimeTest {
             assertTrue(fixture.manager.packageList().isEmpty());
             assertFalse(Files.exists(fixture.manager.getManagerDir()
                     .resolve("library/packages/demo.jar")));
+        }
+    }
+
+    @Test
+    void skipsPackagesForAnotherPlatformAndAcceptsTheBukkitFamily() throws Exception {
+        try (Fixture fixture = fixture("spigot")) {
+            Path demoJar = FixtureModules.buildJar(tempDir, "demo", "1.0.0", "demo",
+                    null, null, false, false);
+            Path fabricJar = FixtureModules.buildJar(tempDir, "fabric-only", "1.0.0", "fabric",
+                    null, null, false, false);
+            Path packages = fixture.manager.getManagerDir().resolve("library/packages");
+            Files.createDirectories(packages);
+            Files.copy(demoJar, packages.resolve("demo.jar"));
+            Files.copy(fabricJar, packages.resolve("fabric-only.jar"));
+
+            List<ActivationResult> activation = fixture.runtime.activate(List.of(
+                    entry("demo", "paper", "manager/library/packages/demo.jar"),
+                    entry("fabric-only", "fabric", "manager/library/packages/fabric-only.jar")));
+
+            assertEquals(1, activation.size());
+            assertTrue(activation.get(0).isSuccess());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("demo").orElseThrow());
+            assertFalse(fixture.host.state("fabric-only").isPresent(),
+                    "a Fabric package must not activate on a Spigot host");
         }
     }
 
@@ -691,7 +719,18 @@ class PackageRuntimeTest {
         return zip;
     }
 
+    private static PackageEntry entry(String name, String platform, String path) {
+        return new PackageEntry(name, "1.0.0", "stable", PackageType.PACKAGE,
+                List.of(), "none", platform, "", "none", "", 0,
+                Map.of(path, new FileEntry(path, 0, "", name)),
+                "", "", Map.of());
+    }
+
     private Fixture fixture() throws IOException {
+        return fixture("test");
+    }
+
+    private Fixture fixture(String platform) throws IOException {
         Path suiteRoot = tempDir.resolve("suite");
         Path managerDir = suiteRoot.resolve("manager");
         ManagerFacade manager = new ManagerFacade(
@@ -701,7 +740,7 @@ class PackageRuntimeTest {
         ModuleHost host = new ModuleHost(
                 managerDir.resolve("library"),
                 managerDir.resolve("config"),
-                PlatformInfo.current("test", "1.0"),
+                PlatformInfo.current(platform, "1.0"),
                 logger,
                 new RuntimeStateStore(managerDir.resolve("runtime"), logger));
         PackageRuntime runtime = new PackageRuntime(manager, host, logger);

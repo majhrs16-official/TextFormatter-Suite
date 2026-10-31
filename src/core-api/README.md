@@ -7,7 +7,7 @@
 ## 1. Responsibilities
 
 - Define the **Module** contract and lifecycle (`Module`, `ModuleDescriptor`, `Capability`, `Requirement`, `SemVer`)
-- Define the **runtime lifecycle API** (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`, `ModuleActivatedEvent`, `ModuleDeactivatedEvent`)
+- Define the **runtime lifecycle API** (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `PlatformHandle`, `ModuleState`, `ModuleActivatedEvent`, `ModuleDeactivatedEvent`)
 - Define **shared cross-package contracts** (`api.channel.Channel`/`ChannelRegistry`, `api.iflow.Router` and routing value types)
 - Define **message domain types** (`Message`, `ChatMessage`, `Actor`, `Channel`, `MessageType`, `Direction`, `Language`, `ColorMode`, `Formats`, `SoundSpec`)
 - Define **SPI interfaces** for platform/implementation plugins:
@@ -69,7 +69,7 @@
 | `ModuleDescriptor` | Metadata: id, version, capabilities, requirements, main class |
 | `Capability` / `Requirement` | Module dependency declaration (name + version range) |
 | `SemVer` | Semantic version parsing/comparison for requirements |
-| `ModuleActivator` / `ModuleContext` | Runtime entry point and module-scoped view of services, events, scheduler and resources |
+| `ModuleActivator` / `ModuleContext` | Runtime entry point and module-scoped view of services, events, scheduler and resources; `isShuttingDown()` distinguishes a full shutdown from a hot unload |
 | `ServiceRegistry` | Mutable registry of live services; registrations disappear with their owner |
 | `EventBus` | Scoped publish/subscribe used for runtime lifecycle and feature events |
 | `Scheduler` / `ResourceTracker` | Module-owned tasks and resources; released on deactivation |
@@ -129,6 +129,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 |-----|---------------|
 | `ModuleActivator` | Implement in a package and register it via `META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator` |
 | `ServiceRegistry` / `EventBus` | Publish services or subscribe to lifecycle events from a `ModuleContext` |
+| `PlatformHandle` | Opaque native handle registered by the host; only platform packages resolve it |
 | `ActorDirectory` | Implement in platform adapter (see `SpigotActorDirectory`, `FabricActorDirectory`) |
 | `TranslationService` / `TranslatorProvider` | Implement in translation module (see `GTranslateProvider`, `LTranslateProvider`) |
 | `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`) |
@@ -149,6 +150,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 2. ModuleDescriptor.java          → Module metadata & dependencies
 3. api/runtime/ModuleActivator.java → Runtime package entry point
 4. api/runtime/ModuleContext.java → Module-scoped services, events, scheduler and resources
+5. api/runtime/PlatformHandle.java → Opaque bridge to the host plugin/server object
 5. api/runtime/ServiceRegistry.java → Live service registry
 6. api/runtime/EventBus.java      → Lifecycle and feature events
 7. api/message/*.java             → Domain types (Message, Actor, Channel, etc.)

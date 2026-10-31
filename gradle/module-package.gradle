@@ -2,17 +2,19 @@
 //
 // A module build applies this script after defining `moduleVersion` (and
 // optionally `moduleId`, which defaults to the Gradle project name,
-// `moduleType` (PACKAGE or DEPENDENCY) and `moduleDependencies`). The resulting
-// ZIP contains the module JAR and METADATA/package.list, ready for
-// `ManagerFacade.packageInstall(...)`.
+// `moduleType` (PACKAGE or DEPENDENCY), `moduleDependencies`, `modulePlatform`
+// and `moduleJarTaskName`). The resulting ZIP contains the module JAR and
+// METADATA/package.list, ready for `ManagerFacade.packageInstall(...)`.
 def moduleId = project.findProperty('moduleId') ?: project.name
 def moduleVersion = project.findProperty('moduleVersion') ?: project.version.toString()
 def moduleType = project.findProperty('moduleType') ?: 'PACKAGE'
 def moduleDependencies = project.findProperty('moduleDependencies') ?: ''
+def modulePlatform = project.findProperty('modulePlatform') ?: 'common'
+def moduleJarTaskName = project.findProperty('moduleJarTaskName') ?: 'jar'
 def moduleJarPath = moduleType == 'DEPENDENCY'
         ? "manager/library/dependencies/${moduleId}.jar"
         : "manager/library/packages/${moduleId}.jar"
-def moduleJarTask = tasks.named('jar')
+def moduleJarTask = tasks.named(moduleJarTaskName)
 
 tasks.register('generateModuleManifest') {
     dependsOn moduleJarTask
@@ -30,7 +32,7 @@ Channel: stable
 Type: ${moduleType}
 Dependencies: ${moduleDependencies}
 Arch: none
-Platform: common
+Platform: ${modulePlatform}
 URL: 
 OS: none
 SHA256: 

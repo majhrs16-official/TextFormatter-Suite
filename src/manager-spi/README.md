@@ -18,7 +18,8 @@
   `ResolvedModule` / `ResolutionResult` value types.
 - **Package metadata** — `PackageEntry` (one package in a manifest or status database),
   `FileEntry` (one file in a package inventory), `PackageType`
-  (`PACKAGE`, `DEPENDENCY`, `METAPACKAGE`).
+  (`PACKAGE`, `DEPENDENCY`, `METAPACKAGE`) and `PlatformCompatibility`
+  (shared platform-family matching).
 - **Parsers and serializers** — `ManifestParser` (remote index `packages.list`,
   `METADATA/package.list`, `library/status`, `DependencySpec`), `RepoConfigParser`
   (`repo.yml` → `RepositoryConfig`), `Version` (SemVer 2.0.0 parsing, comparison and
@@ -69,6 +70,7 @@
 | `RepoConfigParser` | Parses/serializes `repo.yml` |
 | `RepositoryConfig` | Repository name, URL, type, enabled flag, priority and options |
 | `Version` | SemVer 2.0.0: parse, compare, range matching |
+| `PlatformCompatibility` | Matches `Platform` declarations (`common`/`any`, Bukkit family, exact) |
 
 ---
 
@@ -95,6 +97,7 @@ None — SPI and data types only.
 4. spi/ManifestParser.java         → Package list / status format
 5. spi/RepoConfigParser.java       → repo.yml
 6. spi/Version.java                → SemVer and ranges
+7. spi/PlatformCompatibility.java  → Platform-family matching
 ```
 
 ---

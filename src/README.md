@@ -42,18 +42,23 @@ TextFormatter Suite
 │   ├── sync-websocket    → WebSocket sink
 │   ├── sync-velocity-core → Neutral Velocity sink
 │   ├── sync-velocity     → Velocity plugin adapter
+│   ├── sync-common       → Shared YAML and neutral event helpers (DEPENDENCY)
 │   └── sync-bus          → Unified fan-out/lifecycle bus
 │
 └── Platform Adapters
-    ├── spigot-host       → Bukkit/Paper plugin (Java 21)
-    └── fabric-host       → Fabric mod (Java 21)
+    ├── spigot-host       → Bukkit/Paper bootstrap (Java 21)
+    ├── fabric-host       → Fabric bootstrap (Java 21)
+    ├── sync-bukkit       → Event capture package (Platform: spigot)
+    └── sync-fabric       → Event capture package (Platform: fabric)
 ```
 
 **Key architectural principles observed in code:**
 - `core-api` has **zero dependencies** on other modules — it defines contracts only
 - `kernel` depends only on `core-api` — loads modules via SPI
-- `host` is the **integration hub** — wires core-api, textformatter, the installed iFlow engine (`iflow-vm` or `iflow-firewall`; mutually exclusive), translations, transports
-- Platform adapters (`spigot-host`, `fabric-host`) depend on `host` + all sync modules
+- `host` is the **neutral pipeline** — dispatch, config and message catalog; it does not depend on features or `kernel`
+- `suite-runtime` is the composition root — it builds the pipeline from installed packages and owns package lifecycle
+- Platform adapters (`spigot-host`, `fabric-host`) depend only on `core-api`, `core-render`, `suite-runtime` and their SDK
+- Event capture lives in downloadable `sync-bukkit`/`sync-fabric` packages, not in the host JAR
 - Sync modules depend on `core-api`; technology adapters add `transport`, JDA or a platform SDK
 - **No circular dependencies** between core modules
 
@@ -69,7 +74,7 @@ TextFormatter Suite
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `host`, `spigot-host`, `fabric-host` |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `host` (selección `vm`/`firewall`), web editor |
-| `host` | Bootstrap, message dispatch, config loading, platform-agnostic wiring; selecciona el motor iFlow instalado con `iflow.engine.kind` | `core-api`, `kernel`, `textformatter`, `iflow-vm`/`iflow-firewall` (alternativos), `gtranslate`, `ltranslate`, `transport` | `spigot-host`, `fabric-host`, `observability` |
+| `host` | Neutral message dispatch, config loading and `SuiteHost` assembly; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
@@ -92,9 +97,11 @@ TextFormatter Suite
 | `sync-velocity-core` | Neutral Velocity sink; queue, mapping, retry and payload codec | `core-api`, `sync-common`, `transport` | `sync-velocity`, optional suite hosts |
 | `sync-velocity` | Velocity plugin adapter; channel registration and `sendPluginMessage` | `sync-velocity-core`, Velocity API | Velocity proxy |
 | `sync-bus` | Unified fan-out, deduplication, retries and sink lifecycle | `core-api` | `spigot-host`, `fabric-host` |
-| `sync-common` | Shared YAML reader and sync config path resolution (`DEPENDENCY`) | JDK, `snakeyaml` | `sync-*` |
-| `spigot-host` | Bukkit/Paper plugin entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, all sync, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `inworld`, `extension-api`, `tester` | — (leaf) |
-| `fabric-host` | Fabric mod entry point, platform adapters | `core-api`, `kernel`, `host`, `iflow-vm`, `textformatter`, sync modules, `gtranslate`, `ltranslate`, `messages`, `observability`, `manager-spi`, `manager-core`, `manager-apt`, `presets`, `inworld`, `extension-api`, `loadtest`, `performance` | — (leaf) |
+| `sync-common` | Shared YAML reader, config paths and neutral event helpers (`DEPENDENCY`) | `core-api`, `snakeyaml` | `sync-*`, `sync-bukkit`, `sync-fabric` |
+| `sync-bukkit` | Bukkit/Paper event capture package (`PACKAGE`, Platform `spigot`) | `core-api`, `sync-common`, Paper API | `spigot-host` (instalado por el Manager) |
+| `sync-fabric` | Fabric event capture package (`PACKAGE`, Platform `fabric`) | `core-api`, `sync-common`, Fabric API/Minecraft | `fabric-host` (instalado por el Manager) |
+| `spigot-host` | Bukkit/Paper bootstrap and platform ports | `core-api`, `core-render`, `suite-runtime`, Paper API | — (leaf) |
+| `fabric-host` | Fabric bootstrap and platform ports | `core-api`, `core-render`, `suite-runtime`, Fabric API/Minecraft | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |
 | `loadtest` | Load testing utilities | — | `fabric-host` |
 | `tester` | Runtime pipeline test service behind the neutral `TestProbe`; packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotTestProbe`), `suite-runtime` |
@@ -125,6 +132,8 @@ TextFormatter Suite
 | `extension-api` | Extension system | Extension lifecycle & context | `Extension`, `ExtensionContext`, `ExtensionManager` | — | [extension-api/README.md](extension-api/README.md) |
 | `spigot-host` | Bukkit/Paper plugin | Thin platform adapter | `TextFormatterSuitePlugin`, `SpigotPlatformPorts`, `SpigotActorDirectory`, `SpigotChatDelivery` | `TextFormatterSuitePlugin.onEnable()` | [spigot-host/README.md](spigot-host/README.md) |
 | `fabric-host` | Fabric mod | Thin platform adapter | `TextFormatterSuiteMod`, `FabricPlatformPorts`, `FabricActorDirectory`, `FabricChatDelivery` | `TextFormatterSuiteMod.onInitialize()` | [fabric-host/README.md](fabric-host/README.md) |
+| `sync-bukkit` | Bukkit/Paper event capture | Platform package | `SyncBukkitActivator`, `BukkitChatListener`, `SyncBukkitConfig` | `SyncBukkitActivator` | [sync-bukkit/README.md](sync-bukkit/README.md) |
+| `sync-fabric` | Fabric event capture | Platform package | `SyncFabricActivator`, `FabricEventListener`, `FabricDeathTracker` | `SyncFabricActivator` | [sync-fabric/README.md](sync-fabric/README.md) |
 
 ---
 
@@ -260,8 +269,8 @@ TextFormatter Suite
 |----------|-------------------|---------------------|-------|
 | `core-api` → * | `core-api` is depended upon by all | Nothing depends on `core-api` internally | Pure contracts and shared value types; no feature dependencies |
 | `kernel` → `core-api` | `kernel` uses `core-api` SPI | `core-api` must not depend on `kernel` | Module loading mechanism |
-| `host` → core modules | `host` integrates `textformatter`, `iflow-vm`, translations, transports | Core modules must not depend on `host` | `host` is the integration hub |
-| Platform adapters → `host` | `spigot-host`/`fabric-host` depend on `host` | `host` must not depend on platform adapters | Platform-agnostic core |
+| `host` → core contracts | `host` consumes neutral contracts only | Core modules must not depend on `host` | Feature-free pipeline |
+| Platform adapters → `suite-runtime` | `spigot-host`/`fabric-host` depend on `core-api`/`core-render`/`suite-runtime` | Adapters must not import features, `host`, `kernel` or `manager` | Bootstrap-only adapters |
 | Sync modules → `core-api` + `transport` | Sync modules implement `SyncSink` SPI | `core-api` must not depend on sync modules | Transport abstraction |
 | `manager-apt`/`manager-core` → `manager-spi` | Implementations depend on the SPI | SPI must not depend on implementations | Standard API/impl separation |
 
@@ -400,4 +409,4 @@ Module.initialize() called in order
 
 ---
 
-*Generated from actual repository state. Last updated: 2026-10-28 (F5 closes the six base packages; F6 adds transport as a dependency package, gtranslate/ltranslate activators, module lifecycle events for chattranslator, sync-bus as an activatable package with hot sink registration, sync-common as a shared dependency, sync-socket/sync-telegram/sync-http/sync-websocket as activatable sink packages, a neutral metrics facade, and observability as an activatable package with DebugEndpoint moved to host.debug).*
+*Generated from actual repository state. Last updated: 2026-10-31 (F4b/F4c closed: feature-free hosts, `PlatformHandle`, downloadable `sync-bukkit`/`sync-fabric` packages, shared neutral event helpers in `sync-common`, and platform-filtered package activation).*

@@ -1,3 +1,7 @@
+plugins {
+    id 'fabric-loom' version '1.6.12' apply false
+}
+
 group = 'me.majhrs16'
 version = providers.gradleProperty('version').getOrElse('2.1.0-SNAPSHOT')
 
@@ -115,6 +119,12 @@ tasks.register('checkArchitecture') {
         ]
         rules['spigot-host'] = adapterForbidden
         rules['fabric-host'] = adapterForbidden
+
+        // F4c: platform event-capture packages may use their SDK, but never
+        // host internals, the manager/kernel or a feature package.
+        def syncForbidden = adapterForbidden.findAll { it != 'me.majhrs16.suite.synccommon.' }
+        rules['sync-bukkit'] = syncForbidden
+        rules['sync-fabric'] = syncForbidden
 
         def violations = []
         rules.each { module, prefixes ->
