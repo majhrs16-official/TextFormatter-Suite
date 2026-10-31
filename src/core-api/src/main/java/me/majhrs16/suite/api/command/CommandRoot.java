@@ -1,8 +1,10 @@
 package me.majhrs16.suite.api.command;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Absolute root of the suite command tree.
@@ -23,14 +25,35 @@ public record CommandRoot(List<String> segments, List<List<String>> aliases) {
         segments = validate(segments, "root");
         Objects.requireNonNull(aliases, "aliases");
         List<List<String>> normalized = new ArrayList<>();
+        Set<List<String>> seen = new HashSet<>();
         for (List<String> alias : aliases) {
             List<String> checked = validate(alias, "alias");
             if (checked.equals(segments)) {
                 throw new IllegalArgumentException("alias must differ from root: " + checked);
             }
+            if (shadowedByRoot(checked, segments)) {
+                throw new IllegalArgumentException(
+                        "alias is shadowed by root: " + checked);
+            }
+            if (!seen.add(checked)) {
+                throw new IllegalArgumentException("duplicate alias: " + checked);
+            }
             normalized.add(checked);
         }
         aliases = List.copyOf(normalized);
+    }
+
+    private static boolean shadowedByRoot(List<String> alias, List<String> root) {
+        if (!alias.get(0).equals(root.get(0))) {
+            return false;
+        }
+        List<String> rootRemaining = root.subList(1, root.size());
+        if (rootRemaining.isEmpty()) {
+            return true;
+        }
+        List<String> aliasRemaining = alias.subList(1, alias.size());
+        return aliasRemaining.size() >= rootRemaining.size()
+                && aliasRemaining.subList(0, rootRemaining.size()).equals(rootRemaining);
     }
 
     /** Creates a root without aliases. */

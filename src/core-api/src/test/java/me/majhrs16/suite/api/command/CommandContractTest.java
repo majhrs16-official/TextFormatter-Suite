@@ -23,6 +23,17 @@ class CommandContractTest {
         assertEquals(List.of("module"), root.remaining());
         assertEquals(List.of(List.of("sm")), root.aliases());
         assertThrows(IllegalArgumentException.class, () -> CommandRoot.parse("Suite"));
+        assertThrows(IllegalArgumentException.class,
+                () -> CommandRoot.of("suite")
+                        .withAliases(List.of(List.of("suite", "module"))));
+        assertThrows(IllegalArgumentException.class,
+                () -> CommandRoot.of("suite").withAlias("txf").withAlias("txf"));
+
+        CommandRoot shorterAlias = CommandRoot.of("suite", "module").withAlias("suite");
+        assertEquals(List.of(List.of("suite")), shorterAlias.aliases());
+        assertThrows(IllegalArgumentException.class,
+                () -> CommandRoot.of("suite", "module")
+                        .withAliases(List.of(List.of("suite", "module", "extra"))));
     }
 
     @Test

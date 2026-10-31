@@ -2,6 +2,7 @@ package me.majhrs16.suite.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,10 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
@@ -179,6 +182,210 @@ class SuiteRuntimeTest {
     }
 
     @Test
+    void loadsCommandRootAndAliasesFromCommandsYml() throws Exception {
+        writeCommands("""
+                root: [suite, module]
+                aliases:
+                  - sm
+                """);
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+
+            PlatformPorts.Command command = ports.commands.get("suite");
+            assertNotNull(command);
+            assertEquals(List.of("sm"), command.aliases());
+
+            Path jar = FixtureModules.buildCommandConfigJar(tempDir, "demo", "1.0.0");
+            Path zip = FixtureModules.buildPackageZip(
+                    tempDir, "demo", "1.0.0", "stable", jar, null);
+            runtime.installLocal(zip, false);
+
+            Actor console = Actor.unknown("console");
+            command.execute(console, List.of("module", "help"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Uso: /suite module <comando>")));
+
+            ports.sent.clear();
+            command.execute(console, List.of("help"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Uso: /suite module <comando>")),
+                    "the alias sm must consume the configured root");
+
+            ports.sent.clear();
+            command.execute(console, List.of("module", "demo", "echo", "hola"));
+            assertTrue(ports.sent.stream().anyMatch(line -> line.equals("echo:hola")));
+
+            ports.sent.clear();
+            command.execute(console, List.of("demo", "echo", "hola"));
+            assertTrue(ports.sent.stream().anyMatch(line -> line.equals("echo:hola")),
+                    "the alias sm must route the same module tree");
+        }
+    }
+
+    @Test
+    void reloadsTheCommandRootWithoutTouchingModuleCommands() throws Exception {
+        writeCommands("""
+                root: [suite]
+                aliases: [txf]
+                """);
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+            assertTrue(ports.commands.containsKey("suite"));
+
+            Path jar = FixtureModules.buildCommandConfigJar(tempDir, "demo", "1.0.0");
+            Path zip = FixtureModules.buildPackageZip(
+                    tempDir, "demo", "1.0.0", "stable", jar, null);
+            runtime.installLocal(zip, false);
+
+            writeCommands("""
+                    root: [tf]
+                    aliases: [suite]
+                    """);
+            CommandRootChange change = runtime.reloadCommandRoot();
+
+            assertEquals(CommandRootChange.Status.APPLIED, change.status());
+            assertFalse(ports.commands.containsKey("suite"));
+            assertTrue(ports.commands.containsKey("tf"));
+            assertEquals(List.of("suite"), ports.commands.get("tf").aliases());
+            assertEquals("tf", runtime.commands().root().first());
+            assertFalse(runtime.commandRootRestartRequired());
+
+            ports.sent.clear();
+            ports.commands.get("tf").execute(Actor.unknown("console"), List.of("help"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Uso: /tf <comando>")));
+
+            ports.sent.clear();
+            ports.commands.get("tf").execute(
+                    Actor.unknown("console"), List.of("demo", "echo", "hola"));
+            assertTrue(ports.sent.stream().anyMatch(line -> line.equals("echo:hola")),
+                    "module commands stay registered across a root change");
+        }
+    }
+
+    @Test
+    void reloadingTheSameRootIsIdempotent() throws Exception {
+        writeCommands("root: [suite]\n");
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+
+            CommandRootChange change = runtime.reloadCommandRoot();
+
+            assertEquals(CommandRootChange.Status.UNCHANGED, change.status());
+            assertTrue(ports.commands.containsKey("suite"));
+            assertFalse(runtime.commandRootRestartRequired());
+        }
+    }
+
+    @Test
+    void builtInReloadCommandAppliesTheNewRoot() throws Exception {
+        writeCommands("root: [suite]\n");
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+            writeCommands("root: [tf]\n");
+
+            ports.commands.get("suite").execute(Actor.unknown("console"), List.of("reload"));
+
+            assertTrue(ports.commands.containsKey("tf"));
+            assertFalse(ports.commands.containsKey("suite"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Raíz de comandos aplicada: /tf.")));
+        }
+    }
+
+    @Test
+    void failedUnregisterRequiresRestartInsteadOfPretendingSuccess() throws Exception {
+        writeCommands("root: [suite]\n");
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+            writeCommands("root: [tf]\n");
+            ports.failClose = true;
+
+            CommandRootChange change = runtime.reloadCommandRoot();
+
+            assertEquals(CommandRootChange.Status.RESTART_REQUIRED, change.status());
+            assertTrue(runtime.commandRootRestartRequired());
+            assertTrue(ports.commands.containsKey("suite"));
+            assertFalse(ports.commands.containsKey("tf"));
+
+            assertEquals(CommandRootChange.Status.RESTART_REQUIRED,
+                    runtime.reloadCommandRoot().status());
+            assertThrows(IllegalStateException.class, runtime::registerCommands);
+        }
+    }
+
+    @Test
+    void failedNewRootRegistrationRestoresThePreviousRoot() throws Exception {
+        writeCommands("root: [suite]\n");
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+            writeCommands("root: [tf]\n");
+            ports.failRegister.add("tf");
+
+            CommandRootChange change = runtime.reloadCommandRoot();
+
+            assertEquals(CommandRootChange.Status.FAILED, change.status());
+            assertTrue(ports.commands.containsKey("suite"));
+            assertFalse(ports.commands.containsKey("tf"));
+            assertEquals("suite", runtime.commands().root().first());
+            assertFalse(runtime.commandRootRestartRequired());
+        }
+    }
+
+    @Test
+    void invalidCommandsYmlDoesNotReplaceTheActiveRoot() throws Exception {
+        writeCommands("root: [suite]\n");
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+            writeCommands("root: [Suite]\n");
+
+            CommandRootChange change = runtime.reloadCommandRoot();
+
+            assertEquals(CommandRootChange.Status.FAILED, change.status());
+            assertTrue(ports.commands.containsKey("suite"));
+            assertEquals("suite", runtime.commands().root().first());
+        }
+    }
+
+    @Test
+    void appliesARootChangeBeforeThePlatformCommandIsRegistered() throws Exception {
+        writeCommands("root: [suite]\n");
+
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            writeCommands("root: [tf]\n");
+
+            CommandRootChange change = runtime.reloadCommandRoot();
+
+            assertEquals(CommandRootChange.Status.APPLIED, change.status());
+            assertEquals("tf", runtime.commands().root().first());
+            runtime.registerCommands();
+            assertTrue(ports.commands.containsKey("tf"));
+            assertFalse(ports.commands.containsKey("suite"));
+        }
+    }
+
+    private void writeCommands(String yaml) throws Exception {
+        Path file = tempDir.resolve("data/config/suite/commands.yml");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, yaml);
+    }
+
+    @Test
     void dispatchWithoutActivePackagesFailsExplicitly() throws Exception {
         try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
             runtime.start();
@@ -316,6 +523,8 @@ class SuiteRuntimeTest {
         private final List<String> sent = new ArrayList<>();
         private final List<Message> delivered = new ArrayList<>();
         private final Map<String, Command> commands = new LinkedHashMap<>();
+        private final Set<String> failRegister = new HashSet<>();
+        private boolean failClose;
 
         @Override
         public PlatformInfo info() {
@@ -349,8 +558,16 @@ class SuiteRuntimeTest {
 
         @Override
         public Registration registerCommand(Command command) {
+            if (failRegister.contains(command.name())) {
+                throw new IllegalStateException("cannot register " + command.name());
+            }
             commands.put(command.name(), command);
-            return () -> commands.remove(command.name());
+            return () -> {
+                if (failClose) {
+                    throw new IllegalStateException("cannot unregister " + command.name());
+                }
+                commands.remove(command.name());
+            };
         }
     }
 }

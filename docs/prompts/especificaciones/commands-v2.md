@@ -1,174 +1,115 @@
-# TextFormatter Suite — Dynamic Command System (commands.yml v2)
+# TextFormatter Suite — commands.yml v2
 
-## Config Example
+`commands.yml` declara la **raíz** del árbol de comandos. No declara acciones ni
+subcomandos: los comandos son código neutral en los paquetes y se registran por
+`api.command`. La raíz es configuración; los módulos siempre usan rutas
+relativas.
+
+## Ubicación y migración
+
+- Ruta canónica: `config/suite/commands.yml`.
+- Ruta heredada: `commands.yml` en la raíz del data folder.
+- La ruta canónica tiene prioridad si existen ambas.
+- `base-name` se acepta solo como migración: se interpreta como `root` de un
+  segmento y se descarta un alias idéntico a la raíz (los archivos antiguos
+  solían repetir el nombre base). Se elimina en **F8**.
+- Las claves antiguas `actions` y `commands` ya no se leen. La topología
+  dinámica se retiró con el árbol de comandos legacy en F4d.
+
+## Esquema
 
 ```yaml
-# commands.yml — Topología dinámica de comandos /suite
-
-# Nombre base del comando (renombrable: cht/dst/txf/tg/if)
-base-name: "suite"
-aliases: ["suite", "txf", "textformat"]
-
-# Definición de acciones atómicas reutilizables
-actions:
-  # Acción: recargar configuración
-  reload:
-    description: "Recarga toda la configuración desde disco"
-    permission: "textformattersuite.admin"
-    execute: |
-      reloadSuite()
-      sender.sendMessage("§a[suite] Recargado: {channels} canales, traductor '{translator}'")
-
-  # Acción: mostrar estado
-  status:
-    description: "Muestra estado del plugin"
-    permission: "textformattersuite.user"
-    execute: |
-      sender.sendMessage("§a[suite] Canales: {channels}")
-      sender.sendMessage("§a[suite] Traductor: {translator}")
-      sender.sendMessage("§a[suite] Engine: parallel={engineParallel} sonido={soundEnabled} claim={claimMode}")
-
-  # Acción: configurar idioma (propio u otro jugador)
-  lang:
-    description: "Configura idioma de traducción"
-    permission: "textformattersuite.user"
-    admin-permission: "textformattersuite.admin"
-    args:
-      - name: "target"
-        type: "player?"
-        description: "Jugador objetivo (omitir = tú)"
-      - name: "value"
-        type: "enum(auto,off,<code>)"
-        description: "auto | off | código de idioma (es, en, zh-CN, etc.)"
-    execute: |
-      target = target ?: sender
-      if target != sender && !sender.hasPermission(admin-permission):
-        sender.sendMessage("§cPermiso de admin requerido")
-        return
-      current.languages.save(target.uuid, value)
-      sender.sendMessage("§a[suite] Idioma de {target} actualizado a {value}")
-
-  # Acción: alternar traducción on/off
-  toggle:
-    description: "Alterna traducción entre auto y off"
-    permission: "textformattersuite.user"
-    admin-permission: "textformattersuite.admin"
-    args:
-      - name: "target"
-        type: "player?"
-        description: "Jugador objetivo (omitir = tú)"
-    execute: |
-      target = target ?: sender
-      if target != sender && !sender.hasPermission(admin-permission):
-        sender.sendMessage("§cPermiso de admin requerido")
-        return
-      current = current.languages.languageOf(target.uuid).orElse("auto")
-      flipped = current == "off" ? "auto" : "off"
-      current.languages.save(target.uuid, flipped)
-      sender.sendMessage("§a[suite] Traducción de {target}: {flipped}")
-
-  # Acción: resetear configuración
-  reset:
-    description: "Restaura configs por defecto (con backup)"
-    permission: "textformattersuite.admin"
-    confirm: true
-    execute: |
-      if resetConfigs():
-        reloadSuite()
-        sender.sendMessage("§a[suite] Configs restauradas (backup en backup/)")
-      else:
-        sender.sendMessage("§c[suite] Error: ver log")
-
-  # Acción: test suite
-  test:
-    description: "Ejecuta tests automatizados"
-    permission: "textformattersuite.admin"
-    args:
-      - name: "type"
-        type: "enum(full,stress,concurrency,routing,events,perf,sync)"
-        default: "full"
-      - name: "args..."
-        type: "string*"
-        description: "Parámetros adicionales según tipo"
-    execute: |
-      # Delegar a TestService existente
-
-  # Acción: editar config.yml estilo LuckPerms
-  edit:
-    description: "Edita un valor en config.yml"
-    permission: "textformattersuite.admin"
-    args:
-      - name: "path"
-        type: "string"
-        description: "Ruta YAML (ej: general.language, chat.claim-mode)"
-      - name: "value"
-        type: "string"
-        description: "Nuevo valor"
-    execute: |
-      config.set(path, value)
-      config.save()
-      sender.sendMessage("§a[suite] {path} = {value}")
-      reloadSuite()  # hot-reload
-
-  # Acción: ver valor actual
-  get:
-    description: "Muestra valor actual de una clave"
-    permission: "textformattersuite.user"
-    args:
-      - name: "path"
-        type: "string"
-        description: "Ruta YAML"
-    execute: |
-      val = config.get(path)
-      sender.sendMessage("§a[suite] {path} = {val}")
-
-# Estructura de comandos (árbol)
-commands:
-  suite:
-    description: "Comando principal TextFormatter Suite"
-    permission: "textformattersuite.user"
-    default: status  # subcomando por defecto sin args
-    children:
-      reload:
-        ref: reload
-      status:
-        ref: status
-      lang:
-        ref: lang
-        children:
-          auto:
-            ref: lang
-            fixed-args: ["auto"]
-          off:
-            ref: lang
-            fixed-args: ["off"]
-          <code>:
-            ref: lang
-            arg-binding: "value"
-      toggle:
-        ref: toggle
-        children:
-          <player>:
-            ref: toggle
-            arg-binding: "target"
-      reset:
-        ref: reset
-      test:
-        ref: test
-        children:
-          full:
-            ref: test
-            fixed-args: ["full"]
-          stress:
-            ref: test
-            arg-binding: "type"
-            fixed-args: ["stress"]
-          concurrency:
-            ref: test
-            arg-binding: "type"
-            fixed-args: ["concurrency"]
-      edit:
-        ref: edit
-      get:
-        ref: get
+# commands.yml — raíz del árbol de comandos
+root: [suite]
+aliases:
+  - [txf]
 ```
+
+| Clave | Tipo | Obligatoria | Descripción |
+|---|---|---|---|
+| `root` | cadena o lista de cadenas | No | Segmentos del comando raíz. Si falta, se usa `[suite]`. |
+| `aliases` | lista de cadenas o listas de cadenas | No | Raíces alternativas. Cada elemento puede ser una cadena (`txf`) o una lista de segmentos (`[sm, module]`). |
+
+### Raíz multi-segmento
+
+```yaml
+root: [suite, module]
+aliases:
+  - [sm]
+  - [txf, module]
+```
+
+El adaptador de plataforma registra solo el primer segmento (`suite`). El
+dispatcher neutral consume `module` antes de resolver el comando del módulo. Un
+módulo que registra `demo echo` responde a:
+
+```text
+/suite module demo echo hola
+/sm demo echo hola
+/txf module demo echo hola
+```
+
+### Reglas de validación
+
+- Cada segmento debe cumplir `[a-z0-9][a-z0-9_-]*`.
+- `root` y cada alias deben tener al menos un segmento.
+- Un alias no puede ser igual a `root`.
+- Un alias no puede quedar tapado por la raíz. Con `root: [suite]`, un alias
+  `[suite, module]` es ambiguo; con `root: [suite, module]`, un alias `[suite]`
+  sí es válido porque la raíz no consume `module` en ese caso.
+- No se permiten aliases duplicados.
+- Un `commands.yml` inválido no reemplaza la raíz activa. El runtime registra el
+  error y conserva la raíz anterior; al arrancar usa `/suite`.
+- Si la plataforma ya tiene un comando con el primer segmento de la raíz, el
+  registro falla explícitamente. No se roba un comando ajeno.
+
+## Recarga en caliente
+
+El comando built-in `reload` vuelve a leer `commands.yml`. Se invoca con la raíz
+que está activa en ese momento (por defecto `/suite reload`):
+
+```text
+/suite reload
+```
+
+- Si la raíz no cambió: `UNCHANGED`.
+- Si cambió y la plataforma puede desregistrar el comando anterior: se aplica y
+  se re-registra la nueva raíz (`APPLIED`). Los comandos de los módulos no se
+  tocan.
+- Si la plataforma no puede desregistrar o restaurar la raíz: se informa
+  `RESTART_REQUIRED`. No se simula un cambio exitoso.
+- Si el archivo es inválido o la nueva raíz choca con un comando existente: se
+  conserva la raíz anterior y se informa `FAILED`.
+
+## Ejemplos
+
+Mantener `/suite` y añadir `/tf`:
+
+```yaml
+root: [suite]
+aliases: [tf]
+```
+
+Mover todo el árbol a `/tf` sin alias:
+
+```yaml
+root: [tf]
+```
+
+Mover el árbol a `/suite module` y conservar `/sm`:
+
+```yaml
+root: [suite, module]
+aliases: [sm]
+```
+
+## Contrato de implementación
+
+- `api.command.CommandRoot` valida segmentos y aliases.
+- `RuntimeCommandRegistry` resuelve paths relativos y consume el prefijo de la
+  raíz.
+- `CommandContext.root()` es la única fuente para help, usage y mensajes de
+  error; ningún módulo concatena `/suite`.
+- `SuiteRuntime` carga este archivo al arrancar y en `reloadCommandRoot()`.
+- El adaptador de plataforma solo registra el comando raíz y delega en el
+  registro neutral.

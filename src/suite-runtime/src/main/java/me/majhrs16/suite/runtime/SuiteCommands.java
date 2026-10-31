@@ -30,6 +30,7 @@ final class SuiteCommands {
 
     static void register(CommandRegistry commands, SuiteRuntime runtime) {
         commands.register(help(commands));
+        commands.register(reload(runtime));
         commands.register(list(runtime));
         commands.register(state(runtime));
         commands.register(install(runtime));
@@ -65,6 +66,17 @@ final class SuiteCommands {
         for (CommandSpec child : spec.children()) {
             describe(context, prefix + spec.name() + " ", child);
         }
+    }
+
+    private static CommandSpec reload(SuiteRuntime runtime) {
+        return CommandSpec.builder("reload")
+                .description("Recarga commands.yml y re-registra la raíz")
+                .permission(PERMISSION)
+                .handler(context -> {
+                    CommandRootChange change = runtime.reloadCommandRoot();
+                    context.reply(change.message());
+                })
+                .build();
     }
 
     private static CommandSpec list(SuiteRuntime runtime) {

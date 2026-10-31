@@ -12,7 +12,10 @@
 - **Lifecycle** — `SERVER_STARTING` crea el runtime; `SERVER_STOPPING` lo
   cierra.
 - **Command bridge** — `CommandRegistrationCallback` enlaza el
-  `CommandDispatcher` de Brigadier con `FabricPlatformPorts`.
+  `CommandDispatcher` de Brigadier con `FabricPlatformPorts`. La raíz y sus
+  aliases se leen de `config/suite/commands.yml` (default copiado desde
+  `defaults/commands.yml`); `/suite reload` re-registra el nodo raíz o informa
+  `RESTART_REQUIRED`.
 - **Platform ports** — `FabricPlatformPorts` implementa `info`, `deliver`,
   `send`, `findActor`, `onlineActors`, `hasPermission` y `registerCommand`.
 - **Adapter services**:

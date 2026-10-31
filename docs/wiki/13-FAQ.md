@@ -169,28 +169,22 @@ intents: [GUILD_MESSAGES, MESSAGE_CONTENT]
 
 ### How do I change the command name?
 
-Edit `commands.yml`:
+Edit `config/suite/commands.yml`:
 ```yaml
-base-name: "myname"
-aliases: ["suite", "txf", "custom"]
+root: [myname]
+aliases: [suite, txf, custom]
 ```
+
+Aplica el cambio con `/<raíz-actual> reload` (por defecto `/suite reload`); tras
+el re-registro, el comando pasa a estar en `/myname`. Reinicia el servidor si el
+runtime informa `RESTART_REQUIRED`. `base-name` se acepta solo durante la
+migración y se elimina en F8.
 
 ### How do I add custom commands?
 
-Edit `commands.yml`:
-```yaml
-actions:
-  myaction:
-    description: "My custom action"
-    permission: "myplugin.custom"
-    execute: |
-      sender.sendMessage("Hello ${sender}!")
-commands:
-  suite:
-    children:
-      mycommand:
-        ref: myaction
-```
+`commands.yml` solo declara la raíz. Los comandos se registran desde un paquete
+mediante `api.command` (`CommandSpec` y `ModuleContext.commands()`); no hay un
+intérprete de acciones en YAML.
 
 ## Troubleshooting
 

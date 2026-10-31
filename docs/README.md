@@ -33,7 +33,7 @@ El criterio completo —qué es un prompt frente a una skill, cómo se nombran l
 ```
 prompts/diseno/manager-v2.md             →  implementación en src/manager-*
 prompts/diseno/web-editor.md             →  implementación en src/web-editor/
-prompts/especificaciones/commands-v2.md  →  implementación en src/host/config/CommandsConfig*
+prompts/especificaciones/commands-v2.md  →  implementación en src/core-api/api/command + src/suite-runtime/CommandRootConfig
 prompts/especificaciones/extension-v1.md →  implementación en src/extension-api/
 skills auditar-*                         →  auditorías contra la spec v3 (prompts/diseno/iflow-cpu-implement.md)
 skills generar-*                         →  README raíz y CodeGuide (src/README.md)

@@ -759,13 +759,16 @@ nodo del path y oculta de la tab completion los subárboles no permitidos.
 
 ## Decisión 2026-10-29 — Raíz de comandos relocalizable (ADR-022)
 
-**Estado:** Aceptada. `CommandRoot` existe en `api.command` y el dispatcher neutral consume prefijos multi-segmento; la configuración `root`/aliases, el re-registro en caliente y la migración de `commands.yml` quedan en F4e.
+**Estado:** Aceptada e implementada en F4e. `CommandRoot` vive en `api.command`;
+`CommandRootConfig` carga `root`/`aliases` desde `config/suite/commands.yml`;
+`SuiteRuntime.reloadCommandRoot()` re-registra la raíz y distingue
+`APPLIED`/`UNCHANGED`/`FAILED`/`RESTART_REQUIRED`.
 
-**Contexto.** El literal `/suite` sigue hardcodeado en la raíz por defecto y en
-los mensajes de ayuda. Los árboles de host ya se retiraron en F4d; el Brigadier
-de Fabric solo adapta la invocación. Cambiar a `/suite module` o `/tf` obligaría
-a tocar la configuración y los mensajes, no los módulos. Los módulos deben
-registrar rutas relativas, no la raíz.
+**Contexto.** Antes de F4e, el literal `/suite` estaba hardcodeado en la raíz
+por defecto y en los mensajes de ayuda. Los árboles de host ya se retiraron en
+F4d; el Brigadier de Fabric solo adapta la invocación. Cambiar a `/suite module`
+o `/tf` obligaría a tocar la configuración y los mensajes, no los módulos. Los
+módulos deben registrar rutas relativas, no la raíz.
 
 **Decisión.**
 
@@ -783,12 +786,14 @@ registrar rutas relativas, no la raíz.
 5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
    `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
    permiten mantener `/suite` y `/tf` a la vez.
-6. El `base-name` actual de `commands.yml` se sustituye por `root`; no se
-   conserva como fallback permanente. La migración y el esquema exacto se
-   documentan en `commands-v2.md` al cerrar F4e.
+6. El `base-name` actual de `commands.yml` se sustituye por `root`. Se acepta
+   solo como migración con aviso y se elimina en **F8**; no es un fallback
+   permanente. La migración y el esquema exacto están en `commands-v2.md`.
 7. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
-   plataforma no permite desregistrar, se marca `RESTART_REQUIRED`. No se
-   mantiene un root viejo activo.
+   plataforma no permite desregistrar o restaurar, se marca
+   `RESTART_REQUIRED` y no se publica la nueva raíz como activa. Si el nuevo
+   registro falla, se intenta restaurar la raíz anterior y se informa
+   `FAILED`.
 8. Conflictos de root con comandos existentes fallan explícitamente; no se roba
    un comando ajeno.
 

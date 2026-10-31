@@ -19,7 +19,10 @@
   `ActorDirectory`, `PermissionChecker`, `UserLanguageStore`,
   `PlaceholderResolver`, `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **Root command** — `runtime.registerCommands()` registra el árbol neutral en
-  el `CommandMap`; `plugin.yml` ya no declara `/suite`.
+  el `CommandMap`; `plugin.yml` ya no declara `/suite`. La raíz y sus aliases
+  se leen de `config/suite/commands.yml` (default copiado desde
+  `defaults/commands.yml`); `/suite reload` re-registra el comando o informa
+  `RESTART_REQUIRED`.
 - **In-world adapter** — `SpigotInWorldListener` consume `InWorldService` y
   `MessageRenderer` desde el runtime.
 

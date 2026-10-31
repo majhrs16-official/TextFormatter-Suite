@@ -31,6 +31,7 @@
     ├── config/                      ← **Directorio raíz de configuración de la suite**
     │   ├── suite/                   ← Configuración GLOBAL del host (solo lo que el core necesita)
     │   │   ├── config.yml           ← Config principal: idioma, claim-mode, sound, parallel, repositorios
+    │   │   ├── commands.yml         ← Raíz del árbol de comandos (`root`/`aliases`)
     │   │   └── messages.yml         ← Strings de UI del host/platform (comandos /suite, prefijos)
     │   │
     │   ├── iflow-firewall/          ← **Módulo iflow-firewall** (motor SpEL legacy + grafo del editor)
@@ -120,9 +121,10 @@
 | `config/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
 | `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
 | `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
+| `config/suite/commands.yml` | `suite-runtime` carga (`CommandRootConfig`) | **`suite-runtime` (raíz neutral)** | ✅ Migrado (F4e) |
 | `config/iflow-firewall/rules.yml` | `iflow-firewall` carga reglas (`RuleConfigLoader`) y valida el grafo (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
 
-> **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. El único archivo compartido es `config/suite/messages.yml` (ADR-020).
+> **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. `config/suite/messages.yml` lo carga `host` (ADR-020) y `config/suite/commands.yml` lo carga `suite-runtime` (ADR-022).
 
 ---
 
@@ -462,6 +464,7 @@ health-enabled: true
 ```
 1. Mueve configs de usuario a backup/<timestamp>/
    - config/suite/config.yml
+   - config/suite/commands.yml
    - config/suite/messages.yml
    - config/iflow-firewall/
    - config/textformatter/

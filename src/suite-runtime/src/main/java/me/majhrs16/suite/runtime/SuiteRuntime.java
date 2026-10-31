@@ -69,6 +69,7 @@ public final class SuiteRuntime implements AutoCloseable {
     private RuntimeCommandRegistry commands;
     private RuntimeConfigRegistry configs;
     private PlatformPorts.Registration commandRegistration;
+    private boolean commandRootRestartRequired;
     private final Map<Class<?>, Object> pendingPlatformServices = new LinkedHashMap<>();
     private final List<ServiceRegistry.Registration> platformRegistrations =
         new ArrayList<>();
@@ -136,7 +137,13 @@ public final class SuiteRuntime implements AutoCloseable {
         manager.initialize();
 
         stateStore = new RuntimeStateStore(runtimeDir, logger);
-        commands = new RuntimeCommandRegistry(CommandRoot.suite(), logger);
+        ConfigLoader.LoadResult<CommandRoot> commandRoot =
+                CommandRootConfig.load(dataDir, logger);
+        for (String error : commandRoot.errors()) {
+            logger.error("Command root config error: " + error);
+        }
+        commands = new RuntimeCommandRegistry(commandRoot.config(), logger);
+        commandRootRestartRequired = false;
         configs = new RuntimeConfigRegistry();
         moduleHost = new ModuleHost(
                 libraryRoot, configRoot, ports.info(), logger, stateStore, commands, configs);
@@ -260,6 +267,7 @@ public final class SuiteRuntime implements AutoCloseable {
         commands = null;
         configs = null;
         manager = null;
+        commandRootRestartRequired = false;
         started = false;
     }
 
@@ -275,25 +283,139 @@ public final class SuiteRuntime implements AutoCloseable {
      */
     public synchronized PlatformPorts.Registration registerCommands() {
         ensureStarted();
+        if (commandRootRestartRequired) {
+            throw new IllegalStateException(
+                    "command root requires a server restart before it can be registered");
+        }
         if (commandRegistration == null) {
-            PlatformPorts.Registration delegate =
-                    ports.registerCommand(new RootCommand(commands, ports));
-            commandRegistration = new PlatformPorts.Registration() {
-                @Override
-                public void close() {
-                    try {
-                        delegate.close();
-                    } finally {
-                        synchronized (SuiteRuntime.this) {
-                            if (commandRegistration == this) {
-                                commandRegistration = null;
-                            }
+            commandRegistration = registerRootCommand();
+        }
+        return commandRegistration;
+    }
+
+    private PlatformPorts.Registration registerRootCommand() {
+        PlatformPorts.Registration delegate =
+                ports.registerCommand(new RootCommand(commands, ports));
+        return new PlatformPorts.Registration() {
+            @Override
+            public void close() {
+                try {
+                    delegate.close();
+                } finally {
+                    synchronized (SuiteRuntime.this) {
+                        if (commandRegistration == this) {
+                            commandRegistration = null;
                         }
                     }
                 }
-            };
+            }
+        };
+    }
+
+    /**
+     * Reloads {@code commands.yml} and re-registers the platform root command
+     * when the configured root or its aliases changed.
+     *
+     * <p>Module command registrations are root-relative and are not touched.
+     * If the platform cannot release the old root, the runtime reports
+     * {@link CommandRootChange.Status#RESTART_REQUIRED} instead of pretending
+     * that the change was applied.</p>
+     *
+     * @return outcome and the root that remains active
+     */
+    public synchronized CommandRootChange reloadCommandRoot() {
+        ensureStarted();
+        if (commandRootRestartRequired) {
+            return new CommandRootChange(
+                    CommandRootChange.Status.RESTART_REQUIRED,
+                    "La raíz de comandos requiere reiniciar el servidor antes de "
+                            + "volver a intentar el re-registro.",
+                    commands.root());
         }
-        return commandRegistration;
+        ConfigLoader.LoadResult<CommandRoot> loaded =
+                CommandRootConfig.load(dataDir, logger);
+        if (!loaded.isValid()) {
+            String detail = String.join("; ", loaded.errors());
+            logger.error("Command root reload rejected: " + detail);
+            return new CommandRootChange(
+                    CommandRootChange.Status.FAILED,
+                    "No se cambió la raíz de comandos: " + detail,
+                    commands.root());
+        }
+
+        CommandRoot next = loaded.config();
+        CommandRoot previous = commands.root();
+        if (next.equals(previous)) {
+            commandRootRestartRequired = false;
+            return new CommandRootChange(
+                    CommandRootChange.Status.UNCHANGED,
+                    "La raíz de comandos ya es /" + next.display() + ".",
+                    previous);
+        }
+
+        if (commandRegistration == null) {
+            commands.setRoot(next);
+            commandRootRestartRequired = false;
+            return new CommandRootChange(
+                    CommandRootChange.Status.APPLIED,
+                    "Raíz de comandos aplicada: /" + next.display() + ".",
+                    next);
+        }
+
+        PlatformPorts.Registration old = commandRegistration;
+        try {
+            old.close();
+        } catch (RuntimeException failure) {
+            commandRootRestartRequired = true;
+            logger.error("Cannot unregister command root /" + previous.display(), failure);
+            return new CommandRootChange(
+                    CommandRootChange.Status.RESTART_REQUIRED,
+                    "No se pudo retirar la raíz /" + previous.display()
+                            + "; reinicia el servidor para aplicar /"
+                            + next.display() + ".",
+                    previous);
+        }
+
+        commands.setRoot(next);
+        try {
+            commandRegistration = registerRootCommand();
+            commandRootRestartRequired = false;
+            return new CommandRootChange(
+                    CommandRootChange.Status.APPLIED,
+                    "Raíz de comandos aplicada: /" + next.display() + ".",
+                    next);
+        } catch (RuntimeException failure) {
+            commands.setRoot(previous);
+            try {
+                commandRegistration = registerRootCommand();
+                commandRootRestartRequired = false;
+                logger.error("Cannot register command root /" + next.display()
+                        + "; restored /" + previous.display(), failure);
+                return new CommandRootChange(
+                        CommandRootChange.Status.FAILED,
+                        "No se pudo registrar /" + next.display()
+                                + "; se restauró /" + previous.display() + ".",
+                        previous);
+            } catch (RuntimeException restoreFailure) {
+                commandRootRestartRequired = true;
+                logger.error("Cannot restore command root /" + previous.display(),
+                        restoreFailure);
+                return new CommandRootChange(
+                        CommandRootChange.Status.RESTART_REQUIRED,
+                        "No se pudo registrar /" + next.display()
+                                + " ni restaurar /" + previous.display()
+                                + "; reinicia el servidor.",
+                        previous);
+            }
+        }
+    }
+
+    /**
+     * @return {@code true} when a failed hot reload left the platform command
+     *         tree in a state that only a server restart can repair
+     */
+    public synchronized boolean commandRootRestartRequired() {
+        return commandRootRestartRequired;
     }
 
     /**

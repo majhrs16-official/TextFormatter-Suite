@@ -215,10 +215,11 @@ TextFormatter Suite
 ### Add a New Platform Adapter
 ```
 → src/spigot-host/README.md or src/fabric-host/README.md
-  → Implement ActorDirectory, ChatDelivery, PlaceholderResolver
-  → Implement Module (extend ModuleBase or similar)
-  → Register commands, listeners, config validator
-  → Wire in platform-specific bootstrap
+  → Implement PlatformPorts and the adapter-owned services
+    (ActorDirectory, ChatDelivery, PlaceholderResolver, ...)
+  → Register them in SuiteRuntime before start()
+  → Start SuiteRuntime and register only the root command adapter
+  → Keep command trees and event capture out of the host
 ```
 
 ---
@@ -234,7 +235,7 @@ TextFormatter Suite
 ### Bootstrap & Initialization
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
-| `SuiteRuntime` | `suite-runtime` | Composition root: installs packages, builds `SuiteHost`, publishes commands and `MessageDispatch` |
+| `SuiteRuntime` | `suite-runtime` | Composition root: installs packages, builds `SuiteHost`, loads the configured `CommandRoot`, publishes commands and `MessageDispatch` |
 | `SuiteHost` | `host` | Neutral pipeline: holds services and dispatches messages |
 | `ModuleLoader` | `kernel` | Discovers and loads `Module` implementations via SPI |
 | `ModuleGraph` | `kernel` | Resolves module dependency graph |
@@ -253,9 +254,11 @@ TextFormatter Suite
 ### Command Registration
 | Platform | Registration |
 |----------|--------------|
-| Neutral | `api.command` tree owned by `RuntimeCommandRegistry`; modules register through `ModuleContext.commands()` |
+| Root | `config/suite/commands.yml` (`root`/`aliases`) → `CommandRootConfig` → `RuntimeCommandRegistry` |
+| Neutral | `api.command` tree owned by `RuntimeCommandRegistry`; modules register root-relative paths through `ModuleContext.commands()` |
 | Bukkit | `SuiteRuntime.registerCommands()` → `SpigotPlatformPorts` → `CommandMap` (root adapter only) |
 | Fabric | `SuiteRuntime.registerCommands()` → `FabricPlatformPorts` → Brigadier (root adapter only) |
+| Reload | `SuiteRuntime.reloadCommandRoot()` / `/suite reload` → re-register root or `RESTART_REQUIRED` |
 
 ### Event/Listener Registration
 | Platform | Registration |

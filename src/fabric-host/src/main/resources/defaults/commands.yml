@@ -1,0 +1,12 @@
+# Raíz del árbol de comandos de TextFormatter Suite.
+#
+# root: segmentos del comando raíz. Puede ser una lista de varios segmentos,
+#       por ejemplo [suite, module], o una cadena "suite module".
+# aliases: raíces alternativas. Cada entrada puede ser una cadena ("txf") o
+#          una lista de segmentos ([sm, module]).
+#
+# Los módulos registran rutas relativas: cambiar la raíz no requiere
+# recompilarlos. El comando /suite reload aplica los cambios en caliente.
+root: [suite]
+aliases:
+  - [txf]

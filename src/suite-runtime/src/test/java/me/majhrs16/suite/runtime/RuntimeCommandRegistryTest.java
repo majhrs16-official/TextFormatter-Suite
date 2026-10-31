@@ -208,6 +208,22 @@ class RuntimeCommandRegistryTest {
     }
 
     @Test
+    void allowsAShorterAliasSharingTheRootFirstSegment() {
+        RuntimeCommandRegistry multi = new RuntimeCommandRegistry(
+                CommandRoot.of("suite", "module").withAlias("suite"),
+                FixtureModules.logger());
+        multi.register("demo", CommandSpec.builder("demo")
+                .child(CommandSpec.builder("echo")
+                        .handler(context -> context.reply("ok"))
+                        .build())
+                .build());
+
+        Source source = new Source();
+        assertTrue(multi.dispatch(source, List.of("demo", "echo")).handled());
+        assertEquals(List.of("ok"), source.replies);
+    }
+
+    @Test
     void moduleScopeRejectsCommandsOutsideItsNamespace() {
         assertThrows(IllegalArgumentException.class, () -> registry.scope("demo")
                 .register(CommandSpec.builder("other")

@@ -173,6 +173,8 @@ public final class TextFormatterSuitePlugin extends JavaPlugin {
     private void copyDefaultsIfMissing(Path folder) {
         copyResourceIfMissing(folder, "defaults/config.yml",
                 folder.resolve("config/suite/config.yml"), folder.resolve("config.yml"));
+        copyResourceIfMissing(folder, "defaults/commands.yml",
+                folder.resolve("config/suite/commands.yml"), folder.resolve("commands.yml"));
         for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
             copyResourceIfMissing(folder, "defaults/channels/" + name + ".yml",
                     folder.resolve("config/textformatter/channels/" + name + ".yml"),

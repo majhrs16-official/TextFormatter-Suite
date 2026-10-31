@@ -38,7 +38,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Sync WebSocket** | ✅ Implementada y probada | SO_REUSEADDR, auth token, subscripciones, log streaming; 1 test de contrato del módulo |
 | **Sync Velocity (proxy)** | ✅ Implementada y probada | **Production-ready**: async queue, retry/backoff exponencial, métricas, health, dynamic discovery, mapping avanzado (regex, per-type); compila, tests pasan |
 | **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; 4 tests de ciclo y entrega |
-| **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: `AsyncPlayerChatEvent` (claim modes), join/quit/death/advancement channels, `/suite` commands, fat-jar shadow; **compila con Paper API 1.21.4**; probado en servidor real Paper 1.20.6 |
+| **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: bootstrap neutral, comandos con raíz configurable, fat-jar shadow; **compila con Paper API 1.21.4** |
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
 | **Module Manager (runtime)** | ⚠️ Núcleo completado, releases descartados | GitHub/local/HTTP downloader, version resolver (semver ranges + env compat), dependency resolver (module.yml), relocator (fixed), ClassLoader aislado parent-last, SHA256 obligatorio, `register()` SPI-only, `discoverAll()`/`discoverAvailableModules()`, manifest validation obligatoria; **decisión: no habrá GitHub Releases públicos** (ver `PLAN.md`) |
 | **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
@@ -204,7 +204,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Adaptadores de plataforma
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap, `/suite` commands, fat-jar shadow | ✅ Probado en servidor real Paper 1.20.6 |
+| `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap neutral, raíz de comandos configurable, fat-jar shadow | ✅ Compilación y tests automatizados |
 | `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ⚠️ Compila (sin tests Java; verificación Loom local; no probado en servidor real) |
 
 ### Legacy / referencial
@@ -281,9 +281,10 @@ cp src/fabric-host/build/libs/textformatter-suite-fabric-*.jar /ruta/servidor/mo
 ```
 
 ### Verificar carga correcta
-- Comando `/suite` muestra status
-- `/suite status` lista canales, traductor activo, knobs
-- Logs muestran `[TextFormatterSuite] Loaded X modules` y sinks registrados
+- `/suite help` lista los comandos built-in
+- `/suite list` lista paquetes y `/suite state` el estado runtime
+- `/suite reload` recarga `config/suite/commands.yml` y re-registra la raíz
+- Logs muestran el pipeline y los módulos activados
 
 ### Limitaciones conocidas antes de probar
 - **Fabric**: No probado en servidor real; death detection usa tick-based polling
@@ -410,7 +411,7 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 | **docs/wiki/01-Introduction.md** | Entrada wiki usuario/dev: quick start, módulos, arquitectura, guías | [`docs/wiki/01-Introduction.md`](docs/wiki/01-Introduction.md) |
 | **docs/wiki/02-Configuration.md** | Guía configuración (config.yml, channels, rules, translators, sync) | [`docs/wiki/02-Configuration.md`](docs/wiki/02-Configuration.md) |
 | **docs/wiki/05-iFlow-Rules.md** | ⚠️ Legacy: describe el motor de reglas antiguo (`DefaultRouter`, SpEL), restaurado en `iflow-firewall` y seleccionable con `iflow.engine.kind: firewall`. La VM `.flow` y Wasm no usan SpEL | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
-| **docs/wiki/08-Commands.md** | Referencia comandos `/suite` (dinámicos v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
+| **docs/wiki/08-Commands.md** | Referencia de comandos con raíz configurable (`commands.yml` v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
 | **docs/prompts/** | Material de referencia: contexto del proyecto, diseños de componentes y contratos de formato | [`docs/prompts/README.md`](docs/prompts/README.md) |
 | **.opencode/skills/** | Procedimientos que el agente ejecuta por sí mismo (auditar, generar documentación) | [`docs/prompts/README.md`](docs/prompts/README.md) § Prompt frente a skill |

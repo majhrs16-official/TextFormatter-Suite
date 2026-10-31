@@ -32,7 +32,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
  */
 public final class RuntimeCommandRegistry implements CommandRegistry {
 
-    private final CommandRoot root;
+    private volatile CommandRoot root;
     private final PluginLogger logger;
     private final Map<String, Registered> commands = new LinkedHashMap<>();
     private final Map<String, String> aliases = new LinkedHashMap<>();
@@ -45,6 +45,17 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
     @Override
     public CommandRoot root() {
         return root;
+    }
+
+    /**
+     * Replaces the configured root without touching the registered subtrees.
+     * Module commands are root-relative, so only the platform adapter has to
+     * re-register the root command after this call.
+     *
+     * @param next new root
+     */
+    public void setRoot(CommandRoot next) {
+        this.root = Objects.requireNonNull(next, "root");
     }
 
     @Override
@@ -138,25 +149,26 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
     public CommandResult dispatch(me.majhrs16.suite.api.command.CommandSource source,
                                   List<String> args) {
         Objects.requireNonNull(source, "source");
-        List<String> tokens = stripRoot(args);
+        CommandRoot currentRoot = root;
+        List<String> tokens = stripRoot(args, currentRoot);
         if (tokens == null) {
-            return CommandResult.notFound("Usa /" + root.display() + " help.");
+            return CommandResult.notFound("Usa /" + currentRoot.display() + " help.");
         }
         if (tokens.isEmpty()) {
-            return CommandResult.usage("/" + root.display() + " <comando>");
+            return CommandResult.usage("/" + currentRoot.display() + " <comando>");
         }
 
         String first = tokens.get(0).toLowerCase(Locale.ROOT);
         Registered registered = findRoot(first);
         if (registered == null) {
             return CommandResult.notFound("Subcomando desconocido: " + first
-                    + ". Usa /" + root.display() + " help.");
+                    + ". Usa /" + currentRoot.display() + " help.");
         }
 
         CommandSpec spec = registered.spec;
         CommandPath path = CommandPath.of(spec.name());
         if (!permitted(source, spec)) {
-            return denied(path);
+            return denied(currentRoot, path);
         }
         int index = 1;
         while (index < tokens.size()) {
@@ -168,20 +180,20 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
             path = path.child(spec.name());
             index++;
             if (!permitted(source, spec)) {
-                return denied(path);
+                return denied(currentRoot, path);
             }
         }
 
         if (spec.handler().isEmpty()) {
             if (index < tokens.size()) {
                 return CommandResult.notFound("Subcomando desconocido: "
-                        + tokens.get(index) + ". Usa /" + root.display() + " help.");
+                        + tokens.get(index) + ". Usa /" + currentRoot.display() + " help.");
             }
-            return CommandResult.usage(usage(path, spec));
+            return CommandResult.usage(usage(currentRoot, path, spec));
         }
 
         CommandContext context = new CommandContext(
-                root, source, path, tokens.subList(index, tokens.size()), spec.usage());
+                currentRoot, source, path, tokens.subList(index, tokens.size()), spec.usage());
         try {
             spec.handler().orElseThrow().execute(context);
             return CommandResult.success();
@@ -197,7 +209,8 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
     public List<String> complete(me.majhrs16.suite.api.command.CommandSource source,
                                  List<String> args) {
         Objects.requireNonNull(source, "source");
-        List<String> tokens = stripRoot(args);
+        CommandRoot currentRoot = root;
+        List<String> tokens = stripRoot(args, currentRoot);
         if (tokens == null) {
             return List.of();
         }
@@ -264,9 +277,9 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
         return spec.permission() == null || source.hasPermission(spec.permission());
     }
 
-    private CommandResult denied(CommandPath path) {
+    private CommandResult denied(CommandRoot currentRoot, CommandPath path) {
         return CommandResult.denied("No tienes permiso para ejecutar /"
-                + root.display() + " " + path.display() + ".");
+                + currentRoot.display() + " " + path.display() + ".");
     }
 
     private void checkAvailable(String token) {
@@ -293,21 +306,21 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
         return canonical == null ? null : commands.get(canonical);
     }
 
-    private List<String> stripRoot(List<String> args) {
+    private List<String> stripRoot(List<String> args, CommandRoot currentRoot) {
         Objects.requireNonNull(args, "args");
         List<String> tokens = new ArrayList<>(args);
-        if (matchesRoot(tokens, root.remaining())) {
-            tokens.subList(0, root.remaining().size()).clear();
+        if (matchesRoot(tokens, currentRoot.remaining())) {
+            tokens.subList(0, currentRoot.remaining().size()).clear();
             return tokens;
         }
-        for (List<String> alias : root.aliases()) {
+        for (List<String> alias : currentRoot.aliases()) {
             List<String> remaining = alias.subList(1, alias.size());
             if (matchesRoot(tokens, remaining)) {
                 tokens.subList(0, remaining.size()).clear();
                 return tokens;
             }
         }
-        return root.remaining().isEmpty() ? tokens : null;
+        return currentRoot.remaining().isEmpty() ? tokens : null;
     }
 
     private boolean matchesRoot(List<String> tokens, List<String> remaining) {
@@ -322,8 +335,8 @@ public final class RuntimeCommandRegistry implements CommandRegistry {
         return true;
     }
 
-    private String usage(CommandPath path, CommandSpec spec) {
-        StringBuilder usage = new StringBuilder("/").append(root.display());
+    private String usage(CommandRoot currentRoot, CommandPath path, CommandSpec spec) {
+        StringBuilder usage = new StringBuilder("/").append(currentRoot.display());
         if (!path.segments().isEmpty()) {
             usage.append(' ').append(path.display());
         }
