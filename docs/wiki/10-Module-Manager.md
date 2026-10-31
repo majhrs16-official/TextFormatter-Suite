@@ -34,7 +34,7 @@ RepositoryManager ──► DependencyResolver ──► AptInstaller
 
 | Path | Meaning |
 |---|---|
-| `manager/library/packages/<id>-<version>.jar` | Module JARs, versioned so the active version survives until an upgrade is confirmed |
+| `manager/library/packages/<package>-<version>-<n>.jar` | Module JARs, versioned so the active version survives until an upgrade is confirmed |
 | `manager/library/dependencies/<id>-<version>.jar` | Shared dependency JARs, visible to module classloaders |
 | `manager/library/status` | Authoritative installed-package database |
 | `manager/runtime/modules.status` | Transient runtime state (`ACTIVE`, `FAILED`, `RESTART_REQUIRED`, ...) |
@@ -84,11 +84,13 @@ Clean shutdown marks the module `INSTALLED`. Any leak marks it
    `RESTART_REQUIRED`.
 5. The new version starts. If it fails, the previous JAR is prepared and started
    again (rollback), and the new package files are removed.
-6. If a batch upgrades several modules and one fails, `PackageRuntime` records
-   every module already upgraded, restores those JARs in reverse order and
-   verifies that each one is `ACTIVE`. Only then does it authorize the manager
-   to delete the new files. A local ZIP with several packages follows the same
-   transaction, not just `repo upgrade`.
+6. A package may contain several module JARs; every active module in it is
+   upgraded in the same transaction, mapped by the `moduleId` declared in each
+   JAR. If a package or a batch upgrades several modules and one fails,
+   `PackageRuntime` records every module already upgraded, restores those JARs
+   in reverse order and verifies that each one is `ACTIVE`. Only then does it
+   authorize the manager to delete the new files. A local ZIP with several
+   packages follows the same transaction, not just `repo upgrade`.
 7. If compensation cannot verify every restoration, the runtime returns
    `keepBoth`: both versions stay on disk and the affected modules become
    `RESTART_REQUIRED`. No artifact is deleted.
@@ -98,13 +100,19 @@ The two versions are not started simultaneously: they share the module id,
 service/config namespaces, command paths and thread group. Preparing the new
 classloader first isolates class loading without colliding registrations.
 
-### Package cardinality invariant
+### Package contents and module identity
 
-A `PACKAGE` contains exactly one module JAR. Additional libraries belong in a
-`DEPENDENCY` package. `PackageRuntime` validates this before activation or
-upgrade: zero or more than one module JAR is an explicit failure, never a silent
-choice of the first JAR. Activation and upgrade use the same cardinality so the
-two paths cannot drift.
+A `PACKAGE` contains one or more module JARs. The package name is not the module
+id: every JAR declares its own `moduleId` through
+`ModuleActivator.descriptor()`, and `PackageRuntime` maps activation, upgrade and
+removal by that id. Module ids must be unique within a package; zero JARs or
+duplicate ids are explicit failures. Additional libraries belong in a
+`DEPENDENCY` package.
+
+Activation starts every JAR in the package. A hot upgrade replaces every active
+module in the package in one transaction, restoring the modules already upgraded
+if a later one fails. The runtime never chooses the first JAR silently and never
+exposes a package whose activation and upgrade capabilities differ.
 
 ### Shared dependencies
 
@@ -168,10 +176,12 @@ declares its SHA-256; downloads without a valid checksum are rejected.
 ## Package format
 
 A package is a ZIP with `METADATA/package.list` and its files. A module
-`PACKAGE` contains exactly one executable JAR under
+`PACKAGE` contains one or more executable JARs under
 `manager/library/packages/`; dependency packages contain their JARs under
-`manager/library/dependencies/`. The `package.list` records name, version,
-channel, type, platform, dependencies and per-file SHA-256.
+`manager/library/dependencies/`. Each module JAR declares its own id through
+`ModuleActivator.descriptor()`; the package name is not assumed to be a module
+id. The `package.list` records name, version, channel, type, platform,
+dependencies and per-file SHA-256.
 
 There is no `module.yml` inside the package: the authoritative metadata is
 `packages.list` / `package.list`, and the module JAR exposes its descriptor
@@ -249,7 +259,7 @@ No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 | Activation/deactivation | ✅ |
 | Hot upgrade + rollback | ✅ |
 | Batch compensation and `keepBoth` recovery | ✅ |
-| One module JAR per `PACKAGE` invariant | ✅ |
+| One or more module JARs per `PACKAGE` with unique module ids | ✅ |
 | Leak detection and `RESTART_REQUIRED` | ✅ |
 | Two-phase manager/runtime upgrade | ✅ |
 | Local/HTTP/file repositories | ✅ |

@@ -259,6 +259,29 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /**
+     * Reads the descriptor of a module JAR without starting it.
+     *
+     * <p>Package upgrades use this to map every JAR in a multi-JAR package to
+     * its real module id. The temporary classloader is closed before returning;
+     * no module, context or thread group is created.</p>
+     *
+     * @param jar            module JAR
+     * @param dependencyJars shared dependency JARs
+     * @return the descriptor declared by the JAR
+     * @throws Exception if the JAR cannot be read or declares an invalid
+     *                   activator
+     */
+    public ModuleDescriptor inspect(Path jar, List<Path> dependencyJars) throws Exception {
+        Objects.requireNonNull(jar, "jar");
+        Objects.requireNonNull(dependencyJars, "dependencyJars");
+        try (ModuleClassLoader classLoader = new ModuleClassLoader(
+                jar, dependencyJars, ModuleActivator.class.getClassLoader())) {
+            ModuleActivator activator = loadSingleActivator(jar, classLoader);
+            return descriptorOf(activator, jar);
+        }
+    }
+
+    /**
      * Replaces an active module with a new JAR.
      *
      * <p>The new JAR is prepared in a second classloader first. The active
@@ -456,21 +479,8 @@ public final class ModuleHost implements AutoCloseable {
         ModuleClassLoader classLoader = new ModuleClassLoader(
                 jar, dependencyJars, ModuleActivator.class.getClassLoader());
         try {
-            List<ModuleActivator> activators = loadActivators(jar, classLoader);
-            if (activators.isEmpty()) {
-                throw new IllegalStateException(
-                        "No META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator in " + jar);
-            }
-            if (activators.size() > 1) {
-                throw new IllegalStateException(
-                        "Multiple ModuleActivator implementations in " + jar + ": " + activators.size());
-            }
-
-            ModuleActivator activator = activators.get(0);
-            ModuleDescriptor descriptor = activator.descriptor();
-            if (descriptor == null) {
-                throw new IllegalStateException("ModuleActivator.descriptor() returned null in " + jar);
-            }
+            ModuleActivator activator = loadSingleActivator(jar, classLoader);
+            ModuleDescriptor descriptor = descriptorOf(activator, jar);
 
             String moduleId = descriptor.name();
             Path configDir = configRoot.resolve(moduleId);
@@ -513,6 +523,28 @@ public final class ModuleHost implements AutoCloseable {
             }
         }
         return new ArrayList<>(selected.values());
+    }
+
+    private static ModuleActivator loadSingleActivator(Path jar, ModuleClassLoader classLoader)
+            throws ReflectiveOperationException, IOException {
+        List<ModuleActivator> activators = loadActivators(jar, classLoader);
+        if (activators.isEmpty()) {
+            throw new IllegalStateException(
+                    "No META-INF/services/me.majhrs16.suite.api.runtime.ModuleActivator in " + jar);
+        }
+        if (activators.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple ModuleActivator implementations in " + jar + ": " + activators.size());
+        }
+        return activators.get(0);
+    }
+
+    private static ModuleDescriptor descriptorOf(ModuleActivator activator, Path jar) {
+        ModuleDescriptor descriptor = activator.descriptor();
+        if (descriptor == null) {
+            throw new IllegalStateException("ModuleActivator.descriptor() returned null in " + jar);
+        }
+        return descriptor;
     }
 
     /**

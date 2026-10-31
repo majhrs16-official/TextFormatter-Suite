@@ -655,8 +655,11 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 - `ModuleHost` prepara la versión nueva, detiene la anterior, arranca la nueva y
   compensa lotes en orden inverso. Una compensación fallida conserva ambas
   versiones y marca `RESTART_REQUIRED`.
-- Un `PACKAGE` contiene exactamente un JAR de módulo; las librerías compartidas
-  son paquetes `DEPENDENCY`.
+- Un `PACKAGE` puede contener uno o más JARs de módulo. El nombre del paquete no
+  identifica al módulo: cada JAR declara su `moduleId` en el descriptor y
+  `PackageRuntime` mapea activación, upgrade y retirada por ese id. Los ids
+  deben ser únicos dentro del paquete; cero JARs o ids duplicados son errores
+  explícitos. Las librerías compartidas son paquetes `DEPENDENCY`.
 
 ##### Principios no negociables
 
@@ -943,8 +946,8 @@ Secuencia de activación:
 
 Secuencia de hot upgrade (ADR-026):
 
-1. Instalar la nueva versión en una ruta versionada
-   (`<id>-<version>.jar`); no sobrescribir la activa.
+1. Instalar la nueva versión en rutas versionadas
+   (`<package>-<version>-<n>.jar`); no sobrescribir la activa.
 2. Preparar el classloader, el descriptor y el `ModuleContext` de la nueva
    versión, sin ejecutar `start()` todavía.
 3. Detener la versión anterior y liberar sus recursos, registros, listeners,
@@ -953,11 +956,12 @@ Secuencia de hot upgrade (ADR-026):
    `RESTART_REQUIRED` y conservar ambos paquetes hasta el reinicio.
 5. Arrancar la nueva versión. Si falla, preparar y arrancar de nuevo el JAR
    anterior (rollback) y eliminar la versión nueva instalada.
-6. Si un lote incluye varios módulos y uno falla, recorrer en orden inverso los
-   módulos ya actualizados, restaurar sus JAR anteriores y verificar que cada
-   uno quedó `ACTIVE`. Solo entonces autorizar el borrado de los archivos
-   nuevos. Esta regla vale tanto para `repo upgrade` como para un ZIP local con
-   varios paquetes.
+6. Si un paquete contiene varios JARs, actualizar todos sus módulos activos
+   mapeados por `moduleId`. Si un paquete o un lote incluye varios módulos y uno
+   falla, recorrer en orden inverso los módulos ya actualizados, restaurar sus
+   JAR anteriores y verificar que cada uno quedó `ACTIVE`. Solo entonces
+   autorizar el borrado de los archivos nuevos. Esta regla vale tanto para
+   `repo upgrade` como para un ZIP local con varios paquetes.
 7. Si la compensación no puede verificar todas las restauraciones, devolver
    `keepBoth`: conservar ambas versiones, marcar los módulos afectados
    `RESTART_REQUIRED` y no borrar ningún artefacto.
@@ -972,13 +976,14 @@ servicios/configuración, rutas de comandos y grupo de hilos. La coexistencia de
 classloaders se usa para preparar la nueva versión, no para registrarla antes de
 detener la anterior.
 
-Invariante de paquete: un `PACKAGE` contiene exactamente un JAR de módulo. Las
-librerías adicionales van en `DEPENDENCY`. `PackageRuntime` valida la
-cardinalidad antes de activar o actualizar; cero o más de un JAR es un error
-explícito, nunca una elección silenciosa del primero. Esta regla existe porque
-la activación y el upgrade deben tener la misma capacidad; si en el futuro se
-quiere soportar varios módulos por paquete, se implementa en ambas rutas y se
-prueba, no se asume.
+Invariante de paquete: un `PACKAGE` contiene uno o más JARs de módulo, cada uno
+con un `moduleId` único declarado por su descriptor. El nombre del paquete no se
+usa como id de módulo. Las librerías adicionales van en `DEPENDENCY`.
+`PackageRuntime` inspecciona todos los JARs antes de activar o actualizar; cero
+JARs o ids duplicados son un error explícito. La activación arranca todos los
+módulos y el upgrade reemplaza todos los módulos activos del paquete de forma
+transaccional; si un módulo falla, se compensan los ya actualizados. No se elige
+el primero en silencio ni se deja una ruta con capacidad distinta.
 
 Secuencia de desactivación:
 
@@ -1160,7 +1165,7 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | ✅ `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
 | **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | ✅ Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y `CommandsConfig*` no existen; el Brigadier de Fabric queda como adaptador de invocación; tests de registro, desregistro, permisos, colisiones y tab completion |
 | **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | ✅ El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión, cambio de raíz, restauración y `RESTART_REQUIRED` |
-| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, compensación de lotes, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, rutas de JAR versionadas y hook transaccional manager/runtime | ✅ Upgrade exitoso y fallido con rollback; lote con un módulo ya actualizado y otro fallido compensa el primero antes de borrar archivos; si la compensación falla se conservan ambas versiones y se marca `RESTART_REQUIRED`; hilo filtrado, recurso que falla y tarea en ejecución producen `RESTART_REQUIRED`; un `PACKAGE` con más de un JAR se rechaza; estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados |
+| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, compensación de lotes, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, rutas de JAR versionadas y hook transaccional manager/runtime | ✅ Upgrade exitoso y fallido con rollback; lote con un módulo ya actualizado y otro fallido compensa el primero antes de borrar archivos; si la compensación falla se conservan ambas versiones y se marca `RESTART_REQUIRED`; hilo filtrado, recurso que falla y tarea en ejecución producen `RESTART_REQUIRED`; un `PACKAGE` multi-JAR activa y actualiza todos sus módulos; cero JARs o ids duplicados se rechazan; estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados |
 | **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
 
 **F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,

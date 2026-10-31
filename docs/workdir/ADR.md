@@ -1161,10 +1161,14 @@ listeners o registros apuntando a clases muertas sin que el estado lo reflejara.
    la usa (directa o transitivamente); el mensaje exige reiniciar. Borrar el JAR
    anterior mientras un classloader activo puede cargarlo después es peor que
    bloquear el upgrade.
-9. Un paquete `PACKAGE` contiene exactamente un JAR de módulo. Las librerías
-   adicionales van en paquetes `DEPENDENCY`. `PackageRuntime` valida la
-   cardinalidad antes de activar o actualizar y rechaza el paquete si declara
-   cero o más de un JAR; nunca elige el primero en silencio.
+9. Un paquete `PACKAGE` contiene uno o más JARs de módulo. El paquete no
+   identifica al módulo: cada JAR declara su `moduleId` en
+   `ModuleActivator.descriptor()` y el runtime mapea activación, upgrade y
+   retirada por ese id. Los ids deben ser únicos dentro del paquete; cero JARs
+   o ids duplicados son un error explícito. La activación arranca todos los
+   JARs y el upgrade reemplaza todos los módulos activos del paquete en una
+   sola transacción, compensando los ya actualizados si uno falla. Las
+   librerías adicionales van en paquetes `DEPENDENCY`.
 10. `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
     `ModuleDescriptor` y `Environment` de `manager-spi`, junto con
     `ManagerFacade.discoverAll()`/`getLoadedModules()`, se eliminan. El

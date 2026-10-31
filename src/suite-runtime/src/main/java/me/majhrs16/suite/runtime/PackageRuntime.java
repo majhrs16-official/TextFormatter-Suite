@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.manager.apt.AptInstaller;
@@ -191,148 +192,137 @@ public final class PackageRuntime {
         }
 
         List<PackageChange> changes = new ArrayList<>();
-        List<AppliedChange> applied = new ArrayList<>();
-        List<PackageEntry> oldEntries = new ArrayList<>();
-        for (PackageEntry entry : entries) {
-            PackageEntry previous = before.get(entry.name());
-            if (previous != null && !previous.version().equals(entry.version())) {
-                oldEntries.add(previous);
-            }
-        }
-
+        List<ModuleChange> applied = new ArrayList<>();
+        List<PackageEntry> oldPackages = new ArrayList<>();
         Set<Path> seen = new HashSet<>();
+
         for (PackageEntry entry : orderByDependencies(entries)) {
             if (entry.type() != PackageType.PACKAGE) {
                 continue;
             }
             PackageEntry previous = before.get(entry.name());
-            boolean active = moduleHost.activeModules().contains(entry.name());
             if (!PlatformCompatibility.matches(entry.platform(), moduleHost.platform().name())) {
-                if (active) {
-                    return abortApply(applied, oldEntries, entries, installed, before,
-                            entry, List.of(), changes,
-                            "New package " + entry.name() + " " + entry.version()
+                if (previous != null && packageHasActiveModule(previous, before)) {
+                    return abortApply(applied, oldPackages, entries, before, entry,
+                            changes, "New package " + entry.name() + " " + entry.version()
                                     + " is not compatible with " + moduleHost.platform().name(),
-                            null);
+                            null, false, entry.name());
                 }
                 logger.info("Package " + entry.name() + " is for platform " + entry.platform()
                         + "; not activated on " + moduleHost.platform().name());
                 continue;
             }
 
-            Optional<Path> moduleJar;
+            List<ModuleArtifact> newArtifacts;
             try {
-                moduleJar = singleModuleJar(entry);
+                newArtifacts = artifacts(entry, installed);
             } catch (IllegalStateException invalidPackage) {
                 rollbackInstalledEntry(entry);
-                return abortApply(applied, oldEntries, entries, installed, before,
-                        entry, List.of(), changes,
-                        invalidPackage.getMessage(), invalidPackage);
-            }
-            if (moduleJar.isEmpty()) {
-                rollbackInstalledEntry(entry);
-                return abortApply(applied, oldEntries, entries, installed, before,
-                        entry, List.of(), changes,
-                        "Package " + entry.name() + " " + entry.version()
-                                + " does not contain a module JAR", null);
+                return abortApply(applied, oldPackages, entries, before, entry,
+                        changes, invalidPackage.getMessage(), invalidPackage,
+                        false, entry.name());
             }
 
-            if (previous != null && !previous.version().equals(entry.version()) && active) {
-                UpgradeResult upgrade = moduleHost.upgrade(
-                        entry.name(), moduleJar.get(), dependencyJars(entry, installed));
-                changes.add(PackageChange.from(upgrade));
-                if (!upgrade.isSuccess()) {
-                    return abortApply(applied, oldEntries, entries, installed, before,
-                            entry, List.of(), changes, upgrade.message(), upgrade.cause());
+            if (previous != null && !previous.version().equals(entry.version())) {
+                List<ModuleArtifact> oldArtifacts;
+                try {
+                    oldArtifacts = artifacts(previous, before);
+                } catch (IllegalStateException invalidOldPackage) {
+                    rollbackInstalledEntry(entry);
+                    return abortApply(applied, oldPackages, entries, before, entry,
+                            changes, invalidOldPackage.getMessage(), invalidOldPackage,
+                            false, entry.name());
                 }
-                applied.add(new AppliedChange(previous, entry, true, List.of()));
+                boolean active = oldArtifacts.stream()
+                        .anyMatch(artifact -> moduleHost.activeModules().contains(artifact.moduleId()));
+                if (active) {
+                    PackageApply result = upgradePackage(oldArtifacts, newArtifacts,
+                            installed, applied, seen);
+                    changes.addAll(result.changes());
+                    if (!result.ok()) {
+                        return abortApply(applied, oldPackages, entries, before, entry,
+                                changes, result.message(), result.cause(),
+                                result.keepBoth(), result.failingModuleId());
+                    }
+                    oldPackages.add(previous);
+                } else {
+                    ActivationApply activation = activateArtifacts(newArtifacts, installed, seen);
+                    changes.addAll(activation.changes());
+                    applied.addAll(activation.applied());
+                    if (!activation.ok()) {
+                        return abortApply(applied, oldPackages, entries, before, entry,
+                                changes, activation.message(), activation.cause(),
+                                false, activation.failingModuleId());
+                    }
+                    oldPackages.add(previous);
+                }
                 continue;
             }
 
-            List<ActivationResult> results = activateEntries(
-                    List.of(entry), installed, seen);
-            for (ActivationResult result : results) {
-                changes.add(PackageChange.from(result));
-            }
-            Optional<ActivationResult> failure = results.stream()
-                    .filter(result -> !result.isSuccess())
-                    .findFirst();
-            if (failure.isPresent()) {
-                return abortApply(applied, oldEntries, entries, installed, before,
-                        entry, results, changes,
-                        failure.get().message(), failure.get().cause());
-            }
-            if (!results.isEmpty()) {
-                applied.add(new AppliedChange(previous, entry, false, results));
+            ActivationApply activation = activateArtifacts(newArtifacts, installed, seen);
+            changes.addAll(activation.changes());
+            applied.addAll(activation.applied());
+            if (!activation.ok()) {
+                return abortApply(applied, oldPackages, entries, before, entry,
+                        changes, activation.message(), activation.cause(),
+                        false, activation.failingModuleId());
             }
         }
 
-        commitRemovals(applied, entries, before);
+        commitRemovals(oldPackages, entries, before);
         return List.copyOf(changes);
     }
 
     private List<PackageChange> abortApply(
-            List<AppliedChange> applied, List<PackageEntry> oldEntries,
-            List<PackageEntry> newEntries, Map<String, PackageEntry> installed,
-            Map<String, PackageEntry> before, PackageEntry current,
-            List<ActivationResult> currentResults, List<PackageChange> changes,
-            String message, Throwable cause) {
-        Compensation currentCleanup = deactivateActivated(currentResults);
-        if (!currentCleanup.ok()) {
-            String fullMessage = message + "; no se pudo limpiar la versión nueva: "
-                    + currentCleanup.message() + "; se requiere reinicio";
-            markRestartRequired(oldEntries, newEntries, fullMessage);
-            changes.add(PackageChange.failed(current.name(), ModuleState.RESTART_REQUIRED,
-                    fullMessage, currentCleanup.cause()));
-            return List.copyOf(changes);
-        }
-
-        if (applied.isEmpty()) {
-            rollbackNewPackages(newEntries, before);
-            if (changes.stream().noneMatch(change ->
-                    change.moduleId().equals(current.name()) && !change.isSuccess())) {
-                changes.add(PackageChange.failed(current.name(), stateFor(current.name()),
-                        message, cause));
+            List<ModuleChange> applied, List<PackageEntry> oldPackages,
+            List<PackageEntry> newEntries, Map<String, PackageEntry> before,
+            PackageEntry current, List<PackageChange> changes,
+            String message, Throwable cause, boolean keepBoth,
+            String failingModuleId) {
+        String failedId = failingModuleId == null ? current.name() : failingModuleId;
+        Compensation compensation = compensate(applied);
+        if (keepBoth || !compensation.ok()) {
+            String reason = message;
+            if (!compensation.ok()) {
+                reason = message + "; la compensación del runtime falló: "
+                        + compensation.message() + "; ambas versiones se conservan y se requiere reinicio";
+            } else if (keepBoth) {
+                reason = message + "; se requiere reinicio y ambas versiones se conservan";
             }
-            return List.copyOf(changes);
-        }
-
-        Compensation compensation = compensate(applied, oldEntries, installed);
-        if (!compensation.ok()) {
-            String fullMessage = message + "; la compensación del runtime falló: "
-                    + compensation.message() + "; ambas versiones se conservan y se requiere reinicio";
-            markRestartRequired(oldEntries, newEntries, fullMessage);
-            List<PackageChange> result = compensatedChanges(applied, fullMessage);
-            result.add(PackageChange.failed(current.name(), ModuleState.RESTART_REQUIRED,
-                    fullMessage, compensation.cause() != null ? compensation.cause() : cause));
+            markRestartRequired(oldPackages, newEntries, applied, failedId, reason);
+            List<PackageChange> result = compensatedChanges(applied, reason);
+            result.add(PackageChange.failed(failedId, ModuleState.RESTART_REQUIRED,
+                    reason, compensation.cause() != null ? compensation.cause() : cause));
             return List.copyOf(result);
         }
 
         rollbackNewPackages(newEntries, before);
+        if (applied.isEmpty()) {
+            if (changes.stream().noneMatch(change ->
+                    change.moduleId().equals(failedId) && !change.isSuccess())) {
+                changes.add(PackageChange.failed(failedId, stateFor(failedId), message, cause));
+            }
+            return List.copyOf(changes);
+        }
         List<PackageChange> result = compensatedChanges(applied, message);
-        result.add(PackageChange.failed(current.name(), stateFor(current.name()), message, cause));
+        result.add(PackageChange.failed(failedId, stateFor(failedId), message, cause));
         return List.copyOf(result);
     }
 
-    private List<PackageChange> compensatedChanges(List<AppliedChange> applied, String message) {
+    private List<PackageChange> compensatedChanges(List<ModuleChange> applied, String message) {
         List<PackageChange> changes = new ArrayList<>();
-        for (AppliedChange change : applied) {
-            ModuleState state = change.wasActive()
-                    ? ModuleState.ACTIVE
-                    : ModuleState.INSTALLED;
-            changes.add(new PackageChange(change.newEntry().name(), state, false,
-                    change.oldEntry() != null, true,
+        for (ModuleChange change : applied) {
+            changes.add(new PackageChange(change.moduleId(), stateFor(change.moduleId()), false,
+                    change.oldJar() != null, true,
                     "upgrade compensado tras el fallo del lote: " + message, null));
         }
         return changes;
     }
 
-    private void commitRemovals(List<AppliedChange> applied, List<PackageEntry> entries,
+    private void commitRemovals(List<PackageEntry> oldPackages, List<PackageEntry> entries,
                                 Map<String, PackageEntry> before) {
-        for (AppliedChange change : applied) {
-            if (change.oldEntry() != null) {
-                removeOldPackage(change.oldEntry());
-            }
+        for (PackageEntry old : oldPackages) {
+            removeOldPackage(old);
         }
         for (PackageEntry entry : entries) {
             if (entry.type() != PackageType.DEPENDENCY) {
@@ -367,6 +357,10 @@ public final class PackageRuntime {
     PackageUpgradeListener.Decision beforeRemovingOld(List<PackageEntry> oldEntries,
                                                        List<PackageEntry> newEntries) {
         Map<String, PackageEntry> installed = latestByName(manager.packageList());
+        Map<String, PackageEntry> oldPackagesById = new LinkedHashMap<>(installed);
+        for (PackageEntry old : oldEntries) {
+            oldPackagesById.put(old.name(), old);
+        }
 
         // Reject unsafe dependency upgrades before touching any active module:
         // a rollback after a module already upgraded would leave the runtime
@@ -381,60 +375,53 @@ public final class PackageRuntime {
             }
         }
 
-        List<AppliedChange> applied = new ArrayList<>();
+        List<ModuleChange> applied = new ArrayList<>();
+        List<PackageEntry> upgradedPackages = new ArrayList<>();
+        Set<Path> seen = new HashSet<>();
         for (PackageEntry old : oldEntries) {
             PackageEntry next = findNew(old, newEntries);
             if (next == null || next.type() != PackageType.PACKAGE) {
                 continue;
             }
-            boolean active = moduleHost.activeModules().contains(old.name());
             if (!PlatformCompatibility.matches(next.platform(), moduleHost.platform().name())) {
-                if (active) {
-                    return failAndCompensate(applied, oldEntries, newEntries, installed,
+                if (packageHasActiveModule(old, oldPackagesById)) {
+                    return failAndCompensate(applied, upgradedPackages, newEntries, installed,
                             "la nueva versión de " + old.name() + " no es compatible con "
-                                    + moduleHost.platform().name(), null);
+                                    + moduleHost.platform().name(), null, false, old.name());
                 }
                 continue;
             }
 
-            Optional<Path> moduleJar;
+            List<ModuleArtifact> oldArtifacts;
+            List<ModuleArtifact> newArtifacts;
             try {
-                moduleJar = singleModuleJar(next);
+                oldArtifacts = artifacts(old, oldPackagesById);
+                newArtifacts = artifacts(next, installed);
             } catch (IllegalStateException invalidPackage) {
-                return failAndCompensate(applied, oldEntries, newEntries, installed,
-                        invalidPackage.getMessage(), invalidPackage);
+                return failAndCompensate(applied, upgradedPackages, newEntries, installed,
+                        invalidPackage.getMessage(), invalidPackage, false, old.name());
             }
-            if (moduleJar.isEmpty()) {
-                return failAndCompensate(applied, oldEntries, newEntries, installed,
-                        "la nueva versión de " + old.name()
-                                + " no contiene un JAR de módulo", null);
-            }
+
+            boolean active = oldArtifacts.stream()
+                    .anyMatch(artifact -> moduleHost.activeModules().contains(artifact.moduleId()));
             if (active) {
-                UpgradeResult upgrade = moduleHost.upgrade(
-                        old.name(), moduleJar.get(), dependencyJars(next, installed));
-                if (!upgrade.isSuccess()) {
-                    return failAndCompensate(applied, oldEntries, newEntries, installed,
-                            upgrade.message(), upgrade.cause());
+                PackageApply result = upgradePackage(oldArtifacts, newArtifacts,
+                        installed, applied, seen);
+                if (!result.ok()) {
+                    return failAndCompensate(applied, upgradedPackages, newEntries, installed,
+                            result.message(), result.cause(), result.keepBoth(),
+                            result.failingModuleId());
                 }
-                applied.add(new AppliedChange(old, next, true, List.of()));
+                upgradedPackages.add(old);
             } else {
-                List<ActivationResult> results = activateEntries(
-                        List.of(next), installed, new HashSet<>());
-                Optional<ActivationResult> failure = results.stream()
-                        .filter(result -> !result.isSuccess())
-                        .findFirst();
-                if (failure.isPresent()) {
-                    Compensation current = deactivateActivated(results);
-                    if (!current.ok()) {
-                        String message = "la activación de " + next.name()
-                                + " falló y su limpieza también: " + current.message();
-                        markRestartRequired(oldEntries, newEntries, message);
-                        return PackageUpgradeListener.Decision.keepBoth(message, current.cause());
-                    }
-                    return failAndCompensate(applied, oldEntries, newEntries, installed,
-                            failure.get().message(), failure.get().cause());
+                ActivationApply activation = activateArtifacts(newArtifacts, installed, seen);
+                applied.addAll(activation.applied());
+                if (!activation.ok()) {
+                    return failAndCompensate(applied, upgradedPackages, newEntries, installed,
+                            activation.message(), activation.cause(), false,
+                            activation.failingModuleId());
                 }
-                applied.add(new AppliedChange(old, next, false, results));
+                upgradedPackages.add(old);
             }
         }
         return PackageUpgradeListener.Decision.allow();
@@ -447,114 +434,218 @@ public final class PackageRuntime {
                 .orElse(null);
     }
 
+    private PackageApply upgradePackage(List<ModuleArtifact> oldArtifacts,
+                                        List<ModuleArtifact> newArtifacts,
+                                        Map<String, PackageEntry> installed,
+                                        List<ModuleChange> applied,
+                                        Set<Path> seen) {
+        Map<String, ModuleArtifact> newById = byModuleId(newArtifacts);
+        List<PackageChange> changes = new ArrayList<>();
+        Set<String> active = Set.copyOf(moduleHost.activeModules());
+
+        for (ModuleArtifact old : oldArtifacts) {
+            if (!active.contains(old.moduleId())) {
+                continue;
+            }
+            ModuleArtifact next = newById.get(old.moduleId());
+            if (next == null) {
+                DeactivationResult deactivation = moduleHost.deactivate(old.moduleId());
+                changes.add(removed(old.moduleId(), deactivation));
+                if (!deactivation.isClean()) {
+                    return PackageApply.keepBoth(changes, old.moduleId(),
+                            "No se pudo retirar el módulo " + old.moduleId()
+                                    + " del paquete: " + deactivation.message(),
+                            deactivation.cause());
+                }
+                applied.add(new ModuleChange(old.moduleId(), old.jar(),
+                        old.dependencies(), null, null, true));
+                continue;
+            }
+            UpgradeResult upgrade = moduleHost.upgrade(next.moduleId(), next.jar(),
+                    next.dependencies());
+            changes.add(PackageChange.from(upgrade));
+            if (!upgrade.isSuccess()) {
+                return PackageApply.failed(changes, next.moduleId(),
+                        upgrade.message(), upgrade.cause());
+            }
+            applied.add(new ModuleChange(next.moduleId(), old.jar(), old.dependencies(),
+                    next.jar(), next.dependencies(), true));
+        }
+
+        List<ModuleArtifact> toActivate = newArtifacts.stream()
+                .filter(artifact -> !active.contains(artifact.moduleId()))
+                .toList();
+        ActivationApply activation = activateArtifacts(toActivate, installed, seen);
+        changes.addAll(activation.changes());
+        applied.addAll(activation.applied());
+        if (!activation.ok()) {
+            return PackageApply.failed(changes, activation.failingModuleId(),
+                    activation.message(), activation.cause());
+        }
+        return PackageApply.ok(changes);
+    }
+
     private PackageUpgradeListener.Decision failAndCompensate(
-            List<AppliedChange> applied, List<PackageEntry> oldEntries,
+            List<ModuleChange> applied, List<PackageEntry> oldPackages,
             List<PackageEntry> newEntries, Map<String, PackageEntry> installed,
-            String message, Throwable cause) {
-        Compensation compensation = compensate(applied, oldEntries, installed);
-        if (compensation.ok()) {
+            String message, Throwable cause, boolean keepBoth, String failingModuleId) {
+        Compensation compensation = compensate(applied);
+        if (compensation.ok() && !keepBoth) {
             return PackageUpgradeListener.Decision.rollback(message, cause);
         }
-        String fullMessage = message + "; la compensación del runtime falló: "
-                + compensation.message() + "; ambas versiones se conservan y se requiere reinicio";
-        markRestartRequired(oldEntries, newEntries, fullMessage);
-        return PackageUpgradeListener.Decision.keepBoth(fullMessage,
+        String reason = message;
+        if (!compensation.ok()) {
+            reason = message + "; la compensación del runtime falló: "
+                    + compensation.message() + "; ambas versiones se conservan y se requiere reinicio";
+        } else if (keepBoth) {
+            reason = message + "; se requiere reinicio y ambas versiones se conservan";
+        }
+        markRestartRequired(oldPackages, newEntries, applied, failingModuleId, reason);
+        return PackageUpgradeListener.Decision.keepBoth(reason,
                 compensation.cause() != null ? compensation.cause() : cause);
     }
 
-    private Compensation compensate(List<AppliedChange> applied,
-                                    List<PackageEntry> oldEntries,
-                                    Map<String, PackageEntry> installed) {
-        if (applied.isEmpty()) {
-            return Compensation.clean();
-        }
-        Map<String, PackageEntry> rollbackInstalled = new LinkedHashMap<>(installed);
-        for (PackageEntry old : oldEntries) {
-            rollbackInstalled.put(old.name(), old);
-        }
-
+    private Compensation compensate(List<ModuleChange> applied) {
         for (int i = applied.size() - 1; i >= 0; i--) {
-            AppliedChange change = applied.get(i);
+            ModuleChange change = applied.get(i);
             if (change.wasActive()) {
-                Optional<Path> oldJar;
-                try {
-                    oldJar = singleModuleJar(change.oldEntry());
-                } catch (IllegalStateException invalidOldPackage) {
-                    return Compensation.failed(invalidOldPackage.getMessage(), invalidOldPackage);
+                if (change.oldJar() == null) {
+                    return Compensation.failed("no se guardó el JAR anterior de "
+                            + change.moduleId(), null);
                 }
-                if (oldJar.isEmpty()) {
-                    return Compensation.failed("no se encontró el JAR anterior de "
-                            + change.oldEntry().name(), null);
+                if (moduleHost.activeModules().contains(change.moduleId())) {
+                    UpgradeResult restored = moduleHost.upgrade(change.moduleId(),
+                            change.oldJar(), change.oldDependencies());
+                    if (!restored.isSuccess()) {
+                        return Compensation.failed("no se pudo restaurar "
+                                + change.moduleId() + ": " + restored.message(),
+                                restored.cause());
+                    }
+                } else {
+                    ActivationResult restored = moduleHost.activate(change.oldJar(),
+                            change.oldDependencies());
+                    if (!restored.isSuccess()) {
+                        return Compensation.failed("no se pudo reactivar "
+                                + change.moduleId() + ": " + restored.message(),
+                                restored.cause());
+                    }
                 }
-                UpgradeResult restored = moduleHost.upgrade(change.oldEntry().name(),
-                        oldJar.get(), dependencyJars(change.oldEntry(), rollbackInstalled));
-                if (!restored.isSuccess()) {
-                    return Compensation.failed("no se pudo restaurar "
-                            + change.oldEntry().name() + " " + change.oldEntry().version()
-                            + ": " + restored.message(), restored.cause());
-                }
-                if (moduleHost.state(change.oldEntry().name())
+                if (moduleHost.state(change.moduleId())
                         .filter(state -> state == ModuleState.ACTIVE).isEmpty()) {
                     return Compensation.failed("la versión anterior de "
-                            + change.oldEntry().name() + " no quedó activa", null);
+                            + change.moduleId() + " no quedó activa", null);
                 }
-            } else {
-                Compensation deactivation = deactivateActivated(change.activationResults());
-                if (!deactivation.ok()) {
-                    return deactivation;
+            } else if (change.newJar() != null
+                    && moduleHost.activeModules().contains(change.moduleId())) {
+                DeactivationResult deactivation = moduleHost.deactivate(change.moduleId());
+                if (!deactivation.isClean()) {
+                    return Compensation.failed("no se pudo desactivar la versión nueva de "
+                            + change.moduleId() + ": " + deactivation.message(),
+                            deactivation.cause());
                 }
             }
         }
         return Compensation.clean();
     }
 
-    private Compensation deactivateActivated(List<ActivationResult> results) {
-        Throwable failure = null;
-        for (ActivationResult result : results) {
-            if (!result.isSuccess()) {
-                continue;
-            }
-            DeactivationResult deactivation = moduleHost.deactivate(result.moduleId());
-            if (moduleHost.activeModules().contains(result.moduleId())) {
-                failure = first(failure, deactivation.cause() != null
-                        ? deactivation.cause()
-                        : new IllegalStateException("module is still active: " + result.moduleId()));
-            } else if (deactivation.state() == ModuleState.RESTART_REQUIRED) {
-                failure = first(failure, deactivation.cause() != null
-                        ? deactivation.cause()
-                        : new IllegalStateException("module did not release cleanly: "
-                                + result.moduleId()));
-            }
-        }
-        return failure == null
-                ? Compensation.clean()
-                : Compensation.failed("no se pudo desactivar la versión nueva", failure);
-    }
-
-    private void markRestartRequired(List<PackageEntry> oldEntries,
-                                     List<PackageEntry> newEntries, String reason) {
+    private void markRestartRequired(List<PackageEntry> oldPackages,
+                                     List<PackageEntry> newEntries,
+                                     List<ModuleChange> applied,
+                                     String failingModuleId, String reason) {
         Set<String> moduleIds = new LinkedHashSet<>();
-        for (PackageEntry entry : oldEntries) {
-            if (entry.type() != PackageType.DEPENDENCY) {
-                moduleIds.add(entry.name());
-            }
+        for (ModuleChange change : applied) {
+            moduleIds.add(change.moduleId());
         }
-        for (PackageEntry entry : newEntries) {
-            if (entry.type() != PackageType.DEPENDENCY) {
-                moduleIds.add(entry.name());
-            }
+        if (failingModuleId != null) {
+            moduleIds.add(failingModuleId);
         }
+        collectModuleIds(oldPackages, moduleIds);
+        collectModuleIds(newEntries, moduleIds);
         for (String moduleId : moduleIds) {
             moduleHost.requireRestart(moduleId, reason);
         }
     }
 
-    private static Throwable first(Throwable current, Throwable candidate) {
-        return current == null ? candidate : current;
+    private void collectModuleIds(List<PackageEntry> entries, Set<String> moduleIds) {
+        Map<String, PackageEntry> installed = latestByName(manager.packageList());
+        for (PackageEntry entry : entries) {
+            if (entry.type() != PackageType.PACKAGE) {
+                continue;
+            }
+            try {
+                for (ModuleArtifact artifact : artifacts(entry, installed)) {
+                    moduleIds.add(artifact.moduleId());
+                }
+            } catch (IllegalStateException invalid) {
+                moduleIds.add(entry.name());
+            }
+        }
     }
 
-    private record AppliedChange(PackageEntry oldEntry, PackageEntry newEntry,
-                                 boolean wasActive, List<ActivationResult> activationResults) {
+    private boolean packageHasActiveModule(PackageEntry entry, Map<String, PackageEntry> installed) {
+        try {
+            for (ModuleArtifact artifact : artifacts(entry, installed)) {
+                if (moduleHost.activeModules().contains(artifact.moduleId())) {
+                    return true;
+                }
+            }
+        } catch (IllegalStateException invalid) {
+            return true;
+        }
+        return false;
+    }
+
+    private PackageChange removed(String moduleId, DeactivationResult deactivation) {
+        return new PackageChange(moduleId,
+                deactivation.isClean() ? ModuleState.INSTALLED : ModuleState.RESTART_REQUIRED,
+                deactivation.isClean(), false, false,
+                deactivation.isClean() ? "removed from upgraded package" : deactivation.message(),
+                deactivation.cause());
+    }
+
+    private record ModuleArtifact(String moduleId, Path jar,
+                                  List<Path> dependencies,
+                                  ModuleDescriptor descriptor) {
+    }
+
+    private record ModuleChange(String moduleId,
+                                Path oldJar, List<Path> oldDependencies,
+                                Path newJar, List<Path> newDependencies,
+                                boolean wasActive) {
+    }
+
+    private record ActivationApply(List<PackageChange> changes,
+                                   List<ModuleChange> applied,
+                                   boolean ok, String message, Throwable cause,
+                                   String failingModuleId) {
+        private static ActivationApply ok(List<PackageChange> changes,
+                                          List<ModuleChange> applied) {
+            return new ActivationApply(changes, applied, true, null, null, null);
+        }
+
+        private static ActivationApply failed(List<PackageChange> changes,
+                                              List<ModuleChange> applied,
+                                              String failingModuleId,
+                                              String message, Throwable cause) {
+            return new ActivationApply(changes, applied, false, message, cause, failingModuleId);
+        }
+    }
+
+    private record PackageApply(List<PackageChange> changes, boolean ok, boolean keepBoth,
+                                String message, Throwable cause, String failingModuleId) {
+        private static PackageApply ok(List<PackageChange> changes) {
+            return new PackageApply(changes, true, false, null, null, null);
+        }
+
+        private static PackageApply failed(List<PackageChange> changes, String failingModuleId,
+                                           String message, Throwable cause) {
+            return new PackageApply(changes, false, false, message, cause, failingModuleId);
+        }
+
+        private static PackageApply keepBoth(List<PackageChange> changes, String failingModuleId,
+                                             String message, Throwable cause) {
+            return new PackageApply(changes, false, true, message, cause, failingModuleId);
+        }
     }
 
     private record Compensation(boolean ok, String message, Throwable cause) {
@@ -581,45 +672,126 @@ public final class PackageRuntime {
                         + "; not activated on " + moduleHost.platform().name());
                 continue;
             }
-            Optional<Path> moduleJar;
             try {
-                moduleJar = singleModuleJar(entry);
+                ActivationApply activation = activateArtifacts(artifacts(entry, installed),
+                        installed, seen);
+                for (PackageChange change : activation.changes()) {
+                    results.add(new ActivationResult(change.moduleId(), change.state(),
+                            change.message(), change.cause()));
+                }
             } catch (IllegalStateException invalidPackage) {
                 results.add(ActivationResult.failed(entry.name(),
                         invalidPackage.getMessage(), invalidPackage));
-                continue;
-            }
-            if (moduleJar.isEmpty()) {
-                results.add(ActivationResult.failed(entry.name(),
-                        "Package " + entry.name() + " " + entry.version()
-                                + " does not contain a module JAR", null));
-                continue;
-            }
-            if (seen.add(moduleJar.get())) {
-                results.add(moduleHost.activate(
-                        moduleJar.get(), dependencyJars(entry, installed)));
             }
         }
         return List.copyOf(results);
     }
 
+    private ActivationApply activateArtifacts(List<ModuleArtifact> artifacts,
+                                              Map<String, PackageEntry> installed,
+                                              Set<Path> seen) {
+        List<PackageChange> changes = new ArrayList<>();
+        List<ModuleChange> applied = new ArrayList<>();
+        for (ModuleArtifact artifact : orderArtifactsForActivation(artifacts)) {
+            if (!seen.add(artifact.jar())) {
+                continue;
+            }
+            ActivationResult result = moduleHost.activate(artifact.jar(), artifact.dependencies());
+            changes.add(PackageChange.from(result));
+            if (!result.isSuccess()) {
+                return ActivationApply.failed(changes, applied, result.moduleId(),
+                        result.message(), result.cause());
+            }
+            applied.add(new ModuleChange(result.moduleId(), null, List.of(),
+                    artifact.jar(), artifact.dependencies(), false));
+        }
+        return ActivationApply.ok(changes, applied);
+    }
+
     /**
-     * A module package carries exactly one executable JAR. Additional
-     * libraries belong in a {@code DEPENDENCY} package; a package with two
-     * module JARs is ambiguous for upgrades and is rejected instead of silently
-     * activating or upgrading only the first one.
+     * Reads every module JAR of a package and maps it to the module id declared
+     * by its own descriptor. A package may carry one or more module JARs; the
+     * package name is never assumed to be the module id.
      */
-    private Optional<Path> singleModuleJar(PackageEntry entry) {
-        if (entry.type() != PackageType.PACKAGE) {
-            return Optional.empty();
-        }
+    private List<ModuleArtifact> artifacts(PackageEntry entry,
+                                           Map<String, PackageEntry> installed) {
         List<Path> jars = moduleJars(entry);
-        if (jars.size() > 1) {
+        if (jars.isEmpty()) {
             throw new IllegalStateException("Package " + entry.name() + " " + entry.version()
-                    + " declares " + jars.size()
-                    + " module JARs; exactly one is required");
+                    + " does not contain a module JAR");
         }
-        return jars.stream().findFirst();
+        List<Path> dependencies = dependencyJars(entry, installed);
+        List<ModuleArtifact> artifacts = new ArrayList<>();
+        Map<String, Path> byId = new LinkedHashMap<>();
+        for (Path jar : jars) {
+            ModuleDescriptor descriptor;
+            try {
+                descriptor = moduleHost.inspect(jar, dependencies);
+            } catch (Throwable failure) {
+                throw new IllegalStateException("Cannot read module JAR " + jar
+                        + " in package " + entry.name() + ": " + failure.getMessage(), failure);
+            }
+            Path duplicate = byId.putIfAbsent(descriptor.name(), jar);
+            if (duplicate != null) {
+                throw new IllegalStateException("Package " + entry.name()
+                        + " declares duplicate module id " + descriptor.name()
+                        + " in " + duplicate + " and " + jar);
+            }
+            artifacts.add(new ModuleArtifact(descriptor.name(), jar, dependencies, descriptor));
+        }
+        return List.copyOf(artifacts);
+    }
+
+    private static Map<String, ModuleArtifact> byModuleId(List<ModuleArtifact> artifacts) {
+        Map<String, ModuleArtifact> byId = new LinkedHashMap<>();
+        for (ModuleArtifact artifact : artifacts) {
+            byId.put(artifact.moduleId(), artifact);
+        }
+        return byId;
+    }
+
+    private static List<ModuleArtifact> orderArtifactsForActivation(
+            List<ModuleArtifact> artifacts) {
+        Map<String, ModuleArtifact> providers = new LinkedHashMap<>();
+        for (ModuleArtifact artifact : artifacts) {
+            for (var capability : artifact.descriptor().provides()) {
+                providers.putIfAbsent(capability.name(), artifact);
+            }
+        }
+
+        List<ModuleArtifact> ordered = new ArrayList<>();
+        Set<String> added = new HashSet<>();
+        Set<String> pending = new LinkedHashSet<>();
+        for (ModuleArtifact artifact : artifacts) {
+            pending.add(artifact.moduleId());
+        }
+        Map<String, ModuleArtifact> byId = byModuleId(artifacts);
+        boolean progress = true;
+        while (!pending.isEmpty() && progress) {
+            progress = false;
+            for (String moduleId : new ArrayList<>(pending)) {
+                ModuleArtifact artifact = byId.get(moduleId);
+                boolean ready = true;
+                for (var requirement : artifact.descriptor().requires()) {
+                    ModuleArtifact provider = providers.get(requirement.name());
+                    if (provider != null && !provider.moduleId().equals(moduleId)
+                            && !added.contains(provider.moduleId())) {
+                        ready = false;
+                        break;
+                    }
+                }
+                if (ready) {
+                    ordered.add(artifact);
+                    added.add(moduleId);
+                    pending.remove(moduleId);
+                    progress = true;
+                }
+            }
+        }
+        for (String moduleId : pending) {
+            ordered.add(byId.get(moduleId));
+        }
+        return ordered;
     }
 
     private List<Path> moduleJars(PackageEntry entry) {
@@ -714,30 +886,48 @@ public final class PackageRuntime {
             }
         }
 
-        // A cycle cannot be ordered; activate the rest in manifest order so the
-        // runtime reports the unsatisfied requirement instead of hanging.
         for (String name : pending) {
             ordered.add(byName.get(name));
         }
         return ordered;
     }
 
-    private void deactivateIfActive(String moduleId) {
-        if (moduleHost.activeModules().contains(moduleId)) {
-            DeactivationResult result = moduleHost.deactivate(moduleId);
-            if (!result.isClean()) {
-                logger.warn("Module " + moduleId + " did not deactivate cleanly before removal: "
-                        + result.message());
+    private void deactivateIfActive(String packageName) {
+        Map<String, PackageEntry> installed = latestByName(manager.packageList());
+        PackageEntry entry = installed.get(packageName);
+        Set<String> moduleIds = new LinkedHashSet<>();
+        if (entry != null && entry.type() == PackageType.PACKAGE) {
+            try {
+                for (ModuleArtifact artifact : artifacts(entry, installed)) {
+                    moduleIds.add(artifact.moduleId());
+                }
+            } catch (IllegalStateException invalid) {
+                logger.warn("Cannot inspect package " + packageName
+                        + " before removal: " + invalid.getMessage());
             }
-        } else if (moduleHost.state(moduleId).filter(ModuleState.RESTART_REQUIRED::equals).isPresent()) {
-            logger.warn("Module " + moduleId + " already required a restart; removing its files now");
+        }
+        if (moduleIds.isEmpty() && moduleHost.activeModules().contains(packageName)) {
+            moduleIds.add(packageName);
+        }
+        for (String moduleId : moduleIds) {
+            if (moduleHost.activeModules().contains(moduleId)) {
+                DeactivationResult result = moduleHost.deactivate(moduleId);
+                if (!result.isClean()) {
+                    logger.warn("Module " + moduleId
+                            + " did not deactivate cleanly before removal: " + result.message());
+                }
+            } else if (moduleHost.state(moduleId)
+                    .filter(ModuleState.RESTART_REQUIRED::equals).isPresent()) {
+                logger.warn("Module " + moduleId
+                        + " already required a restart; removing its files now");
+            }
         }
     }
 
     private boolean anyActiveModuleDependsOn(String dependencyName) {
         Map<String, PackageEntry> latest = latestByName(manager.packageList());
         for (String active : moduleHost.activeModules()) {
-            PackageEntry entry = latest.get(active);
+            PackageEntry entry = packageForModule(active, latest);
             if (entry == null) {
                 // A module activated outside the package database may still use
                 // the dependency; keeping the old JAR is the safe choice.
@@ -748,6 +938,29 @@ public final class PackageRuntime {
             }
         }
         return false;
+    }
+
+    private PackageEntry packageForModule(String moduleId, Map<String, PackageEntry> latest) {
+        PackageEntry direct = latest.get(moduleId);
+        if (direct != null) {
+            return direct;
+        }
+        for (PackageEntry candidate : latest.values()) {
+            if (candidate.type() != PackageType.PACKAGE) {
+                continue;
+            }
+            try {
+                for (ModuleArtifact artifact : artifacts(candidate, latest)) {
+                    if (artifact.moduleId().equals(moduleId)) {
+                        return candidate;
+                    }
+                }
+            } catch (IllegalStateException invalid) {
+                logger.warn("Cannot inspect package " + candidate.name()
+                        + " while resolving module " + moduleId + ": " + invalid.getMessage());
+            }
+        }
+        return null;
     }
 
     private static boolean dependsOn(PackageEntry entry, String dependencyName,
