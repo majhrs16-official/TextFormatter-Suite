@@ -3,6 +3,7 @@ package me.majhrs16.suite.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -21,6 +22,7 @@ import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslatorProvider;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
+import me.majhrs16.suite.manager.core.PackageInstaller;
 import me.majhrs16.suite.manager.spi.FileEntry;
 import me.majhrs16.suite.manager.spi.PackageEntry;
 import me.majhrs16.suite.manager.spi.PackageType;
@@ -52,24 +54,29 @@ class PackageRuntimeTest {
             assertEquals(ModuleState.ACTIVE, fixture.host.state("demo").orElseThrow());
             assertEquals(1, fixture.manager.packageList().size());
             assertTrue(Files.exists(fixture.manager.getManagerDir()
-                    .resolve("library/packages/demo-1.0.0.jar")));
+                    .resolve("library/packages/demo/1.0.0/demo-1.0.0.jar")));
             assertTrue(Files.readString(fixture.manager.getManagerDir().resolve("library/status"))
                     .contains("Status: installed"));
+            assertEquals(ModuleState.ACTIVE,
+                    fixture.host.packageState("demo").orElseThrow());
             assertTrue(Files.readString(fixture.manager.getManagerDir().resolve("runtime/modules.status"))
                     .contains("demo ACTIVE"));
+            assertTrue(Files.readString(fixture.manager.getManagerDir().resolve("runtime/modules.status"))
+                    .contains("package:demo ACTIVE"));
 
             fixture.runtime.removeLocal("demo", "1.0.0", "stable", false);
 
             assertEquals(ModuleState.INSTALLED, fixture.host.state("demo").orElseThrow());
+            assertTrue(fixture.host.packageState("demo").isEmpty());
             assertTrue(fixture.host.activeModules().isEmpty());
             assertTrue(fixture.manager.packageList().isEmpty());
             assertFalse(Files.exists(fixture.manager.getManagerDir()
-                    .resolve("library/packages/demo-1.0.0.jar")));
+                    .resolve("library/packages/demo/1.0.0/demo-1.0.0.jar")));
         }
     }
 
     @Test
-    void hotUpgradesAnActivePackageAndRemovesTheOldVersion() throws Exception {
+    void hotUpgradesAnActivePackageAndKeepsTheOldVersionOnDisk() throws Exception {
         try (Fixture fixture = fixture()) {
             Path v1Jar = FixtureModules.buildJar(tempDir, "demo-upgrade", "1.0.0", "v1",
                     null, null, false, false);
@@ -91,7 +98,6 @@ class PackageRuntimeTest {
             PackageChange change = changes.get(0);
             assertTrue(change.isSuccess(), () -> "upgrade failed: " + change.message());
             assertTrue(change.upgraded());
-            assertFalse(change.rolledBack());
             assertEquals(ModuleState.ACTIVE, fixture.host.state("demo-upgrade").orElseThrow());
             assertEquals("v2", fixture.host.services().find(CharSequence.class)
                     .orElseThrow().toString());
@@ -101,8 +107,9 @@ class PackageRuntimeTest {
                     "a successful upgrade must leave one installed version");
             assertEquals("2.0.0", fixture.manager.packageList().get(0).version());
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertTrue(Files.exists(packages.resolve("demo-upgrade-2.0.0.jar")));
-            assertFalse(Files.exists(packages.resolve("demo-upgrade-1.0.0.jar")));
+            assertTrue(Files.exists(packages.resolve("demo-upgrade/2.0.0/demo-upgrade-2.0.0.jar")));
+            assertTrue(Files.exists(packages.resolve("demo-upgrade/1.0.0/demo-upgrade-1.0.0.jar")),
+                    "the previous version stays until an explicit cleanup");
             assertTrue(Files.readString(
                     fixture.manager.getManagerDir().resolve("runtime/modules.status"))
                     .contains("demo-upgrade ACTIVE"));
@@ -110,7 +117,7 @@ class PackageRuntimeTest {
     }
 
     @Test
-    void failedHotUpgradeKeepsTheOldVersionInstalledAndActive() throws Exception {
+    void failedHotUpgradeKeepsTheCommittedInstallationAndReportsFailure() throws Exception {
         try (Fixture fixture = fixture()) {
             Path v1Jar = FixtureModules.buildJar(tempDir, "demo-rollback", "1.0.0", "v1",
                     null, null, false, false);
@@ -131,79 +138,93 @@ class PackageRuntimeTest {
             assertEquals(1, changes.size());
             PackageChange change = changes.get(0);
             assertFalse(change.isSuccess());
-            assertTrue(change.upgraded());
-            assertTrue(change.rolledBack(), "the previous version must be restored");
-            assertEquals(ModuleState.ACTIVE, change.state());
-            assertEquals(ModuleState.ACTIVE,
+            assertFalse(change.upgraded());
+            assertEquals(ModuleState.FAILED, change.state());
+            assertEquals(ModuleState.FAILED,
                     fixture.host.state("demo-rollback").orElseThrow());
-            assertEquals("v1", fixture.host.services().find(CharSequence.class)
-                    .orElseThrow().toString());
+            assertEquals(ModuleState.ACTIVATION_FAILED,
+                    fixture.host.packageState("demo-rollback").orElseThrow());
+            assertTrue(fixture.host.activeModules().isEmpty());
+            assertTrue(fixture.host.services().findAll(CharSequence.class).isEmpty());
             assertTrue(oldLoader.isClosed());
 
             assertEquals(1, fixture.manager.packageList().size(),
-                    "a failed upgrade must leave exactly the previous version installed");
-            assertEquals("1.0.0", fixture.manager.packageList().get(0).version());
+                    "stage 3 must not roll back the committed status");
+            assertEquals("2.0.0", fixture.manager.packageList().get(0).version());
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertTrue(Files.exists(packages.resolve("demo-rollback-1.0.0.jar")));
-            assertFalse(Files.exists(packages.resolve("demo-rollback-2.0.0.jar")));
-            assertTrue(Files.readString(
-                    fixture.manager.getManagerDir().resolve("runtime/modules.status"))
-                    .contains("demo-rollback ACTIVE"));
+            assertTrue(Files.exists(packages.resolve("demo-rollback/1.0.0/demo-rollback-1.0.0.jar")),
+                    "the previous version stays for a later explicit cleanup");
+            assertTrue(Files.exists(packages.resolve("demo-rollback/2.0.0/demo-rollback-2.0.0.jar")));
+            String runtimeState = Files.readString(
+                    fixture.manager.getManagerDir().resolve("runtime/modules.status"));
+            assertTrue(runtimeState.contains("demo-rollback FAILED"));
+            assertTrue(runtimeState.contains("package:demo-rollback ACTIVATION_FAILED"));
         }
     }
 
     @Test
-    void failedUpgradeCompensatesTheModulesAlreadyUpgraded() throws Exception {
+    void refusesToHotUpgradeAModuleThatStillRequiresARestart() throws Exception {
         try (Fixture fixture = fixture()) {
-            Path a1Jar = FixtureModules.buildJar(tempDir, "upgrade-a", "1.0.0", "a1",
+            Path v1Jar = FixtureModules.buildJarFailingOnStop(
+                    tempDir, "demo-restart", "1.0.0", "v1");
+            Path v1Zip = FixtureModules.buildPackageZip(
+                    tempDir, "demo-restart", "1.0.0", "stable", v1Jar, null);
+            assertTrue(fixture.runtime.installLocal(v1Zip, false).get(0).isSuccess());
+
+            var stopped = fixture.host.deactivate("demo-restart");
+            assertFalse(stopped.isClean());
+            assertEquals(ModuleState.RESTART_REQUIRED,
+                    fixture.host.state("demo-restart").orElseThrow());
+
+            Path v2Jar = FixtureModules.buildJar(tempDir, "demo-restart", "2.0.0", "v2",
                     null, null, false, false);
-            Path a1Zip = FixtureModules.buildPackageZip(
-                    tempDir, "upgrade-a", "1.0.0", "stable", a1Jar, null);
-            assertTrue(fixture.runtime.installLocal(a1Zip, false).get(0).isSuccess());
+            Path v2Zip = FixtureModules.buildPackageZip(
+                    tempDir, "demo-restart", "2.0.0", "stable", v2Jar, null);
 
-            Path b1Jar = FixtureModules.buildJar(tempDir, "upgrade-b", "1.0.0", "b1",
-                    null, null, false, false);
-            Path b1Zip = FixtureModules.buildPackageZip(
-                    tempDir, "upgrade-b", "1.0.0", "stable", b1Jar, null);
-            assertTrue(fixture.runtime.installLocal(b1Zip, false).get(0).isSuccess());
+            List<PackageChange> changes = fixture.runtime.installLocal(v2Zip, false);
 
-            List<PackageEntry> oldEntries = fixture.manager.packageList();
-            PackageEntry oldA = oldEntries.stream()
-                    .filter(entry -> entry.name().equals("upgrade-a")).findFirst().orElseThrow();
-            PackageEntry oldB = oldEntries.stream()
-                    .filter(entry -> entry.name().equals("upgrade-b")).findFirst().orElseThrow();
-
-            Path a2Jar = FixtureModules.buildJar(tempDir, "upgrade-a", "2.0.0", "a2",
-                    null, null, false, false);
-            Path a2Zip = FixtureModules.buildPackageZip(
-                    tempDir, "upgrade-a", "2.0.0", "stable", a2Jar, null);
-            PackageEntry newA = fixture.manager.packageInstall(a2Zip, true).get(0);
-
-            Path b2Jar = FixtureModules.buildJar(tempDir, "upgrade-b", "2.0.0", "b2",
-                    null, null, true, false);
-            Path b2Zip = FixtureModules.buildPackageZip(
-                    tempDir, "upgrade-b", "2.0.0", "stable", b2Jar, null);
-            PackageEntry newB = fixture.manager.packageInstall(b2Zip, true).get(0);
-
-            var decision = fixture.runtime.beforeRemovingOld(
-                    List.of(oldA, oldB), List.of(newA, newB));
-
-            assertFalse(decision.commit());
-            assertFalse(decision.keepBoth(),
-                    "a clean compensation must let the manager remove the new files");
-            assertTrue(fixture.host.activeModules().containsAll(
-                    List.of("upgrade-a", "upgrade-b")));
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("upgrade-a").orElseThrow());
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("upgrade-b").orElseThrow());
-            assertEquals(Set.of("a1", "b1"),
-                    Set.copyOf(fixture.host.services().findAll(CharSequence.class).stream()
-                            .map(CharSequence::toString).toList()),
-                    "the module upgraded before the failure must be restored");
+            assertEquals(1, changes.size());
+            assertFalse(changes.get(0).isSuccess());
+            assertEquals(ModuleState.RESTART_REQUIRED, changes.get(0).state());
+            assertTrue(fixture.host.activeModules().isEmpty(),
+                    "a leaked previous module must not be replaced in place");
+            assertEquals(ModuleState.RESTART_REQUIRED,
+                    fixture.host.packageState("demo-restart").orElseThrow());
+            assertEquals("2.0.0", fixture.manager.packageList().get(0).version(),
+                    "stage 3 must not roll back the committed installation");
         }
     }
 
     @Test
-    void failedLocalBatchCompensatesEveryModuleItAlreadyUpgraded() throws Exception {
+    void failedRemovalBarrierReactivatesTheModulesItAlreadyStopped() throws Exception {
+        try (Fixture fixture = fixture()) {
+            Path bad = FixtureModules.buildJarFailingOnStop(
+                    tempDir, "a-bad", "1.0.0", "bad");
+            Path clean = FixtureModules.buildJar(tempDir, "z-clean", "1.0.0", "clean",
+                    null, null, false, false);
+            Path zip = FixtureModules.buildPackageZipWithJars(
+                    tempDir, "partial", "1.0.0", "stable", List.of(bad, clean));
+            assertTrue(fixture.runtime.installLocal(zip, false).stream()
+                    .allMatch(PackageChange::isSuccess));
+            assertTrue(fixture.host.activeModules().containsAll(List.of("a-bad", "z-clean")));
+
+            assertThrows(PackageInstaller.InstallException.class,
+                    () -> fixture.runtime.removeLocal("partial", "1.0.0", "stable", false));
+
+            assertEquals(ModuleState.RESTART_REQUIRED,
+                    fixture.host.packageState("partial").orElseThrow());
+            assertEquals(ModuleState.RESTART_REQUIRED,
+                    fixture.host.state("a-bad").orElseThrow());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("z-clean").orElseThrow());
+            assertTrue(fixture.host.activeModules().contains("z-clean"),
+                    "the module stopped before the barrier failure must be restored");
+            assertEquals(1, fixture.manager.packageList().size(),
+                    "the failed removal must keep the installation");
+        }
+    }
+
+    @Test
+    void failedLocalBatchKeepsCommittedFilesAndStopsStartedModules() throws Exception {
         try (Fixture fixture = fixture()) {
             Path a1Jar = FixtureModules.buildJar(tempDir, "batch-a", "1.0.0", "a1",
                     null, null, false, false);
@@ -229,88 +250,34 @@ class PackageRuntimeTest {
             List<PackageChange> changes = fixture.runtime.installLocal(batch, false);
 
             assertEquals(2, changes.size());
-            PackageChange compensatedA = changes.stream()
+            PackageChange upgradedA = changes.stream()
                     .filter(change -> change.moduleId().equals("batch-a"))
                     .findFirst().orElseThrow();
-            assertFalse(compensatedA.isSuccess());
-            assertTrue(compensatedA.upgraded());
-            assertTrue(compensatedA.rolledBack(),
-                    "the module upgraded before the failure must report its rollback");
-            assertEquals(ModuleState.ACTIVE, compensatedA.state());
+            assertTrue(upgradedA.isSuccess());
+            assertTrue(upgradedA.upgraded());
             assertFalse(changes.stream()
                     .filter(change -> change.moduleId().equals("batch-b"))
                     .findFirst().orElseThrow().isSuccess());
 
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("batch-a").orElseThrow());
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("batch-b").orElseThrow());
-            assertEquals(Set.of("a1", "b1"),
-                    Set.copyOf(fixture.host.services().findAll(CharSequence.class).stream()
-                            .map(CharSequence::toString).toList()),
-                    "both modules must be back on their previous version");
+            assertTrue(fixture.host.activeModules().isEmpty(),
+                    "the module started in this pass must be stopped after the failure");
+            assertEquals(ModuleState.INSTALLED, fixture.host.state("batch-a").orElseThrow());
+            assertEquals(ModuleState.FAILED, fixture.host.state("batch-b").orElseThrow());
+            assertEquals(ModuleState.INSTALLED,
+                    fixture.host.packageState("batch-a").orElseThrow());
+            assertEquals(ModuleState.ACTIVATION_FAILED,
+                    fixture.host.packageState("batch-b").orElseThrow());
+            assertTrue(fixture.host.services().findAll(CharSequence.class).isEmpty());
 
-            assertEquals(2, fixture.manager.packageList().size(),
-                    "the failed batch must leave only the two previous versions installed");
+            assertEquals(2, fixture.manager.packageList().size());
             assertTrue(fixture.manager.packageList().stream()
-                    .allMatch(entry -> entry.version().equals("1.0.0")));
+                    .allMatch(entry -> entry.version().equals("2.0.0")),
+                    "stage 3 must not roll back the committed batch");
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertFalse(Files.exists(packages.resolve("batch-a-2.0.0.jar")));
-            assertFalse(Files.exists(packages.resolve("batch-b-2.0.0.jar")));
-        }
-    }
-
-    @Test
-    void keepsBothVersionsWhenCompensationCannotRestoreAPreviousModule() throws Exception {
-        try (Fixture fixture = fixture()) {
-            Path a1Jar = FixtureModules.buildJar(tempDir, "keep-a", "1.0.0", "a1",
-                    null, null, false, false);
-            Path a1Zip = FixtureModules.buildPackageZip(
-                    tempDir, "keep-a", "1.0.0", "stable", a1Jar, null);
-            assertTrue(fixture.runtime.installLocal(a1Zip, false).get(0).isSuccess());
-
-            Path b1Jar = FixtureModules.buildJar(tempDir, "keep-b", "1.0.0", "b1",
-                    null, null, false, false);
-            Path b1Zip = FixtureModules.buildPackageZip(
-                    tempDir, "keep-b", "1.0.0", "stable", b1Jar, null);
-            assertTrue(fixture.runtime.installLocal(b1Zip, false).get(0).isSuccess());
-
-            List<PackageEntry> oldEntries = fixture.manager.packageList();
-            PackageEntry oldA = oldEntries.stream()
-                    .filter(entry -> entry.name().equals("keep-a")).findFirst().orElseThrow();
-            PackageEntry oldB = oldEntries.stream()
-                    .filter(entry -> entry.name().equals("keep-b")).findFirst().orElseThrow();
-
-            Path a2Jar = FixtureModules.buildJar(tempDir, "keep-a", "2.0.0", "a2",
-                    null, null, false, false);
-            Path a2Zip = FixtureModules.buildPackageZip(
-                    tempDir, "keep-a", "2.0.0", "stable", a2Jar, null);
-            PackageEntry newA = fixture.manager.packageInstall(a2Zip, true).get(0);
-
-            // This module corrupts the previous A JAR and then fails, so the
-            // runtime cannot restore A after it already upgraded A.
-            Path b2Jar = FixtureModules.buildJarCorruptingFileAndFailing(
-                    tempDir, "keep-b", "2.0.0", "keep-a-1.0.0.jar");
-            Path b2Zip = FixtureModules.buildPackageZip(
-                    tempDir, "keep-b", "2.0.0", "stable", b2Jar, null);
-            PackageEntry newB = fixture.manager.packageInstall(b2Zip, true).get(0);
-
-            var decision = fixture.runtime.beforeRemovingOld(
-                    List.of(oldA, oldB), List.of(newA, newB));
-
-            assertFalse(decision.commit());
-            assertTrue(decision.keepBoth(),
-                    "a failed compensation must preserve both versions and require restart");
-            assertEquals(ModuleState.RESTART_REQUIRED,
-                    fixture.host.state("keep-a").orElseThrow());
-            assertEquals(ModuleState.RESTART_REQUIRED,
-                    fixture.host.state("keep-b").orElseThrow());
-
-            assertEquals(4, fixture.manager.packageList().size(),
-                    "the manager must not delete any old or new version");
-            Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertTrue(Files.exists(packages.resolve("keep-a-1.0.0.jar")));
-            assertTrue(Files.exists(packages.resolve("keep-a-2.0.0.jar")));
-            assertTrue(Files.exists(packages.resolve("keep-b-1.0.0.jar")));
-            assertTrue(Files.exists(packages.resolve("keep-b-2.0.0.jar")));
+            assertTrue(Files.exists(packages.resolve("batch-a/2.0.0/batch-a-2.0.0.jar")));
+            assertTrue(Files.exists(packages.resolve("batch-b/2.0.0/batch-b-2.0.0.jar")));
+            assertTrue(Files.exists(packages.resolve("batch-a/1.0.0/batch-a-1.0.0.jar")));
+            assertTrue(Files.exists(packages.resolve("batch-b/1.0.0/batch-b-1.0.0.jar")));
         }
     }
 
@@ -334,8 +301,10 @@ class PackageRuntimeTest {
             assertEquals("multi-package", fixture.manager.packageList().get(0).name());
 
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertTrue(Files.exists(packages.resolve("multi-package-1.0.0-0.jar")));
-            assertTrue(Files.exists(packages.resolve("multi-package-1.0.0-1.jar")));
+            assertTrue(Files.exists(packages.resolve(
+                    "multi-package/1.0.0/multi-package-1.0.0-0.jar")));
+            assertTrue(Files.exists(packages.resolve(
+                    "multi-package/1.0.0/multi-package-1.0.0-1.jar")));
 
             fixture.runtime.removeLocal("multi-package", "1.0.0", "stable", false);
 
@@ -382,15 +351,16 @@ class PackageRuntimeTest {
             assertEquals(1, fixture.manager.packageList().size());
             assertEquals("2.0.0", fixture.manager.packageList().get(0).version());
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertFalse(Files.exists(packages.resolve("bundle-1.0.0-0.jar")));
-            assertFalse(Files.exists(packages.resolve("bundle-1.0.0-1.jar")));
-            assertTrue(Files.exists(packages.resolve("bundle-2.0.0-0.jar")));
-            assertTrue(Files.exists(packages.resolve("bundle-2.0.0-1.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/1.0.0/bundle-1.0.0-0.jar")),
+                    "the previous version stays until an explicit cleanup");
+            assertTrue(Files.exists(packages.resolve("bundle/1.0.0/bundle-1.0.0-1.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/2.0.0/bundle-2.0.0-0.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/2.0.0/bundle-2.0.0-1.jar")));
         }
     }
 
     @Test
-    void failedMultiJarUpgradeRestoresEveryModuleAlreadyUpgraded() throws Exception {
+    void failedMultiJarUpgradeKeepsCommittedFilesAndStopsStartedModules() throws Exception {
         try (Fixture fixture = fixture()) {
             Path a1 = FixtureModules.buildJar(tempDir, "bundle-a", "1.0.0", "a1",
                     null, null, false, false);
@@ -411,22 +381,27 @@ class PackageRuntimeTest {
             List<PackageChange> changes = fixture.runtime.installLocal(v2, false);
 
             assertEquals(2, changes.size());
-            assertTrue(changes.stream().noneMatch(PackageChange::isSuccess));
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("bundle-a").orElseThrow());
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("bundle-b").orElseThrow());
-            assertEquals(1, fixture.manager.packageList().size(),
-                    "a failed upgrade must leave only the previous package installed");
-            assertEquals("1.0.0", fixture.manager.packageList().get(0).version());
+            assertTrue(changes.stream().anyMatch(PackageChange::isSuccess),
+                    "bundle-a was upgraded before bundle-b failed");
+            assertFalse(changes.stream()
+                    .filter(change -> change.moduleId().equals("bundle-b"))
+                    .findFirst().orElseThrow().isSuccess());
+            assertTrue(fixture.host.activeModules().isEmpty());
+            assertEquals(ModuleState.INSTALLED, fixture.host.state("bundle-a").orElseThrow());
+            assertEquals(ModuleState.FAILED, fixture.host.state("bundle-b").orElseThrow());
+            assertEquals(1, fixture.manager.packageList().size());
+            assertEquals("2.0.0", fixture.manager.packageList().get(0).version(),
+                    "stage 3 must not roll back the committed upgrade");
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertTrue(Files.exists(packages.resolve("bundle-1.0.0-0.jar")));
-            assertTrue(Files.exists(packages.resolve("bundle-1.0.0-1.jar")));
-            assertFalse(Files.exists(packages.resolve("bundle-2.0.0-0.jar")));
-            assertFalse(Files.exists(packages.resolve("bundle-2.0.0-1.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/1.0.0/bundle-1.0.0-0.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/1.0.0/bundle-1.0.0-1.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/2.0.0/bundle-2.0.0-0.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/2.0.0/bundle-2.0.0-1.jar")));
         }
     }
 
     @Test
-    void repositoryUpgradeHandlesEveryModuleInAMultiJarPackage() throws Exception {
+    void localUpgradeHandlesEveryModuleInAMultiJarPackage() throws Exception {
         try (Fixture fixture = fixture()) {
             Path a1 = FixtureModules.buildJar(tempDir, "bundle-a", "1.0.0", "a1",
                     null, null, false, false);
@@ -434,9 +409,8 @@ class PackageRuntimeTest {
                     null, null, false, false);
             Path v1 = FixtureModules.buildPackageZipWithJars(
                     tempDir, "bundle", "1.0.0", "stable", List.of(a1, b1));
-            PackageEntry old = fixture.manager.packageInstall(v1, true).get(0);
-            assertTrue(fixture.runtime.activate(List.of(old)).stream()
-                    .allMatch(ActivationResult::isSuccess));
+            assertTrue(fixture.runtime.installLocal(v1, false).stream()
+                    .allMatch(PackageChange::isSuccess));
 
             Path a2 = FixtureModules.buildJar(tempDir, "bundle-a", "2.0.0", "a2",
                     null, null, false, false);
@@ -444,17 +418,15 @@ class PackageRuntimeTest {
                     null, null, false, false);
             Path v2 = FixtureModules.buildPackageZipWithJars(
                     tempDir, "bundle", "2.0.0", "stable", List.of(a2, b2));
-            PackageEntry next = fixture.manager.packageInstall(v2, true).get(0);
 
-            var decision = fixture.runtime.beforeRemovingOld(List.of(old), List.of(next));
+            List<PackageChange> changes = fixture.runtime.installLocal(v2, false);
 
-            assertTrue(decision.commit(), () -> "upgrade failed: " + decision.message());
-            assertFalse(decision.keepBoth());
+            assertTrue(changes.stream().allMatch(PackageChange::isSuccess));
             assertEquals(ModuleState.ACTIVE, fixture.host.state("bundle-a").orElseThrow());
             assertEquals(ModuleState.ACTIVE, fixture.host.state("bundle-b").orElseThrow());
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            assertTrue(Files.exists(packages.resolve("bundle-2.0.0-0.jar")));
-            assertTrue(Files.exists(packages.resolve("bundle-2.0.0-1.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/2.0.0/bundle-2.0.0-0.jar")));
+            assertTrue(Files.exists(packages.resolve("bundle/2.0.0/bundle-2.0.0-1.jar")));
         }
     }
 
@@ -471,7 +443,8 @@ class PackageRuntimeTest {
             List<PackageChange> changes = fixture.runtime.installLocal(zip, false);
 
             assertEquals(2, changes.size());
-            assertTrue(changes.stream().noneMatch(PackageChange::isSuccess));
+            assertTrue(changes.stream().anyMatch(PackageChange::isSuccess),
+                    "batch-a started before batch-b failed");
             assertTrue(fixture.host.activeModules().isEmpty());
             assertEquals(ModuleState.INSTALLED, fixture.host.state("batch-a").orElseThrow());
             assertEquals(ModuleState.FAILED, fixture.host.state("batch-b").orElseThrow());
@@ -497,8 +470,8 @@ class PackageRuntimeTest {
             assertTrue(changes.get(0).message().contains("duplicate module id"),
                     () -> "unexpected message: " + changes.get(0).message());
             assertTrue(fixture.host.activeModules().isEmpty());
-            assertTrue(fixture.manager.packageList().isEmpty(),
-                    "an invalid package must be rolled back instead of staying installed");
+            assertEquals(1, fixture.manager.packageList().size(),
+                    "stage 3 validation must not roll back the committed installation");
         }
     }
 
@@ -510,13 +483,15 @@ class PackageRuntimeTest {
             Path fabricJar = FixtureModules.buildJar(tempDir, "fabric-only", "1.0.0", "fabric",
                     null, null, false, false);
             Path packages = fixture.manager.getManagerDir().resolve("library/packages");
-            Files.createDirectories(packages);
-            Files.copy(demoJar, packages.resolve("demo-1.0.0.jar"));
-            Files.copy(fabricJar, packages.resolve("fabric-only-1.0.0.jar"));
+            Files.createDirectories(packages.resolve("demo/1.0.0"));
+            Files.createDirectories(packages.resolve("fabric-only/1.0.0"));
+            Files.copy(demoJar, packages.resolve("demo/1.0.0/demo-1.0.0.jar"));
+            Files.copy(fabricJar, packages.resolve("fabric-only/1.0.0/fabric-only-1.0.0.jar"));
 
             List<ActivationResult> activation = fixture.runtime.activate(List.of(
-                    entry("demo", "paper", "manager/library/packages/demo-1.0.0.jar"),
-                    entry("fabric-only", "fabric", "manager/library/packages/fabric-only-1.0.0.jar")));
+                    entry("demo", "paper", "manager/library/packages/demo/1.0.0/demo-1.0.0.jar"),
+                    entry("fabric-only", "fabric",
+                            "manager/library/packages/fabric-only/1.0.0/fabric-only-1.0.0.jar")));
 
             assertEquals(1, activation.size());
             assertTrue(activation.get(0).isSuccess());

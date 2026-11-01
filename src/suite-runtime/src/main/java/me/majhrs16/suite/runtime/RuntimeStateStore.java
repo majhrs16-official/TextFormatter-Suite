@@ -18,9 +18,10 @@ import me.majhrs16.suite.api.spi.PluginLogger;
  *
  * <p>This is deliberately separate from {@code library/status}. The package
  * database records what is installed; this file records what happened at
- * runtime (active, failed, restart required). It lives under the manager's
- * runtime directory, not under the package database, so a stale runtime state
- * can never be mistaken for an installation fact.</p>
+ * runtime (active, failed, restart required). Module entries use the module id
+ * as key; package-level activation entries use {@code package:<name>}. It lives
+ * under the manager's runtime directory, not under the package database, so a
+ * stale runtime state can never be mistaken for an installation fact.</p>
  */
 public final class RuntimeStateStore {
 

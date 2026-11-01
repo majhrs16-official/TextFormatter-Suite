@@ -13,13 +13,14 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * Package manager facade for the APT/dpkg architecture.
  *
  * <p>It owns installation facts and repository operations. Live module state
- * belongs to {@code suite-runtime}; hot upgrades cross that boundary through
- * {@link PackageUpgradeListener}.</p>
+ * belongs to {@code suite-runtime}; the manager commits files and status, and
+ * the runtime activates the committed packages afterwards.</p>
  */
 public final class ManagerFacade {
 
@@ -67,9 +68,15 @@ public final class ManagerFacade {
         database.initialize();
         logger.info("Local package database initialized: " + database.getAllPackages().size() + " packages installed");
 
-        // 3. Create installer (dpkg)
+        // 3. Create installer (dpkg) and recover interrupted stage-2 journals
         Path installRoot = managerDir.getParent(); // Server root (plugins/mods dir)
         installer = new PackageInstaller(database, installRoot, logger);
+        try {
+            installer.recoverIncompleteOperations();
+        } catch (PackageInstaller.InstallException failure) {
+            throw new IOException("Cannot recover interrupted package operations: "
+                    + failure.getMessage(), failure);
+        }
 
         // 4. Create repository manager (APT)
         repoManager = new RepositoryManager(database, repositories, logger);
@@ -80,7 +87,7 @@ public final class ManagerFacade {
                 platform, arch, os, javaVersion);
 
         // 6. Create APT installer
-        aptInstaller = new AptInstaller(repoManager, resolver, installer, database, logger);
+        aptInstaller = new AptInstaller(resolver, installer, database, logger);
 
         initialized = true;
         logger.info("Module Manager initialized (APT/dpkg architecture)");
@@ -96,8 +103,9 @@ public final class ManagerFacade {
 
     /**
      * Installs packages from repositories (`/suite repo install`).
-     * Automatically confirms replacement plans. Prefer the overload with
-     * {@code confirmed} for interactive callers.
+     * Automatically confirms plans that do not need a runtime barrier. Use the
+     * overload with a replacement barrier when {@code Exclude} may remove active
+     * packages.
      */
     public AptInstaller.InstallResult repoInstall(Collection<String> packages, String version, String channel, boolean force) {
         ensureInitialized();
@@ -110,19 +118,31 @@ public final class ManagerFacade {
      */
     public AptInstaller.InstallResult repoInstall(Collection<String> packages, String version,
                                                    String channel, boolean force, boolean confirmed) {
-        ensureInitialized();
-        return aptInstaller.install(packages, version, channel, force, confirmed);
+        return repoInstall(packages, version, channel, force, confirmed, replaced -> {
+            throw new IllegalStateException(
+                    "Replacement requires a runtime barrier: " + replaced);
+        });
     }
 
     /**
-     * Upgrades all packages (`/suite repo upgrade`).
-     *
-     * @param listener runtime hook that activates the new versions before the
-     *                 old files are removed
+     * Installs packages from repositories and lets the runtime deactivate the
+     * installed packages that the plan replaces through {@code Exclude}.
      */
-    public AptInstaller.InstallResult repoUpgrade(PackageUpgradeListener listener) {
+    public AptInstaller.InstallResult repoInstall(Collection<String> packages, String version,
+                                                   String channel, boolean force, boolean confirmed,
+                                                   Consumer<Collection<PackageEntry>> replacementBarrier) {
         ensureInitialized();
-        return aptInstaller.upgrade(listener);
+        return aptInstaller.install(packages, version, channel, force, confirmed,
+                replacementBarrier);
+    }
+
+    /**
+     * Upgrades all packages (`/suite repo upgrade`). The runtime activates the
+     * committed versions afterwards; this method never vetoes the commit.
+     */
+    public AptInstaller.InstallResult repoUpgrade() {
+        ensureInitialized();
+        return aptInstaller.upgrade();
     }
 
     /**
@@ -139,6 +159,21 @@ public final class ManagerFacade {
     public AptInstaller.RemoveResult repoRemove(String name, String version, String channel, boolean autoRemove) {
         ensureInitialized();
         return aptInstaller.remove(name, version, channel, autoRemove);
+    }
+
+    /**
+     * Removes a package after a runtime barrier has deactivated its modules.
+     */
+    public AptInstaller.RemoveResult repoRemove(String name, String version, String channel,
+                                                boolean autoRemove, Runnable barrier) {
+        ensureInitialized();
+        return aptInstaller.remove(name, version, channel, autoRemove, barrier);
+    }
+
+    /** Cleans only the download cache; installed files and journals stay intact. */
+    public void cacheClean() throws IOException {
+        ensureInitialized();
+        aptInstaller.cacheClean();
     }
 
     /**
@@ -163,6 +198,15 @@ public final class ManagerFacade {
     public void packageRemove(String name, String version, String channel, boolean autoRemove) throws PackageInstaller.InstallException {
         ensureInitialized();
         installer.remove(name, version, channel, autoRemove);
+    }
+
+    /**
+     * Removes a local package after the runtime barrier has run.
+     */
+    public void packageRemove(String name, String version, String channel, boolean autoRemove,
+                              Runnable barrier) throws PackageInstaller.InstallException {
+        ensureInitialized();
+        installer.remove(name, version, channel, autoRemove, barrier);
     }
 
     /**

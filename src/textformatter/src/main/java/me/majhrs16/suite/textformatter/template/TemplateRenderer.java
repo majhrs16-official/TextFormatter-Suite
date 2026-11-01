@@ -29,6 +29,10 @@ import static java.util.Locale.ROOT;
  *       {@link PlaceholderResolver} and their values escaped;</li>
  *   <li>{@code %content%} / {@code %ct_messages%} markers are replaced with the
  *       raw message text;</li>
+ *   <li>every {@code <regex match="...">...</regex>} span evaluates its
+ *       pre-compiled pattern against the resolved content; the span emits its
+ *       content only when the pattern finds a match (anchor it for full
+ *       matches);</li>
  *   <li>every {@code <tr>...</tr>} span is extracted, translated from
  *       {@code sourceLanguage} to {@code targetLanguage} and re-inserted
  *       escaped;</li>
@@ -36,7 +40,8 @@ import static java.util.Locale.ROOT;
  * </ol>
  *
  * <p>Dynamic policy logic belongs to the iFlow VM; templates are deliberately
- * limited to placeholders and MiniMessage markup.</p>
+ * limited to placeholders, MiniMessage markup, {@code <tr>} and the local
+ * {@code <regex>} rendering condition from ADR-028.</p>
  */
 public final class TemplateRenderer {
 
@@ -62,13 +67,13 @@ public final class TemplateRenderer {
 
     /** Renders a template as a rich component for a given recipient context. */
     public Component render(Template template, TemplateContext context) {
-        String rendered = renderString(template.source(), context);
+        String rendered = renderString(template, context);
         return miniMessage.deserialize(rendered);
     }
 
     /** Renders a template as plain, tag-free text (console, Discord). */
     public String renderPlain(Template template, TemplateContext context) {
-        String rendered = renderString(template.source(), context);
+        String rendered = renderString(template, context);
         return plainText.serialize(miniMessage.deserialize(rendered));
     }
 
@@ -77,11 +82,42 @@ public final class TemplateRenderer {
         return translation;
     }
 
-    private String renderString(String source, TemplateContext context) {
+    private String renderString(Template template, TemplateContext context) {
+        String resolved = renderRegexSpans(template, context);
+        return translateSpans(resolved, context);
+    }
+
+    // -- step 4: local regex rendering condition ---------------------------
+
+    private String renderRegexSpans(Template template, TemplateContext context) {
+        String source = template.source();
+        List<Template.RegexSpan> spans = template.regexSpans();
+        if (spans.isEmpty()) {
+            return resolve(source, context);
+        }
+
+        StringBuilder result = new StringBuilder(source.length());
+        int cursor = 0;
+        for (Template.RegexSpan span : spans) {
+            result.append(resolve(source.substring(cursor, span.start()), context));
+            String content = resolve(span.content(), context);
+            if (content.length() > Template.MAX_REGEX_CONTENT_LENGTH) {
+                throw new IllegalArgumentException("Resolved <regex> content exceeds "
+                        + Template.MAX_REGEX_CONTENT_LENGTH + " characters");
+            }
+            if (span.pattern().matcher(content).find()) {
+                result.append(content);
+            }
+            cursor = span.end();
+        }
+        result.append(resolve(source.substring(cursor), context));
+        return result.toString();
+    }
+
+    private String resolve(String source, TemplateContext context) {
         String resolved = replaceBuiltins(source, context);
         resolved = resolveExternalTokens(resolved, context);
-        resolved = replaceContent(resolved, context);
-        return translateSpans(resolved, context);
+        return replaceContent(resolved, context);
     }
 
     // -- step 1: built-ins -------------------------------------------------
@@ -129,7 +165,7 @@ public final class TemplateRenderer {
             .replace("%ct_messages%", MiniEscape.escape(context.content()));
     }
 
-    // -- step 4: translatable spans ----------------------------------------
+    // -- step 5: translatable spans ----------------------------------------
 
     private String translateSpans(String source, TemplateContext context) {
         List<Span> spans = findSpans(source);

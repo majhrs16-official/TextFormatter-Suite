@@ -5,16 +5,18 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-10-31 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
-> **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas.** `sync-bukkit`
-> y `sync-fabric` son paquetes de plataforma descargables con listeners,
-> configuración y ciclo de vida propios; `PackageRuntime` filtra por plataforma
-> y los hosts ya no capturan eventos ni mantienen árboles de comandos. Los
-> comandos viven en `api.command`, la raíz se carga de
-> `config/suite/commands.yml` (`root`/`aliases`) y los hosts solo registran el
-> adaptador raíz. El hot upgrade conserva la versión anterior en una ruta
-> versionada hasta que el runtime confirma la nueva, hace rollback si el
-> arranque falla y detecta hilos, recursos, registros y classloaders filtrados.
-> El siguiente trabajo es F8.
+> **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
+> anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
+> descargables con listeners, configuración y ciclo de vida propios;
+> `PackageRuntime` filtra por plataforma y los hosts ya no capturan eventos ni
+> mantienen árboles de comandos. Los comandos viven en `api.command`, la raíz se
+> carga de `config/suite/commands.yml` (`root`/`aliases`) y los hosts solo
+> registran el adaptador raíz. **ADR-027 sustituye la semántica de instalación y
+> rollback:** tres etapas (adquisición, commit con journal duradero y
+> activación), la etapa 2 es el único rollback automático y un fallo de
+> activación deja `ACTIVATION_FAILED` sin deshacer archivos. La migración está
+> cerrada: `PackageCache`, `PackageJournal`, layout versionado y activación
+> separada están implementados y cubiertos por tests. El siguiente trabajo es F8.
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
@@ -550,8 +552,10 @@ Semántica de instalación:
 3. `AptInstaller.install(..., confirmed=false)` no modifica el sistema si hay
    reemplazos: devuelve un resultado de confirmación con la pregunta estilo APT:
    `Deseas instalar estos paquetes?: <lista>` y `Reemplazarán a: <paquetes>`.
-   Con `confirmed=true` retira primero los paquetes en conflicto y después instala
-   el plan. En los comandos, el token final `confirm` activa esa confirmación:
+   Con `confirmed=true`, la variante que recibe la barrera de runtime desactiva
+   primero los paquetes en conflicto y después instala el plan. Las sobrecargas
+   sin barrera fallan explícitamente si hay reemplazos. En los comandos, el token
+   final `confirm` activa esa confirmación:
    `/suite repo install iflow-vm confirm`.
 4. Las dependencias satisfechas por `Provide` se reconocen tanto al instalar como al
    comprobar dependencias inversas y al diagnosticar paquetes rotos.
@@ -640,7 +644,7 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
   Solo implementan una API común entre plataformas y adaptan, en reversa, los
   eventos de su Minecraft a una representación interna agnóstica.
 
-##### Estado vigente (F7 cerrado)
+##### Estado vigente (F7 cerrado; ADR-027 implementada)
 
 - El Manager instala y registra paquetes; `SuiteRuntime` construye el
   `ModuleHost`, activa los módulos desde `library/packages` y mantiene el
@@ -652,9 +656,13 @@ wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 - Los comandos y la configuración son APIs module-scoped; la raíz se configura
   en `commands.yml` y se recarga en caliente con `RESTART_REQUIRED` cuando el
   registro de plataforma no permite reemplazarla.
-- `ModuleHost` prepara la versión nueva, detiene la anterior, arranca la nueva y
-  compensa lotes en orden inverso. Una compensación fallida conserva ambas
-  versiones y marca `RESTART_REQUIRED`.
+- ADR-027 sustituye el rollback de activación por un pipeline de tres etapas:
+  adquisición en caché, commit con journal duradero y activación. La etapa 2 es
+  el único rollback automático; un fallo de activación detiene en orden inverso
+  lo ya arrancado, conserva la instalación y marca `ACTIVATION_FAILED`. La
+  implementación usa `PackageCache`, `PackageJournal`, `PackageLayout` y
+  `PackageRuntime.activateCommitted`; no queda el flujo de activación/rollback de
+  F7.
 - Un `PACKAGE` puede contener uno o más JARs de módulo. El nombre del paquete no
   identifica al módulo: cada JAR declara su `moduleId` en el descriptor y
   `PackageRuntime` mapea activación, upgrade y retirada por ese id. Los ids
@@ -889,7 +897,7 @@ sus registros, se cancelan sus tareas y se liberan sus recursos.
 
 ```java
 public final class ModuleHost implements AutoCloseable {
-    public List<ActivationResult> loadInstalled();  // escanea library/packages
+    public List<ActivationResult> loadInstalled();  // utilidad de inspección; el arranque usa library/status
     public ActivationResult activate(Path jarPath); // carga JAR + start()
     public UpgradeResult upgrade(String id, Path newJar, List<Path> dependencyJars);
     public DeactivationResult deactivate(String id);
@@ -902,8 +910,10 @@ Estados:
 ```java
 public enum ModuleState {
     INSTALLED,
+    ACTIVATION_PENDING,
     ACTIVE,
     FAILED,
+    ACTIVATION_FAILED,
     RESTART_REQUIRED,
     REMOVED
 }
@@ -944,46 +954,84 @@ Secuencia de activación:
    classloader y marcar `FAILED`.
 9. Si funciona: confirmar servicios y marcar `ACTIVE`.
 
-Secuencia de hot upgrade (ADR-026):
+Secuencia de instalación por etapas (ADR-027):
 
-1. Instalar la nueva versión en rutas versionadas
-   (`<package>-<version>-<n>.jar`); no sobrescribir la activa.
-2. Preparar el classloader, el descriptor y el `ModuleContext` de la nueva
-   versión, sin ejecutar `start()` todavía.
-3. Detener la versión anterior y liberar sus recursos, registros, listeners,
-   tareas, sockets y classloader.
-4. Si la versión anterior no libera limpio: no arrancar la nueva, marcar
-   `RESTART_REQUIRED` y conservar ambos paquetes hasta el reinicio.
-5. Arrancar la nueva versión. Si falla, preparar y arrancar de nuevo el JAR
-   anterior (rollback) y eliminar la versión nueva instalada.
-6. Si un paquete contiene varios JARs, actualizar todos sus módulos activos
-   mapeados por `moduleId`. Si un paquete o un lote incluye varios módulos y uno
-   falla, recorrer en orden inverso los módulos ya actualizados, restaurar sus
-   JAR anteriores y verificar que cada uno quedó `ACTIVE`. Solo entonces
-   autorizar el borrado de los archivos nuevos. Esta regla vale tanto para
-   `repo upgrade` como para un ZIP local con varios paquetes.
-7. Si la compensación no puede verificar todas las restauraciones, devolver
-   `keepBoth`: conservar ambas versiones, marcar los módulos afectados
-   `RESTART_REQUIRED` y no borrar ningún artefacto.
-8. Si la nueva versión arranca y la compensación no fue necesaria, el runtime
-   confirma el upgrade; solo entonces el manager borra la versión anterior de
-   `library/status` y del disco.
-9. El estado runtime se anota en `<manager>/runtime/modules.status`; un
-   rollback exitoso deja la versión anterior `ACTIVE`, no `FAILED`.
+1. **Adquisición.** El manager resuelve paquetes, dependencias transitivas,
+   versiones, conflictos, plataforma y orden jerárquico. Descarga todos los ZIP y
+   dependencias a `library/cache/downloads/<sha256>/` y verifica tamaño y
+   SHA-256 antes de tocar las rutas finales. Cada artefacto es `PENDING` o
+   `COMPLETE`; reanudar solo descarga los pendientes. `/<root> cache clean` borra
+   la caché y los manifiestos de operaciones, no la instalación.
+2. **Commit de archivos.** Aplica todo el plan con un journal durable en
+   `library/journal/<operationId>.log`: archivos preparados, reemplazados y
+   retirados, versiones anteriores, operaciones completadas y rollback por
+   operación. Los JAR viven en directorios versionados
+   (`library/packages/<id>/<version>/` y
+   `library/dependencies/<id>/<version>/`); la versión activa no se sobrescribe.
+   Instalar la misma versión ya presente se rechaza para no reemplazar un JAR
+   que un `ClassLoader` activo todavía referencia. El nuevo `library/status` se
+   publica con rename atómico al final y marca el
+   punto de commit. Antes del commit, la recuperación revierte el journal; después
+   del commit, completa la limpieza y no revierte. La etapa 2 es el único rollback
+   automático.
+3. **Activación.** Solo después del commit, el runtime detiene las versiones
+   anteriores en orden inverso y arranca los módulos nuevos en orden topológico.
+   Antes del primer `start()` persiste `ACTIVATION_PENDING`. Si un módulo falla,
+   detiene en orden inverso los módulos ya arrancados en ese intento, conserva
+   archivos y `library/status`, marca `ACTIVATION_FAILED` y permite reintentar sin
+   reinstalar. No restaura la versión anterior ni borra archivos nuevos. Si la
+   versión anterior ya está en `RESTART_REQUIRED`, no se arranca la nueva y el
+   paquete permanece en `RESTART_REQUIRED`. Tras un corte, el arranque vuelve a
+   activar los paquetes instalados desde `library/status`; no confía en el estado
+   runtime para decidir qué está instalado.
 
-No se arrancan las dos versiones a la vez: comparten `moduleId`, namespaces de
+La desinstalación usa las mismas etapas, pero la desactivación efectiva es una
+barrera al inicio de la etapa 2: si un módulo no se detiene limpio, no se toca
+ningún archivo. Después se mueven los archivos propios a
+`library/trash/<operationId>/`, se actualiza `library/status` y la etapa 3 limpia
+el estado runtime del paquete. La desactivación efectiva y la liberación de
+classloaders y recursos ya ocurrieron en la barrera de la etapa 2; la etapa 3 no
+muta archivos. Cuando `autoRemove` está activo, las dependencias huérfanas se
+retiran en la misma transacción de la etapa 2. Un fallo de la etapa 3 no revierte
+la retirada; si quedan referencias vivas, se marca `RESTART_REQUIRED`.
+
+Un reemplazo por `Exclude` usa la misma barrera: la etapa 2 desactiva los
+paquetes que el plan retira antes de mover sus archivos; la etapa 3 solo activa
+los paquetes nuevos.
+
+Estados persistentes de una operación:
+
+| Estado | Significado |
+|---|---|
+| `INSTALLED` | Archivos e inventario confirmados; activación no iniciada o detenida limpiamente. |
+| `ACTIVATION_PENDING` | Activación iniciada y no confirmada; el arranque debe reanudarla. |
+| `ACTIVE` | Todos los módulos esperados están activos. |
+| `ACTIVATION_FAILED` | Instalación confirmada, pero al menos un módulo no arrancó; se puede reintentar. |
+| `RESTART_REQUIRED` | La limpieza del runtime no pudo verificarse; hace falta reiniciar. |
+
+`library/status` registra la instalación; `runtime/modules.status` registra la
+activación. Las claves de módulo usan su `moduleId`; el resultado de activación
+del paquete se persiste con la clave `package:<nombre>`. Un módulo puede quedar
+`FAILED`; al retirar un paquete se elimina su entrada `package:<nombre>` en vez
+de persistir `REMOVED`. Una instalación puede estar correctamente instalada sin
+estar correctamente activada.
+
+No se arrancan dos versiones a la vez: comparten `moduleId`, namespaces de
 servicios/configuración, rutas de comandos y grupo de hilos. La coexistencia de
-classloaders se usa para preparar la nueva versión, no para registrarla antes de
-detener la anterior.
+directorios versionados se usa para preparar la versión nueva y conservar la
+anterior mientras exista una referencia de runtime. El commit no borra la
+versión anterior; sus archivos se retiran al desinstalar el paquete.
 
 Invariante de paquete: un `PACKAGE` contiene uno o más JARs de módulo, cada uno
 con un `moduleId` único declarado por su descriptor. El nombre del paquete no se
 usa como id de módulo. Las librerías adicionales van en `DEPENDENCY`.
 `PackageRuntime` inspecciona todos los JARs antes de activar o actualizar; cero
 JARs o ids duplicados son un error explícito. La activación arranca todos los
-módulos y el upgrade reemplaza todos los módulos activos del paquete de forma
-transaccional; si un módulo falla, se compensan los ya actualizados. No se elige
-el primero en silencio ni se deja una ruta con capacidad distinta.
+módulos y el upgrade sustituye todos los módulos activos del paquete en una sola
+operación de runtime. Si la activación falla, se detienen los módulos ya
+arrancados en orden inverso y se registra `ACTIVATION_FAILED`; no se compensa
+reactivando la versión anterior. No se elige el primero en silencio ni se deja
+una ruta con capacidad distinta.
 
 Secuencia de desactivación:
 
@@ -991,7 +1039,8 @@ Secuencia de desactivación:
 2. Cerrar `ResourceTracker` (listeners, tareas, sockets, executors).
 3. Cerrar registros de servicios del módulo.
 4. Cerrar classloader.
-5. Actualizar estado a `INSTALLED` o `REMOVED`.
+5. Actualizar el módulo a `INSTALLED` y eliminar la entrada `package:<nombre>`
+   si se retiró el paquete.
 
 ##### Manager: instalación y activación separadas
 
@@ -1000,48 +1049,55 @@ repo update
   → actualiza índices
 
 repo install <pkg>
-  → resuelve dependencias y conflictos (Exclude/Provide)
-  → descarga y verifica SHA-256
-  → instala en library/packages
-  → registra la instalación en library/status
-  → ModuleHost.activate(...)
-  → anota ACTIVE o FAILED en runtime/modules.status
+  → etapa 1: resuelve dependencias y conflictos (Exclude/Provide)
+  → etapa 1: descarga todo a library/cache y verifica SHA-256
+  → etapa 2: journal + commit atómico en directorios versionados
+  → etapa 2: publica library/status (punto de commit)
+  → etapa 3: activa en orden topológico
+  → anota ACTIVATION_PENDING y luego ACTIVE o ACTIVATION_FAILED
 
 repo remove <pkg>
-  → ModuleHost.deactivate(...)
-  → elimina archivos y dependencias huérfanas
-  → actualiza library/status (instalación)
+  → etapa 1: valida cierre inverso y dependencias afectadas
+  → etapa 2: detiene módulos en orden inverso (barrera)
+  → etapa 2: mueve los archivos propios a library/trash y publica library/status
+  → etapa 3: finaliza el estado runtime (sin mutar archivos)
+  → la etapa 3 no muta archivos; si falla, no se revierte la retirada
 
 repo upgrade
-  → resuelve y descarga nueva versión
-  → instala en ruta versionada
-  → PackageUpgradeListener.beforeRemovingOld(...)
-  → ModuleHost.upgrade(...) dentro del callback
-  → si falla, rollback a la versión anterior y borrar la nueva
-  → si la limpieza falla, RESTART_REQUIRED en el estado runtime
-  → si el runtime confirma, borrar la versión anterior
+  → etapa 1: resuelve y descarga todo
+  → etapa 2: commit de la versión nueva y puntero en library/status
+  → etapa 3: detiene la versión anterior y arranca la nueva
+  → si el arranque falla, detiene lo ya arrancado, conserva archivos
+    y marca ACTIVATION_FAILED; no hay rollback de instalación
 
 arranque
   → ManagerFacade.initialize()
-  → ModuleHost.loadInstalled()
-  → activación en orden topológico
+  → recuperación del journal de etapas 2 incompletas
+  → PackageRuntime.activate(manager.packageList()) desde library/status
+  → reanudación de ACTIVATION_PENDING o activación en orden topológico
   → SuiteRuntime construye el pipeline desde ServiceRegistry
 ```
 
 `library/status` registra **solo instalación**: nombre, versión, canal,
-dependencias, archivos y hashes. No guarda si un módulo está activo en un
-instante dado (C6/P2).
+dependencias, directorio de versión, archivos y hashes. No guarda si un módulo
+está activo en un instante dado (C6/P2).
 
 El estado runtime se guarda aparte, en `<manager>/runtime/modules.status`
 (transitorio, no autoritativo):
 
+- `INSTALLED`: archivos e inventario confirmados; activación no iniciada o
+  detenida limpiamente.
+- `ACTIVATION_PENDING`: activación iniciada y no confirmada; el arranque debe
+  reanudarla.
 - `ACTIVE`: activación confirmada.
-- `FAILED`: instalación correcta, activación fallida.
+- `ACTIVATION_FAILED`: instalación correcta, activación fallida; se puede
+  reintentar sin reinstalar.
 - `RESTART_REQUIRED`: activación/desactivación incompleta que requiere reinicio.
 
 La activación fallida no puede registrarse como correcta
 (`manager-v2.md:546-548`). Un paquete instalado y un módulo activo son hechos
-distintos y viven en archivos distintos.
+distintos y viven en archivos distintos. Una instalación puede estar
+correctamente instalada sin estar correctamente activada.
 
 ##### Clasificación objetivo de módulos
 
@@ -1165,8 +1221,8 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | ✅ `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
 | **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | ✅ Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y `CommandsConfig*` no existen; el Brigadier de Fabric queda como adaptador de invocación; tests de registro, desregistro, permisos, colisiones y tab completion |
 | **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | ✅ El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión, cambio de raíz, restauración y `RESTART_REQUIRED` |
-| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, rollback, compensación de lotes, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, rutas de JAR versionadas y hook transaccional manager/runtime | ✅ Upgrade exitoso y fallido con rollback; lote con un módulo ya actualizado y otro fallido compensa el primero antes de borrar archivos; si la compensación falla se conservan ambas versiones y se marca `RESTART_REQUIRED`; hilo filtrado, recurso que falla y tarea en ejecución producen `RESTART_REQUIRED`; un `PACKAGE` multi-JAR activa y actualiza todos sus módulos; cero JARs o ids duplicados se rechazan; estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados |
-| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio |
+| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, directorios de JAR versionados y transición manager/runtime | ✅ Upgrade exitoso y fallido sin rollback de archivos, lote multi-JAR, detección de fugas y estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados. **ADR-027 implementada:** caché de adquisición, commit con journal durable, layout versionado y activación con `ACTIVATION_FAILED` |
+| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites; ADR-027 ya migrada (caché, journal, layout versionado por directorio) | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio; pruebas de recuperación de etapa 2 y activación fallida |
 
 **F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,
 `iflow-firewall` e `iflow-wasm` tienen activador y la tarea `modulePackage`
@@ -1847,6 +1903,75 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
 - Los módulos son independientes del nombre del comando raíz.
 - El host solo necesita un adaptador de invocación de primer nivel.
 - La documentación y los mensajes deben usar `CommandContext.root()`.
+
+---
+
+#### ADR-028: Etiqueta MiniMessage `<regex>` en TextFormatter
+
+**Estado:** Aceptada e implementada. No modifica ADR-027 ni sustituye el regex del espacio de
+usuario de iFlow.
+
+**Contexto**
+
+- iFlow VM ya puede aplicar expresiones regulares en sus políticas de usuario. Esa es la vía
+  principal para routing, permisos y mutaciones.
+- Un template de TextFormatter puede necesitar una comprobación regex local para decidir si
+  muestra un fragmento, sin obligar a que la política preprocese el texto.
+- El usuario fija una sintaxis MiniMessage, no una variable `%regex%`: la construcción debe ser
+  visible en la plantilla y aplicar formato MiniMessage al texto que coincide.
+
+**Decisión**
+
+1. Sintaxis: `<regex match="PATRÓN">CONTENIDO</regex>`. No se añade `%regex%`, `${regex}` ni otra
+   variable escalar.
+2. `match` es un patrón Java obligatorio y no vacío. El atributo no se interpreta como MiniMessage;
+   las comillas dobles se escriben como `&quot;` y los caracteres XML se escapan.
+3. `CONTENIDO` es el texto candidato y la plantilla MiniMessage que se renderiza. Puede usar los
+   placeholders existentes (`%content%`, `%player_name%`, etc.) y las etiquetas MiniMessage
+   habituales.
+4. Si el patrón coincide con el contenido resuelto, el span se sustituye por `CONTENIDO`
+   interpretado como MiniMessage. Si no coincide, el span no emite texto. La etiqueta es una
+   condición de renderizado local, no un motor de reemplazo global.
+5. El formato MiniMessage se aplica al texto que satisface el patrón; los grupos de captura no se
+   interpolan automáticamente y el patrón no se colorea.
+6. No se permite anidar `<regex>` dentro de `<regex>`. `<tr>` conserva su tratamiento independiente.
+7. El patrón se compila una vez por plantilla y se reutiliza. Patrón inválido, vacío o fuera de
+   límite es error explícito de configuración.
+8. Se imponen límites duros y documentados al patrón y al contenido evaluado para acotar el coste de
+   backtracking. El patrón procede de la plantilla, nunca del mensaje recibido.
+9. La etiqueta no ejecuta código, no evalúa SpEL, no consulta la VM, no decide routing, permisos ni
+   entrega y no muta el `Message`.
+
+**Implementación aplicada**
+
+1. `Template.of(...)` parsea los spans `<regex>`, valida sintaxis, anidamiento y límites, y compila
+   cada `Pattern` una sola vez. Un template inválido falla al crearse.
+2. `TemplateRenderer` resuelve placeholders y `%content%` antes de evaluar el patrón. La condición
+   usa `Pattern.matcher(content).find()`; para coincidencia total deben usarse anclas `^...$`.
+3. Si el patrón coincide, el span emite `CONTENIDO` y el `deserialize` final aplica MiniMessage. Si
+   no coincide, emite cadena vacía.
+4. Los grupos de captura no se interpolan y el patrón nunca se colorea ni se transforma.
+5. Límites: patrón ≤ 512 unidades UTF-16, contenido evaluado ≤ 8192 unidades UTF-16 y ≤ 32 spans.
+   El límite de contenido se revalida tras resolver placeholders.
+6. `src/textformatter/README.md` documenta sintaxis, entidades XML, semántica `find` y límites.
+
+**Tests implementados**
+
+- Coincidencia simple con formato MiniMessage y ausencia de coincidencia.
+- Flags inline y grupos de captura sin interpolación automática.
+- Patrón inválido, vacío o ausente: fallo explícito al crear el template.
+- Límite de patrón, de contenido declarado y de contenido resuelto.
+- Anidamiento rechazado.
+- Convivencia con `<tr>` y placeholders existentes.
+- Entidades XML en el atributo y no mutación del template original.
+- El mensaje original no se muta y el regex de iFlow sigue siendo independiente.
+
+**Criterios de aceptación**
+
+- No existe ninguna ruta `%regex%` ni una variable escalar equivalente.
+- La etiqueta solo decide renderizado; no routing, permisos, entrega ni mutación.
+- Un template inválido no se activa silenciosamente.
+- Implementación y tests cerrados en la misma fase.
 
 ---
 

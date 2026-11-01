@@ -16,19 +16,22 @@
   `resolveInstall`, `resolveUpgrade` and `resolveFixBroken`: version constraints,
   conflicts, cycles, incompatibilities and topological order, with steps typed
   `INSTALL`, `UPGRADE`, `REMOVE` or `DOWNGRADE`.
-- **Remote installation** — `AptInstaller` downloads the resolved artifacts (with
-  checksum verification) and delegates to `PackageInstaller`; it also implements
-  `upgrade`, `fixBroken` and `remove` (including orphaned dependencies).
-- **Two-phase upgrades** — `AptInstaller.upgrade(PackageUpgradeListener)` installs
-  the new files first and invokes the runtime before removing the previous
-  version. A clean rejection rolls back the files installed by that step and
-  keeps the old installation. If the runtime cannot compensate a partially
-  applied batch, it returns `Decision.keepBoth(...)`; the manager then keeps
-  both versions on disk and reports that a restart is required.
+- **Stage-1 cache** — `PackageCache` stores verified artifacts by SHA-256 under
+  `library/cache/downloads/<sha256>/`, resumes incomplete `.part` files with
+  HTTP `Range`, writes `library/cache/operations/<operationId>.json` with
+  `PENDING`/`COMPLETE`, and never treats an unverified file as complete.
+- **Batch installation** — `AptInstaller` downloads and verifies every artifact
+  before mutating the installed store, then delegates one
+  `PackageInstaller.installBatch(...)` call. A download failure leaves the
+  installation untouched and can be resumed or cleaned with `cache clean`.
+- **Activation is separate** — `AptInstaller.upgrade()` only commits files and
+  `library/status`; `suite-runtime` activates the committed modules afterwards.
+  There is no runtime veto, no `keepBoth`, and no automatic file rollback after
+  the status commit.
 - **Unified API** — `ManagerFacade` wires the database, repositories, resolver and
-  installer, and exposes `repoUpdate`, `repoInstall`, `repoUpgrade(listener)`,
-  `repoFixBroken`, `repoRemove`, `packageInstall/List/Remove/Files/Verify` and
-  `checkUpdates`.
+  installer, and exposes `repoUpdate`, `repoInstall`, `repoUpgrade`,
+  `repoFixBroken`, `repoRemove`, `cacheClean`, `packageInstall/List/Remove/
+  Files/Verify` and `checkUpdates`.
 
 ---
 
@@ -36,7 +39,8 @@
 
 - **No ZIP extraction or file database** — `manager-core` owns both.
 - **No module lifecycle** — `suite-runtime` loads, activates, upgrades and
-  unloads modules. `PackageUpgradeListener` is the only crossing point.
+  unloads modules. The manager only commits files and status; the runtime
+  observes the committed result.
 - **No package format or parser definitions** — `manager-spi` defines them.
 - **No platform wiring** — `spigot-host`/`fabric-host` construct `SuiteRuntime`,
   which constructs `ManagerFacade`.
@@ -49,7 +53,7 @@
 |------------|------|--------|
 | `core-api` | Compile | `PluginLogger` and base domain types |
 | `manager-spi` | Compile | Manifests, repository config, versions, package metadata |
-| `manager-core` | Compile | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` |
+| `manager-core` | Compile | `PackageInstaller`, `LocalPackageDatabase`, `PackageJournal` |
 
 `manager-apt` no longer depends on `kernel`: discovery by classpath was removed
 in F7.
@@ -72,8 +76,8 @@ in F7.
 | `ManagerFacade` | Single entry point: repo + package operations and updates |
 | `RepositoryManager` | Index refresh/cache and candidate selection (`UpdateResult`, `PackageCandidate`) |
 | `DependencyResolver` | Install/upgrade/fix-broken plans (`ResolutionPlan`, `PlanStep`, `ResolutionIssue`) |
-| `AptInstaller` | Download, checksum verification, install and two-phase upgrade |
-| `PackageUpgradeListener` | Runtime hook invoked before old package files are removed |
+| `AptInstaller` | Stage-1 download/cache, batch commit and cache cleanup |
+| `PackageCache` | Content-addressed downloads, resumable partials and manifests |
 
 ---
 
@@ -86,31 +90,32 @@ repo.yml ──► RepositoryManager.updateAll() ──► cached index
                     DependencyResolver.resolve*()
                                    │  ResolutionPlan (INSTALL/UPGRADE/REMOVE/DOWNGRADE)
                                    ▼
-                    AptInstaller ──► download + verify
+                    AptInstaller ──► PackageCache (download + SHA-256)
+                                   │  all artifacts verified before mutation
+                                   ▼
+                    PackageInstaller.installBatch(...) (manager-core)
+                                   │  journal → files → status commit
+                                   ▼
+                    LocalPackageDatabase + PackageJournal
                                    │
                                    ▼
-                    PackageInstaller (manager-core)
-                                   │
-                                   ▼
-                    LocalPackageDatabase + TransactionLog
-                                   │
-                                   ▼
-             PackageUpgradeListener ──► ModuleHost.upgrade(...)
-                                   │
-              allow ───────────────┼─────────────── keepBoth
-                │                  │                    │
-        remove old files      rollback new files   keep both versions
-                                   │                    │
-                              previous ACTIVE     RESTART_REQUIRED
+                    suite-runtime activates the committed packages
+                       │ success                 │ failure
+                       ▼                         ▼
+                     ACTIVE            ACTIVATION_FAILED / RESTART_REQUIRED
+                                       (files stay installed)
 ```
+
+The package-level outcome is persisted in `manager/runtime/modules.status` under
+`package:<name>`; each module also keeps its own `moduleId` entry.
 
 ---
 
 ## 7. Entry Points
 
 - `ManagerFacade.initialize()`
-- `ManagerFacade.repoUpdate()` / `repoInstall(...)` / `repoUpgrade(listener)` /
-  `repoFixBroken()` / `repoRemove(...)`
+- `ManagerFacade.repoUpdate()` / `repoInstall(...)` / `repoUpgrade()` /
+  `repoFixBroken()` / `repoRemove(...)` / `cacheClean()`
 - `ManagerFacade.packageInstall(...)` / `packageRemove(...)` / `packageVerify(...)`
 - `ManagerFacade.checkUpdates()`
 
@@ -122,8 +127,8 @@ repo.yml ──► RepositoryManager.updateAll() ──► cached index
 1. ManagerFacade.java            → Unified API
 2. RepositoryManager.java        → Index refresh, cache and candidates
 3. DependencyResolver.java       → Resolution plans
-4. AptInstaller.java             → Download + install + two-phase upgrade
-5. PackageUpgradeListener.java   → Runtime confirmation hook
+4. AptInstaller.java             → Stage-1 download + batch commit
+5. PackageCache.java             → Content-addressed cache and resume
 ```
 
 ---

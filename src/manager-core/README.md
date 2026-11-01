@@ -14,9 +14,15 @@
 - **Package database** — `LocalPackageDatabase` owns `library/status`: registers and
   unregisters packages, tracks file ownership and reverse dependencies, answers
   `isInstalled` / `getPackage`, and runs `verifyPackage`.
-- **Transactions** — `TransactionLog` journals every operation and records its result
-  (`log`, `markCompleted`, `markFailed`, `markRolledBack`,
-  `recoverIncompleteTransactions`), so a crash leaves no half-installed package.
+- **Durable transactions** — `PackageJournal` is an append-only, fsynced journal
+  per operation. The atomic rename of `library/status` is the commit point:
+  recovery rolls back before it and only cleans up after it. A crash cannot
+  leave a half-installed package.
+- **Versioned layout** — module JARs live under
+  `library/packages/<package>/<version>/` and shared dependencies under
+  `library/dependencies/<dependency>/<version>/`; an upgrade leaves the old
+  version on disk and never reuses its path for the new version. Removing the
+  package removes its owned files.
 - **Validation** — package metadata, inventory and declared dependencies are checked
   before anything is written to disk; extraction is confined to the install root.
 
@@ -57,49 +63,62 @@
 
 | Component | Role |
 |-----------|------|
-| `PackageInstaller` | Install / remove / verify / list files from a local ZIP (`InstallException`) |
+| `PackageInstaller` | Batch install / remove / verify / list files from local ZIPs (`InstallException`) |
 | `LocalPackageDatabase` | `library/status` persistence, ownership, reverse deps, verification |
-| `TransactionLog` | Journal and recovery of incomplete transactions |
+| `PackageJournal` | Append-only durable journal and crash recovery |
+| `PackageLayout` | Versioned path validation for packages and dependencies |
+| `IoSupport` | `fsync`, atomic writes, SHA-256 and safe deletion |
 
 ---
 
 ## 6. Data Flow
 
 ```
-ZIP package
+ZIP batch
    │
    ▼
-PackageInstaller.install()
-   │  validate metadata / inventory / dependencies
-   │  extract under the install root
+PackageInstaller.installBatch()
+   │  validate every ZIP, manifest and dependency
+   │  extract under library/tmp/<operationId>
+   │  write journal records + backup replaced files
    ▼
-LocalPackageDatabase   ── register package + files
+library/status atomic rename  ◄── commit point
    │
    ▼
-TransactionLog         ── log → markCompleted (or markFailed / rollback)
+PackageJournal.committed()
+   │  cleanup backup/tmp
+   ▼
+installed packages (activation is owned by suite-runtime)
 ```
 
-Removal follows the inverse path: unregister from the database, delete owned files,
-then optionally remove orphaned dependencies.
+Removal follows the inverse path: deactivate through the runtime barrier,
+compute the removal closure (including auto-removed dependencies when requested),
+journal file removals and trash moves, and commit the new status. Before the
+commit, recovery restores the previous status and files; after it, recovery never
+reverts the installation.
 
 ---
 
 ## 7. Entry Points
 
-- `PackageInstaller.install(Path, boolean)`
-- `PackageInstaller.remove(String, String, String, boolean)`
-- `PackageInstaller.verify(...)` / `listFiles(...)`
+- `PackageInstaller.installBatch(List<Path>, boolean[, Collection<PackageEntry>[, Runnable]])`
+  rejects reinstalling a version that is already installed, so an active JAR is
+  never overwritten in place.
+- `PackageInstaller.remove(String, String, String, boolean[, Runnable])`
+- `PackageInstaller.verify(...)` / `listFiles(...)` / `recoverIncompleteOperations()`
 - `LocalPackageDatabase.initialize()` / `load()` / `save()`
-- `TransactionLog.recoverIncompleteTransactions()`
+- `PackageJournal.recoverAll(...)`
 
 ---
 
 ## 8. Exploration Path
 
 ```
-1. PackageInstaller.java        → Install / remove / verify
-2. LocalPackageDatabase.java    → library/status and ownership
-3. TransactionLog.java          → Journal and crash recovery
+1. PackageInstaller.java        → Batch install / remove / verify
+2. LocalPackageDatabase.java    → library/status, images and ownership
+3. PackageJournal.java          → Durable journal and crash recovery
+4. PackageLayout.java           → Versioned package/dependency paths
+5. IoSupport.java               → fsync, atomic writes and hashes
 ```
 
 ---

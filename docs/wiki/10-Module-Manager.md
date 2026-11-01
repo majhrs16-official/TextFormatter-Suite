@@ -1,5 +1,10 @@
 # Module Manager
 
+> **ADR-027 implemented.** The manager uses the staged pipeline: acquisition
+> into a content-addressed cache, journaled file/status commit and separate
+> runtime activation. Activation failures are reported as `ACTIVATION_FAILED`;
+> they do not roll back installed files.
+
 ## Overview
 
 TextFormatter Suite separates **installation facts** from **live module state**:
@@ -16,31 +21,30 @@ Neither layer pretends to be the other. `PackageRuntime` is the only bridge.
 ```
 RepositoryManager ──► DependencyResolver ──► AptInstaller
                                                    │
-                                                   ▼
-                                      PackageInstaller (manager-core)
-                                                   │
-                                      library/status + library/packages
-                                                   │
-                                                   ▼
-                                          PackageRuntime
-                                                   │
-                    ┌──────────────────────────────┴──────────────────────────┐
-                    ▼                                                         ▼
-          ModuleHost (suite-runtime)                         PackageUpgradeListener
-          classloaders, start/stop, rollback                 runtime confirmation
+                    ┌──────────────────────────────┼──────────────────────────┐
+                    ▼                              ▼                          ▼
+          Stage 1: cache/plan          Stage 2: PackageInstaller       Stage 3: ModuleHost
+          SHA-256, PENDING/COMPLETE    journal + status + versioned    start/stop, leak checks
+                                       directories                     ACTIVATION_* states
 ```
 
 ### Package storage
 
 | Path | Meaning |
 |---|---|
-| `manager/library/packages/<package>-<version>-<n>.jar` | Module JARs, versioned so the active version survives until an upgrade is confirmed |
-| `manager/library/dependencies/<id>-<version>.jar` | Shared dependency JARs, visible to module classloaders |
-| `manager/library/status` | Authoritative installed-package database |
-| `manager/runtime/modules.status` | Transient runtime state (`ACTIVE`, `FAILED`, `RESTART_REQUIRED`, ...) |
+| `manager/library/packages/<packageId>/<version>/` | Module JARs for one installed version; the previous version directory survives until cleanup |
+| `manager/library/dependencies/<dependencyId>/<version>/` | Shared dependency JARs, visible to module classloaders |
+| `manager/library/status` | Authoritative installed-package database and persistent version pointer |
+| `manager/library/cache/downloads/<sha256>/` | Content-addressed ZIP cache; `.part` files are never valid |
+| `manager/library/cache/operations/<operationId>.json` | Per-operation artifact states (`PENDING`/`COMPLETE`) |
+| `manager/library/journal/<operationId>.log` | Durable stage-2 journal used for crash recovery |
+| `manager/library/backup/<operationId>/` | Backups of replaced non-versioned files |
+| `manager/library/trash/<operationId>/` | Reversibly removed package files used by journal rollback before commit |
+| `manager/runtime/modules.status` | Persistent activation state (`INSTALLED`, `ACTIVATION_PENDING`, `ACTIVE`, `FAILED`, `ACTIVATION_FAILED`, `RESTART_REQUIRED`); module ids are keys and package-level outcomes use `package:<name>` |
 
 `library/status` records what is installed. It never records that a module is
-active. A failed activation does not remove the package from `library/status`.
+active. A failed activation does not remove the package from `library/status`;
+it changes the runtime state only.
 
 ## Lifecycle
 
@@ -59,6 +63,10 @@ active. A failed activation does not remove the package from `library/status`.
 A failure closes the context, runs `stop()` for cleanup, closes the classloader
 and marks the module `FAILED` — or `RESTART_REQUIRED` if cleanup leaked.
 
+The package-level entry is written before the first `start()`
+(`ACTIVATION_PENDING`), then becomes `ACTIVE`, `ACTIVATION_FAILED` or
+`RESTART_REQUIRED`. Removing the package clears its entry.
+
 ### Deactivation
 
 1. `stop()` runs inside the module's `ThreadGroup`.
@@ -74,31 +82,58 @@ and marks the module `FAILED` — or `RESTART_REQUIRED` if cleanup leaked.
 Clean shutdown marks the module `INSTALLED`. Any leak marks it
 `RESTART_REQUIRED`.
 
-### Hot upgrade
+### Staged install and upgrade
 
-1. The new version is installed at a versioned path; the active JAR is untouched.
-2. `ModuleHost.upgrade(...)` prepares the new classloader, descriptor and context
-   without starting it.
-3. The previous version stops and releases its resources.
-4. If the previous version leaks, the new version is not started and the state is
-   `RESTART_REQUIRED`.
-5. The new version starts. If it fails, the previous JAR is prepared and started
-   again (rollback), and the new package files are removed.
-6. A package may contain several module JARs; every active module in it is
-   upgraded in the same transaction, mapped by the `moduleId` declared in each
-   JAR. If a package or a batch upgrades several modules and one fails,
-   `PackageRuntime` records every module already upgraded, restores those JARs
-   in reverse order and verifies that each one is `ACTIVE`. Only then does it
-   authorize the manager to delete the new files. A local ZIP with several
-   packages follows the same transaction, not just `repo upgrade`.
-7. If compensation cannot verify every restoration, the runtime returns
-   `keepBoth`: both versions stay on disk and the affected modules become
-   `RESTART_REQUIRED`. No artifact is deleted.
-8. Only after a clean upgrade does the manager remove the previous package.
+1. **Acquisition.** Resolve packages, transitive dependencies, versions,
+   conflicts, platform and activation order. Download every ZIP to
+   `library/cache/downloads/<sha256>/` and verify size and SHA-256. Each artifact
+   is `PENDING` or `COMPLETE`; a retry downloads only the pending ones. A
+   `cache clean` command removes cache entries and operation manifests, not
+   installed packages or `library/status`.
+2. **File commit.** Apply the whole plan in one transaction with a durable journal
+   under `library/journal/`. New versions go to
+   `library/packages/<packageId>/<version>/`; the active version directory is not
+   overwritten. `library/status` is published with an atomic rename and is the
+   commit point. Recovery before the commit point rolls the journal back;
+   recovery after it only completes cleanup. This is the only automatic
+   rollback.
+3. **Activation.** After the commit, stop previous versions in reverse order and
+   start the new modules in dependency order. Persist `ACTIVATION_PENDING` before
+   the first `start()`. If a module fails, stop the modules already started in
+   this attempt in reverse order, keep the files and `library/status`, and mark
+   `ACTIVATION_FAILED`. The previous version is not reactivated and no new files
+   are deleted. Activation can be retried without reinstalling.
+
+A package may contain several module JARs; every active module in it is upgraded
+in the same runtime operation, mapped by the `moduleId` declared in each JAR. If
+one module fails, the reverse-order cleanup covers the modules started in that
+attempt; it is runtime cleanup, not an installation rollback.
 
 The two versions are not started simultaneously: they share the module id,
-service/config namespaces, command paths and thread group. Preparing the new
-classloader first isolates class loading without colliding registrations.
+service/config namespaces, command paths and thread group. Versioned directories
+keep the old files available for manual recovery, but the old runtime version is
+never restored automatically after a stage-3 failure.
+
+### Staged uninstall
+
+1. **Plan.** Resolve the reverse dependency closure and validate that no remaining
+   module depends on what will be removed. No download is needed.
+2. **Runtime barrier and file commit.** Deactivate affected modules in reverse
+   order before touching files. If deactivation leaks, abort without removing
+   anything and mark `RESTART_REQUIRED`. Otherwise move the owned files to
+   `library/trash/<operationId>/` and publish `library/status`. If the file commit
+   fails, restore the files and reactivate the previous versions.
+3. **Finalization.** Clear the package runtime entry. Stage 3 does not mutate
+   files. Installed dependency cleanup happens inside the same stage-2 manager
+   transaction when auto-remove is requested. A stage-3 failure does not restore
+   removed files; it marks `RESTART_REQUIRED` if live references remain.
+
+`library/trash` holds removed files for journal rollback before the commit point;
+after the commit it is only manual recovery, never an automatic rollback source.
+Deactivation must run before file removal because an active classloader may still
+hold a JAR open. An `Exclude` replacement uses the same barrier: stage
+2 deactivates the packages removed by the plan before moving their files, and
+stage 3 only starts the new packages.
 
 ### Package contents and module identity
 
@@ -109,10 +144,12 @@ removal by that id. Module ids must be unique within a package; zero JARs or
 duplicate ids are explicit failures. Additional libraries belong in a
 `DEPENDENCY` package.
 
-Activation starts every JAR in the package. A hot upgrade replaces every active
-module in the package in one transaction, restoring the modules already upgraded
-if a later one fails. The runtime never chooses the first JAR silently and never
-exposes a package whose activation and upgrade capabilities differ.
+Activation starts every JAR in the package. An upgrade replaces every active
+module in the package in one runtime operation. If activation fails, the modules
+already started in that attempt are stopped in reverse order and the package is
+marked `ACTIVATION_FAILED`; installed files are not rolled back. The runtime
+never chooses the first JAR silently and never exposes a package whose activation
+and upgrade capabilities differ.
 
 ### Shared dependencies
 
@@ -140,6 +177,7 @@ All built-in commands require `textformatter.suite.admin`.
 | `/<root> repo install <pkg...>` | Install packages from configured repositories |
 | `/<root> repo remove <pkg> [version] [channel]` | Remove a package through repositories |
 | `/<root> repo upgrade` | Upgrade packages from configured repositories |
+| `/<root> cache clean` | Remove downloads, `.part` files and operation cache manifests |
 
 Examples with the default root:
 
@@ -177,8 +215,9 @@ declares its SHA-256; downloads without a valid checksum are rejected.
 
 A package is a ZIP with `METADATA/package.list` and its files. A module
 `PACKAGE` contains one or more executable JARs under
-`manager/library/packages/`; dependency packages contain their JARs under
-`manager/library/dependencies/`. Each module JAR declares its own id through
+`manager/library/packages/<packageId>/<version>/`; dependency packages contain
+their JARs under `manager/library/dependencies/<dependencyId>/<version>/`.
+Each module JAR declares its own id through
 `ModuleActivator.descriptor()`; the package name is not assumed to be a module
 id. The `package.list` records name, version, channel, type, platform,
 dependencies and per-file SHA-256.
@@ -217,7 +256,7 @@ public interface ModuleContext extends AutoCloseable {
 `ModuleHost` exposes:
 
 ```java
-List<ActivationResult> loadInstalled();
+List<ActivationResult> loadInstalled(); // inspection utility; startup uses library/status
 ActivationResult activate(Path jar);
 ActivationResult activate(Path jar, List<Path> dependencyJars);
 UpgradeResult upgrade(String id, Path newJar, List<Path> dependencyJars);
@@ -239,11 +278,15 @@ and `Environment` bridge was removed in F7. Module metadata lives in
 The suite includes real JAR/ZIP fixtures for:
 
 - activation and deactivation;
-- successful hot upgrade with the old classloader closed;
-- failed upgrade with rollback to the previous version;
-- leaked module threads;
-- failing resource cleanup;
-- coherent installed state after upgrade and rollback.
+- successful upgrade with the old classloader closed;
+- failed stage-2 commit restoring previous files, directories and `library/status`;
+- failed stage-3 activation that keeps the installation and persists
+  `ACTIVATION_FAILED`;
+- reverse-order cleanup of modules started during a failed activation;
+- cache resume and cleanup without touching installed packages;
+- journal recovery before and after the commit point;
+- uninstall deactivation barrier before file removal;
+- leaked module threads and failing resource cleanup.
 
 No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 
@@ -257,11 +300,13 @@ No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 | Versioned package paths | ✅ |
 | Isolated classloaders | ✅ |
 | Activation/deactivation | ✅ |
-| Hot upgrade + rollback | ✅ |
-| Batch compensation and `keepBoth` recovery | ✅ |
+| Staged acquisition, commit and activation | ✅ ADR-027 |
+| Stage-1 content-addressed cache and resume | ✅ ADR-027 |
+| Stage-2 journal and crash recovery | ✅ ADR-027 |
+| `ACTIVATION_FAILED` without install rollback | ✅ ADR-027 |
+| Versioned package directories and persistent pointer | ✅ ADR-027 |
 | One or more module JARs per `PACKAGE` with unique module ids | ✅ |
 | Leak detection and `RESTART_REQUIRED` | ✅ |
-| Two-phase manager/runtime upgrade | ✅ |
 | Local/HTTP/file repositories | ✅ |
 | GitHub releases | Not used; `packages.list` is authoritative |
 | Real-server E2E | Not available |
@@ -271,6 +316,6 @@ No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 - [Commands Reference](08-Commands.md)
 - [Configuration Guide](02-Configuration.md)
 - [Developer Guide](09-Developer-Guide.md)
-- [ADR-026](../workdir/ADR.md)
+- [ADR-026 / ADR-027](../workdir/ADR.md)
 - [PLAN](../workdir/PLAN.md)
 - [Philosophy, C13](../prompts/diseno/philosophy.md) — hypotheses need evidence; invariant or full support

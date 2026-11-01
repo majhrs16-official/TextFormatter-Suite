@@ -47,16 +47,18 @@ import me.majhrs16.suite.kernel.ResolutionResult;
  * {@link RuntimeStateStore} is supplied.</p>
  *
  * <p>Hot upgrades prepare the new JAR in a second classloader before touching
- * the active version. The previous version is stopped, the new one starts, and
- * a failed start re-prepares the previous JAR from disk. This ordering is
- * deliberate: both versions share the same module id, service namespaces,
- * command paths and config namespace, so starting them simultaneously would
- * collide instead of proving isolation.</p>
+ * the active version. The previous version is stopped and the new one starts.
+ * A failed start leaves the installation committed and the old version on
+ * disk, but never restores it automatically. This ordering is deliberate: both
+ * versions share the same module id, service namespaces, command paths and
+ * config namespace, so starting them simultaneously would collide instead of
+ * proving isolation.</p>
  */
 public final class ModuleHost implements AutoCloseable {
 
     private static final long THREAD_RELEASE_TIMEOUT_MS = 1_000L;
     private static final AtomicLong THREAD_GROUP_SEQUENCE = new AtomicLong();
+    private static final String PACKAGE_STATE_PREFIX = "package:";
 
     private final Path packagesDir;
     private final Path configRoot;
@@ -72,6 +74,7 @@ public final class ModuleHost implements AutoCloseable {
     private final Map<String, LoadedModule> active = new LinkedHashMap<>();
     private volatile boolean closing;
     private final Map<String, ModuleState> states = new LinkedHashMap<>();
+    private final Map<String, ModuleState> packageStates = new LinkedHashMap<>();
 
     /**
      * @param libraryRoot directory that contains {@code packages/}
@@ -158,7 +161,7 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /**
-     * Scans {@code <library>/packages/*.jar}, resolves their descriptors and
+     * Scans {@code <library>/packages/.../*.jar}, resolves their descriptors and
      * activates them in dependency order.
      *
      * <p>A JAR that cannot be read or whose descriptor cannot be resolved is
@@ -177,8 +180,9 @@ public final class ModuleHost implements AutoCloseable {
         List<ActivationResult> failures = new ArrayList<>();
 
         List<Path> jars;
-        try (Stream<Path> stream = Files.list(packagesDir)) {
+        try (Stream<Path> stream = Files.walk(packagesDir)) {
             jars = stream
+                    .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".jar"))
                     .sorted()
                     .toList();
@@ -285,16 +289,16 @@ public final class ModuleHost implements AutoCloseable {
      * Replaces an active module with a new JAR.
      *
      * <p>The new JAR is prepared in a second classloader first. The active
-     * version is then stopped, the new version starts, and a failed start
-     * re-prepares and starts the previous JAR. The caller owns the installation
-     * transaction: it must keep the previous JAR on disk until this method
-     * returns success and must remove the new package when it does not.</p>
+     * version is then stopped and the new version starts. If the new version
+     * fails, the previous version is <strong>not</strong> restored: the file
+     * commit already happened and only the runtime reports the failed
+     * activation. The old version directory remains on disk for a later,
+     * explicit cleanup.</p>
      *
      * @param moduleId       active module id
      * @param newJar         new module JAR
      * @param dependencyJars shared dependency JARs for the new version
-     * @return upgrade outcome, including whether the previous version was
-     *         restored
+     * @return upgrade outcome
      */
     public synchronized UpgradeResult upgrade(String moduleId, Path newJar, List<Path> dependencyJars) {
         Objects.requireNonNull(moduleId, "moduleId");
@@ -304,7 +308,7 @@ public final class ModuleHost implements AutoCloseable {
         LoadedModule previous = active.get(moduleId);
         if (previous == null) {
             ModuleState state = states.getOrDefault(moduleId, ModuleState.FAILED);
-            return UpgradeResult.failed(moduleId, null, null, state, false,
+            return UpgradeResult.failed(moduleId, null, null, state,
                     "Module is not active: " + moduleId, null);
         }
         String previousVersion = previous.descriptor.version().toString();
@@ -314,15 +318,15 @@ public final class ModuleHost implements AutoCloseable {
             next = prepare(newJar, dependencyJars);
         } catch (Throwable failure) {
             return UpgradeResult.failed(moduleId, previousVersion, null, ModuleState.ACTIVE,
-                    false, "Cannot prepare new version of " + moduleId + ": "
-                    + failure.getMessage(), failure);
+                    "Cannot prepare new version of " + moduleId + ": "
+                            + failure.getMessage(), failure);
         }
         String newVersion = next.descriptor.version().toString();
         if (!next.id.equals(moduleId)) {
             ReleaseReport release = closeQuietly(next, false, "descriptor id mismatch");
             return UpgradeResult.failed(moduleId, previousVersion, newVersion,
                     release.isClean() ? ModuleState.ACTIVE : ModuleState.RESTART_REQUIRED,
-                    false, "New JAR declares module " + next.id + " instead of " + moduleId,
+                    "New JAR declares module " + next.id + " instead of " + moduleId,
                     release.failure());
         }
 
@@ -331,7 +335,7 @@ public final class ModuleHost implements AutoCloseable {
             ReleaseReport release = closeQuietly(next, false, "unsatisfied requirement");
             return UpgradeResult.failed(moduleId, previousVersion, newVersion,
                     release.isClean() ? ModuleState.ACTIVE : ModuleState.RESTART_REQUIRED,
-                    false, unsatisfied, release.failure());
+                    unsatisfied, release.failure());
         }
 
         active.remove(moduleId);
@@ -347,45 +351,19 @@ public final class ModuleHost implements AutoCloseable {
                     message, oldRelease.failure());
         }
 
+        markActivationPending(moduleId);
         ActivationResult activation = activatePrepared(next);
         if (activation.isSuccess()) {
             logger.info("Module upgraded: " + moduleId + " " + previousVersion + " -> " + newVersion);
             return UpgradeResult.upgraded(moduleId, previousVersion, newVersion);
         }
 
-        PreparedModule rollback;
-        try {
-            rollback = prepare(previous.jar, previous.dependencyJars);
-        } catch (Throwable failure) {
-            String message = "New version of " + moduleId + " failed and the previous version "
-                    + "cannot be prepared: " + failure.getMessage();
-            setState(moduleId, ModuleState.RESTART_REQUIRED);
-            logger.error(message, failure);
-            return UpgradeResult.failed(moduleId, previousVersion, newVersion,
-                    ModuleState.RESTART_REQUIRED, false, message, failure);
-        }
-
-        ActivationResult restored = activatePrepared(rollback);
-        if (!restored.isSuccess()) {
-            String message = "New version of " + moduleId + " failed and the previous version "
-                    + "could not be restored: " + restored.message();
-            logger.error(message, restored.cause());
-            return UpgradeResult.failed(moduleId, previousVersion, newVersion,
-                    restored.state(), false, message, restored.cause());
-        }
-
-        ModuleState finalState = activation.state() == ModuleState.RESTART_REQUIRED
-                ? ModuleState.RESTART_REQUIRED
-                : ModuleState.ACTIVE;
-        if (finalState == ModuleState.RESTART_REQUIRED) {
-            setState(moduleId, ModuleState.RESTART_REQUIRED);
-        }
         String message = "New version " + newVersion + " of " + moduleId
-                + " failed; previous version " + previousVersion + " was restored: "
-                + activation.message();
+                + " failed; the previous version was not restored because the installation "
+                + "is already committed: " + activation.message();
         logger.warn(message);
         return UpgradeResult.failed(moduleId, previousVersion, newVersion,
-                finalState, true, message, activation.cause());
+                activation.state(), message, activation.cause());
     }
 
     /**
@@ -437,11 +415,63 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /**
+     * Persists that activation of a module has started but is not confirmed.
+     * A process crash at this point must resume activation instead of assuming
+     * the module is active.
+     *
+     * @param moduleId module id
+     */
+    public synchronized void markActivationPending(String moduleId) {
+        Objects.requireNonNull(moduleId, "moduleId");
+        setState(moduleId, ModuleState.ACTIVATION_PENDING);
+    }
+
+    /**
+     * Persists that activation of a package has started but is not confirmed.
+     *
+     * @param packageId package name
+     */
+    public synchronized void markPackageActivationPending(String packageId) {
+        markPackageState(packageId, ModuleState.ACTIVATION_PENDING);
+    }
+
+    /**
+     * Records the activation state of a committed package.
+     *
+     * @param packageId package name
+     * @param state     activation state
+     */
+    public synchronized void markPackageState(String packageId, ModuleState state) {
+        Objects.requireNonNull(packageId, "packageId");
+        Objects.requireNonNull(state, "state");
+        packageStates.put(packageId, state);
+        persistStates();
+    }
+
+    /**
+     * Removes the runtime activation entry of a package that is no longer
+     * installed.
+     *
+     * @param packageId package name
+     */
+    public synchronized void clearPackageState(String packageId) {
+        Objects.requireNonNull(packageId, "packageId");
+        if (packageStates.remove(packageId) != null) {
+            persistStates();
+        }
+    }
+
+    /**
+     * @param packageId package name
+     * @return the last known activation state of the package
+     */
+    public synchronized Optional<ModuleState> packageState(String packageId) {
+        return Optional.ofNullable(packageStates.get(packageId));
+    }
+
+    /**
      * Marks a known module as requiring a restart without pretending it was
      * cleanly unloaded.
-     *
-     * <p>Package upgrades use this when runtime compensation fails and both
-     * package versions must stay on disk for recovery.</p>
      *
      * @param moduleId module id
      * @param reason   human-readable cause
@@ -466,9 +496,18 @@ public final class ModuleHost implements AutoCloseable {
 
     private void setState(String moduleId, ModuleState state) {
         states.put(moduleId, state);
-        if (stateStore != null) {
-            stateStore.save(states);
+        persistStates();
+    }
+
+    private void persistStates() {
+        if (stateStore == null) {
+            return;
         }
+        Map<String, ModuleState> persisted = new LinkedHashMap<>(states);
+        for (Map.Entry<String, ModuleState> entry : packageStates.entrySet()) {
+            persisted.put(PACKAGE_STATE_PREFIX + entry.getKey(), entry.getValue());
+        }
+        stateStore.save(persisted);
     }
 
     private PreparedModule prepare(Path jar) throws Exception {

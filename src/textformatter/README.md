@@ -11,6 +11,7 @@
 - **Formatting pipeline** — `TextFormatter` interface orchestrating template + channel lookup
 - **Neutral plain-text port** — `MessageRenderer` lets platform adapters render lines without importing textformatter types
 - **Translation spans** — translate `<tr>...</tr>` content through `TranslationService`
+- **Local regex condition** — `<regex match="PATRÓN">CONTENIDO</regex>` renders its content only when the pre-compiled pattern finds a match (ADR-028)
 - **Module registration** — `TextFormatterModule` registers the module descriptor for the kernel
 
 ---
@@ -77,9 +78,11 @@ DefaultTextFormatter.format()
          ↓
 TemplateRenderer.render(Template, TemplateContext)
          ↓
-MiniMessage template with %placeholders% and <tr> spans
+MiniMessage template with %placeholders%, <regex> and <tr> spans
          ↓
 PlaceholderResolver.resolve() for external tokens
+         ↓
+<regex> condition: emit CONTENIDO only on a match
          ↓
 TranslationService.translate() for <tr> spans (when enabled)
          ↓
@@ -87,6 +90,31 @@ Formatted message (Adventure Component)
 ```
 
 Templates intentionally have no `<expr>` or `${...}` scripting step. Policy decisions are executed by the iFlow VM; the formatter only substitutes values.
+
+### `<regex>` template condition (ADR-028)
+
+```text
+<regex match="PATRÓN">CONTENIDO</regex>
+```
+
+- `match` is a mandatory, non-empty Java regex. Double quotes and XML characters are
+  written as `&quot;`, `&amp;`, `&lt;`, `&gt;` and `&apos;`; the pattern is not
+  interpreted as MiniMessage. Unknown or malformed XML entities are configuration
+  errors.
+- `CONTENIDO` is both the candidate text and a MiniMessage template. Placeholders are
+  resolved before the pattern is evaluated. If the pattern finds a match
+  (`Pattern.matcher(content).find()`), the span emits `CONTENIDO`; otherwise it emits
+  nothing. Anchor with `^`/`$` for a full-content match.
+- Capture groups are not interpolated automatically and the pattern is never rendered.
+- Patterns are compiled once in `Template.of(...)`. An invalid, empty, missing or
+  oversized pattern fails when the template is created. Nesting `<regex>` spans is
+  rejected.
+- Limits: pattern ≤ 512 UTF-16 code units, evaluated content ≤ 8192 UTF-16 code
+  units, at most 32 spans per template. The content limit is checked again after
+  placeholder expansion.
+- The tag only controls rendering of its own span. It does not execute code, evaluate
+  SpEL, decide routing/permissions/delivery, mutate the message or replace the regex
+  used by iFlow policies.
 
 ---
 

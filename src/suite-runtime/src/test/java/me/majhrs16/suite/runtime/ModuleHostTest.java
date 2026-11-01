@@ -207,7 +207,6 @@ class ModuleHostTest {
             assertTrue(result.isSuccess(), () -> "upgrade failed: " + result.message());
             assertEquals("1.0.0", result.previousVersion());
             assertEquals("2.0.0", result.newVersion());
-            assertFalse(result.rolledBack());
             assertEquals(ModuleState.ACTIVE, host.state("upgrade-fixture").orElseThrow());
             assertEquals(List.of("upgrade-fixture"), host.activeModules());
 
@@ -246,7 +245,7 @@ class ModuleHostTest {
     }
 
     @Test
-    void failedUpgradeRestoresThePreviousVersion() throws Exception {
+    void failedUpgradeDoesNotRestoreThePreviousVersion() throws Exception {
         Path v1 = FixtureModules.buildJar(tempDir, "rollback-fixture", "1.0.0", "v1",
                 null, null, false, false);
         Path v2 = FixtureModules.buildJar(tempDir, "rollback-fixture", "2.0.0", "v2",
@@ -260,14 +259,12 @@ class ModuleHostTest {
             UpgradeResult result = host.upgrade("rollback-fixture", v2, List.of());
 
             assertFalse(result.isSuccess());
-            assertTrue(result.rolledBack(), "the previous version must be restored");
-            assertEquals(ModuleState.ACTIVE, result.state());
-            assertEquals(ModuleState.ACTIVE, host.state("rollback-fixture").orElseThrow());
-            assertEquals(List.of("rollback-fixture"), host.activeModules());
+            assertEquals(ModuleState.FAILED, result.state());
+            assertEquals(ModuleState.FAILED, host.state("rollback-fixture").orElseThrow());
+            assertTrue(host.activeModules().isEmpty(),
+                    "the committed new version failed and the old one is not restored");
             assertTrue(oldLoader.isClosed());
-            assertEquals("v1", host.services().find(CharSequence.class)
-                    .orElseThrow().toString(),
-                    "the restored module must serve the previous payload");
+            assertTrue(host.services().findAll(CharSequence.class).isEmpty());
             assertNotNull(result.cause());
         }
     }

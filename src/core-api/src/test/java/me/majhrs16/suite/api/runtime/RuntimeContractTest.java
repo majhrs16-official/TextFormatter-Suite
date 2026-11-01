@@ -37,8 +37,10 @@ class RuntimeContractTest {
         assertEquals(
                 EnumSet.of(
                         ModuleState.INSTALLED,
+                        ModuleState.ACTIVATION_PENDING,
                         ModuleState.ACTIVE,
                         ModuleState.FAILED,
+                        ModuleState.ACTIVATION_FAILED,
                         ModuleState.RESTART_REQUIRED,
                         ModuleState.REMOVED),
                 EnumSet.allOf(ModuleState.class));

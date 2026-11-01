@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TemplateRendererTest {
@@ -141,5 +142,117 @@ class TemplateRendererTest {
             context);
 
         assertEquals("[Lobos] Steve", result);
+    }
+
+    @Test
+    void regexSpanRendersMiniMessageContentWhenThePatternMatches() {
+        String result = renderer().renderPlain(
+            Template.of("<regex match=\"hola\"><red>hola</red></regex>"),
+            context("hola", Language.EN, Language.ES, false));
+
+        assertEquals("hola", result);
+    }
+
+    @Test
+    void regexSpanEmitsNothingWhenThePatternDoesNotMatch() {
+        String result = renderer().renderPlain(
+            Template.of("a<regex match=\"adios\"><red>hola</red></regex>b"),
+            context("hola", Language.EN, Language.ES, false));
+
+        assertEquals("ab", result);
+    }
+
+    @Test
+    void regexSpanUsesFindAndDoesNotInterpolateCaptureGroups() {
+        String result = renderer().renderPlain(
+            Template.of("<regex match=\"(?i)h(e)llo\">%content%</regex>"),
+            context("Hello world", Language.EN, Language.ES, false));
+
+        assertEquals("Hello world", result);
+    }
+
+    @Test
+    void regexSpanMatchesResolvedPlaceholdersAndCoexistsWithTranslation() {
+        String result = renderer().renderPlain(
+            Template.of("<regex match=\"hola\"><tr>%content%</tr></regex>"),
+            context("hola", Language.EN, Language.ES, true));
+
+        assertEquals("es: hola", result);
+    }
+
+    @Test
+    void regexSpanDecodesXmlEntitiesInThePattern() {
+        String result = renderer().renderPlain(
+            Template.of("<regex match=\"a&quot;b\">a\"b</regex>"),
+            context("", Language.EN, Language.ES, false));
+
+        assertEquals("a\"b", result);
+    }
+
+    @Test
+    void malformedXmlEntityFailsWhenTheTemplateIsCreated() {
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"a&b\">x</regex>"));
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"&#65;\">x</regex>"));
+    }
+
+    @Test
+    void invalidRegexPatternFailsWhenTheTemplateIsCreated() {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"[\">x</regex>"));
+
+        assertTrue(failure.getMessage().contains("<regex>"));
+    }
+
+    @Test
+    void missingOrEmptyRegexPatternFailsWhenTheTemplateIsCreated() {
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex>x</regex>"));
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"\">x</regex>"));
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"   \">x</regex>"));
+    }
+
+    @Test
+    void regexPatternAndContentLimitsAreEnforced() {
+        String tooLongPattern = "a".repeat(Template.MAX_REGEX_PATTERN_LENGTH + 1);
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"" + tooLongPattern + "\">x</regex>"));
+
+        String tooLongContent = "a".repeat(Template.MAX_REGEX_CONTENT_LENGTH + 1);
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\".*\">" + tooLongContent + "</regex>"));
+    }
+
+    @Test
+    void resolvedRegexContentLimitIsEnforcedAtRenderTime() {
+        String tooLong = "a".repeat(Template.MAX_REGEX_CONTENT_LENGTH + 1);
+        TemplateContext context = TemplateContext
+            .builder(Actor.unknown("Steve"), Language.EN, Language.ES)
+            .translate(false)
+            .variable("huge", tooLong)
+            .build();
+
+        assertThrows(IllegalArgumentException.class, () -> renderer().renderPlain(
+            Template.of("<regex match=\".*\">%huge%</regex>"), context));
+    }
+
+    @Test
+    void nestedRegexSpansAreRejected() {
+        assertThrows(IllegalArgumentException.class,
+            () -> Template.of("<regex match=\"x\"><regex match=\"y\">y</regex></regex>"));
+    }
+
+    @Test
+    void renderingDoesNotMutateTheOriginalTemplate() {
+        Template template = Template.of(
+            "<regex match=\"hola\"><red>%content%</red></regex>");
+        String source = template.source();
+
+        renderer().renderPlain(template, context("hola", Language.EN, Language.ES, false));
+
+        assertEquals(source, template.source());
     }
 }

@@ -135,6 +135,9 @@ public final class HttpSink implements SyncSink {
                 Thread.currentThread().interrupt();
             }
         }
+        // HttpClient owns a selector thread; close it so module deactivation is
+        // clean and the classloader can be released.
+        client.close();
     }
 
     @Override

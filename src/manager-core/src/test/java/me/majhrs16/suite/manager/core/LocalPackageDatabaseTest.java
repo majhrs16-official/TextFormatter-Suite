@@ -7,6 +7,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -37,6 +38,19 @@ class LocalPackageDatabaseTest {
         assertTrue(tempDir.resolve("library/dependencies").toFile().exists());
         assertTrue(tempDir.resolve("library/tmp").toFile().exists());
         assertTrue(tempDir.resolve("library/lists").toFile().exists());
+    }
+
+    @Test
+    void restoreInvalidStatusSnapshotKeepsTheCurrentStatus() throws Exception {
+        LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
+        db.initialize();
+        String before = db.currentStatusSha256();
+
+        assertThrows(IOException.class,
+                () -> db.restoreStatus("not a package list".getBytes()));
+
+        assertEquals(before, db.currentStatusSha256(),
+                "an invalid snapshot must not replace the authoritative status");
     }
 
     @Test

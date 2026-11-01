@@ -52,6 +52,7 @@ Todos los comandos built-in requieren el permiso
 | `/<raíz> repo install <pkg...>` | Instala paquetes desde los repositorios configurados. |
 | `/<raíz> repo remove <pkg> [version] [canal]` | Elimina un paquete desde los repositorios. |
 | `/<raíz> repo upgrade` | Actualiza paquetes desde los repositorios. |
+| `/<raíz> cache clean` | Limpia descargas, archivos `.part` y manifiestos de operaciones de la caché; no toca paquetes instalados, `library/status`, journal ni trash. |
 
 Ejemplos con la raíz por defecto:
 

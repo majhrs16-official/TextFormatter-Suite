@@ -722,13 +722,15 @@ final class FixtureModules {
     static Path buildPackageZip(Path workDir, String packageName, String version, String channel,
                                 Path moduleJar, String dependencies) throws IOException {
         return buildPackageZip(workDir, packageName, version, channel, moduleJar, dependencies,
-                "PACKAGE", "manager/library/packages/" + packageName + "-" + version + ".jar");
+                "PACKAGE", "manager/library/packages/" + packageName + "/" + version
+                        + "/" + packageName + "-" + version + ".jar");
     }
 
     static Path buildDependencyPackageZip(Path workDir, String packageName, String version,
                                           String channel, Path dependencyJar) throws IOException {
         return buildPackageZip(workDir, packageName, version, channel, dependencyJar, null,
-                "DEPENDENCY", "manager/library/dependencies/" + packageName + "-" + version + ".jar");
+                "DEPENDENCY", "manager/library/dependencies/" + packageName + "/" + version
+                        + "/" + packageName + "-" + version + ".jar");
     }
 
     static Path buildPackageZipWithJars(Path workDir, String packageName, String version,
@@ -738,8 +740,8 @@ final class FixtureModules {
         for (int i = 0; i < moduleJars.size(); i++) {
             Path moduleJar = moduleJars.get(i);
             byte[] jarBytes = Files.readAllBytes(moduleJar);
-            String jarPath = "manager/library/packages/" + packageName + "-"
-                    + version + "-" + i + ".jar";
+            String jarPath = "manager/library/packages/" + packageName + "/" + version
+                    + "/" + packageName + "-" + version + "-" + i + ".jar";
             jarPaths.add(jarPath);
             files.append("  ").append(jarPath).append('\t')
                     .append(jarBytes.length).append('\t')
@@ -787,8 +789,8 @@ final class FixtureModules {
         for (int i = 0; i < packages.size(); i++) {
             ModulePackage pkg = packages.get(i);
             byte[] jarBytes = Files.readAllBytes(pkg.jar());
-            String jarPath = "manager/library/packages/" + pkg.name()
-                    + "-" + pkg.version() + ".jar";
+            String jarPath = "manager/library/packages/" + pkg.name() + "/"
+                    + pkg.version() + "/" + pkg.name() + "-" + pkg.version() + ".jar";
             if (i > 0) {
                 manifest.append("\n\n");
             }
@@ -815,8 +817,8 @@ final class FixtureModules {
             zipOut.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
             zipOut.closeEntry();
             for (ModulePackage pkg : packages) {
-                String jarPath = "manager/library/packages/" + pkg.name()
-                        + "-" + pkg.version() + ".jar";
+                String jarPath = "manager/library/packages/" + pkg.name() + "/"
+                        + pkg.version() + "/" + pkg.name() + "-" + pkg.version() + ".jar";
                 zipOut.putNextEntry(new ZipEntry(jarPath));
                 zipOut.write(Files.readAllBytes(pkg.jar()));
                 zipOut.closeEntry();

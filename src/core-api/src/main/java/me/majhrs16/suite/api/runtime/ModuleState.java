@@ -13,11 +13,17 @@ public enum ModuleState {
     /** Files are installed on disk; activation has not been confirmed. */
     INSTALLED,
 
+    /** Activation started and has not been confirmed; startup must resume it. */
+    ACTIVATION_PENDING,
+
     /** The activator started successfully and its services are registered. */
     ACTIVE,
 
-    /** Files are installed but {@code start()} failed. */
+    /** A module failed to start; the installation remains committed. */
     FAILED,
+
+    /** A committed package has at least one module that did not start. */
+    ACTIVATION_FAILED,
 
     /** Activation or deactivation left resources behind; a restart is required. */
     RESTART_REQUIRED,

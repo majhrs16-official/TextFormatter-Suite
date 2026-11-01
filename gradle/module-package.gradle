@@ -11,12 +11,13 @@ def moduleType = project.findProperty('moduleType') ?: 'PACKAGE'
 def moduleDependencies = project.findProperty('moduleDependencies') ?: ''
 def modulePlatform = project.findProperty('modulePlatform') ?: 'common'
 def moduleJarTaskName = project.findProperty('moduleJarTaskName') ?: 'jar'
-// Versioned JAR paths let a hot upgrade keep the active version on disk until
-// the new module has started. The manager removes the old package afterwards.
+// Versioned JAR paths let an upgrade keep the active version on disk until the
+// manager commits the new pointer and the runtime confirms the new activation.
 def moduleJarName = "${moduleId}-${moduleVersion}.jar"
-def moduleJarPath = moduleType == 'DEPENDENCY'
-        ? "manager/library/dependencies/${moduleJarName}"
-        : "manager/library/packages/${moduleJarName}"
+def moduleJarDir = moduleType == 'DEPENDENCY'
+        ? "manager/library/dependencies/${moduleId}/${moduleVersion}"
+        : "manager/library/packages/${moduleId}/${moduleVersion}"
+def moduleJarPath = "${moduleJarDir}/${moduleJarName}"
 def moduleJarTask = tasks.named(moduleJarTaskName)
 
 tasks.register('generateModuleManifest') {
@@ -55,9 +56,7 @@ tasks.register('modulePackage', Zip) {
     destinationDirectory = layout.buildDirectory.dir('distributions')
     from(layout.buildDirectory.dir('module'))
     from(moduleJarTask.flatMap { it.archiveFile }) {
-        into(moduleType == 'DEPENDENCY'
-                ? 'manager/library/dependencies'
-                : 'manager/library/packages')
+        into(moduleJarDir)
         rename { moduleJarName }
     }
 }

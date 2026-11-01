@@ -7,7 +7,6 @@ import me.majhrs16.suite.manager.spi.Version;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,7 +16,10 @@ import java.util.stream.Collectors;
 
 /**
  * Local package database (dpkg equivalent) - manages library/status.
- * Thread-safe with read-write locking for concurrent access.
+ *
+ * <p>The status file is the authoritative installation pointer. Writes are
+ * fsynced and published with an atomic rename, so a journal can use that rename
+ * as its commit point.</p>
  */
 public final class LocalPackageDatabase {
 
@@ -27,10 +29,14 @@ public final class LocalPackageDatabase {
     private final Path dependenciesDir;
     private final Path tmpDir;
     private final Path listsDir;
-    
+    private final Path journalDir;
+    private final Path backupDir;
+    private final Path trashDir;
+    private final Path cacheDir;
+
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final Map<String, PackageEntry> packages = new ConcurrentHashMap<>();
-    private final Map<String, Set<String>> fileOwnership = new ConcurrentHashMap<>(); // file path -> package IDs (name_version_channel)
+    private final Map<String, Set<String>> fileOwnership = new ConcurrentHashMap<>();
     private boolean loaded = false;
     private Instant lastModified;
 
@@ -41,6 +47,10 @@ public final class LocalPackageDatabase {
         this.dependenciesDir = this.managerDir.resolve("library/dependencies");
         this.tmpDir = this.managerDir.resolve("library/tmp");
         this.listsDir = this.managerDir.resolve("library/lists");
+        this.journalDir = this.managerDir.resolve("library/journal");
+        this.backupDir = this.managerDir.resolve("library/backup");
+        this.trashDir = this.managerDir.resolve("library/trash");
+        this.cacheDir = this.managerDir.resolve("library/cache");
     }
 
     /**
@@ -53,13 +63,16 @@ public final class LocalPackageDatabase {
             Files.createDirectories(dependenciesDir);
             Files.createDirectories(tmpDir);
             Files.createDirectories(listsDir);
+            Files.createDirectories(journalDir);
+            Files.createDirectories(backupDir);
+            Files.createDirectories(trashDir);
+            Files.createDirectories(cacheDir);
             Files.createDirectories(statusFile.getParent());
-            
+
             if (Files.exists(statusFile)) {
-                load();
+                loadLocked();
             } else {
-                // Create empty status file
-                save();
+                commitImageLocked(imageOfLocked(List.of()));
             }
             loaded = true;
         } finally {
@@ -73,64 +86,166 @@ public final class LocalPackageDatabase {
     public void load() throws IOException {
         lock.writeLock().lock();
         try {
-            if (!Files.exists(statusFile)) {
-                packages.clear();
-                fileOwnership.clear();
-                lastModified = Instant.now();
-                return;
-            }
-
-            String content = Files.readString(statusFile);
-            lastModified = Files.getLastModifiedTime(statusFile).toInstant();
-            
-            List<PackageEntry> entries = ManifestParser.parseManifest(content);
-            packages.clear();
-            fileOwnership.clear();
-            
-            for (PackageEntry entry : entries) {
-                String key = entry.id();
-                packages.put(key, entry);
-                
-                // Build file ownership map using full package ID (consistent with registerPackage)
-                for (FileEntry file : entry.files().values()) {
-                    fileOwnership.computeIfAbsent(file.path(), k -> ConcurrentHashMap.newKeySet())
-                            .add(entry.id());
-                }
-            }
-        } catch (ManifestParser.ParseException e) {
-            throw new IOException("Failed to parse status database: " + e.getMessage(), e);
+            loadLocked();
         } finally {
             lock.writeLock().unlock();
         }
     }
 
+    private void loadLocked() throws IOException {
+        if (!Files.exists(statusFile)) {
+            packages.clear();
+            fileOwnership.clear();
+            lastModified = Instant.now();
+            return;
+        }
+
+        byte[] content = Files.readAllBytes(statusFile);
+        lastModified = Files.getLastModifiedTime(statusFile).toInstant();
+        List<PackageEntry> entries;
+        try {
+            entries = ManifestParser.parseManifest(new String(content, java.nio.charset.StandardCharsets.UTF_8));
+            validateIds(entries);
+        } catch (ManifestParser.ParseException e) {
+            throw new IOException("Failed to parse status database: " + e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new IOException("Failed to parse status database: " + e.getMessage(), e);
+        }
+        replaceInMemoryLocked(entries);
+    }
+
     /**
-     * Saves the status database to disk atomically.
+     * Saves the current in-memory state atomically.
      */
     public void save() throws IOException {
         lock.writeLock().lock();
         try {
-            // Write to temp file first
-            Path tempFile = Files.createTempFile(statusFile.getParent(), "status", ".tmp");
-            try {
-                List<PackageEntry> entries = new ArrayList<>(packages.values());
-                // Sort for consistent output
-                entries.sort(Comparator.comparing(PackageEntry::name)
-                        .thenComparing(e -> Version.parse(e.version()))
-                        .thenComparing(PackageEntry::channel));
-                
-                String content = ManifestParser.serialize(entries);
-                Files.writeString(tempFile, content);
-                
-                // Atomic move
-                Files.move(tempFile, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                lastModified = Instant.now();
-            } catch (Exception e) {
-                Files.deleteIfExists(tempFile);
-                throw e;
-            }
+            commitImageLocked(imageOfLocked(packages.values()));
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+
+    /** Immutable serialized status image used as a journal snapshot. */
+    public record StatusImage(byte[] content, String sha256, List<PackageEntry> entries) {
+        public StatusImage {
+            content = content.clone();
+            entries = List.copyOf(entries);
+        }
+
+        @Override
+        public byte[] content() {
+            return content.clone();
+        }
+    }
+
+    public StatusImage imageOf(Collection<PackageEntry> entries) {
+        lock.readLock().lock();
+        try {
+            return imageOfLocked(entries);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public StatusImage currentImage() throws IOException {
+        lock.readLock().lock();
+        try {
+            byte[] content = Files.exists(statusFile) ? Files.readAllBytes(statusFile) : new byte[0];
+            return new StatusImage(content, IoSupport.sha256(content),
+                    new ArrayList<>(packages.values()));
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public byte[] readStatusBytes() throws IOException {
+        lock.readLock().lock();
+        try {
+            return Files.exists(statusFile) ? Files.readAllBytes(statusFile) : new byte[0];
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public String currentStatusSha256() throws IOException {
+        return IoSupport.sha256(readStatusBytes());
+    }
+
+    /**
+     * Publishes a prepared status image. The atomic rename inside this method is
+     * the commit point of a package transaction.
+     */
+    public void commitImage(StatusImage image) throws IOException {
+        lock.writeLock().lock();
+        try {
+            commitImageLocked(image);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    /** Restores raw status bytes and reloads the in-memory inventory. */
+    public void restoreStatus(byte[] content) throws IOException {
+        lock.writeLock().lock();
+        try {
+            List<PackageEntry> entries;
+            try {
+                entries = ManifestParser.parseManifest(new String(content, java.nio.charset.StandardCharsets.UTF_8));
+                validateIds(entries);
+            } catch (ManifestParser.ParseException e) {
+                throw new IOException("Cannot restore invalid status snapshot: " + e.getMessage(), e);
+            } catch (IllegalStateException e) {
+                throw new IOException("Cannot restore invalid status snapshot: " + e.getMessage(), e);
+            }
+            IoSupport.atomicWrite(statusFile, content);
+            replaceInMemoryLocked(entries);
+            lastModified = Instant.now();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private StatusImage imageOfLocked(Collection<PackageEntry> source) {
+        List<PackageEntry> entries = new ArrayList<>(source);
+        validateIds(entries);
+        entries.sort(Comparator.comparing(PackageEntry::name)
+                .thenComparing(e -> Version.parse(e.version()))
+                .thenComparing(PackageEntry::channel));
+        byte[] content = ManifestParser.serialize(entries)
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            return new StatusImage(content, IoSupport.sha256(content), entries);
+        } catch (IOException failure) {
+            throw new IllegalStateException("Cannot hash status image", failure);
+        }
+    }
+
+    private void commitImageLocked(StatusImage image) throws IOException {
+        validateIds(image.entries());
+        IoSupport.atomicWrite(statusFile, image.content());
+        replaceInMemoryLocked(image.entries());
+        lastModified = Instant.now();
+    }
+
+    private static void validateIds(Collection<PackageEntry> entries) {
+        Set<String> ids = new HashSet<>();
+        for (PackageEntry entry : entries) {
+            if (!ids.add(entry.id())) {
+                throw new IllegalStateException("Duplicate package id in status: " + entry.id());
+            }
+        }
+    }
+
+    private void replaceInMemoryLocked(Collection<PackageEntry> entries) {
+        packages.clear();
+        fileOwnership.clear();
+        for (PackageEntry entry : entries) {
+            packages.put(entry.id(), entry);
+            for (FileEntry file : entry.files().values()) {
+                fileOwnership.computeIfAbsent(file.path(), k -> ConcurrentHashMap.newKeySet())
+                        .add(entry.id());
+            }
         }
     }
 
@@ -140,8 +255,7 @@ public final class LocalPackageDatabase {
     public boolean isInstalled(String name, String version, String channel) {
         lock.readLock().lock();
         try {
-            String key = name + "_" + version + "_" + channel;
-            return packages.containsKey(key);
+            return packages.containsKey(name + "_" + version + "_" + channel);
         } finally {
             lock.readLock().unlock();
         }
@@ -159,22 +273,15 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Gets an installed package by name, version, channel.
-     */
     public Optional<PackageEntry> getPackage(String name, String version, String channel) {
         lock.readLock().lock();
         try {
-            String key = name + "_" + version + "_" + channel;
-            return Optional.ofNullable(packages.get(key));
+            return Optional.ofNullable(packages.get(name + "_" + version + "_" + channel));
         } finally {
             lock.readLock().unlock();
         }
     }
 
-    /**
-     * Gets the latest installed version of a package (by channel).
-     */
     public Optional<PackageEntry> getLatestInstalled(String name, String channel) {
         lock.readLock().lock();
         try {
@@ -186,10 +293,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Gets the latest installed package that supplies {@code name}, either by its
-     * real package name or through a virtual {@code Provide} name.
-     */
     public Optional<PackageEntry> findInstalledProvider(String name) {
         lock.readLock().lock();
         try {
@@ -201,10 +304,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Checks whether an installed package satisfies a dependency name and version
-     * constraint, including virtual names declared with {@code Provide}.
-     */
     public boolean isDependencySatisfied(String name, String constraint) {
         lock.readLock().lock();
         try {
@@ -216,11 +315,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Finds installed packages that conflict with {@code candidate} through the
-     * symmetric {@code Exclude} relation. A package conflicts with another when
-     * either one excludes the other's name or a virtual name it provides.
-     */
     public List<PackageEntry> findConflicts(PackageEntry candidate) {
         lock.readLock().lock();
         try {
@@ -233,11 +327,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Returns true when two packages cannot coexist according to their Exclude
-     * declarations. The relation is symmetric: it is enough for one side to
-     * exclude the other.
-     */
     public static boolean conflicts(PackageEntry first, PackageEntry second) {
         if (first.name().equals(second.name())) {
             return false;
@@ -254,9 +343,6 @@ public final class LocalPackageDatabase {
         return false;
     }
 
-    /**
-     * Gets all installed packages.
-     */
     public List<PackageEntry> getAllPackages() {
         lock.readLock().lock();
         try {
@@ -266,9 +352,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Gets packages by type.
-     */
     public List<PackageEntry> getPackagesByType(me.majhrs16.suite.manager.spi.PackageType type) {
         lock.readLock().lock();
         try {
@@ -280,138 +363,42 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Registers a package as installed.
-     */
     public void registerPackage(PackageEntry entry) throws IOException {
         lock.writeLock().lock();
         try {
-            String key = entry.id();
-            if (packages.containsKey(key)) {
-                throw new IllegalStateException("Package already installed: " + key);
+            if (packages.containsKey(entry.id())) {
+                throw new IllegalStateException("Package already installed: " + entry.id());
             }
-            
-            // Save first, then update in-memory state (atomic: persist then memory)
-            PackageEntry newEntry = entry;
-            doSaveWithNewPackage(newEntry);
-            
-            // Only update in-memory state after successful save
-            packages.put(key, newEntry);
-            
-            // Update file ownership (use full package ID for ownership)
-            for (FileEntry file : newEntry.files().values()) {
-                fileOwnership.computeIfAbsent(file.path(), k -> ConcurrentHashMap.newKeySet())
-                        .add(newEntry.id());
+            Map<String, PackageEntry> next = new LinkedHashMap<>();
+            for (PackageEntry installed : packages.values()) {
+                next.put(installed.id(), installed);
             }
+            next.put(entry.id(), entry);
+            commitImageLocked(imageOfLocked(next.values()));
         } finally {
             lock.writeLock().unlock();
         }
     }
-    
-    /**
-     * Saves the database with a new package added.
-     */
-    private void doSaveWithNewPackage(PackageEntry newEntry) throws IOException {
-        // Write to temp file first
-        Path tempFile = Files.createTempFile(statusFile.getParent(), "status", ".tmp");
-        try {
-            List<PackageEntry> entries = new ArrayList<>(packages.values());
-            entries.add(newEntry);
-            entries.sort(Comparator.comparing(PackageEntry::name)
-                    .thenComparing(e -> Version.parse(e.version()))
-                    .thenComparing(PackageEntry::channel));
-            
-            String content = ManifestParser.serialize(entries);
-            Files.writeString(tempFile, content);
-            
-            // Atomic move
-            Files.move(tempFile, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            lastModified = Instant.now();
-        } catch (Exception e) {
-            Files.deleteIfExists(tempFile);
-            throw e;
-        }
-    }
 
-    /**
-     * Unregisters a package (marks as removed, but keeps files for now).
-     * Actual file removal is done by the caller after checking dependencies.
-     */
     public void unregisterPackage(String name, String version, String channel) throws IOException {
         lock.writeLock().lock();
         try {
             String key = name + "_" + version + "_" + channel;
-            PackageEntry entry = packages.get(key);
-            if (entry == null) {
+            if (!packages.containsKey(key)) {
                 throw new IllegalStateException("Package not installed: " + key);
             }
-            
-            // Save first (without this package), then update in-memory state
-            doSaveWithoutPackage(key);
-            
-            // Only update in-memory state after successful save
-            packages.remove(key);
-            
-            // Update file ownership (use full package ID)
-            for (FileEntry file : entry.files().values()) {
-                Set<String> owners = fileOwnership.get(file.path());
-                if (owners != null) {
-                    owners.remove(entry.id());
-                    if (owners.isEmpty()) {
-                        fileOwnership.remove(file.path());
-                    }
+            Map<String, PackageEntry> next = new LinkedHashMap<>();
+            for (PackageEntry installed : packages.values()) {
+                if (!installed.id().equals(key)) {
+                    next.put(installed.id(), installed);
                 }
             }
+            commitImageLocked(imageOfLocked(next.values()));
         } finally {
             lock.writeLock().unlock();
-        }
-    }
-    
-    /**
-     * Transfers file ownership from old packages to a new package.
-     * Used during force install to update ownership records.
-     */
-    public void transferFileOwnership(String filePath, String newPackageId) {
-        lock.writeLock().lock();
-        try {
-            Set<String> owners = fileOwnership.get(filePath);
-            if (owners != null) {
-                // Clear old owners and add new one
-                owners.clear();
-                owners.add(newPackageId);
-            }
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-    
-    /**
-     * Saves the database without a specific package.
-     */
-    private void doSaveWithoutPackage(String keyToRemove) throws IOException {
-        Path tempFile = Files.createTempFile(statusFile.getParent(), "status", ".tmp");
-        try {
-            List<PackageEntry> entries = packages.values().stream()
-                    .filter(e -> !e.id().equals(keyToRemove))
-                    .collect(Collectors.toCollection(ArrayList::new));
-            entries.sort(Comparator.comparing(PackageEntry::name)
-                    .thenComparing(e -> Version.parse(e.version()))
-                    .thenComparing(PackageEntry::channel));
-            
-            String content = ManifestParser.serialize(entries);
-            Files.writeString(tempFile, content);
-            
-            Files.move(tempFile, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            lastModified = Instant.now();
-        } catch (Exception e) {
-            Files.deleteIfExists(tempFile);
-            throw e;
         }
     }
 
-    /**
-     * Checks if a file is owned by any installed package.
-     */
     public boolean isFileOwned(String path) {
         lock.readLock().lock();
         try {
@@ -421,9 +408,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Gets the packages that own a file.
-     */
     public Set<String> getFileOwners(String path) {
         lock.readLock().lock();
         try {
@@ -434,9 +418,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Checks if removing a package would leave files orphaned (owned only by that package).
-     */
     public Map<String, Set<String>> checkOrphanedFiles(PackageEntry entry) {
         lock.readLock().lock();
         try {
@@ -453,11 +434,6 @@ public final class LocalPackageDatabase {
         }
     }
 
-    /**
-     * Gets packages that depend on the given package (reverse dependencies).
-     * Dependencies may be satisfied by the real package name or by a virtual
-     * name declared with {@code Provide}.
-     */
     public List<PackageEntry> getReverseDependencies(String packageName) {
         lock.readLock().lock();
         try {
@@ -502,63 +478,39 @@ public final class LocalPackageDatabase {
         return false;
     }
 
-    /**
-     * Verifies integrity of installed package files.
-     */
     public VerificationResult verifyPackage(PackageEntry entry, Path installRoot) {
         lock.readLock().lock();
         try {
             List<VerificationIssue> issues = new ArrayList<>();
-            
+
             for (FileEntry file : entry.files().values()) {
                 Path filePath = installRoot.resolve(file.path());
-                
+
                 if (!Files.exists(filePath)) {
                     issues.add(new VerificationIssue(file.path(), "MISSING", "File not found"));
                     continue;
                 }
-                
+
                 try {
                     long actualSize = Files.size(filePath);
                     if (actualSize != file.size()) {
-                        issues.add(new VerificationIssue(file.path(), "SIZE_MISMATCH", 
+                        issues.add(new VerificationIssue(file.path(), "SIZE_MISMATCH",
                                 "Expected " + file.size() + " bytes, got " + actualSize));
                     }
-                    
-                    String actualSha256 = computeSha256(filePath);
+
+                    String actualSha256 = IoSupport.sha256(filePath);
                     if (!actualSha256.equalsIgnoreCase(file.sha256())) {
-                        issues.add(new VerificationIssue(file.path(), "HASH_MISMATCH", 
+                        issues.add(new VerificationIssue(file.path(), "HASH_MISMATCH",
                                 "Expected " + file.sha256() + ", got " + actualSha256));
                     }
                 } catch (IOException e) {
                     issues.add(new VerificationIssue(file.path(), "READ_ERROR", e.getMessage()));
                 }
             }
-            
+
             return new VerificationResult(entry.name(), issues.isEmpty(), issues);
         } finally {
             lock.readLock().unlock();
-        }
-    }
-
-    private String computeSha256(Path file) throws IOException {
-        try {
-            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-            try (var is = Files.newInputStream(file)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = is.read(buffer)) > 0) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            byte[] hash = digest.digest();
-            StringBuilder hex = new StringBuilder();
-            for (byte b : hash) {
-                hex.append(String.format("%02x", b));
-            }
-            return hex.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IOException("SHA-256 not available", e);
         }
     }
 
@@ -568,6 +520,10 @@ public final class LocalPackageDatabase {
     public Path getListsDir() { return listsDir; }
     public Path getStatusFile() { return statusFile; }
     public Path getManagerDir() { return managerDir; }
+    public Path getJournalDir() { return journalDir; }
+    public Path getBackupDir() { return backupDir; }
+    public Path getTrashDir() { return trashDir; }
+    public Path getCacheDir() { return cacheDir; }
 
     public boolean isLoaded() { return loaded; }
 

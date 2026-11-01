@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -39,7 +40,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -49,12 +50,38 @@ class PackageInstallerTest {
             assertEquals(1, installed.size());
             assertEquals("test", installed.get(0).name());
             assertEquals("1.0.0", installed.get(0).version());
-            assertTrue(Files.exists(installRoot.resolve("test.jar")));
+            assertTrue(Files.exists(installRoot.resolve(
+                    "manager/library/packages/test/1.0.0/test.jar")));
         } catch (InstallException e) {
             System.err.println("InstallException: " + e.getMessage());
             e.printStackTrace();
             throw e;
         }
+    }
+
+    @Test
+    void install_sameVersionIsRejectedWithoutOverwritingTheInstalledJar() throws Exception {
+        Path zipPath = tempDir.resolve("reinstall-package.zip");
+        createValidZip(zipPath, "reinstall", "1.0.0", "stable", "reinstall.jar",
+                "original".getBytes());
+
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        installer.install(zipPath, false);
+        Path jar = installRoot.resolve(
+                "manager/library/packages/reinstall/1.0.0/reinstall.jar");
+        byte[] before = Files.readAllBytes(jar);
+
+        InstallException failure = assertThrows(InstallException.class,
+                () -> installer.install(zipPath, true));
+
+        assertTrue(failure.getMessage().contains("already installed"));
+        assertArrayEquals(before, Files.readAllBytes(jar));
+        assertEquals(1, db.getAllPackages().size());
     }
 
     @Test
@@ -71,7 +98,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -100,7 +127,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -127,7 +154,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -148,7 +175,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -165,18 +192,20 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
         installer.install(zipPath, false);
         
-        assertTrue(Files.exists(installRoot.resolve("test.jar")));
+        Path installedJar = installRoot.resolve(
+                "manager/library/packages/test/1.0.0/test.jar");
+        assertTrue(Files.exists(installedJar));
         assertTrue(db.isInstalled("test"));
         
         installer.remove("test", "1.0.0", "stable", false);
         
-        assertFalse(Files.exists(installRoot.resolve("test.jar")));
+        assertFalse(Files.exists(installedJar));
         assertFalse(db.isInstalled("test"));
     }
 
@@ -194,7 +223,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -211,12 +240,13 @@ class PackageInstallerTest {
     void install_forceOverwritesExistingFile() throws Exception {
         // Install first package
         Path zipPath1 = tempDir.resolve("pkg1.zip");
-        createValidZip(zipPath1, "pkg1", "1.0.0", "stable", "shared.jar", "v1".getBytes());
+        createValidZip(zipPath1, "pkg1", "1.0.0", "stable",
+                "manager/config/shared.yml", "v1".getBytes());
         
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
         
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
@@ -227,7 +257,8 @@ class PackageInstallerTest {
         
         // Try to install second package with same file (should fail without force)
         Path zipPath2 = tempDir.resolve("pkg2.zip");
-        createValidZip(zipPath2, "pkg2", "1.0.0", "stable", "shared.jar", "v2".getBytes());
+        createValidZip(zipPath2, "pkg2", "1.0.0", "stable",
+                "manager/config/shared.yml", "v2".getBytes());
         
         InstallException ex = assertThrows(InstallException.class, () -> 
             installer.install(zipPath2, false));
@@ -244,11 +275,159 @@ class PackageInstallerTest {
     }
 
     @Test
+    void installRejectsFilesInManagerControlDirectories() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path zip = tempDir.resolve("control-path.zip");
+        createValidZip(zip, "control-path", "1.0.0", "stable",
+                "manager/library/lists/evil.idx", "evil".getBytes());
+
+        assertThrows(InstallException.class, () -> installer.install(zip, false));
+        assertFalse(db.isInstalled("control-path"));
+        assertFalse(Files.exists(installRoot.resolve("manager/library/lists/evil.idx")));
+    }
+
+    @Test
+    void installRejectsJarsInManagerControlDirectories() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path zip = tempDir.resolve("control-jar.zip");
+        createValidZip(zip, "control-jar", "1.0.0", "stable",
+                "manager/library/backup/evil.jar", "evil".getBytes());
+
+        assertThrows(InstallException.class, () -> installer.install(zip, false));
+        assertFalse(db.isInstalled("control-jar"));
+        assertFalse(Files.exists(installRoot.resolve("manager/library/backup/evil.jar")));
+    }
+
+    @Test
+    void installRejectsChildrenOfTheStatusFile() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path zip = tempDir.resolve("status-child.zip");
+        createValidZip(zip, "status-child", "1.0.0", "stable",
+                "manager/library/status/evil.txt", "evil".getBytes());
+
+        assertThrows(InstallException.class, () -> installer.install(zip, false));
+        assertFalse(db.isInstalled("status-child"));
+        assertFalse(Files.exists(installRoot.resolve("manager/library/status/evil.txt")));
+    }
+
+    @Test
+    void installRejectsRuntimeStateRepositoryConfigAndUnmanagedLibraryFiles() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        List<String> controlPaths = List.of(
+                "manager/runtime/modules.status",
+                "manager/repo.yml",
+                "manager/library/unmanaged.txt");
+        for (int i = 0; i < controlPaths.size(); i++) {
+            String controlPath = controlPaths.get(i);
+            String name = "control-" + i;
+            Path zip = tempDir.resolve(name + ".zip");
+            createValidZip(zip, name, "1.0.0", "stable", controlPath, "evil".getBytes());
+
+            assertThrows(InstallException.class, () -> installer.install(zip, false));
+            assertFalse(db.isInstalled(name));
+            assertFalse(Files.exists(installRoot.resolve(controlPath)));
+        }
+    }
+
+    @Test
+    void installBatchRunsTheRuntimeBarrierBeforeMovingFiles() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path zip = tempDir.resolve("barrier.zip");
+        createValidZip(zip, "barrier", "1.0.0", "stable", "barrier.jar", "barrier".getBytes());
+        Path installedJar = installRoot.resolve(
+                "manager/library/packages/barrier/1.0.0/barrier.jar");
+        AtomicBoolean called = new AtomicBoolean();
+
+        installer.installBatch(List.of(zip), false, List.of(), () -> {
+            called.set(true);
+            assertFalse(db.isInstalled("barrier"));
+            assertFalse(Files.exists(installedJar),
+                    "the barrier must run before the file commit");
+        });
+
+        assertTrue(called.get());
+        assertTrue(db.isInstalled("barrier"));
+        assertTrue(Files.exists(installedJar));
+    }
+
+    @Test
+    void installBatchBarrierFailureLeavesTheStoreUntouched() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path zip = tempDir.resolve("barrier-failure.zip");
+        createValidZip(zip, "barrier-failure", "1.0.0", "stable",
+                "barrier-failure.jar", "barrier".getBytes());
+
+        assertThrows(InstallException.class, () -> installer.installBatch(
+                List.of(zip), false, List.of(), () -> {
+                    throw new IllegalStateException("runtime refused");
+                }));
+        assertFalse(db.isInstalled("barrier-failure"));
+        assertFalse(Files.exists(installRoot.resolve(
+                "manager/library/packages/barrier-failure/1.0.0/barrier-failure.jar")));
+    }
+
+    @Test
+    void forcedReplacementKeepsAFileReusedByTheNewPackage() throws Exception {
+        Path installRoot = tempDir.resolve("install");
+        Files.createDirectories(installRoot);
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
+        db.initialize();
+        PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
+
+        Path oldZip = tempDir.resolve("old-shared.zip");
+        createValidZip(oldZip, "old-shared", "1.0.0", "stable",
+                "manager/config/shared.yml", "old".getBytes());
+        installer.install(oldZip, false);
+        PackageEntry old = db.getPackage("old-shared", "1.0.0", "stable").orElseThrow();
+
+        Path newZip = tempDir.resolve("new-shared.zip");
+        createValidZip(newZip, "new-shared", "1.0.0", "stable",
+                "manager/config/shared.yml", "new".getBytes());
+        installer.installBatch(List.of(newZip), false, List.of(old));
+
+        assertEquals("new", Files.readString(
+                installRoot.resolve("manager/config/shared.yml")),
+                "the new owner must survive the old package cleanup");
+        assertTrue(db.isInstalled("new-shared", "1.0.0", "stable"));
+        assertFalse(db.isInstalled("old-shared", "1.0.0", "stable"));
+    }
+
+    @Test
     void install_packageExcludeConflict_throws() throws Exception {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
 
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
@@ -272,7 +451,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
 
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
@@ -297,7 +476,7 @@ class PackageInstallerTest {
         Path installRoot = tempDir.resolve("install");
         Files.createDirectories(installRoot);
 
-        LocalPackageDatabase db = new LocalPackageDatabase(tempDir.resolve("manager"));
+        LocalPackageDatabase db = new LocalPackageDatabase(installRoot.resolve("manager"));
         db.initialize();
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
@@ -318,6 +497,7 @@ class PackageInstallerTest {
                                        String fileName, byte[] fileContent,
                                        String dependencies, String exclude, String provide) throws Exception {
         String fileSha256 = computeSha256(fileContent);
+        String storedPath = storedPath(name, version, fileName);
         StringBuilder manifest = new StringBuilder();
         manifest.append("Name: ").append(name).append("\n")
                 .append("Version: ").append(version).append("\n")
@@ -337,7 +517,7 @@ class PackageInstallerTest {
                 .append("SHA256: \n")
                 .append("Size: 0\n")
                 .append("Files: \n")
-                .append("  ").append(fileName).append("\t")
+                .append("  ").append(storedPath).append("\t")
                 .append(fileContent.length).append("\t")
                 .append(fileSha256).append("\t")
                 .append(name);
@@ -348,7 +528,7 @@ class PackageInstallerTest {
             zos.write(manifest.toString().getBytes());
             zos.closeEntry();
 
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
@@ -375,9 +555,10 @@ class PackageInstallerTest {
                                               String fileName, byte[] fileContent, String fileSha256,
                                               String dependency) throws Exception {
         // Use empty SHA256 and Size: 0 in manifest to skip validation
+        String storedPath = storedPath(name, version, fileName);
         String finalManifest = String.format(
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: %s\nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: \nSize: 0\nFiles: \n  %s\t%d\t%s\t%s",
-            name, version, channel, dependency, fileName, fileContent.length, fileSha256, name
+            name, version, channel, dependency, storedPath, fileContent.length, fileSha256, name
         );
         
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
@@ -386,7 +567,7 @@ class PackageInstallerTest {
             zos.write(finalManifest.getBytes());
             zos.closeEntry();
             
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
@@ -396,9 +577,10 @@ class PackageInstallerTest {
     private void createValidZipFull(Path zipPath, String name, String version, String channel,
                                     String fileName, byte[] fileContent, String fileSha256, String zipSha256Override) throws Exception {
         // Use empty SHA256 and Size: 0 in manifest to skip validation
+        String storedPath = storedPath(name, version, fileName);
         String finalManifest = String.format(
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: \nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: \nSize: 0\nFiles: \n  %s\t%d\t%s\t%s",
-            name, version, channel, fileName, fileContent.length, fileSha256, name
+            name, version, channel, storedPath, fileContent.length, fileSha256, name
         );
         
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
@@ -407,7 +589,7 @@ class PackageInstallerTest {
             zos.write(finalManifest.getBytes());
             zos.closeEntry();
             
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
@@ -418,11 +600,12 @@ class PackageInstallerTest {
                                             String fileName, byte[] fileContent, String fileSha256) throws Exception {
         // Manifest with duplicate file entry (same path twice)
         // Use empty SHA256 and Size: 0 to skip ZIP validation
+        String storedPath = storedPath(name, version, fileName);
         String finalManifest = String.format(
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: \nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: \nSize: 0\nFiles: \n  %s\t%d\t%s\t%s\n  %s\t%d\t%s\t%s",
             name, version, channel,
-            fileName, fileContent.length, fileSha256, name,
-            fileName, fileContent.length, fileSha256, name
+            storedPath, fileContent.length, fileSha256, name,
+            storedPath, fileContent.length, fileSha256, name
         );
         
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
@@ -432,7 +615,7 @@ class PackageInstallerTest {
             zos.closeEntry();
             
             // Write file once (the manifest says it twice)
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
@@ -443,11 +626,12 @@ class PackageInstallerTest {
                                                String fileName, byte[] fileContent, String fileSha256) throws Exception {
         // Manifest with two packages having the same name
         // Use empty SHA256 and Size: 0 to skip ZIP validation
+        String storedPath = storedPath(name, version, fileName);
         String finalManifest = String.format(
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: \nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: \nSize: 0\nFiles: \n  %s\t%d\t%s\t%s\n\n" +
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: \nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: \nSize: 0\nFiles: \n  %s\t%d\t%s\t%s",
-            name, version, channel, fileName, fileContent.length, fileSha256, name,
-            name, version, channel, fileName, fileContent.length, fileSha256, name
+            name, version, channel, storedPath, fileContent.length, fileSha256, name,
+            name, version, channel, storedPath, fileContent.length, fileSha256, name
         );
         
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
@@ -456,7 +640,7 @@ class PackageInstallerTest {
             zos.write(finalManifest.getBytes());
             zos.closeEntry();
             
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
@@ -466,9 +650,10 @@ class PackageInstallerTest {
     private void createValidZipWithCorruptedZipSha256(Path zipPath, String name, String version, String channel,
                                                     String fileName, byte[] fileContent, String fileSha256, String wrongZipSha256) throws Exception {
         // Create ZIP with wrong ZIP SHA256 in manifest (Size: 0 to skip size validation)
+        String storedPath = storedPath(name, version, fileName);
         String finalManifest = String.format(
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: \nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: %s\nSize: 0\nFiles: \n  %s\t%d\t%s\t%s",
-            name, version, channel, wrongZipSha256, fileName, fileContent.length, fileSha256, name
+            name, version, channel, wrongZipSha256, storedPath, fileContent.length, fileSha256, name
         );
         
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
@@ -477,7 +662,7 @@ class PackageInstallerTest {
             zos.write(finalManifest.getBytes());
             zos.closeEntry();
             
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
@@ -488,9 +673,10 @@ class PackageInstallerTest {
                                                        String fileName, byte[] fileContent, String fileSha256, String wrongFileSha256) throws Exception {
         // Create ZIP with correct ZIP SHA256 (empty to skip) but wrong file SHA256 in manifest
         // Size: 0 to skip size validation
+        String storedPath = storedPath(name, version, fileName);
         String finalManifest = String.format(
             "Name: %s\nVersion: %s\nChannel: %s\nType: PACKAGE\nDependencies: \nArch: none\nPlatform: common\nURL: \nOS: none\nSHA256: \nSize: 0\nFiles: \n  %s\t%d\t%s\t%s",
-            name, version, channel, fileName, fileContent.length, wrongFileSha256, name
+            name, version, channel, storedPath, fileContent.length, wrongFileSha256, name
         );
         
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
@@ -499,11 +685,18 @@ class PackageInstallerTest {
             zos.write(finalManifest.getBytes());
             zos.closeEntry();
             
-            ZipEntry fileEntry = new ZipEntry(fileName);
+            ZipEntry fileEntry = new ZipEntry(storedPath);
             zos.putNextEntry(fileEntry);
             zos.write(fileContent);
             zos.closeEntry();
         }
+    }
+
+    private static String storedPath(String name, String version, String fileName) {
+        if (fileName.startsWith("manager/") || fileName.startsWith("config/")) {
+            return fileName;
+        }
+        return "manager/library/packages/" + name + "/" + version + "/" + fileName;
     }
 
     private String computeSha256(byte[] content) throws Exception {

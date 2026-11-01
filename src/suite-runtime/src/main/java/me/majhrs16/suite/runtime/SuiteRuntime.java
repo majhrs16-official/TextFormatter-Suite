@@ -118,7 +118,9 @@ public final class SuiteRuntime implements AutoCloseable {
 
     /**
      * Initializes the package manager, creates the module host and activates
-     * every module already present in {@code library/packages}.
+     * every package recorded in {@code library/status}. Files without a status
+     * entry are not executable: the status database is the authoritative
+     * installation pointer.
      *
      * @throws IOException if the manager cannot be initialized
      */
@@ -154,9 +156,7 @@ public final class SuiteRuntime implements AutoCloseable {
         SuiteCommands.register(commands, this);
 
         List<PackageEntry> installed = manager.packageList();
-        List<ActivationResult> results = installed.isEmpty()
-                ? moduleHost.loadInstalled()
-                : packageRuntime.activate(installed);
+        List<ActivationResult> results = packageRuntime.activate(installed);
         for (ActivationResult result : results) {
             if (!result.isSuccess()) {
                 logger.warn("Module " + result.moduleId() + " was not activated at startup: "
@@ -466,6 +466,17 @@ public final class SuiteRuntime implements AutoCloseable {
         AptInstaller.InstallResult result = packageRuntime.upgrade();
         rebuildPipeline();
         return result;
+    }
+
+    /**
+     * Cleans only the stage-1 download cache. Installed files, status, journal
+     * and trash are untouched.
+     *
+     * @throws IOException if the cache cannot be cleaned
+     */
+    public void cacheClean() throws IOException {
+        ensureStarted();
+        manager.cacheClean();
     }
 
     /**

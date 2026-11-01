@@ -83,8 +83,8 @@ TextFormatter Suite
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
 | `presets` | Preset catalog, YAML import/export and canonical file persistence (no execution engine) | `core-api`, `snakeyaml` | `suite-runtime` (paquete `PACKAGE`), `host` (`HostPresetApplier`) |
 | `manager-spi` | Package metadata, manifests, versions and repository config | `core-api` | `manager-core`, `manager-apt`, `suite-runtime`, hosts |
-| `manager-core` | Package installer, local package database, transaction log | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `suite-runtime` |
-| `manager-apt` | Repository manager, dependency resolver, APT installer/facade and two-phase upgrade hook | `core-api`, `manager-spi`, `manager-core` | `suite-runtime` |
+| `manager-core` | Package installer, local package database, durable journal, versioned layout | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `suite-runtime` |
+| `manager-apt` | Repository manager, dependency resolver, stage-1 cache, batch installer/facade | `core-api`, `manager-spi`, `manager-core` | `suite-runtime` |
 | `extension-api` | Extension system API (Extension, ExtensionContext, ExtensionManager) | `core-api` | `example-extension`, `spigot-host`, `fabric-host` |
 | `inworld` | Neutral in-world domain (signs, containers, books, WORLD/RADIUS, click/hover); packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotInWorldListener`), `suite-runtime` |
 | `performance` | Hotspot detection, profiling, cache/memory optimization | `core-api` | `spigot-host`, `fabric-host` |
@@ -128,8 +128,8 @@ TextFormatter Suite
 | `observability` | Metrics & health | Prometheus, health checks, endpoints | `Observability`, `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint` | `ObservabilityModule` | [observability/README.md](observability/README.md) |
 | `presets` | Preset catalog | YAML preset import/export, built-in definitions and canonical file persistence | `PresetManager`, `Preset`, `FilePresetTarget`, `PresetsActivator`, `PresetsModule` | `PresetsActivator` | [presets/README.md](presets/README.md) |
 | `manager-spi` | Manager SPI | Package metadata, manifest/version parsing, repository config | `PackageEntry`, `ManifestParser`, `Version`, `PlatformCompatibility` | — | [manager-spi/README.md](manager-spi/README.md) |
-| `manager-core` | Package installer | Local ZIP installation, package database, transactions | `PackageInstaller`, `LocalPackageDatabase`, `TransactionLog` | — | [manager-core/README.md](manager-core/README.md) |
-| `manager-apt` | Repository/APT layer | Repositories, dependency resolution, installer facade, two-phase upgrades | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller`, `PackageUpgradeListener` | — | [manager-apt/README.md](manager-apt/README.md) |
+| `manager-core` | Package installer | Local ZIP installation, package database, durable journal, versioned layout | `PackageInstaller`, `LocalPackageDatabase`, `PackageJournal`, `PackageLayout` | — | [manager-core/README.md](manager-core/README.md) |
+| `manager-apt` | Repository/APT layer | Repositories, dependency resolution, download cache, batch commit | `ManagerFacade`, `RepositoryManager`, `DependencyResolver`, `AptInstaller`, `PackageCache` | — | [manager-apt/README.md](manager-apt/README.md) |
 | `extension-api` | Extension system | Extension lifecycle & context | `Extension`, `ExtensionContext`, `ExtensionManager` | — | [extension-api/README.md](extension-api/README.md) |
 | `spigot-host` | Bukkit/Paper plugin | Thin platform adapter | `TextFormatterSuitePlugin`, `SpigotPlatformPorts`, `SpigotActorDirectory`, `SpigotChatDelivery` | `TextFormatterSuitePlugin.onEnable()` | [spigot-host/README.md](spigot-host/README.md) |
 | `fabric-host` | Fabric mod | Thin platform adapter | `TextFormatterSuiteMod`, `FabricPlatformPorts`, `FabricActorDirectory`, `FabricChatDelivery` | `TextFormatterSuiteMod.onInitialize()` | [fabric-host/README.md](fabric-host/README.md) |

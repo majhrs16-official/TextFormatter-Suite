@@ -37,6 +37,7 @@ final class SuiteCommands {
         commands.register(remove(runtime));
         commands.register(upgrade(runtime));
         commands.register(repository(runtime));
+        commands.register(cache(runtime));
     }
 
     private static CommandSpec help(CommandRegistry commands) {
@@ -223,6 +224,22 @@ final class SuiteCommands {
                 .description("Actualiza paquetes desde repositorios")
                 .permission(PERMISSION)
                 .handler(context -> reportInstall(context, runtime.upgrade()))
+                .build();
+    }
+
+    private static CommandSpec cache(SuiteRuntime runtime) {
+        return CommandSpec.builder("cache")
+                .description("Gestiona la caché de descargas")
+                .permission(PERMISSION)
+                .usage("<clean>")
+                .child(CommandSpec.builder("clean")
+                        .description("Borra descargas, parciales y manifiestos de operaciones")
+                        .permission(PERMISSION)
+                        .handler(context -> {
+                            runtime.cacheClean();
+                            context.reply("Caché de descargas limpiada.");
+                        })
+                        .build())
                 .build();
     }
 

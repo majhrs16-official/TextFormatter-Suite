@@ -507,7 +507,8 @@ la corrección de un bug de producción.
 **Decisión.** Eliminar SpEL de todo el repositorio. La única superficie de políticas ejecutables es la
 VM de iFlow: programas binarios `.flow` cargados por `VmConfigLoader` y ejecutados por
 `VmPolicyEngine`/`VmInterpreter`, con servicios `HOST` y *fuel budget*. Las plantillas de
-`textformatter` quedan limitadas a placeholders, MiniMessage y traducción `<tr>`.
+`textformatter` quedan limitadas a placeholders, MiniMessage, traducción `<tr>` y la etiqueta
+`<regex>` definida en ADR-028.
 
 Cambios aplicados:
 
@@ -1107,11 +1108,12 @@ paquete no fuera la única vía de composición.
 
 ---
 
-## Decisión 2026-10-31 — hot upgrade transaccional y descarga real (ADR-026)
+## Decisión 2026-10-31 — hot upgrade, fugas y límites de dependencias (ADR-026)
 
-**Estado:** Aceptada e implementada (F7 cerrado). Sustituye la secuencia
-optimista de `PLAN.md` que arrancaba la versión nueva antes de detener la
-anterior.
+**Estado:** Parcialmente sustituida por ADR-027. Se mantienen las reglas de
+detección de fugas, dependencias compartidas, paquetes multi-JAR y retirada de
+APIs legacy. La secuencia de activación, el contrato manager-runtime y la
+política de rollback pasan a ADR-027.
 
 **Contexto.** `ModuleHost` sabía activar y desactivar, pero no sustituir una
 versión activa. El manager instalaba la versión nueva y borraba la anterior
@@ -1120,74 +1122,399 @@ antes de que el runtime pudiera confirmar el arranque; el empaquetado usaba
 Además, una desactivación podía cerrar el classloader y dejar hilos, recursos,
 listeners o registros apuntando a clases muertas sin que el estado lo reflejara.
 
-**Decisión.**
+**Decisión vigente.**
 
-1. El empaquetado usa `library/packages/<id>-<version>.jar` y
-   `library/dependencies/<id>-<version>.jar`. La versión anterior permanece en
-   disco hasta que el runtime confirma el upgrade.
-2. `ModuleHost.upgrade(id, newJar, dependencyJars)` prepara el classloader de la
-   versión nueva, detiene la anterior, arranca la nueva y, si el arranque falla,
-   vuelve a preparar y arrancar el JAR anterior. No arranca las dos versiones a
-   la vez: comparten `moduleId`, namespaces de servicios/configuración, rutas de
-   comandos y grupo de hilos, así que la coexistencia colisionaría en lugar de
-   demostrar aislamiento.
-3. El manager invoca `PackageUpgradeListener.beforeRemovingOld(old, new)` antes
-   de borrar la versión anterior. El runtime activa las nuevas versiones dentro
-   de ese callback y devuelve `allow()`, `rollback(...)` o `keepBoth(...)`.
-4. El callback es transaccional dentro de su lote. `PackageRuntime` registra
-   cada módulo que ya actualizó; si una versión posterior falla, recorre ese
-   registro en orden inverso, vuelve a preparar y arrancar el JAR anterior y
-   verifica que el módulo quedó `ACTIVE`. Solo cuando toda la compensación es
-   limpia devuelve `rollback(...)` y permite al manager borrar los archivos
-   nuevos.
-5. Si la compensación falla, no se finge un rollback: se devuelve
-   `keepBoth(...)`, el manager conserva ambas versiones en disco, los módulos
-   afectados se marcan `RESTART_REQUIRED` y el operador recibe la causa. Los
-   archivos nuevos no se borran porque pueden seguir en uso; los antiguos
-   tampoco, porque son la única vía de recuperación. La misma transacción se
-   aplica a la instalación local de un ZIP con varios paquetes, no solo al
-   callback de `repo upgrade`.
-6. `PackageRuntime` devuelve `PackageChange`/`UpgradeResult` con
-   `success`, `state`, `upgraded` y `rolledBack` separados. Un upgrade fallido
-   con rollback puede terminar con la versión anterior `ACTIVE` sin mentir
-   diciendo que el cambio se aplicó.
-7. La desactivación valida cuatro fugas antes de declarar `INSTALLED`:
+1. Las rutas de instalación son versionadas por directorio:
+   `library/packages/<id>/<version>/` y
+   `library/dependencies/<id>/<version>/`, con la versión instalada referenciada
+   desde `library/status`. Ningún JAR activo se sobrescribe durante la
+   preparación. La política de commit, journal, backup y rollback de la
+   operación completa vive en ADR-027.
+2. La desactivación valida cuatro fugas antes de declarar `INSTALLED`:
    fallo de `ResourceTracker`, registros de owner restantes, classloader no
    cerrado e hilos vivos en el `ThreadGroup` del módulo. Cualquier fuga produce
    `RESTART_REQUIRED`. Los hilos de `start`/`stop` se ejecutan dentro del grupo
    del módulo para que la detección sea posible. Las tareas del scheduler que
    siguen ejecutándose también cuentan como owner vivo.
-8. Un upgrade de una dependencia compartida se rechaza si algún módulo activo
+3. Un upgrade de una dependencia compartida se rechaza si algún módulo activo
    la usa (directa o transitivamente); el mensaje exige reiniciar. Borrar el JAR
    anterior mientras un classloader activo puede cargarlo después es peor que
-   bloquear el upgrade.
-9. Un paquete `PACKAGE` contiene uno o más JARs de módulo. El paquete no
+   bloquear el upgrade. La comprobación ocurre en la fase de preparación, antes
+   de tocar `library/packages`, `library/dependencies` o `library/status`.
+4. Un paquete `PACKAGE` contiene uno o más JARs de módulo. El paquete no
    identifica al módulo: cada JAR declara su `moduleId` en
    `ModuleActivator.descriptor()` y el runtime mapea activación, upgrade y
    retirada por ese id. Los ids deben ser únicos dentro del paquete; cero JARs
    o ids duplicados son un error explícito. La activación arranca todos los
-   JARs y el upgrade reemplaza todos los módulos activos del paquete en una
-   sola transacción, compensando los ya actualizados si uno falla. Las
-   librerías adicionales van en paquetes `DEPENDENCY`.
-10. `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
-    `ModuleDescriptor` y `Environment` de `manager-spi`, junto con
-    `ManagerFacade.discoverAll()`/`getLoadedModules()`, se eliminan. El
-    descubrimiento por classpath ya no es una vía de producción.
+   JARs y el upgrade los sustituye en una sola operación de runtime. Un fallo de
+   la etapa de runtime no restaura la versión anterior; detiene los módulos ya
+   arrancados en ese intento y conserva la instalación (ADR-027). Las librerías
+   adicionales van en paquetes `DEPENDENCY`.
+5. `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
+   `ModuleDescriptor` y `Environment` de `manager-spi`, junto con
+   `ManagerFacade.discoverAll()`/`getLoadedModules()`, se eliminan. El
+   descubrimiento por classpath ya no es una vía de producción.
 
 **Consecuencias.**
 
 - El manager conserva la propiedad de los hechos de instalación; el runtime
   conserva la propiedad del estado vivo. Ninguno simula el estado del otro.
-- Un upgrade fallido deja el sistema en una de tres situaciones verificables:
-  versión anterior activa y nueva eliminada; `RESTART_REQUIRED` con la anterior
-  activa si la limpieza de la nueva falló; o `RESTART_REQUIRED` con ambas
-  versiones conservadas si la compensación no pudo restaurar un módulo previo.
-- La atomicidad no depende de que el lote contenga un solo paquete. Si un lote
-  con varios módulos falla a mitad, los módulos ya actualizados se compensan
-  antes de autorizar el borrado de archivos nuevos.
+- Una operación puede fallar en tres puntos con efectos distintos: preparación
+  (sin mutación; caché reutilizable), commit de archivos (se restaura la
+  instalación anterior) y runtime (la instalación nueva queda registrada y no
+  hay rollback). ADR-027 fija el contrato.
 - `manager-apt` deja de depender de `kernel`.
 - Las dependencias compartidas no se actualizan en caliente mientras estén en
   uso; el reinicio es la vía segura.
 - La regla de evidencia de C13 aplica a este ADR: no se puede asumir que un
   paquete tendrá un JAR, que una dependencia no estará en uso ni que una
   compensación funcionará. Cada una se valida y se prueba.
+
+---
+
+## Decisión 2026-10-31 — instalación por etapas y semántica de fallo (ADR-027)
+
+**Estado:** Aceptada e implementada. Sustituye la secuencia de
+activación/rollback de ADR-026 y retira `keepBoth` como mecanismo de
+recuperación automática. El código ya aplica las tres etapas: caché
+content-addressed, commit con journal durable y activación separada.
+
+**Contexto.** El flujo anterior mezclaba red, commit de archivos y arranque:
+descargaba e instalaba paquete por paquete y activaba cada módulo dentro del
+callback del manager. Un fallo de arranque podía disparar compensación de
+archivos y reactivación de versiones anteriores. Eso hace que el resultado
+dependa de cuántos paquetes ya se habían instalado y de si el rollback del
+runtime era verificable. El usuario fija un pipeline determinista: primero se
+completa la adquisición, después el commit de archivos y solo entonces se
+arranca en orden jerárquico. La única reversión automática es la del commit de
+archivos; un fallo de arranque no deshace una instalación ya desplegada.
+
+**Decisión.**
+
+### 1. Etapa 1 — Adquisición independiente
+
+Antes de modificar cualquier ruta de instalación, el manager construye un plan
+completo e inmutable con:
+
+- paquetes principales y dependencias transitivas;
+- versiones resueltas y conflictos `Exclude`/`Provide`;
+- plataforma, arquitectura y capacidades;
+- hashes SHA-256, tamaños y metadatos de cada artefacto;
+- orden jerárquico de instalación y activación.
+
+Para instalar o actualizar, todos los ZIP y dependencias se descargan y
+verifican en caché antes de tocar `library/packages`, `library/dependencies` o
+`library/status`. La caché es contenido-direccionada:
+
+```text
+library/cache/downloads/<sha256>/<archivo>.zip
+library/cache/downloads/<sha256>/<archivo>.zip.part
+library/cache/operations/<operationId>.json
+```
+
+Cada artefacto tiene un estado explícito `PENDING` o `COMPLETE`. Solo es
+`COMPLETE` cuando el archivo final existe, su tamaño coincide y su SHA-256 se
+verificó. Un `.part` nunca se reutiliza como artefacto válido. Reanudar significa
+reutilizar los `COMPLETE` y descargar únicamente los `PENDING`; no repetir todo
+el proceso. El comando `/<root> cache clean` borra descargas, parciales y
+manifiestos de operaciones, pero no toca paquetes instalados,
+`library/status`, el journal ni `library/trash`. La raíz `<root>` es la
+configurada en `commands.yml`.
+
+La desinstalación no descarga nada. Su etapa 1 resuelve el cierre de
+dependencias inverso y valida que ningún módulo restante dependa de lo retirado.
+Si falla la etapa 1, la instalación no cambia y la caché permite reanudar o
+limpiar.
+
+### 2. Etapa 2 — Commit de archivos con journal duradero
+
+La etapa 2 aplica **todos** los cambios del plan en una sola transacción, no
+paquete por paquete. Antes de la primera mutación escribe un journal durable en
+`library/journal/<operationId>.log` con:
+
+- instantánea del `library/status` anterior;
+- archivos preparados, creados, reemplazados y retirados;
+- versiones y directorios anteriores;
+- operaciones completadas y pendientes de revertir;
+- acciones de rollback por operación.
+
+El journal se escribe en modo append-only, se sincroniza a disco (`fsync`) y se
+trata como la fuente de recuperación ante excepciones, `kill -9`, corte de
+energía o reinicio abrupto del equipo. Los archivos se mueven con rename atómico
+dentro del mismo sistema de archivos y se sincroniza el directorio padre. El
+nuevo `library/status` se escribe en un temporal, se sincroniza y se publica con
+rename atómico; **ese rename es el punto de commit**. Antes del punto de commit,
+la recuperación revierte todas las operaciones registradas y restaura el estado
+anterior. Después del punto de commit, la recuperación completa la limpieza y
+nunca revierte la instalación. El runtime no arranca hasta que el journal se ha
+recuperado y la etapa 2 está confirmada.
+
+Los archivos de paquetes viven en directorios versionados; la versión nueva no
+sobrescribe los archivos de la versión activa. Instalar la misma versión ya
+presente se rechaza: para repararla hay que retirarla primero. Así nunca se
+sobrescribe un JAR que un `ClassLoader` activo todavía referencia.
+`library/status` guarda la referencia persistente a la versión instalada y es el
+único puntero autoritativo.
+Los archivos no versionados (por ejemplo, configuración reemplazada) se respaldan
+en `library/backup/<operationId>/` antes de sustituirlos. Si falla cualquier
+paso, se restaura el journal completo: archivos anteriores, archivos nuevos
+retirados, `library/status` anterior y directorios de versión. La caché de
+descargas no se borra.
+
+En una desinstalación, la etapa 2 empieza con una **barrera de runtime**:
+desactiva los módulos afectados en orden inverso antes de mover sus archivos. Si
+la desactivación falla o deja fugas, se aborta antes de tocar archivos y se
+marca `RESTART_REQUIRED`; no se borra nada. Si la desactivación es limpia, mueve
+los archivos propios a `library/trash/<operationId>/`, actualiza
+`library/status` y confirma el journal. Si el commit de archivos falla después
+de desactivar, restaura los archivos y reactiva las versiones anteriores; si esa
+reactivación no puede verificarse, conserva los archivos restaurados y marca
+`RESTART_REQUIRED`. Un reemplazo por `Exclude` usa la misma barrera: la etapa 2
+desactiva los paquetes que el plan retira antes de mover sus archivos y la
+etapa 3 solo activa los paquetes nuevos. Las sobrecargas sin barrera de runtime
+fallan explícitamente cuando el plan requiere reemplazos; no existe una ruta
+que mueva JARs de paquetes activos.
+
+La etapa 2 es el **único rollback automático** del manager. Un fallo en esta
+etapa restaura íntegramente la instalación anterior, incluido el inventario
+persistente.
+
+### 3. Etapa 3 — Activación y recuperación, sin rollback de instalación
+
+Solo después del commit de archivos, el runtime aplica el ciclo de vida:
+
+- instalar/actualizar: detener las versiones anteriores en orden inverso y
+  arrancar los módulos nuevos en orden jerárquico;
+- desinstalar: limpiar el estado runtime del paquete. La desactivación efectiva
+  y la liberación de classloaders, registros y recursos ya ocurrieron en la
+  barrera de la etapa 2; la etapa 3 no muta archivos ni retira dependencias
+  huérfanas.
+
+Antes del primer `start()` se persiste el estado `ACTIVATION_PENDING` en
+`runtime/modules.status`. Si el proceso cae durante la activación, el arranque
+siguiente vuelve a activar los paquetes instalados desde `library/status`; no
+asume que los módulos están activos ni revierte los archivos.
+
+El orden es el orden topológico de dependencias declarado por los paquetes y,
+dentro de un paquete, el orden de capacidades `requires`/`provides` de sus
+módulos. Las dependencias se arrancan antes que sus consumidores. Los empates se
+resuelven por nombre para que el orden sea estable. La desinstalación recorre el
+orden inverso.
+
+Si falla el arranque de un módulo:
+
+1. Se detienen, en orden inverso, los módulos que ya se habían arrancado en este
+   intento de activación. Esto es limpieza del runtime, no rollback de la
+   instalación.
+2. No se restauran archivos, `library/status` ni la versión anterior. Los
+   archivos nuevos permanecen instalados.
+3. El paquete queda `ACTIVATION_FAILED`; el módulo culpable queda `FAILED` y los
+   módulos detenidos vuelven a `INSTALLED`. Si la detención de limpieza deja
+   hilos, recursos o registros vivos, se marca `RESTART_REQUIRED`.
+4. Si la versión anterior ya está en `RESTART_REQUIRED`, no se arranca la nueva
+   versión: el paquete permanece en `RESTART_REQUIRED` y la instalación
+   confirmada no se revierte.
+5. El resultado incluye la etapa fallida (`RUNTIME`), el `moduleId` y la causa.
+   La activación puede reintentarse sin reinstalar.
+
+Estados persistentes de instalación/activación:
+
+| Estado | Significado |
+|---|---|
+| `INSTALLED` | Archivos e inventario confirmados; activación no iniciada o detenida limpiamente. |
+| `ACTIVATION_PENDING` | Activación iniciada y aún no confirmada; el arranque debe reanudarla. |
+| `ACTIVE` | Todos los módulos esperados están activos. |
+| `ACTIVATION_FAILED` | La instalación está confirmada, pero al menos un módulo no arrancó; se permite reintentar. |
+| `RESTART_REQUIRED` | La limpieza del runtime no pudo verificarse; hace falta reiniciar. |
+
+Un módulo puede quedar `FAILED`; al retirar un paquete se elimina su entrada
+`package:<nombre>` en vez de persistir `REMOVED`.
+
+**Invariante:** una instalación puede estar correctamente instalada sin estar
+correctamente activada. `library/status` registra la instalación; el estado de
+runtime registra la activación. El manager no convierte un fallo de activación
+en un fallo de instalación ni oculta la diferencia con un rollback destructivo.
+La etapa 3 solo actualiza estado de runtime; no modifica `library/status` ni el
+sistema de archivos.
+
+### 4. Desinstalación: coordinación explícita con el runtime
+
+La desinstalación sigue las mismas tres etapas, con una adaptación obligatoria:
+no se puede retirar un JAR que un classloader activo todavía tiene abierto. Por
+eso la desactivación efectiva se ejecuta como barrera al **inicio de la etapa
+2**, antes de mover archivos, y la etapa 3 solo finaliza y verifica esa
+desactivación. No se invierte el orden en silencio ni se borran archivos con
+módulos activos.
+
+| Operación | Etapa 1 | Etapa 2 | Etapa 3 |
+|---|---|---|---|
+| `install` | resolver, descargar y verificar | commit de archivos y `status` | arrancar en orden |
+| `upgrade` | resolver, descargar y verificar | commit de la versión nueva y puntero | detener anterior y arrancar nueva |
+| `uninstall` | validar plan de retirada | detener módulos y retirar archivos/`status` | finalizar estado runtime (sin mutar archivos) |
+
+Si falla la etapa 3 de una desinstalación, los archivos ya retirados y el
+inventario ya actualizado no se revierten; se marca `RESTART_REQUIRED` si quedan
+referencias vivas. La etapa 3 no retira dependencias huérfanas: cuando
+`autoRemove` está activo, la etapa 2 las incluye en la misma transacción.
+`library/trash` conserva los archivos retirados para el rollback del journal
+antes del commit; después del commit solo sirve para recuperación manual, nunca
+para rollback automático.
+
+### 5. Layout versionado por paquete
+
+El layout objetivo es:
+
+```text
+manager/library/
+├── packages/
+│   └── <packageId>/
+│       ├── <version>/
+│       │   ├── <module>.jar
+│       │   └── ...
+│       └── <versionAnterior>/
+├── dependencies/
+│   └── <dependencyId>/
+│       └── <version>/
+├── status
+├── cache/
+│   ├── downloads/<sha256>/
+│   └── operations/<operationId>.json
+├── journal/<operationId>.log
+├── backup/<operationId>/
+├── trash/<operationId>/
+└── tmp/<operationId>/
+```
+
+`library/status` relaciona cada paquete con su versión instalada y con los
+archivos y hashes de esa versión. No se usan enlaces simbólicos como puntero
+autoritativo. Una versión anterior permanece en disco mientras exista una
+referencia de runtime; no se borra durante el commit de la instalación. Un fallo
+de activación no autoriza a borrar la versión anterior, pero tampoco la reactiva
+automáticamente.
+
+### 6. Contrato manager-runtime y resultados
+
+La etapa 3 se invoca mediante un contrato post-commit que recibe el plan ya
+instalado y devuelve un resultado por módulo. No puede vetar la etapa 2, ordenar
+el borrado de archivos ni restaurar versiones anteriores.
+`PackageUpgradeListener` con `allow()`, `rollback(...)` y `keepBoth(...)` se
+retira; `keepBoth` deja de existir como estado de recuperación automática.
+
+`InstallResult` debe distinguir:
+
+- `installed`: el commit de archivos y `library/status` se completaron;
+- `activation`: `ACTIVE`, `ACTIVATION_FAILED`, `ACTIVATION_PENDING` o
+  `RESTART_REQUIRED`;
+- `failedStage`: `PREPARE`, `COMMIT` o `RUNTIME`;
+- `moduleId` y causa cuando el fallo es de runtime.
+
+Un fallo de runtime no puede reportarse como “no instalado”. Un fallo de
+instalación no puede reportarse como “módulo fallido”.
+
+### 7. Validaciones de la etapa 1
+
+Un ciclo de dependencias, un proveedor faltante, un checksum inválido, un
+conflicto de plataforma, un artefacto fuera de la caché o una dependencia
+compartida en uso se detectan en la etapa 1. Si no se puede determinar un orden
+de arranque estable, la operación falla antes de mutar archivos. La caché se
+verifica por SHA-256 antes de reutilizar cualquier artefacto; la limpieza no
+sigue enlaces simbólicos y nunca acepta rutas fuera de `library/cache`,
+`library/tmp`, `library/backup` o `library/trash`.
+
+**Consecuencias.**
+
+- La etapa 2 es el único rollback automático. Un fallo de etapa 3 deja una
+  instalación nueva committed, con arranque detenido o parcial; no se deshace.
+  Esto es deliberado: deshacer una instalación que ya sobrescribió el sistema es
+  más peligroso que dejar un estado explícito y recuperable.
+- Los estados `INSTALLED`, `ACTIVATION_PENDING`, `ACTIVE`,
+  `ACTIVATION_FAILED` y `RESTART_REQUIRED` son persistentes y no se infieren del
+  código de retorno de un comando.
+- La atomicidad del lote no depende del número de paquetes. Todos los paquetes
+  y dependencias se adquieren antes de la primera escritura final, y todos los
+  archivos se confirman antes del primer `start()`.
+- Los tests deben cubrir: fallo de etapa 1 sin mutación y reanudación/limpieza
+  de caché; fallo de etapa 2 con restauración exacta de archivos, directorios y
+  `library/status`; caída abrupta antes y después del punto de commit; fallo de
+  etapa 3 sin rollback, con parada inversa de los módulos ya arrancados y
+  `ACTIVATION_FAILED` persistido; reintento de activación sin reinstalar; orden
+  topológico y orden inverso de desinstalación; barrera de desactivación antes
+  de retirar archivos; y rechazo de ciclos, checksums y dependencias compartidas
+  en uso.
+- La regla C13 sigue aplicando: ninguna etapa puede asumirse correcta sin
+  verificarla. Un rollback de etapa 2 se prueba; un fallo de etapa 3 se reporta
+  con evidencia y no se disfraza de rollback.
+
+---
+
+## Decisión 2026-10-31 — etiqueta `<regex>` en plantillas de TextFormatter (ADR-028)
+
+**Estado:** Aceptada e implementada. No modifica ADR-027 y enmienda la decisión de
+2026-10-20 en lo relativo a las construcciones permitidas en las plantillas de `textformatter`:
+además de placeholders, MiniMessage y `<tr>`, se admite la etiqueta `<regex>`.
+
+**Contexto.** La VM de iFlow puede aplicar expresiones regulares en el espacio de usuario de sus
+políticas. Esa es la vía principal para decidir routing, permisos o mutaciones. TextFormatter no
+evalúa políticas, pero un template puede necesitar una comprobación regex local para decidir si
+muestra un fragmento. Duplicar esa comprobación en el template evita obligar a que la política
+preprocese el texto, sin convertir al formateador en un segundo motor de políticas. La etiqueta es
+redundante: no reemplaza al regex de iFlow y no altera el mensaje original.
+
+**Decisión.**
+
+1. La sintaxis es `<regex match="PATRÓN">CONTENIDO</regex>`. No se introduce `%regex%`, `${regex}`
+   ni otra variable escalar para esta función.
+2. `match` es un patrón Java (`java.util.regex.Pattern`). Es obligatorio y no vacío. El patrón no
+   se interpreta como MiniMessage; las comillas dobles y los caracteres XML se escapan en el
+   atributo.
+3. `CONTENIDO` es el texto candidato y, a la vez, la plantilla MiniMessage que se renderiza. Puede
+   contener los placeholders existentes (`%content%`, `%player_name%`, etc.) y las etiquetas
+   MiniMessage habituales.
+4. La etiqueta se evalúa en `TemplateRenderer` antes del `deserialize` final de MiniMessage. Si el
+   patrón coincide con el contenido ya resuelto, el span se sustituye por `CONTENIDO` interpretado
+   como MiniMessage. Si no coincide, el span no emite texto. La etiqueta es, por tanto, una
+   condición de renderizado local, no un motor de reemplazo global.
+5. El formato MiniMessage se aplica al texto que satisface el patrón. El patrón en sí no se colorea
+   ni se transforma; los grupos de captura no se interpolan automáticamente.
+6. No se anidan etiquetas `<regex>` dentro de otra `<regex>`. `<tr>` conserva su tratamiento
+   independiente y no cambia su contrato.
+7. El patrón se compila una vez por plantilla y se reutiliza. Un patrón inválido, vacío o que exceda
+   el límite configurado es un error explícito de configuración; no se ignora, no se convierte en
+   texto plano y no se degrada a coincidencia vacía.
+8. Se imponen límites duros y documentados al tamaño del patrón y al del contenido evaluado para
+   acotar el coste de backtracking. El patrón procede de la plantilla, nunca del mensaje recibido.
+9. La etiqueta no ejecuta código, no evalúa SpEL, no consulta la VM, no decide routing, permisos ni
+   entrega y no muta el `Message`. No sustituye al regex que iFlow ejecuta en su espacio de usuario.
+
+**Alternativas consideradas.**
+
+1. **Variable escalar `%regex%`.** Ventajas: encaja con el mecanismo actual de placeholders.
+   Limitaciones: el usuario fija la sintaxis MiniMessage y una variable escalar no expresa contenido
+   ni condición; además colisiona con el espacio de nombres de placeholders. Evaluación:
+   **descartada**.
+2. **Motor de reemplazo regex global.** Ventajas: permitiría transformar el mensaje completo.
+   Limitaciones: duplica la superficie de mutación de iFlow, introduce orden de aplicación y hace
+   que el formateador compita con la política. Evaluación: **descartada**.
+3. **Solo regex en iFlow.** Ventajas: una única superficie de decisión. Limitaciones: obliga a que
+   cada template que necesite una comprobación local dependa de que la política haya preprocesado
+   el texto. Evaluación: **descartada** para este caso; se conserva como vía principal.
+4. **Etiqueta MiniMessage condicional `<regex>`.** Ventajas: sintaxis elegida por el usuario,
+   redundancia local sin segundo motor de políticas, formato MiniMessage en el contenido.
+   Limitaciones: añade un span al parser y requiere límites de coste. Evaluación: **aceptada**.
+
+**Consecuencias.**
+
+- `textformatter` gana una construcción de plantilla, no un lenguaje de políticas. La VM sigue
+  siendo la única superficie para decisiones ejecutables.
+- El regex de iFlow y la etiqueta `<regex>` pueden coexistir; si ambos evalúan el mismo texto deben
+  producir el mismo resultado, pero la etiqueta solo controla la renderización del span.
+- Los templates con patrones inválidos fallan al cargarse y no llegan a producción.
+- El parser debe probar coincidencia, ausencia de coincidencia, formato MiniMessage, límites,
+  patrones inválidos, entidades XML válidas y mal formadas, y ausencia de anidamiento.
+- Implementado en `Template` (parseo y compilación única) y `TemplateRenderer` (condición de
+  renderizado), con tests de coincidencia, ausencia, flags/grupos, entidades XML válidas y mal
+  formadas, límites, anidamiento, `<tr>`/placeholders y no mutación. `src/textformatter/README.md`
+  documenta sintaxis, semántica (`find`) y límites.
+- Límites vigentes: patrón ≤ 512 unidades UTF-16, contenido evaluado ≤ 8192 unidades UTF-16 y
+  ≤ 32 spans por plantilla. El límite de contenido se comprueba de nuevo tras resolver
+  placeholders.

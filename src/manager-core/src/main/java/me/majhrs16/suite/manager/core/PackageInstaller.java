@@ -9,403 +9,678 @@ import me.majhrs16.suite.manager.spi.Version;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.FileTime;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * Package installer (dpkg equivalent) - handles installation from local ZIP artifacts.
- * Validates metadata, inventory, dependencies, and extracts files safely.
+ * Package installer (dpkg equivalent) - handles installation from local ZIP
+ * artifacts.
+ *
+ * <p>A batch is validated and extracted before the first mutation. The journal
+ * then records every file action, {@code library/status} is committed with one
+ * atomic rename, and only after that point is the installation considered
+ * installed. The manager never activates modules.</p>
  */
 public final class PackageInstaller {
 
     private final LocalPackageDatabase database;
     private final Path installRoot;
     private final PluginLogger logger;
-    private final TransactionLog transactionLog;
 
     public PackageInstaller(LocalPackageDatabase database, Path installRoot, PluginLogger logger) {
         this.database = database;
-        this.installRoot = installRoot.toAbsolutePath();
+        this.installRoot = installRoot.toAbsolutePath().normalize();
         this.logger = logger;
-        this.transactionLog = new TransactionLog(database.getManagerDir(), logger);
     }
 
     /**
-     * Installs a package from a local distribution ZIP.
-     * Validates manifest, dependencies, checksums, and extracts files.
-     *
-     * @param zipPath path to the distribution ZIP
-     * @param force if true, overwrite existing files (after verification)
-     * @return list of installed package entries (including metapackage contents)
-     * @throws InstallException if installation fails
+     * Recovers every incomplete journal before the manager starts serving
+     * operations. This is the crash path for an interrupted stage-2 commit:
+     * journals before the status rename restore files/status, journals after it
+     * only finish cleanup.
      */
-    public List<PackageEntry> install(Path zipPath, boolean force) throws InstallException {
-        String operationId = TransactionLog.generateOperationId();
-        String mainPkgName = null;
-        String mainPkgVersion = null;
-        String mainPkgChannel = null;
-        Path tempExtractDir = null;
-        Map<PackageEntry, Map<String, FileEntry>> allExtractedFiles = new LinkedHashMap<>();
-        List<PackageEntry> installedEntries = new ArrayList<>();
-        
+    public void recoverIncompleteOperations() throws InstallException {
         try {
-            logger.info("Installing package from: " + zipPath);
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, null, null, null, 
-                    TransactionLog.OperationState.STARTED, "Starting installation from " + zipPath);
-            
-            // 1. Validate ZIP and read manifest
+            PackageJournal.recoverAll(database, installRoot, logger);
+        } catch (IOException failure) {
+            throw new InstallException("Cannot recover package journals: "
+                    + failure.getMessage(), failure);
+        }
+    }
+
+    public List<PackageEntry> install(Path zipPath, boolean force) throws InstallException {
+        return installBatch(List.of(zipPath), force, List.of());
+    }
+
+    /**
+     * Installs several distribution ZIPs in one file/status transaction.
+     */
+    public List<PackageEntry> installBatch(List<Path> zipPaths, boolean force) throws InstallException {
+        return installBatch(zipPaths, force, List.of());
+    }
+
+    /**
+     * Installs several distribution ZIPs and also removes packages that the
+     * resolver explicitly replaced because of an {@code Exclude} conflict.
+     *
+     * <p>An upgrade of the same package name/channel only changes the pointer;
+     * its previous version directory is deliberately kept on disk and is never
+     * reused as the destination of the new version.</p>
+     */
+    public List<PackageEntry> installBatch(List<Path> zipPaths, boolean force,
+                                           Collection<PackageEntry> replaceBefore)
+            throws InstallException {
+        return installBatch(zipPaths, force, replaceBefore, () -> {
+        });
+    }
+
+    /**
+     * Installs several distribution ZIPs after running a runtime barrier.
+     *
+     * <p>The barrier runs after validation/extraction and before the journal or
+     * any installed file is touched. It is used to deactivate packages that an
+     * {@code Exclude} replacement removes, so their JARs are not moved while a
+     * classloader may still need them.</p>
+     */
+    public List<PackageEntry> installBatch(List<Path> zipPaths, boolean force,
+                                           Collection<PackageEntry> replaceBefore,
+                                           Runnable beforeMutation)
+            throws InstallException {
+        if (zipPaths == null || zipPaths.isEmpty()) {
+            throw new InstallException("No distribution ZIPs supplied");
+        }
+        Objects.requireNonNull(beforeMutation, "beforeMutation");
+        String operationId = IoSupport.operationId();
+        Path tempRoot = database.getTmpDir().resolve(operationId);
+        PackageJournal journal = null;
+        boolean committed = false;
+        List<PackageEntry> installed = new ArrayList<>();
+        LocalPackageDatabase.StatusImage newImage = null;
+
+        try {
+            List<PreparedZip> prepared = prepareZips(zipPaths);
+            List<PackageEntry> newEntries = prepared.stream()
+                    .flatMap(zip -> zip.manifest().allPackages().stream())
+                    .toList();
+            validateBatch(newEntries, replaceBefore, force);
+
+            Files.createDirectories(tempRoot);
+            for (PreparedZip zip : prepared) {
+                for (PackageEntry entry : zip.manifest().allPackages()) {
+                    extractPackageFilesToTemp(zip.path(), entry, tempRoot);
+                }
+            }
+
+            for (PreparedZip zip : prepared) {
+                for (PackageEntry entry : zip.manifest().allPackages()) {
+                    installed.add(installedEntry(entry, zip, tempRoot));
+                }
+            }
+
+            try {
+                beforeMutation.run();
+            } catch (RuntimeException failure) {
+                throw new InstallException("Runtime barrier rejected installation: "
+                        + failure.getMessage(), failure);
+            }
+
+            Collection<PackageEntry> removals = replaceBefore;
+            Map<String, PackageEntry> next = nextStatus(installed, removals);
+            newImage = database.imageOf(next.values());
+            LocalPackageDatabase.StatusImage oldImage = database.currentImage();
+            journal = PackageJournal.begin(installRoot, database, operationId,
+                    PackageJournal.OperationType.INSTALL, oldImage, newImage);
+
+            for (PreparedZip zip : prepared) {
+                for (PackageEntry entry : zip.manifest().allPackages()) {
+                    moveInstalledFiles(entry, tempRoot, operationId, journal);
+                }
+            }
+            moveReplacedPackages(replaceBefore, newEntries, operationId, journal);
+
+            journal.committing();
+            database.commitImage(newImage);
+            committed = true;
+            try {
+                journal.committed();
+            } catch (IOException failure) {
+                // The status rename already happened. Recovery will see the
+                // COMMITTING record and the new status hash as committed.
+                logger.warn("Cannot append COMMITTED marker for operation " + operationId
+                        + ": " + failure.getMessage());
+            }
+            journal.close();
+            try {
+                IoSupport.deleteRecursively(database.getBackupDir().resolve(operationId));
+            } catch (IOException failure) {
+                logger.warn("Cannot remove package backup for operation " + operationId
+                        + ": " + failure.getMessage());
+            }
+
+            logger.info("Installed " + installed.size() + " package(s) in operation " + operationId);
+            return List.copyOf(installed);
+        } catch (InstallException failure) {
+            rollback(journal, committed, newImage, operationId, failure);
+            throw failure;
+        } catch (Exception failure) {
+            InstallException wrapped = new InstallException("Installation failed: " + failure.getMessage(), failure);
+            rollback(journal, committed, newImage, operationId, wrapped);
+            throw wrapped;
+        } finally {
+            try {
+                IoSupport.deleteRecursively(tempRoot);
+            } catch (IOException failure) {
+                logger.warn("Failed to remove package temporary directory " + tempRoot + ": "
+                        + failure.getMessage());
+            }
+        }
+    }
+
+    private void rollback(PackageJournal journal, boolean committed,
+                          LocalPackageDatabase.StatusImage newImage, String operationId,
+                          InstallException failure) {
+        if (journal == null) {
+            return;
+        }
+        try {
+            journal.close();
+            if (committed || (newImage != null
+                    && database.currentStatusSha256().equalsIgnoreCase(newImage.sha256()))) {
+                logger.warn("Operation " + operationId
+                        + " was already committed; keeping the installed files: "
+                        + failure.getMessage());
+                return;
+            }
+            logger.warn("Rolling back package operation " + operationId);
+            PackageJournal.recoverAll(database, installRoot, logger);
+        } catch (Exception rollbackFailure) {
+            logger.error("Rollback of operation " + operationId + " failed: "
+                    + rollbackFailure.getMessage(), rollbackFailure);
+        }
+    }
+
+    private record PreparedZip(Path path, String sha256, long size, PackageManifest manifest) {
+    }
+
+    private List<PreparedZip> prepareZips(List<Path> zipPaths) throws IOException, InstallException {
+        List<PreparedZip> prepared = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        Set<String> names = new HashSet<>();
+        for (Path zipPath : zipPaths) {
             PackageManifest manifest;
             try (ZipFile zip = new ZipFile(zipPath.toFile())) {
                 manifest = readManifest(zip);
-            } catch (IOException e) {
-                transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, null, null, null, 
-                        TransactionLog.OperationState.FAILED, "Failed to read ZIP: " + e.getMessage());
-                throw new InstallException("Failed to read ZIP: " + e.getMessage(), e);
             }
-            
-            mainPkgName = manifest.mainPackage().name();
-            mainPkgVersion = manifest.mainPackage().version();
-            mainPkgChannel = manifest.mainPackage().channel();
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, 
-                    mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.EXTRACTING, "Reading manifest");
-            
-            // 2. Verify ZIP checksum against manifest
-            String zipSha256;
-            try {
-                zipSha256 = computeSha256(zipPath);
-            } catch (IOException e) {
-                transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                        TransactionLog.OperationState.FAILED, "Failed to compute ZIP SHA256: " + e.getMessage());
-                throw new InstallException("Failed to compute ZIP SHA256: " + e.getMessage(), e);
+            String sha256 = IoSupport.sha256(zipPath);
+            long size = Files.size(zipPath);
+            PackageEntry main = manifest.mainPackage();
+            if (main.sha256() != null && !main.sha256().isBlank()
+                    && !sha256.equalsIgnoreCase(main.sha256())) {
+                throw new InstallException("ZIP SHA256 mismatch: expected "
+                        + main.sha256() + ", got " + sha256);
             }
-            if (manifest.mainPackage().sha256() != null && !manifest.mainPackage().sha256().isBlank()) {
-                if (!zipSha256.equalsIgnoreCase(manifest.mainPackage().sha256())) {
-                    transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                            TransactionLog.OperationState.FAILED, "ZIP SHA256 mismatch");
-                    throw new InstallException("ZIP SHA256 mismatch: expected " + manifest.mainPackage().sha256() + ", got " + zipSha256);
+            if (main.size() > 0 && size != main.size()) {
+                throw new InstallException("ZIP size mismatch: expected "
+                        + main.size() + ", got " + size);
+            }
+            for (PackageEntry entry : manifest.allPackages()) {
+                if (!names.add(entry.name())) {
+                    throw new InstallException("Duplicate package name in batch: " + entry.name());
+                }
+                if (!ids.add(entry.id())) {
+                    throw new InstallException("Duplicate package name in batch: " + entry.id());
+                }
+                for (FileEntry file : entry.files().values()) {
+                    PackageLayout.validate(entry, file.path());
                 }
             }
-
-            // 3. Verify size
-            long zipSize;
-            try {
-                zipSize = Files.size(zipPath);
-            } catch (IOException e) {
-                transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                        TransactionLog.OperationState.FAILED, "Failed to get ZIP size: " + e.getMessage());
-                throw new InstallException("Failed to get ZIP size: " + e.getMessage(), e);
-            }
-            if (manifest.mainPackage().size() > 0 && zipSize != manifest.mainPackage().size()) {
-                transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                        TransactionLog.OperationState.FAILED, "ZIP size mismatch");
-                throw new InstallException("ZIP size mismatch: expected " + manifest.mainPackage().size() + ", got " + zipSize);
-            }
-
-            // 4. Check dependencies
-            checkDependencies(manifest);
-
-            // 5. Check package conflicts declared through Exclude
-            checkPackageConflicts(manifest, force);
-
-            // 6. Check for conflicts (file ownership)
-            checkFileConflicts(manifest, force);
-
-            // 7. Extract ALL files to temporary location FIRST (transactional)
-            tempExtractDir = Files.createTempDirectory(database.getTmpDir(), "install-");
-            
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.EXTRACTING, "Extracting files to temp directory");
-            
-            // Extract all packages to temp directory
-            for (PackageEntry pkgEntry : manifest.allPackages()) {
-                Map<String, FileEntry> extractedFiles = extractPackageFilesToTemp(zipPath, pkgEntry, tempExtractDir);
-                allExtractedFiles.put(pkgEntry, extractedFiles);
-            }
-
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.EXTRACTED, "Files extracted successfully");
-
-            // 8. Validate all extracted files against manifest
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.VALIDATING, "Validating extracted files");
-            for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
-                validateExtractedFiles(entry.getKey(), entry.getValue());
-            }
-            
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.VALIDATED, "All files validated");
-
-            // 9. ATOMIC COMMIT: Move all files from temp to final location
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.MOVING, "Moving files to final location");
-            for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
-                moveFilesToFinalLocation(entry.getKey(), entry.getValue(), tempExtractDir, force);
-            }
-            
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.MOVED, "Files moved to final location");
-
-            // 10. Register all packages in database
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.REGISTERING, "Registering packages");
-            for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
-                PackageEntry pkgEntry = entry.getKey();
-                Map<String, FileEntry> extractedFiles = entry.getValue();
-                
-                PackageEntry installedEntry = new PackageEntry(
-                        pkgEntry.name(),
-                        pkgEntry.version(),
-                        pkgEntry.channel(),
-                        pkgEntry.type(),
-                        pkgEntry.dependencies(),
-                        pkgEntry.excludes(),
-                        pkgEntry.provides(),
-                        pkgEntry.arch(),
-                        pkgEntry.platform(),
-                        pkgEntry.url(),
-                        pkgEntry.os(),
-                        zipSha256,
-                        zipSize,
-                        extractedFiles,
-                        zipSha256,
-                        pkgEntry.parentPackage(),
-                        Map.of(
-                                "Installed-Time", Instant.now().toString(),
-                                "Status", "installed"
-                        )
-                );
-                
-                database.registerPackage(installedEntry);
-                installedEntries.add(installedEntry);
-                logger.info("Installed package: " + installedEntry.name() + " " + installedEntry.version() + " (" + installedEntry.channel() + ")");
-            }
-            
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.REGISTERED, "Packages registered in database");
-            
-            transactionLog.markCompleted(operationId);
-            
-            return installedEntries;
-
-        } catch (InstallException e) {
-            // Rollback on failure
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.FAILED, "Installation failed: " + e.getMessage());
-            rollbackInstallation(installedEntries, allExtractedFiles, tempExtractDir);
-            transactionLog.markFailed(operationId, e.getMessage());
-            throw e;
-        } catch (IOException e) {
-            // Rollback on failure
-            transactionLog.log(operationId, TransactionLog.OperationType.INSTALL, mainPkgName, mainPkgVersion, mainPkgChannel,
-                    TransactionLog.OperationState.FAILED, "Installation failed: " + e.getMessage());
-            rollbackInstallation(installedEntries, allExtractedFiles, tempExtractDir);
-            transactionLog.markFailed(operationId, e.getMessage());
-            throw new InstallException("Installation failed: " + e.getMessage(), e);
-        } finally {
-            // Cleanup temp directory
-            if (tempExtractDir != null) {
-                try {
-                    deleteDirectory(tempExtractDir);
-                } catch (IOException ignored) {}
-            }
+            prepared.add(new PreparedZip(zipPath, sha256, size, manifest));
         }
+        return prepared;
     }
-    
-    /**
-     * Rolls back a failed installation by removing installed packages and cleaning up files.
-     */
-    private void rollbackInstallation(List<PackageEntry> installedEntries, 
-                                      Map<PackageEntry, Map<String, FileEntry>> allExtractedFiles,
-                                      Path tempExtractDir) {
-        logger.warn("Rolling back installation...");
-        
-        // Unregister packages that were registered
-        for (PackageEntry entry : installedEntries) {
-            try {
-                database.unregisterPackage(entry.name(), entry.version(), entry.channel());
-                logger.debug("Unregistered package during rollback: " + entry.name());
-            } catch (IOException e) {
-                logger.error("Failed to unregister package during rollback: " + entry.name() + " - " + e.getMessage());
+
+    private void validateBatch(List<PackageEntry> newEntries,
+                               Collection<PackageEntry> replaceBefore, boolean force)
+            throws InstallException {
+        for (PackageEntry entry : newEntries) {
+            boolean sameVersionInstalled = database.getAllPackages().stream()
+                    .anyMatch(old -> old.type() == entry.type()
+                            && old.name().equals(entry.name())
+                            && old.version().equals(entry.version()));
+            if (sameVersionInstalled) {
+                throw new InstallException("Package " + entry.name() + " " + entry.version()
+                        + " is already installed; remove it before reinstalling");
             }
         }
-        
-        // Delete files that were moved to final location
-        for (Map.Entry<PackageEntry, Map<String, FileEntry>> entry : allExtractedFiles.entrySet()) {
-            for (FileEntry fileEntry : entry.getValue().values()) {
-                Path filePath = installRoot.resolve(fileEntry.path());
-                try {
-                    if (Files.exists(filePath)) {
-                        Files.delete(filePath);
-                        logger.debug("Deleted file during rollback: " + fileEntry.path());
+        Set<String> removedIds = new HashSet<>();
+        for (PackageEntry entry : replaceBefore) {
+            removedIds.add(entry.id());
+        }
+        for (PackageEntry entry : newEntries) {
+            removedIds.addAll(database.getAllPackages().stream()
+                    .filter(old -> old.name().equals(entry.name())
+                            && old.channel().equals(entry.channel()))
+                    .map(PackageEntry::id)
+                    .toList());
+        }
+
+        for (PackageEntry entry : newEntries) {
+            for (String dependency : entry.dependencies()) {
+                ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dependency);
+                if (spec == null) {
+                    continue;
+                }
+                if (!satisfied(spec, newEntries, removedIds)) {
+                    throw new InstallException("Unsatisfied dependency: " + entry.name()
+                            + " requires " + dependency);
+                }
+            }
+        }
+
+        for (int i = 0; i < newEntries.size(); i++) {
+            for (int j = i + 1; j < newEntries.size(); j++) {
+                PackageEntry first = newEntries.get(i);
+                PackageEntry second = newEntries.get(j);
+                if (LocalPackageDatabase.conflicts(first, second)) {
+                    if (!force) {
+                        throw new InstallException("Package conflict inside batch: "
+                                + first.name() + " cannot coexist with " + second.name());
                     }
-                } catch (IOException e) {
-                    logger.error("Failed to delete file during rollback: " + fileEntry.path() + " - " + e.getMessage());
+                    logger.warn("Package conflict inside batch (force): " + first.name()
+                            + " cannot coexist with " + second.name());
+                }
+            }
+            for (PackageEntry installed : database.getAllPackages()) {
+                if (removedIds.contains(installed.id())) {
+                    continue;
+                }
+                if (LocalPackageDatabase.conflicts(newEntries.get(i), installed)) {
+                    if (!force) {
+                        throw new InstallException("Package conflict: " + newEntries.get(i).name()
+                                + " cannot coexist with " + installed.name() + " "
+                                + installed.version() + " (Exclude).");
+                    }
+                    logger.warn("Package conflict (force): " + newEntries.get(i).name()
+                            + " cannot coexist with " + installed.name() + " "
+                            + installed.version());
                 }
             }
         }
-        
-        // Cleanup temp directory
-        if (tempExtractDir != null) {
-            try {
-                deleteDirectory(tempExtractDir);
-            } catch (IOException ignored) {}
+
+        Set<String> paths = new HashSet<>();
+        for (PackageEntry entry : newEntries) {
+            for (FileEntry file : entry.files().values()) {
+                if (!paths.add(file.path())) {
+                    throw new InstallException("Duplicate file in batch: " + file.path());
+                }
+                Set<String> owners = new HashSet<>(database.getFileOwners(file.path()));
+                owners.removeAll(removedIds);
+                if (!owners.isEmpty()) {
+                    if (!force) {
+                        throw new InstallException("File conflict: " + file.path()
+                                + " already owned by " + owners);
+                    }
+                    logger.warn("File conflict (force): " + file.path()
+                            + " owned by " + owners + "; ownership will transfer");
+                }
+            }
         }
-        
-        logger.warn("Rollback completed");
+    }
+
+    private boolean satisfied(ManifestParser.DependencySpec spec, List<PackageEntry> newEntries,
+                              Set<String> removedIds) {
+        for (PackageEntry candidate : newEntries) {
+            if ((candidate.name().equals(spec.name()) || candidate.provides().contains(spec.name()))
+                    && Version.parse(candidate.version()).satisfies(spec.constraint())) {
+                return true;
+            }
+        }
+        return database.getAllPackages().stream()
+                .filter(entry -> !removedIds.contains(entry.id()))
+                .filter(entry -> entry.name().equals(spec.name())
+                        || entry.provides().contains(spec.name()))
+                .anyMatch(entry -> Version.parse(entry.version()).satisfies(spec.constraint()));
+    }
+
+    private Map<String, PackageEntry> nextStatus(List<PackageEntry> newEntries,
+                                                 Collection<PackageEntry> replaceBefore) {
+        Set<String> replaceNames = new HashSet<>();
+        for (PackageEntry entry : newEntries) {
+            replaceNames.add(entry.name() + "\0" + entry.channel());
+        }
+        Set<String> removedIds = replaceBefore.stream()
+                .map(PackageEntry::id)
+                .collect(Collectors.toSet());
+
+        Map<String, PackageEntry> next = new LinkedHashMap<>();
+        for (PackageEntry old : database.getAllPackages()) {
+            if (removedIds.contains(old.id())
+                    || replaceNames.contains(old.name() + "\0" + old.channel())) {
+                continue;
+            }
+            next.put(old.id(), old);
+        }
+
+        // Forced ownership transfer: a non-versioned file can only have one owner
+        // in the authoritative status so removal of the new package cannot leave
+        // a stale owner behind.
+        Set<String> newPaths = new HashSet<>();
+        for (PackageEntry entry : newEntries) {
+            newPaths.addAll(entry.files().keySet());
+        }
+        Map<String, PackageEntry> transferred = new LinkedHashMap<>();
+        for (PackageEntry old : next.values()) {
+            Map<String, FileEntry> kept = new LinkedHashMap<>();
+            for (Map.Entry<String, FileEntry> file : old.files().entrySet()) {
+                if (!newPaths.contains(file.getKey())) {
+                    kept.put(file.getKey(), file.getValue());
+                }
+            }
+            transferred.put(old.id(), kept.size() == old.files().size()
+                    ? old : copyWithFiles(old, kept));
+        }
+        next.clear();
+        next.putAll(transferred);
+        for (PackageEntry entry : newEntries) {
+            next.put(entry.id(), entry);
+        }
+        return next;
+    }
+
+    private static PackageEntry copyWithFiles(PackageEntry entry, Map<String, FileEntry> files) {
+        return new PackageEntry(entry.name(), entry.version(), entry.channel(), entry.type(),
+                entry.dependencies(), entry.excludes(), entry.provides(), entry.arch(),
+                entry.platform(), entry.url(), entry.os(), entry.sha256(), entry.size(),
+                files, entry.sourceArtifact(), entry.parentPackage(), entry.extraFields());
+    }
+
+    private PackageEntry installedEntry(PackageEntry entry, PreparedZip zip, Path tempRoot)
+            throws IOException {
+        Map<String, FileEntry> files = new LinkedHashMap<>();
+        for (FileEntry expected : entry.files().values()) {
+            Path source = tempRoot.resolve(expected.path()).normalize();
+            long size = Files.size(source);
+            String sha256 = IoSupport.sha256(source);
+            files.put(expected.path(), new FileEntry(expected.path(), size, sha256, entry.name()));
+        }
+        return new PackageEntry(entry.name(), entry.version(), entry.channel(), entry.type(),
+                entry.dependencies(), entry.excludes(), entry.provides(), entry.arch(),
+                entry.platform(), entry.url(), entry.os(), zip.sha256(), zip.size(), files,
+                zip.sha256(), entry.parentPackage(),
+                Map.of("Installed-Time", Instant.now().toString(), "Status", "installed"));
+    }
+
+    private void moveInstalledFiles(PackageEntry entry, Path tempRoot, String operationId,
+                                    PackageJournal journal) throws IOException {
+        Path backupRoot = database.getBackupDir().resolve(operationId);
+        for (FileEntry file : entry.files().values()) {
+            Path source = PackageLayout.resolve(tempRoot, file.path());
+            Path destination = PackageLayout.resolve(installRoot, file.path());
+            if (Files.exists(destination)) {
+                Path backup = PackageLayout.resolve(backupRoot,
+                        installRoot.relativize(destination).toString());
+                journal.replaced(destination, backup);
+                IoSupport.move(destination, backup);
+            } else {
+                journal.created(destination);
+            }
+            IoSupport.move(source, destination);
+        }
+    }
+
+    private void moveReplacedPackages(Collection<PackageEntry> replaceBefore,
+                                      List<PackageEntry> newEntries, String operationId,
+                                      PackageJournal journal) throws IOException {
+        Set<String> newNames = newEntries.stream().map(PackageEntry::name).collect(Collectors.toSet());
+        Set<String> newPaths = newEntries.stream()
+                .flatMap(entry -> entry.files().keySet().stream())
+                .collect(Collectors.toSet());
+        Path trashRoot = database.getTrashDir().resolve(operationId);
+        for (PackageEntry old : replaceBefore) {
+            if (newNames.contains(old.name())) {
+                continue;
+            }
+            for (FileEntry file : old.files().values()) {
+                // A forced replacement may reuse a path owned by the old package.
+                // The new package now owns it; moving it to trash would delete the
+                // file that was just installed.
+                if (newPaths.contains(file.path())) {
+                    continue;
+                }
+                if (!fileExclusiveTo(file.path(), replaceBefore)) {
+                    logger.warn("Keeping shared file " + file.path()
+                            + " while replacing " + old.name());
+                    continue;
+                }
+                Path path = PackageLayout.resolve(installRoot, file.path());
+                if (!Files.exists(path)) {
+                    continue;
+                }
+                Path trash = PackageLayout.resolve(trashRoot,
+                        installRoot.relativize(path).toString());
+                journal.removed(path, trash);
+                IoSupport.move(path, trash);
+            }
+        }
     }
 
     /**
-     * Removes a package.
-     *
-     * @param name package name
-     * @param version package version (or "any" for latest)
-     * @param channel package channel
-     * @param autoRemoveDependencies if true, also remove unused dependencies
-     * @throws InstallException if removal fails
+     * Removes a package and optionally unused dependency packages in one
+     * transaction. The barrier runs before any file or status mutation.
      */
-    public void remove(String name, String version, String channel, boolean autoRemoveDependencies) throws InstallException {
-        logger.info("Removing package: " + name + " " + version + " (" + channel + ")");
+    public void remove(String name, String version, String channel,
+                       boolean autoRemoveDependencies) throws InstallException {
+        remove(name, version, channel, autoRemoveDependencies, () -> {
+        });
+    }
 
-        // Find package to remove
+    public void remove(String name, String version, String channel,
+                       boolean autoRemoveDependencies, Runnable barrier) throws InstallException {
+        String operationId = IoSupport.operationId();
+        PackageJournal journal = null;
+        boolean committed = false;
+        LocalPackageDatabase.StatusImage newImage = null;
+        try {
+            List<PackageEntry> targets = removalTargets(name, version, channel, autoRemoveDependencies);
+            validateRemoval(targets);
+            try {
+                barrier.run();
+            } catch (RuntimeException failure) {
+                throw new InstallException("Runtime barrier rejected removal: "
+                        + failure.getMessage(), failure);
+            }
+
+            Map<String, PackageEntry> next = new LinkedHashMap<>();
+            for (PackageEntry installed : database.getAllPackages()) {
+                next.put(installed.id(), installed);
+            }
+            for (PackageEntry target : targets) {
+                next.remove(target.id());
+            }
+            newImage = database.imageOf(next.values());
+            LocalPackageDatabase.StatusImage oldImage = database.currentImage();
+            journal = PackageJournal.begin(installRoot, database, operationId,
+                    PackageJournal.OperationType.REMOVE, oldImage, newImage);
+
+            Path trashRoot = database.getTrashDir().resolve(operationId);
+            for (PackageEntry target : targets) {
+                for (FileEntry file : target.files().values()) {
+                    Path path = PackageLayout.resolve(installRoot, file.path());
+                    if (!Files.exists(path)) {
+                        continue;
+                    }
+                    if (!fileExclusiveTo(file.path(), targets)) {
+                        logger.warn("Keeping shared file " + file.path()
+                                + " while removing " + target.name());
+                        continue;
+                    }
+                    if (!matchesInstalledFile(path, file)) {
+                        logger.warn("File modified since installation, keeping it in place: "
+                                + file.path());
+                        continue;
+                    }
+                    Path trash = PackageLayout.resolve(trashRoot,
+                            installRoot.relativize(path).toString());
+                    journal.removed(path, trash);
+                    IoSupport.move(path, trash);
+                }
+            }
+
+            journal.committing();
+            database.commitImage(newImage);
+            committed = true;
+            try {
+                journal.committed();
+            } catch (IOException failure) {
+                logger.warn("Cannot append COMMITTED marker for operation " + operationId
+                        + ": " + failure.getMessage());
+            }
+            journal.close();
+            try {
+                IoSupport.deleteRecursively(database.getBackupDir().resolve(operationId));
+            } catch (IOException failure) {
+                logger.warn("Cannot remove package backup for operation " + operationId
+                        + ": " + failure.getMessage());
+            }
+            for (PackageEntry target : targets) {
+                cleanupVersionDirectory(target);
+            }
+            logger.info("Removed package operation " + operationId + ": "
+                    + targets.stream().map(PackageEntry::name).collect(Collectors.joining(", ")));
+        } catch (InstallException failure) {
+            rollback(journal, committed, newImage, operationId, failure);
+            throw failure;
+        } catch (Exception failure) {
+            InstallException wrapped = new InstallException("Removal failed: " + failure.getMessage(), failure);
+            rollback(journal, committed, newImage, operationId, wrapped);
+            throw wrapped;
+        }
+    }
+
+    private boolean fileExclusiveTo(String path, Collection<PackageEntry> targets) {
+        Set<String> removedIds = targets.stream().map(PackageEntry::id).collect(Collectors.toSet());
+        Set<String> owners = new HashSet<>(database.getFileOwners(path));
+        owners.removeAll(removedIds);
+        return owners.isEmpty();
+    }
+
+    private boolean matchesInstalledFile(Path path, FileEntry file) {
+        try {
+            return Files.size(path) == file.size()
+                    && IoSupport.sha256(path).equalsIgnoreCase(file.sha256());
+        } catch (IOException failure) {
+            return false;
+        }
+    }
+
+    private List<PackageEntry> removalTargets(String name, String version, String channel,
+                                              boolean autoRemoveDependencies) throws InstallException {
         PackageEntry entry;
         if ("any".equals(version)) {
-            Optional<PackageEntry> latest = database.getLatestInstalled(name, channel);
-            if (latest.isEmpty()) {
-                throw new InstallException("Package not installed: " + name + " (" + channel + ")");
-            }
-            entry = latest.get();
+            entry = database.getLatestInstalled(name, channel)
+                    .orElseThrow(() -> new InstallException("Package not installed: "
+                            + name + " (" + channel + ")"));
         } else {
-            Optional<PackageEntry> pkg = database.getPackage(name, version, channel);
-            if (pkg.isEmpty()) {
-                throw new InstallException("Package not installed: " + name + " " + version + " (" + channel + ")");
-            }
-            entry = pkg.get();
+            entry = database.getPackage(name, version, channel)
+                    .orElseThrow(() -> new InstallException("Package not installed: "
+                            + name + " " + version + " (" + channel + ")"));
+        }
+        List<PackageEntry> targets = new ArrayList<>();
+        targets.add(entry);
+        if (!autoRemoveDependencies) {
+            return targets;
         }
 
-        // Check reverse dependencies
-        List<PackageEntry> reverseDeps = database.getReverseDependencies(name);
-        if (!reverseDeps.isEmpty()) {
-            String deps = reverseDeps.stream()
-                    .map(p -> p.name() + " " + p.version())
-                    .collect(Collectors.joining(", "));
-            throw new InstallException("Cannot remove " + name + ": required by " + deps);
-        }
-
-        // Check for shared files
-        Map<String, Set<String>> orphanedFiles = database.checkOrphanedFiles(entry);
-        Map<String, Set<String>> sharedFiles = new HashMap<>();
-        for (FileEntry file : entry.files().values()) {
-            Set<String> owners = database.getFileOwners(file.path());
-            if (owners.size() > 1) {
-                sharedFiles.put(file.path(), owners);
-            }
-        }
-
-        if (!sharedFiles.isEmpty()) {
-            logger.warn("Package " + name + " shares files with other packages: " + sharedFiles.keySet());
-            // Don't remove shared files, just unregister
-        }
-
-        // FIRST: Unregister from database (atomic with save)
-        try {
-            database.unregisterPackage(entry.name(), entry.version(), entry.channel());
-        } catch (IOException e) {
-            throw new InstallException("Failed to unregister package: " + e.getMessage(), e);
-        }
-
-        // SECOND: Remove files that are exclusively owned by this package
-        List<String> failedDeletions = new ArrayList<>();
-        List<String> modifiedFiles = new ArrayList<>();
-        for (Map.Entry<String, Set<String>> orphaned : orphanedFiles.entrySet()) {
-            Path filePath = installRoot.resolve(orphaned.getKey());
-            try {
-                if (Files.exists(filePath)) {
-                    // MGR-018: Check file integrity before deletion
-                    // Verify the file hasn't been modified since installation
-                    FileEntry fileEntry = entry.files().get(orphaned.getKey());
-                    if (fileEntry != null) {
-                        try {
-                            long actualSize = Files.size(filePath);
-                            String actualSha256 = computeSha256(filePath);
-                            
-                            if (actualSize != fileEntry.size() || !actualSha256.equalsIgnoreCase(fileEntry.sha256())) {
-                                logger.warn("File modified since installation, skipping deletion: " + orphaned.getKey() + 
-                                        " (expected size: " + fileEntry.size() + ", actual: " + actualSize + ")");
-                                modifiedFiles.add(orphaned.getKey());
-                                continue;
-                            }
-                        } catch (IOException e) {
-                            logger.warn("Failed to verify file integrity for " + orphaned.getKey() + ": " + e.getMessage());
+        boolean progress = true;
+        while (progress) {
+            progress = false;
+            Set<String> removedIds = targets.stream().map(PackageEntry::id).collect(Collectors.toSet());
+            for (PackageEntry dependency : database.getPackagesByType(PackageType.DEPENDENCY)) {
+                if (removedIds.contains(dependency.id())) {
+                    continue;
+                }
+                boolean needed = false;
+                for (PackageEntry installed : database.getAllPackages()) {
+                    if (removedIds.contains(installed.id())) {
+                        continue;
+                    }
+                    for (String declared : installed.dependencies()) {
+                        ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(declared);
+                        if (spec != null && (spec.name().equals(dependency.name())
+                                || dependency.provides().contains(spec.name()))) {
+                            needed = true;
+                            break;
                         }
                     }
-                    
-                    Files.delete(filePath);
-                    logger.debug("Removed file: " + orphaned.getKey());
+                    if (needed) {
+                        break;
+                    }
                 }
-            } catch (IOException e) {
-                logger.error("Failed to remove file " + orphaned.getKey() + ": " + e.getMessage());
-                failedDeletions.add(orphaned.getKey());
-            }
-        }
-        
-        if (!modifiedFiles.isEmpty()) {
-            logger.warn("Skipped deletion of modified files: " + modifiedFiles);
-        }
-
-        if (!failedDeletions.isEmpty()) {
-            // Package already unregistered, but some files couldn't be deleted
-            // This is a warning, not a failure - the package is no longer tracked
-            logger.warn("Package unregistered but some files could not be deleted: " + failedDeletions);
-        }
-
-        // Auto-remove orphaned dependencies
-        if (autoRemoveDependencies) {
-            removeOrphanedDependencies();
-        }
-    }
-
-    /**
-     * Removes dependencies that are no longer required by any installed package.
-     */
-    private void removeOrphanedDependencies() {
-        List<PackageEntry> deps = database.getPackagesByType(PackageType.DEPENDENCY);
-        for (PackageEntry dep : deps) {
-            List<PackageEntry> reverseDeps = database.getReverseDependencies(dep.name());
-            if (reverseDeps.isEmpty()) {
-                logger.info("Removing orphaned dependency: " + dep.name());
-                try {
-                    remove(dep.name(), dep.version(), dep.channel(), false);
-                } catch (InstallException e) {
-                    logger.warn("Failed to remove orphaned dependency " + dep.name() + ": " + e.getMessage());
+                if (!needed) {
+                    targets.add(dependency);
+                    progress = true;
                 }
             }
         }
+        return targets;
     }
 
-    /**
-     * Verifies an installed package.
-     */
+    private void validateRemoval(List<PackageEntry> targets) throws InstallException {
+        Set<String> removedIds = targets.stream().map(PackageEntry::id).collect(Collectors.toSet());
+        Set<String> supplied = new HashSet<>();
+        for (PackageEntry target : targets) {
+            supplied.add(target.name());
+            supplied.addAll(target.provides());
+        }
+        for (PackageEntry installed : database.getAllPackages()) {
+            if (removedIds.contains(installed.id())) {
+                continue;
+            }
+            for (String declared : installed.dependencies()) {
+                ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(declared);
+                if (spec == null || !supplied.contains(spec.name())) {
+                    continue;
+                }
+                boolean alternative = database.getAllPackages().stream()
+                        .filter(entry -> !removedIds.contains(entry.id()))
+                        .filter(entry -> entry.name().equals(spec.name())
+                                || entry.provides().contains(spec.name()))
+                        .anyMatch(entry -> Version.parse(entry.version()).satisfies(spec.constraint()));
+                if (!alternative) {
+                    String removed = targets.stream()
+                            .filter(target -> target.name().equals(spec.name())
+                                    || target.provides().contains(spec.name()))
+                            .map(PackageEntry::name)
+                            .collect(Collectors.joining(", "));
+                    throw new InstallException("Cannot remove " + removed
+                            + ": required by " + installed.name() + " " + installed.version());
+                }
+            }
+        }
+    }
+
+    private void cleanupVersionDirectory(PackageEntry entry) {
+        try {
+            Path versionRoot = PackageLayout.versionRoot(installRoot, entry);
+            IoSupport.deleteEmptyParents(versionRoot, installRoot);
+        } catch (IOException failure) {
+            logger.debug("Cannot clean version directory for " + entry.name() + ": "
+                    + failure.getMessage());
+        }
+    }
+
     public LocalPackageDatabase.VerificationResult verify(String name, String version, String channel) {
         Optional<PackageEntry> entry = database.getPackage(name, version, channel);
         if (entry.isEmpty()) {
-            return new LocalPackageDatabase.VerificationResult(name, false, 
+            return new LocalPackageDatabase.VerificationResult(name, false,
                     List.of(new LocalPackageDatabase.VerificationIssue("", "NOT_INSTALLED", "Package not found")));
         }
         return database.verifyPackage(entry.get(), installRoot);
     }
 
-    /**
-     * Lists files belonging to a package.
-     */
     public List<FileEntry> listFiles(String name, String version, String channel) {
         Optional<PackageEntry> entry = database.getPackage(name, version, channel);
         return entry.map(e -> new ArrayList<>(e.files().values())).orElseGet(ArrayList::new);
@@ -416,7 +691,6 @@ public final class PackageInstaller {
         if (manifestEntry == null) {
             throw new InstallException("Missing METADATA/package.list in ZIP");
         }
-
         try (var is = zip.getInputStream(manifestEntry)) {
             String content = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             List<PackageEntry> entries;
@@ -425,276 +699,85 @@ public final class PackageInstaller {
             } catch (ManifestParser.ParseException e) {
                 throw new InstallException("Invalid manifest: " + e.getMessage(), e);
             }
-
             if (entries.isEmpty()) {
                 throw new InstallException("Manifest contains no packages");
             }
-
-            // First entry is the main package
             PackageEntry mainPackage = entries.get(0);
-            List<PackageEntry> additionalPackages = entries.size() > 1 ? entries.subList(1, entries.size()) : List.of();
-
-            // Validate: check for duplicate names
-            Set<String> seen = new HashSet<>();
-            for (PackageEntry e : entries) {
-                if (!seen.add(e.name())) {
-                    throw new InstallException("Duplicate package name in manifest: " + e.name());
-                }
-            }
-
-            return new PackageManifest(mainPackage, additionalPackages, entries);
+            List<PackageEntry> additional = entries.size() > 1 ? entries.subList(1, entries.size()) : List.of();
+            return new PackageManifest(mainPackage, additional, entries);
         }
     }
 
-    private void checkDependencies(PackageManifest manifest) throws InstallException {
-        for (PackageEntry pkg : manifest.allPackages()) {
-            for (String dep : pkg.dependencies()) {
-                ManifestParser.DependencySpec spec = ManifestParser.DependencySpec.parse(dep);
-                if (spec == null) continue;
-                
-                // Check if dependency is satisfied by an installed package or by a
-                // package included in this same multi-package manifest, either
-                // through its real name or through a virtual Provide name.
-                if (!database.isDependencySatisfied(spec.name(), spec.constraint())
-                        && !manifestSatisfies(manifest, spec)) {
-                    throw new InstallException("Unsatisfied dependency: " + pkg.name() + " requires " + dep);
-                }
-            }
-        }
-    }
-
-    private boolean manifestSatisfies(PackageManifest manifest, ManifestParser.DependencySpec spec) {
-        for (PackageEntry candidate : manifest.allPackages()) {
-            if ((candidate.name().equals(spec.name()) || candidate.provides().contains(spec.name()))
-                    && Version.parse(candidate.version()).satisfies(spec.constraint())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void checkPackageConflicts(PackageManifest manifest, boolean force) throws InstallException {
-        List<PackageEntry> packages = manifest.allPackages();
-        for (int i = 0; i < packages.size(); i++) {
-            PackageEntry pkg = packages.get(i);
-            for (int j = i + 1; j < packages.size(); j++) {
-                PackageEntry other = packages.get(j);
-                if (LocalPackageDatabase.conflicts(pkg, other)) {
-                    if (force) {
-                        logger.warn("Package conflict inside manifest (force): "
-                                + pkg.name() + " cannot coexist with " + other.name()
-                                + " (Exclude); continuing because force was requested.");
-                    } else {
-                        throw new InstallException("Package conflict inside manifest: "
-                                + pkg.name() + " cannot coexist with " + other.name() + " (Exclude).");
-                    }
-                }
-            }
-
-            List<PackageEntry> conflicts = database.findConflicts(pkg);
-            if (!conflicts.isEmpty()) {
-                String names = conflicts.stream()
-                        .map(p -> p.name() + " " + p.version())
-                        .collect(Collectors.joining(", "));
-                if (force) {
-                    logger.warn("Package conflict (force): " + pkg.name()
-                            + " cannot coexist with " + names
-                            + " (Exclude); continuing because force was requested.");
-                } else {
-                    throw new InstallException("Package conflict: " + pkg.name()
-                            + " cannot coexist with " + names
-                            + " (Exclude). Remove the conflicting package first.");
-                }
-            }
-        }
-    }
-
-    private void checkFileConflicts(PackageManifest manifest, boolean force) throws InstallException {
-        for (PackageEntry pkg : manifest.allPackages()) {
-            for (FileEntry file : pkg.files().values()) {
-                Set<String> owners = database.getFileOwners(file.path());
-                if (!owners.isEmpty()) {
-                    if (force) {
-                        logger.warn("File conflict (force): " + file.path() + " owned by " + owners + ", will overwrite and transfer ownership");
-                    } else {
-                        throw new InstallException("File conflict: " + file.path() + " already owned by " + owners);
-                    }
-                }
-            }
-        }
-    }
-
-    private Map<String, FileEntry> extractPackageFilesToTemp(Path zipPath, PackageEntry pkgEntry, Path tempDir) throws IOException {
+    private Map<String, FileEntry> extractPackageFilesToTemp(Path zipPath, PackageEntry pkgEntry,
+                                                             Path tempDir) throws IOException {
         Map<String, FileEntry> extracted = new LinkedHashMap<>();
-        
-        // Zip bomb protection: limit total extracted size
         long maxTotalExtractedSize = pkgEntry.files().values().stream()
                 .mapToLong(FileEntry::size)
-                .sum() + 10 * 1024 * 1024; // Allow 10MB overhead
+                .sum() + 10 * 1024 * 1024;
         long totalExtractedSize = 0;
-        
+
         try (ZipFile zip = new ZipFile(zipPath.toFile())) {
             for (FileEntry fileEntry : pkgEntry.files().values()) {
-                String zipPathStr = fileEntry.path();
-                // In the ZIP, files are at the root or in a package-specific directory
-                ZipEntry zipEntry = zip.getEntry(zipPathStr);
+                PackageLayout.validate(pkgEntry, fileEntry.path());
+                ZipEntry zipEntry = zip.getEntry(fileEntry.path());
                 if (zipEntry == null) {
-                    // Try with package name prefix
-                    zipEntry = zip.getEntry(pkgEntry.name() + "/" + zipPathStr);
+                    zipEntry = zip.getEntry(pkgEntry.name() + "/" + fileEntry.path());
                 }
                 if (zipEntry == null) {
-                    throw new IOException("File not found in ZIP: " + zipPathStr);
+                    throw new IOException("File not found in ZIP: " + fileEntry.path());
                 }
 
-                Path destPath = tempDir.resolve(fileEntry.path());
-                
-                // ZIP slip protection: validate path BEFORE creating directories
-                Path normalizedDest = destPath.normalize();
-                Path normalizedTempDir = tempDir.normalize();
-                if (!normalizedDest.startsWith(normalizedTempDir)) {
-                    throw new IOException("ZIP slip attempt detected: " + fileEntry.path());
-                }
-                
-                // Now safe to create directories
+                Path destPath = PackageLayout.resolve(tempDir, fileEntry.path());
                 Files.createDirectories(destPath.getParent());
 
-                // Extract with size limit to prevent zip bomb
-                long fileSizeLimit = fileEntry.size() + 1024 * 1024; // Allow 1MB overhead per file
+                long fileSizeLimit = fileEntry.size() + 1024 * 1024;
                 try (var is = zip.getInputStream(zipEntry);
-                     var os = Files.newOutputStream(destPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                     var os = Files.newOutputStream(destPath, StandardOpenOption.CREATE,
+                             StandardOpenOption.TRUNCATE_EXISTING)) {
                     byte[] buffer = new byte[8192];
                     int read;
                     long bytesWritten = 0;
                     while ((read = is.read(buffer)) > 0) {
                         bytesWritten += read;
                         if (bytesWritten > fileSizeLimit) {
-                            throw new IOException("Extracted file exceeds size limit: " + fileEntry.path() + 
-                                    " (limit: " + fileSizeLimit + ")");
+                            throw new IOException("Extracted file exceeds size limit: " + fileEntry.path());
                         }
                         os.write(buffer, 0, read);
                     }
                 }
 
-                // Verify extracted file
                 long actualSize = Files.size(destPath);
                 totalExtractedSize += actualSize;
                 if (totalExtractedSize > maxTotalExtractedSize) {
-                    throw new IOException("Total extracted size exceeds limit: " + totalExtractedSize + 
-                            " (limit: " + maxTotalExtractedSize + ")");
+                    throw new IOException("Total extracted size exceeds limit: " + totalExtractedSize);
                 }
-                
-                String actualSha256 = computeSha256(destPath);
-                
+                String actualSha256 = IoSupport.sha256(destPath);
                 if (actualSize != fileEntry.size()) {
-                    throw new IOException("Extracted file size mismatch: " + fileEntry.path() + 
-                            " expected " + fileEntry.size() + ", got " + actualSize);
+                    throw new IOException("Extracted file size mismatch: " + fileEntry.path()
+                            + " expected " + fileEntry.size() + ", got " + actualSize);
                 }
                 if (!actualSha256.equalsIgnoreCase(fileEntry.sha256())) {
-                    throw new IOException("Extracted file hash mismatch: " + fileEntry.path() + 
-                            " expected " + fileEntry.sha256() + ", got " + actualSha256);
+                    throw new IOException("Extracted file hash mismatch: " + fileEntry.path()
+                            + " expected " + fileEntry.sha256() + ", got " + actualSha256);
                 }
-
-                // Update with actual verified info
-                extracted.put(fileEntry.path(), new FileEntry(
-                        fileEntry.path(), actualSize, actualSha256, pkgEntry.name()));
+                extracted.put(fileEntry.path(), new FileEntry(fileEntry.path(), actualSize,
+                        actualSha256, pkgEntry.name()));
             }
         }
-
         return extracted;
-    }
-
-    private void validateExtractedFiles(PackageEntry pkgEntry, Map<String, FileEntry> extractedFiles) throws IOException {
-        // Verify all expected files are present
-        for (FileEntry expectedFile : pkgEntry.files().values()) {
-            FileEntry actualFile = extractedFiles.get(expectedFile.path());
-            if (actualFile == null) {
-                throw new IOException("Missing extracted file: " + expectedFile.path());
-            }
-            if (!actualFile.sha256().equalsIgnoreCase(expectedFile.sha256())) {
-                throw new IOException("File hash mismatch after extraction: " + expectedFile.path());
-            }
-            if (actualFile.size() != expectedFile.size()) {
-                throw new IOException("File size mismatch after extraction: " + expectedFile.path());
-            }
-        }
-    }
-
-    private void moveFilesToFinalLocation(PackageEntry pkgEntry, Map<String, FileEntry> extractedFiles, Path tempDir, boolean force) throws IOException {
-        for (FileEntry fileEntry : extractedFiles.values()) {
-            Path srcPath = tempDir.resolve(fileEntry.path());
-            Path destPath = installRoot.resolve(fileEntry.path());
-            
-            // Symlink protection: resolve to real path and verify it's within installRoot
-            Path realDestPath;
-            try {
-                realDestPath = destPath.toRealPath(LinkOption.NOFOLLOW_LINKS);
-            } catch (IOException e) {
-                // File doesn't exist yet, check parent
-                realDestPath = destPath.getParent().toRealPath(LinkOption.NOFOLLOW_LINKS).resolve(destPath.getFileName());
-            }
-            
-            Path realInstallRoot = installRoot.toRealPath(LinkOption.NOFOLLOW_LINKS);
-            if (!realDestPath.startsWith(realInstallRoot)) {
-                throw new IOException("Symlink escape detected: " + fileEntry.path() + " resolves outside install root");
-            }
-            
-            Files.createDirectories(destPath.getParent());
-            
-            // Atomic move: copy then delete source
-            Files.move(srcPath, destPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        }
-        
-        // If force install, transfer file ownership from old packages to new package
-        if (force) {
-            for (FileEntry fileEntry : extractedFiles.values()) {
-                database.transferFileOwnership(fileEntry.path(), pkgEntry.id());
-            }
-        }
-    }
-
-    private void deleteDirectory(Path dir) throws IOException {
-        if (Files.exists(dir)) {
-            Files.walk(dir)
-                .sorted(Comparator.reverseOrder())
-                .forEach(path -> {
-                    try {
-                        Files.delete(path);
-                    } catch (IOException e) {
-                        logger.warn("Failed to delete temp file: " + path + " - " + e.getMessage());
-                    }
-                });
-        }
-    }
-
-    private String computeSha256(Path file) throws IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (var is = Files.newInputStream(file)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = is.read(buffer)) > 0) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            byte[] hash = digest.digest();
-            StringBuilder hex = new StringBuilder();
-            for (byte b : hash) {
-                hex.append(String.format("%02x", b));
-            }
-            return hex.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IOException("SHA-256 not available", e);
-        }
     }
 
     public static class InstallException extends Exception {
         public InstallException(String message) {
             super(message);
         }
+
         public InstallException(String message, Throwable cause) {
             super(message, cause);
         }
     }
 
-    private record PackageManifest(PackageEntry mainPackage, List<PackageEntry> additionalPackages, List<PackageEntry> allPackages) {}
+    private record PackageManifest(PackageEntry mainPackage, List<PackageEntry> additionalPackages,
+                                   List<PackageEntry> allPackages) {
+    }
 }

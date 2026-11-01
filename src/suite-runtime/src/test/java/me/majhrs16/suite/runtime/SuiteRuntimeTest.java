@@ -31,6 +31,7 @@ import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.render.ChatDelivery;
+import me.majhrs16.suite.manager.apt.ManagerFacade;
 
 import net.kyori.adventure.text.Component;
 
@@ -53,11 +54,16 @@ class SuiteRuntimeTest {
     void startsWithPreinstalledModulesAndStopDeactivatesThem() throws Exception {
         Path jar = FixtureModules.buildJar(tempDir, "pre", "1.0.0", "pre",
                 null, null, false, false);
-        Path packages = tempDir.resolve("data/manager/library/packages");
-        Files.createDirectories(packages);
-        Files.copy(jar, packages.resolve("pre.jar"));
+        Path zip = FixtureModules.buildPackageZip(
+                tempDir, "pre", "1.0.0", "stable", jar, null);
+        Path data = tempDir.resolve("data");
+        ManagerFacade manager = new ManagerFacade(data.resolve("manager"), logger,
+                ports.info().name(), ports.info().arch(), ports.info().os(),
+                ports.info().javaMajor());
+        manager.initialize();
+        manager.packageInstall(zip, false);
 
-        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+        try (SuiteRuntime runtime = new SuiteRuntime(data, ports, logger)) {
             runtime.start();
 
             assertTrue(runtime.isStarted());
