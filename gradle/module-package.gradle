@@ -24,6 +24,12 @@ tasks.register('generateModuleManifest') {
     dependsOn moduleJarTask
     def jarFileProvider = moduleJarTask.flatMap { it.archiveFile }
     inputs.file(jarFileProvider)
+    inputs.property('moduleId', moduleId)
+    inputs.property('moduleVersion', moduleVersion)
+    inputs.property('moduleType', moduleType)
+    inputs.property('moduleDependencies', moduleDependencies)
+    inputs.property('modulePlatform', modulePlatform)
+    inputs.property('moduleJarPath', moduleJarPath)
     outputs.file(layout.buildDirectory.file('module/METADATA/package.list'))
     doLast {
         def jarFile = jarFileProvider.get().asFile
@@ -54,9 +60,33 @@ tasks.register('modulePackage', Zip) {
     dependsOn 'generateModuleManifest'
     archiveFileName = "${moduleId}-${moduleVersion}.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
+    // Byte-for-byte reproducible ZIPs: stable entry order and no wall-clock
+    // timestamps. The JAR inside is already reproducible (root build.gradle).
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
     from(layout.buildDirectory.dir('module'))
     from(moduleJarTask.flatMap { it.archiveFile }) {
         into(moduleJarDir)
         rename { moduleJarName }
     }
 }
+
+// Publish the SHA-256 next to the artifact in the same format as sha256sum.
+// The manager repository index consumes the checksum, not the ZIP name.
+def moduleArchiveFile = layout.buildDirectory.file("distributions/${moduleId}-${moduleVersion}.zip")
+def moduleChecksumFile = layout.buildDirectory.file("distributions/${moduleId}-${moduleVersion}.zip.sha256")
+tasks.register('moduleChecksum') {
+    dependsOn 'modulePackage'
+    inputs.file(moduleArchiveFile)
+    outputs.file(moduleChecksumFile)
+    doLast {
+        def archive = moduleArchiveFile.get().asFile
+        def digest = java.security.MessageDigest.getInstance('SHA-256').digest(archive.bytes)
+        def sha = digest.collect { String.format('%02x', it & 0xff) }.join()
+        def out = moduleChecksumFile.get().asFile
+        out.parentFile.mkdirs()
+        out.text = "${sha}  ${archive.name}\n"
+    }
+}
+tasks.named('modulePackage') { finalizedBy 'moduleChecksum' }
+tasks.named('assemble') { dependsOn 'moduleChecksum' }

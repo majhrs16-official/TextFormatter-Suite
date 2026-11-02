@@ -73,7 +73,43 @@ tasks.jar {
 shadowJar {
     archiveClassifier = ''
     archiveBaseName = 'textformatter-suite-fabric'
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    configurations = [project.configurations.runtimeClasspath]
 }
+
+tasks.register('verifyShadowJarHasNoFeatures') {
+    dependsOn 'shadowJar'
+    doLast {
+        def forbidden = [
+                'me/majhrs16/suite/textformatter/',
+                'me/majhrs16/suite/messages/',
+                'me/majhrs16/suite/chattranslator/',
+                'me/majhrs16/suite/gtranslate/',
+                'me/majhrs16/suite/ltranslate/',
+                'me/majhrs16/suite/iflow/',
+                'me/majhrs16/suite/sync',
+                'me/majhrs16/suite/observability/',
+                'me/majhrs16/suite/presets/',
+                'me/majhrs16/suite/inworld/',
+                'me/majhrs16/suite/tester/',
+        ]
+        def found = []
+        new java.util.zip.ZipFile(tasks.named('shadowJar').get().archiveFile.get().asFile)
+                .withCloseable { zip ->
+                    zip.entries().each { entry ->
+                        if (forbidden.any { entry.name.startsWith(it) }) {
+                            found << entry.name
+                        }
+                    }
+                }
+        if (!found.isEmpty()) {
+            throw new GradleException("Fabric shadow JAR contains feature classes: "
+                    + found.take(10).join(', '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'verifyShadowJarHasNoFeatures' }
 
 processResources {
     filesMatching('fabric.mod.json') {

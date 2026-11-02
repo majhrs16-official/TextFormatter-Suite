@@ -74,4 +74,5 @@ tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
 
 // F5 — distribution ZIP for the manager
 ext.moduleVersion = '2.1.0'
+ext.moduleDependencies = 'spring-expression@>=6.1.12,jackson-databind@>=2.17.1,snakeyaml@>=2.2.0'
 apply from: rootProject.file('gradle/module-package.gradle')

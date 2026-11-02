@@ -41,53 +41,20 @@ jobs:
         run: |
           echo "BUILD_TIMESTAMP=$(git log -1 --format=%ct)000" >> "$GITHUB_ENV"
 
-      - name: Build all modules
+      - name: Build all modules and platform plugins
         run: |
-          ./gradlew \
-            :src:core-api:build \
-            :src:kernel:build \
-            :src:logger:build \
-            :src:iflow-vm:build \
-            :src:iflow-wasm:build \
-            :src:host:build \
-            :src:textformatter:build \
-            :src:gtranslate:build \
-            :src:ltranslate:build \
-            :src:sync-http:build \
-            :src:sync-tcpudp:build \
-            :src:sync-discord:build \
-            :src:sync-discord-jda:build \
-            :src:sync-discord-jdk:build \
-            :src:sync-telegram:build \
-            :src:sync-websocket:build \
-            :src:sync-velocity-core:build \
-            :src:sync-velocity:build \
-            :src:sync-bus:build \
-            :src:observability:build \
-            :src:extension-api:build \
-            :src:example-extension:build \
-            :src:manager-spi:build \
-            :src:manager-core:build \
-            :src:manager-apt:build \
-            :src:presets:build \
-            :src:inworld:build \
-            :src:loadtest:build \
-            :src:performance:build \
-            :src:transport:build \
-            :src:messages:build \
-            :src:tester:build \
-            :src:common-legacy:build \
-            checkArchitecture \
+          ./gradlew build checkArchitecture \
             -Pversion="${{ steps.version.outputs.version }}" \
             --no-daemon
 
-      - name: Build platform plugins
+      - name: Build reproducible module repository
         run: |
-          ./gradlew :src:spigot-host:build :src:fabric-host:build \
+          ./gradlew moduleRepository \
+            -PrepositoryBaseUrl="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
             -Pversion="${{ steps.version.outputs.version }}" \
             --no-daemon
 
-      - name: Generate SHA256 for all JARs
+      - name: Generate SHA256 for all host JARs
         run: |
           mkdir -p release-artifacts
           for jar in src/*/build/libs/*.jar; do
@@ -98,6 +65,9 @@ jobs:
           for jar in release-artifacts/*.jar; do
             sha256sum "$jar" | cut -d' ' -f1 > "$jar.sha256"
           done
+          cp build/repository/*.zip build/repository/*.sha256 \
+            build/repository/packages.list build/repository/SHA256SUMS \
+            release-artifacts/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -111,11 +81,14 @@ jobs:
             ### Artefactos
             - Plugin Spigot (fat-jar): `textformatter-suite-spigot-${{ steps.version.outputs.version }}.jar`
             - Mod Fabric: `textformatter-suite-fabric-${{ steps.version.outputs.version }}.jar`
-            - Módulos Java (JAR + SHA256) publicados en GitHub Releases
+            - Paquetes de módulo reproducibles (`.zip` + `.sha256`) y `packages.list`
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             release-artifacts/*.jar
             release-artifacts/*.sha256
+            release-artifacts/*.zip
+            release-artifacts/packages.list
+            release-artifacts/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

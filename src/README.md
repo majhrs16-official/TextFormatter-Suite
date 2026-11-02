@@ -29,12 +29,11 @@ TextFormatter Suite
 │   ├── manager-apt       → Repositories, dependency resolver, APT installer
 │   ├── extension-api     → Extension system API
 │   ├── inworld           → In-world integration
-│   ├── performance       → Profiling & optimization
-│   └── common-legacy     → Legacy shared code
+│   └── performance       → Profiling & optimization
 │
 ├── Sync Transports (platform-agnostic)
 │   ├── sync-http         → HTTP webhook sink
-│   ├── sync-tcpudp       → TCP/UDP sinks
+│   ├── sync-socket       → TCP/UDP sinks
 │   ├── sync-discord      → Discord sink (neutral)
 │   ├── sync-discord-jda  → Discord JDA adapter
 │   ├── sync-discord-jdk  → Discord JDK adapter
@@ -61,6 +60,9 @@ TextFormatter Suite
 - Event capture lives in downloadable `sync-bukkit`/`sync-fabric` packages, not in the host JAR
 - Commands live in the neutral `api.command` tree; the hosts only register the root adapter (F4d)
 - Sync modules depend on `core-api`; technology adapters add `transport`, JDA or a platform SDK
+- Feature libraries that do not cross an API boundary are `DEPENDENCY` packages (`snakeyaml`, `json`, `gson`, `java-websocket`, `chicory`, `prometheus`, `spring-expression`, `jackson-databind`, `jda`); Adventure stays on the host because `core-render` exposes its types
+- Host shadow JARs contain only the bootstrap/runtime; `verifyShadowJarHasNoFeatures` fails the build if a feature leaks in
+- `modulePackage` builds a reproducible ZIP plus `.sha256`; `thirdPartyPackages` builds dependency ZIPs; `moduleRepository` writes `packages.list` and `SHA256SUMS` for a public base URL
 - **No circular dependencies** between core modules
 
 ---
@@ -77,7 +79,7 @@ TextFormatter Suite
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `host` (selección `vm`/`firewall`), web editor |
 | `host` | Neutral message dispatch, config loading and `SuiteHost` assembly; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
-| `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-tcpudp`, `sync-discord`, `gtranslate`, `ltranslate` |
+| `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-socket`, `sync-discord`, `gtranslate`, `ltranslate` |
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `ltranslate` | LibreTranslate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
@@ -89,7 +91,7 @@ TextFormatter Suite
 | `inworld` | Neutral in-world domain (signs, containers, books, WORLD/RADIUS, click/hover); packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotInWorldListener`), `suite-runtime` |
 | `performance` | Hotspot detection, profiling, cache/memory optimization | `core-api` | `spigot-host`, `fabric-host` |
 | `sync-http` | HTTP webhook sync sink | `core-api`, `transport` | `spigot-host`, `fabric-host` |
-| `sync-tcpudp` | TCP/UDP sync sinks | `core-api`, `transport` | `spigot-host`, `fabric-host` |
+| `sync-socket` | TCP/UDP sync sinks | `core-api`, `transport` | `spigot-host`, `fabric-host` |
 | `sync-discord` | Neutral Discord sink; selects a `DiscordConnectionFactory` by config | `core-api`, `sync-common` | `spigot-host`, `fabric-host` |
 | `sync-discord-jda` | JDA `discord-transport` adapter (provides the capability) | `core-api`, JDA | `spigot-host` |
 | `sync-discord-jdk` | JDK WebSocket/REST `discord-transport` adapter | `core-api`, `transport` | optional |
@@ -191,7 +193,7 @@ TextFormatter Suite
 ```
 → src/transport/README.md
   → Transport.java, HttpTransport.java, MessageCodec.java
-→ src/sync-http/README.md, sync-tcpudp/README.md, sync-discord/README.md, etc.
+→ src/sync-http/README.md, sync-socket/README.md, sync-discord/README.md, etc.
   → SyncSink implementations
 ```
 
@@ -377,9 +379,7 @@ Module.initialize() called in order
 
 > ℹ️ **Velocity split**: `sync-velocity-core` is the neutral sink; `sync-velocity` is the Velocity plugin. Only the plugin imports `com.velocitypowered`.
 
-> ⚠️ **Duplicate MessageCodec**: Both `transport` and `sync-http`/`sync-tcpudp`/`sync-discord` have `MessageCodec` classes. The `transport` one is the base abstraction; sync modules have their own (possibly for historical reasons).
-
-> ⚠️ **Legacy code**: `common-legacy` remains as a historical reference. `coretranslator` was removed from the build on 2026-09-28 and no longer exists in `src/`.
+> ⚠️ **Duplicate MessageCodec**: Both `transport` and `sync-http`/`sync-socket`/`sync-discord` have `MessageCodec` classes. The `transport` one is the base abstraction; sync modules have their own (possibly for historical reasons).
 
 > ⚠️ **Incomplete migration**: `fabric-host` uses Maven coordinates for dependencies (e.g., `me.majhrs16:suite-core-api:2.1.0-SNAPSHOT`) while `spigot-host` uses Gradle project dependencies. This suggests `fabric-host` may be built/published separately.
 

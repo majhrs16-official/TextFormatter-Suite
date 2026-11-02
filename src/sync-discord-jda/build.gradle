@@ -70,4 +70,5 @@ configurations.configureEach {
 // F6 — Discord transport adapter package. JDA is provided by the host until
 // F8 packages third-party libraries as DEPENDENCY artifacts.
 ext.moduleVersion = '2.1.0'
+ext.moduleDependencies = 'jda@>=6.4.2'
 apply from: rootProject.file('gradle/module-package.gradle')

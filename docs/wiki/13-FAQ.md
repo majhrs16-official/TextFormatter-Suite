@@ -177,8 +177,8 @@ aliases: [suite, txf, custom]
 
 Aplica el cambio con `/<raíz-actual> reload` (por defecto `/suite reload`); tras
 el re-registro, el comando pasa a estar en `/myname`. Reinicia el servidor si el
-runtime informa `RESTART_REQUIRED`. `base-name` se acepta solo durante la
-migración y se elimina en F8.
+runtime informa `RESTART_REQUIRED`. `base-name` está retirado: se ignora y la
+raíz por defecto es `suite`.
 
 ### How do I add custom commands?
 

@@ -466,7 +466,20 @@ public void benchmarkTemplateRendering() {
 # Run specific module tests
 ./gradlew :src:textformatter:test
 ./gradlew :src:iflow-vm:test
+
+# Build one reproducible module package and its .sha256 sidecar
+./gradlew :src:textformatter:modulePackage
+
+# Build the third-party DEPENDENCY packages
+./gradlew thirdPartyPackages
+
+# Build a complete repository index (base URL is mandatory)
+./gradlew moduleRepository -PrepositoryBaseUrl=https://repo.example.com/suite
 ```
+
+`moduleRepository` writes the module ZIPs, their sidecars, `packages.list` and
+`SHA256SUMS` under `build/repository/`. The base URL must be the public URL where
+those files will be served; a blank or placeholder URL is rejected.
 
 ### Publishing
 

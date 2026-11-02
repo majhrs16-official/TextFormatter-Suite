@@ -40,7 +40,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; 4 tests de ciclo y entrega |
 | **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: bootstrap neutral, comandos con raíz configurable, fat-jar shadow; **compila con Paper API 1.21.4** |
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
-| **Module Manager (runtime)** | ✅ Núcleo y hot upgrade probados | Repositorios HTTP/file, resolver SemVer y dependencias, SHA-256 obligatorio, JARs versionados, classloader aislado, activación/desactivación real, hot upgrade con rollback y detección de hilos/recursos/registros filtrados; `packages.list` es la metadata autoritativa; **no hay GitHub Releases públicos** (ver `PLAN.md`) |
+| **Module Manager (runtime)** | ✅ Núcleo y hot upgrade probados | Repositorios HTTP/file, resolver SemVer y dependencias, SHA-256 obligatorio, JARs versionados, classloader aislado, activación/desactivación real, hot upgrade con journal y detección de hilos/recursos/registros filtrados; un fallo de activación deja `ACTIVATION_FAILED` sin rollback de archivos; paquetes `DEPENDENCY` de terceros; `packages.list` es la metadata autoritativa; **no hay GitHub Releases públicos** (ver `PLAN.md`) |
 | **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
 | **Presets** | ✅ Catálogo probado | Standard/RPG/Staff/Minimal, import/export YAML; 2 tests; sin motor de ejecución (placeholder) |
 | **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
@@ -182,7 +182,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | `sync-discord` | Discord Gateway v10 (WebSocket JDK + REST), intents, embeds, tokens `char[]` | ✅ Probado (8 tests) |
 | `sync-telegram` | Telegram Bot long-poll, watermark offset, tokens `char[]` | ✅ Probado (7 tests) |
 | `sync-http` | Webhook + REST (`HttpServer` JDK), inbound/outbound | ✅ Probado (7 tests) |
-| `sync-tcpudp` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (7 tests) |
+| `sync-socket` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (7 tests) |
 | `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ✅ Probado (1 test de contrato) |
 | `sync-velocity-core` | Neutral Velocity sink — async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado |
 | `sync-velocity` | Velocity plugin real — registro de canal, `PluginMessageEvent` y `sendPluginMessage` | ✅ Probado |
@@ -206,11 +206,6 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 |--------|-----------|--------|
 | `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap neutral, raíz de comandos configurable, fat-jar shadow | ✅ Compilación y tests automatizados |
 | `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ⚠️ Compila (sin tests Java; verificación Loom local; no probado en servidor real) |
-
-### Legacy / referencial
-| Módulo | Propósito | Estado |
-|--------|-----------|--------|
-| `common-legacy` | Referencia histórica del trío monolítico eliminado | 📚 Solo referencia (0 fuentes Java) |
 
 > **Documentación por módulo:** Cada módulo en `src/*/README.md` detalla responsabilidades, dependencias, data flow y entry points. Ver [`src/README.md`](src/README.md) para mapa completo y discrepancias conocidas.
 
@@ -351,6 +346,9 @@ cd src/web-editor && npm run check
 | Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 766 tests JVM en 28 módulos y 108 tests JS (verificación local 2026-10-20) |
 | Solo build (sin tests) | `./gradlew build -x test --no-daemon` | Solo el proyecto raíz |
 | Plugin Spigot (fat-jar) | `./gradlew :src:spigot-host:build --no-daemon` | En `src/spigot-host/build/libs/` |
+| Paquete de un módulo | `./gradlew :src:<modulo>:modulePackage --no-daemon` | ZIP reproducible + `.sha256` en `src/<modulo>/build/distributions/` |
+| Paquetes de terceros | `./gradlew thirdPartyPackages --no-daemon` | Paquetes `DEPENDENCY` en `build/third-party/` |
+| Repositorio de paquetes | `./gradlew moduleRepository -PrepositoryBaseUrl=https://... --no-daemon` | ZIPs, sidecars, `packages.list` y `SHA256SUMS` en `build/repository/`; la URL base es obligatoria |
 | Paquetes iFlow (3 motores) | `./gradlew publishIflowEngines --no-daemon` | Publica `suite-iflow-vm`, `suite-iflow-firewall` y `suite-iflow-wasm` por separado en `build/repo/` |
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
 | Javadoc | `./gradlew javadocAll --no-daemon` | En `**/build/docs/javadoc/` |

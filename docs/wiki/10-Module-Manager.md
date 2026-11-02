@@ -3,7 +3,9 @@
 > **ADR-027 implemented.** The manager uses the staged pipeline: acquisition
 > into a content-addressed cache, journaled file/status commit and separate
 > runtime activation. Activation failures are reported as `ACTIVATION_FAILED`;
-> they do not roll back installed files.
+> they do not roll back installed files. **ADR-029** adds reproducible
+> distribution, third-party `DEPENDENCY` packages and the repository trust
+> boundary.
 
 ## Overview
 
@@ -82,6 +84,33 @@ The package-level entry is written before the first `start()`
 Clean shutdown marks the module `INSTALLED`. Any leak marks it
 `RESTART_REQUIRED`.
 
+### Hot reload and restart
+
+Hot unload and hot upgrade are supported only when deactivation is clean. The
+runtime closes the old classloader, releases tracked resources, cancels module
+tasks and removes the services, commands, events and config sections owned by
+the module. Versioned directories keep the old JARs available for manual
+recovery, but the old runtime version is never reactivated automatically after a
+stage-3 failure.
+
+A restart is required when:
+
+- `stop()` throws, a tracked resource fails to close, a live thread remains in
+  the module `ThreadGroup`, or an owner registration is left behind;
+- an active module uses a dependency package that is being upgraded or removed,
+  directly or transitively;
+- the platform adapter cannot undo a registration and reports the failure
+  instead of pretending success;
+- the operator wants to retry a module whose runtime state is
+  `RESTART_REQUIRED`.
+
+`RESTART_REQUIRED` is sticky: install, upgrade and remove operations that would
+need to unload that module fail explicitly until the process restarts. A restart
+re-reads `library/status` and activates the committed version. A stage-3
+activation failure is different: files and `library/status` are already
+committed, so activation can be retried without reinstalling, and the package is
+reported as `ACTIVATION_FAILED`.
+
 ### Staged install and upgrade
 
 1. **Acquisition.** Resolve packages, transitive dependencies, versions,
@@ -157,6 +186,19 @@ Dependency packages are versioned too. A dependency upgrade is rejected while an
 active module uses it directly or transitively; removing the old JAR could break
 lazy class loading. Restart the server to apply that dependency upgrade.
 
+Feature libraries that do not cross an API boundary are shipped as `DEPENDENCY`
+packages: `snakeyaml`, `json`, `gson`, `java-websocket`, `chicory`,
+`prometheus`, `spring-expression`, `jackson-databind` and `jda`. Their
+transitive JARs are resolved at build time and declared in the consumer's
+`moduleDependencies`, so the manager installs them before the module and
+`ModuleClassLoader` exposes them from `library/dependencies`.
+
+Adventure remains a host API dependency. `core-render` exposes Adventure types
+in its contract, so loading a second Adventure classloader would split
+`Component`/`Audience` identity across the API boundary. MiniMessage and the
+plain serializer stay on the host for the same reason. A module must not declare
+an Adventure `DEPENDENCY` package unless that contract is redesigned.
+
 ## Commands
 
 The command root is configurable in `config/suite/commands.yml`. By default it is
@@ -225,6 +267,78 @@ dependencies and per-file SHA-256.
 There is no `module.yml` inside the package: the authoritative metadata is
 `packages.list` / `package.list`, and the module JAR exposes its descriptor
 through `ModuleActivator.descriptor()`.
+
+## Distribution and repository responsibility
+
+### Build outputs
+
+| Task | Output | Purpose |
+|---|---|---|
+| `:<module>:modulePackage` | `build/distributions/<id>-<version>.zip` | One module or dependency package with `METADATA/package.list` |
+| `:<module>:moduleChecksum` | `<zip>.sha256` | `sha256sum`-style sidecar; `assemble` depends on it |
+| `thirdPartyPackages` | `build/third-party/*.zip` | Third-party `DEPENDENCY` packages with resolved transitive JARs |
+| `moduleRepository` | `build/repository/` | Every module ZIP, sidecar, `packages.list` and `SHA256SUMS` |
+
+`moduleRepository` requires `-PrepositoryBaseUrl=https://...`; it rejects a
+missing or blank base URL. `packages.list` is the manager's authoritative index.
+`SHA256SUMS` lets a mirror verify the whole directory with `sha256sum -c`.
+Published ZIPs, sidecars and indexes must be immutable: a new build gets a new
+version or a new directory, never a rewritten artifact under the same URL.
+
+### Reproducibility
+
+Module ZIPs use a stable entry order and fixed timestamps; the module JAR
+manifests use `Build-Timestamp: 0` unless a release explicitly supplies
+`BUILD_TIMESTAMP`/`-PbuildTimestamp`. The same sources, dependencies and
+toolchain must produce byte-identical JARs and ZIPs. The build does not embed
+wall-clock time, absolute paths or machine-local URLs.
+
+### Host and module separation
+
+The Spigot and Fabric shadow JARs contain only the host runtime
+(`me.majhrs16.suite.{api,host,kernel,manager,runtime,...host}`), never feature
+classes. `verifyShadowJarHasNoFeatures` runs as part of `check` and fails if a
+feature leaks into a host artifact. Features, platform listeners and
+`sync-bukkit`/`sync-fabric` are downloaded as packages; they are not embedded in
+the bootstrap.
+
+### Responsibility split
+
+The repository owner is responsible for:
+
+- publishing immutable ZIPs, matching `.sha256` sidecars, `packages.list` and
+  `SHA256SUMS`;
+- keeping old versions available long enough for rollback and manual recovery;
+- using a stable HTTPS base URL and access controls appropriate to the trust
+  level of the deployment;
+- never publishing placeholder URLs, mutable checksums or a `packages.list` that
+  disagrees with the ZIPs.
+
+The manager is responsible for:
+
+- resolving the dependency graph and rejecting missing or unsatisfied
+  dependencies before mutating files;
+- verifying size and SHA-256 for every downloaded artifact and using a
+  content-addressed cache;
+- applying stage 1 (acquisition), stage 2 (journaled commit) and stage 3
+  (activation) exactly as described above;
+- treating `library/status` as the only installed-version pointer and never
+  overwriting a JAR used by an active `ClassLoader`.
+
+### Trust boundaries and limits
+
+TLS plus SHA-256 detects corruption and transport tampering; it does **not**
+prove authorship. There is no signature or certificate pinning in this phase, so
+a compromised repository can serve malicious packages with matching checksums.
+The repository owner is trusted. Module isolation is a classloader and
+capability boundary, not a security sandbox against hostile JVM code.
+
+Third-party packages are resolved from Maven Central at build time and may carry
+transitive duplicates. Modules must declare the dependencies they actually use;
+the manager does not infer imports. Adventure is the documented API-boundary
+exception. No E2E test runs against real Spigot/Paper/Fabric/Velocity servers;
+the recovery and activation gates use real ZIPs, JARs and temporary manager
+directories.
 
 ## API reference
 
@@ -306,6 +420,9 @@ No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 | `ACTIVATION_FAILED` without install rollback | ✅ ADR-027 |
 | Versioned package directories and persistent pointer | ✅ ADR-027 |
 | One or more module JARs per `PACKAGE` with unique module ids | ✅ |
+| Reproducible module ZIPs and `.sha256` sidecars | ✅ |
+| Third-party `DEPENDENCY` packages with resolved transitives | ✅ |
+| Repository `packages.list` and `SHA256SUMS` | ✅ |
 | Leak detection and `RESTART_REQUIRED` | ✅ |
 | Local/HTTP/file repositories | ✅ |
 | GitHub releases | Not used; `packages.list` is authoritative |
@@ -316,6 +433,6 @@ No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 - [Commands Reference](08-Commands.md)
 - [Configuration Guide](02-Configuration.md)
 - [Developer Guide](09-Developer-Guide.md)
-- [ADR-026 / ADR-027](../workdir/ADR.md)
+- [ADR-026 / ADR-027 / ADR-029](../workdir/ADR.md)
 - [PLAN](../workdir/PLAN.md)
 - [Philosophy, C13](../prompts/diseno/philosophy.md) — hypotheses need evidence; invariant or full support

@@ -29,56 +29,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build all modules
-        run: |
-          ./gradlew :src:core-api:build \
-            :src:kernel:build \
-            :src:logger:build \
-            :src:iflow-vm:build \
-            :src:iflow-wasm:build \
-            :src:host:build \
-            :src:textformatter:build \
-            :src:gtranslate:build \
-            :src:ltranslate:build \
-            :src:sync-http:build \
-            :src:sync-tcpudp:build \
-            :src:sync-discord:build \
-            :src:sync-discord-jda:build \
-            :src:sync-discord-jdk:build \
-            :src:sync-telegram:build \
-            :src:sync-websocket:build \
-            :src:sync-velocity-core:build \
-            :src:sync-velocity:build \
-            :src:sync-bus:build \
-            :src:observability:build \
-            :src:extension-api:build \
-            :src:example-extension:build \
-            :src:manager-spi:build \
-            :src:manager-core:build \
-            :src:manager-apt:build \
-            :src:presets:build \
-            :src:inworld:build \
-            :src:loadtest:build \
-            :src:performance:build \
-            :src:transport:build \
-            :src:messages:build \
-            :src:tester:build \
-            :src:common-legacy:build \
-            checkArchitecture \
-            --no-daemon
+        run: ./gradlew build checkArchitecture --no-daemon
 
       - name: Verify dependency lockfiles
         run: ./gradlew checkLocks --no-daemon
 
       - name: Verify generated schema
         run: ./gradlew :src:host:verifySchema --no-daemon
-
-      - name: Build Spigot plugin
-        run: |
-          ./gradlew :src:spigot-host:build --no-daemon
-
-      - name: Build Fabric plugin
-        run: |
-          ./gradlew :src:fabric-host:build --no-daemon
 
       - name: Upload Spigot artifact
         uses: actions/upload-artifact@v4

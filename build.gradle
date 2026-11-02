@@ -11,36 +11,43 @@ allprojects {
     apply plugin: 'java'
 }
 
+repositories {
+    mavenCentral()
+}
+
 // Reproducible builds configuration
 // For reproducible builds, timestamp must be deterministic:
 // - SNAPSHOT: epoch (0)
 // - Release: fixed timestamp from BUILD_TIMESTAMP env var (ms since epoch), or project property
-tasks.withType(Jar).configureEach { jar ->
-    def buildTimestamp
-    if (project.version.endsWith('-SNAPSHOT')) {
-        buildTimestamp = 0L
-    } else {
-        // Allow override via environment variable or the gradle.properties entry
-        // (buildTimestamp; -PbuildTimestamp=... overrides for one build).
-        def envTs = System.getenv('BUILD_TIMESTAMP')
-        def propTs = providers.gradleProperty('buildTimestamp').getOrNull()
-        buildTimestamp = (envTs ?: propTs ?: '0') as long
-        if (buildTimestamp == 0) {
-            logger.warn("Release build without BUILD_TIMESTAMP env var or buildTimestamp property - using epoch (non-reproducible across builds)")
+allprojects {
+    tasks.withType(Jar).configureEach { jar ->
+        def buildTimestamp
+        if (project.version.endsWith('-SNAPSHOT')) {
+            buildTimestamp = 0L
+        } else {
+            // Allow override via environment variable or the gradle.properties entry
+            // (buildTimestamp; -PbuildTimestamp=... overrides for one build).
+            def envTs = System.getenv('BUILD_TIMESTAMP')
+            def propTs = providers.gradleProperty('buildTimestamp').getOrNull()
+            buildTimestamp = (envTs ?: propTs ?: '0') as long
+            if (buildTimestamp == 0) {
+                logger.warn("Release build without BUILD_TIMESTAMP env var or buildTimestamp property - using epoch (non-reproducible across builds)")
+            }
         }
-    }
-    jar.manifest {
-        attributes(
-            'Implementation-Version': project.version,
-            'Implementation-Title': project.name,
-            'Implementation-Vendor': 'me.majhrs16',
-            'Build-Timestamp': buildTimestamp
-        )
-    }
-    jar.reproducibleFileOrder = true
-    jar.doLast {
-        def jarFile = jar.archiveFile.get().asFile
-        jarFile.setLastModified(buildTimestamp)
+        jar.manifest {
+            attributes(
+                'Implementation-Version': project.version,
+                'Implementation-Title': project.name,
+                'Implementation-Vendor': 'me.majhrs16',
+                'Build-Timestamp': buildTimestamp
+            )
+        }
+        jar.setReproducibleFileOrder(true)
+        jar.setPreserveFileTimestamps(false)
+        jar.doLast {
+            def jarFile = jar.archiveFile.get().asFile
+            jarFile.setLastModified(buildTimestamp)
+        }
     }
 }
 
@@ -550,7 +557,6 @@ subprojects { project ->
                 ':src:loadtest'       : [line: 0.10, branch: 0.05],
                 ':src:iflow-wasm'     : [line: 0.10, branch: 0.05],
                 ':src:example-extension': [line: 0.10, branch: 0.05],
-                ':src:common-legacy'  : [line: 0.10, branch: 0.05],
             ]
 
             def t = thresholds[project.path] ?: [line: 0.10, branch: 0.05]
@@ -570,5 +576,219 @@ subprojects { project ->
                 }
             }
         }
+    }
+}
+
+// ============================================================
+// F8 — Third-party dependency packages
+// ============================================================
+// These libraries are feature dependencies, not host code. Each package carries
+// its resolved transitive JARs under library/dependencies/<id>/<version>/.
+// Adventure remains a host API dependency: core-render exposes Adventure types,
+// so loading a second Adventure classloader would break the API contract.
+def thirdPartyPackages = [
+        'snakeyaml'        : [version: '2.3.0',
+                              coordinates: ['org.yaml:snakeyaml:2.3']],
+        'json'             : [version: '2024.3.3',
+                              coordinates: ['org.json:json:20240303']],
+        'gson'             : [version: '2.11.0',
+                              coordinates: ['com.google.code.gson:gson:2.11.0']],
+        'java-websocket'   : [version: '1.5.4',
+                              coordinates: ['org.java-websocket:Java-WebSocket:1.5.4']],
+        'chicory'          : [version: '1.4.0',
+                              coordinates: ['com.dylibso.chicory:runtime:1.4.0']],
+        'prometheus'       : [version: '0.16.0',
+                              coordinates: ['io.prometheus:simpleclient:0.16.0',
+                                            'io.prometheus:simpleclient_common:0.16.0']],
+        'spring-expression': [version: '6.1.12',
+                              coordinates: ['org.springframework:spring-expression:6.1.12']],
+        'jackson-databind' : [version: '2.17.1',
+                              coordinates: ['com.fasterxml.jackson.core:jackson-databind:2.17.1']],
+        'jda'              : [version: '6.4.2',
+                              coordinates: ['net.dv8tion:JDA:6.4.2']],
+]
+def thirdPartyPackageTasks = []
+thirdPartyPackages.each { id, spec ->
+    def suffix = id.replace('-', '').capitalize()
+    def configuration = configurations.detachedConfiguration(
+            spec.coordinates.collect { project.dependencies.create(it) } as Dependency[])
+    configuration.transitive = true
+    def manifestDir = layout.buildDirectory.dir("third-party-manifest/${id}")
+    def manifestTask = tasks.register("thirdPartyManifest${suffix}") {
+        inputs.files(configuration)
+        inputs.property('packageId', id)
+        inputs.property('packageVersion', spec.version)
+        inputs.property('coordinates', spec.coordinates.join(','))
+        outputs.file(manifestDir.map { it.file('METADATA/package.list') })
+        doLast {
+            def files = configuration.files.findAll { it.name.endsWith('.jar') }
+                    .sort { it.name }
+            def seen = new HashSet<String>()
+            def entries = []
+            files.each { file ->
+                if (!seen.add(file.name)) {
+                    throw new GradleException("Duplicate JAR name in dependency package "
+                            + "${id}: ${file.name}")
+                }
+                def digest = java.security.MessageDigest.getInstance('SHA-256')
+                        .digest(file.bytes)
+                def sha = digest.collect { String.format('%02x', it & 0xff) }.join()
+                def path = "manager/library/dependencies/${id}/${spec.version}/${file.name}"
+                entries << "  ${path}\t${file.length()}\t${sha}\t${id}"
+            }
+            if (entries.isEmpty()) {
+                throw new GradleException("Dependency package ${id} resolved no JARs")
+            }
+            def manifest = "Name: ${id}\n" +
+                    "Version: ${spec.version}\n" +
+                    "Channel: stable\n" +
+                    "Type: DEPENDENCY\n" +
+                    "Dependencies: " + "\n" +
+                    "Arch: none\n" +
+                    "Platform: common\n" +
+                    "URL: " + "\n" +
+                    "OS: none\n" +
+                    "SHA256: " + "\n" +
+                    "Size: 0\n" +
+                    "Files: " + "\n" +
+                    entries.join('\n') + "\n"
+            def out = manifestDir.get().file('METADATA/package.list').asFile
+            out.parentFile.mkdirs()
+            out.text = manifest
+        }
+    }
+    thirdPartyPackageTasks << tasks.register("thirdPartyPackage${suffix}", Zip) {
+        dependsOn manifestTask
+        archiveFileName = "${id}-${spec.version}.zip"
+        destinationDirectory = layout.buildDirectory.dir('third-party')
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+        from(manifestDir)
+        from(configuration) {
+            into("manager/library/dependencies/${id}/${spec.version}")
+        }
+    }
+}
+tasks.register('thirdPartyPackages') {
+    group = 'distribution'
+    description = 'Builds the third-party DEPENDENCY packages'
+    dependsOn thirdPartyPackageTasks
+}
+
+// ============================================================
+// F8 — Reproducible module repository
+// ============================================================
+// Collects every modulePackage ZIP, writes a sha256sum-style sidecar and a
+// packages.list index. The base URL is mandatory: a release index must never
+// contain a placeholder or a machine-local absolute path.
+tasks.register('moduleRepository') {
+    group = 'distribution'
+    description = 'Collects module ZIPs, SHA-256 sidecars and packages.list'
+    dependsOn 'thirdPartyPackages'
+    dependsOn {
+        subprojects.collectMany { project ->
+            project.tasks.withType(Zip).matching { it.name == 'modulePackage' }
+        }
+    }
+    def outputDir = layout.buildDirectory.dir('repository')
+    inputs.property('repositoryBaseUrl',
+            providers.gradleProperty('repositoryBaseUrl').orElse(''))
+    inputs.files(provider {
+        def archives = []
+        subprojects.each { subproject ->
+            subproject.tasks.withType(Zip).matching { it.name == 'modulePackage' }.each {
+                archives << it.archiveFile.get().asFile
+            }
+        }
+        tasks.withType(Zip).matching {
+            it.name.startsWith('thirdPartyPackage') && it.name != 'thirdPartyPackages'
+        }.each {
+            archives << it.archiveFile.get().asFile
+        }
+        archives
+    })
+    outputs.dir(outputDir)
+    doLast {
+        def baseUrl = providers.gradleProperty('repositoryBaseUrl').orNull
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new GradleException(
+                    'moduleRepository requires -PrepositoryBaseUrl=<public repository URL>')
+        }
+        baseUrl = baseUrl.strip().replaceAll('/+$', '')
+        def destination = outputDir.get().asFile
+        delete(destination)
+        destination.mkdirs()
+
+        def packageTasks = []
+        subprojects.each { project ->
+            project.tasks.withType(Zip).matching { it.name == 'modulePackage' }.each { task ->
+                packageTasks << [task: task, owner: project]
+            }
+        }
+        tasks.withType(Zip).matching {
+            it.name.startsWith('thirdPartyPackage') && it.name != 'thirdPartyPackages'
+        }.each { task ->
+            packageTasks << [task: task, owner: project]
+        }
+
+        def packages = []
+        packageTasks.each { entry ->
+            def task = entry.task
+            def owner = entry.owner
+            def archive = task.archiveFile.get().asFile
+            if (!archive.isFile()) {
+                throw new GradleException("Module package was not produced: ${archive}")
+            }
+            owner.copy {
+                from archive
+                into destination
+            }
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+                    .digest(archive.bytes)
+            def sha = digest.collect { String.format('%02x', it & 0xff) }.join()
+            new File(destination, archive.name + '.sha256').text =
+                    "${sha}  ${archive.name}\n"
+
+            def manifestText
+            new java.util.zip.ZipFile(archive).withCloseable { zip ->
+                def manifestEntry = zip.getEntry('METADATA/package.list')
+                if (manifestEntry == null) {
+                    throw new GradleException("Missing METADATA/package.list in ${archive}")
+                }
+                manifestText = zip.getInputStream(manifestEntry).getText('UTF-8')
+            }
+            def nameMatcher = manifestText =~ /(?m)^Name:\s*(.+)$/
+            def versionMatcher = manifestText =~ /(?m)^Version:\s*(.+)$/
+            def name = nameMatcher.find() ? nameMatcher.group(1).trim() : null
+            def version = versionMatcher.find() ? versionMatcher.group(1).trim() : null
+            if (!name || !version) {
+                throw new GradleException("Invalid METADATA/package.list in ${archive}")
+            }
+            packages << [name: name, version: version, file: archive.name,
+                         size: archive.length(), sha: sha]
+        }
+
+        def seen = [:]
+        packages.each { pkg ->
+            def key = "${pkg.name}\t${pkg.version}"
+            if (seen.putIfAbsent(key, pkg.file) != null) {
+                throw new GradleException("Duplicate package ${pkg.name} ${pkg.version}: "
+                        + "${seen[key]} and ${pkg.file}")
+            }
+        }
+        packages.sort { a, b -> a.name == b.name ? a.version <=> b.version : a.name <=> b.name }
+
+        def index = new StringBuilder()
+        index << '# TextFormatter Suite module repository\n'
+        index << "# Packages: ${packages.size()}\n"
+        index << '\n'
+        packages.each { pkg ->
+            index << "${pkg.name}\t${baseUrl}/${pkg.file}\t${pkg.size}\t${pkg.sha}\n"
+        }
+        new File(destination, 'packages.list').text = index.toString()
+
+        def sums = packages.sort { it.file }.collect { "${it.sha}  ${it.file}" }.join('\n')
+        new File(destination, 'SHA256SUMS').text = sums + '\n'
+        logger.lifecycle("Module repository written to ${destination}")
     }
 }

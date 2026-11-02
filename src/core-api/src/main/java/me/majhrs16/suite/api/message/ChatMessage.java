@@ -3,8 +3,7 @@ package me.majhrs16.suite.api.message;
 /**
  * Represents a chat message in the suite ecosystem.
  * <p>
- * This is the canonical domain model for chat messages, replacing duplicated
- * versions in {@code common-legacy} and {@code coretranslator}.
+ * This is the canonical domain model for chat messages.
  * </p>
  * <p>
  * Thread-safe and immutable. Instances should be created via {@link Builder}.

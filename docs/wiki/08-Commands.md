@@ -21,8 +21,7 @@ aliases:
 ```
 
 Los módulos registran rutas **relativas**; cambiar la raíz no requiere
-recompilarlos. El esquema completo, la migración de `base-name` y las reglas de
-colisión están en
+recompilarlos. El esquema completo y las reglas de colisión están en
 [`docs/prompts/especificaciones/commands-v2.md`](../prompts/especificaciones/commands-v2.md).
 
 ### Recarga de la raíz

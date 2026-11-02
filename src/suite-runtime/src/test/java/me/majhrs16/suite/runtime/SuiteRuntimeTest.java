@@ -419,6 +419,10 @@ class SuiteRuntimeTest {
             runtime.registerPlatformService(PermissionChecker.class, PermissionChecker.ALLOW_ALL);
             runtime.start();
 
+            assertTrue(runtime.installLocal(thirdPartyPackage("snakeyaml", "2.3.0"), false)
+                    .isEmpty());
+            assertTrue(runtime.installLocal(thirdPartyPackage("jackson-databind", "2.17.1"),
+                    false).isEmpty());
             assertTrue(runtime.installLocal(packageFromProperty("logger.package"), false).isEmpty());
             assertTrue(runtime.installLocal(packageFromProperty("textformatter.package"), false)
                     .get(0).isSuccess());
@@ -449,6 +453,14 @@ class SuiteRuntimeTest {
         assertTrue(path != null && Files.isRegularFile(Path.of(path)),
                 name + " must point to a built distribution");
         return Path.of(path);
+    }
+
+    private static Path thirdPartyPackage(String name, String version) {
+        String dir = System.getProperty("thirdParty.dir");
+        assertTrue(dir != null, "thirdParty.dir must be set by the build");
+        Path zip = Path.of(dir, name + "-" + version + ".zip");
+        assertTrue(Files.isRegularFile(zip), "missing dependency package: " + zip);
+        return zip;
     }
 
     @Test

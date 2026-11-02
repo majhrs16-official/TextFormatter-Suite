@@ -1518,3 +1518,86 @@ redundante: no reemplaza al regex de iFlow y no altera el mensaje original.
 - Límites vigentes: patrón ≤ 512 unidades UTF-16, contenido evaluado ≤ 8192 unidades UTF-16 y
   ≤ 32 spans por plantilla. El límite de contenido se comprueba de nuevo tras resolver
   placeholders.
+
+---
+
+## Decisión 2026-11-02 — distribución reproducible y frontera de dependencias de terceros (ADR-029)
+
+**Estado:** Aceptada e implementada. Complementa ADR-026 y ADR-027; no cambia las tres etapas de
+instalación ni la semántica de `ACTIVATION_FAILED`.
+
+**Contexto.** F8 debía dejar un modelo reproducible y verificable: ZIPs de módulo, separación
+host/módulos, SHA-256, límites de confianza y un tratamiento explícito de las librerías de
+terceros. El host ya no puede contener features, pero varias features necesitan librerías que no
+cruzan la API neutral. Adventure es el caso límite: `core-render` expone `Component`/`Audience` en
+su contrato, así que cargar una segunda copia en un classloader de módulo rompería la identidad de
+tipos entre el módulo y el host.
+
+**Decisión.**
+
+1. Los JARs de módulo y de host se generan con orden estable y sin reloj de pared. El manifiesto usa
+   `Build-Timestamp: 0` salvo que un release fije explícitamente `BUILD_TIMESTAMP` o
+   `-PbuildTimestamp`. Los ZIP de módulo usan `preserveFileTimestamps = false` y
+   `reproducibleFileOrder = true`.
+2. `moduleChecksum` publica un sidecar `.sha256` junto a cada ZIP. `moduleRepository` exige
+   `-PrepositoryBaseUrl`, recopila todos los ZIP de módulo y de terceros, y escribe
+   `packages.list` y `SHA256SUMS`. Un artefacto publicado es inmutable: un cambio de contenido
+   exige una versión o un directorio nuevos.
+3. Las librerías de terceros que no cruzan una API neutral se empaquetan como `DEPENDENCY` con sus
+   transitivas resueltas. El módulo consumidor las declara en `moduleDependencies`; el manager las
+   instala antes y `ModuleClassLoader` las expone desde `library/dependencies`.
+4. La versión de un paquete debe ser SemVer, aunque el artefacto Maven no lo sea. `json` usa la
+   versión de paquete `2024.3.3` sobre el artefacto Maven `org.json:json:20240303`.
+5. Adventure, MiniMessage y el serializador plano permanecen en el host. Un módulo no declara un
+   paquete `DEPENDENCY` de Adventure mientras `core-render` exponga esos tipos. Cambiar esta regla
+   requiere rediseñar el contrato de renderizado.
+6. Los shadow JAR de Spigot y Fabric contienen solo el runtime del host.
+   `verifyShadowJarHasNoFeatures` falla `check` si una feature se cuela en el bootstrap. Los
+   listeners de plataforma y `sync-bukkit`/`sync-fabric` son paquetes descargables.
+7. TLS + SHA-256 detecta corrupción y manipulación de transporte, no prueba autoría. No hay firma
+   de paquetes, pinning ni certificados en esta fase; el propietario del repositorio es una
+   autoridad de confianza. El aislamiento por classloader/capabilities no es un sandbox contra
+   código JVM hostil.
+
+**Alternativas consideradas.**
+
+1. **Mantener todas las librerías de terceros en el host.** Ventajas: build más simple y sin
+   paquetes extra. Limitaciones: el host vuelve a mezclar features y dependencias, no permite
+   upgrades por módulo y contradice la separación host/módulos. Evaluación: **descartada**.
+2. **Shading de todas las dependencias dentro del JAR del módulo.** Ventajas: un solo artefacto.
+   Limitaciones: duplica clases entre módulos, impide compartir upgrades y agranda cada paquete.
+   Evaluación: **descartada** para dependencias compartidas; se conserva para casos puntuales.
+3. **Aislar también Adventure como `DEPENDENCY`.** Ventajas: consistencia teórica. Limitaciones:
+   `core-render` y la API neutral exponen `Component`/`Audience`; dos classloaders partirían la
+   identidad de tipos y romperían módulos y hosts. Evaluación: **descartada**.
+4. **Firmar paquetes en F8.** Ventajas: autenticidad además de integridad. Limitaciones: requiere
+   gestión, rotación y revocación de claves, y una política de confianza que no existe todavía.
+   Evaluación: **diferida** a una fase con ADR propio.
+5. **Reproducibilidad con timestamps del build.** Ventajas: trazabilidad de la fecha. Limitaciones:
+   rompe la igualdad byte a byte. Evaluación: **descartada**; la fecha va en metadatos de release,
+   no en el artefacto.
+
+**Consecuencias.**
+
+- Los paquetes de terceros son más grandes y pueden contener transitivas duplicadas; los módulos
+  deben declarar lo que usan y el manager no infiere imports.
+- `thirdPartyPackages` y `moduleRepository` requieren red para resolver Maven Central; un build
+  offline solo funciona con caché poblada.
+- `moduleRepository` no acepta una URL base vacía ni una ruta local como sustituto.
+- La reproducibilidad se verifica con dos builds y comparación de hashes; `SHA256SUMS` se verifica
+  con `sha256sum -c`.
+- No hay E2E en Spigot/Paper/Fabric/Velocity reales. Los gates usan ZIP/JAR reales, directorios
+  temporales y tests de recuperación/activación.
+- Una futura firma de paquetes, un repositorio no confiable o un rediseño de `core-render` para
+  aislar Adventure requieren una ADR nueva.
+
+**Evidencia.**
+
+- `./gradlew build checkArchitecture` verde.
+- `./gradlew moduleRepository -PrepositoryBaseUrl=https://repo.example.com/suite` genera 35
+  paquetes y `sha256sum -c SHA256SUMS` pasa.
+- Dos ejecuciones de `thirdPartyPackages --rerun-tasks` producen los mismos hashes.
+- `verifyShadowJarHasNoFeatures` verde en Spigot y Fabric.
+- Tests de `PackageRuntimeTest`/`PackageJournalTest` cubren recuperación de etapa 2 y activación
+  fallida; `PackageRuntimeTest` instala los paquetes de terceros reales antes de los módulos que los
+  declaran.

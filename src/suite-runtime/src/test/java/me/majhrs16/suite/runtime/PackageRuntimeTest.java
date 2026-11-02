@@ -555,6 +555,7 @@ class PackageRuntimeTest {
         assertTrue(Files.isRegularFile(zip), "missing distribution: " + zip);
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml");
             List<PackageChange> activation = fixture.runtime.installLocal(zip, false);
 
             assertEquals(1, activation.size());
@@ -619,6 +620,7 @@ class PackageRuntimeTest {
         Path zip = packageFromProperty("presets.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml");
             List<PackageChange> activation = fixture.runtime.installLocal(zip, false);
 
             assertEquals(1, activation.size());
@@ -639,6 +641,7 @@ class PackageRuntimeTest {
         Path testerZip = packageFromProperty("tester.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml", "jackson-databind");
             assertTrue(fixture.runtime.installLocal(loggerZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(textformatterZip, false).get(0).isSuccess());
             assertTrue(fixture.runtime.installLocal(vmZip, false).get(0).isSuccess());
@@ -658,6 +661,7 @@ class PackageRuntimeTest {
         Path inworldZip = packageFromProperty("inworld.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml");
             assertTrue(fixture.runtime.installLocal(textformatterZip, false)
                     .get(0).isSuccess());
 
@@ -678,6 +682,7 @@ class PackageRuntimeTest {
         assertTrue(Files.isRegularFile(zip), "missing distribution: " + zip);
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml");
             List<PackageChange> activation = fixture.runtime.installLocal(zip, false);
 
             assertEquals(1, activation.size());
@@ -694,6 +699,7 @@ class PackageRuntimeTest {
         Path vmZip = packageFromProperty("iflow-vm.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml", "jackson-databind");
             assertTrue(fixture.runtime.installLocal(loggerZip, false).isEmpty(),
                     "dependency packages are installed but not activated");
             assertTrue(fixture.runtime.installLocal(textformatterZip, false).get(0).isSuccess());
@@ -715,6 +721,7 @@ class PackageRuntimeTest {
         Path firewallZip = packageFromProperty("iflow-firewall.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml", "jackson-databind", "spring-expression");
             List<PackageChange> formatterActivation =
                     fixture.runtime.installLocal(textformatterZip, false);
             assertTrue(formatterActivation.get(0).isSuccess(),
@@ -736,6 +743,7 @@ class PackageRuntimeTest {
         Path wasmZip = packageFromProperty("iflow-wasm.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "chicory");
             List<PackageChange> activation = fixture.runtime.installLocal(wasmZip, false);
 
             assertEquals(1, activation.size());
@@ -753,6 +761,7 @@ class PackageRuntimeTest {
         Path ltranslateZip = packageFromProperty("ltranslate.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "json", "snakeyaml");
             Path translators = fixture.manager.getManagerDir()
                     .resolve("config/chattranslator/translators");
             Files.createDirectories(translators);
@@ -835,6 +844,7 @@ class PackageRuntimeTest {
         Path discordZip = packageFromProperty("sync-discord.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml", "jda");
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
@@ -887,6 +897,7 @@ class PackageRuntimeTest {
         Path velocityZip = packageFromProperty("sync-velocity-core.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "json", "snakeyaml");
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
@@ -939,6 +950,7 @@ class PackageRuntimeTest {
         Path socketZip = packageFromProperty("sync-socket.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "json", "snakeyaml");
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
@@ -979,6 +991,7 @@ class PackageRuntimeTest {
         Path telegramZip = packageFromProperty("sync-telegram.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "json", "snakeyaml");
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
@@ -1012,6 +1025,7 @@ class PackageRuntimeTest {
         Path httpZip = packageFromProperty("sync-http.package");
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "json", "snakeyaml");
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
@@ -1048,6 +1062,7 @@ class PackageRuntimeTest {
         int port = freePort();
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "json", "snakeyaml", "gson", "java-websocket");
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
@@ -1081,6 +1096,7 @@ class PackageRuntimeTest {
         int port = freePort();
 
         try (Fixture fixture = fixture()) {
+            installDependencies(fixture, "snakeyaml", "prometheus");
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
 
             Path configDir = fixture.manager.getManagerDir().resolve("config/observability");
@@ -1126,6 +1142,34 @@ class PackageRuntimeTest {
         Path zip = Path.of(packagePath);
         assertTrue(Files.isRegularFile(zip), "missing distribution: " + zip);
         return zip;
+    }
+
+    private static final Map<String, String> THIRD_PARTY_VERSIONS = Map.ofEntries(
+            Map.entry("snakeyaml", "2.3.0"),
+            Map.entry("json", "2024.3.3"),
+            Map.entry("gson", "2.11.0"),
+            Map.entry("java-websocket", "1.5.4"),
+            Map.entry("chicory", "1.4.0"),
+            Map.entry("prometheus", "0.16.0"),
+            Map.entry("spring-expression", "6.1.12"),
+            Map.entry("jackson-databind", "2.17.1"),
+            Map.entry("jda", "6.4.2"));
+
+    private static Path thirdPartyPackage(String name) {
+        String dir = System.getProperty("thirdParty.dir");
+        assertNotNull(dir, "thirdParty.dir must be set by the build");
+        String version = THIRD_PARTY_VERSIONS.get(name);
+        assertNotNull(version, "unknown third-party package: " + name);
+        Path zip = Path.of(dir, name + "-" + version + ".zip");
+        assertTrue(Files.isRegularFile(zip), "missing dependency package: " + zip);
+        return zip;
+    }
+
+    private static void installDependencies(Fixture fixture, String... names) throws Exception {
+        for (String name : names) {
+            assertTrue(fixture.runtime.installLocal(thirdPartyPackage(name), false).isEmpty(),
+                    "dependency package " + name + " must install without activation");
+        }
     }
 
     private static PackageEntry entry(String name, String platform, String path) {

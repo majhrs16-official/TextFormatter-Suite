@@ -69,8 +69,10 @@ tasks.jar {
 shadowJar {
     archiveClassifier = ''
     archiveBaseName = 'textformatter-suite-spigot'
-    // Include project modules required at runtime (fat-jar for standalone plugin)
-    // External platform deps (Paper, Adventure, JDA, etc.) remain excluded
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    // Include only the host runtime. Feature packages are installed from
+    // library/packages and must never be compiled into this artifact.
     configurations = [project.configurations.runtimeClasspath]
     dependencies {
         exclude(dependency('net.kyori:adventure-platform-bukkit'))
@@ -80,11 +82,42 @@ shadowJar {
         exclude(dependency('org.yaml:snakeyaml'))
         exclude(dependency('io.papermc.paper:paper-api'))
         exclude(dependency('me.clip:placeholderapi'))
-        // Project modules are now included (not excluded)
     }
-    // Merge service files
     mergeServiceFiles()
 }
+
+tasks.register('verifyShadowJarHasNoFeatures') {
+    dependsOn 'shadowJar'
+    doLast {
+        def forbidden = [
+                'me/majhrs16/suite/textformatter/',
+                'me/majhrs16/suite/messages/',
+                'me/majhrs16/suite/chattranslator/',
+                'me/majhrs16/suite/gtranslate/',
+                'me/majhrs16/suite/ltranslate/',
+                'me/majhrs16/suite/iflow/',
+                'me/majhrs16/suite/sync',
+                'me/majhrs16/suite/observability/',
+                'me/majhrs16/suite/presets/',
+                'me/majhrs16/suite/inworld/',
+                'me/majhrs16/suite/tester/',
+        ]
+        def found = []
+        new java.util.zip.ZipFile(tasks.named('shadowJar').get().archiveFile.get().asFile)
+                .withCloseable { zip ->
+                    zip.entries().each { entry ->
+                        if (forbidden.any { entry.name.startsWith(it) }) {
+                            found << entry.name
+                        }
+                    }
+                }
+        if (!found.isEmpty()) {
+            throw new GradleException("Spigot shadow JAR contains feature classes: "
+                    + found.take(10).join(', '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'verifyShadowJarHasNoFeatures' }
 
 processResources {
     filesMatching('plugin.yml') {

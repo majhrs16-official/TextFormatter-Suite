@@ -20,16 +20,14 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * Loads the command-root configuration from {@code config/suite/commands.yml}.
  *
  * <p>The supported schema is deliberately small: {@code root} and
- * {@code aliases}. The legacy {@code base-name} key is migrated to a
- * single-segment root with a warning; it is removed in F8. The old
+ * {@code aliases}. Unknown keys are ignored; in particular, the retired
+ * {@code base-name} key does not set the root. The old
  * {@code actions}/{@code commands} topology is not loaded because command
  * behavior is code in packages, not a YAML interpreter.</p>
  */
 final class CommandRootConfig {
 
     private static final String FILE = "commands.yml";
-    private static final String LEGACY_BASE_NAME = "base-name";
-    private static final String REMOVAL_PHASE = "F8";
 
     private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
@@ -57,23 +55,9 @@ final class CommandRootConfig {
             }
 
             List<String> segments = null;
-            boolean legacyRoot = false;
             Object rootValue = map.get("root");
             if (rootValue != null) {
                 segments = segments(rootValue, "root", errors);
-            }
-            Object legacy = map.get(LEGACY_BASE_NAME);
-            if (segments == null && legacy != null) {
-                segments = segments(legacy, LEGACY_BASE_NAME, errors);
-                legacyRoot = segments != null;
-                if (segments != null && logger != null) {
-                    logger.warn("commands.yml uses legacy '" + LEGACY_BASE_NAME
-                            + "'; migrate to 'root'. Compatibility is removed in "
-                            + REMOVAL_PHASE + ".");
-                }
-            } else if (legacy != null && logger != null) {
-                logger.warn("commands.yml ignores legacy '" + LEGACY_BASE_NAME
-                        + "' because 'root' is present.");
             }
             if (segments == null) {
                 if (errors.isEmpty()) {
@@ -83,8 +67,7 @@ final class CommandRootConfig {
                 }
             }
 
-            List<List<String>> aliases = aliases(
-                    map.get("aliases"), segments, errors, legacyRoot);
+            List<List<String>> aliases = aliases(map.get("aliases"), segments, errors);
             if (!errors.isEmpty()) {
                 return degraded(errors);
             }
@@ -131,8 +114,7 @@ final class CommandRootConfig {
     }
 
     private static List<List<String>> aliases(Object raw, List<String> root,
-                                              List<String> errors,
-                                              boolean legacyMigration) {
+                                              List<String> errors) {
         if (raw == null) {
             return List.of();
         }
@@ -146,8 +128,8 @@ final class CommandRootConfig {
             if (alias == null) {
                 continue;
             }
-            if (legacyMigration && alias.equals(root)) {
-                // Old files often repeated the base name in aliases.
+            if (alias.equals(root)) {
+                errors.add("commands.yml alias must not repeat the root");
                 continue;
             }
             aliases.add(alias);

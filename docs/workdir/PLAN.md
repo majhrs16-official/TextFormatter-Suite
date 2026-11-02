@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-10-31 (**doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-11-02 (**F8 cerrada**: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
@@ -16,7 +16,11 @@
 > activación), la etapa 2 es el único rollback automático y un fallo de
 > activación deja `ACTIVATION_FAILED` sin deshacer archivos. La migración está
 > cerrada: `PackageCache`, `PackageJournal`, layout versionado y activación
-> separada están implementados y cubiertos por tests. El siguiente trabajo es F8.
+> separada están implementados y cubiertos por tests. **F8 cerrada:** el
+> empaquetado reproducible, los paquetes de terceros y la documentación de
+> límites están implementados. El siguiente trabajo es la paridad iFlow W3.5 y
+> el compilador C V6, además de la exposición de `presets` por comando y el
+> adaptador `TestProbe` de Fabric.
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
@@ -421,7 +425,7 @@ validación; W3 integra el motor; W3.5 cierra la paridad. No se toca el backlog 
 |---|---|---|---|
 | **I-002** | Añadir `require('sync-bus')` a submódulos sync | `sync-discord`, `sync-websocket`, `sync-telegram`, `sync-http`, `sync-velocity-core` | ✅ `grep -r "require.*sync-bus" src/sync-*/` → 6/6 |
 | **I-006** | Crear `Module` implementation en `iflow-vm` y `iflow-wasm` | `iflow-vm`, `iflow-wasm` | ✅ `grep -r "implements Module" src/iflow-vm/ src/iflow-wasm/` → YES |
-| **I-007** | Añadir `ModuleDescriptor` a 19 módulos sin él | `host`, `transport`, `messages`, `logger`, `core-api`, `extension-api`, `manager-spi`, `manager-core`, `performance`, `loadtest`, `common-legacy`, `fabric-host`, `spigot-host`, `example-extension`, `kernel`, `iflow-vm`, `iflow-wasm`, `web-editor` | ✅ Cerrado con alcance acotado: core modules con `ModuleDescriptor` (host, kernel, transport, messages, logger, manager-spi, manager-core, manager-apt). Fuera de alcance: platform adapters (clean/hexa), API modules (core-api/extension-api), harness (`performance`, `loadtest`, `tester`), `example-extension` y `web-editor` (diferido). `common-legacy` no tiene fuentes `main` (candidato a eliminar, no a describir) |
+| **I-007** | Añadir `ModuleDescriptor` a 19 módulos sin él | `host`, `transport`, `messages`, `logger`, `core-api`, `extension-api`, `manager-spi`, `manager-core`, `performance`, `loadtest`, `common-legacy`, `fabric-host`, `spigot-host`, `example-extension`, `kernel`, `iflow-vm`, `iflow-wasm`, `web-editor` | ✅ Cerrado con alcance acotado: core modules con `ModuleDescriptor` (host, kernel, transport, messages, logger, manager-spi, manager-core, manager-apt). Fuera de alcance: platform adapters (clean/hexa), API modules (core-api/extension-api), harness (`performance`, `loadtest`, `tester`), `example-extension` y `web-editor` (diferido). `common-legacy` no tenía fuentes `main` y se eliminó en F8 (no se describe) |
 | **I-003** | **CT4:** Integrar `ChatTranslator` en `SuiteHost.bootstrap()` | `host`, `chattranslator`, `spigot-host`, `fabric-host` | ✅ Pipeline real usa `ChatTranslator`; `TranslationService` creado internamente |
 | **I-005** | Cargar `ChatTranslatorConfig` + `BackendConfig` en bootstrap | `host` (SuiteHost), `chattranslator` | ✅ `SuiteHost.bootstrap()` instancia `ChatTranslator` y lo expone via `chatTranslator()` |
 | **I-009** | Mover `TranslatorsConfig.discoverProviders()` a `chattranslator.BackendConfig` | `host` (eliminar), `chattranslator` (nuevo `BackendConfig`) | ✅ `host` no usa `ServiceLoader<TranslatorProvider>`; `chattranslator` carga backends |
@@ -1112,7 +1116,7 @@ correctamente instalada sin estar correctamente activada.
 | Producción auxiliar | `tester` (`PACKAGE` neutral + `TestProbe`) | Módulo de producción: benchmarking en runtime y traza del pipeline completo (C7); no es harness |
 | Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
 | Retirado | `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, descubrimiento por classpath y cableado de features en adapters | Eliminados en F4b/F7; no se restauran |
-| Pendiente de retirada | `common-legacy` (sin fuentes `main`, solo test de sanidad) | Se elimina en F8 |
+| Retirado | `common-legacy` (sin fuentes `main`, solo test de sanidad) | Eliminado en F8 |
 
 Decisión por defecto: **todo feature es paquete**, incluso `textformatter`,
 `iflow-*`, `chattranslator` y `messages`. El núcleo solo contiene contratos,
@@ -1196,8 +1200,8 @@ módulo platform-specific
 - `tester` sigue siendo paquete de producción (C7): ya se empaqueta como
   `PACKAGE` neutral; el adapter Spigot vive en `spigot-host` y Fabric deberá
   implementar su `TestProbe`. Nunca se mueve a harness.
-- `common-legacy`: no tiene fuentes `main`; solo conserva un test de sanidad y
-  se elimina en F8.
+- `common-legacy`: no tenía fuentes `main`; solo conservaba un test de sanidad.
+  Se eliminó en F8.
 - `sync-http` en Fabric: es un paquete compartido, no una diferencia de adapter.
 - `ExtensionManager` con loader propio: se unifica con `ModuleHost` o se
   documenta como subsistema separado con contrato propio. No se mantienen dos
@@ -1222,7 +1226,27 @@ viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
 | **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | ✅ Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y `CommandsConfig*` no existen; el Brigadier de Fabric queda como adaptador de invocación; tests de registro, desregistro, permisos, colisiones y tab completion |
 | **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | ✅ El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión, cambio de raíz, restauración y `RESTART_REQUIRED` |
 | **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, directorios de JAR versionados y transición manager/runtime | ✅ Upgrade exitoso y fallido sin rollback de archivos, lote multi-JAR, detección de fugas y estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados. **ADR-027 implementada:** caché de adquisición, commit con journal durable, layout versionado y activación con `ACTIVATION_FAILED` |
-| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos, separación host/módulos, SHA-256, modelo de responsabilidad del repositorio, documentación de límites; ADR-027 ya migrada (caché, journal, layout versionado por directorio) | `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; documentación de hot reload y reinicio; pruebas de recuperación de etapa 2 y activación fallida |
+| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos reproducibles, paquetes `DEPENDENCY` de terceros, separación host/módulos, SHA-256 y `.sha256`, `moduleRepository` con `packages.list`/`SHA256SUMS`, modelo de responsabilidad del repositorio, documentación de límites; ADR-027 ya migrada (caché, journal, layout versionado por directorio) | ✅ `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; `moduleRepository` verificable con `sha256sum -c`; documentación de hot reload y reinicio; pruebas de recuperación de etapa 2 y activación fallida |
+
+**F8 cerrada (2026-11-02; ADR-029):** los JARs de módulo y host se generan con
+`Build-Timestamp: 0` salvo que el release fije `BUILD_TIMESTAMP`; los ZIP de
+módulo usan orden estable y timestamps fijos, y `moduleChecksum` publica un
+sidecar `.sha256`. `moduleRepository` exige `-PrepositoryBaseUrl`, recopila todos
+los ZIP de módulo y de terceros, y genera `packages.list` + `SHA256SUMS`
+verificable con `sha256sum -c`. `thirdPartyPackages` resuelve y empaqueta como
+`DEPENDENCY` a `snakeyaml`, `json` (versión de paquete `2024.3.3` sobre el
+artefacto Maven `20240303`), `gson`, `java-websocket`, `chicory`, `prometheus`,
+`spring-expression`, `jackson-databind` y `jda`; los módulos consumidores los
+declaran en `moduleDependencies`. Adventure sigue en el host porque `core-render`
+expone sus tipos en el contrato. Los shadow JAR de Spigot y Fabric son
+reproducibles, contienen solo runtime del host y `verifyShadowJarHasNoFeatures`
+falla `check` si aparece una feature. `common-legacy` se eliminó y `base-name`
+dejó de migrarse. Documentación vigente: `docs/wiki/10-Module-Manager.md`
+(hot reload/reinicio, responsabilidad del repositorio, límites de confianza) y
+`docs/wiki/09-Developer-Guide.md` (tareas de empaquetado). Los tests de
+recuperación de etapa 2 y activación fallida ya cubren el journal, el status
+autoritativo y la ausencia de rollback de archivos. Límites: no hay firma de
+paquetes ni E2E en servidores reales; TLS + SHA-256 no prueba autoría.
 
 **F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,
 `iflow-firewall` e `iflow-wasm` tienen activador y la tarea `modulePackage`
@@ -1258,9 +1282,10 @@ configurado, se registra en el bus y usa la fachada neutral
 `api.metrics.Metrics` en lugar de depender de `observability`. `observability`
 ya es paquete: publica `HealthCheckRegistry` y `Observability`, instala el sink
 Prometheus y sirve `/health`/`/metrics`; `DebugEndpoint` se movió a
-`host.debug` porque necesita estado del host. Las librerías de terceros
-(Java-WebSocket, Gson, org.json, Prometheus, JDA) siguen en el classpath del
-host hasta que F8 las empaquete como `DEPENDENCY`.
+`host.debug` porque necesita estado del host. F8 ya empaqueta como `DEPENDENCY`
+Java-WebSocket, Gson, org.json, Prometheus, JDA, SnakeYAML, Chicory,
+Spring Expression y Jackson; Adventure sigue en el host por el contrato de
+`core-render`.
 
 **F4d cerrada (2026-10-31):** `core-api` publica `api.command`
 (`CommandRoot`, `CommandPath`, `CommandSpec`, `CommandOption`, `CommandSource`,
@@ -1287,15 +1312,15 @@ completion, desregistro explícito y desregistro por ciclo de vida.
 
 **F4e cerrada (2026-10-31):** `CommandRootConfig` carga
 `config/suite/commands.yml` (con fallback heredado `commands.yml`) y valida
-`root` multi-segmento y `aliases`; `base-name` se migra con aviso y se elimina
-en F8. `RuntimeCommandRegistry` permite cambiar la raíz sin tocar los comandos
+`root` multi-segmento y `aliases`; `base-name` fue retirado en F8 y ya no
+define la raíz. `RuntimeCommandRegistry` permite cambiar la raíz sin tocar los comandos
 registrados por los módulos. `SuiteRuntime.reloadCommandRoot()` devuelve
 `CommandRootChange` con `UNCHANGED`, `APPLIED`, `FAILED` o `RESTART_REQUIRED`,
 re-registra el comando de plataforma y restaura la raíz anterior si el nuevo
 registro falla; el comando built-in `reload` aplica el cambio. Los hosts copian
 `defaults/commands.yml` a la ruta canónica y el Brigadier/Bukkit solo adaptan la
 invocación. Tests: archivo ausente, raíz multi-segmento, aliases de cadena y de
-lista, migración de `base-name`, raíz inválida, colisión de alias, recarga
+lista, retirada de `base-name`, raíz inválida, colisión de alias, recarga
 idempotente, cambio de raíz con comandos de módulo activos, fallo de
 desregistro (`RESTART_REQUIRED`), conflicto de registro con restauración y
 cambio antes de registrar el comando de plataforma.
@@ -1347,9 +1372,9 @@ paquete neutral.
   sinks, observability, inworld, extensiones ni features; solo registran sus
   puertos y arrancan `SuiteRuntime`. La captura de eventos vive en
   `sync-bukkit`/`sync-fabric`. Los árboles de comandos de host, la raíz
-  configurable y el hot upgrade/unload real se cerraron en F4d/F4e/F7; queda el
+  configurable y el hot upgrade/unload real se cerraron en F4d/F4e/F7; el
   empaquetado de librerías de terceros como `DEPENDENCY` y la revisión de
-  seguridad de F8.
+  límites se cerraron en F8.
 
 **F4b — punto de partida medido:** `spigot-host` importa directamente al menos
 9 paquetes de feature (`sync-socket`, `sync-websocket`, `sync-telegram`,
@@ -1883,9 +1908,8 @@ pipeline debe degradar a no-op cuando no hay backends instalados.
    `/suite`.
 5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
    `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
-   permiten mantener `/suite` y `/tf` a la vez. El `base-name` actual se
-   sustituye por `root`; se acepta solo como migración con aviso y se elimina
-   en **F8**.
+   permiten mantener `/suite` y `/tf` a la vez. El antiguo `base-name` fue
+   sustituido por `root` y se retiró en **F8**; ya no se migra.
 6. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
    plataforma no permite desregistrar o restaurar, se marca
    `RESTART_REQUIRED` y no se publica la nueva raíz como activa. Si el nuevo
@@ -1988,7 +2012,6 @@ usuario de iFlow.
 
 | Módulo | Test Dir | Archivos Test | Líneas Prod | Líneas Test | Cobertura Línea | Cobertura Rama | Gaps Críticos |
 |---|---|---:|---:|---:|---:|---:|---|
-| `src:common-legacy` | ✅ OK | 1 | N/A | 30 | N/A | N/A | Pocos tests (<3) |
 | `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
 | `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
 | `src:extension-api` | ✅ OK | 3 | N/A | 260 | N/A | N/A | `ExtensionContext` usa puertos neutrales, sin `host` |

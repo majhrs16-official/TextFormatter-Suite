@@ -14,7 +14,7 @@ import me.majhrs16.suite.host.config.ConfigLoader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** F4e gate: commands.yml root, aliases and legacy base-name migration. */
+/** F4e/F8 gate: commands.yml root and aliases; base-name is retired. */
 class CommandRootConfigTest {
 
     @TempDir
@@ -48,17 +48,17 @@ class CommandRootConfigTest {
     }
 
     @Test
-    void migratesLegacyBaseNameAndDropsTheRedundantAlias() throws Exception {
+    void retiredBaseNameDoesNotSetTheRoot() throws Exception {
         write("""
                 base-name: txf
-                aliases: [txf, tf]
+                aliases: [tf]
                 """);
 
         ConfigLoader.LoadResult<CommandRoot> loaded =
                 CommandRootConfig.load(dir, FixtureModules.logger());
 
         assertTrue(loaded.isValid(), () -> String.join("; ", loaded.errors()));
-        assertEquals(List.of("txf"), loaded.config().segments());
+        assertEquals(List.of("suite"), loaded.config().segments());
         assertEquals(List.of(List.of("tf")), loaded.config().aliases());
     }
 

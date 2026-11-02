@@ -74,6 +74,9 @@ tasks.withType(JavaCompile).configureEach {
 
 test {
     useJUnitPlatform()
+    dependsOn rootProject.tasks.named('thirdPartyPackages')
+    systemProperty 'thirdParty.dir',
+            rootProject.layout.buildDirectory.dir('third-party').get().asFile.absolutePath
     def textformatterPackage = project(':src:textformatter').tasks.named('modulePackage')
     dependsOn textformatterPackage
     systemProperty 'textformatter.package',
