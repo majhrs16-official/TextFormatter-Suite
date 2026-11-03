@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-02 (**F8 cerrada**: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-11-03 (**F8 cerrada** y `FabricTestProbe` implementado: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
@@ -18,9 +18,10 @@
 > cerrada: `PackageCache`, `PackageJournal`, layout versionado y activación
 > separada están implementados y cubiertos por tests. **F8 cerrada:** el
 > empaquetado reproducible, los paquetes de terceros y la documentación de
-> límites están implementados. El siguiente trabajo es la paridad iFlow W3.5 y
-> el compilador C V6, además de la exposición de `presets` por comando y el
-> adaptador `TestProbe` de Fabric.
+> límites están implementados. `FabricTestProbe` quedó implementado con el mismo
+> contrato neutral que `SpigotTestProbe`. El siguiente trabajo es la paridad
+> iFlow W3.5 y el compilador C V6, además de la exposición de `presets` por
+> comando.
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
@@ -1430,6 +1431,15 @@ inyectar los puertos del adapter (`ActorDirectory`, `ChatDelivery`,
 el registro se cierra en `stop()` y se rechaza después de `start()`. La retirada
 completa de `SuiteHost` del adapter pertenece al cierre de F4b.
 
+**TestProbe Fabric (2026-11-03):** `FabricTestProbe` replica el contrato neutral
+de `SpigotTestProbe` y recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
+`MessageDispatch`, `TranslationService`, el contador de módulos y el idioma por
+defecto. No importa `SuiteHost`, `MessageDispatcher`, `DispatchReport`,
+textformatter ni APIs de Minecraft/Fabric; los tests cubren readiness, dispatch,
+formato y detección de idioma. El host todavía no monta el comando `/test`; el
+adapter queda listo para que el bootstrap lo construya cuando el paquete
+`tester` esté activo.
+
 **Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
 `core-render` con el puerto `MessageComponentRenderer` (Adventure, sin
 dependencias de features). `textformatter` lo implementa con
@@ -2015,7 +2025,7 @@ usuario de iFlow.
 | `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
 | `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
 | `src:extension-api` | ✅ OK | 3 | N/A | 260 | N/A | N/A | `ExtensionContext` usa puertos neutrales, sin `host` |
-| `src:fabric-host` | ✅ OK | 1 | 840 | 30 | 0.0% | 0.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
+| `src:fabric-host` | ✅ OK | 5 | 840 | 86 | 18.4% | 11.2% | `FabricTestProbe` cubierto; bootstrap Fabric sin E2E; cobertura global baja |
 | `src:gtranslate` | ✅ OK | 3 | N/A | 229 | N/A | N/A |  |
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
@@ -2094,7 +2104,7 @@ usuario de iFlow.
 | sync-velocity | ✅ `sync-velocity-core` neutral + `sync-velocity` plugin real (Velocity API 3.4.0, cola async, retry/backoff, métricas, health, dynamic discovery) | build + tests de paquete |
 | sync-websocket | ✅ real (SO_REUSEADDR fix) | build |
 | spigot-host | ✅ **COMPILA** (Plugin, SpigotPlatformPorts, SpigotActorDirectory, SpigotChatDelivery, SpigotInWorldListener) | compile |
-| fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, FabricPlatformPorts, FabricActorDirectory, FabricChatDelivery, FabricInWorldHandler) | compile |
+| fabric-host | ✅ **COMPILA** (Fabric 1.21 + Fabric API 0.100.5, FabricPlatformPorts, FabricActorDirectory, FabricChatDelivery, FabricInWorldHandler, FabricTestProbe) | compile + tests del probe |
 | web-editor | ⚠️ gates verdes; UI inestable; auditoría separada diferida | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |

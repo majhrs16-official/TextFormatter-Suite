@@ -107,7 +107,7 @@ TextFormatter Suite
 | `fabric-host` | Fabric bootstrap and platform ports | `core-api`, `core-render`, `suite-runtime`, Fabric API/Minecraft | — (leaf) |
 | `example-extension` | Example extension implementation | `extension-api` | — (leaf) |
 | `loadtest` | Load testing utilities | — | `fabric-host` |
-| `tester` | Runtime pipeline test service behind the neutral `TestProbe`; packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotTestProbe`), `suite-runtime` |
+| `tester` | Runtime pipeline test service behind the neutral `TestProbe`; packaged as `PACKAGE` | `core-api` | `spigot-host` (`SpigotTestProbe`), `fabric-host` (`FabricTestProbe`), `suite-runtime` |
 
 ---
 

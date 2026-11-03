@@ -27,6 +27,9 @@
   `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **In-world adapter** — `FabricInWorldHandler` consume `InWorldService` y
   `MessageRenderer`.
+- **Test probe adapter** — `FabricTestProbe` implementa el puerto neutral
+  `TestProbe` con los puertos vivos del runtime; el comando `/test` todavía no
+  está cableado.
 
 ## 2. Non-responsibilities
 
@@ -61,6 +64,7 @@
 | `FabricChatDelivery` | `ChatDelivery` |
 | `FabricPlaceholderResolver` | `PlaceholderResolver` |
 | `FabricInWorldHandler` | Adapter de `InWorldService` |
+| `FabricTestProbe` | `TestProbe` neutral (sin cablear al comando todavía) |
 
 ## 5. Data Flow
 
@@ -91,6 +95,7 @@ SERVER_STOPPING → runtime.close()
 3. `FabricChatDelivery.java`
 4. `FabricActorDirectory.java`
 5. `FabricInWorldHandler.java`
+6. `FabricTestProbe.java`
 
 ## 7. Related modules
 

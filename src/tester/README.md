@@ -42,9 +42,9 @@ The distribution is a `PACKAGE` with no package dependencies. Its descriptor req
 |----------|-------|
 | `spigot-host` | Builds `TestService` with `SpigotTestProbe` and the live host |
 | `suite-runtime` | Installs/activates the `tester` package and publishes `TestServiceFactory` |
-| Future `fabric-host` | Must implement its own `TestProbe`; no platform types enter this package |
+| `fabric-host` | Builds `TestService` with `FabricTestProbe` and the live host |
 
-The host still constructs the service directly while F4b is open. The package already exposes the neutral `TestRunnerFactory` for the final host wiring; `SpigotTestProbe` now binds only `ChannelRegistry`, `Router`, `MessageRenderer`, `MessageDispatch` and `TranslationService`.
+The hosts do not wire the `/test` command yet. The package already exposes the neutral `TestRunnerFactory` for that final wiring; `SpigotTestProbe` and `FabricTestProbe` bind only `ChannelRegistry`, `Router`, `MessageRenderer`, `MessageDispatch` and `TranslationService`.
 
 ---
 
@@ -93,7 +93,7 @@ TestServiceFactory ──→ TestService ─────────────
 
 ## 8. Limitations
 
-- `fabric-host` does not wire the tester yet; its adapter must implement `TestProbe`.
+- `spigot-host` and `fabric-host` provide their `TestProbe` adapters, but neither wires the `/test` command yet.
 - The host adapter still constructs `TestService` directly; moving it to the runtime service registry is F4b.
 - Scenarios depend on the live host having `chat.global`, `join`, `quit`, `death` and `advancement` channels.
 - No E2E validation runs against a real Spigot/Paper/Fabric server in CI.
@@ -121,6 +121,7 @@ TestServiceFactory ──→ TestService ─────────────
 4. TesterActivator.java    → Runtime activation and service registration
 5. TesterModule.java       → Module descriptor/capability
 6. SpigotTestProbe.java    → Live Spigot adapter (in spigot-host)
+7. FabricTestProbe.java    → Live Fabric adapter (in fabric-host)
 ```
 
 ---
@@ -130,5 +131,5 @@ TestServiceFactory ──→ TestService ─────────────
 - [core-api](../core-api/README.md) — `Message`, `Actor`, `ChannelRegistry`, `Router`, SPI
 - [textformatter](../textformatter/README.md) — Live formatter used by the probe; provides `formatter`
 - [iflow-vm](../iflow-vm/README.md) — Live router; provides `router`
-- [spigot-host](../spigot-host/README.md) — `SpigotTestProbe` and `/suite test` command
-- [fabric-host](../fabric-host/README.md) — Future `TestProbe` adapter
+- [spigot-host](../spigot-host/README.md) — `SpigotTestProbe` and Spigot bootstrap
+- [fabric-host](../fabric-host/README.md) — `FabricTestProbe` and Fabric bootstrap
