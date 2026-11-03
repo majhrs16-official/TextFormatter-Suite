@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v2.1
 
-Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño) · Última actualización: 2026-10-31
+Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño) · Última actualización: 2026-11-03
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura. El estado operativo y las fases viven en `PLAN.md`.
 > **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` para estado actual.
 
@@ -1601,3 +1601,65 @@ tipos entre el módulo y el host.
 - Tests de `PackageRuntimeTest`/`PackageJournalTest` cubren recuperación de etapa 2 y activación
   fallida; `PackageRuntimeTest` instala los paquetes de terceros reales antes de los módulos que los
   declaran.
+
+---
+
+## Decisión 2026-11-03 — presets por comando y recarga de módulos activos (ADR-030)
+
+**Estado:** Aceptada e implementada. No cambia las tres etapas de instalación de ADR-027 ni el
+modelo de paquetes de ADR-029.
+
+**Contexto.** `PresetService` ya existía como puerto neutral y `DefaultPresetService` aplicaba el
+catálogo con `FilePresetTarget`, pero no había comando para seleccionar un preset. El callback de
+recarga era una promesa del contrato sin una operación runtime que lo cumpliera: `SuiteRuntime`
+solo recargaba `commands.yml`. Además, el host lee su configuración de `config/suite/`, mientras
+que `ModuleHost` entrega a cada módulo `manager/config/<module>/`; un único directorio base no
+podía escribir ambas ubicaciones.
+
+**Decisión.**
+
+1. `suite-runtime` registra `presets list` y `presets apply <preset>` como comandos built-in con el
+   permiso `textformatter.suite.admin`. El comando resuelve `PresetService` desde el
+   `ServiceRegistry`; si el paquete no está activo responde explícitamente y no inventa catálogo.
+2. `FilePresetTarget` escribe la configuración del host en `config/suite/` y la de cada módulo en
+   `manager/config/<module>/`. El directorio base sigue siendo el data folder del adaptador.
+3. Tras persistir un preset, el callback ejecuta `SuiteRuntime.reloadActiveModules()`: cierra el
+   pipeline, detiene los módulos activos en orden inverso, los reactiva en el orden de activación y
+   reconstruye el pipeline. No se recarga el conjunto instalado ni se activan módulos inactivos.
+4. Si un módulo no se libera limpiamente, la recarga se detiene, el comando informa el módulo y su
+   causa, y el estado queda `RESTART_REQUIRED`. No se restaura una versión anterior ni se simula
+   éxito.
+5. Un preset desconocido devuelve `false` sin escribir ni recargar. Los errores de escritura o de
+   recarga se reportan al ejecutor del comando.
+
+**Alternativas consideradas.**
+
+1. **Exigir reinicio del servidor tras aplicar un preset.** Ventajas: implementación mínima.
+   Limitaciones: no cumple el callback de recarga del contrato y obliga a reiniciar para cambios
+   que el runtime puede aplicar. Evaluación: **descartada**.
+2. **Registrar el comando dentro del paquete `presets`.** Ventajas: encapsula el catálogo.
+   Limitaciones: el paquete tendría que conocer la raíz de comandos, el data folder y el ciclo de
+   vida del runtime; además desaparecería durante la propia recarga. Evaluación: **descartada**.
+3. **Recargar solo los módulos afectados por el preset.** Ventajas: menos interrupción.
+   Limitaciones: exige un grafo de dependencias y un mapeo preset→módulos que hoy no existe;
+   desactivar solo una parte puede dejar servicios de dependencias en estado inconsistente.
+   Evaluación: **diferida** a una fase con ADR propio.
+4. **Escribir todo bajo un único directorio base.** Ventajas: una sola ruta. Limitaciones: el host
+   y los módulos ya tienen raíces distintas; elegir una rompe la otra. Evaluación: **descartada**.
+
+**Consecuencias.**
+
+- Aplicar un preset es una operación de ciclo de vida completo: puede ser más lenta que una
+  escritura de archivos, pero deja archivos y servicios coherentes.
+- La recarga depende de que los módulos liberen recursos. Un módulo que no lo hace exige reinicio;
+  el comando lo dice en lugar de ocultarlo.
+- `FilePresetTarget` conoce el layout canónico del runtime (`config/suite/` y
+  `manager/config/<module>/`). Un cambio de layout requiere actualizar el target y sus tests.
+- Los tests cubren el orden de parada/reinicio, la conservación de servicios, la lista, la
+  aplicación, el preset desconocido y el paquete inactivo.
+
+**Evidencia.**
+
+- `./gradlew build checkArchitecture` verde.
+- `./gradlew :src:presets:test :src:suite-runtime:test` verde.
+- `./gradlew checkLocks` verde.

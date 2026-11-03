@@ -42,7 +42,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
 | **Module Manager (runtime)** | ✅ Núcleo y hot upgrade probados | Repositorios HTTP/file, resolver SemVer y dependencias, SHA-256 obligatorio, JARs versionados, classloader aislado, activación/desactivación real, hot upgrade con journal y detección de hilos/recursos/registros filtrados; un fallo de activación deja `ACTIVATION_FAILED` sin rollback de archivos; paquetes `DEPENDENCY` de terceros; `packages.list` es la metadata autoritativa; **no hay GitHub Releases públicos** (ver `PLAN.md`) |
 | **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
-| **Presets** | ✅ Catálogo probado | Standard/RPG/Staff/Minimal, import/export YAML; 2 tests; sin motor de ejecución (placeholder) |
+| **Presets** | ✅ Catálogo y aplicación probados | Standard/RPG/Staff/Minimal, import/export YAML, aplicación real a `config/suite/` y `manager/config/<module>/`, recarga de módulos activos mediante `/suite presets apply`; sin motor de ejecución |
 | **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
 | **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 9 tests |
 | **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 108 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
@@ -166,7 +166,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (397 tests) |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | ✅ Probado (44 tests) |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | 🧪 W2 |
-| `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML; sin motor de ejecución | ✅ Catálogo probado (2 tests) |
+| `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML, aplicación a la configuración canónica y recarga de módulos activos; sin motor de ejecución | ✅ Catálogo y aplicación probados |
 
 ### Traducción
 | Módulo | Propósito | Estado |
@@ -278,6 +278,7 @@ cp src/fabric-host/build/libs/textformatter-suite-fabric-*.jar /ruta/servidor/mo
 ### Verificar carga correcta
 - `/suite help` lista los comandos built-in
 - `/suite list` lista paquetes y `/suite state` el estado runtime
+- `/suite presets list` y `/suite presets apply <id>` listan y aplican presets
 - `/suite reload` recarga `config/suite/commands.yml` y re-registra la raíz
 - Logs muestran el pipeline y los módulos activados
 

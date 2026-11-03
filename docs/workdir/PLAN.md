@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-03 (**F8 cerrada** y `FabricTestProbe` implementado: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-11-03 (**F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); paridad funcional VM↔Wasm según spec v3 pendiente (W3.5)**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
@@ -19,9 +19,10 @@
 > separada están implementados y cubiertos por tests. **F8 cerrada:** el
 > empaquetado reproducible, los paquetes de terceros y la documentación de
 > límites están implementados. `FabricTestProbe` quedó implementado con el mismo
-> contrato neutral que `SpigotTestProbe`. El siguiente trabajo es la paridad
-> iFlow W3.5 y el compilador C V6, además de la exposición de `presets` por
-> comando.
+> contrato neutral que `SpigotTestProbe`. La exposición de `presets` por comando
+> quedó cerrada: `presets list` y `presets apply <id>` escriben el layout
+> canónico y recargan los módulos activos en orden de dependencias. El siguiente
+> trabajo es la paridad iFlow W3.5 y el compilador C V6.
 
 > **Nota de estado (2026-10-29):** se añade el **compilador C de iFlow VM** como fase **V6** y ADR-023. Es una herramienta offline/CI que emite `.flowasm` v3; no se embebe en el host ni compila C en runtime. Depende de V1 (ISA/ABI v3) y V5 (assembler v3), y su cierre de ejecución de V2/V3/V4.
 
@@ -1365,8 +1366,8 @@ paquete neutral.
   `PresetTarget`; `FilePresetTarget` persiste el layout canónico,
   `PresetsActivator` publica `PresetManager` y `PresetService`, y
   `DefaultPresetService` selecciona, persiste y recarga el runtime. La
-  exposición por comando no forma parte de F4e (que solo cerró la raíz
-  configurable); queda pendiente para una fase posterior.
+  exposición por comando quedó implementada en `suite-runtime` (`presets list`
+  y `presets apply <id>`), fuera de F4e, que solo cerró la raíz configurable.
 - `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
   `ActorDirectory`; no importa `host`.
 - F4b y F4c están cerradas: `spigot-host`/`fabric-host` ya no construyen
@@ -1420,8 +1421,9 @@ publica `MessageDispatch` como servicio neutral enlazado a
 dispatcher del host. También se añadió el puerto neutral `PresetService` en
 `core-api`; `presets` lo implementa con `DefaultPresetService` y lo registra en
 su `ModuleContext`, así el host deja de importar `presets` para seleccionar,
-persistir y recargar un preset. La selección por comando sigue pendiente y no
-forma parte de F4e. En Fabric, `FabricInWorldHandler` dejó
+persistir y recargar un preset. La selección por comando quedó implementada en
+`suite-runtime` (`presets list/apply`), fuera de F4e. En Fabric,
+`FabricInWorldHandler` dejó
 de ser un handler duplicado con stubs: ahora implementa `InWorldPlatform`,
 delega en `InWorldHandler` y registra los callbacks una sola vez con una
 instancia activa intercambiable; `unregister()` desengancha el adapter al
@@ -1439,6 +1441,20 @@ textformatter ni APIs de Minecraft/Fabric; los tests cubren readiness, dispatch,
 formato y detección de idioma. El host todavía no monta el comando `/test`; el
 adapter queda listo para que el bootstrap lo construya cuando el paquete
 `tester` esté activo.
+
+**Presets por comando (2026-11-03, ADR-030):** `suite-runtime` registra
+`presets list` y `presets apply <id>`. El comando resuelve el puerto neutral
+`PresetService`; si el paquete no está activo responde explícitamente y no
+inventa un catálogo. `FilePresetTarget` escribe la configuración del host en
+`config/suite/` y la de cada módulo en `manager/config/<module>/`, que es el
+mismo layout que consume `ModuleHost`. Tras persistir, el callback llama a
+`SuiteRuntime.reloadActiveModules()`: cierra el pipeline, detiene los módulos
+activos en orden inverso, los reactiva en orden de dependencias y reconstruye
+el pipeline. Si un módulo no se libera limpiamente, el comando informa el fallo
+y el módulo queda `RESTART_REQUIRED`; no se simula una recarga exitosa. Los
+tests cubren el orden de reinicio y la conservación de servicios en
+`ModuleHostTest`, y los comandos `list/apply`, el preset desconocido y el
+paquete inactivo en `SuiteRuntimeTest`.
 
 **Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
 `core-render` con el puerto `MessageComponentRenderer` (Adventure, sin
@@ -2043,7 +2059,7 @@ usuario de iFlow.
 | `src:messages` | ✅ OK | 1 | 30 | 53 | 93.3% | 75.0% | 18 tests integración |
 | `src:observability` | ✅ OK | 2 | N/A | 105 | N/A | N/A | 15 tests integración |
 | `src:performance` | ✅ OK | 2 | N/A | 135 | N/A | N/A | Pocos tests (<3) |
-| `src:presets` | ✅ OK | 5 | N/A | 1152 | N/A | N/A | `Preset.apply` + `FilePresetTarget` reales; paquete y activador probados; adapter de host pendiente |
+| `src:presets` | ✅ OK | 5 | N/A | 1152 | N/A | N/A | `Preset.apply` + `FilePresetTarget` reales; paquete y activador probados; comando integrado en `suite-runtime` |
 | `src:spigot-host` | ✅ OK | 4 | 590 | 3346 | 7.5% | 7.7% | Cobertura línea <70%; Cobertura rama <50%; `SpigotInWorldListener` cubierto con Mockito |
 | `src:sync-bus` | ✅ OK | 1 | N/A | 116 | N/A | N/A | Pocos tests (<3) |
 | `src:sync-discord` | ✅ OK | 3 | N/A | 250 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin JDA |
@@ -2108,7 +2124,7 @@ usuario de iFlow.
 | web-editor | ⚠️ gates verdes; UI inestable; auditoría separada diferida | check+integración |
 | manager-api | ✅ SPI estable | compile |
 | manager-impl | ✅ compila (manifest validation obligatoria, capability check habilitado) | compile |
-| presets | ✅ standard/rpg/staff/minimal + `Preset.apply(PresetTarget)` + `FilePresetTarget` real; paquete/activador listos; adapter de host pendiente | tests + paquete |
+| presets | ✅ standard/rpg/staff/minimal + `Preset.apply(PresetTarget)` + `FilePresetTarget` real; paquete/activador listos; `presets list/apply` recarga módulos activos | tests + paquete |
 | inworld | ✅ `PACKAGE` neutral (`InWorldHandler`/`InWorldPlatform`); `SpigotInWorldListener` en `spigot-host` | tests + paquete |
 | observability | ✅ metrics/debug/health (auth token, 127.0.0.1, custom port) | tests (15 integración) |
 | extension-api | ✅ SDK estable | tests |

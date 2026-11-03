@@ -419,6 +419,24 @@ public final class SuiteRuntime implements AutoCloseable {
     }
 
     /**
+     * Restarts every active module from its installed JAR and rebuilds the
+     * message pipeline.
+     *
+     * <p>The pipeline is closed before the modules restart so no dispatch uses
+     * a service from a classloader that is being released. Preset application
+     * uses this method after persisting the new files.</p>
+     *
+     * @return one activation result per restarted module
+     */
+    public synchronized List<ActivationResult> reloadActiveModules() {
+        ensureStarted();
+        closePipeline();
+        List<ActivationResult> results = moduleHost.reloadActiveModules();
+        rebuildPipeline();
+        return results;
+    }
+
+    /**
      * Installs a local distribution ZIP and activates or hot-upgrades its
      * modules.
      *

@@ -83,7 +83,7 @@ TextFormatter Suite
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `ltranslate` | LibreTranslate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
 | `observability` | Prometheus metrics, health checks, debug/metrics HTTP endpoints | `core-api`, `host`, `textformatter` | `spigot-host`, `fabric-host` |
-| `presets` | Preset catalog, YAML import/export and canonical file persistence (no execution engine) | `core-api`, `snakeyaml` | `suite-runtime` (paquete `PACKAGE`), `host` (`HostPresetApplier`) |
+| `presets` | Preset catalog, YAML import/export and canonical file persistence (no execution engine) | `core-api`, `snakeyaml` | `suite-runtime` (paquete `PACKAGE`; comandos `presets list/apply`) |
 | `manager-spi` | Package metadata, manifests, versions and repository config | `core-api` | `manager-core`, `manager-apt`, `suite-runtime`, hosts |
 | `manager-core` | Package installer, local package database, durable journal, versioned layout | `core-api`, `manager-spi`, `kernel` | `manager-apt`, `suite-runtime` |
 | `manager-apt` | Repository manager, dependency resolver, stage-1 cache, batch installer/facade | `core-api`, `manager-spi`, `manager-core` | `suite-runtime` |

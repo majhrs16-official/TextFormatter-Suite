@@ -52,6 +52,8 @@ Todos los comandos built-in requieren el permiso
 | `/<raíz> repo remove <pkg> [version] [canal]` | Elimina un paquete desde los repositorios. |
 | `/<raíz> repo upgrade` | Actualiza paquetes desde los repositorios. |
 | `/<raíz> cache clean` | Limpia descargas, archivos `.part` y manifiestos de operaciones de la caché; no toca paquetes instalados, `library/status`, journal ni trash. |
+| `/<raíz> presets list` | Lista los presets disponibles en el paquete `presets`; falla explícitamente si el paquete no está activo. |
+| `/<raíz> presets apply <preset>` | Aplica un preset y recarga todos los módulos activos en orden de dependencias. Si un módulo no se libera limpiamente, informa el fallo y queda `RESTART_REQUIRED`. |
 
 Ejemplos con la raíz por defecto:
 
@@ -62,6 +64,8 @@ Ejemplos con la raíz por defecto:
 /suite install paquetes/textformatter-1.0.0.zip
 /suite remove textformatter
 /suite repo install textformatter messages
+/suite presets list
+/suite presets apply standard
 /suite reload
 ```
 

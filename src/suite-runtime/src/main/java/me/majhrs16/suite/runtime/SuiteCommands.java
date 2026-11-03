@@ -11,6 +11,7 @@ import me.majhrs16.suite.api.command.CommandOption;
 import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.command.CommandSpec;
 import me.majhrs16.suite.api.runtime.ModuleState;
+import me.majhrs16.suite.api.spi.PresetService;
 import me.majhrs16.suite.manager.apt.AptInstaller;
 import me.majhrs16.suite.manager.spi.PackageEntry;
 
@@ -38,6 +39,7 @@ final class SuiteCommands {
         commands.register(upgrade(runtime));
         commands.register(repository(runtime));
         commands.register(cache(runtime));
+        commands.register(presets(runtime));
     }
 
     private static CommandSpec help(CommandRegistry commands) {
@@ -240,6 +242,81 @@ final class SuiteCommands {
                             context.reply("Caché de descargas limpiada.");
                         })
                         .build())
+                .build();
+    }
+
+    private static CommandSpec presets(SuiteRuntime runtime) {
+        return CommandSpec.builder("presets")
+                .description("Lista y aplica presets de configuración")
+                .permission(PERMISSION)
+                .usage("<list|apply>")
+                .child(presetList(runtime))
+                .child(presetApply(runtime))
+                .build();
+    }
+
+    private static CommandSpec presetList(SuiteRuntime runtime) {
+        return CommandSpec.builder("list")
+                .description("Lista los presets disponibles")
+                .permission(PERMISSION)
+                .handler(context -> {
+                    PresetService service = runtime.services().find(PresetService.class)
+                            .orElse(null);
+                    if (service == null) {
+                        context.reply("El paquete presets no está activo.");
+                        return;
+                    }
+                    List<String> available = service.list();
+                    context.reply(available.isEmpty()
+                            ? "No hay presets disponibles."
+                            : "Presets: " + String.join(", ", available));
+                })
+                .build();
+    }
+
+    private static CommandSpec presetApply(SuiteRuntime runtime) {
+        return CommandSpec.builder("apply")
+                .description("Aplica un preset y recarga los módulos activos")
+                .permission(PERMISSION)
+                .usage("<preset>")
+                .argument(CommandArgument.required("preset")
+                        .describe("Identificador del preset"))
+                .handler(context -> {
+                    PresetService service = runtime.services().find(PresetService.class)
+                            .orElse(null);
+                    if (service == null) {
+                        context.reply("El paquete presets no está activo.");
+                        return;
+                    }
+                    String presetId = context.requireArg(0);
+                    List<ActivationResult> reloaded = new ArrayList<>();
+                    boolean applied;
+                    try {
+                        applied = service.apply(presetId, runtime.dataDir(),
+                                id -> reloaded.addAll(runtime.reloadActiveModules()));
+                    } catch (RuntimeException failure) {
+                        context.reply("Error al aplicar el preset " + presetId + ": "
+                                + failure.getMessage());
+                        return;
+                    }
+                    if (!applied) {
+                        context.reply("Preset desconocido: " + presetId);
+                        return;
+                    }
+                    List<String> failed = reloaded.stream()
+                            .filter(result -> !result.isSuccess())
+                            .map(result -> result.moduleId()
+                                    + " (" + result.message() + ")")
+                            .toList();
+                    if (failed.isEmpty()) {
+                        context.reply("Preset aplicado: " + presetId
+                                + ". Módulos recargados.");
+                    } else {
+                        context.reply("Preset aplicado: " + presetId
+                                + ". La recarga falló en: " + String.join(", ", failed)
+                                + ". Revisa /state y reinicia si es necesario.");
+                    }
+                })
                 .build();
     }
 

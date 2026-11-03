@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
@@ -30,6 +31,7 @@ import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.PresetService;
 import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 
@@ -138,6 +140,62 @@ class SuiteRuntimeTest {
 
             registration.close();
             assertFalse(ports.commands.containsKey("suite"));
+        }
+    }
+
+    @Test
+    void presetsCommandListsAndAppliesThroughTheNeutralService() throws Exception {
+        List<Path> appliedRoots = new ArrayList<>();
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.registerPlatformService(PresetService.class, new PresetService() {
+                @Override
+                public List<String> list() {
+                    return List.of("standard", "rpg");
+                }
+
+                @Override
+                public boolean apply(String presetId, Path suiteDir, Consumer<String> reload) {
+                    if (!"standard".equals(presetId)) {
+                        return false;
+                    }
+                    appliedRoots.add(suiteDir);
+                    reload.accept(presetId);
+                    return true;
+                }
+            });
+            runtime.start();
+            runtime.registerCommands();
+            PlatformPorts.Command command = ports.commands.get("suite");
+            Actor console = Actor.unknown("console");
+
+            command.execute(console, List.of("presets", "list"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Presets: standard, rpg")));
+
+            ports.sent.clear();
+            command.execute(console, List.of("presets", "apply", "standard"));
+            assertEquals(List.of(tempDir.resolve("data").toAbsolutePath()), appliedRoots);
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Preset aplicado: standard. Módulos recargados.")));
+
+            ports.sent.clear();
+            command.execute(console, List.of("presets", "apply", "missing"));
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("Preset desconocido: missing")));
+        }
+    }
+
+    @Test
+    void presetsCommandReportsAnInactivePackage() throws Exception {
+        try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.start();
+            runtime.registerCommands();
+
+            ports.commands.get("suite").execute(
+                    Actor.unknown("console"), List.of("presets", "list"));
+
+            assertTrue(ports.sent.stream().anyMatch(
+                    line -> line.equals("El paquete presets no está activo.")));
         }
     }
 

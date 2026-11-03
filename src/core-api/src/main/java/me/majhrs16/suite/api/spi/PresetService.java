@@ -11,6 +11,11 @@ import java.util.function.Consumer;
  * algorithm. The platform bootstrap supplies the suite data directory and the
  * callback that reloads the runtime after a successful application, so the
  * host never imports the preset implementation.</p>
+ *
+ * <p>The suite data directory contains host settings under {@code config/suite/}
+ * and module-owned settings under {@code manager/config/<module>/}; the
+ * implementation is responsible for writing each part to its canonical
+ * location.</p>
  */
 public interface PresetService {
 

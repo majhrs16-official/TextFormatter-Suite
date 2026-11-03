@@ -102,6 +102,33 @@ class ModuleHostTest {
     }
 
     @Test
+    void reloadActiveModulesRestartsInDependencyOrderAndKeepsServices() throws Exception {
+        Path base = FixtureModules.buildJar(tempDir, "z-base", "1.0.0", "base", "base", null, false, true);
+        Path consumer = FixtureModules.buildJar(tempDir, "a-consumer", "1.0.0", "consumer", null, "base", false, true);
+
+        Path packages = tempDir.resolve("library").resolve("packages");
+        Files.createDirectories(packages);
+        Files.copy(consumer, packages.resolve("a-consumer.jar"));
+        Files.copy(base, packages.resolve("z-base.jar"));
+
+        try (ModuleHost host = newHost()) {
+            assertTrue(host.loadInstalled().stream().allMatch(ActivationResult::isSuccess));
+
+            List<ActivationResult> results = host.reloadActiveModules();
+
+            assertEquals(2, results.size());
+            assertTrue(results.stream().allMatch(ActivationResult::isSuccess));
+            assertEquals(List.of("z-base", "a-consumer", "z-base", "a-consumer"),
+                    Files.readAllLines(tempDir.resolve("config").resolve("activation-order.log")));
+            assertEquals(List.of("z-base", "a-consumer"), host.activeModules());
+            assertEquals(ModuleState.ACTIVE, host.state("a-consumer").orElseThrow());
+            assertEquals(Set.of("base", "consumer"),
+                    host.services().findAll(CharSequence.class).stream()
+                            .map(CharSequence::toString).collect(Collectors.toSet()));
+        }
+    }
+
+    @Test
     void failedActivationIsReportedAndRollsBackServices() throws Exception {
         Path broken = FixtureModules.buildJar(tempDir, "broken", "1.0.0", "broken", null, null, true, false);
 

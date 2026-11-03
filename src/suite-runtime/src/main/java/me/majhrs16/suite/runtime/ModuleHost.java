@@ -397,6 +397,40 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /**
+     * Restarts every active module in dependency order without changing the
+     * installed set.
+     *
+     * <p>Modules are stopped in reverse activation order and started again in
+     * the original order. If a module does not release cleanly, the reload
+     * stops immediately and the affected module is left in
+     * {@link ModuleState#RESTART_REQUIRED}; modules stopped before it remain
+     * inactive until an explicit restart or activation.</p>
+     *
+     * @return one activation result per restarted module, or one
+     *         restart-required result when a deactivation fails
+     */
+    public synchronized List<ActivationResult> reloadActiveModules() {
+        List<LoadedModule> snapshot = new ArrayList<>(active.values());
+        if (snapshot.isEmpty()) {
+            return List.of();
+        }
+        for (int i = snapshot.size() - 1; i >= 0; i--) {
+            LoadedModule module = snapshot.get(i);
+            DeactivationResult result = deactivate(module.id);
+            if (!result.isClean()) {
+                return List.of(ActivationResult.restartRequired(
+                        module.id, result.message(), result.cause()));
+            }
+        }
+
+        List<ActivationResult> results = new ArrayList<>(snapshot.size());
+        for (LoadedModule module : snapshot) {
+            results.add(activate(module.jar, module.dependencyJars));
+        }
+        return List.copyOf(results);
+    }
+
+    /**
      * @param moduleId module id
      * @return the last known state, if the module was seen by this host
      */

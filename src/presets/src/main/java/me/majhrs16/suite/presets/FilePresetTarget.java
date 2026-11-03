@@ -26,9 +26,10 @@ import java.util.Objects;
  * Real file-backed {@link PresetTarget}.
  *
  * <p>Persists a preset into the canonical configuration layout of the suite:
- * suite settings, textformatter channels, chattranslator backends and sync
- * transports. Existing YAML keys that the preset does not touch are preserved;
- * a preset is a patch, not a full replacement of unrelated configuration.</p>
+ * suite settings under {@code config/suite/}, and module-owned files under
+ * {@code manager/config/<module>/}. Existing YAML keys that the preset does not
+ * touch are preserved; a preset is a patch, not a full replacement of
+ * unrelated configuration.</p>
  *
  * <p>The target does not reload the host. The caller that applies a preset must
  * reload the affected modules after {@link PresetManager#apply(String,
@@ -40,15 +41,18 @@ public final class FilePresetTarget implements PresetTarget {
     private static final Yaml WRITER = writer();
 
     private final Path suiteDir;
+    private final Path moduleConfigRoot;
 
     /**
-     * @param suiteDir adapter data directory (the same directory that contains
-     *                 {@code config/})
+     * @param suiteDir adapter data directory; host settings live under
+     *                 {@code config/suite/} and module settings under
+     *                 {@code manager/config/<module>/}
      */
     public FilePresetTarget(Path suiteDir) {
         this.suiteDir = Objects.requireNonNull(suiteDir, "suiteDir")
             .toAbsolutePath()
             .normalize();
+        this.moduleConfigRoot = this.suiteDir.resolve("manager/config");
     }
 
     @Override
@@ -89,7 +93,7 @@ public final class FilePresetTarget implements PresetTarget {
         }
         patch.put("sounds", sounds);
 
-        Path channelsDir = suiteDir.resolve("config/textformatter/channels");
+        Path channelsDir = moduleConfigRoot.resolve("textformatter/channels");
         mergeWrite(channelsDir.resolve(safeFileName(channel.name()) + ".yml"), patch);
     }
 
@@ -105,7 +109,7 @@ public final class FilePresetTarget implements PresetTarget {
             patch.put("max-concurrent", translator.maxConcurrent());
         }
 
-        Path translatorsDir = suiteDir.resolve("config/chattranslator/translators");
+        Path translatorsDir = moduleConfigRoot.resolve("chattranslator/translators");
         mergeWrite(translatorsDir.resolve(safeFileName(translator.provider()) + ".yml"), patch);
     }
 
@@ -132,7 +136,7 @@ public final class FilePresetTarget implements PresetTarget {
         copyIfPresent(patch, sync, "format", "format");
         copyIfPresent(patch, sync, "transport", "transport");
         copyIfPresent(patch, sync, "intents", "intents");
-        mergeWrite(suiteDir.resolve("config/sync-discord/config.yml"), patch);
+        mergeWrite(moduleConfigRoot.resolve("sync-discord/config.yml"), patch);
     }
 
     private void applyTelegram(Preset.PresetSync sync) {
@@ -140,7 +144,7 @@ public final class FilePresetTarget implements PresetTarget {
         patch.put("enabled", sync.enabled());
         copyIfPresent(patch, sync, "token", "token");
         copyIfPresent(patch, sync, "chat-id", "chatId");
-        mergeWrite(suiteDir.resolve("config/sync-telegram/config.yml"), patch);
+        mergeWrite(moduleConfigRoot.resolve("sync-telegram/config.yml"), patch);
     }
 
     private void applyHttp(Preset.PresetSync sync) {
@@ -152,7 +156,7 @@ public final class FilePresetTarget implements PresetTarget {
         copyIfPresent(patch, sync, "bind", "bind");
         copyIfPresent(patch, sync, "auth-token", "authToken");
         copyIfPresent(patch, sync, "hmac-secret", "hmacSecret");
-        mergeWrite(suiteDir.resolve("config/sync-http/config.yml"), patch);
+        mergeWrite(moduleConfigRoot.resolve("sync-http/config.yml"), patch);
     }
 
     private void applySocket(Preset.PresetSync sync) {
@@ -163,7 +167,7 @@ public final class FilePresetTarget implements PresetTarget {
         copyIfPresent(patch, sync, "host", "remoteHost");
         copyIfPresent(patch, sync, "outbound-port", "remotePort");
         copyIfPresent(patch, sync, "inbound-port", "localPort");
-        mergeWrite(suiteDir.resolve("config/sync-socket").resolve(file), patch);
+        mergeWrite(moduleConfigRoot.resolve("sync-socket").resolve(file), patch);
     }
 
     private void applyVelocity(Preset.PresetSync sync) {
@@ -177,7 +181,7 @@ public final class FilePresetTarget implements PresetTarget {
         if (servers != null) {
             patch.put("servers", splitList(servers));
         }
-        mergeWrite(suiteDir.resolve("config/sync-velocity-core/config.yml"), patch);
+        mergeWrite(moduleConfigRoot.resolve("sync-velocity-core/config.yml"), patch);
     }
 
     private static List<String> splitList(String raw) {
