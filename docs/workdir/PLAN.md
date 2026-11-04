@@ -1456,6 +1456,17 @@ tests cubren el orden de reinicio y la conservación de servicios en
 `ModuleHostTest`, y los comandos `list/apply`, el preset desconocido y el
 paquete inactivo en `SuiteRuntimeTest`.
 
+**Defaults de módulos (2026-11-03):** se corrigió el primer arranque de los
+hosts. Antes copiaban los defaults de canales, traductores, sync, inworld y
+reglas a `config/<module>/`, pero los activadores leen
+`manager/config/<module>/`; el resultado era que los módulos arrancaban sin la
+configuración empaquetada. `HostPaths` expone ahora `moduleConfigRoot` y
+`moduleConfigDir`, y `DefaultConfigInstaller` centraliza la copia: el host
+conserva `config/suite/`, los módulos reciben `manager/config/<module>/`, los
+archivos legacy se migran a la ruta canónica y nunca se sobrescribe una
+configuración existente. Los candidatos legacy se retiran en F9. La regresión
+está cubierta por `HostPathsTest` y `DefaultConfigInstallerTest`.
+
 **Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
 `core-render` con el puerto `MessageComponentRenderer` (Adventure, sin
 dependencias de features). `textformatter` lo implementa con

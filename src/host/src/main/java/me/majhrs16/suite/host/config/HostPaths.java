@@ -8,8 +8,9 @@ import java.nio.file.Path;
  * {@code docs/prompts/diseno/storage.md}.
  * <p>
  * La disposición canónica es {@code config/suite/} para la configuración global
- * ({@code config.yml}, {@code commands.yml}, {@code messages.yml}). Las rutas
- * planas anteriores ({@code config.yml}, {@code commands.yml},
+ * ({@code config.yml}, {@code commands.yml}, {@code messages.yml}) y
+ * {@code manager/config/<module>/} para la configuración de cada módulo. Las
+ * rutas planas anteriores ({@code config.yml}, {@code commands.yml},
  * {@code messages.yml} en la raíz del data folder) se mantienen como fallback
  * durante la migración para no romper instalaciones existentes.
  * </p>
@@ -31,6 +32,16 @@ public final class HostPaths {
     /** @return {@code <data>/config/suite} */
     public static Path suiteDir(Path dataFolder) {
         return configRoot(dataFolder).resolve("suite");
+    }
+
+    /** @return {@code <data>/manager/config}, root of module-owned settings */
+    public static Path moduleConfigRoot(Path dataFolder) {
+        return dataFolder.resolve("manager").resolve("config");
+    }
+
+    /** @return {@code <data>/manager/config/<moduleId>} */
+    public static Path moduleConfigDir(Path dataFolder, String moduleId) {
+        return moduleConfigRoot(dataFolder).resolve(moduleId);
     }
 
     /** @return ruta canónica de {@code config.yml} (destino de escritura). */

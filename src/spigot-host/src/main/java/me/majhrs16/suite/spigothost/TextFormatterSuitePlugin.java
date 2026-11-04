@@ -2,9 +2,7 @@ package me.majhrs16.suite.spigothost;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import me.majhrs16.suite.api.iflow.PermissionChecker;
@@ -17,6 +15,7 @@ import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.runtime.DefaultConfigInstaller;
 import me.majhrs16.suite.runtime.SuiteRuntime;
 import me.majhrs16.suite.runtime.YamlUserLanguageStore;
 
@@ -49,7 +48,7 @@ public final class TextFormatterSuitePlugin extends JavaPlugin {
         audiences = BukkitAudiences.create(this);
         PluginLogger logger = logger();
         Path folder = getDataFolder().toPath();
-        copyDefaultsIfMissing(folder);
+        DefaultConfigInstaller.install(folder, getClass()::getResourceAsStream, logger);
 
         AtomicReference<SuiteRuntime> runtimeRef = new AtomicReference<>();
         UserLanguageStore languages = new YamlUserLanguageStore(folder);
@@ -165,56 +164,4 @@ public final class TextFormatterSuitePlugin extends JavaPlugin {
         return Boolean.getBoolean("textformattersuite.debug");
     }
 
-    /**
-     * First-boot experience: copies the bundled {@code defaults/} tree into the
-     * canonical per-package configuration paths. Existing user files are never
-     * overwritten.
-     */
-    private void copyDefaultsIfMissing(Path folder) {
-        copyResourceIfMissing(folder, "defaults/config.yml",
-                folder.resolve("config/suite/config.yml"), folder.resolve("config.yml"));
-        copyResourceIfMissing(folder, "defaults/commands.yml",
-                folder.resolve("config/suite/commands.yml"), folder.resolve("commands.yml"));
-        for (String name : List.of("chat.global", "join", "quit", "death", "advancement")) {
-            copyResourceIfMissing(folder, "defaults/channels/" + name + ".yml",
-                    folder.resolve("config/textformatter/channels/" + name + ".yml"),
-                    folder.resolve("channels/" + name + ".yml"));
-        }
-        copyResourceIfMissing(folder, "defaults/translators/google.yml",
-                folder.resolve("config/chattranslator/translators/google.yml"),
-                folder.resolve("translators/google.yml"));
-        copyResourceIfMissing(folder, "defaults/messages.yml",
-                folder.resolve("config/suite/messages.yml"), folder.resolve("messages.yml"));
-        copyResourceIfMissing(folder, "defaults/sync/discord.yml",
-                folder.resolve("config/sync-discord/config.yml"), folder.resolve("sync/discord.yml"));
-        copyResourceIfMissing(folder, "defaults/sync/websocket.yml",
-                folder.resolve("config/sync-websocket/config.yml"), folder.resolve("sync/websocket.yml"));
-        copyResourceIfMissing(folder, "defaults/inworld.yml",
-                folder.resolve("config/inworld/config.yml"), folder.resolve("inworld.yml"));
-        copyResourceIfMissing(folder, "defaults/rules.yml",
-                folder.resolve("config/iflow-firewall/rules.yml"), folder.resolve("rules.yml"));
-    }
-
-    private void copyResourceIfMissing(Path folder, String resourcePath, Path canonical, Path legacy) {
-        if (Files.exists(canonical) || (legacy != null && Files.exists(legacy))) {
-            return;
-        }
-        copyResource(folder, resourcePath, canonical);
-    }
-
-    private void copyResource(Path folder, String resourcePath, Path target) {
-        if (Files.exists(target)) {
-            return;
-        }
-        try (var in = getClass().getResourceAsStream("/" + resourcePath)) {
-            if (in == null) {
-                return;
-            }
-            Files.createDirectories(target.getParent());
-            Files.copy(in, target);
-            getLogger().info("Default file created: " + folder.relativize(target));
-        } catch (IOException exception) {
-            getLogger().warning("Cannot create " + target + ": " + exception.getMessage());
-        }
-    }
 }

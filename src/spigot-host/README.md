@@ -18,6 +18,9 @@
 - **Runtime bootstrap** — crea `SuiteRuntime`, registra `ChatDelivery`,
   `ActorDirectory`, `PermissionChecker`, `UserLanguageStore`,
   `PlaceholderResolver`, `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
+- **Default configuration** — `DefaultConfigInstaller` copia los defaults del
+  host a `config/suite/` y los de cada módulo a `manager/config/<module>/`;
+  migra archivos legacy sin sobrescribir la configuración existente.
 - **Root command** — `runtime.registerCommands()` registra el árbol neutral en
   el `CommandMap`; `plugin.yml` ya no declara `/suite`. La raíz y sus aliases
   se leen de `config/suite/commands.yml` (default copiado desde
@@ -41,7 +44,7 @@
 |------------|------|--------|
 | `core-api` | Compile | Contratos neutrales |
 | `core-render` | Compile | `ChatDelivery` |
-| `suite-runtime` | Compile | Composition root |
+| `suite-runtime` | Compile | Composition root y `DefaultConfigInstaller` |
 | `adventure-platform-bukkit` | Compile | `BukkitAudiences` |
 | `adventure-api` | Compile | Componentes |
 | `paper-api` | CompileOnly | SDK de Bukkit/Paper |

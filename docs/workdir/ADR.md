@@ -1651,6 +1651,10 @@ podía escribir ambas ubicaciones.
 
 - Aplicar un preset es una operación de ciclo de vida completo: puede ser más lenta que una
   escritura de archivos, pero deja archivos y servicios coherentes.
+- Los bootstraps de Spigot y Fabric usan `DefaultConfigInstaller` para copiar los defaults del
+  host a `config/suite/` y los de cada módulo a `manager/config/<module>/`. Los archivos legacy se
+  migran a la ruta canónica y nunca se sobrescribe una configuración existente; los candidatos
+  legacy se retiran en F9.
 - La recarga depende de que los módulos liberen recursos. Un módulo que no lo hace exige reinicio;
   el comando lo dice en lugar de ocultarlo.
 - `FilePresetTarget` conoce el layout canónico del runtime (`config/suite/` y

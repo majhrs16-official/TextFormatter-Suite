@@ -4,7 +4,7 @@
 >
 > **Principio**: Cada módulo Java (`src/<modulo>/`) es dueño de su directorio de configuración en `config/<modulo>/`. El host/plataforma solo gestiona el directorio raíz y delega.
 >
-> **Layout vigente del runtime de módulos:** el host lee su configuración de `<data>/config/suite/` y `ModuleHost` entrega a cada módulo `<data>/manager/config/<module>/`. El diagrama de la sección 1.3 describe la intención original de un único `config/`; la separación vigente evita mezclar la configuración del host con la de los paquetes gestionados. `FilePresetTarget` respeta ambas raíces.
+> **Layout vigente del runtime de módulos:** el host lee su configuración de `<data>/config/suite/` y `ModuleHost` entrega a cada módulo `<data>/manager/config/<module>/`. El diagrama de la sección 1.3 describe la intención original de un único `config/`; la separación vigente evita mezclar la configuración del host con la de los paquetes gestionados. `FilePresetTarget` y `DefaultConfigInstaller` respetan ambas raíces.
 
 ---
 

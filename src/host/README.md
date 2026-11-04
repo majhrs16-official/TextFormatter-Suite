@@ -14,7 +14,8 @@
 - **Message dispatch** — `MessageDispatcher` enruta, renderiza, traduce,
   entrega al destinatario y publica copias de auditoría.
 - **Configuration loading** — `ConfigLoader` lee `config/suite/config.yml` y
-  produce `HostConfig`; `HostPaths` resuelve el layout canónico.
+  produce `HostConfig`; `HostPaths` resuelve el layout canónico del host
+  (`config/suite/`) y el de los módulos (`manager/config/<module>/`).
 - **Message catalog** — `MessagesConfig` carga `config/suite/messages.yml` con
   fallback a los recursos.
 - **Schema generation** — `ConfigSchemaGenerator` genera el esquema del editor
@@ -58,7 +59,7 @@
 | `RoutingResult` | Resultado de una entrega (entregado, silenciado, redirigido) |
 | `DispatchReport` | Contadores de una operación de despacho |
 | `ConfigLoader` | Carga `HostConfig` desde YAML |
-| `HostPaths` | Layout canónico `config/<paquete>/...` con fallback legacy |
+| `HostPaths` | `config/suite/` para el host y `manager/config/<module>/` para módulos; fallback legacy solo para el host |
 | `MessagesConfig` | Catálogo de mensajes con defaults empaquetados |
 | `ConfigSchemaGenerator` | Esquema para el editor web |
 | `DebugEndpoint` | Endpoint HTTP de simulación/estado |

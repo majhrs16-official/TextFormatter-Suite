@@ -23,6 +23,15 @@ class HostPathsTest {
     }
 
     @Test
+    void moduleConfigLivesUnderManagerConfig() {
+        assertEquals(dir.resolve("manager/config"), HostPaths.moduleConfigRoot(dir));
+        assertEquals(dir.resolve("manager/config/textformatter"),
+                HostPaths.moduleConfigDir(dir, "textformatter"));
+        assertEquals(dir.resolve("manager/config/iflow-firewall"),
+                HostPaths.moduleConfigDir(dir, "iflow-firewall"));
+    }
+
+    @Test
     void canonicalConfigWinsWhenBothExist() throws Exception {
         Files.createDirectories(dir.resolve("config/suite"));
         Files.writeString(dir.resolve("config/suite/config.yml"), "quick-look: true\n");
