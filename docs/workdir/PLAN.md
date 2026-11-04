@@ -10,9 +10,10 @@
 > `1.0` (`1.0.0` en artefactos, `config-version: 1.0` en YAML). No se mantiene
 > retrocompatibilidad, código de compatibilidad, aliases legacy ni ciclos de deprecación. Los
 > *breaking changes* son el modo normal hasta el hito `1.0.0`. El betatesting/E2E en servidores
-> reales Spigot/Paper, Fabric y Velocity forma parte del ciclo pre-1.0. `AUDITORIA.md` es efímera:
-> contiene solo la auditoría vigente y se reemplaza al cerrar sus bugs con tests. La hoja de ruta
-> inmediata está en «Purga pre-1.0 — hoja de ruta inmediata».
+> reales Spigot/Paper, Fabric y Velocity se ejecuta **después** de la base `1.0.0` y es requisito
+> para declarar estabilidad o producción. `AUDITORIA.md` es efímera: contiene solo la auditoría
+> vigente y se reemplaza al cerrar sus bugs con tests; su ciclo se declara en ADR-034 y se menciona
+> desde este PLAN. La hoja de ruta inmediata está en «Purga pre-1.0 — hoja de ruta inmediata».
 
 > **Hub iFlow (2026-11-04, ADR-032):** se añadió el paquete `iflow` como hub de selección. Los
 > motores publican `IflowBackend`; el hub publica `IflowHub` y `Router`, elige un backend y aplica
@@ -60,7 +61,7 @@
 > La base formal vigente es `1.0.0`.
 
 > **Alcance vigente (2026-11-04, ADR-034):** el betatesting/E2E en servidores reales
-> Spigot/Paper, Fabric y Velocity es parte del ciclo pre-1.0; ya no está descartado. El editor web
+> Spigot/Paper, Fabric y Velocity se ejecuta después de la base 1.0.0; ya no está descartado. El editor web
 > sigue diferido a una auditoría separada. La auditoría de iFlow se ratifica como especificación
 > técnica de referencia v3 en `docs/prompts/diseno/iflow-cpu-implement.md`. `AUDITORIA.md` es un
 > documento efímero de la auditoría vigente, no un marcador vacío ni un historial acumulativo; su
@@ -84,8 +85,7 @@
 | **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo. Añadir regresiones que demuestren que el camino legacy se rechaza o se ignora, no que se migra. | Pendiente |
 | **P0.6** | Auditoría manual de bugs estructurales | Revisar `AUDITORIA.md`; corregir P0/P1 con test de regresión antes de avanzar. Al cerrar todos los hallazgos, reemplazar el archivo por completo para el siguiente ciclo. | Pendiente |
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Pendiente |
-| **P0.8** | Betatesting/E2E real pre-1.0 | Matriz Spigot/Paper, Fabric y Velocity con versiones reales; registrar resultado y declarar **desconocida** toda combinación no probada. No se declara 1.0.0 sin este paso. | Pendiente |
-| **P0.9** | Coherencia documental | `philosophy.md`, `ADR.md` y `PLAN.md` describen una sola base `1.0`, un solo contrato exacto y un solo camino vigente. Las menciones históricas quedan marcadas como tales. | Hecho (2026-11-04) |
+| **P0.8** | Coherencia documental | `philosophy.md`, `ADR.md` y `PLAN.md` describen una sola base `1.0`, un solo contrato exacto y un solo camino vigente. Las menciones históricas quedan marcadas como tales. | Hecho (2026-11-04) |
 
 **Deuda conocida al abrir esta hoja (verificar antes de cerrar P0.2/P0.3):**
 
@@ -93,6 +93,15 @@
 - `iflow-wasm` exige `channel-api >= 2.1.0` en su descriptor/activador; debe alinearse a `1.0.0`.
 - Quedan aliases y rutas legacy en configuración y tests; se eliminan, no se migran.
 - La auditoría vigente y el estado real de los módulos deben revisarse antes de añadir features.
+
+### Después de 1.0.0 — betatesting/E2E real
+
+La base `1.0.0` se alcanza con la suite integrada; el betatesting/E2E se ejecuta **después** y no
+forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabilidad ni producción.
+
+| # | Tarea | Criterio de cierre | Estado |
+|---|---|---|---|
+| **E2E.1** | Betatesting/E2E posterior a 1.0.0 | Matriz Spigot/Paper, Fabric y Velocity con versiones reales; registrar resultado y declarar **desconocida** toda combinación no probada. La 1.0.0 es la base probada; la estabilidad/producción se declara solo al cerrar este ciclo. | Pendiente |
 
 ---
 
@@ -1319,7 +1328,7 @@ dejó de migrarse. Documentación vigente: `docs/wiki/10-Module-Manager.md`
 `docs/wiki/09-Developer-Guide.md` (tareas de empaquetado). Los tests de
 recuperación de etapa 2 y activación fallida ya cubren el journal, el status
 autoritativo y la ausencia de rollback de archivos. Límites: no hay firma de
-paquetes; el betatesting/E2E real pre-1.0 está pendiente (ADR-034). TLS + SHA-256 no prueba autoría.
+paquetes; el betatesting/E2E real posterior a 1.0.0 está pendiente (ADR-034). TLS + SHA-256 no prueba autoría.
 
 **F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,
 `iflow-firewall` e `iflow-wasm` tienen activador y la tarea `modulePackage`
@@ -1600,7 +1609,7 @@ plataforma solo en `sync-bukkit`, `sync-fabric` y los hosts. Los hosts ya no
 contienen listeners de eventos. Los ZIP de ambos paquetes declaran
 `Platform: spigot`/`Platform: fabric`, incluyen su `META-INF/services` y su
 configuración por defecto. La validación automatizada es compilación + tests; el betatesting/E2E
-contra servidores reales es parte del ciclo pre-1.0 (ADR-034) y se rastrea en la hoja de ruta.
+contra servidores reales se ejecuta después de la 1.0.0 (ADR-034) y se rastrea en la hoja de ruta.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
@@ -2128,7 +2137,7 @@ usuario de iFlow.
 | `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
 | `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
 | `src:extension-api` | ✅ OK | 3 | N/A | 260 | N/A | N/A | `ExtensionContext` usa puertos neutrales, sin `host` |
-| `src:fabric-host` | ✅ OK | 5 | 840 | 86 | 18.4% | 11.2% | `FabricTestProbe` cubierto; E2E real pre-1.0 pendiente (ADR-034); cobertura global baja |
+| `src:fabric-host` | ✅ OK | 5 | 840 | 86 | 18.4% | 11.2% | `FabricTestProbe` cubierto; E2E real posterior a 1.0.0 pendiente (ADR-034); cobertura global baja |
 | `src:gtranslate` | ✅ OK | 3 | N/A | 229 | N/A | N/A |  |
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
@@ -2172,7 +2181,7 @@ usuario de iFlow.
 | **T1 — Scaffold obligatorio** ✅ | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | **0 módulos sin directorio de tests; 0 directorios vacíos** |
 | **T2 — Gates de cobertura por módulo** ✅ | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | **Gates verdes en CI para todos los módulos** (umbrales según baseline T1) |
 | **T3 — Tests de contrato SPI/API** ✅ | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | **Tests de contrato pasan en aislamiento**; documentación de contratos generada |
-| **T4 — Tests de integración por dominio** ✅ | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real; el E2E real es la tarea P0.8 de ADR-034 |
+| **T4 — Tests de integración por dominio** ✅ | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real; el E2E real es la tarea E2E.1 posterior a 1.0.0 (ADR-034) |
 | **T5 — Tests de regresión obligatorios** | Cada bug/fix P0/P1 de `AUDITORIA.md`, commits `fix:` tiene al menos un test que falla sin el fix y pasa con él | Matriz bug→test inline en `docs/workdir/PLAN.md` |
 | **T6 — Fuzzing y property-based** | Módulos de parsing/serialización (`textformatter`, `messages`, `iflow-vm` bytecode, `iflow-wasm` loader) usan jqwik o JUnit-Quickcheck | Campañas nocturnas en CI; hallazgos → issues automáticos |
 | **T7 — Performance/soak baselines** | `loadtest`, `performance`: benchmarks JMH con umbrales de regresión (p99, throughput, heap) | Alertas automáticas si hay regresión > 10 % |
@@ -2180,7 +2189,7 @@ usuario de iFlow.
 **Reglas de diseño:**
 - **Los tests automatizados no requieren servidor real**: usar mocks, testcontainers o harnesses
   in-process. El betatesting/E2E en Spigot/Paper/Fabric/Velocity reales es una capa adicional
-  obligatoria del ciclo pre-1.0 (ADR-034), no un sustituto de los tests.
+  obligatoria posterior a la 1.0.0 (ADR-034), no un sustituto de los tests.
 - **Tests deterministas**: sin `Thread.sleep`, sin orden no determinista, sin estado global mutable entre tests.
 - **Fixtures compartidas** en `src/fixtures/` (ya existe) para mensajes, canales, políticas, configs; versionadas con el código.
 - **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.

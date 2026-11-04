@@ -5,8 +5,9 @@ Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Úl
 > **Régimen pre-1.0 (ADR-034, 2026-11-04):** no existe versión estable ni producción. Todos los
 > módulos, componentes, contratos y configuraciones se alinean a la base `1.0`; los números `2.x`,
 > `3.x` y superiores del historial son etiquetas de iteración, no versiones publicadas. No se
-> mantiene retrocompatibilidad ni código de compatibilidad. La versión oficial `1.0.0` solo se
-> alcanza cuando la suite completa y el betatesting/E2E real estén cerrados. Ver
+> mantiene retrocompatibilidad ni código de compatibilidad. La versión oficial `1.0.0` se alcanza
+> cuando la suite completa está integrada; el betatesting/E2E real se ejecuta **después** de la
+> 1.0.0 y es requisito para declarar estabilidad o producción. Ver
 > `docs/prompts/diseno/philosophy.md` §0 y `PLAN.md` «Purga pre-1.0».
 
 ## Contexto
@@ -681,7 +682,7 @@ equivalentes de Fabric API y detecta muertes en el tick. `PackageRuntime`
 filtra por `PlatformCompatibility` y `checkArchitecture` permite el SDK solo en
 los dos paquetes y en los hosts. Los ZIP declaran `Platform: spigot` y
 `Platform: fabric`. La validación automatizada es compilación + tests; el betatesting/E2E en
-servidores reales es parte del ciclo pre-1.0 y se rastrea en `PLAN.md` (ADR-034).
+servidores reales se ejecuta después de la 1.0.0 y se rastrea en `PLAN.md` (ADR-034).
 
 **Consecuencias.**
 
@@ -979,7 +980,7 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
     barreras); corpus de políticas reales; determinismo byte a byte; y ejecución
     contra la VM v3 cuando V2/V4 estén disponibles. Los casos no soportados
     tienen tests negativos. El compilador no ejecuta servidores Minecraft; el E2E de la suite se
-    cubre en el ciclo pre-1.0 (ADR-034).
+    cubre después de la 1.0.0 (ADR-034).
 
 **Fases V6.**
 
@@ -1600,9 +1601,9 @@ tipos entre el módulo y el host.
 - `moduleRepository` no acepta una URL base vacía ni una ruta local como sustituto.
 - La reproducibilidad se verifica con dos builds y comparación de hashes; `SHA256SUMS` se verifica
   con `sha256sum -c`.
-- El betatesting/E2E en Spigot/Paper/Fabric/Velocity reales es parte del ciclo pre-1.0 (ADR-034).
-  Los gates automatizados siguen usando ZIP/JAR reales, directorios temporales y tests de
-  recuperación/activación; una plataforma no probada se declara desconocida.
+- El betatesting/E2E en Spigot/Paper/Fabric/Velocity reales se ejecuta después de la base 1.0.0
+  (ADR-034). Los gates automatizados siguen usando ZIP/JAR reales, directorios temporales y tests
+  de recuperación/activación; una plataforma no probada se declara desconocida.
 - Una futura firma de paquetes, un repositorio no confiable o un rediseño de `core-render` para
   aislar Adventure requieren una ADR nueva.
 
@@ -1936,8 +1937,9 @@ código que solo existe para no romper instalaciones que nunca fueron oficiales.
 
 La versión `1.0.0` debe ser un hito real, no un número de build. Hasta alcanzarlo, el proyecto
 opera en régimen de *rolling release*: los *breaking changes* están permitidos y son deseables para
-limpiar la deuda técnica. El betatesting/E2E en servidores reales forma parte de ese ciclo, porque
-los tests aislados no demuestran la integración con Spigot/Paper, Fabric y Velocity.
+limpiar la deuda técnica. Una vez alcanzada la base `1.0.0`, comienza el betatesting/E2E en
+servidores reales, porque los tests aislados no demuestran la integración con Spigot/Paper, Fabric
+y Velocity. La estabilidad y la producción no se declaran hasta cerrar ese ciclo posterior.
 
 **Decisión.**
 
@@ -1967,18 +1969,19 @@ los tests aislados no demuestran la integración con Spigot/Paper, Fabric y Velo
    lectores, aliases de motores y cualquier módulo o fachada marcada como *deprecated*. El
    inventario de versiones `2.x`/`3.x` se corrige a `1.0.0` o se elimina si ya no representa una
    capacidad vigente.
-6. **E2E real como parte del ciclo pre-1.0.** Hasta el hito `1.0.0`, la validación incluye
-   betatesting/E2E en servidores reales Spigot/Paper, Fabric y proxies Velocity. Los tests
-   automatizados siguen siendo obligatorios y no se sustituyen por una prueba manual. Una
-   plataforma no probada se declara **desconocida**, no aprobada. No se declara estabilidad ni
-   producción antes del hito.
-7. **Hito `1.0.0`.** La versión oficial solo se alcanza cuando la suite completa, la integración de
-   todos los módulos y todas las features estén terminadas, el betatesting/E2E real haya validado
-   el conjunto, no queden hallazgos P0/P1 abiertos y el gate completo esté verde. Antes de ese
-   hito no hay *release notes* de estabilidad ni promesas de soporte.
+6. **E2E real después de `1.0.0`.** Una vez alcanzada la base `1.0.0`, comienza el betatesting/E2E
+   en servidores reales Spigot/Paper, Fabric y proxies Velocity. Los tests automatizados siguen
+   siendo obligatorios y no se sustituyen por una prueba manual. Una plataforma no probada se
+   declara **desconocida**, no aprobada. No se declara estabilidad ni producción hasta cerrar el
+   ciclo de betatesting/E2E posterior a la 1.0.0.
+7. **Hito `1.0.0`.** La versión oficial se alcanza cuando la suite completa, la integración de
+   todos los módulos y todas las features estén terminadas, no queden hallazgos P0/P1 abiertos y el
+   gate completo esté verde. La 1.0.0 es la base sobre la que se ejecuta el betatesting/E2E
+   posterior; no es todavía una declaración de estabilidad ni de producción.
 8. **`AUDITORIA.md` efímera.** El archivo contiene solo la auditoría vigente. Cuando todos sus bugs
    estén corregidos con tests de validación, se reemplaza por completo para el siguiente ciclo. El
-   historial de auditorías vive exclusivamente en Git. Ver la costumbre C14 de la filosofía.
+   historial de auditorías vive exclusivamente en Git. El archivo no se modifica para dejar notas
+   de metodología: su ciclo se declara aquí y se menciona desde `PLAN.md`.
 
 **Alternativas consideradas.**
 
@@ -1990,9 +1993,10 @@ los tests aislados no demuestran la integración con Spigot/Paper, Fabric y Velo
    antiguas. Limitaciones: contamina la base de código (*bloatware*), duplica caminos y fija
    decisiones antes de que el diseño esté cerrado. Evaluación: **descartada**; no hay instalaciones
    oficiales que proteger.
-3. **Posponer el E2E real hasta después de la 1.0.** Ventajas: menos coste inmediato. Limitaciones:
-   la 1.0 se declararía sin haber validado la integración real; los fallos de plataforma aparecerían
-   después del hito. Evaluación: **descartada**; el E2E es parte del betatesting pre-1.0.
+3. **Declarar la 1.0.0 estable y de producción sin betatesting/E2E posterior.** Ventajas: menos
+   coste inmediato. Limitaciones: se declararía estabilidad sin haber validado la integración real;
+   los fallos de plataforma aparecerían después. Evaluación: **descartada**; la 1.0.0 es la base
+   integrada, pero la estabilidad se declara solo tras el betatesting/E2E posterior.
 4. **Acumular el historial de auditorías en `AUDITORIA.md`.** Ventajas: todo en un archivo.
    Limitaciones: el documento activo deja de ser operativo y se vuelve difícil distinguir lo
    vigente de lo cerrado. Evaluación: **descartada**; Git conserva el historial.
@@ -2009,8 +2013,9 @@ los tests aislados no demuestran la integración con Spigot/Paper, Fabric y Velo
   inventariar y corregir, no versiones válidas. El PLAN fija el orden de purga.
 - Las instalaciones que conserven rutas o formatos antiguos no se migran en runtime. El operador
   debe aceptar el layout canónico o la carga se rechaza/ignora explícitamente.
-- El E2E real añade tiempo y requiere entornos de prueba; a cambio, la 1.0.0 no se declara sobre
-  una integración no verificada.
+- El E2E real añade tiempo y requiere entornos de prueba; a cambio, la estabilidad y la producción
+  no se declaran sobre una integración no verificada. La 1.0.0 es la base que se somete a ese
+  betatesting, no la declaración final de estabilidad.
 - La purga puede romper tests existentes que afirmaban compatibilidad. Esos tests se eliminan o se
   reescriben para el camino vigente; no se mantienen para “no romper” una garantía que ya no
   existe.
@@ -2020,7 +2025,7 @@ los tests aislados no demuestran la integración con Spigot/Paper, Fabric y Velo
 **Evidencia y referencias.**
 
 - `docs/prompts/diseno/philosophy.md` §0 («Régimen pre-1.0»), C7 («Sin retrocompatibilidad
-  prematura»), C8 («Betatesting/E2E real en pre-1.0») y C14 («`AUDITORIA.md` es efímera»).
+  prematura») y C8 («Betatesting/E2E real después de 1.0.0»).
 - `docs/workdir/PLAN.md`, sección «Purga pre-1.0 — hoja de ruta inmediata».
 - Inventario pendiente de ejecución: `build.gradle` declara `2.1.0-SNAPSHOT` y varios módulos,
   manifiestos y configuraciones conservan versiones o aliases anteriores. La corrección se rastrea

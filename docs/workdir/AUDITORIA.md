@@ -1,12 +1,6 @@
 # Auditoría Exhaustiva de Inconsistencias — TextFormatter Suite
 
-> **Documento efímero (ADR-034):** este archivo contiene solo la auditoría vigente. Cuando todos
-> sus bugs estén corregidos y cada corrección tenga su test de validación, se reemplaza por
-> completo para el siguiente ciclo. El historial de auditorías vive exclusivamente en Git; no se
-> acumula aquí. El cierre y reemplazo se rastrea en `PLAN.md` (tarea P0.6).
-
-**Commit auditado (snapshot):** `3aaba49` (15 commits por delante de `origin/main` en el momento de la auditoría)
-
+**Commit auditado:** `3aaba49` (HEAD, 15 commits ahead de origin/main)  
 **Fecha:** 2026-10-24  
 **Cobertura:** 33 módulos en `src/`, todos los `build.gradle`, `settings.gradle`, `docs/prompts/diseno/*.md`, `docs/workdir/PLAN.md`
 

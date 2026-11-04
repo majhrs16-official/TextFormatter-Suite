@@ -10,11 +10,12 @@ módulos, componentes, contratos, artefactos y esquemas de configuración. Los n
 superiores que aparezcan en el historial son etiquetas de iteración, no versiones publicadas ni
 promesas de compatibilidad.
 
-La versión oficial **1.0.0** es un hito de cierre, no un número de build. Se alcanzará únicamente
-cuando la suite completa, la integración de todos los módulos y todas las features estén terminadas
-y el betatesting/E2E en servidores reales haya validado el conjunto. Hasta entonces el proyecto
-opera en régimen de *rolling release*: los *breaking changes* están permitidos y son deseables para
-limpiar la deuda técnica antes de congelar la arquitectura.
+La versión oficial **1.0.0** es un hito de integración, no un número de build. Se alcanza cuando la
+suite completa, la integración de todos los módulos y todas las features están terminadas. Una vez
+alcanzada esa base, comienza el betatesting/E2E en servidores reales; la estabilidad y la producción
+no se declaran hasta cerrar ese ciclo posterior. Hasta la 1.0.0 el proyecto opera en régimen de
+*rolling release*: los *breaking changes* están permitidos y son deseables para limpiar la deuda
+técnica antes de congelar la arquitectura.
 
 ### Reglas de oro pre-1.0
 
@@ -102,13 +103,13 @@ adaptadores, alias ni parches de soporte. La compatibilidad prematura contamina 
 (*bloatware*) y fija decisiones antes de que el diseño esté terminado. Cada fase debe tener puertas
 de calidad, planes completados y tests en verde; está prohibido dejar código a medias.
 
-## C8. Betatesting/E2E real en pre-1.0
+## C8. Betatesting/E2E real después de 1.0.0
 
-Hasta el hito 1.0.0, la validación incluye betatesting/E2E en servidores reales Spigot/Paper,
+Una vez alcanzada la base **1.0.0**, comienza el betatesting/E2E en servidores reales Spigot/Paper,
 Fabric y proxies Velocity. Los tests automatizados siguen siendo obligatorios y no se sustituyen
 por una prueba manual; el E2E real es una capa adicional para descubrir integraciones que un test
 aislado no puede demostrar. Una plataforma no probada se declara **desconocida**, no aprobada. No
-se declara estabilidad ni producción antes del hito 1.0.0.
+se declara estabilidad ni producción hasta cerrar el ciclo de betatesting/E2E posterior a la 1.0.0.
 
 ## C9. Seguridad compartida: sandbox + dueño del repo
 
@@ -140,15 +141,6 @@ Esto obliga a dos disciplinas concretas:
 2. **Invariantes validados o soporte completo.** Cuando aparece una asimetría, se elige una de dos salidas: implementar la capacidad completa en todas las rutas, o declarar un invariante formal, validarlo en la frontera y fallar con un mensaje explícito cuando se incumpla. Lo que no se permite es asumir que la entrada siempre cumplirá el invariante sin comprobarlo.
 
 La misma regla se aplica al estado de recuperación. Un rollback no es exitoso porque el código lo diga: hay que verificar que cada versión anterior quedó activa y que cada versión nueva quedó fuera. Si la compensación falla, no se finge éxito ni se borran artefactos que aún pueden hacer falta: se conservan ambos lados y se marca `RESTART_REQUIRED` con una causa verificable. Los estados `FAILED`, `RESTART_REQUIRED` y «desconocido» existen para decir la verdad, no para decorar logs.
-
-## C14. `AUDITORIA.md` es efímera
-
-`docs/workdir/AUDITORIA.md` contiene **solo la auditoría vigente**, realizada por agentes o de forma
-externa. No es un archivo histórico ni un registro acumulativo. Cuando todos los bugs de la
-auditoría actual estén corregidos y cada corrección tenga su test de validación, el archivo se
-**reemplaza por completo** para el siguiente ciclo. El historial de auditorías vive exclusivamente en
-Git; no se conserva dentro del documento activo. Si una auditoría no está cerrada, sus hallazgos
-pendientes siguen visibles en el archivo actual y bloquean el avance de nuevas features.
 
 ---
 
