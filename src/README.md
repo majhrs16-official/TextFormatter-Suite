@@ -13,9 +13,10 @@ TextFormatter Suite
 │   ├── core-api          → Core interfaces, SPI, domain types
 │   ├── kernel            → Module loading & dependency resolution
 │   ├── textformatter     → Template engine, placeholders, channels
+│   ├── iflow             → hub que descubre `IflowBackend` y publica el `Router` estable; selección y fallback
 │   ├── iflow-vm          → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de la VM de 32 bits)
 │   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; contrato W1/W2 (validación, instancia, invocación), sin integración al pipeline
-│   ├── iflow-firewall    → motor de reglas SpEL legacy (alternativa mutuamente excluyente a la VM) + grafo del editor
+│   ├── iflow-firewall    → motor de reglas SpEL legacy + grafo del editor
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
 │   ├── chattranslator    → Translation facade and provider lifecycle
@@ -74,9 +75,10 @@ TextFormatter Suite
 | `core-api` | Core interfaces, SPI, domain types and cross-package contracts (Module, Actor, Channel, ChannelRegistry, Router, TranslationService, SyncSink, MessageRenderer, CommandRegistry, etc.) | — | **All modules** |
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `suite-runtime`, `manager-core`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `spigot-host`, `fabric-host` |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `host`, `spigot-host`, `fabric-host` |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `host`) |
-| `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `host` (selección `vm`/`firewall`), web editor |
+| `iflow` | Hub de selección: descubre `IflowBackend`, publica `IflowHub` y `Router`, aplica `engine`/`fallback-on-unavailable` desde `config/iflow/config.yml` | `core-api`, `snakeyaml` | `suite-runtime`, `spigot-host`, `fabric-host` |
+| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `iflow` (backend), `host` legacy |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `iflow` backend) |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `iflow` (backend), `host` legacy, web editor |
 | `host` | Neutral message dispatch, config loading and `SuiteHost` assembly; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-socket`, `sync-discord`, `gtranslate`, `ltranslate` |

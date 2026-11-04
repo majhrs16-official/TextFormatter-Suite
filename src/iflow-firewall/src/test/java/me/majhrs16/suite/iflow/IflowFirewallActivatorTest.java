@@ -12,6 +12,7 @@ import java.util.Optional;
 
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.IflowBackend;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.EventBus;
 import me.majhrs16.suite.api.runtime.ModuleContext;
@@ -44,6 +45,9 @@ class IflowFirewallActivatorTest {
 
         assertTrue(registry.find(Router.class).isPresent());
         assertTrue(registry.find(DefaultRouter.class).isPresent());
+        IflowBackend backend = registry.find(IflowBackend.class).orElseThrow();
+        assertEquals("iflow-firewall", backend.name());
+        assertTrue(backend.isAvailable());
         assertEquals(1, resources.tracked.size());
 
         resources.releaseAll();

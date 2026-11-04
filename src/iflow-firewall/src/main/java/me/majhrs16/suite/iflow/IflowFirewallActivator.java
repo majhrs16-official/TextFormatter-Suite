@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.IflowBackend;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
@@ -55,6 +56,22 @@ public final class IflowFirewallActivator implements ModuleActivator {
 
         context.services().register(Router.class, router);
         context.services().register(DefaultRouter.class, router);
+        context.services().register(IflowBackend.class, new IflowBackend() {
+            @Override
+            public String name() {
+                return "iflow-firewall";
+            }
+
+            @Override
+            public Router router() {
+                return router;
+            }
+
+            @Override
+            public boolean isAvailable() {
+                return true;
+            }
+        });
         context.resources().track(router);
         context.logger().info("iFlow firewall engine ready with "
                 + router.rules().size() + " rules");

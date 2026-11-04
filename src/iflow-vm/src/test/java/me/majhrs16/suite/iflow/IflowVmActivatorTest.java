@@ -14,6 +14,7 @@ import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.IflowBackend;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.EventBus;
 import me.majhrs16.suite.api.runtime.ModuleContext;
@@ -53,6 +54,9 @@ class IflowVmActivatorTest {
 
         assertTrue(registry.find(Router.class).isPresent());
         assertTrue(registry.find(VmPolicyEngine.class).isPresent());
+        IflowBackend backend = registry.find(IflowBackend.class).orElseThrow();
+        assertEquals("iflow-vm", backend.name());
+        assertTrue(backend.isAvailable());
         assertEquals(1, resources.tracked.size());
 
         resources.releaseAll();

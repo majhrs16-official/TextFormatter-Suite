@@ -1770,3 +1770,69 @@ del mensaje, no el estado de la máquina, el tiempo, la cola ni la entrega.
 - Ratificación del usuario: 2026-11-03.
 - Implementación: W1/W2 en `src/iflow-wasm` (contrato `PolicyAbiV3`, `TlvCodec`, `PolicySession`,
   `PolicyHost` y `WasmPolicyEngine` aislado, con tests); W3/W3.5 pendientes.
+
+---
+
+## Decisión 2026-11-04 — hub `iflow` para seleccionar backend (ADR-032)
+
+**Estado:** Aceptada. Hub implementado con los backends `iflow-firewall` e `iflow-vm`; el backend
+`iflow-wasm` se conecta en W3.
+
+**Contexto.** Los motores iFlow se trataban como paquetes mutuamente excluyentes y el host elegía
+entre ellos con `iflow.engine.kind`. Esa selección no cubre la convivencia de `iflow-vm`,
+`iflow-wasm` e `iflow-firewall`, no tiene un punto único de fallback y obliga al host a conocer
+detalles de cada motor. El patrón de `chattranslator` ya resuelve un problema equivalente: un hub
+publica la fachada estable y descubre proveedores por servicio.
+
+**Decisión.**
+
+1. Se añade el paquete `iflow` como **hub**. Publica `IflowHub` y `Router`, y es el único punto que
+   elige el backend activo.
+2. Los motores publican `IflowBackend` (`name()`, `router()`, `isAvailable()`). No publican la
+   selección ni conocen al hub.
+3. La configuración canónica del hub es `config/iflow/config.yml`:
+   `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
+   `engine` acepta los alias `firewall`, `vm` y `wasm`; `default-backend` es un alias de `engine`.
+   Las rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml` son incorrectas
+   y no se aceptan como fallback.
+4. El valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y
+   `fallback-on-unavailable` es `true`, el hub usa el primer backend disponible en orden de
+   registro. Si no hay ninguno, `IflowHub.router()` devuelve `null` y el runtime deja el pipeline
+   sin motor; las llamadas directas al hub fallan cerradas con `REJECT`.
+5. `IflowHub` extiende `Router`. `SuiteRuntime` prefiere `IflowHub` sobre un `Router` legacy, de
+   modo que el hub gana aunque los motores sigan publicando `Router` durante la transición.
+6. Los motores pueden coexistir instalados; el hub activa uno solo. La regla histórica de
+   exclusividad de paquetes queda sustituida por la selección del hub para el runtime.
+7. `HostConfig.Engine`/`iflow.engine.kind` queda como compatibilidad legacy del host y no es la
+   fuente de verdad cuando el hub está instalado. El hub lee su propio `config.yml`.
+
+**Alternativas consideradas.**
+
+1. **Mantener `iflow.engine.kind` en `config/suite/config.yml` como selector único.**
+   Ventajas: sin paquete nuevo. Limitaciones: el host tendría que conocer los motores y no habría
+   descubrimiento ni fallback por disponibilidad. Evaluación: **descartada**.
+2. **Un hub dentro de `iflow-firewall` o de `iflow-vm`.** Ventajas: un paquete menos. Limitaciones:
+   acopla la selección a un motor y rompe la independencia de las líneas. Evaluación: **descartada**.
+3. **Selección por `ServiceLoader` únicamente.** Ventajas: sin registro runtime. Limitaciones: no
+   soporta hot unload/upgrade ni disponibilidad dinámica. Evaluación: **descartada**; se usa el
+   `ServiceRegistry` y se refresca con eventos de ciclo de vida.
+4. **Fallback silencioso al primer motor disponible siempre.** Ventajas: el pipeline nunca queda
+   vacío. Limitaciones: oculta una configuración incorrecta. Evaluación: **descartada**; el
+   fallback es explícito y configurable.
+
+**Consecuencias.**
+
+- El host deja de importar motores concretos y solo consume `Router`/`IflowHub`.
+- Instalar varios motores ya no es un error de classpath; el hub elige uno y los demás quedan
+  inactivos para el routing.
+- Un backend puede existir pero no estar disponible (por ejemplo, `iflow-wasm` sin artefacto o con
+  hash incorrecto); el hub puede aplicar fallback.
+- El hub no crea ni cierra motores: cada motor conserva la propiedad de sus recursos.
+- Cambiar la selección en caliente requiere que el hub refresque; los eventos
+  `ModuleActivatedEvent`/`ModuleDeactivatedEvent` ya lo hacen.
+
+**Evidencia.**
+
+- `./gradlew :src:iflow:test :src:host:test :src:suite-runtime:test :src:presets:test` verde.
+- `src/iflow/README.md`.
+- `IflowConfigTest` e `IflowHubTest`.

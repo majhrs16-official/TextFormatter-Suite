@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.IflowBackend;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.api.iflow.Router;
@@ -48,6 +49,22 @@ public final class IflowVmActivator implements ModuleActivator {
             engine.setProgram(VmConfigLoader.loadProgram(context.configDir(), context.logger()));
             context.services().register(Router.class, engine);
             context.services().register(VmPolicyEngine.class, engine);
+            context.services().register(IflowBackend.class, new IflowBackend() {
+                @Override
+                public String name() {
+                    return "iflow-vm";
+                }
+
+                @Override
+                public Router router() {
+                    return engine;
+                }
+
+                @Override
+                public boolean isAvailable() {
+                    return true;
+                }
+            });
             context.resources().track(engine);
             context.logger().info("iFlow VM engine ready");
         } catch (RuntimeException failure) {

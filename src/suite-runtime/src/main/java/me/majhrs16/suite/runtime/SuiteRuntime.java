@@ -12,6 +12,7 @@ import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.command.CommandRoot;
 import me.majhrs16.suite.api.config.ConfigRegistry;
+import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.render.MessageComponentRenderer;
@@ -49,7 +50,7 @@ import me.majhrs16.suite.manager.spi.PackageEntry;
  * <pre>
  *   &lt;data&gt;/manager/library/packages   installed module JARs
  *   &lt;data&gt;/manager/library/status     installation database
- *   &lt;data&gt;/config/manager/&lt;module&gt;     module configuration
+ *   &lt;data&gt;/config/&lt;module&gt;     module configuration
  *   &lt;data&gt;/manager/runtime            transient runtime state
  * </pre>
  */
@@ -201,7 +202,7 @@ public final class SuiteRuntime implements AutoCloseable {
             HostConfig config = configResult.config();
             ChannelRegistry channels = requireService(ChannelRegistry.class);
             TranslationService translation = requireService(TranslationService.class);
-            Router router = requireService(Router.class);
+            Router router = resolveRouter();
             MessageComponentRenderer componentRenderer =
                     requireService(MessageComponentRenderer.class);
             MessageRenderer renderer = requireService(MessageRenderer.class);
@@ -234,6 +235,25 @@ public final class SuiteRuntime implements AutoCloseable {
     private <T> T requireService(Class<T> type) {
         return moduleHost.services().find(type).orElseThrow(() ->
                 new IllegalStateException("missing service " + type.getName()));
+    }
+
+    /**
+     * Prefiere el hub iFlow cuando está instalado; si no, conserva el router
+     * legacy publicado por un motor. El hub es el único punto que elige entre
+     * {@code iflow-firewall}, {@code iflow-vm} e {@code iflow-wasm}.
+     */
+    private Router resolveRouter() {
+        IflowHub hub = moduleHost.services().find(IflowHub.class).orElse(null);
+        if (hub == null) {
+            return requireService(Router.class);
+        }
+        Router router = hub.router();
+        if (router == null) {
+            throw new IllegalStateException(
+                    "iFlow hub has no active backend: " + hub.availableBackends());
+        }
+        logger.info("iFlow backend: " + hub.activeBackend());
+        return router;
     }
 
     private synchronized void closePipeline() {

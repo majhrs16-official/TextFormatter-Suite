@@ -5,6 +5,13 @@
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
 > Última actualización: 2026-11-04 (**W1 y W2 de `iflow-wasm` cerrados en su alcance aislado:** contrato v3 con módulo de imports `iflow`, firmas explícitas, export `decide`, TLV estricto y validación de firmas; `WasmModuleLoader` instancia con `ImportValues`; `PolicySession` implementa journal read-your-writes y decisión única; `PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve `PolicyOutcome`. La integración con `Router`/`MessageDispatcher` queda para W3. Antes: **F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/<module>/`; `config/manager/<module>/` y `manager/config/<module>/` son rutas incorrectas que se corrigen y no se aceptan como fallback; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
+> **Hub iFlow (2026-11-04, ADR-032):** se añadió el paquete `iflow` como hub de selección. Los
+> motores publican `IflowBackend`; el hub publica `IflowHub` y `Router`, elige un backend y aplica
+> fallback configurable. Configuración canónica: `config/iflow/config.yml` con
+> `engine: iflow-firewall|iflow-vm|iflow-wasm` y `fallback-on-unavailable`. Default
+> `iflow-firewall`. `SuiteRuntime` prefiere `IflowHub` sobre `Router`; `iflow.engine.kind` queda
+> legacy. `iflow-firewall` e `iflow-vm` ya publican su backend; `iflow-wasm` se conecta en W3.
+
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
 > descargables con listeners, configuración y ciclo de vida propios;
@@ -57,26 +64,24 @@ Las dos líneas son independientes. Los hallazgos `IFLOW-MAN-*` se incorporan co
 aplican automáticamente** a `iflow-wasm`. El host podrá seleccionar el motor por configuración
 cuando ambas estén listas.
 
-### Regla de exclusividad de los motores iFlow (2026-10-27)
+### Selección de motores iFlow mediante el hub `iflow` (2026-11-04, ADR-032)
 
-> **Los tres motores — `iflow-vm`, `iflow-wasm` e `iflow-firewall` — son mutuamente excluyentes.**
-> Solo uno puede estar instalado en un servidor a la vez. Ocupan el mismo slot de instalación de
-> motor iFlow; instalar otro **desinstala/reemplaza** al anterior y no se admite la convivencia en
-> el classpath.
+> **Los tres motores — `iflow-vm`, `iflow-wasm` e `iflow-firewall` — publican `IflowBackend`.**
+> El paquete `iflow` es el hub: descubre los backends y activa **uno solo** para el routing.
+> Pueden coexistir instalados; el hub es la fuente de verdad y aplica el fallback configurado.
 >
-> Los tres comparten el paquete base `me.majhrs16.suite.iflow` (con subpaquetes propios:
-> `.vm`, `.wasm`, `.rule`, etc.). Esto es intencional: el contrato `Router` y los tipos de
-> decisión tienen el mismo FQCN en cada motor, y el host se compila contra ese contrato base.
-> Al ser excluyentes, no hay colisión en runtime; **no se debe añadir un sufijo de paquete**
-> (por ejemplo `.firewall`) ni un módulo `iflow-api` compartido.
+> Configuración canónica: `config/iflow/config.yml` con
+> `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
+> El default es `iflow-firewall`. `iflow.engine.kind` queda como compatibilidad legacy del host y
+> no selecciona el backend cuando el hub está presente.
 >
-> Consecuencia operativa: el paquete instalado debe aportar las clases de `me.majhrs16.suite.iflow`
-> y el host selecciona el motor con `iflow.engine.kind` (`vm` por defecto, `firewall` para el
-> motor legacy). Un despliegue con dos motores a la vez no está soportado. El monorepo compila
-> los tres y `./gradlew publishIflowEngines` los publica como paquetes Maven separados en
-> `build/repo` (`suite-iflow-vm`, `suite-iflow-wasm` y `suite-iflow-firewall`); el classpath de
-> ejecución debe contener exactamente uno, y `SuiteBootstrap` filtra los alternativos si el
-> classpath de desarrollo trae varios.
+> Los contratos neutrales (`Router`, `IflowHub`, `IflowBackend`) viven en `core-api` bajo
+> `me.majhrs16.suite.iflow`; cada motor usa su propio subpaquete. `SuiteRuntime` prefiere
+> `IflowHub` sobre un `Router` legacy, de modo que el hub gana aunque los motores sigan publicando
+> `Router` durante la transición. El backend `iflow-wasm` se conecta en W3.
+>
+> El monorepo compila los tres motores y el hub; `./gradlew publishIflowEngines` publica
+> `suite-iflow`, `suite-iflow-vm`, `suite-iflow-wasm` y `suite-iflow-firewall` en `build/repo`.
 
 El único pendiente transversal es la **paridad funcional de propiedades del mensaje** (W3.5) contra
 la **spec v3**: que `iflow-wasm` implemente el mismo contrato de transformación, decisión y entrega,
