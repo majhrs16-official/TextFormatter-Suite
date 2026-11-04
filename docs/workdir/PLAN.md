@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-04 (**W1 y W2 de `iflow-wasm` cerrados en su alcance aislado:** contrato v3 con módulo de imports `iflow`, firmas explícitas, export `decide`, TLV estricto y validación de firmas; `WasmModuleLoader` instancia con `ImportValues`; `PolicySession` implementa journal read-your-writes y decisión única; `PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve `PolicyOutcome`. La integración con `Router`/`MessageDispatcher` queda para W3. Antes: **F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/manager/<module>/`, con migración desde `manager/config/<module>/`, `config/<module>/` y rutas planas; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-11-04 (**W1 y W2 de `iflow-wasm` cerrados en su alcance aislado:** contrato v3 con módulo de imports `iflow`, firmas explícitas, export `decide`, TLV estricto y validación de firmas; `WasmModuleLoader` instancia con `ImportValues`; `PolicySession` implementa journal read-your-writes y decisión única; `PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve `PolicyOutcome`. La integración con `Router`/`MessageDispatcher` queda para W3. Antes: **F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/<module>/`; `config/manager/<module>/` y `manager/config/<module>/` son rutas incorrectas que se corrigen y no se aceptan como fallback; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
@@ -1455,7 +1455,7 @@ adapter queda listo para que el bootstrap lo construya cuando el paquete
 `presets list` y `presets apply <id>`. El comando resuelve el puerto neutral
 `PresetService`; si el paquete no está activo responde explícitamente y no
 inventa un catálogo. `FilePresetTarget` escribe la configuración del host en
-`config/suite/` y la de cada módulo en `config/manager/<module>/`, que es el
+`config/suite/` y la de cada módulo en `config/<module>/`, que es el
 mismo layout que consume `ModuleHost`. Tras persistir, el callback llama a
 `SuiteRuntime.reloadActiveModules()`: cierra el pipeline, detiene los módulos
 activos en orden inverso, los reactiva en orden de dependencias y reconstruye
@@ -1465,19 +1465,18 @@ tests cubren el orden de reinicio y la conservación de servicios en
 `ModuleHostTest`, y los comandos `list/apply`, el preset desconocido y el
 paquete inactivo en `SuiteRuntimeTest`.
 
-**Defaults de módulos (2026-11-03):** se corrigió el primer arranque de los
-hosts. Antes copiaban los defaults de canales, traductores, sync, inworld y
-reglas a `config/<module>/`, pero los activadores leen
-`config/manager/<module>/`; el resultado era que los módulos arrancaban sin la
-configuración empaquetada. `HostPaths` expone ahora `moduleConfigRoot` y
-`moduleConfigDir`, y `DefaultConfigInstaller` centraliza la copia: el host
-conserva `config/suite/`, los módulos reciben `config/manager/<module>/`, los
-archivos legacy se migran a la ruta canónica y nunca se sobrescribe una
-configuración existente. Los candidatos legacy se retiran en F9. La regresión
-está cubierta por `HostPathsTest` y `DefaultConfigInstallerTest`. Corrección
-posterior: la ruta canónica es `config/manager/<module>/`; `manager/config/<module>/`
-fue el layout intermedio y queda como legacy migrable, no como segunda ruta
-canónica.
+**Defaults de módulos (2026-11-03, corregido 2026-11-04):** los hosts copiaban
+los defaults de canales, traductores, sync, inworld y reglas a rutas que no
+coincidían con las que leen los activadores. La ruta canónica de módulos es
+`config/<module>/` (por ejemplo, `config/chattranslator/config.yml`);
+`config/manager/<module>/` y `manager/config/<module>/` son rutas incorrectas,
+no layouts legacy ni versiones alternativas, y no se aceptan como fallback.
+`HostPaths` expone `moduleConfigRoot` y `moduleConfigDir`, y
+`DefaultConfigInstaller` centraliza la copia: el host conserva `config/suite/`
+y los módulos reciben `config/<module>/`. Si se detectan archivos en las rutas
+incorrectas, se corrigen hacia la ruta canónica y nunca se sobrescribe una
+configuración existente. La regresión está cubierta por `HostPathsTest` y
+`DefaultConfigInstallerTest`.
 
 **Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
 `core-render` con el puerto `MessageComponentRenderer` (Adventure, sin
