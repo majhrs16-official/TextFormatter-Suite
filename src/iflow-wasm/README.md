@@ -6,11 +6,13 @@ bits); no hereda el ISA `.flow`, el ABI `HOST` v2 ni el modelo BIOS/kernel.
 
 ## Estado
 
-**W1 — contrato v3 definido; W2 — runtime mínimo ampliado.** `WasmContract.policyV3()` ya declara
-el módulo de imports `iflow`, sus firmas y el export `decide`; `WasmModuleLoader` valida nombres,
-firmas, memoria, `start` y tamaño, y permite instanciar con `ImportValues`. `TlvCodec` implementa el
-formato de los buffers. Las **host functions** y el `WasmPolicyEngine` conectado al pipeline siguen
-pendientes (W2/W3/W3.5).
+**W1 cerrado; W2 cerrado en su alcance de motor aislado.** `WasmContract.policyV3()` declara el
+módulo de imports `iflow`, sus firmas y el export `decide`; `WasmModuleLoader` valida nombres,
+firmas, memoria, `start` y tamaño, y permite instanciar con `ImportValues`. `TlvCodec` implementa
+los buffers; `PolicySession` mantiene el journal read-your-writes y la decisión única;
+`PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve
+un `PolicyOutcome`. La integración con `Router`/`MessageDispatcher`, el hash/hot-reload y la matriz
+de paridad `.flow` v3 siguen pendientes (W3/W3.5).
 
 | Pieza | Estado |
 |---|---|
@@ -20,7 +22,8 @@ pendientes (W2/W3/W3.5).
 | `WasmContract` + `ValidationResult` | ✅ W2; firmas de imports/exports en W1 |
 | `PolicyAbiV3` (nombres, firmas, estados, acciones, propiedades) | ✅ W1 |
 | `TlvCodec` (UTF-8 estricto, nulo vs vacío) | ✅ W1 |
-| Host functions `iflow.*` | ⏳ W2 |
+| Host functions `iflow.*` sobre `PolicySession` | ✅ W2 |
+| `WasmPolicyEngine` (evaluación aislada) | ✅ W2 |
 | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | ⏳ W3 |
 | Hash/firma del artefacto y hot-reload | ⏳ W3 |
 | Matriz de paridad `.flow` v3 vs `.wasm` | ⏳ W3.5 |
@@ -37,11 +40,20 @@ src/iflow-wasm/
     │   ├── WasmContract.java
     │   ├── ValidationResult.java
     │   ├── PolicyAbiV3.java
-    │   └── TlvCodec.java
+    │   ├── TlvCodec.java
+    │   ├── PolicyRequest.java
+    │   ├── PolicySession.java
+    │   ├── PolicyHost.java
+    │   ├── PolicyAction.java
+    │   ├── PolicyOutcome.java
+    │   ├── PolicyException.java
+    │   └── WasmPolicyEngine.java
     └── test/java/me/majhrs16/suite/iflow/wasm/
         ├── WasmModuleLoaderTest.java
         ├── WasmTestModule.java
-        └── TlvCodecTest.java
+        ├── TlvCodecTest.java
+        ├── PolicySessionTest.java
+        └── WasmPolicyEngineTest.java
 ```
 
 ## Contrato v3 (`WasmContract.policyV3()`)
@@ -141,6 +153,25 @@ Un valor se codifica como:
 La validación acumula todos los incumplimientos en `ValidationResult.errors()`. Un módulo inválido
 no se instancia: `instantiate(module, contract)` lanza `IllegalArgumentException`.
 
+## Motor y host functions (W2)
+
+`WasmPolicyEngine.evaluate(module, request)` crea una `PolicySession`, enlaza `PolicyHost` e invoca
+`decide`. El resultado es un `PolicyOutcome` con la acción, el destino informativo, la razón y el
+mensaje transformado.
+
+- **Journal read-your-writes:** `write_property` actualiza el mensaje de trabajo y las lecturas
+  posteriores ven el cambio. El `Message` original no se muta.
+- **Decisión única:** la primera llamada a `decision` gana; la segunda devuelve `CONFLICT` y el
+  outcome final es `ERROR`. Si no hay decisión, el outcome también es `ERROR` (deny-by-default).
+- **`set_channel` validado:** comprueba que el canal exista y que el emisor tenga el permiso de
+  envío y el recipient el de recepción. No hay `REDIRECT` ni `CHANNEL_REDIRECT`.
+- **Transformaciones:** `transform_apply` resuelve placeholders con el recipient original o detecta
+  idioma; el resultado se escribe como TLV string en la memoria del guest.
+- **Permisos:** `permission_check` responde `1`/`0`; los actores conocidos se resuelven por nombre
+  contra emisor/recipient y el resto se representa como `Actor.unknown`.
+- **Fallos:** cualquier error de carga, instanciación o ejecución se convierte en
+  `PolicyOutcome.error(...)`; el host no recibe excepciones de un artefacto no confiable.
+
 ## Uso actual
 
 ```java
@@ -161,6 +192,14 @@ ImportValues imports = ImportValues.builder()
     .addFunction(readPropertyHostFunction)
     .build();
 Instance connected = loader.instantiate(module, WasmContract.policyV3(), imports);
+
+// Camino de alto nivel: sesión + host functions + decisión.
+WasmPolicyEngine engine = new WasmPolicyEngine(loader);
+PolicyOutcome outcome = engine.evaluate(module, PolicyRequest.of(
+    message, emitter, recipient, channels));
+if (outcome.delivered()) {
+    deliver(outcome.message());
+}
 ```
 
 Cada llamada a `instantiate` crea una instancia Chicory nueva con su propia memoria lineal. La
@@ -204,6 +243,10 @@ Cobertura actual:
   firmas de imports y exports, instanciación con `ImportValues` e invocación de `decide`.
 - `TlvCodecTest`: round-trip de string/i64/bool/bytes/nulo, distinción nulo vs string vacío, UTF-8
   estricto, longitudes inválidas, bytes sobrantes y copia defensiva.
+- `PolicySessionTest`: lectura/escritura de propiedades, journal read-your-writes, canales y
+  permisos, transformaciones, decisión única y deny-by-default, logs acotados.
+- `WasmPolicyEngineTest`: módulos binarios que llaman a `decision`, `write_property`,
+  `set_channel` y `transform_apply`, incluyendo memoria lineal y data segments.
 - `IflowWasmActivatorTest`: registro del loader y del contrato en el `ModuleContext`.
 
 Para añadir un caso de contrato, usa `WasmTestModule` para emitir el módulo binario y valida con
@@ -211,13 +254,12 @@ Para añadir un caso de contrato, usa `WasmTestModule` para emitir el módulo bi
 
 ## Próximos pasos
 
-1. Implementar las host functions `iflow.*` sobre un `PolicySession` con journal read-your-writes y
-   una única decisión por ejecución (W2).
-2. Implementar `WasmPolicyEngine` y conectarlo a `Router`/`MessageDispatcher` (W3).
-3. Añadir hash/firma del artefacto y política de hot-reload (W3).
-4. Construir la matriz de paridad `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable
+1. Conectar `WasmPolicyEngine` a `Router`/`MessageDispatcher` y mapear `PolicyOutcome` al pipeline
+   existente sin reabrir el contrato v2 (W3).
+2. Añadir hash/firma del artefacto y política de hot-reload (W3).
+3. Construir la matriz de paridad `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable
    (W3.5), sin usar el ISA v2 como contrato.
-5. Ejemplos en al menos dos lenguajes y guía de autoría (W4).
+4. Ejemplos en al menos dos lenguajes y guía de autoría (W4).
 
 ## Relación con `iflow-vm`
 

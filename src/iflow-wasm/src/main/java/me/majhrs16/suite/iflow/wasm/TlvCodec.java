@@ -63,6 +63,47 @@ public final class TlvCodec {
         return encode(TYPE_BYTES, value);
     }
 
+    public static TlvValue nullValue() {
+        return new TlvValue(TYPE_NULL, new byte[0]);
+    }
+
+    public static TlvValue stringValue(String value) {
+        Objects.requireNonNull(value, "value");
+        return new TlvValue(TYPE_STRING, encodeUtf8(value));
+    }
+
+    public static TlvValue i64Value(long value) {
+        return new TlvValue(TYPE_I64, ByteBuffer.allocate(Long.BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putLong(value)
+            .array());
+    }
+
+    public static TlvValue boolValue(boolean value) {
+        return new TlvValue(TYPE_BOOL, new byte[]{(byte) (value ? 1 : 0)});
+    }
+
+    public static TlvValue bytesValue(byte[] value) {
+        Objects.requireNonNull(value, "value");
+        return new TlvValue(TYPE_BYTES, value);
+    }
+
+    /**
+     * Decodifica UTF-8 estricto. Se usa para buffers de host que no llevan
+     * cabecera TLV (nombres de canal, permisos, destinos).
+     */
+    public static String decodeUtf8(byte[] bytes) {
+        Objects.requireNonNull(bytes, "bytes");
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            return decoder.decode(ByteBuffer.wrap(bytes)).toString();
+        } catch (CharacterCodingException e) {
+            throw new IllegalArgumentException("payload no es UTF-8 válido", e);
+        }
+    }
+
     public static byte[] encode(int type, byte[] payload) {
         Objects.requireNonNull(payload, "payload");
         validatePayload(type, payload);
@@ -168,14 +209,7 @@ public final class TlvCodec {
 
         public String asString() {
             requireType(TYPE_STRING);
-            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT);
-            try {
-                return decoder.decode(ByteBuffer.wrap(payload)).toString();
-            } catch (CharacterCodingException e) {
-                throw new IllegalArgumentException("payload no es UTF-8 válido", e);
-            }
+            return decodeUtf8(payload);
         }
 
         public long asI64() {

@@ -23,6 +23,9 @@ final class WasmTestModule {
     private final List<Integer> functionTypes = new ArrayList<>();
     private final List<byte[]> exports = new ArrayList<>();
     private final List<byte[]> bodies = new ArrayList<>();
+    private final List<byte[]> dataSegments = new ArrayList<>();
+    private int memoryInitial = -1;
+    private int memoryMax = -1;
     private int nextFunctionIndex;
 
     int functionType(int[] params, int[] results) {
@@ -55,6 +58,27 @@ final class WasmTestModule {
         exports.add(concat(string(name), new byte[]{0x00}, leb(functionIndex)));
     }
 
+    void memory(int initialPages, int maxPages) {
+        if (initialPages < 1 || maxPages < initialPages) {
+            throw new IllegalArgumentException("límites de memoria inválidos");
+        }
+        this.memoryInitial = initialPages;
+        this.memoryMax = maxPages;
+    }
+
+    void data(int offset, byte[] bytes) {
+        if (offset < 0) {
+            throw new IllegalArgumentException("offset de datos negativo");
+        }
+        dataSegments.add(concat(
+            leb(0),
+            new byte[]{0x41},
+            sleb(offset),
+            new byte[]{0x0b},
+            leb(bytes.length),
+            bytes));
+    }
+
     /**
      * Añade el cuerpo de una función local. {@code instructions} no incluye el
      * vector de locales ni el {@code end} final.
@@ -79,6 +103,10 @@ final class WasmTestModule {
             }
             out.writeBytes(section(3, vector(encodedTypes)));
         }
+        if (memoryInitial >= 0) {
+            byte[] memory = concat(new byte[]{0x01}, leb(memoryInitial), leb(memoryMax));
+            out.writeBytes(section(5, vector(List.of(memory))));
+        }
         if (!exports.isEmpty()) {
             out.writeBytes(section(7, vector(exports)));
         }
@@ -88,6 +116,9 @@ final class WasmTestModule {
                 encodedBodies.add(concat(leb(body.length), body));
             }
             out.writeBytes(section(10, vector(encodedBodies)));
+        }
+        if (!dataSegments.isEmpty()) {
+            out.writeBytes(section(11, vector(dataSegments)));
         }
         return out.toByteArray();
     }
@@ -121,6 +152,24 @@ final class WasmTestModule {
             }
             out.write(next);
         } while (remaining != 0);
+        return out.toByteArray();
+    }
+
+    /** LEB128 con signo, usado por {@code i32.const} y offsets de datos. */
+    private static byte[] sleb(int value) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int remaining = value;
+        boolean more = true;
+        while (more) {
+            int next = remaining & 0x7f;
+            remaining >>= 7;
+            boolean signBit = (next & 0x40) != 0;
+            more = !((remaining == 0 && !signBit) || (remaining == -1 && signBit));
+            if (more) {
+                next |= 0x80;
+            }
+            out.write(next);
+        }
         return out.toByteArray();
     }
 
