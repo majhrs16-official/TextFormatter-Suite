@@ -15,9 +15,10 @@ ni pruebas de integración en esta pasada.
 queda en el historial de git; la historia no se reescribe.
 
 > **Distinción de alcance:** la auditoría vigente comprende `IFLOW-MAN-01…41` y las preguntas 1–34.
-> La sección `§3.7`, los hallazgos `IFLOW-MAN-42…45` y las preguntas 35–38 son **material diferido**:
-> se conservan para la próxima sesión, después de reimplementar la VM con las nuevas specs, y no
-> forman parte de las conclusiones ni de la remediación de esta pasada.
+> La sección `§3.7`, los hallazgos `IFLOW-MAN-42…45` y las preguntas 35–38 son **material diferido
+> original**. El 2026-11-03 se ratificaron sus decisiones de cierre en §5.4 (Q35–Q38 y
+> `IFLOW-MAN-42…45`); su implementación pertenece a W3.5/W4 y no se reclasifica como trabajo ya
+> realizado.
 
 ---
 
@@ -163,6 +164,9 @@ una segunda fase de routing acotada, no una re-entrega recursiva.
 > **No forma parte de la auditoría vigente.** Esta sección se conserva para la próxima sesión, después
 > de reimplementar la VM con las nuevas specs. No debe usarse como conclusión de esta pasada ni como
 > base para remediar el código actual.
+>
+> **Actualización 2026-11-03:** las decisiones de Q35–Q38 y `IFLOW-MAN-42…45` quedaron cerradas en
+> §5.4; esta sección se conserva como evidencia histórica y no como estado del contrato.
 
 | ID | Severidad | Hallazgo | Evidencia |
 |---|---|---|---|
@@ -184,7 +188,7 @@ una segunda fase de routing acotada, no una re-entrega recursiva.
 - `PassThroughProgram` es una única fuente de bytecode para el fallback y el programa por defecto; la idea de no duplicar bytecode es correcta.
 - `VmMemoryMap` es una única fuente de verdad para el mapa de 64 KB; buena base para no hardcodear páginas.
 
-## 5. Decisiones propuestas (pendientes de ratificar; no aplicadas)
+## 5. Decisiones propuestas (D01–D13; D01–D05 ratificadas en §5.4)
 
 | ID | Propuesta | Motivo |
 |---|---|---|
@@ -239,6 +243,27 @@ No implementadas en esta pasada.
 |---|---|---|
 | `IFLOW-MAN-D43` | **El journal sobrevive al nuevo modelo, pero solo como write set del mensaje.** Sigue siendo el mecanismo para que las mutaciones del mensaje de una ejecución se apliquen todas o ninguna en el límite host/mensaje. No cubre el estado de la máquina, la RAM, el tiempo, el rate limit, la cola ni la entrega; esos efectos necesitan su propio modelo (estado del guest, scheduler o transacción de máquina). | Confirmado en la revisión: la atomicidad del mensaje sigue siendo útil aunque la máquina sea persistente; confundirla con atomicidad de máquina sería el error. |
 
+### 5.4. Decisiones ratificadas para W3.5 (2026-11-03)
+
+Estas decisiones cierran el contrato de política v3 y desbloquean la paridad VM/Wasm. **No están
+implementadas**; su ejecución pertenece a W3.5 y a las fases de render/dispatcher que correspondan.
+
+| ID | Decisión ratificada |
+|---|---|
+| `IFLOW-MAN-D01` | **Default deny + `DELIVER` explícito.** Si la política no llama a `DELIVER`, el mensaje no se entrega. El firmware allow-all debe llamar a `DELIVER` de forma explícita. |
+| `IFLOW-MAN-D02` | **`SET_CHANNEL` validado** como única mutación de canal. Canal inexistente o sin permiso = error controlado, sin fallback silencioso. Si el cambio altera permisos o destinatarios, se resuelve como segunda fase de routing, sin reentrega recursiva. |
+| `IFLOW-MAN-D03` | **Sin `REDIRECT` ni `CHANNEL_REDIRECT` como targets.** La consola es un canal/actor (`Channel.CONSOLE`, `actors.console()`) y el cambio de canal se hace con `SET_CHANNEL`. |
+| `IFLOW-MAN-D04` | **`PolicyTarget` se reduce a `DELIVER`, `CANCEL_EVENT` y `ERROR`.** `DROP` deja de ser target porque no llamar a `DELIVER` ya es drop; `LOG` pasa a pantalla/auditoría. |
+| `IFLOW-MAN-D05` | **Cancelación de mensaje y de evento separadas.** `CANCEL_EVENT` vuelve al adaptador de plataforma y no solo marca el `Message`. |
+| `Q26` | **Read-your-writes.** Las lecturas de propiedades dentro de la misma ejecución ven el overlay provisional del journal; al final, el journal confirma todas las mutaciones o ninguna. |
+| `Q35` / `IFLOW-MAN-42` | **Precedencia de idioma.** Destino: `Message.langTarget` > `Channel.langTarget` > `Actor.language` > `defaultLanguage`. Origen: `Message.langSource` > `Channel.langSource` > detección automática > `defaultLanguage`. |
+| `IFLOW-MAN-31` | **Propiedades.** Se retiran `PROP_PROCESSED` (obsoleta con D41/D43), `PROP_SOUNDS` (sin esquema v3 ratificado) y `PROP_ACTOR_WORLD` (requiere API neutral de mundo). Se implementa `PROP_TRANSLATE` como booleano `true`/`false` validado. |
+| `Q36` / `IFLOW-MAN-43` | **`Formats` produce N mensajes separados.** Cada entrada `texts[i]`/`formats[i]` se entrega en orden; `%content%` es el contenido original en cada una. Rate limit y permisos se evalúan por entrega. |
+| `Q38` / `IFLOW-MAN-44` | **Render con el recipient original.** Tras un cambio de destino, se reutiliza el componente renderizado con el contexto del recipient original; el destinatario final no impone su idioma ni sus placeholders. |
+| `Q37` / `IFLOW-MAN-45` | **Se elimina `Direction.channel`.** El canal se toma solo de `Message.channel`; el override muerto y su builder desaparecen. |
+| ABI de entrada/salida | **TLV.** Campos tipo-longitud-valor, ausencia explícita distinta de cadena vacía y UTF-8 sin truncar. |
+| Decisiones múltiples | **Error y abortar.** Una sola decisión de routing por ejecución; una segunda produce `DECISION_CONFLICT` y no se entrega. D41 ya prohibía “la última gana”. |
+
 ## 6. Matemática de la cola: correcciones y límites
 
 > **Nota (2026-10-20):** estas cuentas describen el VM actual de 16 bits y 64 KB. La dirección
@@ -285,7 +310,8 @@ No implementadas en esta pasada.
 se revisó en lectura, sin ejecutar sus tests; el 10 sigue pendiente. Los hallazgos de esta pasada están
 en `3.1`–`3.6`, separados de los `IFLOW-MAN-01…15` de la primera revisión. La `§3.1.x` y los
 hallazgos `46…54` son hallazgos arquitecturales transversales confirmados en esta pasada; la `§3.7`
-y los hallazgos `42…45` quedan como material diferido para después de reimplementar la VM.
+y los hallazgos `42…45` quedan como material diferido para después de reimplementar la VM. Sus
+decisiones de contrato se cerraron en §5.4 el 2026-11-03; la implementación sigue pendiente.
 
 ## 8. Arquitectura objetivo ratificada: ROM, BIOS, kernel y 32 bits
 
@@ -512,7 +538,7 @@ de 32 bits no deberían compartir el mismo intérprete sin una separación clara
 23. ¿La frecuencia es fija en Hz o se expone como numerador/denominador? ¿Cómo se maneja el overflow?
 24. ¿El contador avanza durante `sleep`/espera, solo cuando la VM ejecuta, o ambos (ciclos de CPU vs tiempo virtual)?
 25. ¿La instrucción de tiempo puede usarse para busy-wait o el kernel debe forzar `sleep`/yield?
-26. ¿Las lecturas de propiedades dentro de la misma ejecución deben ver el journal (*read-your-writes*) o el mensaje original? Si se mantiene lo segundo, debe documentarse y no sorprender a las políticas.
+26. **(Resuelta en §5.4 — 2026-11-03)** ¿Las lecturas de propiedades dentro de la misma ejecución deben ver el journal (*read-your-writes*) o el mensaje original? Si se mantiene lo segundo, debe documentarse y no sorprender a las políticas.
 27. ¿Qué mecanismo de tiempo expone el hardware: RTC MMIO, timer IRQ, `RDCYCLE`, `RDTIME`, o varios? ¿Cómo se combinan?
 28. ¿`HALT` acepta un deadline o el kernel expone `sleep(ticks)`? ¿Cómo despierta, cómo se reanuda y qué pasa si llega una IRQ antes?
 29. ¿Dónde vive el token bucket: RAM de usuario, NVRAM o estado del kernel? ¿Cómo sobrevive a `sleep` y a un fallo de ejecución?
@@ -521,12 +547,15 @@ de 32 bits no deberían compartir el mismo intérprete sin una separación clara
 32. ¿El timeout del dispatcher debe cancelar la ejecución y liberar `machineLock`, o el scheduler/kernel debe matar el quantum por otra vía?
 33. ¿La expansión de `PERMISSION`/`WORLD` vacíos debe ser fail-open, fail-closed o un error de configuración?
 34. ¿Una entrega diferida por `sleep` cuenta como entregada antes de ejecutarse? ¿Cómo se compensa si el scheduler se cierra o la entrega falla?
-35. **(Diferida — no forma parte de la auditoría vigente)** ¿Cuál es la precedencia de idioma: `Message.langTarget`, `Channel.langTarget`, `Actor.language` o `config.defaultLanguage`? ¿Y la de `langSource` frente a la detección automática?
-36. **(Diferida — no forma parte de la auditoría vigente)** ¿`Formats` debe renderizar N mensajes/líneas o el contrato real es un solo mensaje? Si es N, ¿cómo se combinan los N textos con `%content%` y los placeholders?
-37. **(Diferida — no forma parte de la auditoría vigente)** ¿`Direction.channel` debe eliminarse o el dispatcher debe honrarlo? Si se honra, ¿qué precede: `Direction.channel` o `Message.channel`?
-38. **(Diferida — no forma parte de la auditoría vigente)** ¿El redirect a consola o a un actor debe renderizarse con el contexto del destino y no con el del recipient? ¿Cómo se representa el actor consola para placeholders e idioma?
+35. **(Resuelta en §5.4 — 2026-11-03)** ¿Cuál es la precedencia de idioma: `Message.langTarget`, `Channel.langTarget`, `Actor.language` o `config.defaultLanguage`? ¿Y la de `langSource` frente a la detección automática?
+36. **(Resuelta en §5.4 — 2026-11-03)** ¿`Formats` debe renderizar N mensajes/líneas o el contrato real es un solo mensaje? Si es N, ¿cómo se combinan los N textos con `%content%` y los placeholders?
+37. **(Resuelta en §5.4 — 2026-11-03)** ¿`Direction.channel` debe eliminarse o el dispatcher debe honrarlo? Si se honra, ¿qué precede: `Direction.channel` o `Message.channel`?
+38. **(Resuelta en §5.4 — 2026-11-03)** ¿El redirect a consola o a un actor debe renderizarse con el contexto del destino y no con el del recipient? ¿Cómo se representa el actor consola para placeholders e idioma?
 
-> Las preguntas 35–38 se retoman después de reimplementar la VM; no bloquean el cierre de esta pasada.
+> **Cierre W3.5 (2026-11-03):** Q26 = read-your-writes; Q35 = precedencia de idioma de §5.4;
+> Q36 = N entregas separadas; Q37 = eliminar `Direction.channel`; Q38 = render con el recipient
+> original; ABI = TLV; varias decisiones = error y abortar. El detalle está en §5.4. Las preguntas
+> 1–34 no bloquean W3.5; las 35–38 quedan cerradas y su implementación sigue pendiente.
 
 ### 8.9. ISA de 32 bits: decode jerárquico y `MOV`
 
@@ -632,15 +661,17 @@ Consecuencias:
 
 ## 9. Criterio de cierre de esta auditoría
 
-- No se modifica código hasta ratificar `IFLOW-MAN-D01…D13` y las decisiones abiertas de la sección
-  8.8. `D14…D16`, `D36R` y `D40…D43` ya están ratificadas, pero tampoco se implementan en esta pasada.
+- No se modifica código de remediación hasta ratificar las decisiones que afecten al contrato.
+  `D01–D05`, `D14…D16`, `D36R` y `D40…D43` ya están ratificadas (las D01–D05 en §5.4 y ADR-031);
+  `D06–D13` siguen propuestas y no bloquean W3.5. La implementación de las decisiones ratificadas
+  sigue pendiente en esta pasada.
 - Cada hallazgo debe tener evidencia en código y, cuando se remedie, un test de regresión.
 - Este documento es el registro definitivo de los hallazgos `IFLOW-MAN-*` y de la arquitectura
   objetivo; al cerrar la pasada se actualizará el estado de cada punto (confirmado, descartado,
   ratificado o remediado). Los hallazgos `16…54` están confirmados por lectura/sonda, pero su
   remediación sigue pendiente de ratificación. Los hallazgos `46…54` (arquitectura de capas,
   estado persistente, concurrencia) son parte de la auditoría vigente; la `§3.7` y los hallazgos
-  `42…45` son material diferido: no se consideran parte del cierre de esta pasada y se retoman
-  después de reimplementar la VM con las nuevas specs.
+  `42…45` son material diferido: sus decisiones se cerraron en §5.4 el 2026-11-03, pero su
+  implementación se retoma después de reimplementar la VM con las nuevas specs.
 - No se publica nada sin autorización explícita. Los commits locales de esta auditoría siguen sin
   publicar; `git log origin/main..HEAD` es la lista vigente.

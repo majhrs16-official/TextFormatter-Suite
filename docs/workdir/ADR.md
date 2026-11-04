@@ -1670,3 +1670,98 @@ podía escribir ambas ubicaciones.
 - `./gradlew build checkArchitecture` verde.
 - `./gradlew :src:presets:test :src:suite-runtime:test` verde.
 - `./gradlew checkLocks` verde.
+
+---
+
+## Decisión 2026-11-03 — contrato de política iFlow v3 para la paridad VM/Wasm (ADR-031)
+
+**Estado:** Aceptada. No implementada.
+
+**Contexto.** La paridad W3.5 entre `iflow-vm` (spec v3) e `iflow-wasm` estaba bloqueada por
+decisiones de contrato que afectaban a la semántica observable: entrega, mutación de canal,
+cancelación, journal, idioma, propiedades, formato y ABI. El código de `src/iflow-vm` implementa
+la v2 de 16 bits y conserva estados ambiguos (`processed`, `REDIRECT`, `DROP`/`LOG`, lectura del
+mensaje original tras escribir). La spec v3 proponía D01–D05 y dejaba abiertas Q26, Q35–Q38 y
+`IFLOW-MAN-31/42…45`. Sin cerrarlas no se podían congelar imports, validadores ni tests de paridad.
+
+**Decisión.** Se ratifican las siguientes reglas para el contrato de política v3:
+
+| ID | Decisión |
+|---|---|
+| `IFLOW-MAN-D01` | Default deny: si la política no llama a `DELIVER`, no se entrega. |
+| `IFLOW-MAN-D02` | `SET_CHANNEL` es la única mutación de canal; valida existencia y permisos, sin fallback silencioso. Si cambia destinatarios, se resuelve en una segunda fase de routing sin reentrega recursiva. |
+| `IFLOW-MAN-D03` | Se eliminan `REDIRECT` y `CHANNEL_REDIRECT` como targets. La consola es un canal/actor (`Channel.CONSOLE`, `actors.console()`) y el cambio de canal se hace con `SET_CHANNEL`. |
+| `IFLOW-MAN-D04` | `PolicyTarget` se reduce a `DELIVER`, `CANCEL_EVENT` y `ERROR`. `DROP` no es target porque no llamar a `DELIVER` ya es drop; `LOG` pasa a pantalla/auditoría. |
+| `IFLOW-MAN-D05` | `CANCEL_EVENT` vuelve al adaptador de plataforma y es distinto de cancelar el mensaje. |
+| `Q26` | Read-your-writes: las lecturas de propiedades dentro de la misma ejecución ven el overlay provisional del journal; el commit sigue siendo todo o nada. |
+| `Q35` / `IFLOW-MAN-42` | Destino: `Message.langTarget` > `Channel.langTarget` > `Actor.language` > `defaultLanguage`. Origen: `Message.langSource` > `Channel.langSource` > detección automática > `defaultLanguage`. |
+| `IFLOW-MAN-31` | Se retiran `PROP_PROCESSED`, `PROP_SOUNDS` y `PROP_ACTOR_WORLD` del baseline v3. `PROP_TRANSLATE` se implementa como booleano `true`/`false` validado. |
+| `Q36` / `IFLOW-MAN-43` | `Formats` produce N mensajes separados, uno por `texts[i]`/`formats[i]`, en orden. `%content%` es el contenido original en cada uno; rate limit y permisos se evalúan por entrega. |
+| `Q38` / `IFLOW-MAN-44` | El render usa el recipient original. Tras un cambio de destino, el destinatario final reutiliza el componente ya renderizado; no impone su idioma ni sus placeholders. |
+| `Q37` / `IFLOW-MAN-45` | Se elimina `Direction.channel`; el canal se toma solo de `Message.channel`. |
+| ABI | Entrada/salida TLV, con ausencia explícita distinta de cadena vacía y UTF-8 sin truncar. |
+| Decisiones | Una sola decisión de routing por ejecución; una segunda produce `DECISION_CONFLICT` y no se entrega. |
+
+D41 y D43 siguen vigentes: la decisión es explícita y tipada, y el journal cubre solo el write set
+del mensaje, no el estado de la máquina, el tiempo, la cola ni la entrega.
+
+**Consecuencias.**
+
+### Positivas
+
+- La entrega deja de depender de un silencio implícito: una política incompleta no entrega por
+  accidente.
+- `SET_CHANNEL` centraliza la mutación de canal y elimina la reentrega recursiva de `REDIRECT`.
+- `PolicyTarget` y el validador pierden estados muertos (`DROP`, `LOG`, `processed`), lo que reduce
+  ambigüedad entre motores.
+- Read-your-writes permite escribir y volver a leer en la misma ejecución sin introducir un segundo
+  modelo de estado; el journal mantiene la atomicidad del mensaje.
+- La precedencia de idioma deja de ser implícita y se puede probar en ambos motores.
+- TLV evita truncamientos UTF-8 y distingue ausencia de cadena vacía.
+- N entregas separadas respetan el contrato ya documentado por `Formats` y permiten formato,
+  permisos y rate limit por mensaje.
+
+### Negativas
+
+- Rompe políticas v2 que dependían de entrega implícita, `REDIRECT`, `processed` o `LOG`.
+- N entregas separadas multiplican las comprobaciones de permisos y el consumo de rate limit; el
+  dispatcher debe contar cada entrega, no el evento de origen.
+- Read-your-writes exige un overlay de lectura sobre el journal; no basta con leer el `Message`
+  original.
+- Renderizar con el recipient original hace que la consola o un actor destino vean el idioma y los
+  placeholders del recipient original. Es una decisión deliberada de compatibilidad; cambiarla
+  exigirá otro ADR.
+- Retirar `PROP_SOUNDS` y `PROP_ACTOR_WORLD` deja esas capacidades fuera de v3. Recuperarlas exige
+  un esquema de sonidos y una API neutral de mundo, respectivamente.
+- Una sola decisión por ejecución obliga a las políticas a no emitir decisiones alternativas; el
+  error debe ser visible y no silencioso.
+
+**Alternativas consideradas.**
+
+1. **Mantener la semántica v2 (allow por defecto, `REDIRECT`, `processed`, `DROP`/`LOG`).**
+   Ventajas: no rompe políticas existentes. Limitaciones: conserva entrega implícita, reentrega
+   recursiva y estados ambiguos. Evaluación: **descartada**; impide una paridad verificable.
+2. **Default configurable por política.**
+   Ventajas: migración gradual. Limitaciones: dos semánticas de entrega y tests de paridad
+   duplicados. Evaluación: **descartada**; el contrato debe ser único.
+3. **N formatos como un componente multilínea.**
+   Ventajas: una sola entrega y un solo rate limit. Limitaciones: no representa N mensajes
+   independientes y complica placeholders por línea. Evaluación: **descartada**; se eligieron N
+   entregas separadas.
+4. **Renderizar con el contexto del destino final.**
+   Ventajas: consola/actor destino ve su idioma y placeholders. Limitaciones: exige renderizar
+   después de resolver el destino y puede duplicar trabajo. Evaluación: **descartada**; se eligió
+   conservar el recipient original.
+5. **ABI longitud+escape o null-terminated.**
+   Ventajas: implementación más simple. Limitaciones: menos extensible o incapaz de distinguir
+   ausencia de vacío. Evaluación: **descartada**; se eligió TLV.
+6. **Última decisión gana.**
+   Ventajas: tolerante con políticas que emiten varias decisiones. Limitaciones: contradice D41 y
+   hace impredecible el resultado. Evaluación: **descartada**; se eligió error y abortar.
+
+**Evidencia.**
+
+- Spec v3: `docs/prompts/diseno/iflow-cpu-implement.md` §5.4 y cierre de §8.8.
+- Estado y criterios de W3.5: `docs/workdir/PLAN.md`.
+- Ratificación del usuario: 2026-11-03.
+- Implementación: pendiente; este ADR no declara código ni tests nuevos.
