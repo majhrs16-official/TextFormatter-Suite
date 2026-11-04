@@ -8,12 +8,16 @@
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
 > `1.0` (`1.0.0` en artefactos, `config-version: 1.0` en YAML). No se mantiene
-> retrocompatibilidad, código de compatibilidad, aliases legacy ni ciclos de deprecación. Los
-> *breaking changes* son el modo normal hasta el hito `1.0.0`. El betatesting/E2E en servidores
-> reales Spigot/Paper, Fabric y Velocity se ejecuta **después** de la base `1.0.0` y es requisito
-> para declarar estabilidad o producción. `AUDITORIA.md` es efímera: contiene solo la auditoría
-> vigente y se reemplaza al cerrar sus bugs con tests; su ciclo se declara en ADR-034 y se menciona
-> desde este PLAN. La hoja de ruta inmediata está en «Purga pre-1.0 — hoja de ruta inmediata».
+> retrocompatibilidad de features ni contratos, código de compatibilidad, aliases legacy ni ciclos
+> de deprecación. Los módulos legacy independientes (`iflow-firewall`, `CoreTranslator`) no son
+> shims y se rigen por C6. Los *breaking changes* son el modo normal hasta la `1.0` estable.
+> `1.0.0` es la etiqueta de release
+> de la base integrada; el betatesting/E2E en servidores reales Spigot/Paper, Fabric y Velocity se
+> ejecuta **después** y sus fallos se corrigen en la línea beta. `1.0` es la versión estable,
+> declarada solo cuando el proyecto completo está consolidado y sin errores críticos de diseño.
+> `AUDITORIA.md` es efímera: contiene solo la auditoría vigente y se reemplaza al cerrar sus bugs
+> con tests; su ciclo se declara en ADR-034 y se menciona desde este PLAN. La hoja de ruta inmediata
+> está en «Purga pre-1.0 — hoja de ruta inmediata».
 
 > **Hub iFlow (2026-11-04, ADR-032):** se añadió el paquete `iflow` como hub de selección. Los
 > motores publican `IflowBackend`; el hub publica `IflowHub` y `Router`, elige un backend y aplica
@@ -79,19 +83,28 @@
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
 | **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Pendiente |
-| **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0`. Un sufijo de build es metadato, no una versión funcional. | Pendiente |
-| **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name`, lectores de rutas planas bajo `config/` (`config.yml`, `channels/`, `translators/`, `sync/`, `rules.yml`, `inworld.yml`) y cualquier fallback que acepte el esquema viejo. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Pendiente |
-| **P0.4** | Purga de código y APIs *deprecated* | Eliminar `CoreTranslator`, adaptadores, aliases, dobles lectores, puentes de conversión y fachadas mantenidas solo por compatibilidad. Actualizar todos los consumidores en el mismo cambio. | Pendiente |
-| **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo. Añadir regresiones que demuestren que el camino legacy se rechaza o se ignora, no que se migra. | Pendiente |
-| **P0.6** | Auditoría manual de bugs estructurales | Revisar `AUDITORIA.md`; corregir P0/P1 con test de regresión antes de avanzar. Al cerrar todos los hallazgos, reemplazar el archivo por completo para el siguiente ciclo. | Pendiente |
+| **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0` en la raíz, preferentemente al final. `plugin.yml` queda excluido. Si falta `config-version`, el parser falla con un error explícito. Un sufijo de build no cambia la base funcional, pero su publicación se rige por la política de artefactos. | Pendiente |
+| **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata como retirado), lectores de la raíz plana de `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`) y cualquier fallback que acepte el esquema viejo. Los `config/<module>/config.yml` canónicos se conservan. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Pendiente |
+| **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` desde `7dd164a4^` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no reconstruirlo hipotéticamente ni usarlo como shim. Actualizar todos los consumidores en el mismo cambio. | Pendiente |
+| **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Pendiente |
+| **P0.6** | Auditoría manual de bugs estructurales | Revisar `AUDITORIA.md`; mantener en este PLAN el estado de la auditoría (abierta/cerrada) y el mapeo P0/P1/P2 ↔ Alta/Media/Baja; corregir P0/P1 con test de regresión antes de avanzar. Al cerrar todos los hallazgos, reemplazar el archivo por completo para el siguiente ciclo. | Pendiente |
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Pendiente |
-| **P0.8** | Coherencia documental | `philosophy.md`, `ADR.md` y `PLAN.md` describen una sola base `1.0`, un solo contrato exacto y un solo camino vigente. Las menciones históricas quedan marcadas como tales. | Hecho (2026-11-04) |
+| **P0.8** | Coherencia documental (parcial) | Solo `philosophy.md`, `ADR.md` y `PLAN.md`: una sola base `1.0`, base mínima de contrato `1.0.0`, un solo camino vigente, sin planes/fases dentro del ADR y con poda del historial cerrado. La documentación secundaria (`docs/wiki`, `docs/prompts/diseno/storage.md`) queda en P0.8b. | Parcial (2026-11-04) |
+| **P0.8b** | Coherencia de documentación secundaria | Actualizar `docs/wiki` y `docs/prompts/diseno` para que no presenten `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. | Pendiente |
+
+**Estado de la auditoría vigente (2026-11-04):** abierta. Snapshot `3aaba49` (2026-10-24).
+`AUDITORIA.md` no se modifica; el estado operativo y el mapeo viven aquí. Mapeo de severidades:
+P0 = Alta, P1 = Media, P2 = Baja. El cierre y reemplazo se rastrea en P0.6.
+
+**Orden de trabajo:** purga P0 → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
 
 **Deuda conocida al abrir esta hoja (verificar antes de cerrar P0.2/P0.3):**
 
 - `build.gradle` declara `2.1.0-SNAPSHOT`; `src/chattranslator/build.gradle` declara `2.1.0`.
-- `iflow-wasm` exige `channel-api >= 2.1.0` en su descriptor/activador; debe alinearse a `1.0.0`.
+- `iflow-wasm` exige `channel-api >= 2.1.0` en su descriptor/activador; debe alinearse a `>= 1.0.0`.
 - Quedan aliases y rutas legacy en configuración y tests; se eliminan, no se migran.
+- Las configuraciones no declaran `config-version: 1.0`; hay que añadirlo y hacer que el parser falle si falta.
+- `CoreTranslator` fue eliminado en `7dd164a4`; se restaura desde `7dd164a4^` como módulo legacy (ADR-035).
 - La auditoría vigente y el estado real de los módulos deben revisarse antes de añadir features.
 
 ### Después de 1.0.0 — betatesting/E2E real
@@ -101,7 +114,7 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
-| **E2E.1** | Betatesting/E2E posterior a 1.0.0 | Matriz Spigot/Paper, Fabric y Velocity con versiones reales; registrar resultado y declarar **desconocida** toda combinación no probada. La 1.0.0 es la base probada; la estabilidad/producción se declara solo al cerrar este ciclo. | Pendiente |
+| **E2E.1** | Betatesting/E2E posterior a 1.0.0 | Probar manualmente todas las features de la suite en servidores reales Spigot/Paper, Fabric y Velocity, con matriz de versiones y evidencia. No es un smoke test de carga. Registrar resultado y declarar **desconocida** toda combinación no probada. Los fallos se corrigen en la línea beta; la estabilidad/producción se declara solo al cerrar este ciclo. | Pendiente |
 
 ---
 
@@ -528,12 +541,12 @@ exports, el hash del `.wasm` y el hot-reload quedaron cerrados en W1/W3 (`Policy
 
 | ID | Tema | Decisión requerida |
 |---|---|---|
-| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y aplicado: `src/iflow-firewall` restaura **literalmente** el motor SpEL de `933bdd3^:src/iflow`; es **alternativa mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) y el host elige con `iflow.engine.kind` |
+| **I-001** | `iflow-firewall`: restaurar desde git history vs retirar de docs | ✅ ADR-001 aceptado y actualizado por ADR-032: `src/iflow-firewall` restaura **literalmente** el motor SpEL de `933bdd3^:src/iflow`; los tres motores pueden estar instalados y el hub `iflow` activa uno solo. `iflow.engine.kind` es deuda legacy que elimina ADR-034 |
 | **I-019** | `fabric-host` deps: clean/hexa dice NO incluir módulos agnósticos | 🔴 **Reabierto como reestructuración integral**: no es un fix de dependencias. Se reescribe ADR-019 para convertir el Manager en orquestador de un runtime de módulos con carga dinámica, hot unload/upgrade real y adapters que solo implementan puertos de plataforma. Implementación pendiente por fases con puertas de calidad; ver ADR-019 |
 | **I-020** | `MessagesConfig` ownership: shared host vs platform adapters | ✅ Aceptado: un único `config/suite/messages.yml` para todas las plataformas (`HostPaths`); loader compartido en `host` |
 | **I-008** | `ChatTranslatorModule` capability: `chattranslator` vs `translator` | ✅ ADR-008 aceptado y verificado: se mantienen `chattranslator` (façade) y `translator` (proveedor); `ChatTranslatorModuleTest` prueba que la façade activa sin backends, que un backend sin façade queda inactivo y que ambos resuelven cuando coexisten |
 
-#### ADR-001: `iflow-firewall` restaura el motor SpEL legacy como alternativa mutuamente excluyente
+#### ADR-001: `iflow-firewall` restaura el motor SpEL legacy (actualizado por ADR-032)
 
 **Estado:** Aceptado (2026-10-27). Reemplaza la propuesta anterior de un módulo
 SpEL-free que solo validaba el grafo del editor.
@@ -554,10 +567,10 @@ SpEL-free que solo validaba el grafo del editor.
   SpEL y desarrollar `iflow-vm` e `iflow-firewall` en paralelo, sin que uno sustituya
   al otro **en código**. La decisión de `e21e7d7` queda superada **solo** para este
   módulo; la VM y Wasm siguen sin SpEL.
-- **Regla de producto:** los tres motores (`iflow-vm`, `iflow-wasm`, `iflow-firewall`)
-  son **mutuamente excluyentes**. Solo uno se instala a la vez; instalar otro
-  desinstala/reemplaza al anterior. Comparten el paquete base
-  `me.majhrs16.suite.iflow`, por lo que no deben coexistir en el classpath.
+- **Regla de producto (actualizada por ADR-032):** los tres motores (`iflow-vm`,
+  `iflow-wasm`, `iflow-firewall`) son **conceptualmente excluyentes para el routing**.
+  Pueden estar instalados los tres; el hub `iflow` activa uno solo y evita la colisión
+  en el classpath.
 - Restricción de diseño: cada motor es independiente. No se crea un `iflow-api`
   compartido ni `iflow-firewall` depende de `iflow-vm`.
 
@@ -2238,7 +2251,7 @@ usuario de iFlow.
 - ✅ **Monorepo Git** en `/home/majhrs16/Documentos/textformatter-suite` (rama `main`, remoto GitHub `majhrs16-official/TextFormatter-Suite`).
 - ✅ **Arquitectura**: `suite/*` módulos Gradle (Java 17/21) + adapters `spigot-host` (plugin Paper 1.20.6+) y `fabric-host` (Fabric 1.21 + Fabric API 0.100.5), con la captura de eventos en `sync-bukkit`/`sync-fabric` y los comandos en `api.command`.
 - ⚠️ **Web editor**: gates verdes (StateStore, diffing, validación incremental, paths.json; 108 tests unitarios + integración), pero la UI no se considera estable; queda diferido a una auditoría separada (ver «Decisiones de alcance vigentes»).
-- ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido, probado en servidor real Paper 1.20.6).
+- ✅ **Suite corriendo en Spigot/Paper** (plugin `TextFormatterSuite` instalable, fat-jar construido; sin E2E formal: solo se verificó la carga del plugin y la ejecución del módulo tester en Paper 1.20.6).
 - ✅ **Suite corriendo en Fabric** (mod `TextFormatterSuite` instalable, thin-jar construido, Fabric 1.21 + Fabric API 0.100.5).
 - ✅ **Módulos core compilando + tests pasando (histórico, 2026-10-04)**: core-api, kernel, textformatter, iflow (v2 congelado el 2026-10-23), gtranslate, ltranslate, sync-*, host, messages, tester, transport, manager-api, manager-impl, presets, inworld, observability, extension-api, example-extension, loadtest, performance, sync-websocket.
 - ✅ **Module Manager (F12) núcleo completado**: version resolver (semver + env compat), dependency resolver (module.yml), SHA256 obligatorio, register() SPI-only, discoverAll(), manifest validation obligatoria.
@@ -2387,7 +2400,7 @@ El manager descarga del repositorio el archivo `packages.list` y, a partir de ah
 
 Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario. No se fuerza un monolito a elegir un solo motor. Cada motor, backend o implementación es un módulo independiente instalable y reemplazable.
 
-**Consecuencia:** `iflow-vm`, `iflow-wasm` e `iflow-firewall` son mutuamente excluyentes pero coexisten como paquetes independientes. El usuario elige cuál instalar.
+**Consecuencia:** `iflow-vm`, `iflow-wasm` e `iflow-firewall` son conceptualmente excluyentes para el routing, pero coexisten como paquetes independientes. El usuario elige cuál instalar y el hub activa uno solo.
 
 ### P11. Extensiones sin catálogo cerrado
 

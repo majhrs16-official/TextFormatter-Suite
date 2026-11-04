@@ -10,12 +10,15 @@ módulos, componentes, contratos, artefactos y esquemas de configuración. Los n
 superiores que aparezcan en el historial son etiquetas de iteración, no versiones publicadas ni
 promesas de compatibilidad.
 
-La versión oficial **1.0.0** es un hito de integración, no un número de build. Se alcanza cuando la
-suite completa, la integración de todos los módulos y todas las features están terminadas. Una vez
-alcanzada esa base, comienza el betatesting/E2E en servidores reales; la estabilidad y la producción
-no se declaran hasta cerrar ese ciclo posterior. Hasta la 1.0.0 el proyecto opera en régimen de
-*rolling release*: los *breaking changes* están permitidos y son deseables para limpiar la deuda
-técnica antes de congelar la arquitectura.
+La versión oficial **1.0.0** es la etiqueta de release de la base integrada, no un número de build.
+Se alcanza cuando la suite completa, la integración de todos los módulos y todas las features están
+terminadas. Una vez publicada esa base, comienza el betatesting/E2E en servidores reales; los fallos
+del beta se corrigen en la propia línea beta, no en la 1.0. La versión **1.0** se declara estable
+solo cuando el proyecto completo demuestra ser estable, está consolidado y no tiene errores críticos
+de diseño. «Versión oficial» significa públicamente descargable: una release puede ser oficial y
+seguir en beta. Hasta la 1.0 el proyecto opera en régimen de *rolling release*: los *breaking
+changes* están permitidos y son deseables para limpiar la deuda técnica antes de congelar la
+arquitectura.
 
 ### Reglas de oro pre-1.0
 
@@ -25,9 +28,11 @@ técnica antes de congelar la arquitectura.
 2. **Una sola base de versión.** Todo módulo, componente, contrato y configuración se alinea a
    `1.0` (`1.0.0` para artefactos y `config-version: 1.0` para YAML). No se mantienen ramas de
    versión ficticias ni matrices de compatibilidad.
-3. **Cero código de compatibilidad.** No se conservan adaptadores, alias, shims, dobles lectores,
-   rutas legacy ni módulos *deprecated* que existan solo para no romper instalaciones anteriores.
-   Cuando una decisión cambia, el camino viejo se elimina en el mismo cambio.
+3. **Cero compatibilidad prematura.** En pre-release no se conservan adaptadores, alias, shims,
+   dobles lectores, rutas legacy ni capas de compatibilidad que existan solo para no romper
+   instalaciones anteriores. La compatibilidad es una decisión de producción, no una deuda de
+   pre-release. La pluralidad de módulos no es compatibilidad: si un feature se conserva, se
+   implementa como módulo independiente.
 4. **El camino viejo no se migra en runtime.** Si una instalación contiene rutas o formatos que ya
    no son canónicos, se ignoran o se rechazan explícitamente; no se leen como fallback ni se
    convierten silenciosamente.
@@ -97,19 +102,28 @@ Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario. No se f
 
 ## C7. Sin retrocompatibilidad prematura
 
-En régimen pre-1.0 no se mantiene compatibilidad hacia atrás. Se rompe a propósito cuando la
-arquitectura lo necesita, se elimina el camino viejo en el mismo cambio y no se conservan
-adaptadores, alias ni parches de soporte. La compatibilidad prematura contamina la base de código
-(*bloatware*) y fija decisiones antes de que el diseño esté terminado. Cada fase debe tener puertas
-de calidad, planes completados y tests en verde; está prohibido dejar código a medias.
+En régimen pre-1.0 no se mantiene compatibilidad de features ni de contratos hacia atrás. Se rompe
+a propósito cuando la arquitectura lo necesita, se elimina el camino viejo en el mismo cambio y no
+se conservan adaptadores, alias ni parches de soporte. La compatibilidad prematura contamina la
+base de código (*bloatware*) y fija decisiones antes de que el diseño esté terminado. Cada fase
+debe tener puertas de calidad, planes completados y tests en verde; está prohibido dejar código a
+medias.
+
+La prohibición se refiere a capas de compatibilidad dentro de un feature o contrato, no a la
+existencia de módulos legacy independientes. Para módulos rige C6: si hay dos implementaciones
+válidas, se implementan ambas y el usuario elige. `iflow-firewall` y `CoreTranslator` son módulos
+legacy mantenidos, no shims. La compatibilidad con versiones publicadas es una decisión de
+producción; no se anticipa en pre-release.
 
 ## C8. Betatesting/E2E real después de 1.0.0
 
-Una vez alcanzada la base **1.0.0**, comienza el betatesting/E2E en servidores reales Spigot/Paper,
-Fabric y proxies Velocity. Los tests automatizados siguen siendo obligatorios y no se sustituyen
-por una prueba manual; el E2E real es una capa adicional para descubrir integraciones que un test
-aislado no puede demostrar. Una plataforma no probada se declara **desconocida**, no aprobada. No
-se declara estabilidad ni producción hasta cerrar el ciclo de betatesting/E2E posterior a la 1.0.0.
+Una vez publicada la etiqueta de release **1.0.0**, comienza el betatesting/E2E en servidores reales
+Spigot/Paper, Fabric y proxies Velocity. Los tests automatizados siguen siendo obligatorios y no se
+sustituyen por una prueba manual; el E2E real es una capa adicional para descubrir integraciones que
+un test aislado no puede demostrar. E2E significa probar manualmente todas las features de la suite
+en un servidor real, no un smoke test de carga. Una plataforma no probada se declara **desconocida**,
+no aprobada. No se declara estabilidad ni producción hasta cerrar el ciclo de betatesting/E2E
+posterior a la 1.0.0; los fallos del beta se corrigen en la línea beta, no en la 1.0.
 
 ## C9. Seguridad compartida: sandbox + dueño del repo
 
