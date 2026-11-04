@@ -70,33 +70,24 @@ class DefaultConfigInstallerTest {
     }
 
     @Test
-    void repairsIncorrectManagerConfigPathToCanonicalPath() throws Exception {
-        Path previous = dir.resolve("manager/config/textformatter/channels/chat.global.yml");
-        Files.createDirectories(previous.getParent());
-        Files.writeString(previous, "path: previous\n");
+    void ignoresIncorrectManagerConfigPaths() throws Exception {
+        Path first = dir.resolve("manager/config/textformatter/channels/chat.global.yml");
+        Path second = dir.resolve("config/manager/textformatter/channels/chat.global.yml");
+        Files.createDirectories(first.getParent());
+        Files.createDirectories(second.getParent());
+        Files.writeString(first, "path: previous\n");
+        Files.writeString(second, "path: previous\n");
 
         install(Map.of("/defaults/channels/chat.global.yml", "path: default\n"));
 
         assertThat(dir.resolve("config/textformatter/channels/chat.global.yml"))
-                .hasContent("path: previous\n");
-        assertThat(previous).doesNotExist();
+                .hasContent("path: default\n");
+        assertThat(first).hasContent("path: previous\n");
+        assertThat(second).hasContent("path: previous\n");
     }
 
     @Test
-    void repairsIncorrectConfigManagerPathToCanonicalPath() throws Exception {
-        Path previous = dir.resolve("config/manager/textformatter/channels/chat.global.yml");
-        Files.createDirectories(previous.getParent());
-        Files.writeString(previous, "path: previous\n");
-
-        install(Map.of("/defaults/channels/chat.global.yml", "path: default\n"));
-
-        assertThat(dir.resolve("config/textformatter/channels/chat.global.yml"))
-                .hasContent("path: previous\n");
-        assertThat(previous).doesNotExist();
-    }
-
-    @Test
-    void canonicalModuleConfigWinsOverLegacyAndDefault() throws Exception {
+    void canonicalModuleConfigWinsOverLegacyAndIncorrectPath() throws Exception {
         Path canonical = dir.resolve("config/textformatter/channels/chat.global.yml");
         Files.createDirectories(canonical.getParent());
         Files.writeString(canonical, "path: canonical\n");
@@ -110,6 +101,8 @@ class DefaultConfigInstallerTest {
         install(Map.of("/defaults/channels/chat.global.yml", "path: default\n"));
 
         assertThat(canonical).hasContent("path: canonical\n");
+        assertThat(previous).hasContent("path: previous\n");
+        assertThat(legacy).hasContent("path: legacy\n");
     }
 
     @Test

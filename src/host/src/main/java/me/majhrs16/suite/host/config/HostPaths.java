@@ -14,8 +14,8 @@ import java.nio.file.Path;
  * {@code messages.yml} en la raíz del data folder) se mantienen como fallback
  * durante la migración para no romper instalaciones existentes. Las rutas
  * {@code config/manager/<module>/} y {@code manager/config/<module>/} son
- * incorrectas: no son layouts válidos ni fallback, y el instalador solo las
- * detecta para repararlas moviéndolas a {@code config/<module>/}.
+ * incorrectas: no son layouts válidos, no son fallback y no se migran; el
+ * runtime y el instalador las ignoran.
  * </p>
  * <p>
  * Regla de resolución: se prefiere la ruta canónica si existe; si no, la heredada

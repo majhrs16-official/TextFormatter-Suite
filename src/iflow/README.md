@@ -29,8 +29,7 @@ usan `iflow-firewall` y `fallback-on-unavailable: true`.
 
 Las rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml`
 son **incorrectas**. No son layouts legacy ni versiones alternativas; el
-instalador solo las detecta para repararlas moviendo el archivo a
-`config/iflow/config.yml`.
+runtime y el instalador las ignoran, no las migran y no las eliminan.
 
 ## Contratos
 
