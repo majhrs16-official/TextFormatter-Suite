@@ -6,13 +6,14 @@ bits); no hereda el ISA `.flow`, el ABI `HOST` v2 ni el modelo BIOS/kernel.
 
 ## Estado
 
-**W1 cerrado; W2 cerrado en su alcance de motor aislado.** `WasmContract.policyV3()` declara el
-módulo de imports `iflow`, sus firmas y el export `decide`; `WasmModuleLoader` valida nombres,
-firmas, memoria, `start` y tamaño, y permite instanciar con `ImportValues`. `TlvCodec` implementa
-los buffers; `PolicySession` mantiene el journal read-your-writes y la decisión única;
-`PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve
-un `PolicyOutcome`. La integración con `Router`/`MessageDispatcher`, el hash/hot-reload y la matriz
-de paridad `.flow` v3 siguen pendientes (W3/W3.5).
+**W1, W2 y W3 cerrados en su alcance de motor.** `WasmContract.policyV3()` declara el módulo de
+imports `iflow`, sus firmas y el export `decide`; `WasmModuleLoader` valida nombres, firmas,
+memoria, `start` y tamaño, y permite instanciar con `ImportValues`. `TlvCodec` implementa los
+buffers; `PolicySession` mantiene el journal read-your-writes y la decisión única; `PolicyHost`
+enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve un
+`PolicyOutcome`. `WasmPolicyRouter` conecta ese resultado con `Router`, exige SHA-256 del
+artefacto y recarga automáticamente al cambiar el archivo. La matriz de paridad `.flow` v3 sigue
+pendiente (W3.5).
 
 | Pieza | Estado |
 |---|---|
@@ -24,8 +25,9 @@ de paridad `.flow` v3 siguen pendientes (W3/W3.5).
 | `TlvCodec` (UTF-8 estricto, nulo vs vacío) | ✅ W1 |
 | Host functions `iflow.*` sobre `PolicySession` | ✅ W2 |
 | `WasmPolicyEngine` (evaluación aislada) | ✅ W2 |
-| `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | ⏳ W3 |
-| Hash/firma del artefacto y hot-reload | ⏳ W3 |
+| `WasmPolicyRouter` conectado a `Router` | ✅ W3 |
+| SHA-256 obligatorio del `.wasm` y hot-reload automático | ✅ W3 |
+| Backend `iflow-wasm` para el hub `iflow` | ✅ W3 |
 | Matriz de paridad `.flow` v3 vs `.wasm` | ⏳ W3.5 |
 
 ## Estructura
@@ -47,13 +49,18 @@ src/iflow-wasm/
     │   ├── PolicyAction.java
     │   ├── PolicyOutcome.java
     │   ├── PolicyException.java
-    │   └── WasmPolicyEngine.java
+    │   ├── WasmPolicyEngine.java
+    │   ├── WasmPolicyRouter.java
+    │   ├── IflowWasmActivator.java
+    │   └── IfowWasmModule.java
     └── test/java/me/majhrs16/suite/iflow/wasm/
         ├── WasmModuleLoaderTest.java
         ├── WasmTestModule.java
         ├── TlvCodecTest.java
         ├── PolicySessionTest.java
-        └── WasmPolicyEngineTest.java
+        ├── WasmPolicyEngineTest.java
+        ├── WasmPolicyRouterTest.java
+        └── IflowWasmActivatorTest.java
 ```
 
 ## Contrato v3 (`WasmContract.policyV3()`)
@@ -172,6 +179,26 @@ mensaje transformado.
 - **Fallos:** cualquier error de carga, instanciación o ejecución se convierte en
   `PolicyOutcome.error(...)`; el host no recibe excepciones de un artefacto no confiable.
 
+## Integración con `Router` (W3)
+
+`WasmPolicyRouter` es el backend que publica `iflow-wasm` y consume el hub `iflow`.
+
+- Lee `<data>/config/iflow-wasm/policy.wasm`.
+- Exige el SHA-256 del artefacto en `policy.sha256` o `policy.wasm.sha256`; si falta o no
+  coincide, el backend queda **no disponible** y falla cerrado (`REJECT`). El manager ya verifica
+  el SHA-256 del ZIP/JAR del paquete; este hash cubre la política que el usuario instala en el
+  directorio de configuración.
+- Valida el módulo con `WasmContract.policyV3()` antes de publicarlo.
+- Observa `policy.wasm` y los sidecars con `WatchService`; al cambiar cualquiera, recarga con un
+  debounce de 100 ms. Un artefacto nuevo inválido desactiva el backend hasta que se corrija.
+- Mapea `DELIVER → LOG`, `CANCEL_EVENT → DROP` y `ERROR → REJECT`; el mensaje transformado del
+  journal se devuelve en el `RouteOutcome`.
+- Aplica las políticas de envío/recepción del canal y el rate limit de emisión, igual que los
+  otros routers.
+
+El hub publica `IflowBackend` con nombre `iflow-wasm`; si el artefacto no está disponible, el hub
+puede aplicar `fallback-on-unavailable` y elegir otro motor.
+
 ## Uso actual
 
 ```java
@@ -187,7 +214,7 @@ if (!check.valid()) {
 Instance instance = loader.instantiate(module, WasmContract.policyV3());
 long[] result = loader.invoke(instance, "decide");
 
-// Con host functions: el engine construirá ImportValues en W2/W3.
+// Con host functions: el engine enlaza ImportValues por evaluación.
 ImportValues imports = ImportValues.builder()
     .addFunction(readPropertyHostFunction)
     .build();
@@ -213,7 +240,8 @@ memoria se instancia con `withMemoryLimits(initial, max)` y la sección `start` 
 2. **Sin estado compartido entre instancias.** La persistencia, si se necesita, se modela como estado
    de host explícito.
 3. **Artefacto verificable.** El contrato valida magic/version (vía Chicory), tamaño, límites de
-   memoria, imports permitidos y firmas, exports requeridos y `start`. El hash/firma queda para W3.
+   memoria, imports permitidos y firmas, exports requeridos y `start`; `WasmPolicyRouter` exige el
+   SHA-256 del `.wasm` antes de cargarlo.
 4. **Un ABI de host versionado.** No se replica el ABI `HOST` v2 de iFlow.
 5. **Autoría multi-lenguaje.** Cualquier toolchain que produzca `.wasm` (Rust, C/C++, Zig,
    AssemblyScript, TinyGo, WAT) es válida; el servidor no ejecuta toolchains nativas arbitrarias.
@@ -247,19 +275,20 @@ Cobertura actual:
   permisos, transformaciones, decisión única y deny-by-default, logs acotados.
 - `WasmPolicyEngineTest`: módulos binarios que llaman a `decision`, `write_property`,
   `set_channel` y `transform_apply`, incluyendo memoria lineal y data segments.
-- `IflowWasmActivatorTest`: registro del loader y del contrato en el `ModuleContext`.
+- `IflowWasmActivatorTest`: registro del loader, contrato, router y backend; fallo cerrado sin
+  artefacto.
+- `WasmPolicyRouterTest`: hash correcto/ausente/incorrecto, mapeo de acciones, recarga explícita y
+  recarga automática por `WatchService`.
 
 Para añadir un caso de contrato, usa `WasmTestModule` para emitir el módulo binario y valida con
 `WasmContract.policyV3()`; no se necesita un compilador Wasm en el build.
 
 ## Próximos pasos
 
-1. Conectar `WasmPolicyEngine` a `Router`/`MessageDispatcher` y mapear `PolicyOutcome` al pipeline
-   existente sin reabrir el contrato v2 (W3).
-2. Añadir hash/firma del artefacto y política de hot-reload (W3).
-3. Construir la matriz de paridad `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable
+1. Construir la matriz de paridad `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable
    (W3.5), sin usar el ISA v2 como contrato.
-4. Ejemplos en al menos dos lenguajes y guía de autoría (W4).
+2. Ejemplos en al menos dos lenguajes y guía de autoría (W4).
+3. Añadir firma de autor (no solo integridad) si el modelo de confianza lo requiere.
 
 ## Relación con `iflow-vm`
 
@@ -267,4 +296,5 @@ Para añadir un caso de contrato, usa `WasmTestModule` para emitir el módulo bi
   Su especificación técnica de referencia v3 vive en [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md).
 - `iflow-wasm`: este módulo. No hereda requisitos, ISA ni ABI de `iflow-vm`.
 
-La convivencia y la selección de motor por configuración se deciden en el ADR de integración (W3).
+La convivencia y la selección de motor se resuelven con el hub `iflow` (ADR-032): los motores
+publican `IflowBackend` y el hub elige uno solo según `config/iflow/config.yml`.

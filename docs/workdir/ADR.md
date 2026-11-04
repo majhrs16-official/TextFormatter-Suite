@@ -1679,7 +1679,7 @@ podía escribir ambas ubicaciones.
 
 ## Decisión 2026-11-03 — contrato de política iFlow v3 para la paridad VM/Wasm (ADR-031)
 
-**Estado:** Aceptada. W1/W2 implementados en `iflow-wasm`; W3/W3.5 pendientes.
+**Estado:** Aceptada. W1/W2/W3 implementados en `iflow-wasm`; W3.5 pendiente.
 
 **Contexto.** La paridad W3.5 entre `iflow-vm` (spec v3) e `iflow-wasm` estaba bloqueada por
 decisiones de contrato que afectaban a la semántica observable: entrega, mutación de canal,
@@ -1768,15 +1768,16 @@ del mensaje, no el estado de la máquina, el tiempo, la cola ni la entrega.
 - Spec v3: `docs/prompts/diseno/iflow-cpu-implement.md` §5.4 y cierre de §8.8.
 - Estado y criterios de W3.5: `docs/workdir/PLAN.md`.
 - Ratificación del usuario: 2026-11-03.
-- Implementación: W1/W2 en `src/iflow-wasm` (contrato `PolicyAbiV3`, `TlvCodec`, `PolicySession`,
-  `PolicyHost` y `WasmPolicyEngine` aislado, con tests); W3/W3.5 pendientes.
+- Implementación: W1/W2/W3 en `src/iflow-wasm` (contrato `PolicyAbiV3`, `TlvCodec`, `PolicySession`,
+  `PolicyHost`, `WasmPolicyEngine` aislado y `WasmPolicyRouter` con SHA-256/hot-reload, con tests);
+  W3.5 pendiente.
 
 ---
 
 ## Decisión 2026-11-04 — hub `iflow` para seleccionar backend (ADR-032)
 
-**Estado:** Aceptada. Hub implementado con los backends `iflow-firewall` e `iflow-vm`; el backend
-`iflow-wasm` se conecta en W3.
+**Estado:** Aceptada e implementada. Hub y los tres backends (`iflow-firewall`, `iflow-vm` e
+`iflow-wasm`) están conectados; la integridad y el hot-reload de Wasm se detallan en ADR-033.
 
 **Contexto.** Los motores iFlow se trataban como paquetes mutuamente excluyentes y el host elegía
 entre ellos con `iflow.engine.kind`. Esa selección no cubre la convivencia de `iflow-vm`,
@@ -1836,3 +1837,66 @@ publica la fachada estable y descubre proveedores por servicio.
 - `./gradlew :src:iflow:test :src:host:test :src:suite-runtime:test :src:presets:test` verde.
 - `src/iflow/README.md`.
 - `IflowConfigTest` e `IflowHubTest`.
+
+---
+
+## Decisión 2026-11-04 — router Wasm, SHA-256 del artefacto y hot-reload (ADR-033)
+
+**Estado:** Aceptada e implementada.
+
+**Contexto.** W3 exige que una política `.wasm` atraviese el pipeline real. El contrato v3 ya
+valida el módulo, pero faltaban tres piezas: el adaptador a `Router`, la integridad del artefacto
+que el usuario deja en `config/iflow-wasm/` y la recarga cuando ese archivo cambia. El manager ya
+verifica el SHA-256 del ZIP y de los archivos del paquete; eso no cubre una política editada o
+sustituida después de la instalación.
+
+**Decisión.**
+
+1. `WasmPolicyRouter` implementa `Router` y es el backend que publica `iflow-wasm`. Traduce
+   `PolicyOutcome` a `RouteOutcome`: `DELIVER → LOG`, `CANCEL_EVENT → DROP`, `ERROR → REJECT`.
+   El mensaje transformado del journal se devuelve en el outcome.
+2. La política se lee de `<data>/config/iflow-wasm/policy.wasm`. El SHA-256 es **obligatorio** y se
+   toma de `policy.sha256` o `policy.wasm.sha256`; si falta o no coincide, el backend queda no
+   disponible y falla cerrado. No se evalúa un artefacto sin hash.
+3. El hash del `.wasm` es adicional al hash del paquete. El manager sigue verificando el ZIP/JAR
+   contra el manifiesto y `SHA256SUMS`; el sidecar de la política cubre el archivo mutable de
+   configuración. No se duplica el hash del paquete en el sidecar ni se introduce una firma de
+   autor que el modelo de confianza actual no exige.
+4. `WasmPolicyRouter` observa el directorio con `WatchService` y recarga con debounce de 100 ms al
+   cambiar `policy.wasm` o cualquiera de los sidecars. La recarga también es invocable con
+   `reload()`.
+5. Un artefacto nuevo inválido desactiva el backend hasta que se corrija. No se conserva
+   silenciosamente la política anterior: la recarga es fail-closed.
+6. `iflow-wasm` publica `IflowBackend` con nombre `iflow-wasm`; `isAvailable()` refleja si hay una
+   política verificada y validada. El hub `iflow` puede aplicar `fallback-on-unavailable`.
+7. El router aplica las políticas de envío/recepción del canal y el rate limit de emisión, igual
+   que `iflow-vm` y `iflow-firewall`.
+
+**Alternativas consideradas.**
+
+1. **Exigir el hash solo en el manifiesto del paquete.** Ventajas: un único lugar. Limitaciones: la
+   política vive en configuración mutable y el manifiesto no se actualiza cuando el operador la
+   cambia. Evaluación: **descartada**; se mantiene el hash del paquete y se añade el del artefacto.
+2. **No exigir hash.** Ventajas: instalación más simple. Limitaciones: sustitución silenciosa del
+   `.wasm`. Evaluación: **descartada**.
+3. **Conservar la política anterior si la nueva es inválida.** Ventajas: continuidad. Limitaciones:
+   oculta un despliegue roto y mantiene código que el operador creía reemplazado. Evaluación:
+   **descartada**; fail-closed.
+4. **Polling periódico en lugar de `WatchService`.** Ventajas: portable. Limitaciones: latencia y
+   coste constante. Evaluación: **descartada**; el watcher es suficiente y se apoya en el
+   filesystem local.
+
+**Consecuencias.**
+
+- Un `.wasm` sin sidecar no se ejecuta; el hub puede seguir con otro backend.
+- El operador debe actualizar el sidecar al cambiar la política. Es una acción explícita y
+  auditable.
+- El watcher es un hilo daemon por router y se cierra con el módulo.
+- La integridad del paquete y la del artefacto de política son responsabilidades separadas y
+  documentadas.
+
+**Evidencia.**
+
+- `./gradlew :src:iflow-wasm:test` verde, incluidos `WasmPolicyRouterTest` e
+  `IflowWasmActivatorTest`.
+- `src/iflow-wasm/README.md`.

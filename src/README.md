@@ -15,7 +15,7 @@ TextFormatter Suite
 │   ├── textformatter     → Template engine, placeholders, channels
 │   ├── iflow             → hub que descubre `IflowBackend` y publica el `Router` estable; selección y fallback
 │   ├── iflow-vm          → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de la VM de 32 bits)
-│   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; contrato W1/W2 (validación, instancia, invocación), sin integración al pipeline
+│   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; contrato v3, router, SHA-256 y hot-reload
 │   ├── iflow-firewall    → motor de reglas SpEL legacy + grafo del editor
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
@@ -77,7 +77,7 @@ TextFormatter Suite
 | `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `spigot-host`, `fabric-host` |
 | `iflow` | Hub de selección: descubre `IflowBackend`, publica `IflowHub` y `Router`, aplica `engine`/`fallback-on-unavailable` desde `config/iflow/config.yml` | `core-api`, `snakeyaml` | `suite-runtime`, `spigot-host`, `fabric-host` |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `iflow` (backend), `host` legacy |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | `core-api`, `com.dylibso.chicory:runtime` | — (futuro `iflow` backend) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; contrato v3, `WasmPolicyRouter`, SHA-256 obligatorio y hot-reload; publica `IflowBackend` | `core-api`, `com.dylibso.chicory:runtime` | `iflow` (backend), `host` legacy |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `iflow` (backend), `host` legacy, web editor |
 | `host` | Neutral message dispatch, config loading and `SuiteHost` assembly; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
@@ -121,7 +121,7 @@ TextFormatter Suite
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, placeholders | `DefaultTextFormatter`, `TemplateRenderer`, `TextFormatterActivator` | `TextFormatterActivator` | [textformatter/README.md](textformatter/README.md) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowVmActivator` | [iflow-vm/README.md](iflow-vm/README.md) |
-| `iflow-wasm` | Motor WebAssembly con Chicory (W2) | `WasmModuleLoader`, `WasmContract`, `ValidationResult` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
+| `iflow-wasm` | Motor WebAssembly con Chicory (W3) | `WasmModuleLoader`, `WasmContract`, `WasmPolicyRouter`, `IflowBackend` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
 | `host` | Neutral pipeline | Dispatch, config, message catalog | `SuiteHost`, `MessageDispatcher`, `ConfigLoader`, `HostPaths` | `SuiteRuntime` builds `SuiteHost` | [host/README.md](host/README.md) |
 | `chattranslator` | Translation facade | Builds the translator manager from provider services and refreshes it on module lifecycle events | `ChatTranslator`, `ChatTranslatorActivator`, `BackendConfig`, `TranslatorManager` | `ChatTranslatorActivator` | [chattranslator/README.md](chattranslator/README.md) |
