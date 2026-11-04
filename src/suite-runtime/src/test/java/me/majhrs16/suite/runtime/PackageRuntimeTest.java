@@ -740,10 +740,14 @@ class PackageRuntimeTest {
 
     @Test
     void installsRealIflowWasmPackage() throws Exception {
+        Path textformatterZip = packageFromProperty("textformatter.package");
         Path wasmZip = packageFromProperty("iflow-wasm.package");
 
         try (Fixture fixture = fixture()) {
-            installDependencies(fixture, "chicory");
+            installDependencies(fixture, "chicory", "snakeyaml", "jackson-databind", "spring-expression");
+            assertTrue(fixture.runtime.installLocal(textformatterZip, false).get(0).isSuccess(),
+                    "textformatter must provide the channel-api capability");
+
             List<PackageChange> activation = fixture.runtime.installLocal(wasmZip, false);
 
             assertEquals(1, activation.size());
