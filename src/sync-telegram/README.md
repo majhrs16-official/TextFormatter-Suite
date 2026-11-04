@@ -65,7 +65,7 @@ HttpTransport.post(https://api.telegram.org/bot<token>/sendMessage)
 Telegram API responds
 ```
 
-**Config** (`config/manager/sync-telegram/config.yml`):
+**Config** (`config/sync-telegram/config.yml`):
 ```yaml
 enabled: true
 token: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"

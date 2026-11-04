@@ -9,11 +9,13 @@ import java.nio.file.Path;
  * <p>
  * La disposición canónica es {@code config/suite/} para la configuración global
  * ({@code config.yml}, {@code commands.yml}, {@code messages.yml}) y
- * {@code config/manager/<module>/} para la configuración de cada módulo. Las
- * rutas planas anteriores ({@code config.yml}, {@code commands.yml},
- * {@code messages.yml} en la raíz del data folder), {@code config/<module>/}
- * y {@code manager/config/<module>/} se mantienen como fallback durante la
- * migración para no romper instalaciones existentes.
+ * {@code config/<module>/} para la configuración de cada módulo. Las rutas
+ * planas anteriores ({@code config.yml}, {@code commands.yml},
+ * {@code messages.yml} en la raíz del data folder) se mantienen como fallback
+ * durante la migración para no romper instalaciones existentes. Las rutas
+ * {@code config/manager/<module>/} y {@code manager/config/<module>/} son
+ * incorrectas: no son layouts válidos ni fallback, y el instalador solo las
+ * detecta para repararlas moviéndolas a {@code config/<module>/}.
  * </p>
  * <p>
  * Regla de resolución: se prefiere la ruta canónica si existe; si no, la heredada
@@ -35,12 +37,12 @@ public final class HostPaths {
         return configRoot(dataFolder).resolve("suite");
     }
 
-    /** @return {@code <data>/config/manager}, root of module-owned settings */
+    /** @return {@code <data>/config}, root of module-owned settings */
     public static Path moduleConfigRoot(Path dataFolder) {
-        return configRoot(dataFolder).resolve("manager");
+        return configRoot(dataFolder);
     }
 
-    /** @return {@code <data>/config/manager/<moduleId>} */
+    /** @return {@code <data>/config/<moduleId>} */
     public static Path moduleConfigDir(Path dataFolder, String moduleId) {
         return moduleConfigRoot(dataFolder).resolve(moduleId);
     }

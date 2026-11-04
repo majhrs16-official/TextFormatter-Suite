@@ -51,7 +51,7 @@
 | Component | Role |
 |-----------|------|
 | `WebSocketSyncSink` | `SyncSink` impl: `org.java_websocket.server.WebSocketServer`, subscriptions, auth, rate limiting |
-| `WebSocketSyncConfig` | Reads `config/manager/sync-websocket/config.yml` |
+| `WebSocketSyncConfig` | Reads `config/sync-websocket/config.yml` |
 | `SyncWebSocketActivator` | Registers/unregisters the sink with the running bus |
 | `SyncWebSocketModule` | Legacy kernel descriptor publishing the `sync-sink` and `websocket-server` capabilities |
 
@@ -69,7 +69,7 @@ WebSocketSyncSink.broadcastToPath(path, json)
 All subscribed clients receive message
 ```
 
-**Config** (`config/manager/sync-websocket/config.yml`):
+**Config** (`config/sync-websocket/config.yml`):
 ```yaml
 enabled: true
 port: 9092

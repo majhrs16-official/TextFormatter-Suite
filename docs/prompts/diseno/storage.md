@@ -2,9 +2,9 @@
 
 > **Fuente de verdad**: Este documento describe cómo la suite organiza sus archivos de configuración en disco. Es la referencia única para rutas, precedencia y ciclo de vida de los archivos YAML.
 >
-> **Principio**: Cada módulo Java (`src/<modulo>/`) es dueño de su directorio de configuración en `config/manager/<modulo>/`. El host/plataforma solo gestiona el directorio raíz y delega.
+> **Principio**: Cada módulo Java (`src/<modulo>/`) es dueño de su directorio de configuración en `config/<modulo>/`. El host/plataforma solo gestiona el directorio raíz y delega.
 >
-> **Layout vigente del runtime de módulos:** el host lee su configuración de `<data>/config/suite/` y `ModuleHost` entrega a cada módulo `<data>/config/manager/<module>/`. El diagrama de la sección 1.3 refleja ese layout canónico. Las rutas `manager/config/<module>/` (layout intermedio), `config/<module>/` y las rutas planas son legacy: `DefaultConfigInstaller` las migra a `config/manager/<module>/` sin sobrescribir archivos existentes. `FilePresetTarget` y `DefaultConfigInstaller` escriben en las dos raíces canónicas.
+> **Layout vigente del runtime de módulos:** el host lee su configuración de `<data>/config/suite/` y `ModuleHost` entrega a cada módulo `<data>/config/<module>/`. El diagrama de la sección 1.3 refleja ese layout canónico. Las rutas `config/manager/<module>/` y `manager/config/<module>/` son incorrectas: no son layouts legacy, no son versiones alternativas y no se aceptan como fallback. `DefaultConfigInstaller` solo las detecta para repararlas moviendo el archivo a `config/<module>/`; las rutas planas antiguas sí se conservan como legacy durante la migración. `FilePresetTarget` y `DefaultConfigInstaller` escriben en las dos raíces canónicas.
 
 ---
 
@@ -20,8 +20,8 @@
 **Reglas:**
 1. Un **módulo** declara `provide(Capability.of("nombre-módulo", ...))`
 2. Un **submódulo** declara `require(Capability.of("módulo-padre", ...))` y `provide(Capability.of("translator|sync-sink", ...))`
-3. Cada **submódulo** es dueño de su `config/manager/<submódulo>/config.yml`
-3. El **módulo padre** solo gestiona config genérica (`config/manager/<módulo>/config.yml`) y coordina el registro de submódulos
+3. Cada **submódulo** es dueño de su `config/<submódulo>/config.yml`
+3. El **módulo padre** solo gestiona config genérica (`config/<módulo>/config.yml`) y coordina el registro de submódulos
 
 ---
 
@@ -115,17 +115,17 @@
 
 | Directorio Canónico | Dueño Real (Código) | Dueño Correcto (Arquitectura) | Estado |
 |-------------------|---------------------|------------------------------|--------|
-| `config/manager/textformatter/channels/` | `textformatter` carga (`ChannelConfig`) | **`textformatter`** | ✅ Migrado (I-011) |
-| `config/manager/chattranslator/translators/` | `chattranslator` carga (`BackendConfig`) | **`chattranslator`** | ✅ Migrado (I-004) |
-| `config/manager/sync-*/` | cada submódulo sync carga su config (`SyncYaml`) | **cada submódulo sync** | ✅ Migrado (I-004) |
-| `config/manager/sync-discord/config.yml` | `sync-discord` carga (`DiscordConfig`) | **`sync-discord`** (submódulo) | ✅ Migrado (I-004) |
-| `config/manager/sync-websocket/config.yml` | `sync-websocket` carga (`WebSocketSyncConfig`) | **`sync-websocket`** (submódulo) | ✅ Migrado (I-004) |
-| `config/manager/sync-telegram/config.yml` | `sync-telegram` carga (`TelegramConfig`) | **`sync-telegram`** (submódulo) | ✅ Migrado (I-004) |
-| `config/manager/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
+| `config/textformatter/channels/` | `textformatter` carga (`ChannelConfig`) | **`textformatter`** | ✅ Migrado (I-011) |
+| `config/chattranslator/translators/` | `chattranslator` carga (`BackendConfig`) | **`chattranslator`** | ✅ Migrado (I-004) |
+| `config/sync-*/` | cada submódulo sync carga su config (`SyncYaml`) | **cada submódulo sync** | ✅ Migrado (I-004) |
+| `config/sync-discord/config.yml` | `sync-discord` carga (`DiscordConfig`) | **`sync-discord`** (submódulo) | ✅ Migrado (I-004) |
+| `config/sync-websocket/config.yml` | `sync-websocket` carga (`WebSocketSyncConfig`) | **`sync-websocket`** (submódulo) | ✅ Migrado (I-004) |
+| `config/sync-telegram/config.yml` | `sync-telegram` carga (`TelegramConfig`) | **`sync-telegram`** (submódulo) | ✅ Migrado (I-004) |
+| `config/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
 | `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
 | `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
 | `config/suite/commands.yml` | `suite-runtime` carga (`CommandRootConfig`) | **`suite-runtime` (raíz neutral)** | ✅ Migrado (F4e) |
-| `config/manager/iflow-firewall/rules.yml` | `iflow-firewall` carga reglas (`RuleConfigLoader`) y valida el grafo (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
+| `config/iflow-firewall/rules.yml` | `iflow-firewall` carga reglas (`RuleConfigLoader`) y valida el grafo (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
 
 > **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. `config/suite/messages.yml` lo carga `host` (ADR-020) y `config/suite/commands.yml` lo carga `suite-runtime` (ADR-022).
 
@@ -164,12 +164,12 @@ module-allowlist: []
 ### 3.2 `rules.yml` — propiedad de `iflow-firewall`
 
 > **Histórico:** el antiguo `config/suite/rules.yml` con `rules: [{condition, action}]` se movió a
-> `config/manager/iflow-firewall/rules.yml` (§3.3.1). SpEL se conserva **solo** en `iflow-firewall`
+> `config/iflow-firewall/rules.yml` (§3.3.1). SpEL se conserva **solo** en `iflow-firewall`
 > (ADR-001, 2026-10-27); `iflow-vm` e `iflow-wasm` no lo usan.
 
 ---
 
-### 3.3.1 `config/manager/iflow-firewall/rules.yml` — Módulo iflow-firewall
+### 3.3.1 `config/iflow-firewall/rules.yml` — Módulo iflow-firewall
 
 > **Nota**: el archivo admite dos esquemas. La **lista de reglas** (o un mapa con `rules:`) la
 > ejecuta el motor SpEL legacy cuando `iflow.engine.kind: firewall`. El **grafo del editor**
@@ -200,7 +200,7 @@ edges: []
 **Cargado por**: `RuleConfigLoader.loadRules(folder)` (reglas) y `FirewallConfig.load(folder)`
 (validación del grafo), ambos en `me.majhrs16.suite.iflow`
 **Dueño**: `iflow-firewall` module
-**Resolución**: `config/manager/iflow-firewall/rules.yml` (canónico) → `rules.yml` (heredado)
+**Resolución**: `config/iflow-firewall/rules.yml` (canónico) → `rules.yml` (heredado)
 **Selección de motor**: `iflow.engine.kind` en `config/suite/config.yml` (`vm` default | `firewall`)
 **Exclusividad**: `iflow-vm`, `iflow-wasm` e `iflow-firewall` son mutuamente excluyentes; solo uno
 se instala, comparten `me.majhrs16.suite.iflow` y el host usa el motor instalado
@@ -224,10 +224,10 @@ enabled: "[suite] activo: {} canales, traductor '{}'"
 
 ---
 
-### 3.4 `config/manager/textformatter/channels/*.yml` — Módulo textformatter
+### 3.4 `config/textformatter/channels/*.yml` — Módulo textformatter
 
 ```yaml
-# config/manager/textformatter/channels/chat.global.yml
+# config/textformatter/channels/chat.global.yml
 name: "chat.global"
 permission: "suite.chat.global"
 send-permission: "suite.chat.global.send"
@@ -246,21 +246,21 @@ sounds: []
 **Dueño**: `textformatter` module  
 **Usado por**: `ChannelRegistry`, `Router`, `ChatTranslator` (validar `SET_CHANNEL`)
 
-> **Migración completada (I-011)**: `ConfigLoader.loadChannels()` se eliminó de `host`; la carga vive en `textformatter.ChannelConfig`. Rutas resueltas: `config/manager/textformatter/channels/` (canónica) → `textformatter/channels/` → `channels/` (legacy).
+> **Migración completada (I-011)**: `ConfigLoader.loadChannels()` se eliminó de `host`; la carga vive en `textformatter.ChannelConfig`. Rutas resueltas: `config/textformatter/channels/` (canónica) → `textformatter/channels/` → `channels/` (legacy).
 
 ---
 
-### 3.5 `config/manager/chattranslator/translators/*.yml` — Módulo chattranslator
+### 3.5 `config/chattranslator/translators/*.yml` — Módulo chattranslator
 
 ```yaml
-# config/manager/chattranslator/translators/google.yml
+# config/chattranslator/translators/google.yml
 provider: "google"                # Debe coincidir con TranslatorProvider.name()
 active: true
 timeout: 10                       # segundos
 ```
 
 ```yaml
-# config/manager/chattranslator/translators/libre.yml
+# config/chattranslator/translators/libre.yml
 provider: "libre"
 active: true
 base-url: "https://translate.example.com"
@@ -273,11 +273,11 @@ timeout: 15
 **Dueño**: `chattranslator` module  
 **Usado por**: `TranslatorManager`, `TranslationService`, `ChatTranslator`
 
-> **Migración completada (I-004)**: `TranslatorsConfig` se eliminó de `host`; `chattranslator.BackendConfig` carga `config/manager/chattranslator/translators/` y `ChatTranslatorConfig` carga `config/manager/chattranslator/config.yml` (con fallback a las rutas heredadas).
+> **Migración completada (I-004)**: `TranslatorsConfig` se eliminó de `host`; `chattranslator.BackendConfig` carga `config/chattranslator/translators/` y `ChatTranslatorConfig` carga `config/chattranslator/config.yml` (con fallback a las rutas heredadas).
 
 ---
 
-### 3.6 `config/manager/chattranslator/config.yml` — Módulo chattranslator (Fachada)
+### 3.6 `config/chattranslator/config.yml` — Módulo chattranslator (Fachada)
 
 ```yaml
 # Configuración de la fachada ChatTranslator
@@ -293,7 +293,7 @@ translation-timeout-ms: 30000     # Timeout peticiones traducción (ms)
 
 ---
 
-### 3.7 `config/manager/sync-bus/config.yml` — Módulo sync-bus (Bus Central)
+### 3.7 `config/sync-bus/config.yml` — Módulo sync-bus (Bus Central)
 
 ```yaml
 # Configuración genérica del bus de sincronización
@@ -309,7 +309,7 @@ max-concurrent-deliveries: 100
 
 ---
 
-### 3.7.1 `config/manager/sync-discord/config.yml` — Submódulo sync-discord
+### 3.7.1 `config/sync-discord/config.yml` — Submódulo sync-discord
 
 ```yaml
 enabled: true
@@ -324,7 +324,7 @@ channels: []
 
 ---
 
-### 3.7.2 `config/manager/sync-websocket/config.yml` — Submódulo sync-websocket
+### 3.7.2 `config/sync-websocket/config.yml` — Submódulo sync-websocket
 
 ```yaml
 enabled: false
@@ -340,7 +340,7 @@ token: "changeme"
 
 ---
 
-### 3.7.3 `config/manager/sync-telegram/config.yml` — Submódulo sync-telegram
+### 3.7.3 `config/sync-telegram/config.yml` — Submódulo sync-telegram
 
 ```yaml
 enabled: false
@@ -355,15 +355,15 @@ chat-id: 0
 
 ---
 
-### 3.7.4 `config/manager/sync-socket/` — Submódulo sync-socket (TCP/UDP)
+### 3.7.4 `config/sync-socket/` — Submódulo sync-socket (TCP/UDP)
 
 ```yaml
-# config/manager/sync-socket/tcp.yml
+# config/sync-socket/tcp.yml
 enabled: false
 host: "127.0.0.1"
 port: 9093
 
-# config/manager/sync-socket/udp.yml
+# config/sync-socket/udp.yml
 enabled: false
 remote-host: "127.0.0.1"
 remote-port: 9094
@@ -375,11 +375,11 @@ local-port: 9095
 **Require**: `Capability.of("sync-bus", ...)`  
 **Provide**: `Capability.of("sync-sink", ...)` (doble: tcp + udp)
 
-> **Migración completada (I-012/I-004)**: los adapters resuelven cada archivo con `syncbus.SyncConfigPaths` (`config/manager/sync-*/` canónico, `config/sync-*/` y `sync/*.yml` como fallback) y cada submódulo expone su config (`DiscordConfig`, `WebSocketSyncConfig`, `SocketConfig`, `TelegramConfig`) sobre `syncbus.SyncYaml`; el adapter ya no parsea YAML de sync.
+> **Migración completada (I-012/I-004)**: los adapters resuelven cada archivo con `syncbus.SyncConfigPaths` (`config/sync-*/` canónico, `config/sync-*/` y `sync/*.yml` como fallback) y cada submódulo expone su config (`DiscordConfig`, `WebSocketSyncConfig`, `SocketConfig`, `TelegramConfig`) sobre `syncbus.SyncYaml`; el adapter ya no parsea YAML de sync.
 
 ---
 
-### 3.8 `config/manager/inworld/config.yml` — Módulo inworld
+### 3.8 `config/inworld/config.yml` — Módulo inworld
 
 ```yaml
 sign-format: "<gray>[Sign]</gray> <content>"
@@ -394,7 +394,7 @@ world-format: "<blue>[World]</blue> <sender>: <content>"
 
 ---
 
-### 3.9 `config/manager/observability/config.yml` — Módulo observability
+### 3.9 `config/observability/config.yml` — Módulo observability
 
 ```yaml
 port: 9091
@@ -469,18 +469,18 @@ health-enabled: true
    - config/suite/config.yml
    - config/suite/commands.yml
    - config/suite/messages.yml
-   - config/manager/iflow-firewall/
-   - config/manager/textformatter/
-   - config/manager/chattranslator/
-   - config/manager/sync-bus/
-   - config/manager/sync-discord/
-   - config/manager/sync-websocket/
-   - config/manager/sync-telegram/
-   - config/manager/sync-http/
-   - config/manager/sync-socket/
-   - config/manager/inworld/
-   - config/manager/observability/
-   - config/manager/<modulo>/ (todos)
+   - config/iflow-firewall/
+   - config/textformatter/
+   - config/chattranslator/
+   - config/sync-bus/
+   - config/sync-discord/
+   - config/sync-websocket/
+   - config/sync-telegram/
+   - config/sync-http/
+   - config/sync-socket/
+   - config/inworld/
+   - config/observability/
+   - config/<modulo>/ (todos)
 2. Regenera defaults desde resources/defaults/ de cada módulo
 3. Notifica al admin: "Configs reseteados. Reinicia para aplicar."
 ```
@@ -493,10 +493,10 @@ health-enabled: true
 |----------|------------|---------|
 | Directorio **módulo** | `kebab-case` | `textformatter`, `chattranslator`, `sync-bus`, `inworld` |
 | Directorio **submódulo** | `kebab-case` | `gtranslate`, `ltranslate`, `sync-discord`, `sync-websocket` |
-| Archivo config principal | `config.yml` | `config/manager/chattranslator/config.yml`, `config/manager/sync-discord/config.yml` |
-| Sub-archivos (colecciones) | `<nombre>.yml` | `config/manager/textformatter/channels/chat.global.yml` |
-| Backends (colección) | `<provider>.yml` | `config/manager/chattranslator/translators/google.yml` |
-| Sinks (colección — ya no aplica, cada submódulo tiene su config.yml) | — | `config/manager/sync-discord/config.yml`, `config/manager/sync-socket/config.yml` |
+| Archivo config principal | `config.yml` | `config/chattranslator/config.yml`, `config/sync-discord/config.yml` |
+| Sub-archivos (colecciones) | `<nombre>.yml` | `config/textformatter/channels/chat.global.yml` |
+| Backends (colección) | `<provider>.yml` | `config/chattranslator/translators/google.yml` |
+| Sinks (colección — ya no aplica, cada submódulo tiene su config.yml) | — | `config/sync-discord/config.yml`, `config/sync-socket/config.yml` |
 | Backup timestamp | `yyyyMMdd-HHmmss` | `backup/20261024-153045/` |
 | JAR módulo | `<modulo>-<version>.jar` | `chattranslator-2.1.0.jar` |
 | JAR submódulo | `<submodulo>-<version>.jar` | `gtranslate-2.1.0.jar`, `sync-discord-2.1.0.jar` |
@@ -508,7 +508,7 @@ health-enabled: true
 ### 6.1 Validación al Arranque
 
 - `ConfigValidator.validate(HostConfig, logger, folder)` valida `config/suite/config.yml`
-- Cada módulo valida su propio `config/manager/<modulo>/config.yml` en su `onLoad()`
+- Cada módulo valida su propio `config/<modulo>/config.yml` en su `onLoad()`
 - Errores → log ERROR + config degradado (defaults) + suite sigue arrancando
 
 ### 6.2 Migración de Versiones
@@ -525,12 +525,12 @@ health-enabled: true
 // En ChatTranslatorModule.onLoad(SuiteHost host)
 public void onLoad(SuiteHost host) {
     // host.config() expone el directorio base de módulos (folder)
-    Path folder = host.config().getConfigDirectory(); // Path al <manager>/config/manager
+    Path folder = host.config().getConfigDirectory(); // Path al <manager>/config
     
-    // Cargar config propia (config/manager/chattranslator/config.yml)
+    // Cargar config propia (config/chattranslator/config.yml)
     ChatTranslatorConfig.Config facadeConfig = ChatTranslatorConfig.load(folder);
     
-    // Cargar backends (config/manager/chattranslator/translators/*.yml)
+    // Cargar backends (config/chattranslator/translators/*.yml)
     TranslatorManager manager = BackendConfig.load(folder);
     
     // Crear fachada
@@ -542,7 +542,7 @@ public void onLoad(SuiteHost host) {
 }
 ```
 
-> **Nota**: `HostConfig` debe exponer `getConfigDirectory()` que devuelve `Path` al directorio `<manager>/config/manager`. Los módulos resuelven `folder.resolve("<modulo>").resolve("config.yml")`.
+> **Nota**: `HostConfig` debe exponer `getConfigDirectory()` que devuelve `Path` al directorio `<manager>/config`. Los módulos resuelven `folder.resolve("<modulo>").resolve("config.yml")`.
 
 ---
 

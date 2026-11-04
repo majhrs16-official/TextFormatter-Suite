@@ -27,7 +27,7 @@ import java.util.Objects;
  *
  * <p>Persists a preset into the canonical configuration layout of the suite:
  * suite settings under {@code config/suite/}, and module-owned files under
- * {@code config/manager/<module>/}. Existing YAML keys that the preset does not
+ * {@code config/<module>/}. Existing YAML keys that the preset does not
  * touch are preserved; a preset is a patch, not a full replacement of
  * unrelated configuration.</p>
  *
@@ -46,13 +46,13 @@ public final class FilePresetTarget implements PresetTarget {
     /**
      * @param suiteDir adapter data directory; host settings live under
      *                 {@code config/suite/} and module settings under
-     *                 {@code config/manager/<module>/}
+     *                 {@code config/<module>/}
      */
     public FilePresetTarget(Path suiteDir) {
         this.suiteDir = Objects.requireNonNull(suiteDir, "suiteDir")
             .toAbsolutePath()
             .normalize();
-        this.moduleConfigRoot = this.suiteDir.resolve("config/manager");
+        this.moduleConfigRoot = this.suiteDir.resolve("config");
     }
 
     @Override

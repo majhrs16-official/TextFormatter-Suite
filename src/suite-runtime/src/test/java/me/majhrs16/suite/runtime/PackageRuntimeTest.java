@@ -1190,7 +1190,7 @@ class PackageRuntimeTest {
                 managerDir, logger, "spigot", "x86_64", "linux", 21);
         manager.initialize();
 
-        Path configRoot = suiteRoot.resolve("config/manager");
+        Path configRoot = suiteRoot.resolve("config");
         ModuleHost host = new ModuleHost(
                 managerDir.resolve("library"),
                 configRoot,

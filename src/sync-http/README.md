@@ -22,7 +22,7 @@
 - **Implement `SyncSink`** — `send(message) → void`, `start()`, `stop()`
 - **Implement `SyncListener`** (optional) — inbound messages for the bus
 - **Package registration** — `SyncXxxActivator` resolves `SyncBus` from the service registry and registers its sink
-- **Configuration** — read endpoint/credentials from the module-private `config/manager/sync-xxx/` directory
+- **Configuration** — read endpoint/credentials from the module-private `config/sync-xxx/` directory
 - **Message encoding** — use `MessageCodec` (from `transport`) for wire format
 
 ---
@@ -68,7 +68,7 @@
 | Component | Role |
 |-----------|------|
 | `HttpSink` | Implements `SyncSink`: POST JSON to the webhook and expose the inbound endpoint |
-| `HttpConfig` | Reads `config/manager/sync-http/config.yml` |
+| `HttpConfig` | Reads `config/sync-http/config.yml` |
 | `SyncHttpActivator` | Registers/unregisters `HttpSink` with the running bus |
 | `SyncHttpModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
 
@@ -127,7 +127,7 @@ Module-specific transport:
   - VelocitySink: Velocity plugin message channel
 ```
 
-**Config** (`config/manager/sync-http/config.yml`):
+**Config** (`config/sync-http/config.yml`):
 ```yaml
 enabled: true
 outboundUrl: "https://example.com/webhook"
@@ -138,7 +138,7 @@ authToken: ""           # optional Bearer token
 hmacSecret: ""          # optional HMAC-SHA256 secret
 ```
 
-Each `sync-*` package reads its own directory under `config/manager/`. An enabled file
+Each `sync-*` package reads its own directory under `config/`. An enabled file
 without the required fields is skipped with a log line; the package still
 activates.
 

@@ -67,7 +67,7 @@ TcpSink: socket.write(bytes) with reconnect logic
 UdpSink: datagramSocket.send(bytes)
 ```
 
-**Config** (`config/manager/sync-socket/tcp.yml` / `config/manager/sync-socket/udp.yml`):
+**Config** (`config/sync-socket/tcp.yml` / `config/sync-socket/udp.yml`):
 ```yaml
 enabled: true
 remoteHost: "127.0.0.1"

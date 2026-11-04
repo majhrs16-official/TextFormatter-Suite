@@ -67,7 +67,7 @@ async de Bukkit.
 
 ## 6. Configuration
 
-Archivo canónico: `config/manager/sync-bukkit/config.yml`.
+Archivo canónico: `config/sync-bukkit/config.yml`.
 
 ```yaml
 enabled: true

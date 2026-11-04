@@ -19,7 +19,7 @@
   `ActorDirectory`, `PermissionChecker`, `UserLanguageStore`,
   `PlaceholderResolver`, `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **Default configuration** — `DefaultConfigInstaller` copia los defaults del
-  host a `config/suite/` y los de cada módulo a `config/manager/<module>/`;
+  host a `config/suite/` y los de cada módulo a `config/<module>/`;
   migra archivos legacy sin sobrescribir la configuración existente.
 - **Root command** — `runtime.registerCommands()` registra el árbol neutral en
   el `CommandMap`; `plugin.yml` ya no declara `/suite`. La raíz y sus aliases

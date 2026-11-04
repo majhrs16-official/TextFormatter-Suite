@@ -72,7 +72,7 @@ el tick del servidor. `start()` no espera red.
 
 ## 6. Configuration
 
-Archivo canónico: `config/manager/sync-fabric/config.yml`.
+Archivo canónico: `config/sync-fabric/config.yml`.
 
 ```yaml
 enabled: true

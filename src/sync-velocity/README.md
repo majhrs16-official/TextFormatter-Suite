@@ -38,7 +38,7 @@ project in the Velocity path that imports `com.velocitypowered`.
 ## 4. Configuration
 
 The plugin uses the same neutral config:
-`config/manager/sync-velocity-core/config.yml`, with legacy `sync/velocity.yml` fallback.
+`config/sync-velocity-core/config.yml`, with legacy `sync/velocity.yml` fallback.
 The defaults resource is `defaults/sync/velocity.yml`.
 
 `enabled: false` keeps the plugin loaded but does not start the sink.

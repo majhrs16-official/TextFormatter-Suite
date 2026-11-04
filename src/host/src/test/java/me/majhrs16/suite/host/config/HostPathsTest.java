@@ -23,11 +23,11 @@ class HostPathsTest {
     }
 
     @Test
-    void moduleConfigLivesUnderConfigManager() {
-        assertEquals(dir.resolve("config/manager"), HostPaths.moduleConfigRoot(dir));
-        assertEquals(dir.resolve("config/manager/textformatter"),
+    void moduleConfigLivesDirectlyUnderConfig() {
+        assertEquals(dir.resolve("config"), HostPaths.moduleConfigRoot(dir));
+        assertEquals(dir.resolve("config/textformatter"),
                 HostPaths.moduleConfigDir(dir, "textformatter"));
-        assertEquals(dir.resolve("config/manager/iflow-firewall"),
+        assertEquals(dir.resolve("config/iflow-firewall"),
                 HostPaths.moduleConfigDir(dir, "iflow-firewall"));
     }
 

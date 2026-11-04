@@ -1,0 +1,7 @@
+# iFlow hub: selecciona uno de los backends instalados.
+# Valores: iflow-firewall | iflow-vm | iflow-wasm
+engine: iflow-firewall
+
+# Si el backend configurado no está disponible, usa el primer backend
+# disponible en orden de registro. Si es false, el pipeline queda sin motor.
+fallback-on-unavailable: true

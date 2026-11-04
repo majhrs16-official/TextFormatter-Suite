@@ -15,16 +15,16 @@ import me.majhrs16.suite.host.config.HostPaths;
  * First-boot installer for the bundled configuration defaults.
  *
  * <p>Host settings are written under {@code config/suite/}; module-owned
- * settings are written under {@code config/manager/<module>/}, the same root
- * that {@code ModuleHost} passes to each activator. Existing canonical files
- * are never overwritten.</p>
+ * settings are written under {@code config/<module>/}, the same root that
+ * {@code ModuleHost} passes to each activator. Existing canonical files are
+ * never overwritten.</p>
  *
- * <p>Legacy files from the previous flat, {@code config/<module>} and
- * {@code manager/config/<module>} layouts are migrated to the canonical
- * {@code config/manager/<module>} path so activators read the same content
- * they used before. The legacy candidates are scheduled for removal in F9,
- * once installations created before the manager-scoped layout are no longer
- * supported.</p>
+ * <p>Las rutas {@code config/manager/<module>/} y {@code manager/config/<module>/}
+ * son incorrectas: no se aceptan como fallback ni como layouts legacy. El
+ * instalador las detecta únicamente para repararlas moviendo el archivo a la
+ * ruta canónica. Las rutas planas antiguas ({@code channels/...},
+ * {@code translators/...}, {@code sync/...}, etc.) sí se conservan como
+ * legacy durante la migración.</p>
  */
 public final class DefaultConfigInstaller {
 
@@ -58,39 +58,82 @@ public final class DefaultConfigInstaller {
                 dataFolder.resolve("messages.yml"));
 
         for (String name : CHANNELS) {
-            install(resources, logger, "defaults/channels/" + name + ".yml",
-                    HostPaths.moduleConfigDir(dataFolder, "textformatter")
-                            .resolve("channels/" + name + ".yml"),
-                    dataFolder.resolve("manager/config/textformatter/channels/" + name + ".yml"),
-                    dataFolder.resolve("config/textformatter/channels/" + name + ".yml"),
+            Path canonical = HostPaths.moduleConfigDir(dataFolder, "textformatter")
+                    .resolve("channels/" + name + ".yml");
+            repair(logger, canonical,
+                    dataFolder.resolve("config/manager/textformatter/channels/" + name + ".yml"),
+                    dataFolder.resolve("manager/config/textformatter/channels/" + name + ".yml"));
+            install(resources, logger, "defaults/channels/" + name + ".yml", canonical,
                     dataFolder.resolve("channels/" + name + ".yml"));
         }
-        install(resources, logger, "defaults/translators/google.yml",
-                HostPaths.moduleConfigDir(dataFolder, "chattranslator")
-                        .resolve("translators/google.yml"),
-                dataFolder.resolve("manager/config/chattranslator/translators/google.yml"),
-                dataFolder.resolve("config/chattranslator/translators/google.yml"),
+        Path googleTranslator = HostPaths.moduleConfigDir(dataFolder, "chattranslator")
+                .resolve("translators/google.yml");
+        repair(logger, googleTranslator,
+                dataFolder.resolve("config/manager/chattranslator/translators/google.yml"),
+                dataFolder.resolve("manager/config/chattranslator/translators/google.yml"));
+        install(resources, logger, "defaults/translators/google.yml", googleTranslator,
                 dataFolder.resolve("translators/google.yml"));
-        install(resources, logger, "defaults/sync/discord.yml",
-                HostPaths.moduleConfigDir(dataFolder, "sync-discord").resolve("config.yml"),
-                dataFolder.resolve("manager/config/sync-discord/config.yml"),
-                dataFolder.resolve("config/sync-discord/config.yml"),
+
+        Path discord = HostPaths.moduleConfigDir(dataFolder, "sync-discord").resolve("config.yml");
+        repair(logger, discord,
+                dataFolder.resolve("config/manager/sync-discord/config.yml"),
+                dataFolder.resolve("manager/config/sync-discord/config.yml"));
+        install(resources, logger, "defaults/sync/discord.yml", discord,
                 dataFolder.resolve("sync/discord.yml"));
-        install(resources, logger, "defaults/sync/websocket.yml",
-                HostPaths.moduleConfigDir(dataFolder, "sync-websocket").resolve("config.yml"),
-                dataFolder.resolve("manager/config/sync-websocket/config.yml"),
-                dataFolder.resolve("config/sync-websocket/config.yml"),
+
+        Path websocket = HostPaths.moduleConfigDir(dataFolder, "sync-websocket").resolve("config.yml");
+        repair(logger, websocket,
+                dataFolder.resolve("config/manager/sync-websocket/config.yml"),
+                dataFolder.resolve("manager/config/sync-websocket/config.yml"));
+        install(resources, logger, "defaults/sync/websocket.yml", websocket,
                 dataFolder.resolve("sync/websocket.yml"));
-        install(resources, logger, "defaults/inworld.yml",
-                HostPaths.moduleConfigDir(dataFolder, "inworld").resolve("config.yml"),
-                dataFolder.resolve("manager/config/inworld/config.yml"),
-                dataFolder.resolve("config/inworld/config.yml"),
+
+        Path inworld = HostPaths.moduleConfigDir(dataFolder, "inworld").resolve("config.yml");
+        repair(logger, inworld,
+                dataFolder.resolve("config/manager/inworld/config.yml"),
+                dataFolder.resolve("manager/config/inworld/config.yml"));
+        install(resources, logger, "defaults/inworld.yml", inworld,
                 dataFolder.resolve("inworld.yml"));
-        install(resources, logger, "defaults/rules.yml",
-                HostPaths.moduleConfigDir(dataFolder, "iflow-firewall").resolve("rules.yml"),
-                dataFolder.resolve("manager/config/iflow-firewall/rules.yml"),
-                dataFolder.resolve("config/iflow-firewall/rules.yml"),
+
+        Path firewallRules = HostPaths.moduleConfigDir(dataFolder, "iflow-firewall")
+                .resolve("rules.yml");
+        repair(logger, firewallRules,
+                dataFolder.resolve("config/manager/iflow-firewall/rules.yml"),
+                dataFolder.resolve("manager/config/iflow-firewall/rules.yml"));
+        install(resources, logger, "defaults/rules.yml", firewallRules,
                 dataFolder.resolve("rules.yml"));
+
+        Path iflowHub = HostPaths.moduleConfigDir(dataFolder, "iflow").resolve("config.yml");
+        repair(logger, iflowHub,
+                dataFolder.resolve("config/manager/iflow/config.yml"),
+                dataFolder.resolve("manager/config/iflow/config.yml"));
+        install(resources, logger, "defaults/iflow.yml", iflowHub,
+                dataFolder.resolve("iflow.yml"));
+    }
+
+    /**
+     * Repara una ruta incorrecta moviendo el archivo a la ruta canónica. No es
+     * un fallback: el runtime nunca lee {@code config/manager} ni
+     * {@code manager/config}.
+     */
+    private static void repair(PluginLogger logger, Path canonical, Path... incorrect) {
+        if (Files.exists(canonical)) {
+            return;
+        }
+        for (Path source : incorrect) {
+            if (source == null || !Files.isRegularFile(source)) {
+                continue;
+            }
+            try {
+                Files.createDirectories(canonical.getParent());
+                Files.move(source, canonical);
+                logger.info("Incorrect config path repaired: " + source + " -> " + canonical);
+                return;
+            } catch (IOException exception) {
+                logger.warn("Cannot repair " + source + " to " + canonical + ": "
+                        + exception.getMessage());
+            }
+        }
     }
 
     private static void install(Function<String, InputStream> resources, PluginLogger logger,
