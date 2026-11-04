@@ -29,6 +29,7 @@ import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
+import me.majhrs16.suite.host.config.HostPaths;
 import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.manager.apt.AptInstaller;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
@@ -48,7 +49,7 @@ import me.majhrs16.suite.manager.spi.PackageEntry;
  * <pre>
  *   &lt;data&gt;/manager/library/packages   installed module JARs
  *   &lt;data&gt;/manager/library/status     installation database
- *   &lt;data&gt;/manager/config/&lt;module&gt;     module configuration
+ *   &lt;data&gt;/config/manager/&lt;module&gt;     module configuration
  *   &lt;data&gt;/manager/runtime            transient runtime state
  * </pre>
  */
@@ -89,7 +90,7 @@ public final class SuiteRuntime implements AutoCloseable {
         this.dataDir = Objects.requireNonNull(dataDir, "dataDir").toAbsolutePath().normalize();
         this.managerDir = this.dataDir.resolve("manager");
         this.libraryRoot = managerDir.resolve("library");
-        this.configRoot = managerDir.resolve("config");
+        this.configRoot = HostPaths.moduleConfigRoot(this.dataDir);
         this.runtimeDir = managerDir.resolve("runtime");
         this.ports = Objects.requireNonNull(ports, "ports");
         this.logger = Objects.requireNonNull(logger, "logger");

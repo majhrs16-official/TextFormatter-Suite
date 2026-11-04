@@ -52,7 +52,7 @@
 |-----------|------|
 | `Observability` | Metrics facade: `start()`, `stop()`, health summary, metrics sink installation |
 | `ObservabilityActivator` | Package lifecycle: publishes `HealthCheckRegistry` and `Observability` |
-| `ObservabilityConfig` | Reads `config/observability/config.yml` |
+| `ObservabilityConfig` | Reads `config/manager/observability/config.yml` |
 | `MetricsCollector` | Collects: JVM (memory, threads, GC), CPU, custom counters |
 | `HealthCheckRegistry` | Registers health checks: `liveness`, `readiness` |
 | `MetricsEndpoint` | HTTP handler: `GET /metrics` → Prometheus format, `GET /health` |
@@ -93,7 +93,7 @@ Host adapter mounts /debug from host.debug.DebugEndpoint
 
 ## 7b. Configuration
 
-`config/observability/config.yml`:
+`config/manager/observability/config.yml`:
 
 ```yaml
 enabled: true

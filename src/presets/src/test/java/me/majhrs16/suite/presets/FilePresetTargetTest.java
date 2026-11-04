@@ -59,7 +59,7 @@ class FilePresetTargetTest {
         assertThat(nested(suite, "chat", "claim-mode")).isEqualTo("clear-recipients");
 
         Map<String, Object> channelYaml = yaml(
-            tempDir.resolve("manager/config/textformatter/channels/chat.global.yml"));
+            tempDir.resolve("config/manager/textformatter/channels/chat.global.yml"));
         assertThat(channelYaml.get("name")).isEqualTo("chat.global");
         assertThat(channelYaml.get("type")).isEqualTo("CHAT");
         assertThat(channelYaml.get("permission")).isEqualTo("suite.chat");
@@ -70,25 +70,25 @@ class FilePresetTargetTest {
         assertThat((List<?>) channelYaml.get("sounds")).hasSize(1);
 
         Map<String, Object> translator = yaml(
-            tempDir.resolve("manager/config/chattranslator/translators/libre.yml"));
+            tempDir.resolve("config/manager/chattranslator/translators/libre.yml"));
         assertThat(translator.get("provider")).isEqualTo("libre");
         assertThat(translator.get("active")).isEqualTo(true);
         assertThat(translator.get("base-url")).isEqualTo("https://libre");
         assertThat(translator.get("api-key")).isEqualTo("key");
 
-        assertThat(yaml(tempDir.resolve("manager/config/sync-discord/config.yml")))
+        assertThat(yaml(tempDir.resolve("config/manager/sync-discord/config.yml")))
             .containsEntry("token", "t")
             .containsEntry("channel", "42");
-        assertThat(yaml(tempDir.resolve("manager/config/sync-telegram/config.yml")))
+        assertThat(yaml(tempDir.resolve("config/manager/sync-telegram/config.yml")))
             .containsEntry("chatId", "7");
-        assertThat(yaml(tempDir.resolve("manager/config/sync-http/config.yml")))
+        assertThat(yaml(tempDir.resolve("config/manager/sync-http/config.yml")))
             .containsEntry("outboundUrl", "https://hook")
             .containsEntry("inboundPort", "8080")
             .containsEntry("inboundPath", "/in");
-        assertThat(yaml(tempDir.resolve("manager/config/sync-socket/udp.yml")))
+        assertThat(yaml(tempDir.resolve("config/manager/sync-socket/udp.yml")))
             .containsEntry("remoteHost", "127.0.0.1")
             .containsEntry("remotePort", "9000");
-        assertThat(yaml(tempDir.resolve("manager/config/sync-velocity-core/config.yml")))
+        assertThat(yaml(tempDir.resolve("config/manager/sync-velocity-core/config.yml")))
             .containsEntry("secret", "s")
             .containsEntry("mapping", "* -> chat.hub")
             .containsEntry("servers", List.of("lobby", "survival"));
@@ -132,13 +132,13 @@ class FilePresetTargetTest {
 
         assertThat(manager.apply("standard", new FilePresetTarget(tempDir))).isTrue();
 
-        assertThat(tempDir.resolve("manager/config/textformatter/channels/chat.global.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/chattranslator/translators/google.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/sync-discord/config.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/sync-telegram/config.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/sync-http/config.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/sync-socket/tcp.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/sync-velocity-core/config.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/textformatter/channels/chat.global.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/chattranslator/translators/google.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/sync-discord/config.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/sync-telegram/config.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/sync-http/config.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/sync-socket/tcp.yml")).exists();
+        assertThat(tempDir.resolve("config/manager/sync-velocity-core/config.yml")).exists();
     }
 
     @Test
@@ -153,7 +153,7 @@ class FilePresetTargetTest {
         new FilePresetTarget(tempDir).applyChannel(channel);
 
         Map<String, Object> yaml = yaml(
-            tempDir.resolve("manager/config/textformatter/channels/chat.test.yml"));
+            tempDir.resolve("config/manager/textformatter/channels/chat.test.yml"));
         assertThat(yaml.get("messages")).isEqualTo(List.of("<white>%content%</white>"));
     }
 

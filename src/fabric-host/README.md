@@ -26,7 +26,7 @@
   `PermissionChecker`, `UserLanguageStore`, `PlaceholderResolver` y
   `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **Default configuration** — `DefaultConfigInstaller` copia los defaults del
-  host a `config/suite/` y los de cada módulo a `manager/config/<module>/`;
+  host a `config/suite/` y los de cada módulo a `config/manager/<module>/`;
   migra archivos legacy sin sobrescribir la configuración existente.
 - **In-world adapter** — `FabricInWorldHandler` consume `InWorldService` y
   `MessageRenderer`.

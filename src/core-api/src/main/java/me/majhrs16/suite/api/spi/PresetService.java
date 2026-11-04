@@ -13,7 +13,7 @@ import java.util.function.Consumer;
  * host never imports the preset implementation.</p>
  *
  * <p>The suite data directory contains host settings under {@code config/suite/}
- * and module-owned settings under {@code manager/config/<module>/}; the
+ * and module-owned settings under {@code config/manager/<module>/}; the
  * implementation is responsible for writing each part to its canonical
  * location.</p>
  */

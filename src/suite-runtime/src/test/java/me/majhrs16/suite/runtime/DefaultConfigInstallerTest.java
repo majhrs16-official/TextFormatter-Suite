@@ -39,40 +39,56 @@ class DefaultConfigInstallerTest {
         assertThat(dir.resolve("config/suite/config.yml")).hasContent("quick-look: true\n");
         assertThat(dir.resolve("config/suite/commands.yml")).hasContent("root: [suite]\n");
         assertThat(dir.resolve("config/suite/messages.yml")).hasContent("prefix: suite\n");
-        assertThat(dir.resolve("manager/config/textformatter/channels/chat.global.yml"))
+        assertThat(dir.resolve("config/manager/textformatter/channels/chat.global.yml"))
                 .hasContent("path: chat.global\n");
-        assertThat(dir.resolve("manager/config/chattranslator/translators/google.yml"))
+        assertThat(dir.resolve("config/manager/chattranslator/translators/google.yml"))
                 .hasContent("provider: google\n");
-        assertThat(dir.resolve("manager/config/sync-discord/config.yml"))
+        assertThat(dir.resolve("config/manager/sync-discord/config.yml"))
                 .hasContent("enabled: false\n");
-        assertThat(dir.resolve("manager/config/sync-websocket/config.yml"))
+        assertThat(dir.resolve("config/manager/sync-websocket/config.yml"))
                 .hasContent("enabled: false\n");
-        assertThat(dir.resolve("manager/config/inworld/config.yml"))
+        assertThat(dir.resolve("config/manager/inworld/config.yml"))
                 .hasContent("enabled: false\n");
-        assertThat(dir.resolve("manager/config/iflow-firewall/rules.yml"))
+        assertThat(dir.resolve("config/manager/iflow-firewall/rules.yml"))
                 .hasContent("rules: []\n");
         assertThat(dir.resolve("config/textformatter/channels/chat.global.yml"))
                 .doesNotExist();
     }
 
     @Test
-    void migratesLegacyModuleConfigToManagerScopedPath() throws Exception {
+    void migratesLegacyModuleConfigToCanonicalPath() throws Exception {
         Path legacy = dir.resolve("config/textformatter/channels/chat.global.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy, "path: legacy\n");
 
         install(Map.of("/defaults/channels/chat.global.yml", "path: default\n"));
 
-        assertThat(dir.resolve("manager/config/textformatter/channels/chat.global.yml"))
+        assertThat(dir.resolve("config/manager/textformatter/channels/chat.global.yml"))
                 .hasContent("path: legacy\n");
         assertThat(legacy).hasContent("path: legacy\n");
     }
 
     @Test
+    void migratesPreviousManagerScopedConfigToCanonicalPath() throws Exception {
+        Path previous = dir.resolve("manager/config/textformatter/channels/chat.global.yml");
+        Files.createDirectories(previous.getParent());
+        Files.writeString(previous, "path: previous\n");
+
+        install(Map.of("/defaults/channels/chat.global.yml", "path: default\n"));
+
+        assertThat(dir.resolve("config/manager/textformatter/channels/chat.global.yml"))
+                .hasContent("path: previous\n");
+        assertThat(previous).hasContent("path: previous\n");
+    }
+
+    @Test
     void canonicalModuleConfigWinsOverLegacyAndDefault() throws Exception {
-        Path canonical = dir.resolve("manager/config/textformatter/channels/chat.global.yml");
+        Path canonical = dir.resolve("config/manager/textformatter/channels/chat.global.yml");
         Files.createDirectories(canonical.getParent());
         Files.writeString(canonical, "path: canonical\n");
+        Path previous = dir.resolve("manager/config/textformatter/channels/chat.global.yml");
+        Files.createDirectories(previous.getParent());
+        Files.writeString(previous, "path: previous\n");
         Path legacy = dir.resolve("config/textformatter/channels/chat.global.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy, "path: legacy\n");

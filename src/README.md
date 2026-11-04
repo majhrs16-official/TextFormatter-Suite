@@ -238,7 +238,7 @@ TextFormatter Suite
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
 | `SuiteRuntime` | `suite-runtime` | Composition root: installs packages, builds `SuiteHost`, loads the configured `CommandRoot`, publishes commands and `MessageDispatch` |
-| `DefaultConfigInstaller` | `suite-runtime` | First-boot defaults: host files in `config/suite/`, module files in `manager/config/<module>/`, legacy migration |
+| `DefaultConfigInstaller` | `suite-runtime` | First-boot defaults: host files in `config/suite/`, module files in `config/manager/<module>/`, legacy migration |
 | `SuiteHost` | `host` | Neutral pipeline: holds services and dispatches messages |
 | `ModuleLoader` | `kernel` | Discovers and loads `Module` implementations via SPI |
 | `ModuleGraph` | `kernel` | Resolves module dependency graph |
@@ -332,7 +332,7 @@ Config File (YAML)
          ↓
 ConfigLoader.load() → HostConfig
          ↓
-Packages load their own canonical config (config/<package>/...)
+Packages load their own canonical config (config/manager/<package>/...)
          ↓
 SuiteRuntime builds SuiteHost with the active services
          ↓

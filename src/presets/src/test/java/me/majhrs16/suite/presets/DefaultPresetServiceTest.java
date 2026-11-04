@@ -23,7 +23,7 @@ class DefaultPresetServiceTest {
 
         assertThat(reloaded.get()).isEqualTo("standard");
         assertThat(tempDir.resolve("config/suite/config.yml")).exists();
-        assertThat(tempDir.resolve("manager/config/textformatter/channels/chat.global.yml"))
+        assertThat(tempDir.resolve("config/manager/textformatter/channels/chat.global.yml"))
             .exists();
     }
 

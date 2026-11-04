@@ -10,7 +10,7 @@
 - **Preset management** — `PresetManager` registers, retrieves, imports, exports and applies presets
 - **YAML import/export** — reads/writes preset files with SnakeYAML `SafeConstructor`
 - **Preset application** — `Preset.apply(PresetTarget)` converts every preset entry to neutral values and calls the target
-- **Canonical file target** — `FilePresetTarget` writes suite settings under `config/suite/` and module settings under `manager/config/<module>/`, merging with existing YAML instead of replacing unrelated keys
+- **Canonical file target** — `FilePresetTarget` writes suite settings under `config/suite/` and module settings under `config/manager/<module>/`, merging with existing YAML instead of replacing unrelated keys
 - **Runtime activation** — `PresetsActivator` creates the catalog in the module config directory and publishes `PresetManager` plus `PresetService` as scoped services
 - **Command integration** — `suite-runtime` exposes `presets list` and `presets apply <id>`; a successful application reloads the active modules
 - **Module descriptor** — `PresetsModule` declares the `presets` capability
@@ -43,7 +43,7 @@ The distribution is a `PACKAGE` with no package dependencies; `core-api` is prov
 
 ## 4. Consumers
 
-`suite-runtime` installs the distribution ZIP and activates `PresetsActivator`. The activator publishes both `PresetManager` and the neutral `PresetService` port; the latter selects a preset, calls `PresetManager.apply(id, new FilePresetTarget(suiteDir))`, and only after success invokes the runtime reload callback. The runtime resolves `PresetService` from the service registry, so it does not import the presets package. The built-in `presets` command passes the plugin data directory and `SuiteRuntime.reloadActiveModules()`; the target writes host settings to `config/suite/` and module settings to `manager/config/`.
+`suite-runtime` installs the distribution ZIP and activates `PresetsActivator`. The activator publishes both `PresetManager` and the neutral `PresetService` port; the latter selects a preset, calls `PresetManager.apply(id, new FilePresetTarget(suiteDir))`, and only after success invokes the runtime reload callback. The runtime resolves `PresetService` from the service registry, so it does not import the presets package. The built-in `presets` command passes the plugin data directory and `SuiteRuntime.reloadActiveModules()`; the target writes host settings to `config/suite/` and module settings to `config/manager/`.
 
 ---
 
@@ -54,7 +54,7 @@ The distribution is a `PACKAGE` with no package dependencies; `core-api` is prov
 | `PresetManager` | Registry, built-in definitions, YAML import/export, `apply(id, target)` |
 | `Preset` | Root preset model + nested `PresetConfig`, `PresetChannel`, `PresetTranslator`, `PresetSync`; `apply(PresetTarget)` |
 | `PresetTarget` | Neutral port implemented by a persistence adapter |
-| `FilePresetTarget` | Real file-backed target for `config/suite/` plus `manager/config/<module>/` |
+| `FilePresetTarget` | Real file-backed target for `config/suite/` plus `config/manager/<module>/` |
 | `PresetApplyException` | Explicit failure when a preset cannot be persisted or contains an unsupported sync type |
 | `DefaultPresetService` | Implements `api.spi.PresetService`; applies the catalog through `FilePresetTarget` and reloads only after success |
 | `PresetsActivator` | `ModuleActivator`; creates the catalog and registers `PresetManager` plus `PresetService` |
@@ -70,9 +70,9 @@ Preset model ──→ PresetManager.exportToYaml() ──→ Preset YAML
 Built-in definitions ──→ PresetManager.getPreset(id)
 Preset ──→ Preset.apply(PresetTarget) ──→ config + channels + translators + sync
 FilePresetTarget ──→ config/suite/config.yml
-                 ──→ manager/config/textformatter/channels/<channel>.yml
-                 ──→ manager/config/chattranslator/translators/<provider>.yml
-                 ──→ manager/config/sync-discord|sync-telegram|sync-http|sync-socket|sync-velocity-core/...
+                 ──→ config/manager/textformatter/channels/<channel>.yml
+                 ──→ config/manager/chattranslator/translators/<provider>.yml
+                 ──→ config/manager/sync-discord|sync-telegram|sync-http|sync-socket|sync-velocity-core/...
 ```
 
 `Preset.apply` is a real application algorithm, not a placeholder. `FilePresetTarget` merges each patch into existing YAML, preserves unrelated keys and writes atomically. There is no inline expression engine; runtime routing remains in iFlow VM programs.

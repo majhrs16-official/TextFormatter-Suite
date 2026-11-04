@@ -1613,7 +1613,7 @@ modelo de paquetes de ADR-029.
 catálogo con `FilePresetTarget`, pero no había comando para seleccionar un preset. El callback de
 recarga era una promesa del contrato sin una operación runtime que lo cumpliera: `SuiteRuntime`
 solo recargaba `commands.yml`. Además, el host lee su configuración de `config/suite/`, mientras
-que `ModuleHost` entrega a cada módulo `manager/config/<module>/`; un único directorio base no
+que `ModuleHost` entrega a cada módulo `config/manager/<module>/`; un único directorio base no
 podía escribir ambas ubicaciones.
 
 **Decisión.**
@@ -1622,7 +1622,7 @@ podía escribir ambas ubicaciones.
    permiso `textformatter.suite.admin`. El comando resuelve `PresetService` desde el
    `ServiceRegistry`; si el paquete no está activo responde explícitamente y no inventa catálogo.
 2. `FilePresetTarget` escribe la configuración del host en `config/suite/` y la de cada módulo en
-   `manager/config/<module>/`. El directorio base sigue siendo el data folder del adaptador.
+   `config/manager/<module>/`. El directorio base sigue siendo el data folder del adaptador.
 3. Tras persistir un preset, el callback ejecuta `SuiteRuntime.reloadActiveModules()`: cierra el
    pipeline, detiene los módulos activos en orden inverso, los reactiva en el orden de activación y
    reconstruye el pipeline. No se recarga el conjunto instalado ni se activan módulos inactivos.
@@ -1652,13 +1652,16 @@ podía escribir ambas ubicaciones.
 - Aplicar un preset es una operación de ciclo de vida completo: puede ser más lenta que una
   escritura de archivos, pero deja archivos y servicios coherentes.
 - Los bootstraps de Spigot y Fabric usan `DefaultConfigInstaller` para copiar los defaults del
-  host a `config/suite/` y los de cada módulo a `manager/config/<module>/`. Los archivos legacy se
+  host a `config/suite/` y los de cada módulo a `config/manager/<module>/`. Los archivos legacy se
   migran a la ruta canónica y nunca se sobrescribe una configuración existente; los candidatos
   legacy se retiran en F9.
 - La recarga depende de que los módulos liberen recursos. Un módulo que no lo hace exige reinicio;
   el comando lo dice en lugar de ocultarlo.
 - `FilePresetTarget` conoce el layout canónico del runtime (`config/suite/` y
-  `manager/config/<module>/`). Un cambio de layout requiere actualizar el target y sus tests.
+  `config/manager/<module>/`). Un cambio de layout requiere actualizar el target y sus tests.
+- **Corrección (2026-11-03):** la ruta canónica de módulos es `config/manager/<module>/`.
+  `manager/config/<module>/` fue el layout intermedio del primer borrador y queda como candidato
+  legacy migrable; no es una segunda ruta canónica.
 - Los tests cubren el orden de parada/reinicio, la conservación de servicios, la lista, la
   aplicación, el preset desconocido y el paquete inactivo.
 

@@ -69,13 +69,14 @@ class SuiteRuntimeTest {
             runtime.start();
 
             assertTrue(runtime.isStarted());
+            assertEquals(tempDir.resolve("data/config/manager"), runtime.configRoot());
             assertEquals(List.of("pre"), runtime.activeModules());
             assertEquals(ModuleState.ACTIVE, runtime.snapshot().get("pre"));
 
             runtime.stop();
             runtime.stop();
             assertFalse(runtime.isStarted());
-            assertTrue(Files.exists(tempDir.resolve("data/manager/config/pre/released.marker")),
+            assertTrue(Files.exists(tempDir.resolve("data/config/manager/pre/released.marker")),
                     "stopping the runtime must deactivate installed modules");
 
             runtime.start();
@@ -83,7 +84,7 @@ class SuiteRuntimeTest {
                     "a stopped runtime can be started again");
         }
 
-        assertTrue(Files.exists(tempDir.resolve("data/manager/config/pre/released.marker")),
+        assertTrue(Files.exists(tempDir.resolve("data/config/manager/pre/released.marker")),
                 "closing the runtime must deactivate installed modules");
     }
 

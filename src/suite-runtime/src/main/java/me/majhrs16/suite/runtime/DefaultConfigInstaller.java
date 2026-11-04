@@ -15,12 +15,13 @@ import me.majhrs16.suite.host.config.HostPaths;
  * First-boot installer for the bundled configuration defaults.
  *
  * <p>Host settings are written under {@code config/suite/}; module-owned
- * settings are written under {@code manager/config/<module>/}, the same root
+ * settings are written under {@code config/manager/<module>/}, the same root
  * that {@code ModuleHost} passes to each activator. Existing canonical files
  * are never overwritten.</p>
  *
- * <p>Legacy files from the previous flat and {@code config/<module>} layouts
- * are migrated to the manager-scoped path so activators read the same content
+ * <p>Legacy files from the previous flat, {@code config/<module>} and
+ * {@code manager/config/<module>} layouts are migrated to the canonical
+ * {@code config/manager/<module>} path so activators read the same content
  * they used before. The legacy candidates are scheduled for removal in F9,
  * once installations created before the manager-scoped layout are no longer
  * supported.</p>
@@ -60,28 +61,34 @@ public final class DefaultConfigInstaller {
             install(resources, logger, "defaults/channels/" + name + ".yml",
                     HostPaths.moduleConfigDir(dataFolder, "textformatter")
                             .resolve("channels/" + name + ".yml"),
+                    dataFolder.resolve("manager/config/textformatter/channels/" + name + ".yml"),
                     dataFolder.resolve("config/textformatter/channels/" + name + ".yml"),
                     dataFolder.resolve("channels/" + name + ".yml"));
         }
         install(resources, logger, "defaults/translators/google.yml",
                 HostPaths.moduleConfigDir(dataFolder, "chattranslator")
                         .resolve("translators/google.yml"),
+                dataFolder.resolve("manager/config/chattranslator/translators/google.yml"),
                 dataFolder.resolve("config/chattranslator/translators/google.yml"),
                 dataFolder.resolve("translators/google.yml"));
         install(resources, logger, "defaults/sync/discord.yml",
                 HostPaths.moduleConfigDir(dataFolder, "sync-discord").resolve("config.yml"),
+                dataFolder.resolve("manager/config/sync-discord/config.yml"),
                 dataFolder.resolve("config/sync-discord/config.yml"),
                 dataFolder.resolve("sync/discord.yml"));
         install(resources, logger, "defaults/sync/websocket.yml",
                 HostPaths.moduleConfigDir(dataFolder, "sync-websocket").resolve("config.yml"),
+                dataFolder.resolve("manager/config/sync-websocket/config.yml"),
                 dataFolder.resolve("config/sync-websocket/config.yml"),
                 dataFolder.resolve("sync/websocket.yml"));
         install(resources, logger, "defaults/inworld.yml",
                 HostPaths.moduleConfigDir(dataFolder, "inworld").resolve("config.yml"),
+                dataFolder.resolve("manager/config/inworld/config.yml"),
                 dataFolder.resolve("config/inworld/config.yml"),
                 dataFolder.resolve("inworld.yml"));
         install(resources, logger, "defaults/rules.yml",
                 HostPaths.moduleConfigDir(dataFolder, "iflow-firewall").resolve("rules.yml"),
+                dataFolder.resolve("manager/config/iflow-firewall/rules.yml"),
                 dataFolder.resolve("config/iflow-firewall/rules.yml"),
                 dataFolder.resolve("rules.yml"));
     }

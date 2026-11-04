@@ -563,7 +563,7 @@ class PackageRuntimeTest {
                     () -> "activation failed: " + activation.get(0).message());
             assertEquals(ModuleState.ACTIVE, fixture.host.state("textformatter").orElseThrow());
             assertTrue(Files.isDirectory(
-                    fixture.manager.getManagerDir().resolve("config/textformatter/channels")));
+                    fixture.configRoot().resolve("textformatter/channels")));
         }
     }
 
@@ -628,7 +628,7 @@ class PackageRuntimeTest {
                     () -> "activation failed: " + activation.get(0).message());
             assertEquals(ModuleState.ACTIVE, fixture.host.state("presets").orElseThrow());
             assertTrue(Files.isDirectory(
-                    fixture.manager.getManagerDir().resolve("config/presets")),
+                    fixture.configRoot().resolve("presets")),
                     "the activator must create the custom preset directory");
         }
     }
@@ -762,8 +762,8 @@ class PackageRuntimeTest {
 
         try (Fixture fixture = fixture()) {
             installDependencies(fixture, "json", "snakeyaml");
-            Path translators = fixture.manager.getManagerDir()
-                    .resolve("config/chattranslator/translators");
+            Path translators = fixture.configRoot()
+                    .resolve("chattranslator/translators");
             Files.createDirectories(translators);
             Files.writeString(translators.resolve("google.yml"), """
                 provider: google
@@ -848,7 +848,7 @@ class PackageRuntimeTest {
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-discord");
+            Path configDir = fixture.configRoot().resolve("sync-discord");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -902,7 +902,7 @@ class PackageRuntimeTest {
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-velocity-core");
+            Path configDir = fixture.configRoot().resolve("sync-velocity-core");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -955,7 +955,7 @@ class PackageRuntimeTest {
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-socket");
+            Path configDir = fixture.configRoot().resolve("sync-socket");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("tcp.yml"), """
                     enabled: true
@@ -996,7 +996,7 @@ class PackageRuntimeTest {
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-telegram");
+            Path configDir = fixture.configRoot().resolve("sync-telegram");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -1030,7 +1030,7 @@ class PackageRuntimeTest {
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-http");
+            Path configDir = fixture.configRoot().resolve("sync-http");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -1067,7 +1067,7 @@ class PackageRuntimeTest {
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
             assertTrue(fixture.runtime.installLocal(busZip, false).get(0).isSuccess());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/sync-websocket");
+            Path configDir = fixture.configRoot().resolve("sync-websocket");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -1099,7 +1099,7 @@ class PackageRuntimeTest {
             installDependencies(fixture, "snakeyaml", "prometheus");
             assertTrue(fixture.runtime.installLocal(commonZip, false).isEmpty());
 
-            Path configDir = fixture.manager.getManagerDir().resolve("config/observability");
+            Path configDir = fixture.configRoot().resolve("observability");
             Files.createDirectories(configDir);
             Files.writeString(configDir.resolve("config.yml"), """
                     enabled: true
@@ -1190,18 +1190,19 @@ class PackageRuntimeTest {
                 managerDir, logger, "spigot", "x86_64", "linux", 21);
         manager.initialize();
 
+        Path configRoot = suiteRoot.resolve("config/manager");
         ModuleHost host = new ModuleHost(
                 managerDir.resolve("library"),
-                managerDir.resolve("config"),
+                configRoot,
                 PlatformInfo.current(platform, "1.0"),
                 logger,
                 new RuntimeStateStore(managerDir.resolve("runtime"), logger));
         PackageRuntime runtime = new PackageRuntime(manager, host, logger);
-        return new Fixture(manager, host, runtime);
+        return new Fixture(manager, host, runtime, configRoot);
     }
 
-    private record Fixture(ManagerFacade manager, ModuleHost host, PackageRuntime runtime)
-            implements AutoCloseable {
+    private record Fixture(ManagerFacade manager, ModuleHost host, PackageRuntime runtime,
+                           Path configRoot) implements AutoCloseable {
 
         @Override
         public void close() {

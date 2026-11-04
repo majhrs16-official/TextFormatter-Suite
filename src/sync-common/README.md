@@ -11,7 +11,7 @@
   non-map YAML file yields an empty map instead of throwing.
 - Coerce scalar YAML values (`string`, `bool`, `integer`, `longValue`) with
   explicit fallbacks.
-- Resolve the canonical `config/sync-*/` paths and the legacy `sync/*.yml`
+- Resolve the canonical `config/manager/sync-*/` paths and the legacy `sync/*.yml`
   fallback used during migration.
 - Provide the platform-neutral event helpers used by `sync-bukkit` and
   `sync-fabric`: channel selection, translation gating, `Message` construction

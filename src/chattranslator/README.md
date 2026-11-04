@@ -11,8 +11,8 @@ manager in sync with the module lifecycle.
 
 - Entry point: `ChatTranslatorActivator`.
 - Package type: `PACKAGE` (`modulePackage` produces the distribution ZIP).
-- Configuration: `<manager>/config/chattranslator/config.yml` and
-  `<manager>/config/chattranslator/translators/*.yml`.
+- Configuration: `<manager>/config/manager/chattranslator/config.yml` and
+  `<manager>/config/manager/chattranslator/translators/*.yml`.
 - Providers: `gtranslate` and `ltranslate` are separate packages. They require
   `chattranslator` and publish `TranslatorProvider` in the `ServiceRegistry`.
 - Hot refresh: the activator subscribes to `ModuleActivatedEvent` and

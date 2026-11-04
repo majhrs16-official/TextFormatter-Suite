@@ -40,7 +40,7 @@ when a matching `VelocityConnectionFactory` appears or disappears.
 | Component | Role |
 |-----------|------|
 | `VelocitySink` | Neutral `SyncSink`: encode/decode, mapping, retry, metrics, health. |
-| `VelocityConfig` | Loads `config/sync-velocity-core/config.yml`; no Velocity types. |
+| `VelocityConfig` | Loads `config/manager/sync-velocity-core/config.yml`; no Velocity types. |
 | `SyncVelocityActivator` | Resolves `SyncBus` + `VelocityConnectionFactory`, hot attach/detach. |
 | `SyncVelocityModule` | Legacy kernel descriptor, kept for the kernel graph. |
 
@@ -57,7 +57,7 @@ Ports in `core-api` (`me.majhrs16.suite.api.velocity`):
 
 ## 4. Configuration
 
-Canonical path: `config/sync-velocity-core/config.yml`. The legacy
+Canonical path: `config/manager/sync-velocity-core/config.yml`. The legacy
 `sync/velocity.yml` is read during migration.
 
 ```yaml

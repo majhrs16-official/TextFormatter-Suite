@@ -97,8 +97,8 @@ final class FixtureModules {
                                                  String version, String victimFile)
             throws IOException {
         String startBody = """
-                Path packages = context.configDir().getParent().getParent()
-                        .resolve("library/packages");
+                Path packages = context.configDir().getParent().getParent().getParent()
+                        .resolve("manager/library/packages");
                 Files.writeString(packages.resolve("VICTIM"), "corrupt");
                 throw new IllegalStateException("fixture failure after corrupting " + "VICTIM");
                 """.replace("VICTIM", victimFile);
