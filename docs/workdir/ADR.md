@@ -1675,7 +1675,7 @@ podía escribir ambas ubicaciones.
 
 ## Decisión 2026-11-03 — contrato de política iFlow v3 para la paridad VM/Wasm (ADR-031)
 
-**Estado:** Aceptada. No implementada.
+**Estado:** Aceptada. W1/W2 implementados en `iflow-wasm`; W3/W3.5 pendientes.
 
 **Contexto.** La paridad W3.5 entre `iflow-vm` (spec v3) e `iflow-wasm` estaba bloqueada por
 decisiones de contrato que afectaban a la semántica observable: entrega, mutación de canal,
@@ -1764,4 +1764,5 @@ del mensaje, no el estado de la máquina, el tiempo, la cola ni la entrega.
 - Spec v3: `docs/prompts/diseno/iflow-cpu-implement.md` §5.4 y cierre de §8.8.
 - Estado y criterios de W3.5: `docs/workdir/PLAN.md`.
 - Ratificación del usuario: 2026-11-03.
-- Implementación: pendiente; este ADR no declara código ni tests nuevos.
+- Implementación: W1/W2 en `src/iflow-wasm` (contrato `PolicyAbiV3`, `TlvCodec`, `PolicySession`,
+  `PolicyHost` y `WasmPolicyEngine` aislado, con tests); W3/W3.5 pendientes.

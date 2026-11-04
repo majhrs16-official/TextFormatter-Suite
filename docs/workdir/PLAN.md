@@ -369,9 +369,9 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 > **Estado de las decisiones (2026-11-03):** D01–D05 están ratificadas en ADR-031, junto con
 > Q26, Q35–Q38, `IFLOW-MAN-31`, `IFLOW-MAN-43…45`, el ABI TLV y la regla de una sola decisión por
 > ejecución. D14–D16, D36R y D40–D43 ya estaban ratificadas. W3.5 queda desbloqueado en su contrato;
-> la implementación sigue pendiente. D06–D13 continúan propuestas y no bloquean este contrato. Las
-> decisiones de W3 sobre nombres/firmas de imports, validación de exports, hash/hot-reload y
-> selección de motor siguen abiertas.
+> W1/W2 están implementados en `iflow-wasm` y la paridad sigue pendiente. D06–D13 continúan
+> propuestas y no bloquean este contrato. Las decisiones de W3 sobre hash/hot-reload y selección de
+> motor siguen abiertas; nombres/firmas de imports y validación de exports quedaron cerrados en W1.
 
 > **No se hereda de la v2:** `LOG`/`processed`, `DROP`/`REJECT` como targets separados,
 > `REDIRECT`/`CHANNEL_REDIRECT`, `RATE_LIMIT` con backoff calculado por el host, `sleepMillis` como
