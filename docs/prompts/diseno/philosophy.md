@@ -2,6 +2,39 @@
 
 > *"Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario."*
 
+## 0. Régimen pre-1.0: una sola versión, cero compatibilidad prematura
+
+TextFormatter Suite está en fase de diseño fundacional. No existe todavía una versión estable, no hay
+producción y no se promete compatibilidad. Todo el proyecto se identifica con la base **1.0**:
+módulos, componentes, contratos, artefactos y esquemas de configuración. Los números `2.x`, `3.x` o
+superiores que aparezcan en el historial son etiquetas de iteración, no versiones publicadas ni
+promesas de compatibilidad.
+
+La versión oficial **1.0.0** es un hito de cierre, no un número de build. Se alcanzará únicamente
+cuando la suite completa, la integración de todos los módulos y todas las features estén terminadas
+y el betatesting/E2E en servidores reales haya validado el conjunto. Hasta entonces el proyecto
+opera en régimen de *rolling release*: los *breaking changes* están permitidos y son deseables para
+limpiar la deuda técnica antes de congelar la arquitectura.
+
+### Reglas de oro pre-1.0
+
+1. **Diseño limpio antes que compatibilidad.** Se prioriza la arquitectura hexagonal inversa, la
+   separación estricta entre frontend y backends, el tipado binario estricto en las fronteras y el
+   bajo nivel predecible. La compatibilidad con versiones anteriores no es un objetivo de esta fase.
+2. **Una sola base de versión.** Todo módulo, componente, contrato y configuración se alinea a
+   `1.0` (`1.0.0` para artefactos y `config-version: 1.0` para YAML). No se mantienen ramas de
+   versión ficticias ni matrices de compatibilidad.
+3. **Cero código de compatibilidad.** No se conservan adaptadores, alias, shims, dobles lectores,
+   rutas legacy ni módulos *deprecated* que existan solo para no romper instalaciones anteriores.
+   Cuando una decisión cambia, el camino viejo se elimina en el mismo cambio.
+4. **El camino viejo no se migra en runtime.** Si una instalación contiene rutas o formatos que ya
+   no son canónicos, se ignoran o se rechazan explícitamente; no se leen como fallback ni se
+   convierten silenciosamente.
+5. **Cada cambio deja el gate verde.** Código, tests, documentación y eliminación del camino viejo
+   forman una sola unidad de trabajo. Un *breaking change* no autoriza a dejar tests rojos.
+6. **La verdad antes que la apariencia.** Si una plataforma, un servidor o una combinación no se ha
+   probado, se declara desconocida. No se convierte una hipótesis en un resultado verde.
+
 ## 1. El Conflicto de la Dualidad en Sistemas Tradicionales
 
 ¿Por qué existen dos módulos que hacen exactamente lo mismo —como `iFlow-VM` e `iFlow-WASM`, cuyo propósito fundamental es programar mensajes—?
@@ -61,13 +94,21 @@ No se devuelve `parent`, `false` ni vacío fingiendo éxito. Lo no soportado lan
 
 Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario. No se fuerza un monolito a elegir un solo motor. Cada motor, backend o implementación es un módulo independiente instalable y reemplazable. Los motores opuestos para una misma tarea pueden coexistir como paquetes independientes; el usuario elige cuál instalar.
 
-## C7. Cambios con retrocompatibilidad ideal
+## C7. Sin retrocompatibilidad prematura
 
-Idealmente se mantiene retrocompatibilidad. Cuando no es posible, se rompe a propósito. Cada fase debe tener puertas de calidad, planes 100% completados y tests en verde. Está prohibido dejar código a medias; si una fase no se completa, se tiene que terminar (a menos que haya una razón explícita para lo contrario).
+En régimen pre-1.0 no se mantiene compatibilidad hacia atrás. Se rompe a propósito cuando la
+arquitectura lo necesita, se elimina el camino viejo en el mismo cambio y no se conservan
+adaptadores, alias ni parches de soporte. La compatibilidad prematura contamina la base de código
+(*bloatware*) y fija decisiones antes de que el diseño esté terminado. Cada fase debe tener puertas
+de calidad, planes completados y tests en verde; está prohibido dejar código a medias.
 
-## C8. Pruebas E2E descartadas
+## C8. Betatesting/E2E real en pre-1.0
 
-No se validará en servidores reales Spigot/Paper, Fabric ni proxies Velocity. La validación de plataformas se limita a compilación y tests automatizados que no requieran un servidor real.
+Hasta el hito 1.0.0, la validación incluye betatesting/E2E en servidores reales Spigot/Paper,
+Fabric y proxies Velocity. Los tests automatizados siguen siendo obligatorios y no se sustituyen
+por una prueba manual; el E2E real es una capa adicional para descubrir integraciones que un test
+aislado no puede demostrar. Una plataforma no probada se declara **desconocida**, no aprobada. No
+se declara estabilidad ni producción antes del hito 1.0.0.
 
 ## C9. Seguridad compartida: sandbox + dueño del repo
 
@@ -99,6 +140,15 @@ Esto obliga a dos disciplinas concretas:
 2. **Invariantes validados o soporte completo.** Cuando aparece una asimetría, se elige una de dos salidas: implementar la capacidad completa en todas las rutas, o declarar un invariante formal, validarlo en la frontera y fallar con un mensaje explícito cuando se incumpla. Lo que no se permite es asumir que la entrada siempre cumplirá el invariante sin comprobarlo.
 
 La misma regla se aplica al estado de recuperación. Un rollback no es exitoso porque el código lo diga: hay que verificar que cada versión anterior quedó activa y que cada versión nueva quedó fuera. Si la compensación falla, no se finge éxito ni se borran artefactos que aún pueden hacer falta: se conservan ambos lados y se marca `RESTART_REQUIRED` con una causa verificable. Los estados `FAILED`, `RESTART_REQUIRED` y «desconocido» existen para decir la verdad, no para decorar logs.
+
+## C14. `AUDITORIA.md` es efímera
+
+`docs/workdir/AUDITORIA.md` contiene **solo la auditoría vigente**, realizada por agentes o de forma
+externa. No es un archivo histórico ni un registro acumulativo. Cuando todos los bugs de la
+auditoría actual estén corregidos y cada corrección tenga su test de validación, el archivo se
+**reemplaza por completo** para el siguiente ciclo. El historial de auditorías vive exclusivamente en
+Git; no se conserva dentro del documento activo. Si una auditoría no está cerrada, sus hallazgos
+pendientes siguen visibles en el archivo actual y bloquean el avance de nuevas features.
 
 ---
 

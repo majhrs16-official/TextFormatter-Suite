@@ -3,14 +3,24 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-04 (**W1, W2 y W3 de `iflow-wasm` cerrados en su alcance de motor:** contrato v3 con módulo de imports `iflow`, firmas explícitas, export `decide`, TLV estricto y validación de firmas; `WasmModuleLoader` instancia con `ImportValues`; `PolicySession` implementa journal read-your-writes y decisión única; `PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve `PolicyOutcome`. La integración con `Router` se cerró en W3 con `WasmPolicyRouter`, SHA-256 obligatorio y hot-reload; la paridad `.flow` v3 queda para W3.5. Antes: **F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/<module>/`; `config/manager/<module>/` y `manager/config/<module>/` son rutas incorrectas que se corrigen y no se aceptan como fallback; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-11-04 (**W1, W2 y W3 de `iflow-wasm` cerrados en su alcance de motor:** contrato v3 con módulo de imports `iflow`, firmas explícitas, export `decide`, TLV estricto y validación de firmas; `WasmModuleLoader` instancia con `ImportValues`; `PolicySession` implementa journal read-your-writes y decisión única; `PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve `PolicyOutcome`. La integración con `Router` se cerró en W3 con `WasmPolicyRouter`, SHA-256 obligatorio y hot-reload; la paridad `.flow` v3 queda para W3.5. Antes: **F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/<module>/`; `config/manager/<module>/` y `manager/config/<module>/` son rutas incorrectas que se ignoran y no se aceptan como fallback; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+
+> **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
+> Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
+> `1.0` (`1.0.0` en artefactos, `config-version: 1.0` en YAML). No se mantiene
+> retrocompatibilidad, código de compatibilidad, aliases legacy ni ciclos de deprecación. Los
+> *breaking changes* son el modo normal hasta el hito `1.0.0`. El betatesting/E2E en servidores
+> reales Spigot/Paper, Fabric y Velocity forma parte del ciclo pre-1.0. `AUDITORIA.md` es efímera:
+> contiene solo la auditoría vigente y se reemplaza al cerrar sus bugs con tests. La hoja de ruta
+> inmediata está en «Purga pre-1.0 — hoja de ruta inmediata».
 
 > **Hub iFlow (2026-11-04, ADR-032):** se añadió el paquete `iflow` como hub de selección. Los
 > motores publican `IflowBackend`; el hub publica `IflowHub` y `Router`, elige un backend y aplica
 > fallback configurable. Configuración canónica: `config/iflow/config.yml` con
 > `engine: iflow-firewall|iflow-vm|iflow-wasm` y `fallback-on-unavailable`. Default
-> `iflow-firewall`. `SuiteRuntime` prefiere `IflowHub` sobre `Router`; `iflow.engine.kind` queda
-> legacy. `iflow-firewall`, `iflow-vm` e `iflow-wasm` ya publican su backend; Wasm exige SHA-256 y recarga automáticamente.
+> `iflow-firewall`. `SuiteRuntime` prefiere `IflowHub` sobre `Router`; `iflow.engine.kind` es deuda
+> legacy y se elimina en la purga pre-1.0 (ADR-034), no se conserva como fallback permanente.
+> `iflow-firewall`, `iflow-vm` e `iflow-wasm` ya publican su backend; Wasm exige SHA-256 y recarga automáticamente.
 
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
@@ -35,13 +45,54 @@
 
 > **Nota de estado (2026-10-27):** **ADR-019 reescrito** por decisión del usuario: I-019 deja de ser un arreglo de dependencias y pasa a ser una **reestructuración integral** de la suite. El objetivo es un runtime de módulos con carga dinámica, **hot unload/upgrade real**, Manager como orquestador del ciclo de vida y adapters Spigot/Fabric que solo implementan puertos de plataforma. **F0 cerrada, F1 completada, F2 completada como POC, F3 completada, F4a completada, F5 cerrada, F6 de paquetes neutrales completada, F4b, F4c y F4d cerradas**: `core-api` expone la API neutral de ciclo de vida (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`) y los contratos compartidos entre paquetes (`api.channel`, `api.iflow`), `suite-runtime` carga JARs reales desde `library/packages` con classloader aislado, orden de dependencias y liberación de recursos, `PackageRuntime` conecta instalación con activación manteniendo `library/status` como registro de instalación y `<manager>/runtime/modules.status` como estado transitorio, `SuiteRuntime` es el composition root neutral que orquesta manager, host y comandos sin depender de features, y los seis paquetes base (`textformatter`, `messages`, `chattranslator`, `iflow-vm`, `iflow-firewall`, `iflow-wasm`) se empaquetan como ZIP, se instalan y se activan desde sus `ModuleActivator`. El classloader acepta JARs de paquetes de dependencia desde `library/dependencies`; `logger` es el primer paquete de dependencia real. F6 de paquetes neutrales está completada: `transport` ya se empaqueta como dependencia, `gtranslate`/`ltranslate` se activan como proveedores de `chattranslator` (que refresca su `TranslatorManager` con los eventos de ciclo de vida) y `presets` ya se empaqueta como `PACKAGE` con `FilePresetTarget` real para config, canales, traductores y sync, `tester` ya es un `PACKAGE` neutral con `TestProbe`, `TestServiceFactory` y adapter Spigot, e `inworld` también es un `PACKAGE` neutral con `InWorldHandler`/`InWorldPlatform` y el listener Bukkit en `spigot-host`. F4e también está cerrada: la raíz de comandos se declara en `config/suite/commands.yml` y se re-registra en caliente o se marca `RESTART_REQUIRED`. Ver la sección **ADR-019** más abajo y **ADR-021/ADR-022** para las dos mejoras de comandos.
 
-> **Nota de estado (2026-10-27):** `iflow-vm` e `iflow-wasm` no usan SpEL. `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). Los tres motores iFlow son **mutuamente excluyentes**: se instala uno y reemplaza al anterior; comparten el paquete base `me.majhrs16.suite.iflow`. Las menciones a la eliminación de SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
+> **Nota histórica (2026-10-27, superada por ADR-032):** `iflow-vm` e `iflow-wasm` no usan SpEL.
+> `iflow-firewall` restaura el motor SpEL histórico por decisión explícita (ADR-001). En esa fecha
+> los tres motores iFlow eran **mutuamente excluyentes**; ADR-032 introdujo el hub `iflow` y
+> permitió que coexistan instalados, con un solo backend activo. Las menciones a la eliminación de
+> SpEL entre 2026-10-20 y 2026-10-26 se conservan como registro histórico.
 
 > **Nota de estado (2026-10-23):** **iFlow no se abandona ni se elimina.** Se divide en dos líneas paralelas: **`iflow-vm`** (VM propia de 32 bits, con las mejoras de la auditoría) e **`iflow-wasm`** (motor WebAssembly sobre Chicory). La especificación técnica de referencia v3 queda en `docs/prompts/diseno/iflow-cpu-implement.md` y recoge los hallazgos `IFLOW-MAN-*` como requisitos de la línea de 32 bits; **no se hereda** al motor Wasm. Las secciones históricas de este plan se conservan, pero la fuente de verdad es este bloque y el estado real.
 >
-> **Nota de estado (2026-10-24):** **Primer release (v2.1.0-SNAPSHOT).** No hay versiones previas, ni changelog, ni release notes históricos que acumular. `CHANGELOG.md` y `RELEASE_NOTES.md` fueron eliminados; la trazabilidad comienza ahora con commits convencionales y este `PLAN.md` como fuente única de verdad.
+> **Nota histórica (2026-10-24, superada por ADR-034):** el número `v2.1.0-SNAPSHOT` fue una
+> etiqueta de iteración, no una versión publicada. No hay versiones previas, changelog ni release
+> notes históricos que acumular; `CHANGELOG.md` y `RELEASE_NOTES.md` siguen eliminados. La
+> trazabilidad comienza con commits convencionales y este `PLAN.md` como fuente única de verdad.
+> La base formal vigente es `1.0.0`.
 
-> **Alcance vigente (2026-10-23):** las pruebas reales/E2E siguen descartadas y el editor web sigue diferido a una auditoría separada. La sección «Decisiones de alcance vigentes» es la fuente de verdad para ambas. La auditoría de iFlow se ratifica como especificación técnica de referencia v3 en `docs/prompts/diseno/iflow-cpu-implement.md`; `docs/workdir/AUDITORIA.md` queda vacío como marcador histórico.
+> **Alcance vigente (2026-11-04, ADR-034):** el betatesting/E2E en servidores reales
+> Spigot/Paper, Fabric y Velocity es parte del ciclo pre-1.0; ya no está descartado. El editor web
+> sigue diferido a una auditoría separada. La auditoría de iFlow se ratifica como especificación
+> técnica de referencia v3 en `docs/prompts/diseno/iflow-cpu-implement.md`. `AUDITORIA.md` es un
+> documento efímero de la auditoría vigente, no un marcador vacío ni un historial acumulativo; su
+> historial vive en Git.
+
+---
+
+## Purga pre-1.0 — hoja de ruta inmediata (ADR-034)
+
+> **Directriz de corto plazo:** no se inicia una feature nueva hasta cerrar la purga de
+> compatibilidad y los bugs estructurales P0/P1 de la auditoría vigente. Cada tarea termina con
+> código, tests, documentación y gate verde; no se aceptan cambios a medias ni “arreglos” que
+> conserven el camino viejo.
+
+| # | Tarea | Criterio de cierre | Estado |
+|---|---|---|---|
+| **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Pendiente |
+| **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0`. Un sufijo de build es metadato, no una versión funcional. | Pendiente |
+| **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name`, lectores de rutas planas bajo `config/` (`config.yml`, `channels/`, `translators/`, `sync/`, `rules.yml`, `inworld.yml`) y cualquier fallback que acepte el esquema viejo. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Pendiente |
+| **P0.4** | Purga de código y APIs *deprecated* | Eliminar `CoreTranslator`, adaptadores, aliases, dobles lectores, puentes de conversión y fachadas mantenidas solo por compatibilidad. Actualizar todos los consumidores en el mismo cambio. | Pendiente |
+| **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo. Añadir regresiones que demuestren que el camino legacy se rechaza o se ignora, no que se migra. | Pendiente |
+| **P0.6** | Auditoría manual de bugs estructurales | Revisar `AUDITORIA.md`; corregir P0/P1 con test de regresión antes de avanzar. Al cerrar todos los hallazgos, reemplazar el archivo por completo para el siguiente ciclo. | Pendiente |
+| **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Pendiente |
+| **P0.8** | Betatesting/E2E real pre-1.0 | Matriz Spigot/Paper, Fabric y Velocity con versiones reales; registrar resultado y declarar **desconocida** toda combinación no probada. No se declara 1.0.0 sin este paso. | Pendiente |
+| **P0.9** | Coherencia documental | `philosophy.md`, `ADR.md` y `PLAN.md` describen una sola base `1.0`, un solo contrato exacto y un solo camino vigente. Las menciones históricas quedan marcadas como tales. | Hecho (2026-11-04) |
+
+**Deuda conocida al abrir esta hoja (verificar antes de cerrar P0.2/P0.3):**
+
+- `build.gradle` declara `2.1.0-SNAPSHOT`; `src/chattranslator/build.gradle` declara `2.1.0`.
+- `iflow-wasm` exige `channel-api >= 2.1.0` en su descriptor/activador; debe alinearse a `1.0.0`.
+- Quedan aliases y rutas legacy en configuración y tests; se eliminan, no se migran.
+- La auditoría vigente y el estado real de los módulos deben revisarse antes de añadir features.
 
 ---
 
@@ -72,13 +123,14 @@ cuando ambas estén listas.
 >
 > Configuración canónica: `config/iflow/config.yml` con
 > `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
-> El default es `iflow-firewall`. `iflow.engine.kind` queda como compatibilidad legacy del host y
-> no selecciona el backend cuando el hub está presente.
+> El default es `iflow-firewall`. `iflow.engine.kind` es una compatibilidad legacy del host y no
+> selecciona el backend cuando el hub está presente; ADR-034 la elimina en la purga pre-1.0, sin
+> fallback permanente.
 >
 > Los contratos neutrales (`Router`, `IflowHub`, `IflowBackend`) viven en `core-api` bajo
 > `me.majhrs16.suite.iflow`; cada motor usa su propio subpaquete. `SuiteRuntime` prefiere
-> `IflowHub` sobre un `Router` legacy, de modo que el hub gana aunque los motores sigan publicando
-> `Router` durante la transición. `iflow-wasm` ya publica su backend con hash y watcher.
+> `IflowHub` sobre un `Router` legacy mientras dure la transición; el camino legacy se retira en la
+> purga pre-1.0. `iflow-wasm` ya publica su backend con hash y watcher.
 >
 > El monorepo compila los tres motores y el hub; `./gradlew publishIflowEngines` publica
 > `suite-iflow`, `suite-iflow-vm`, `suite-iflow-wasm` y `suite-iflow-firewall` en `build/repo`.
@@ -142,7 +194,7 @@ Reglas de diseño:
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **V0 — Módulo y spec** | `src/iflow-vm/` renombrado, Gradle/CI/docs actualizados y especificación v3 enlazada | ✅ `:src:iflow-vm:build`, `:src:iflow-wasm:build` y `:src:host:build` verificados con JDK 21 |
-| **V1 — Contrato 32 bits** | ADR de ISA, memoria/MMU, IRQ, scheduler, tiempo y ABI `HOST` v3; compatibilidad `.flow` | Contrato congelado antes de tocar el núcleo |
+| **V1 — Contrato 32 bits** | ADR de ISA, memoria/MMU, IRQ, scheduler, tiempo y ABI `HOST` v3; corte limpio sin compatibilidad `.flow` v2 | Contrato congelado antes de tocar el núcleo |
 | **V2 — Núcleo** | CPU/MMU/bus de 32 bits, arranque BIOS/kernel, fixtures actualizados | Tests de memoria, privilegios y arranque |
 | **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
 | **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
@@ -262,11 +314,14 @@ camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 | **CT4 — Integración Host** | `SuiteHost`/`TranslationService` usan `ChatTranslator` como fachada principal; Spigot/Fabric hooks actualizados | Mensaje real traducido via `ChatTranslator` en pipeline E2E |
 | **CT5 — Editor & Autoría** | Panel web para configurar backend default y ver backends registrados | ⏸️ Diferido con el editor web (`PLAN.md:12`); el backend (`ChatTranslatorConfig` + `BackendConfig`) ya expone lo necesario |
 
-### Decisiones pendientes (ADR) — ChatTranslator
+### Decisiones resueltas por el régimen pre-1.0 — ChatTranslator
 
-- **Schema de config:** ¿`translator.default-backend` en `config.yml` raíz o en `translators/*.yml`?
-- **Backward compat:** ¿Mantener `TranslationService.active()` como fallback automático o forzar uso de `ChatTranslator`?
-- **Capability versioning:** ¿`chattranslator` capability versionada independientemente o atada a suite version?
+- **Schema de config:** se usa el layout canónico `config/chattranslator/`; no se mantiene el
+  `config.yml` raíz como fuente alternativa.
+- **Backward compat:** se elimina `TranslationService.active()` como fallback automático. El camino
+  vigente es `ChatTranslator`; ADR-034 prohíbe conservar el puente.
+- **Capability versioning:** la capability `chattranslator` se ata a la base `1.0.0` de la suite;
+  no se versiona de forma independiente ni se declaran rangos de compatibilidad ficticios.
 
 ### Paridad funcional `TranslationService` ↔ `ChatTranslator`
 
@@ -409,7 +464,8 @@ backlog V1–V5 de `iflow-vm`.
 ### Decisiones pendientes (ADR)
 
 - **`iflow-vm`:** ISA de 32 bits, mapa de memoria, MMU, IRQ, scheduler, política de tiempo
-  (quantum/timer/watchdog), journal, concurrencia, ABI `HOST` v3 y compatibilidad con `.flow` v2.
+  (quantum/timer/watchdog), journal, concurrencia y ABI `HOST` v3. No hay compatibilidad con
+  `.flow` v2: el contrato viejo se corta en la purga pre-1.0 (ADR-034).
 - **`iflow-wasm`:** nombre/artefacto definitivo, versión de Chicory (W0 fija `runtime:1.4.0`;
   falta decidir compilador/WASI), capabilities y límites. El ABI de imports, la validación de
 exports, el hash del `.wasm` y el hot-reload quedaron cerrados en W1/W3 (`PolicyAbiV3`,
@@ -448,7 +504,7 @@ exports, el hash del `.wasm` y el hot-reload quedaron cerrados en W1/W3 (`Policy
 | **I-009** | Mover `TranslatorsConfig.discoverProviders()` a `chattranslator.BackendConfig` | `host` (eliminar), `chattranslator` (nuevo `BackendConfig`) | ✅ `host` no usa `ServiceLoader<TranslatorProvider>`; `chattranslator` carga backends |
 | **I-014** | Resolver confusión capability `chattranslator` vs `translator` | `chattranslator`, `gtranslate`, `ltranslate` | ✅ Façade `ChatTranslator` coordina backends; capability model alineado |
 | **I-016** | Alinear `ChatTranslatorConfig.defaultBackend` con `storage.md` | `chattranslator`, `storage.md` | Default `'google'` en ambos (o `null` documentado como auto) | ✅ `ChatTranslatorConfig.defaults()` = `'google'` |
-| **I-011** | **M1:** Mover `ConfigLoader.loadChannels()` a `textformatter.ChannelConfig` | `host` (eliminar), `textformatter` (nuevo `ChannelConfig`) | ✅ `ChannelConfig` en `textformatter` (canónico `config/textformatter/channels/` + fallbacks legacy); `ConfigLoader.loadChannels()` eliminado; `SuiteHost`/`SuiteBootstrap`/`ConfigValidator`/`loadtest` usan `ChannelConfig`; 7 tests en `ChannelConfigTest` |
+| **I-011** | **M1:** Mover `ConfigLoader.loadChannels()` a `textformatter.ChannelConfig` | `host` (eliminar), `textformatter` (nuevo `ChannelConfig`) | ✅ `ChannelConfig` en `textformatter` (canónico `config/textformatter/channels/`; los fallbacks legacy quedan como deuda a purgar, ADR-034); `ConfigLoader.loadChannels()` eliminado; `SuiteHost`/`SuiteBootstrap`/`ConfigValidator`/`loadtest` usan `ChannelConfig`; 7 tests en `ChannelConfigTest` |
 | **I-018** | Completar `resetConfigs` con nuevos directorios `config/<modulo>/` | `spigot-host`, `fabric-host` | ✅ Backup incluye `config/` (suite, chattranslator, sync-*, inworld, observability, iflow-firewall, textformatter) + heredados (`channels/`, `translators/`, `sync/`, `rules.yml`, `inworld.yml`); fabric-host alineado con spigot-host |
 
 #### P1 — FIX_LATER (Próxima iteración)
@@ -456,8 +512,8 @@ exports, el hash del `.wasm` y el hot-reload quedaron cerrados en W1/W3 (`Policy
 | ID | Acción | Módulos afectados | Criterio de cierre |
 |---|---|---|---|
 | **I-004** | Migrar carga config centralizada (translators, sync) a dueños | `host`, `chattranslator`, `sync-bus`, submódulos sync | ✅ `TranslatorsConfig` eliminado de `host` (`chattranslator.BackendConfig`/`ChatTranslatorConfig` cargan sus archivos); cada submódulo sync expone su config (`DiscordConfig`, `WebSocketSyncConfig`, `SocketConfig`, `TelegramConfig`) sobre `syncbus.SyncYaml`, y los adapters ya no parsean YAML de sync. `messages.yml` queda en `host` según ADR-020 |
-| **I-012** | Corregir rutas sync en spigot-host: `sync/*.yml` → `config/sync-*/config.yml` | `spigot-host`, `fabric-host` | ✅ Rutas resueltas vía `syncbus.SyncConfigPaths` (canónica `config/sync-*/`, fallback `sync/*.yml`); websocket/tcp/udp/telegram y `DiscordBridge` en ambas plataformas |
-| **I-017** | Corregir `copyDefaultsIfMissing` a nuevas rutas `config/<modulo>/` | `spigot-host`, `fabric-host` | ✅ Primer arranque escribe `config/suite/`, `config/textformatter/channels/`, `config/chattranslator/translators/`, `config/sync-*/`, `config/inworld/`, `config/iflow-firewall/`; no duplica si existe la ruta legacy |
+| **I-012** | Corregir rutas sync en spigot-host: `sync/*.yml` → `config/sync-*/config.yml` | `spigot-host`, `fabric-host` | ✅ Rutas resueltas vía `syncbus.SyncConfigPaths` (canónica `config/sync-*/`; el fallback `sync/*.yml` queda como deuda a purgar, ADR-034); websocket/tcp/udp/telegram y `DiscordBridge` en ambas plataformas |
+| **I-017** | Corregir `copyDefaultsIfMissing` a nuevas rutas `config/<modulo>/` | `spigot-host`, `fabric-host` | ✅ Primer arranque escribe `config/suite/`, `config/textformatter/channels/`, `config/chattranslator/translators/`, `config/sync-*/`, `config/inworld/`, `config/iflow-firewall/`; no duplica si existe la ruta canónica. Las rutas legacy se ignoran y se purgan (ADR-034), no se migran. |
 
 #### P2 — NEEDS_DESIGN (Requieren ADR antes de actuar)
 
@@ -629,8 +685,8 @@ ambos campos.
 
 **Implementación (2026-10-27).** Código restaurado en `me.majhrs16.suite.iflow`,
 descriptor `iflow-firewall`, SPI de expresión dentro del módulo, `RouterFactory`
-sin adaptador, `FirewallConfig` tolera el esquema legacy, selección de motor en
-`HostConfig`/`ConfigLoader`, publicación separada de los tres motores con
+sin adaptador y selección de motor en `HostConfig`/`ConfigLoader`; `FirewallConfig` todavía tolera
+el esquema legacy, deuda que la purga pre-1.0 elimina (ADR-034). Publicación separada de los tres motores con
 `publishIflowEngines` y documentación de exclusividad (PLAN, ADR, storage, README,
 wiki). `./gradlew build` y `./gradlew publishIflowEngines` pasan.
 
@@ -1263,7 +1319,7 @@ dejó de migrarse. Documentación vigente: `docs/wiki/10-Module-Manager.md`
 `docs/wiki/09-Developer-Guide.md` (tareas de empaquetado). Los tests de
 recuperación de etapa 2 y activación fallida ya cubren el journal, el status
 autoritativo y la ausencia de rollback de archivos. Límites: no hay firma de
-paquetes ni E2E en servidores reales; TLS + SHA-256 no prueba autoría.
+paquetes; el betatesting/E2E real pre-1.0 está pendiente (ADR-034). TLS + SHA-256 no prueba autoría.
 
 **F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,
 `iflow-firewall` e `iflow-wasm` tienen activador y la tarea `modulePackage`
@@ -1328,9 +1384,9 @@ jerárquico, aliases, colisiones, permisos por ancestro, usage, opciones, tab
 completion, desregistro explícito y desregistro por ciclo de vida.
 
 **F4e cerrada (2026-10-31):** `CommandRootConfig` carga
-`config/suite/commands.yml` (con fallback heredado `commands.yml`) y valida
-`root` multi-segmento y `aliases`; `base-name` fue retirado en F8 y ya no
-define la raíz. `RuntimeCommandRegistry` permite cambiar la raíz sin tocar los comandos
+`config/suite/commands.yml` y valida `root` multi-segmento y `aliases`; el
+fallback heredado `commands.yml` es deuda a purgar (ADR-034), no una ruta
+soportada. `base-name` fue retirado en F8 y ya no define la raíz. `RuntimeCommandRegistry` permite cambiar la raíz sin tocar los comandos
 registrados por los módulos. `SuiteRuntime.reloadCommandRoot()` devuelve
 `CommandRootChange` con `UNCHANGED`, `APPLIED`, `FAILED` o `RESTART_REQUIRED`,
 re-registra el comando de plataforma y restaura la raíz anterior si el nuevo
@@ -1480,8 +1536,8 @@ no layouts legacy ni versiones alternativas, y no se aceptan como fallback.
 `HostPaths` expone `moduleConfigRoot` y `moduleConfigDir`, y
 `DefaultConfigInstaller` centraliza la copia: el host conserva `config/suite/`
 y los módulos reciben `config/<module>/`. Si se detectan archivos en las rutas
-incorrectas, se corrigen hacia la ruta canónica y nunca se sobrescribe una
-configuración existente. La regresión está cubierta por `HostPathsTest` y
+incorrectas, se ignoran: no se migran ni se eliminan, y nunca se sobrescribe
+una configuración existente. La regresión está cubierta por `HostPathsTest` y
 `DefaultConfigInstallerTest`.
 
 **Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
@@ -1543,8 +1599,8 @@ normaliza `bukkit`/`paper`/`purpur`/`spigot` a la familia `spigot` y acepta
 plataforma solo en `sync-bukkit`, `sync-fabric` y los hosts. Los hosts ya no
 contienen listeners de eventos. Los ZIP de ambos paquetes declaran
 `Platform: spigot`/`Platform: fabric`, incluyen su `META-INF/services` y su
-configuración por defecto. La validación es compilación + tests automatizados;
-no hay E2E contra servidores reales.
+configuración por defecto. La validación automatizada es compilación + tests; el betatesting/E2E
+contra servidores reales es parte del ciclo pre-1.0 (ADR-034) y se rastrea en la hoja de ruta.
 
 ##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
 
@@ -1793,13 +1849,16 @@ cerrada con ellas y F1 puede empezar.
 - `MessagesConfig` vive en `host` (`MessagesConfig.java:24`) y `storage.md` lo asignaba a «cada platform adapter».
 - Duplicar el archivo por plataforma haría divergir los textos de UI entre Spigot y Fabric y obligaría a mantener dos copias de los defaults.
 - Decisión registrada: «No puede haber un directorio por cada plataforma, se debería abstraer en un mismo archivo para todas las plataformas, y ese es `<manager>/config/suite/`».
-- `Hecho verificado`: `HostPaths.suiteMessages()` resuelve `config/suite/messages.yml` con fallback a `messages.yml`; `MessagesConfig.load()` ya lo consume.
+- `Hecho verificado`: `HostPaths.suiteMessages()` resuelve `config/suite/messages.yml`; el fallback
+  a `messages.yml` es deuda legacy que la purga pre-1.0 elimina (ADR-034). `MessagesConfig.load()`
+  ya consume la ruta canónica.
 
 **Consecuencias**
 
 *Positivas*
 - Una sola fuente de verdad para los textos de UI, independiente de la plataforma.
-- Los fallbacks mantienen funcionando instalaciones con el archivo plano anterior.
+- El fallback al archivo plano anterior se elimina en la purga pre-1.0; las instalaciones con ese
+  layout se ignoran o se rechazan, no se migran en runtime (ADR-034).
 - `resetConfigs`/`copyDefaultsIfMissing` escriben y respaldan la misma ruta en Spigot y Fabric.
 
 *Negativas*
@@ -2069,7 +2128,7 @@ usuario de iFlow.
 | `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
 | `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
 | `src:extension-api` | ✅ OK | 3 | N/A | 260 | N/A | N/A | `ExtensionContext` usa puertos neutrales, sin `host` |
-| `src:fabric-host` | ✅ OK | 5 | 840 | 86 | 18.4% | 11.2% | `FabricTestProbe` cubierto; bootstrap Fabric sin E2E; cobertura global baja |
+| `src:fabric-host` | ✅ OK | 5 | 840 | 86 | 18.4% | 11.2% | `FabricTestProbe` cubierto; E2E real pre-1.0 pendiente (ADR-034); cobertura global baja |
 | `src:gtranslate` | ✅ OK | 3 | N/A | 229 | N/A | N/A |  |
 | `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
 | `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
@@ -2113,13 +2172,15 @@ usuario de iFlow.
 | **T1 — Scaffold obligatorio** ✅ | Todo módulo Java tiene `src/test` con JUnit 5 + AssertJ + Mockito; `build.gradle` incluye `testImplementation` y task `test` pasa en CI | **0 módulos sin directorio de tests; 0 directorios vacíos** |
 | **T2 — Gates de cobertura por módulo** ✅ | `jacocoTestCoverageVerification` con reglas **por módulo** (no global): `minLineCoverage`, `minBranchCoverage`; falla el build si no se cumple | **Gates verdes en CI para todos los módulos** (umbrales según baseline T1) |
 | **T3 — Tests de contrato SPI/API** ✅ | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | **Tests de contrato pasan en aislamiento**; documentación de contratos generada |
-| **T4 — Tests de integración por dominio** ✅ | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real |
+| **T4 — Tests de integración por dominio** ✅ | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real; el E2E real es la tarea P0.8 de ADR-034 |
 | **T5 — Tests de regresión obligatorios** | Cada bug/fix P0/P1 de `AUDITORIA.md`, commits `fix:` tiene al menos un test que falla sin el fix y pasa con él | Matriz bug→test inline en `docs/workdir/PLAN.md` |
 | **T6 — Fuzzing y property-based** | Módulos de parsing/serialización (`textformatter`, `messages`, `iflow-vm` bytecode, `iflow-wasm` loader) usan jqwik o JUnit-Quickcheck | Campañas nocturnas en CI; hallazgos → issues automáticos |
 | **T7 — Performance/soak baselines** | `loadtest`, `performance`: benchmarks JMH con umbrales de regresión (p99, throughput, heap) | Alertas automáticas si hay regresión > 10 % |
 
 **Reglas de diseño:**
-- **No tests de integración con servidor real** (Spigot/Paper/Fabric/Velocity): decisión de alcance vigente. Usar mocks, testcontainers o harnesses in-process.
+- **Los tests automatizados no requieren servidor real**: usar mocks, testcontainers o harnesses
+  in-process. El betatesting/E2E en Spigot/Paper/Fabric/Velocity reales es una capa adicional
+  obligatoria del ciclo pre-1.0 (ADR-034), no un sustituto de los tests.
 - **Tests deterministas**: sin `Thread.sleep`, sin orden no determinista, sin estado global mutable entre tests.
 - **Fixtures compartidas** en `src/fixtures/` (ya existe) para mensajes, canales, políticas, configs; versionadas con el código.
 - **Mutación testing** (Pitest) opcional en T2/T3 para validar calidad de aserciones.

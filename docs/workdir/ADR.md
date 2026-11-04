@@ -1,8 +1,13 @@
-# ADR — TextFormatter Suite v2.1
+# ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pendiente de revisión final del diseño) · Última actualización: 2026-11-03
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-04
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura. El estado operativo y las fases viven en `PLAN.md`.
-> **Nota 2026-09-02**: Proyecto en F4 (fabric-host). Decisiones base vigentes. Ver `PLAN.md` para estado actual.
+> **Régimen pre-1.0 (ADR-034, 2026-11-04):** no existe versión estable ni producción. Todos los
+> módulos, componentes, contratos y configuraciones se alinean a la base `1.0`; los números `2.x`,
+> `3.x` y superiores del historial son etiquetas de iteración, no versiones publicadas. No se
+> mantiene retrocompatibilidad ni código de compatibilidad. La versión oficial `1.0.0` solo se
+> alcanza cuando la suite completa y el betatesting/E2E real estén cerrados. Ver
+> `docs/prompts/diseno/philosophy.md` §0 y `PLAN.md` «Purga pre-1.0».
 
 ## Contexto
 
@@ -28,14 +33,15 @@ potencial se llama **TextFormatter Suite**.
 - **Nada de modloader**: sin ciclo de vida gestionado (`load→enable→disable`),
   sin manifiesto custom, sin reflexión de métodos privados. Solo
   `ServiceLoader`/SPI.
-- **Handshake doble**:
+- **Handshake doble, contrato exacto**:
   - Versión de la JVM (runtime): un módulo compilado contra X exige JVM ≥ Y.
-  - Versión del contrato SPI (compilación): semver por artefacto `*-api`; el
-    runtime detecta mismatch y decide cargar / degradar vía adaptador / avisar.
+  - Versión del contrato SPI (compilación): todos los artefactos `*-api` comparten la base
+    `1.0.0`; un mismatch no se degrada con un adaptador. El runtime rechaza el módulo y exige
+    actualizar el contrato y sus consumidores en el mismo cambio.
 - **Kill switch limpio**: se rompe con la config v1.8 y con los tipos legacy
-  `ChatMessage`/`ChatMessageType`. Único puente: módulo `CoreTranslator`
-  deprecated (la conversión `ChatMessage→Message` ya existe en
-  `ChatRouter.dispatch`).
+  `ChatMessage`/`ChatMessageType`. No se conserva `CoreTranslator` ni un puente de conversión
+  permanente: el camino viejo se elimina en la purga pre-1.0 y la conversión se hace en el único
+  contrato vigente.
 - **Permisos por canal: ambos métodos a la vez.** Base = un único permiso
   `cht.<channel>` (suscripción; poseerlo = estar adscrito al canal). Encima,
   `send-permission` / `receive-permission` opcionales para la asimetría nativa
@@ -74,12 +80,12 @@ Firewall por receptor/emisor con default-policy por canal y targets `LOG`,
 
 ## Fases
 
-- F0 — Kernel SPI: contratos `api` vs runtime, ServiceLoader, semver,
+- F0 — Kernel SPI: contratos `api` vs runtime, ServiceLoader, contrato exacto `1.0.0`,
   grafo de dependencias + tests.
 - F1 — TextFormatter + Channels/index.
 - F2 — iFlow.
 - F3 — GTranslate / LTranslate.
-- F4 — CoreTranslator deprecated.
+- F4 — Retiro de `CoreTranslator` y de los tipos legacy, sin puente de compatibilidad.
 - F5 — Sync (discord/telegram/http/tcp-udp).
 - F6 — Web Editor (GitHub Pages estático; botón Descargar ensambla
   `config.yml` + `channels/*.yml` en un zip; preview en vivo de
@@ -89,10 +95,12 @@ Firewall por receptor/emisor con default-policy por canal y targets `LOG`,
 
 ## Consecuencias
 
-- Los módulos publican a Maven (local o remoto) y se versionan por separado.
-- El host de cada plataforma es mínimo (jade-bootstrap + ServiceLoader).
-- La migración desde v4 es incremental: el v4 queda como referencia
-  (repo baseline en este mismo directorio).
+- Los módulos publican a Maven (local o remoto) y conservan identidad de paquete separada, pero
+  todos comparten la base de versión `1.0.0` durante el régimen pre-1.0; no hay matriz de
+  compatibilidad entre versiones ficticias.
+- El host de cada plataforma es mínimo (bootstrap + ServiceLoader/SPI).
+- La migración desde v4 es un corte limpio, no incremental: v4 queda solo como referencia
+  histórica y no se conservan adaptadores ni tipos legacy para convivir con él.
 
 ## Estado real (2026-08-15)
 
@@ -190,7 +198,7 @@ renderizada y directorio de jugadores.
 1. **Module Manager F12 — Núcleo Release-Ready**
    - `register()` → **SPI-only**: no instancia `Module` (era violación del contrato SPI). Solo almacena descriptor + classloader.
    - Nuevo método `discoverAll(ClassLoader parent)` → combina módulos en classpath + módulos runtime cargados via classloaders aislados para integración kernel (`ModuleLoader` + `ModuleGraph`).
-   - **Version resolver**: rangos semver (`[1.0,2.0)`, `^2.1.0`, `~2.1.0`) + compatibilidad env (Java, MC, contract, platform, capabilities) — usa `SemVer.satisfies()`.
+   - **Version resolver**: rangos semver (`[1.0,2.0)`, `^1.0.0`, `~1.0.0`) + compatibilidad env (Java, MC, contract, platform, capabilities) — usa `SemVer.satisfies()`. La política pre-1.0 (ADR-034) fija la base `1.0.0` y no declara rangos `2.x`/`3.x`.
    - **Dependency resolver**: parsing de `module.yml`/`module.yaml` desde JAR descargado para dependencias transitivas (fallback a release metadata).
    - **SHA256**: obligatorio. Asset `.sha256` separado verificado en download; falla si no existe.
    - **Manifest validation**: obligatoria en `validateModuleManifest()` — lanza excepción si falta `module.yml`, versión mismatched, capabilities desconocidas.
@@ -554,6 +562,11 @@ actualizados; `buildAll` pasa con 766 tests JVM (0 fallos, 11 skipped).
 
 ## Decisión 2026-10-27 — Restauración del motor SpEL legacy en `iflow-firewall` como alternativa mutuamente excluyente
 
+> **Nota 2026-11-04 (ADR-034):** esta decisión se conserva como registro histórico. ADR-032
+> sustituyó la exclusividad por el hub `iflow`; ADR-034 elimina `iflow.engine.kind`, el esquema
+> legacy y la selección mutuamente excluyente en la purga pre-1.0. El motor SpEL sigue existiendo
+> como backend, pero ya no define la política de versiones ni de compatibilidad.
+
 **Estado:** Aceptada. Sustituye, **solo para `iflow-firewall`**, la decisión de 2026-10-20 de
 eliminar SpEL de todo el repositorio. La VM y Wasm siguen sin SpEL.
 
@@ -667,8 +680,8 @@ chat/join/quit/death y aplica `claim-mode`; `sync-fabric` captura los eventos
 equivalentes de Fabric API y detecta muertes en el tick. `PackageRuntime`
 filtra por `PlatformCompatibility` y `checkArchitecture` permite el SDK solo en
 los dos paquetes y en los hosts. Los ZIP declaran `Platform: spigot` y
-`Platform: fabric`. La validación es compilación + tests; no hay E2E en
-servidores reales.
+`Platform: fabric`. La validación automatizada es compilación + tests; el betatesting/E2E en
+servidores reales es parte del ciclo pre-1.0 y se rastrea en `PLAN.md` (ADR-034).
 
 **Consecuencias.**
 
@@ -965,7 +978,8 @@ después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
     (todas las órdenes y fetch/CAS) y ensamblador inline (operandos, clobbers y
     barreras); corpus de políticas reales; determinismo byte a byte; y ejecución
     contra la VM v3 cuando V2/V4 estén disponibles. Los casos no soportados
-    tienen tests negativos. No hay E2E en servidores Minecraft.
+    tienen tests negativos. El compilador no ejecuta servidores Minecraft; el E2E de la suite se
+    cubre en el ciclo pre-1.0 (ADR-034).
 
 **Fases V6.**
 
@@ -1586,8 +1600,9 @@ tipos entre el módulo y el host.
 - `moduleRepository` no acepta una URL base vacía ni una ruta local como sustituto.
 - La reproducibilidad se verifica con dos builds y comparación de hashes; `SHA256SUMS` se verifica
   con `sha256sum -c`.
-- No hay E2E en Spigot/Paper/Fabric/Velocity reales. Los gates usan ZIP/JAR reales, directorios
-  temporales y tests de recuperación/activación.
+- El betatesting/E2E en Spigot/Paper/Fabric/Velocity reales es parte del ciclo pre-1.0 (ADR-034).
+  Los gates automatizados siguen usando ZIP/JAR reales, directorios temporales y tests de
+  recuperación/activación; una plataforma no probada se declara desconocida.
 - Una futura firma de paquetes, un repositorio no confiable o un rediseño de `core-render` para
   aislar Adventure requieren una ADR nueva.
 
@@ -1654,8 +1669,9 @@ podía escribir ambas ubicaciones.
 - Los bootstraps de Spigot y Fabric usan `DefaultConfigInstaller` para copiar los defaults del
   host a `config/suite/` y los de cada módulo a `config/<module>/`. Las rutas
   `config/manager/<module>/` y `manager/config/<module>/` son incorrectas: no se aceptan como
-  fallback ni como versiones alternativas. Si se detectan archivos allí, se corrigen hacia la ruta
-  canónica; nunca se sobrescribe una configuración existente.
+  fallback ni como versiones alternativas. No hay paquete oficial ni de terceros que deba
+  contenerlas, así que el runtime y el instalador las ignoran: no se leen, no se migran y no se
+  eliminan automáticamente. Nunca se sobrescribe una configuración existente.
 - La recarga depende de que los módulos liberen recursos. Un módulo que no lo hace exige reinicio;
   el comando lo dice en lugar de ocultarlo.
 - `FilePresetTarget` conoce el layout canónico del runtime (`config/suite/` y
@@ -1664,8 +1680,7 @@ podía escribir ambas ubicaciones.
   `config/chattranslator/config.yml`. Las rutas `config/manager/<module>/` y
   `manager/config/<module>/` son incorrectas: no son layouts legacy, no son versiones superiores
   y no se aceptan como fallback. El código debe leer y escribir solo `config/<module>/`; cualquier
-  archivo detectado en esas rutas se corrige hacia la ruta canónica y la ruta incorrecta se
-  elimina.
+  archivo en esas rutas se ignora: no se migra ni se elimina automáticamente.
 - Los tests cubren el orden de parada/reinicio, la conservación de servicios, la lista, la
   aplicación, el preset desconocido y el paquete inactivo.
 
@@ -1804,8 +1819,9 @@ publica la fachada estable y descubre proveedores por servicio.
    modo que el hub gana aunque los motores sigan publicando `Router` durante la transición.
 6. Los motores pueden coexistir instalados; el hub activa uno solo. La regla histórica de
    exclusividad de paquetes queda sustituida por la selección del hub para el runtime.
-7. `HostConfig.Engine`/`iflow.engine.kind` queda como compatibilidad legacy del host y no es la
-   fuente de verdad cuando el hub está instalado. El hub lee su propio `config.yml`.
+7. `HostConfig.Engine`/`iflow.engine.kind` es una compatibilidad legacy del host y no es la fuente
+   de verdad cuando el hub está instalado. El hub lee su propio `config.yml`. La purga pre-1.0 de
+   ADR-034 lo elimina; no se conserva como fallback permanente.
 
 **Alternativas consideradas.**
 
@@ -1900,3 +1916,112 @@ sustituida después de la instalación.
 - `./gradlew :src:iflow-wasm:test` verde, incluidos `WasmPolicyRouterTest` e
   `IflowWasmActivatorTest`.
 - `src/iflow-wasm/README.md`.
+
+---
+
+## Decisión 2026-11-04 — régimen pre-1.0: versión base 1.0, rolling release y purga de compatibilidad (ADR-034)
+
+**Estado:** Aceptada. La implementación de la purga y el reseteo de versiones se rastrea en
+`PLAN.md`, sección «Purga pre-1.0». Esta ADR sustituye cualquier política anterior de
+retrocompatibilidad, versiones ficticias o validación exclusivamente automatizada.
+
+**Contexto.** TextFormatter Suite sigue en fase de diseño fundacional: el ensamblador x86_64, la
+VM de iFlow, los contratos SPI, el runtime modular y las capas de red y adaptadores todavía se
+están consolidando. No existe una versión estable, no hay producción y no hay una promesa de
+compatibilidad que sostener. Aun así, el repositorio arrastra números `2.x`/`3.x`, aliases legacy,
+lectores de rutas antiguas, módulos *deprecated* y textos que presentan como “production-ready”
+algo que aún no ha cerrado su integración. Esa ficción de estabilidad fija decisiones antes de que
+la arquitectura esté terminada, añade carga mental y convierte cada refactor en una negociación con
+código que solo existe para no romper instalaciones que nunca fueron oficiales.
+
+La versión `1.0.0` debe ser un hito real, no un número de build. Hasta alcanzarlo, el proyecto
+opera en régimen de *rolling release*: los *breaking changes* están permitidos y son deseables para
+limpiar la deuda técnica. El betatesting/E2E en servidores reales forma parte de ese ciclo, porque
+los tests aislados no demuestran la integración con Spigot/Paper, Fabric y Velocity.
+
+**Decisión.**
+
+1. **Una sola base de versión.** Todos los módulos, componentes, contratos, artefactos y esquemas
+   de configuración se alinean a `1.0`:
+   - artefactos Maven/Gradle: `1.0.0`;
+   - contratos `*-api` y capabilities: `1.0.0`;
+   - configuración YAML: `config-version: 1.0`.
+   Un sufijo de build (`-SNAPSHOT`, hash de commit) es metadato de CI, no una versión funcional
+   distinta. No se usan `2.x`, `3.x` ni superiores como promesa de compatibilidad. Las etiquetas
+   históricas quedan como referencia de iteración, no como versiones publicadas.
+2. **Sin retrocompatibilidad pre-1.0.** Se eliminan los adaptadores, aliases, shims, dobles
+   lectores, rutas legacy, módulos *deprecated* y ramas de compatibilidad que existan solo para no
+   romper instalaciones anteriores. Un cambio incompatible se aplica en el mismo cambio que
+   actualiza a todos sus consumidores; no hay ciclo de deprecación ni periodo de convivencia.
+3. **Contrato exacto.** La resolución de dependencias puede seguir usando el formato SemVer, pero
+   la política pre-1.0 exige la base `1.0.0` y rechaza explícitamente un contrato que no
+   corresponda. No se declaran rangos que prometan compatibilidad con versiones ficticias ni se
+   degrada un mismatch mediante un adaptador.
+4. **Configuración sin migración silenciosa.** Todos los `.yml` declaran `config-version: 1.0`. Si
+   el esquema cambia, se reescribe la configuración en el mismo cambio; no se añaden lectores que
+   acepten el esquema viejo como fallback. Una ruta o un formato no canónico se ignora o se rechaza
+   con un mensaje explícito, nunca se convierte en runtime.
+5. **Purga inmediata.** La primera tarea del PLAN es inventariar y eliminar el código de
+   compatibilidad: `iflow.engine.kind`, `base-name`, rutas planas de configuración
+   (`config.yml`, `channels/`, `translators/`, `sync/`, `rules.yml`, `inworld.yml`), dobles
+   lectores, aliases de motores y cualquier módulo o fachada marcada como *deprecated*. El
+   inventario de versiones `2.x`/`3.x` se corrige a `1.0.0` o se elimina si ya no representa una
+   capacidad vigente.
+6. **E2E real como parte del ciclo pre-1.0.** Hasta el hito `1.0.0`, la validación incluye
+   betatesting/E2E en servidores reales Spigot/Paper, Fabric y proxies Velocity. Los tests
+   automatizados siguen siendo obligatorios y no se sustituyen por una prueba manual. Una
+   plataforma no probada se declara **desconocida**, no aprobada. No se declara estabilidad ni
+   producción antes del hito.
+7. **Hito `1.0.0`.** La versión oficial solo se alcanza cuando la suite completa, la integración de
+   todos los módulos y todas las features estén terminadas, el betatesting/E2E real haya validado
+   el conjunto, no queden hallazgos P0/P1 abiertos y el gate completo esté verde. Antes de ese
+   hito no hay *release notes* de estabilidad ni promesas de soporte.
+8. **`AUDITORIA.md` efímera.** El archivo contiene solo la auditoría vigente. Cuando todos sus bugs
+   estén corregidos con tests de validación, se reemplaza por completo para el siguiente ciclo. El
+   historial de auditorías vive exclusivamente en Git. Ver la costumbre C14 de la filosofía.
+
+**Alternativas consideradas.**
+
+1. **Mantener `2.1.0-SNAPSHOT` y una política SemVer de compatibilidad.** Ventajas: continuidad
+   aparente y menos cambios mecánicos. Limitaciones: presenta como estable una arquitectura que
+   aún se está diseñando, obliga a conservar shims y convierte cada refactor en deuda de
+   compatibilidad. Evaluación: **descartada**.
+2. **Conservar los adaptadores legacy “hasta la 1.0”.** Ventajas: menos fricción para instalaciones
+   antiguas. Limitaciones: contamina la base de código (*bloatware*), duplica caminos y fija
+   decisiones antes de que el diseño esté cerrado. Evaluación: **descartada**; no hay instalaciones
+   oficiales que proteger.
+3. **Posponer el E2E real hasta después de la 1.0.** Ventajas: menos coste inmediato. Limitaciones:
+   la 1.0 se declararía sin haber validado la integración real; los fallos de plataforma aparecerían
+   después del hito. Evaluación: **descartada**; el E2E es parte del betatesting pre-1.0.
+4. **Acumular el historial de auditorías en `AUDITORIA.md`.** Ventajas: todo en un archivo.
+   Limitaciones: el documento activo deja de ser operativo y se vuelve difícil distinguir lo
+   vigente de lo cerrado. Evaluación: **descartada**; Git conserva el historial.
+5. **Resetear solo la documentación y dejar el código en `2.x`.** Ventajas: cambio mínimo.
+   Limitaciones: crea una contradicción entre lo declarado y lo implementado, justo lo que C13
+   prohíbe. Evaluación: **descartada**; el reseteo es una tarea de código y documentación.
+
+**Consecuencias.**
+
+- Los cambios incompatibles dejan de ser excepcionales: son el modo normal de trabajo hasta la
+  1.0.0. Cada cambio debe actualizar módulos, contratos, configuración, tests y documentación en la
+  misma unidad de trabajo.
+- El repositorio puede contener referencias históricas a `2.x`/`3.x`; se consideran deuda a
+  inventariar y corregir, no versiones válidas. El PLAN fija el orden de purga.
+- Las instalaciones que conserven rutas o formatos antiguos no se migran en runtime. El operador
+  debe aceptar el layout canónico o la carga se rechaza/ignora explícitamente.
+- El E2E real añade tiempo y requiere entornos de prueba; a cambio, la 1.0.0 no se declara sobre
+  una integración no verificada.
+- La purga puede romper tests existentes que afirmaban compatibilidad. Esos tests se eliminan o se
+  reescriben para el camino vigente; no se mantienen para “no romper” una garantía que ya no
+  existe.
+- La documentación debe hablar de una sola base `1.0`, un solo contrato exacto y un solo camino
+  vigente. Las menciones a versiones ficticias se marcan como históricas o se eliminan.
+
+**Evidencia y referencias.**
+
+- `docs/prompts/diseno/philosophy.md` §0 («Régimen pre-1.0»), C7 («Sin retrocompatibilidad
+  prematura»), C8 («Betatesting/E2E real en pre-1.0») y C14 («`AUDITORIA.md` es efímera»).
+- `docs/workdir/PLAN.md`, sección «Purga pre-1.0 — hoja de ruta inmediata».
+- Inventario pendiente de ejecución: `build.gradle` declara `2.1.0-SNAPSHOT` y varios módulos,
+  manifiestos y configuraciones conservan versiones o aliases anteriores. La corrección se rastrea
+  en el PLAN; esta ADR no declara el reseteo como implementado.
