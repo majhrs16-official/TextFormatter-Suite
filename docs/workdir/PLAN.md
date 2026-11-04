@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-03 (**F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/manager/<module>/`, con migración desde `manager/config/<module>/`, `config/<module>/` y rutas planas; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
+> Última actualización: 2026-11-04 (**W1 de `iflow-wasm` cerrado:** contrato v3 con módulo de imports `iflow`, firmas explícitas, export `decide`, TLV estricto y validación de firmas; `WasmModuleLoader` instancia con `ImportValues`; host functions y `WasmPolicyEngine` pendientes W2/W3. Antes: **F8 cerrada**, `FabricTestProbe` implementado y `presets` expuesto por comando: empaquetado reproducible, paquetes `DEPENDENCY` de terceros, `moduleRepository` con `packages.list`/`SHA256SUMS`, shadow JAR sin features y documentación de límites; `presets list/apply` aplica el layout canónico y recarga los módulos activos; **layout corregido:** la configuración de módulos vive en `config/manager/<module>/`, con migración desde `manager/config/<module>/`, `config/<module>/` y rutas planas; **doble línea paralela: `iflow-vm` (VM propia de 32 bits, con las mejoras de la auditoría) e `iflow-wasm` (WebAssembly + Chicory); W3.5 desbloqueado con el contrato de política v3 ratificado (ADR-031), implementación pendiente**; **T4 completado**: inworld (14 tests neutrales), observability (15 tests), messages (18 tests) — todos con mocks, sin servidor real; antes: auditoría manual de iFlow en curso, solo lectura, sin cambios de código; SpEL aislado en `iflow-firewall` (motor legacy, ADR-001); `iflow-vm`/`iflow-wasm` sin SpEL; ABI de `HOST` v2 cerrada + mapa de memoria preventivo (`VmMemoryMap`), fabric-host completo, Telegram sink SyncBus, config schema single-source, SSRF TOCTOU fix, coverage gates raised, all `AUDITORIA.md` P0/P1/P2 fixed (histórico)).
 
 > **Nota de estado (2026-10-31):** **F4c, F4d, F4e y F7 cerradas en su alcance
 > anterior.** `sync-bukkit` y `sync-fabric` son paquetes de plataforma
@@ -278,8 +278,8 @@ camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **W0 — Scaffold** | `src/iflow-wasm/` creado, dependencia Chicory, loader mínimo y lockfile/verificación iniciales | ✅ Módulo Gradle incluido; `:src:iflow-wasm:build` validado con JDK 21 y Chicory 1.4.0 |
-| **W1 — Contrato** | ADR del motor Wasm: imports/exports alineados a la **spec v3**, capabilities, límites, errores, ciclo de vida | 📝 ADR-W1 propuesto (inline más abajo): `decide` como export obligatorio, imports vacíos por defecto, sin WASI, `start` denegado, 256 páginas y 4 MiB por artefacto |
-| **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | ✅ `WasmContract`/`ValidationResult`; `WasmModuleLoader` valida imports/exports/start/memoria, instancia con `withStart`/`withMemoryLimits` e invoca exports; 14 tests con módulos binarios escritos a mano |
+| **W1 — Contrato** | ADR del motor Wasm: imports/exports alineados a la **spec v3**, capabilities, límites, errores, ciclo de vida | ✅ ADR-W1 aceptado: `decide` como export obligatorio (`() -> i32`), módulo de imports `iflow` con firmas explícitas (`read_property`, `write_property`, `transform_apply`, `set_channel`, `permission_check`, `channel_policy`, `decision`, `now_nanos`, `log`), sin WASI, `start` denegado, 256 páginas y 4 MiB por artefacto; `PolicyAbiV3` + `TlvCodec` |
+| **W2 — Runtime** | Cargar, validar, instanciar e invocar un `.wasm` de prueba | ✅ `WasmContract`/`ValidationResult`; `WasmModuleLoader` valida imports/exports/start/memoria y firmas, instancia con `withStart`/`withMemoryLimits`/`withImportValues` e invoca exports; tests con módulos binarios generados por `WasmTestModule`. Host functions `iflow.*` pendientes |
 | **W3 — Integración** | `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.wasm` |
 | **W3.5 — Paridad de mensaje (v3)** | Imports de transformación, decisión y entrega alineados a la spec v3 | Matriz `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable |
 | **W4 — Herramientas** | Ejemplos en al menos dos lenguajes, validador de artefactos y guía de autoría | Build reproducible de los ejemplos + tests |
@@ -287,12 +287,12 @@ camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 
 #### ADR-W1: Contrato del motor Wasm — política pura, sin imports implícitos y con límites duros
 
-**Estado:** Propuesto
+**Estado:** Aceptado (W1, 2026-11-04)
 
 **Contexto**
 
 - `Hecho verificado`: Chicory `1.4.0` está fijado en `src/iflow-wasm/build.gradle` y W0 expone solo `Parser.parse` + `Instance.builder`.
-- `Hecho verificado`: la spec v3 (`docs/prompts/diseno/iflow-cpu-implement.md`) define transformación, decisión y entrega; la semántica de política está cerrada en ADR-031, pero los nombres/firmas de imports de Wasm siguen pendientes (W3.5).
+- `Hecho verificado`: la spec v3 (`docs/prompts/diseno/iflow-cpu-implement.md`) define transformación, decisión y entrega; la semántica de política está cerrada en ADR-031. W1 fija los nombres/firmas de imports y el export `decide` en `PolicyAbiV3`; la implementación de las host functions queda en W2.
 - `Restricción`: el artefacto `.wasm` es dato no confiable; un módulo puede declarar memoria de 4 GiB, imports de WASI o una función `start` que se ejecuta al instanciar.
 - `Restricción`: no hay toolchain WAT en el build; los tests de W2 usan módulos binarios mínimos escritos a mano.
 - `Supuesto`: las políticas reales serán pequeñas (lógica de decisión), no cargas de datos; 4 MiB y 256 páginas son holgados para ese caso y deben revisarse si aparecen políticas mayores.
@@ -307,10 +307,10 @@ camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 - Los errores de validación son acumulativos (`ValidationResult.errors()`), lo que da diagnóstico completo en lugar de fallar en el primer incumplimiento.
 
 *Negativas*
-- Todo módulo que necesite imports legítimos (p. ej. `iflow.*` para leer el mensaje) será rechazado hasta que W3 amplíe `allowedImportModules`; el contrato actual es deliberadamente incompleto.
-- No se valida todavía la **firma** de los exports (tipos/aridad): un export llamado `decide` con la firma equivocada pasa la validación y fallará al invocarlo.
+- W1 valida nombres y firmas, pero las **host functions** que implementan `iflow.*` todavía no existen; un módulo que las importe se valida pero no puede ejecutarse hasta W2.
 - El límite de memoria se aplica al total por instancia; un módulo con varias memorias se rechaza, lo que excluye el proposal multi-memory.
 - Sin hash/firma del artefacto, el contrato no protege contra sustitución del `.wasm` en disco.
+- La lista de imports es cerrada: añadir una función exige versionar `PolicyAbiV3` y actualizar el ADR, no un import ad hoc.
 
 **Alternativas consideradas**
 
@@ -332,8 +332,10 @@ camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 **Pendiente de decisión (W3)**
 - Contrato de política v3: **cerrado en ADR-031**; no volver a abrir D01–D05, Q26, Q35–Q38 ni
   `IFLOW-MAN-31/43…45` sin un ADR de sustitución.
-- Nombres y firmas de los imports `iflow.*` (transformación, decisión, entrega) y su correspondencia con la spec v3.
-- Validación de firma de exports mediante `Instance.exportType(name)`.
+- Nombres y firmas de los imports `iflow.*`: **cerrados en W1** (`PolicyAbiV3`); cualquier cambio
+  exige versión nueva del ABI, no una ampliación silenciosa.
+- Validación de firma de exports: **implementada en W1** (`decide` `() -> i32`) sobre las secciones
+  del módulo; `Instance.exportType(name)` queda como comprobación redundante opcional.
 - Hash/firma del artefacto y política de hot-reload.
 - Selección de motor (`.flow` vs `.wasm`) por configuración.
 
@@ -393,8 +395,8 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 7. `Formats` entrega N mensajes separados y un cambio de destino reutiliza el componente
    renderizado con el contexto del recipient original (Q36/Q38).
 
-**Fases:** W1 define los imports alineados a la spec v3; W2 implementa las host functions y la
-validación; W3 integra el motor; W3.5 cierra la paridad. W3.5 está desbloqueado por ADR-031. No se
+**Fases:** W1 define los imports alineados a la spec v3 (✅ cerrado); W2 implementa las host
+functions; W3 integra el motor; W3.5 cierra la paridad. W3.5 está desbloqueado por ADR-031. No se
 toca el backlog V1–V5 de `iflow-vm`.
 
 ### Decisiones pendientes (ADR)
@@ -402,12 +404,11 @@ toca el backlog V1–V5 de `iflow-vm`.
 - **`iflow-vm`:** ISA de 32 bits, mapa de memoria, MMU, IRQ, scheduler, política de tiempo
   (quantum/timer/watchdog), journal, concurrencia, ABI `HOST` v3 y compatibilidad con `.flow` v2.
 - **`iflow-wasm`:** nombre/artefacto definitivo, versión de Chicory (W0 fija `runtime:1.4.0`;
-  falta decidir compilador/WASI), ABI de imports, capabilities, límites, hot-reload y firma/hash
-  de artefactos.
+  falta decidir compilador/WASI), capabilities, límites, hot-reload y firma/hash de artefactos.
+  El ABI de imports y la validación de exports quedaron cerrados en W1 (`PolicyAbiV3`).
 - **Paridad `iflow-vm` ↔ `iflow-wasm`:** contrato de política cerrado en ADR-031 (D01–D05,
-  Q26, Q35–Q38, `IFLOW-MAN-31/43…45`, ABI TLV y decisión única). Quedan los nombres/firmas de
-  imports, la validación de exports, el hash/hot-reload y la selección de motor, alineados a la
-  **spec v3** y no al ABI v2 de `src/iflow-vm`.
+  Q26, Q35–Q38, `IFLOW-MAN-31/43…45`, ABI TLV y decisión única). Quedan el hash/hot-reload y la
+  selección de motor, alineados a la **spec v3** y no al ABI v2 de `src/iflow-vm`.
 - **Exclusividad y selección:** solo un motor iFlow instalado a la vez (instalar otro reemplaza al
   anterior), selección por configuración, formato de configuración común, migración de políticas y
   criterio para declarar un motor como predeterminado.
@@ -2121,7 +2122,7 @@ usuario de iFlow.
 
 **Próxima acción T4:** ✅ **COMPLETADO** — tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld` (14 tests neutrales: dominio, activador y descriptor), `observability` (15 tests) y `messages` (18 tests) — usando mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
 
-**Próxima acción:** W1 — ADR del motor Wasm (imports/exports v3, capabilities, límites, errores, lifecycle) y W2 — implementación minimal `.wasm` load/validate/instantiate/invoke con unit test.
+**Próxima acción:** W1 cerrado (contrato `iflow.*`, firmas, TLV y validación). W2 — implementar las host functions `iflow.*` sobre un `PolicySession` con journal read-your-writes y una única decisión por ejecución; después W3 — `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher`.
 
 ---
 
@@ -2133,7 +2134,7 @@ usuario de iFlow.
 | kernel (ServiceLoader + grafo semver/Tarjan) | ✅ | 13 tests |
 | textformatter (MiniMessage + Channels + `<tr>`) | ✅ estable | tests |
 | iflow-vm (implementación v2 de 16 bits) | 🧱 módulo `src/iflow-vm/`: base histórica; el contrato vigente es la spec v3 de 32 bits (V1–V5) | tests actuales |
-| iflow-wasm (WebAssembly + Chicory) | 🧪 W0 validado (loader mínimo); W1 contrato, W2 runtime, W3 integración y W3.5 paridad v3 pendientes | build |
+| iflow-wasm (WebAssembly + Chicory) | 🧪 W0/W1 cerrados (loader + contrato `iflow.*`/TLV/firmas); W2 host functions, W3 integración y W3.5 paridad v3 pendientes | build + tests |
 | host (SuiteHost+Dispatcher+loaders) | ✅ estable | 39 tests |
 | gtranslate / ltranslate | ✅ | tests |
 | sync-discord | ✅ Paquete neutral + adapters `sync-discord-jda`/`sync-discord-jdk`; `DiscordBridge` usa el sink neutral (respeta iFlow) | build + tests de paquete |

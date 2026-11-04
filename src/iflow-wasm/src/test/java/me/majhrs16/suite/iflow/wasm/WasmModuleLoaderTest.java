@@ -7,9 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.dylibso.chicory.runtime.HostFunction;
+import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.wasm.WasmModule;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -195,5 +198,115 @@ class WasmModuleLoaderTest {
         assertThrows(IllegalArgumentException.class,
             () -> new WasmContract(Set.of(), Set.of(), 0, false));
         assertEquals(256, WasmContract.policyV3().maxMemoryPages());
+    }
+
+    @Test
+    void policyV3AcceptsDeclaredImportWithCorrectSignature() {
+        WasmTestModule module = new WasmTestModule();
+        int readType = module.functionType(
+            new int[]{WasmTestModule.I32, WasmTestModule.I32, WasmTestModule.I32, WasmTestModule.I32},
+            new int[]{WasmTestModule.I32});
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.READ_PROPERTY, readType);
+        int decideType = module.functionType(new int[0], new int[]{WasmTestModule.I32});
+        int decide = module.function(decideType);
+        module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
+        module.code(new byte[]{0x41, 0x00});
+
+        ValidationResult result = loader.validate(loader.load(module.build()), WasmContract.policyV3());
+
+        assertTrue(result.valid(), result.errors().toString());
+    }
+
+    @Test
+    void policyV3RejectsImportWithWrongSignature() {
+        WasmTestModule module = new WasmTestModule();
+        int wrongType = module.functionType(
+            new int[]{WasmTestModule.I32},
+            new int[]{WasmTestModule.I32});
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.READ_PROPERTY, wrongType);
+        int decideType = module.functionType(new int[0], new int[]{WasmTestModule.I32});
+        int decide = module.function(decideType);
+        module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
+        module.code(new byte[]{0x41, 0x00});
+
+        ValidationResult result = loader.validate(loader.load(module.build()), WasmContract.policyV3());
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream()
+            .anyMatch(e -> e.contains("firma de import incorrecta: iflow.read_property")),
+            result.errors().toString());
+    }
+
+    @Test
+    void policyV3RejectsUnknownImportFromAllowedModule() {
+        WasmTestModule module = new WasmTestModule();
+        int type = module.functionType(new int[0], new int[]{WasmTestModule.I32});
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, "unknown", type);
+        int decideType = module.functionType(new int[0], new int[]{WasmTestModule.I32});
+        int decide = module.function(decideType);
+        module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
+        module.code(new byte[]{0x41, 0x00});
+
+        ValidationResult result = loader.validate(loader.load(module.build()), WasmContract.policyV3());
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().contains("import no declarado: iflow.unknown"), result.errors().toString());
+    }
+
+    @Test
+    void policyV3RejectsDecideWithWrongSignature() {
+        WasmTestModule module = new WasmTestModule();
+        int decideType = module.functionType(
+            new int[]{WasmTestModule.I32},
+            new int[]{WasmTestModule.I32});
+        int decide = module.function(decideType);
+        module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
+        module.code(new byte[]{0x41, 0x00});
+
+        ValidationResult result = loader.validate(loader.load(module.build()), WasmContract.policyV3());
+
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream()
+            .anyMatch(e -> e.contains("firma de export incorrecta: decide")),
+            result.errors().toString());
+    }
+
+    @Test
+    void instantiatesWithProvidedImportsAndInvokesDecide() {
+        WasmTestModule module = new WasmTestModule();
+        int readType = module.functionType(
+            new int[]{WasmTestModule.I32, WasmTestModule.I32, WasmTestModule.I32, WasmTestModule.I32},
+            new int[]{WasmTestModule.I32});
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.READ_PROPERTY, readType);
+        int decideType = module.functionType(new int[0], new int[]{WasmTestModule.I32});
+        int decide = module.function(decideType);
+        module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
+        module.code(new byte[]{0x41, 0x00});
+
+        HostFunction readProperty = new HostFunction(
+            PolicyAbiV3.IMPORT_MODULE,
+            PolicyAbiV3.READ_PROPERTY,
+            PolicyAbiV3.imports().get("iflow.read_property"),
+            (instance, args) -> new long[]{PolicyAbiV3.STATUS_NOT_FOUND});
+        ImportValues imports = ImportValues.builder().addFunction(readProperty).build();
+
+        Instance instance = loader.instantiate(
+            loader.load(module.build()), WasmContract.policyV3(), imports);
+        long[] result = loader.invoke(instance, PolicyAbiV3.EXPORT_DECIDE);
+
+        assertEquals(1, result.length);
+        assertEquals(0L, result[0]);
+    }
+
+    @Test
+    void contractRejectsImportTypeForUnlistedModule() {
+        assertThrows(IllegalArgumentException.class, () -> new WasmContract(
+            Set.of(),
+            Map.of(),
+            Set.of("env"),
+            Map.of("iflow.read_property", PolicyAbiV3.imports().get("iflow.read_property")),
+            256,
+            false
+        ));
     }
 }

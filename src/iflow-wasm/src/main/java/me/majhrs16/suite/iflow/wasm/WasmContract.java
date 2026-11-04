@@ -1,25 +1,39 @@
 package me.majhrs16.suite.iflow.wasm;
 
+import com.dylibso.chicory.wasm.types.FunctionType;
+
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Contrato mínimo que un artefacto {@code .wasm} debe cumplir para ejecutarse
- * como política de iFlow.
+ * Contrato que un artefacto {@code .wasm} debe cumplir para ejecutarse como
+ * política de iFlow.
  *
  * <p>Es intencionadamente restrictivo: sin WASI, sin imports implícitos, sin
  * función de arranque y con un límite de memoria lineal. Cualquier ampliación
  * del contrato debe pasar por el ADR del motor (W1) y versionarse.</p>
  *
+ * <p>Las firmas de imports y exports son opcionales. Si
+ * {@code allowedImportTypes} está vacío, se conserva el comportamiento de W2:
+ * solo se valida el módulo del import. Si tiene entradas, cada import usado
+ * debe ser una función declarada y con la firma exacta. Las firmas de exports
+ * se validan siempre que {@code requiredExportTypes} tenga una entrada.</p>
+ *
  * @param requiredExports      exports obligatorios, p. ej. {@code decide}
+ * @param requiredExportTypes  firmas obligatorias de exports, por nombre
  * @param allowedImportModules módulos de import permitidos (vacío = ninguno)
+ * @param allowedImportTypes   firmas permitidas de imports, por {@code "módulo.nombre"}
  * @param maxMemoryPages       máximo de páginas WebAssembly de 64 KiB
  * @param allowStart           si se permite la sección {@code start}
  */
 public record WasmContract(
         Set<String> requiredExports,
+        Map<String, FunctionType> requiredExportTypes,
         Set<String> allowedImportModules,
+        Map<String, FunctionType> allowedImportTypes,
         int maxMemoryPages,
         boolean allowStart
 ) {
@@ -29,19 +43,60 @@ public record WasmContract(
 
     public WasmContract {
         Objects.requireNonNull(requiredExports, "requiredExports");
+        Objects.requireNonNull(requiredExportTypes, "requiredExportTypes");
         Objects.requireNonNull(allowedImportModules, "allowedImportModules");
+        Objects.requireNonNull(allowedImportTypes, "allowedImportTypes");
         if (maxMemoryPages < 1) {
             throw new IllegalArgumentException("maxMemoryPages must be >= 1");
         }
         requiredExports = Set.copyOf(new LinkedHashSet<>(requiredExports));
+        requiredExportTypes = Map.copyOf(new LinkedHashMap<>(requiredExportTypes));
         allowedImportModules = Set.copyOf(new LinkedHashSet<>(allowedImportModules));
+        allowedImportTypes = Map.copyOf(new LinkedHashMap<>(allowedImportTypes));
+
+        for (String export : requiredExportTypes.keySet()) {
+            if (!requiredExports.contains(export)) {
+                throw new IllegalArgumentException(
+                    "requiredExportTypes contiene un export no obligatorio: " + export);
+            }
+        }
+        for (String importKey : allowedImportTypes.keySet()) {
+            int dot = importKey.indexOf('.');
+            if (dot <= 0 || dot == importKey.length() - 1) {
+                throw new IllegalArgumentException(
+                    "allowedImportTypes requiere claves 'módulo.nombre': " + importKey);
+            }
+            String module = importKey.substring(0, dot);
+            if (!allowedImportModules.contains(module)) {
+                throw new IllegalArgumentException(
+                    "allowedImportTypes declara un módulo no permitido: " + importKey);
+            }
+        }
+    }
+
+    /**
+     * Constructor de compatibilidad W2: sin firmas de imports/exports.
+     */
+    public WasmContract(Set<String> requiredExports,
+                        Set<String> allowedImportModules,
+                        int maxMemoryPages,
+                        boolean allowStart) {
+        this(requiredExports, Map.of(), allowedImportModules, Map.of(), maxMemoryPages, allowStart);
     }
 
     /**
      * Contrato por defecto para políticas iFlow v3: export {@code decide},
-     * sin imports, 256 páginas (16 MiB) y sin {@code start}.
+     * imports del módulo {@code iflow} con firmas explícitas, 256 páginas
+     * (16 MiB) y sin {@code start}.
      */
     public static WasmContract policyV3() {
-        return new WasmContract(Set.of("decide"), Set.of(), 256, false);
+        return new WasmContract(
+            Set.of(PolicyAbiV3.EXPORT_DECIDE),
+            PolicyAbiV3.exports(),
+            Set.of(PolicyAbiV3.IMPORT_MODULE),
+            PolicyAbiV3.imports(),
+            256,
+            false
+        );
     }
 }

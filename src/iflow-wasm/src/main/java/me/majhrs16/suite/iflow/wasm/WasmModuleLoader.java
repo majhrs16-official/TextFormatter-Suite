@@ -1,12 +1,16 @@
 package me.majhrs16.suite.iflow.wasm;
 
 import com.dylibso.chicory.runtime.ExportFunction;
+import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.wasm.ChicoryException;
 import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.WasmModule;
 import com.dylibso.chicory.wasm.types.Export;
 import com.dylibso.chicory.wasm.types.ExportSection;
+import com.dylibso.chicory.wasm.types.ExternalType;
+import com.dylibso.chicory.wasm.types.FunctionImport;
+import com.dylibso.chicory.wasm.types.FunctionType;
 import com.dylibso.chicory.wasm.types.Import;
 import com.dylibso.chicory.wasm.types.ImportSection;
 import com.dylibso.chicory.wasm.types.MemoryLimits;
@@ -16,8 +20,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Adapter mínimo de Chicory para la línea {@code iflow-wasm}.
@@ -87,14 +93,35 @@ public final class WasmModuleLoader {
      * @throws IllegalArgumentException si el módulo incumple el contrato
      */
     public Instance instantiate(WasmModule module, WasmContract contract) {
+        return instantiate(module, contract, ImportValues.builder().build());
+    }
+
+    /**
+     * Valida un módulo contra el contrato, enlaza los imports del host y crea
+     * una instancia acotada.
+     *
+     * <p>El llamador es responsable de que {@code imports} cubra exactamente
+     * las funciones declaradas por el módulo; Chicory falla al instanciar si
+     * falta alguna. El contrato ya validó nombres y firmas antes de llegar
+     * aquí.</p>
+     *
+     * @param module   módulo ya parseado
+     * @param contract contrato de exports, imports, memoria y {@code start}
+     * @param imports  funciones de host a enlazar
+     * @return instancia nueva
+     * @throws IllegalArgumentException si el módulo incumple el contrato
+     */
+    public Instance instantiate(WasmModule module, WasmContract contract, ImportValues imports) {
         Objects.requireNonNull(module, "module");
         Objects.requireNonNull(contract, "contract");
+        Objects.requireNonNull(imports, "imports");
         ValidationResult validation = validate(module, contract);
         if (!validation.valid()) {
             throw new IllegalArgumentException("artefacto inválido: " + validation.errors());
         }
         Instance.Builder builder = Instance.builder(module)
-            .withStart(contract.allowStart());
+            .withStart(contract.allowStart())
+            .withImportValues(imports);
         MemoryLimits limits = cappedMemoryLimits(module, contract);
         if (limits != null) {
             builder.withMemoryLimits(limits);
@@ -117,29 +144,8 @@ public final class WasmModuleLoader {
         Objects.requireNonNull(contract, "contract");
         List<String> errors = new ArrayList<>();
 
-        ImportSection imports = module.importSection();
-        if (imports != null) {
-            for (int i = 0; i < imports.importCount(); i++) {
-                Import imp = imports.getImport(i);
-                if (!contract.allowedImportModules().contains(imp.module())) {
-                    errors.add("import no permitido: " + imp.module() + "." + imp.name());
-                }
-            }
-        }
-
-        ExportSection exports = module.exportSection();
-        List<String> exportNames = new ArrayList<>();
-        if (exports != null) {
-            for (int i = 0; i < exports.exportCount(); i++) {
-                Export export = exports.getExport(i);
-                exportNames.add(export.name());
-            }
-        }
-        for (String required : contract.requiredExports()) {
-            if (!exportNames.contains(required)) {
-                errors.add("export requerido ausente: " + required);
-            }
-        }
+        validateImports(module, contract, errors);
+        validateExports(module, contract, errors);
 
         if (module.startSection().isPresent() && !contract.allowStart()) {
             errors.add("sección start no permitida por el contrato");
@@ -184,6 +190,106 @@ public final class WasmModuleLoader {
             throw new IllegalArgumentException("export no encontrado: " + exportName);
         }
         return function.apply(args == null ? new long[0] : args);
+    }
+
+    private static void validateImports(WasmModule module, WasmContract contract, List<String> errors) {
+        ImportSection imports = module.importSection();
+        if (imports == null) {
+            return;
+        }
+        for (int i = 0; i < imports.importCount(); i++) {
+            Import imp = imports.getImport(i);
+            String key = imp.module() + "." + imp.name();
+            if (!contract.allowedImportModules().contains(imp.module())) {
+                errors.add("import no permitido: " + key);
+                continue;
+            }
+            if (contract.allowedImportTypes().isEmpty()) {
+                continue;
+            }
+            if (!(imp instanceof FunctionImport functionImport)) {
+                errors.add("import no funcional no permitido: " + key);
+                continue;
+            }
+            FunctionType expected = contract.allowedImportTypes().get(key);
+            if (expected == null) {
+                errors.add("import no declarado: " + key);
+                continue;
+            }
+            FunctionType actual = functionImportType(module, functionImport);
+            if (!matches(actual, expected)) {
+                errors.add("firma de import incorrecta: " + key
+                    + " esperada " + expected + " y encontrada " + actual);
+            }
+        }
+    }
+
+    private static void validateExports(WasmModule module, WasmContract contract, List<String> errors) {
+        ExportSection exports = module.exportSection();
+        Set<String> exportNames = new HashSet<>();
+        if (exports != null) {
+            for (int i = 0; i < exports.exportCount(); i++) {
+                Export export = exports.getExport(i);
+                exportNames.add(export.name());
+                FunctionType expected = contract.requiredExportTypes().get(export.name());
+                if (expected == null) {
+                    continue;
+                }
+                if (export.exportType() != ExternalType.FUNCTION) {
+                    errors.add("export no funcional: " + export.name());
+                    continue;
+                }
+                FunctionType actual = exportFunctionType(module, export);
+                if (!matches(actual, expected)) {
+                    errors.add("firma de export incorrecta: " + export.name()
+                        + " esperada " + expected + " y encontrada " + actual);
+                }
+            }
+        }
+        for (String required : contract.requiredExports()) {
+            if (!exportNames.contains(required)) {
+                errors.add("export requerido ausente: " + required);
+            }
+        }
+    }
+
+    private static FunctionType functionImportType(WasmModule module, FunctionImport imp) {
+        return module.typeSection().getType(imp.typeIndex());
+    }
+
+    private static FunctionType exportFunctionType(WasmModule module, Export export) {
+        if (module.functionSection() == null) {
+            return null;
+        }
+        int functionIndex = export.index() - countFunctionImports(module);
+        if (functionIndex < 0) {
+            return null;
+        }
+        try {
+            return module.functionSection().getFunctionType(functionIndex, module.typeSection());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static int countFunctionImports(WasmModule module) {
+        ImportSection imports = module.importSection();
+        if (imports == null) {
+            return 0;
+        }
+        int count = 0;
+        for (int i = 0; i < imports.importCount(); i++) {
+            if (imports.getImport(i) instanceof FunctionImport) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static boolean matches(FunctionType actual, FunctionType expected) {
+        return actual != null
+            && actual.paramsMatch(expected)
+            && actual.returnsMatch(expected);
     }
 
     private static void checkSize(long bytes) {

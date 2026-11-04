@@ -6,19 +6,24 @@ bits); no hereda el ISA `.flow`, el ABI `HOST` v2 ni el modelo BIOS/kernel.
 
 ## Estado
 
-**W2 — runtime mínimo.** El módulo carga, valida, instancia e invoca un `.wasm` bajo un contrato
-restrictivo (`WasmContract`). Todavía **no** está conectado a `Router`/`MessageDispatcher` y no
-implementa los imports de host de la spec v3 (W3/W3.5).
+**W1 — contrato v3 definido; W2 — runtime mínimo ampliado.** `WasmContract.policyV3()` ya declara
+el módulo de imports `iflow`, sus firmas y el export `decide`; `WasmModuleLoader` valida nombres,
+firmas, memoria, `start` y tamaño, y permite instanciar con `ImportValues`. `TlvCodec` implementa el
+formato de los buffers. Las **host functions** y el `WasmPolicyEngine` conectado al pipeline siguen
+pendientes (W2/W3/W3.5).
 
 | Pieza | Estado |
 |---|---|
 | Módulo Gradle `:src:iflow-wasm` | ✅ creado |
 | Dependencia `com.dylibso.chicory:runtime:1.4.0` | ✅ declarada |
 | `WasmModuleLoader` (parsear / validar / instanciar / invocar) | ✅ W2 |
-| `WasmContract` + `ValidationResult` | ✅ W2 |
-| Contrato de imports/exports v3 | 📝 ADR-W1 propuesto (inline en `docs/workdir/PLAN.md`) |
-| Validación de firma de exports y hash del artefacto | ⏳ W3 |
-| Integración con el pipeline de mensajes | ⏳ W3 |
+| `WasmContract` + `ValidationResult` | ✅ W2; firmas de imports/exports en W1 |
+| `PolicyAbiV3` (nombres, firmas, estados, acciones, propiedades) | ✅ W1 |
+| `TlvCodec` (UTF-8 estricto, nulo vs vacío) | ✅ W1 |
+| Host functions `iflow.*` | ⏳ W2 |
+| `WasmPolicyEngine` conectado a `Router`/`MessageDispatcher` | ⏳ W3 |
+| Hash/firma del artefacto y hot-reload | ⏳ W3 |
+| Matriz de paridad `.flow` v3 vs `.wasm` | ⏳ W3.5 |
 
 ## Estructura
 
@@ -30,21 +35,108 @@ src/iflow-wasm/
     ├── main/java/me/majhrs16/suite/iflow/wasm/
     │   ├── WasmModuleLoader.java
     │   ├── WasmContract.java
-    │   └── ValidationResult.java
+    │   ├── ValidationResult.java
+    │   ├── PolicyAbiV3.java
+    │   └── TlvCodec.java
     └── test/java/me/majhrs16/suite/iflow/wasm/
-        └── WasmModuleLoaderTest.java
+        ├── WasmModuleLoaderTest.java
+        ├── WasmTestModule.java
+        └── TlvCodecTest.java
 ```
 
-## Contrato actual (`WasmContract.policyV3()`)
+## Contrato v3 (`WasmContract.policyV3()`)
+
+El contrato se define en `PolicyAbiV3` y se aplica con `WasmContract.policyV3()`. El guest importa
+el módulo `iflow`; puede usar un subconjunto de imports, pero cada import usado debe coincidir
+exactamente en nombre y firma.
+
+### Export obligatorio
+
+| Export | Firma | Significado |
+|---|---|---|
+| `decide` | `() -> i32` | Ejecuta la política una vez por mensaje. `0` = OK; otro valor = error de política. |
+
+La decisión de routing **no** se toma por el valor de retorno: se registra llamando a
+`iflow.decision(...)`. Esto permite distinguir “la política no decidió” de “la política falló” y
+evita que un `decide` vacío entregue por defecto.
+
+### Imports del host
+
+Todas las firmas usan `i32` salvo `now_nanos`, que devuelve `i64`.
+
+| Import | Firma | Uso |
+|---|---|---|
+| `read_property` | `(scope, property, outPtr, outCap) -> status` | Lee una propiedad y escribe un valor TLV en memoria del guest. |
+| `write_property` | `(scope, property, inPtr, inLen) -> status` | Aplica una propiedad editable desde un valor TLV. |
+| `transform_apply` | `(kind, inPtr, inLen, outPtr, outCap) -> status` | Resuelve placeholders o detecta idioma; devuelve TLV string. |
+| `set_channel` | `(namePtr, nameLen) -> status` | Cambia el canal validando existencia y permiso de recepción. |
+| `permission_check` | `(actorPtr, actorLen, nodePtr, nodeLen) -> i32` | `1` si el actor tiene el permiso; `0` si no. |
+| `channel_policy` | `(namePtr, nameLen, kind, outPtr, outCap) -> status` | Lee política de envío/recepción/rate de un canal. |
+| `decision` | `(action, targetPtr, targetLen, reasonPtr, reasonLen) -> status` | Registra la decisión única de la ejecución. |
+| `now_nanos` | `() -> i64` | Reloj monótono para políticas temporales. |
+| `log` | `(level, msgPtr, msgLen) -> status` | Auditoría acotada; no entrega ni modifica el mensaje. |
+
+### Estados
+
+| Código | Nombre | Significado |
+|---|---|---|
+| `0` | `OK` | Operación completada. |
+| `1` | `NOT_FOUND` | Propiedad/canal/valor inexistente. |
+| `2` | `BUFFER_TOO_SMALL` | El buffer de salida no cabe; si hay espacio para 4 bytes, se escribe la longitud requerida en little-endian. |
+| `3` | `INVALID_ARGUMENT` | Scope, propiedad, tipo TLV o UTF-8 inválido. |
+| `4` | `DENIED` | Propiedad de solo lectura o permiso insuficiente. |
+| `5` | `CONFLICT` | Segunda llamada a `decision` en la misma ejecución. |
+| `6` | `HOST_FAILURE` | Error interno del host; el mensaje no se entrega. |
+
+### Acciones de decisión
+
+| Código | Acción | Efecto |
+|---|---|---|
+| `0` | `DELIVER` | Entrega al recipient actual. |
+| `1` | `CANCEL_EVENT` | Cancela el evento de plataforma; no hay entrega. |
+| `2` | `ERROR` | Error controlado; no hay entrega y se registra la razón. |
+
+No existen `REDIRECT` ni `CHANNEL_REDIRECT`: el cambio de canal se expresa con `set_channel`, que
+valida el canal y el permiso antes de modificar el mensaje.
+
+### Scopes y propiedades v3
+
+| Scope | Código | Propiedades |
+|---|---|---|
+| `MESSAGE` | `1` | `CONTENT` (`0x01`, string, RW), `CHANNEL` (`0x02`, string, RO), `DIRECTION` (`0x03`, string, RO), `TYPE` (`0x04`, string, RO), `LANG_SOURCE` (`0x05`, string, RW), `LANG_TARGET` (`0x06`, string, RW), `COLOR_MODE` (`0x07`, string, RW), `FORMAT_PAPI` (`0x08`, bool, RW), `TRANSLATE` (`0x09`, bool, RW). |
+| `EMITTER` / `RECIPIENT` | `2` / `3` | `NAME` (`0x01`, string, RO), `UUID` (`0x02`, string, RO), `LANGUAGE` (`0x03`, string, RO). |
+| `CHANNEL` | `4` | `NAME` (`0x01`, string, RO), `RATE` (`0x02`, i64, RO), `SEND_POLICY` (`0x03`, string, RO), `RECEIVE_POLICY` (`0x04`, string, RO). |
+| `SERVER` | `5` | Reservado; sin propiedades en W1. |
+
+Los ids son propios de v3. No se reutilizan `PROP_SOUNDS`, `PROP_PROCESSED` ni `PROP_ACTOR_WORLD`
+de la VM v2; `TRANSLATE` es un booleano validado.
+
+### TLV
+
+Un valor se codifica como:
+
+```text
+[type:u8][length:u32 little-endian][payload]
+```
+
+| Tipo | Código | Payload |
+|---|---|---|
+| `NULL` | `0` | Vacío; ausencia explícita, distinta de string vacío. |
+| `STRING` | `1` | UTF-8 estricto; se rechazan secuencias inválidas y surrogates sueltos. |
+| `I64` | `2` | Exactamente 8 bytes little-endian. |
+| `BOOL` | `3` | Un byte `0` o `1`. |
+| `BYTES` | `4` | Bytes opacos. |
+
+`TlvCodec` copia defensivamente el payload y no trunca caracteres multibyte.
+
+### Límites
 
 | Regla | Valor | Motivo |
 |---|---|---|
-| Export obligatorio | `decide` | Punto de entrada de la política |
-| Imports permitidos | ninguno | Sin WASI ni acceso al host hasta W3 |
-| Memoria máxima | 256 páginas (16 MiB) | Acota el crecimiento lineal |
-| Sección `start` | denegada | Evita ejecución al instanciar |
-| Tamaño del artefacto | 4 MiB | Evita parsear artefactos desproporcionados |
-| Memorias por módulo | 1 | Excluye multi-memory hasta que el contrato lo defina |
+| Memoria máxima | 256 páginas (16 MiB) | Acota el crecimiento lineal. |
+| Sección `start` | denegada | Evita ejecución al instanciar. |
+| Tamaño del artefacto | 4 MiB | Evita parsear artefactos desproporcionados. |
+| Memorias por módulo | 1 | Excluye multi-memory hasta que el contrato lo defina. |
 
 La validación acumula todos los incumplimientos en `ValidationResult.errors()`. Un módulo inválido
 no se instancia: `instantiate(module, contract)` lanza `IllegalArgumentException`.
@@ -60,8 +152,15 @@ if (!check.valid()) {
     throw new IllegalArgumentException(check.errors().toString());
 }
 
+// Sin imports: módulo mínimo de W2.
 Instance instance = loader.instantiate(module, WasmContract.policyV3());
 long[] result = loader.invoke(instance, "decide");
+
+// Con host functions: el engine construirá ImportValues en W2/W3.
+ImportValues imports = ImportValues.builder()
+    .addFunction(readPropertyHostFunction)
+    .build();
+Instance connected = loader.instantiate(module, WasmContract.policyV3(), imports);
 ```
 
 Cada llamada a `instantiate` crea una instancia Chicory nueva con su propia memoria lineal. La
@@ -75,10 +174,12 @@ memoria se instancia con `withMemoryLimits(initial, max)` y la sección `start` 
 2. **Sin estado compartido entre instancias.** La persistencia, si se necesita, se modela como estado
    de host explícito.
 3. **Artefacto verificable.** El contrato valida magic/version (vía Chicory), tamaño, límites de
-   memoria, imports permitidos, exports requeridos y `start`. El hash/firma queda para W3.
+   memoria, imports permitidos y firmas, exports requeridos y `start`. El hash/firma queda para W3.
 4. **Un ABI de host versionado.** No se replica el ABI `HOST` v2 de iFlow.
 5. **Autoría multi-lenguaje.** Cualquier toolchain que produzca `.wasm` (Rust, C/C++, Zig,
    AssemblyScript, TinyGo, WAT) es válida; el servidor no ejecuta toolchains nativas arbitrarias.
+6. **Una decisión por ejecución.** La segunda llamada a `decision` devuelve `CONFLICT`; no se
+   sobrescribe silenciosamente.
 
 ## Build
 
@@ -88,17 +189,35 @@ memoria se instancia con `withMemoryLimits(initial, max)` y la sección `start` 
 
 > **Validación:** `:src:iflow-wasm:build` pasa con JDK 21 y Chicory `1.4.0`. El lockfile está
 > resuelto y `gradle/verification-metadata.xml` incluye la verificación SHA-256/SHA-512 de
-> `asm-bom:9.8`, transitiva de Chicory. Los tests de W2 usan módulos binarios mínimos escritos a
-> mano (sin toolchain WAT).
+> `asm-bom:9.8`, transitiva de Chicory. Los tests usan módulos binarios mínimos generados por
+> `WasmTestModule` (sin toolchain WAT).
+
+## Tests
+
+```bash
+./gradlew :src:iflow-wasm:test
+```
+
+Cobertura actual:
+
+- `WasmModuleLoaderTest`: parseo, límites de tamaño/memoria, `start`, imports/exports obligatorios,
+  firmas de imports y exports, instanciación con `ImportValues` e invocación de `decide`.
+- `TlvCodecTest`: round-trip de string/i64/bool/bytes/nulo, distinción nulo vs string vacío, UTF-8
+  estricto, longitudes inválidas, bytes sobrantes y copia defensiva.
+- `IflowWasmActivatorTest`: registro del loader y del contrato en el `ModuleContext`.
+
+Para añadir un caso de contrato, usa `WasmTestModule` para emitir el módulo binario y valida con
+`WasmContract.policyV3()`; no se necesita un compilador Wasm en el build.
 
 ## Próximos pasos
 
-1. Validar la firma del export `decide` con `Instance.exportType(name)`.
-2. Definir los imports `iflow.*` de la spec v3 y su lista blanca por capability.
-3. `WasmPolicyEngine` conectado a `Router`/`RouteDecision`/`RouteOutcome`.
-4. Hash/firma del artefacto y política de hot-reload.
-5. Test de integración con un `.wasm` mínimo compilado desde WAT.
-6. Ejemplos en al menos dos lenguajes y guía de autoría.
+1. Implementar las host functions `iflow.*` sobre un `PolicySession` con journal read-your-writes y
+   una única decisión por ejecución (W2).
+2. Implementar `WasmPolicyEngine` y conectarlo a `Router`/`MessageDispatcher` (W3).
+3. Añadir hash/firma del artefacto y política de hot-reload (W3).
+4. Construir la matriz de paridad `.flow` v3 (ROM) vs `.wasm` con el mismo resultado observable
+   (W3.5), sin usar el ISA v2 como contrato.
+5. Ejemplos en al menos dos lenguajes y guía de autoría (W4).
 
 ## Relación con `iflow-vm`
 
