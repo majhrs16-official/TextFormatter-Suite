@@ -53,23 +53,37 @@ class ModuleGraphTest {
     }
 
     @Test
-    void acceptsOlderContractThanHostWithinSameMajor() {
+    void acceptsOlderContractThanHostAboveBase() {
         ModuleGraph graph = new ModuleGraph(ENV);
         Module older = Modules.simple("older", 3);
+        Module olderMajor = Modules.simple("older-major", 2);
 
-        ResolutionResult result = graph.resolve(List.of(older));
+        ResolutionResult result = graph.resolve(List.of(older, olderMajor));
 
         assertEquals(ResolutionStatus.RESOLVED, result.of(older));
+        assertEquals(ResolutionStatus.RESOLVED, result.of(olderMajor));
     }
 
     @Test
-    void rejectsContractWithOlderMajor() {
+    void acceptsContractAtBase() {
         ModuleGraph graph = new ModuleGraph(ENV);
-        Module legacy = Modules.simple("legacy", 2);
+        Module base = Modules.simple("base", 1);
+
+        ResolutionResult result = graph.resolve(List.of(base));
+
+        assertEquals(ResolutionStatus.RESOLVED, result.of(base));
+    }
+
+    @Test
+    void rejectsContractBelowBase() {
+        ModuleGraph graph = new ModuleGraph(ENV);
+        Module legacy = Modules.named("legacy", SemVer.of(1, 0, 0), 0,
+                d -> d.contractVersion(SemVer.of(0, 9, 0)));
 
         ResolutionResult result = graph.resolve(List.of(legacy));
 
         assertEquals(ResolutionStatus.CONTRACT_MISMATCH, result.of(legacy));
+        assertTrue(result.reasonOf(legacy).contains("minimum supported contract"));
     }
 
     @Test

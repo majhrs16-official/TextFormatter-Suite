@@ -31,6 +31,14 @@ import java.util.Set;
  */
 public final class ModuleGraph {
 
+    /**
+     * Minimum contract accepted by the pre-1.0 handshake. The contract is a
+     * floor, not an exact match: a module compiled against any version in
+     * {@code [1.0.0, host]} is accepted, while anything below the base is
+     * rejected without a compatibility adapter.
+     */
+    private static final SemVer MIN_CONTRACT = SemVer.of(1, 0, 0);
+
     private final Environment environment;
 
     public ModuleGraph(Environment environment) {
@@ -226,16 +234,13 @@ public final class ModuleGraph {
 
     private String contractMismatch(ModuleDescriptor descriptor) {
         SemVer host = environment.contractVersion();
-        if (descriptor.contractVersion().major() < host.major()) {
-            return "compiled against " + descriptor.contractVersion()
-                    + " but host contract major is " + host.major();
+        SemVer module = descriptor.contractVersion();
+        if (module.compareTo(MIN_CONTRACT) < 0) {
+            return "compiled against " + module
+                    + " but the minimum supported contract is " + MIN_CONTRACT;
         }
-        if (descriptor.contractVersion().major() > host.major()) {
-            return "compiled against a newer contract (" + descriptor.contractVersion()
-                    + ") than the host provides (" + host + ")";
-        }
-        if (descriptor.contractVersion().compareTo(host) > 0) {
-            return "requires contract " + descriptor.contractVersion()
+        if (module.compareTo(host) > 0) {
+            return "requires contract " + module
                     + " but host provides " + host;
         }
         return null;

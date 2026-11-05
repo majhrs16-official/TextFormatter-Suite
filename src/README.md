@@ -20,6 +20,7 @@ TextFormatter Suite
 │   ├── host              → Shared bootstrap, dispatch, configuration
 │   ├── messages          → Message catalog (serialization formats)
 │   ├── chattranslator    → Translation facade and provider lifecycle
+│   ├── coretranslator    → Legacy Bukkit-only PlaceholderAPI expansion (%cot_*); deprecated
 │   ├── transport         → Transport abstraction (HTTP, codecs; dependency package)
 │   ├── gtranslate        → Google Translate provider
 │   ├── ltranslate        → LibreTranslate provider
@@ -79,6 +80,7 @@ TextFormatter Suite
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `iflow` (backend), `host` legacy |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; contrato v3, `WasmPolicyRouter`, SHA-256 obligatorio y hot-reload; publica `IflowBackend` | `core-api`, `com.dylibso.chicory:runtime` | `iflow` (backend), `host` legacy |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `iflow` (backend), `host` legacy, web editor |
+| `coretranslator` | Expansión PlaceholderAPI legacy `%cot_*`; Bukkit-only, *deprecated*, mantenida | `core-api`, Paper API, PlaceholderAPI | `spigot-host` (instalado por el Manager) |
 | `host` | Neutral message dispatch, config loading and `SuiteHost` assembly; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-socket`, `sync-discord`, `gtranslate`, `ltranslate` |
@@ -125,6 +127,7 @@ TextFormatter Suite
 | `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
 | `host` | Neutral pipeline | Dispatch, config, message catalog | `SuiteHost`, `MessageDispatcher`, `ConfigLoader`, `HostPaths` | `SuiteRuntime` builds `SuiteHost` | [host/README.md](host/README.md) |
 | `chattranslator` | Translation facade | Builds the translator manager from provider services and refreshes it on module lifecycle events | `ChatTranslator`, `ChatTranslatorActivator`, `BackendConfig`, `TranslatorManager` | `ChatTranslatorActivator` | [chattranslator/README.md](chattranslator/README.md) |
+| `coretranslator` | Legacy PAPI expansion (`%cot_*`); Bukkit-only, deprecated, maintained | Placeholder grammar over `TranslationService`/`MessageDispatch`; PAPI adapter isolated behind a Bukkit hook | `CoreTranslatorModule`, `CoreTranslatorActivator`, `CoreTranslatorPlaceholders`, `CoreTranslatorPapiExpansion` | `CoreTranslatorActivator` | [coretranslator/README.md](coretranslator/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateActivator` | [gtranslate/README.md](gtranslate/README.md) |
 | `ltranslate` | LibreTranslate | Translate via LibreTranslate API | `LTranslate`, `LTranslateProvider` | `LTranslateActivator` | [ltranslate/README.md](ltranslate/README.md) |
 | `transport` | Transport layer (dependency package) | HTTP transport, codecs | `HttpTransport`, `Transport`, `MessageCodec` | `modulePackage` (`DEPENDENCY`) | [transport/README.md](transport/README.md) |

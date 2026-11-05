@@ -171,6 +171,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Traducción
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
+| `coretranslator` | Expansión PlaceholderAPI legacy `%cot_*` (`translate`, `lang`, `set/get`, `new/send/broadcast/clone`, `sendDiscord`); Bukkit-only, *deprecated*, sin shim ni `suite-common-legacy` | ✅ Probado (13 tests) |
 | `gtranslate` | Google Translate provider (web scraping, UA rotation, rate limit, concatena segmentos) | ✅ Probado (17+19 tests) |
 | `ltranslate` | LibreTranslate provider (self-hosted/público, long-poll, tokens `char[]`) | ✅ Probado (17+15 tests) |
 

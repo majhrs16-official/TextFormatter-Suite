@@ -2011,43 +2011,79 @@ y Velocity. La estabilidad y la producción no se declaran hasta cerrar ese cicl
 
 ## Decisión 2026-11-04 — CoreTranslator como módulo legacy independiente (ADR-035)
 
-**Estado:** Aceptada. Restauración pendiente.
+**Estado:** Aceptada. Implementada en `src/coretranslator` (2026-11-04).
 
 **Contexto.** `CoreTranslator` proviene del proyecto anterior ChatTranslator y se conserva por su
 utilidad como feature. No es una capa de compatibilidad dentro de otro módulo ni un shim: es una
 implementación legacy independiente. La regla de no retrocompatibilidad se refiere a features y
 contratos, no a la pluralidad de módulos; para módulos rige C6 («implementar ambas»).
 
+La investigación del historial mostró una discrepancia importante: el módulo llamado
+`src/coretranslator` en `7dd164a4^` no era el CoreTranslator funcional de ChatTranslator. Era un
+`LegacyBridge` que convertía `me.majhrs16.suite.common.legacy.ChatMessage` al `Message` actual, y su
+dependencia `suite-common-legacy` solo contenía los DTO deprecados `ChatMessage` y
+`ChatMessageType`. Restaurar ese código habría reintroducido exactamente el shim que C7 prohíbe. El
+CoreTranslator real es la expansión PlaceholderAPI `me.majhrs16.cot.CoreTranslator` del proyecto
+ChatTranslator, que expone los placeholders `%cot_*`.
+
 **Decisión.**
 
-1. Restaurar `src/coretranslator` desde `7dd164a4^`, commit anterior a su eliminación en
-   `7dd164a4`. No reconstruir el módulo hipotéticamente.
-2. Mantenerlo como módulo *deprecated*, independiente y mantenido.
-3. Es exclusivo de Bukkit porque depende de PlaceholderAPI; puede importar clases de
-   Bukkit/Spigot/Paper.
+1. No restaurar el `LegacyBridge` de `7dd164a4^` ni recuperar `suite-common-legacy`: no aportan una
+   feature, solo tipos de compatibilidad para el puente eliminado.
+2. Restaurar la feature real desde el proyecto ChatTranslator: una expansión PlaceholderAPI con
+   identificador `cot`, adaptada a los contratos actuales (`Actor`, `Message`, `TranslationService`,
+   `MessageDispatch`, `UserLanguageStore`, `SyncBus`).
+3. Mantenerla como módulo *deprecated*, independiente y mantenido. Es exclusivo de Bukkit porque
+   PlaceholderAPI es un plugin Bukkit; puede importar Bukkit/Spigot/Paper y fija Java 21 por la API
+   de Paper 1.21.4.
 4. No se usa como puente interno ni como fallback de otros módulos. Los consumidores nuevos usan el
-   contrato vigente.
-5. Alinear versión y contrato a `1.0.0`; adaptar el código histórico a la API actual.
-6. Añadir tests de módulo y de integración Bukkit.
+   contrato vigente. El módulo se declara `Platform: spigot` y no se instala en Fabric/Velocity.
+5. Alinear versión, contrato y capability a `1.0.0`; el requisito es `chattranslator >= 1.0.0`.
+6. Alcance restaurado: `translate`, `lang`, `set`/`get`, `new`, `send`, `broadcast`, `clone` y
+   `sendDiscord`. No se restaura `var` (SpEL): el modelo actual es inmutable y exponer SpEL
+   arbitrario en un placeholder reintroduce un agujero de seguridad. La lista explícita de canales
+   de `sendDiscord` se acepta por compatibilidad, pero el `SyncBus` actual enruta a su sink
+   configurado.
+7. Añadir tests neutrales de gramática, contrato de módulo y adaptador PAPI. La prueba real en
+   servidor Bukkit/Paper con PlaceholderAPI pertenece al E2E posterior a `1.0.0`.
 
 **Consecuencias.**
 
-- El código histórico depende de `suite-common-legacy`, eliminado en `9e5f6d09`; la restauración
-  debe decidir si se recupera ese paquete desde el historial o se adapta la dependencia.
-- `CoreTranslator` no se elimina en la purga P0.4; se restaura como feature legacy.
+- `suite-common-legacy` y el `LegacyBridge` siguen eliminados; no hay doble lector ni adaptador
+  interno.
+- `CoreTranslator` es una expansión PAPI, no un motor de traducción ni un puente de mensajes. Si
+  PlaceholderAPI no está instalado, el módulo lo registra en el log y no expone placeholders.
+- `%cot_translate%` resuelve de forma síncrona porque PAPI exige un valor inmediato; se apoya en la
+  caché de `TranslationService`. Es una limitación legacy documentada, no el camino recomendado
+  para cargas altas.
+- `send`/`broadcast`/`clone` operan sobre mensajes creados por `cot_new`/`cot_clone`; no capturan el
+  historial del chat vivo. La captura de eventos pertenece a `sync-bukkit` y al pipeline neutral.
+- `CoreTranslator` no se elimina en la purga P0.4; se mantiene como feature legacy.
 - La documentación debe dejar de decir que `CoreTranslator` fue retirado.
 
 **Alternativas consideradas.**
 
-1. **Reconstruirlo desde cero.** Ventajas: código limpio. Limitaciones: el usuario exige recuperar
-   el módulo real desde el historial. Evaluación: **descartada**.
-2. **Eliminarlo.** Ventajas: menos código legacy. Limitaciones: se pierde un feature útil de
-   ChatTranslator. Evaluación: **descartada**.
-3. **Mantenerlo como shim dentro de otro módulo.** Ventajas: un paquete menos. Limitaciones:
+1. **Restaurar el `LegacyBridge` de `7dd164a4^`.** Ventajas: recuperación literal del historial.
+   Limitaciones: es un shim, depende de DTO sin feature y contradice C7. Evaluación: **descartada**.
+2. **Recuperar `suite-common-legacy`.** Ventajas: compila el puente sin cambios. Limitaciones: solo
+   contenía DTO deprecados; mantiene un camino de compatibilidad que la purga debe eliminar.
+   Evaluación: **descartada**.
+3. **Reconstruir la expansión PAPI desde cero.** Ventajas: código más limpio. Limitaciones: la
+   feature real existe en el proyecto ChatTranslator y se puede adaptar; reconstruirla oculta el
+   origen histórico. Evaluación: **descartada**.
+4. **Eliminar CoreTranslator.** Ventajas: menos código legacy. Limitaciones: se pierde un feature
+   útil de ChatTranslator. Evaluación: **descartada**.
+5. **Mantenerlo como shim dentro de otro módulo.** Ventajas: un paquete menos. Limitaciones:
    contradice C6 y la independencia de módulos. Evaluación: **descartada**.
 
 **Evidencia y referencias.**
 
-- `git log --all -- src/coretranslator`: `7dd164a4` (eliminación), `7dd164a4^` (último estado).
+- `/home/majhrs16/Documentos/chattranslator/src/main/java/me/majhrs16/cot/CoreTranslator.java` y
+  `CommandsPAPI.java`: expansión `cot` original.
+- `git show 7dd164a4^:src/coretranslator/src/main/java/me/majhrs16/suite/coretranslator/LegacyBridge.java`:
+  puente eliminado, no la feature.
+- `git show b0de8fe64077a2971ae85a29b443990918034cf5:suite/common-legacy/...`: solo
+  `ChatMessage`/`ChatMessageType`.
 - `src/common-legacy` eliminado en `9e5f6d09`.
+- `src/coretranslator`: módulo restaurado, tests y README.
 - `docs/prompts/diseno/philosophy.md` C6 y C7.
