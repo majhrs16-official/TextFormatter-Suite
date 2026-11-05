@@ -221,12 +221,6 @@ public final class RuleConfigLoader {
             }
         }
 
-        // Also support legacy single "transform" string
-        String legacyTransform = getString(map, "transform", null);
-        if (legacyTransform != null && transforms.isEmpty()) {
-            transforms.add(new TransformOp.Rewrite(legacyTransform));
-        }
-
         return transforms;
     }
 

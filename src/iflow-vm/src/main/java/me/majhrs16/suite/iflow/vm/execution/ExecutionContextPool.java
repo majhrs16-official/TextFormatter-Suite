@@ -73,7 +73,7 @@ public final class ExecutionContextPool implements AutoCloseable {
 
         // Reset context for reuse
         try {
-            ctx.reset();
+            ctx.initialize();
             // Re-apply configuration
             configurator.accept(ctx);
         } catch (Exception e) {

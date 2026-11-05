@@ -81,7 +81,7 @@ class WasmModuleLoaderTest {
 
     private static WasmContract contract(Set<String> exports, Set<String> imports,
                                          int maxPages, boolean allowStart) {
-        return new WasmContract(exports, imports, maxPages, allowStart);
+        return new WasmContract(exports, Map.of(), imports, Map.of(), maxPages, allowStart);
     }
 
     @Test
@@ -196,7 +196,7 @@ class WasmModuleLoaderTest {
     @Test
     void contractRejectsInvalidLimits() {
         assertThrows(IllegalArgumentException.class,
-            () -> new WasmContract(Set.of(), Set.of(), 0, false));
+            () -> new WasmContract(Set.of(), Map.of(), Set.of(), Map.of(), 0, false));
         assertEquals(256, WasmContract.policyV3().maxMemoryPages());
     }
 

@@ -373,3 +373,30 @@ vigente alternativo.
 
 **Validación:** `git diff --check` sin salida; checker de enlaces locales sobre `docs/wiki/*.md`
 con **0 enlaces rotos**. No se ejecutó E2E real; sigue siendo posterior a `1.0.0`.
+
+---
+
+## 11. Addendum — P0.1 y avance de P0.4 (2026-11-05)
+
+**Estado:** P0.1 cerrado; P0.4 parcial, sin declarar cerrado.
+
+- Inventario completo en `docs/workdir/P0.1-inventory.md`: 34 YAML con `config-version: 1.0`,
+  `plugin.yml` excluido, 0 aliases legacy en producción, 0 lectores de rutas planas, 0 shims y
+  `CoreTranslator` como único módulo `@Deprecated` de la base.
+- P0.4 eliminó los aliases de `IflowConfig` (`firewall`/`vm`/`wasm`, `default-backend`, `fallback`),
+  el `transform` de cadena en `rules.yml`, los constructores de compatibilidad sin uso de
+  `RoutingResult`, `DispatchReport`, `HttpSink`, `ChatTranslator` y `WasmContract`, el alias
+  `ExecutionContext.reset()`, `MessagesCatalog.getAllMessages()` y los placeholders `%s`.
+- Se corrigieron las versiones `2.1`/`3.0` que sobrevivían en `HttpTransport`, `TextFormatterModule`
+  y la UI del editor web; el manifiesto exportado usa `suite-version: 1.0.0`. También se retiraron
+  las etiquetas `F7+` de las rutas y validaciones del editor, y el builder `Rule.transform(String)`
+  que ya no leía el loader.
+- Se corrigieron Javadocs que describían rutas heredadas inexistentes (`BackendConfig`,
+  `ChatTranslatorConfig`, `SocketConfig`, `WebSocketSyncConfig`) y las menciones de alias en
+  `storage.md`, `ADR-032` y `src/iflow/README.md`.
+- Deuda que permanece: entradas `2.1.0-SNAPSHOT` en `gradle/verification-metadata.xml`, revisión
+  final de P0.4 y coherencia documental de P0.8. No se declara E2E ni estabilidad.
+
+**Validación:** gate completo `./gradlew build checkArchitecture checkLocks --no-daemon` en verde;
+`npm run check` del editor web en verde; regresiones de `IflowConfig`, `RuleConfigLoader`,
+`MessagesCatalog`, `ExecutionContext` y `HttpTransport` añadidas/actualizadas.

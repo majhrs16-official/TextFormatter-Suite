@@ -5,9 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MessagesCatalogTest {
 
@@ -36,18 +33,8 @@ class MessagesCatalogTest {
     }
 
     @Test
-    void substitutesBothCurlyAndPercentPlaceholders() {
-        assertEquals("a 1 b 2", catalog.substitute("a {} b %s", 1, 2));
+    void substitutesCurlyPlaceholders() {
+        assertEquals("a 1 b 2", catalog.substitute("a {} b {}", 1, 2));
         assertEquals("no arguments", catalog.substitute("no arguments"));
-    }
-
-    @Test
-    void exposesImmutableMessageMap() {
-        assertFalse(catalog.getAllMessages().isEmpty());
-        assertTrue(catalog.getAllMessages().containsKey("enabled"));
-        assertThrows(
-            UnsupportedOperationException.class,
-            () -> catalog.getAllMessages().put("x", "y")
-        );
     }
 }

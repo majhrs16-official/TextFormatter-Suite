@@ -48,7 +48,8 @@ class ChatTranslatorTest {
         manager.add(mockLibre);
         
         translationService = new TranslationService(manager);
-        chatTranslator = new ChatTranslator(manager, translationService);
+        chatTranslator = new ChatTranslator(
+            manager, translationService, ChatTranslatorConfig.Config.defaults());
     }
 
     @Test

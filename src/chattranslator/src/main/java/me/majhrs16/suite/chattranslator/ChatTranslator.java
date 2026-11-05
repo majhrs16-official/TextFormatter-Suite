@@ -24,8 +24,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *   <li><strong>Flag de contexto (runtime):</strong> Si la petición incluye un
  *       contexto con clave indicando un nombre de proveedor (ej. {@code "google"}, {@code "libre"}),
  *       se usa ese backend (si {@code contextOverrideEnabled} es true).</li>
- *   <li><strong>Configuración estática (chattranslator/config.yml):</strong> En ausencia de flag,
- *       se usa el backend configurado como predeterminado en {@code default-backend}.</li>
+ *   <li><strong>Configuración estática (config/chattranslator/config.yml):</strong> En ausencia de
+ *       flag, se usa el backend configurado como predeterminado en {@code default-backend}.</li>
  *   <li><strong>Fallback automático:</strong> Si el backend indicado no está
  *       disponible, se recurre al primer proveedor disponible en el
  *       {@link TranslatorManager}.</li>
@@ -58,7 +58,7 @@ public final class ChatTranslator implements AutoCloseable {
      *
      * @param manager           gestor de proveedores (inyectado desde el host)
      * @param translationService servicio de traducción (inyectado desde el host)
-     * @param config            configuración del módulo (desde chattranslator/config.yml)
+     * @param config            configuración del módulo (desde config/chattranslator/config.yml)
      */
     public ChatTranslator(TranslatorManager manager, TranslationService translationService, ChatTranslatorConfig.Config config) {
         this.manager = manager;
@@ -68,14 +68,8 @@ public final class ChatTranslator implements AutoCloseable {
     }
 
     /**
-     * Constructor de compatibilidad sin config explícita (usa defaults).
-     */
-    public ChatTranslator(TranslatorManager manager, TranslationService translationService) {
-        this(manager, translationService, ChatTranslatorConfig.Config.defaults());
-    }
-
-    /**
-     * Establece el backend predeterminado desde configuración estática (chattranslator/config.yml).
+     * Establece el backend predeterminado desde configuración estática
+     * ({@code config/chattranslator/config.yml}).
      * Se invoca durante el arranque del host al cargar la configuración.
      *
      * @param backendName nombre del backend (ej. {@code "google"}, {@code "libre"}),

@@ -10,7 +10,7 @@ import me.majhrs16.suite.api.SemVer;
  * hands out {@link TextFormatter} instances.
  *
  * <p>The module declares the {@code channel-api} capability at contract
- * {@code 3.0.0}: any consumer (iFlow, platform hosts) requiring it can be
+ * {@code 1.0.0}: any consumer (iFlow, platform hosts) requiring it can be
  * wired to this module by the resolver.</p>
  */
 public final class TextFormatterModule implements Module {

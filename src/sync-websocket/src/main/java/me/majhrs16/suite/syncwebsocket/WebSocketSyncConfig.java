@@ -9,9 +9,9 @@ import java.util.Map;
 /**
  * Configuración propia del submódulo {@code sync-websocket}.
  *
- * <p>El módulo es dueño de su archivo ({@code config/sync-websocket/config.yml},
- * con fallback a {@code sync/websocket.yml}) y de las reglas de seguridad
- * asociadas: un servidor WebSocket habilitado sin token no es utilizable.</p>
+ * <p>El módulo es dueño de su archivo ({@code config/sync-websocket/config.yml})
+ * y de las reglas de seguridad asociadas: un servidor WebSocket habilitado sin
+ * token no es utilizable.</p>
  *
  * @param enabled si el sink debe arrancar
  * @param token   token de autenticación compartido con los clientes

@@ -85,12 +85,6 @@ public final class HttpSink implements SyncSink {
         );
     }
 
-    /** @deprecated Use constructor with bindAddress, authToken, and hmacSecret. */
-    @Deprecated
-    public HttpSink(String outboundUrl, int inboundPort, String inboundPath) {
-        this(outboundUrl, inboundPort, inboundPath, "127.0.0.1", null, null);
-    }
-
     @Override
     public String name() {
         return "http";

@@ -100,7 +100,7 @@ public final class MessagesConfig {
         }
     }
 
-    /** @return resolved message with {} / %s positional args substituted. */
+    /** @return resolved message with {@code {}} positional args substituted. */
     public String format(String key, Object... args) {
         return substitute(values.getOrDefault(key, key), args);
     }
@@ -111,12 +111,10 @@ public final class MessagesConfig {
         }
         String out = template;
         for (Object arg : args) {
-            int braces = out.indexOf("{}");
-            int percent = out.indexOf("%s");
-            if (braces < 0 && percent < 0) {
+            int at = out.indexOf("{}");
+            if (at < 0) {
                 break;
             }
-            int at = braces < 0 ? percent : (percent < 0 ? braces : Math.min(braces, percent));
             out = out.substring(0, at) + arg + out.substring(at + 2);
         }
         return out;

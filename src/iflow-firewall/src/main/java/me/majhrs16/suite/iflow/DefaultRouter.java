@@ -204,7 +204,7 @@ public final class DefaultRouter implements Router, AutoCloseable {
             working = actionSurface.msg();
         }
 
-        // Apply transform operations (F7+)
+        // Apply transform operations
         if (!rule.transforms().isEmpty()) {
             ScriptSurface surface = new ScriptSurface(working, emitter, recipient,
                 channels, null, null, permissions::has);

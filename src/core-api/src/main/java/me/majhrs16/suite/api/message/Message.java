@@ -124,7 +124,7 @@ public final class Message {
         return channel;
     }
 
-    /** @return sleep milliseconds for delayed delivery (F7+ sleep transform). */
+    /** @return sleep milliseconds for delayed delivery (sleep transform). */
     public long sleepMillis() {
         return sleepMillis;
     }

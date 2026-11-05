@@ -104,7 +104,7 @@
           warn('iflow', 'nodes/' + n.id, 'Nodo cond sin matcher (siempre pasa)');
         }
         if (n.kind === 'transform') {
-          warn('iflow', 'nodes/' + n.id, 'transform requiere motor F7+ (capability transforms=false)');
+          warn('iflow', 'nodes/' + n.id, 'transform requiere un motor con capability transforms');
         }
         if (n.kind === 'redirect' && !n.target) {
           warn('iflow', 'nodes/' + n.id, 'Redirección sin target');

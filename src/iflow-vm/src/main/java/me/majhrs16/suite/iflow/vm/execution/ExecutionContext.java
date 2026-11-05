@@ -226,11 +226,6 @@ public final class ExecutionContext {
         }
     }
 
-    /** Resets the context for reuse (alias for initialize). */
-    public void reset() {
-        initialize();
-    }
-
     // ===== Fuel management =====
 
     public long fuelRemaining() { return fuelRemaining; }

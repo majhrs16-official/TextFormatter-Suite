@@ -336,7 +336,7 @@
     },
     "sync.velocity.enabled": {
       "label": "Habilitado (Velocity)",
-      "desc": "Proxy plugin (F7+)",
+      "desc": "Proxy plugin Velocity",
       "type": "boolean",
       "default": false
     },

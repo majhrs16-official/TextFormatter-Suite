@@ -9,13 +9,13 @@
   function renderKernel() {
     const st = StateStore.getState();
     const mods = [
-      { name: 'sync-discord', v: '2.1.0', present: true, note: 'Gateway v10 + REST' },
-      { name: 'sync-telegram', v: '2.1.0', present: true, note: 'sendMessage + getUpdates' },
-      { name: 'sync-http', v: '2.1.0', present: true, note: 'webhook + API REST' },
-      { name: 'sync-tcpudp', v: '2.1.0', present: true, note: 'raw TCP/UDP + proto' },
-      { name: 'sync-velocity', v: 'F7+', present: false, note: 'interconexión entre servidores' },
-      { name: 'engine DefaultRouter', v: 'F7+', present: false, note: 'knob parallel + transform' },
-      { name: 'web-editor (this)', v: '2.1.0', present: true, note: 'schema v2.2 · ServiceLoader' },
+      { name: 'sync-discord', v: '1.0.0', present: true, note: 'Gateway v10 + REST' },
+      { name: 'sync-telegram', v: '1.0.0', present: true, note: 'sendMessage + getUpdates' },
+      { name: 'sync-http', v: '1.0.0', present: true, note: 'webhook + API REST' },
+      { name: 'sync-socket', v: '1.0.0', present: true, note: 'TCP/UDP' },
+      { name: 'sync-velocity', v: '1.0.0', present: true, note: 'interconexión entre servidores' },
+      { name: 'engine DefaultRouter', v: '1.0.0', present: true, note: 'router neutral del runtime' },
+      { name: 'web-editor (this)', v: '1.0.0', present: true, note: 'schema v2.2 · ServiceLoader' },
     ];
     const hasTransform = st.graph.nodes.some(n => n.kind === 'transform');
     const modGrid = $('#modGrid');
@@ -37,9 +37,6 @@
           '<p style="font-size:12px;color:var(--txt2)">' +
           Suite.utils.esc(m.note) +
           '</p>' +
-          (m.name === 'engine DefaultRouter' && hasTransform
-            ? '<span style="font-size:11px;color:var(--amber)">⚠ Transform nodes detectados — requiere F7+</span>'
-            : '') +
           '</div>'
         );
       })

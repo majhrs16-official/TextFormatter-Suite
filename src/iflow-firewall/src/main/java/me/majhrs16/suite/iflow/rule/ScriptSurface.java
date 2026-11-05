@@ -219,7 +219,7 @@ public final class ScriptSurface {
     }
 
     // ============================================================
-    // TRANSFORM OPERATIONS (for F7+ transform ops)
+    // TRANSFORM OPERATIONS
     // ============================================================
 
     /** Sets the raw message text (for Rewrite transform). */

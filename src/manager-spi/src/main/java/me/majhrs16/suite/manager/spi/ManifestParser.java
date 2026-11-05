@@ -292,8 +292,8 @@ public static List<PackageEntry> parseManifest(String content) throws ParseExcep
     }
 
     /**
-     * Parses a whitespace-separated list of package names, preserving order and
-     * removing duplicates. Commas are accepted as separators for compatibility.
+     * Parses a whitespace- or comma-separated list of package names, preserving
+     * order and removing duplicates.
      */
     private static List<String> parseNameList(String value) {
         if (value == null || value.isBlank()) {

@@ -29,9 +29,9 @@ class IflowConfigTest {
     }
 
     @Test
-    void loadsEngineAndNormalizesAliases() throws Exception {
+    void loadsCanonicalEngine() throws Exception {
         Files.writeString(dir.resolve("config.yml"), """
-                engine: wasm
+                engine: iflow-wasm
                 fallback-on-unavailable: false
                 config-version: 1.0
                 """);
@@ -43,10 +43,21 @@ class IflowConfigTest {
     }
 
     @Test
-    void acceptsDefaultBackendAlias() throws Exception {
+    void ignoresDefaultBackendAlias() throws Exception {
         Files.writeString(dir.resolve("config.yml"), "default-backend: vm\nconfig-version: 1.0\n");
 
-        assertEquals("iflow-vm", IflowConfig.load(dir, logger()).engine());
+        assertEquals("iflow-firewall", IflowConfig.load(dir, logger()).engine());
+    }
+
+    @Test
+    void ignoresFallbackAlias() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-vm
+                fallback: false
+                config-version: 1.0
+                """);
+
+        assertTrue(IflowConfig.load(dir, logger()).fallback());
     }
 
     @Test
@@ -69,6 +80,7 @@ class IflowConfigTest {
     @Test
     void normalizeKeepsUnknownNamesForExplicitFailure() {
         assertEquals("custom-backend", IflowConfig.normalize("custom-backend"));
+        assertEquals("wasm", IflowConfig.normalize("wasm"));
         assertEquals("iflow-firewall", IflowConfig.normalize(null));
         assertEquals("iflow-firewall", IflowConfig.normalize(" "));
     }

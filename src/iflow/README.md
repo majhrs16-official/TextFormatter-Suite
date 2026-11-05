@@ -23,8 +23,7 @@ engine: iflow-firewall        # iflow-firewall | iflow-vm | iflow-wasm
 fallback-on-unavailable: true # usa el backend disponible según la prioridad explícita
 ```
 
-`engine` también acepta los alias `firewall`, `vm` y `wasm`, y la clave
-`default-backend` como alias de `engine`. Si el archivo falta o es inválido se
+Solo se aceptan los nombres canónicos. Si el archivo falta o es inválido se
 usan `iflow-firewall` y `fallback-on-unavailable: true`.
 
 Las rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml`

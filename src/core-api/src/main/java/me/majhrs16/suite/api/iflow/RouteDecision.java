@@ -22,7 +22,7 @@ public record RouteDecision(
         String redirectChannel
 ) {
 
-    // Compact constructor for backwards compatibility (redirectChannel defaults to null)
+    // Convenience overload for decisions without a channel redirect.
     public RouteDecision(PolicyTarget target, String reason, long backoffMillis,
                          Actor recipient, Actor emitter) {
         this(target, reason, backoffMillis, recipient, emitter, null);

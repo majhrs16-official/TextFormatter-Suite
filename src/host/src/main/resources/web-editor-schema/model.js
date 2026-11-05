@@ -451,7 +451,7 @@
     const hasTransform = state.graph.nodes.some(n => n.kind === 'transform');
     return {
       schema: 'v2.2',
-      'suite-version': '2.1.0',
+      'suite-version': '1.0.0',
       'generated-at': new Date().toISOString(),
       capabilities: { transforms: hasTransform },
       validation: {

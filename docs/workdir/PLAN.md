@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; D-009 cerrado con prioridad explícita y test; P0.2, P0.3, P0.5, P0.7 y P0.8b cerrados con gate verde.**)
+> Última actualización: 2026-11-05 (**P0.1 cerrado con inventario `archivo:línea`; P0.4 avanzado con purga de aliases, constructores de compatibilidad, `%s` y versiones `2.1`/`3.0` en código y UI; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7 y P0.8b cerrados con gate verde.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -47,10 +47,10 @@
 
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
-| **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Pendiente |
+| **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Completado (2026-11-05, `docs/workdir/P0.1-inventory.md`) |
 | **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0` en la raíz, preferentemente al final. `plugin.yml` queda excluido. Si falta `config-version`, el parser falla con un error explícito. Un sufijo de build no cambia la base funcional, pero su publicación se rige por la política de artefactos. | Completado (2026-11-04) |
 | **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata como retirado), lectores de la raíz plana de `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`) y cualquier fallback que acepte el esquema viejo. Los `config/<module>/config.yml` canónicos se conservan. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Completado (2026-11-04) |
-| **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no como shim ni recuperando `suite-common-legacy`. El `LegacyBridge` de `7dd164a4^` no se restaura. Actualizar todos los consumidores en el mismo cambio. | Parcial (CoreTranslator, 2026-11-04) |
+| **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no como shim ni recuperando `suite-common-legacy`. El `LegacyBridge` de `7dd164a4^` no se restaura. Actualizar todos los consumidores en el mismo cambio. | Parcial (2026-11-05: aliases iFlow, `transform` legacy, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+` y versiones de UI eliminados; quedan metadatos históricos y la revisión final de P0.4) |
 | **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Completado (2026-11-04) |
 | **P0.6** | Auditoría vigente | `AUDITORIA.md` refleja la auditoría documental de 2026-11-04 (D-001…D-010) con evidencia y estado; este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Corregir P0/P1 con test de regresión antes de avanzar. Al cerrar el ciclo, reemplazar el archivo por completo. | Parcial (auditoría documental 2026-11-04) |
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
@@ -67,7 +67,7 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
 **Cerrado en esta ronda:** D-009. `IflowBackendManager` aplica la prioridad explícita
 `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
 
-**Deuda conocida tras P0.2/P0.3 (2026-11-04):**
+**Deuda conocida tras P0.2/P0.3/P0.4 (2026-11-05):**
 
 - `iflow-firewall` sigue siendo un módulo legacy independiente con expresiones SpEL; no es shim
   ni compite con el hub, que lo selecciona como backend.
@@ -76,6 +76,10 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
   se recuperan (ADR-035).
 - La wiki (`docs/wiki/`) quedó alineada en P0.8b: 17 páginas revisadas, sin duplicar ADRs,
   sin comandos inexistentes y sin `iflow.engine.kind` presentado como vigente.
+- P0.1 cerró el inventario en `docs/workdir/P0.1-inventory.md`; P0.4 ya eliminó los aliases de
+  iFlow, el `transform` legacy, los constructores de compatibilidad sin uso, `%s`, `reset`, W2, las
+  etiquetas `F7+` de la UI y las versiones `2.1`/`3.0` de código y UI. Quedan la revisión final de
+  P0.4 y P0.8.
 - `gradle/verification-metadata.xml` conserva entradas históricas de artefactos propios
   `2.1.0-SNAPSHOT`; no participan en la resolución actual.
 - W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.

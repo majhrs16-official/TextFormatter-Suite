@@ -17,10 +17,10 @@ import java.util.Set;
  * del contrato debe pasar por el ADR del motor (W1) y versionarse.</p>
  *
  * <p>Las firmas de imports y exports son opcionales. Si
- * {@code allowedImportTypes} está vacío, se conserva el comportamiento de W2:
- * solo se valida el módulo del import. Si tiene entradas, cada import usado
- * debe ser una función declarada y con la firma exacta. Las firmas de exports
- * se validan siempre que {@code requiredExportTypes} tenga una entrada.</p>
+ * {@code allowedImportTypes} está vacío, solo se valida el módulo del import.
+ * Si tiene entradas, cada import usado debe ser una función declarada y con la
+ * firma exacta. Las firmas de exports se validan siempre que
+ * {@code requiredExportTypes} tenga una entrada.</p>
  *
  * @param requiredExports      exports obligatorios, p. ej. {@code decide}
  * @param requiredExportTypes  firmas obligatorias de exports, por nombre
@@ -72,16 +72,6 @@ public record WasmContract(
                     "allowedImportTypes declara un módulo no permitido: " + importKey);
             }
         }
-    }
-
-    /**
-     * Constructor de compatibilidad W2: sin firmas de imports/exports.
-     */
-    public WasmContract(Set<String> requiredExports,
-                        Set<String> allowedImportModules,
-                        int maxMemoryPages,
-                        boolean allowStart) {
-        this(requiredExports, Map.of(), allowedImportModules, Map.of(), maxMemoryPages, allowStart);
     }
 
     /**

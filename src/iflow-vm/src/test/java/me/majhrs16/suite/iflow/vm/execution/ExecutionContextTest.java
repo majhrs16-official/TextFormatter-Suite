@@ -296,12 +296,12 @@ class ExecutionContextTest {
     }
 
     @Test
-    void resetAliasForInitialize() {
+    void initializeResetsContext() {
         SoftMMU mmu = createMappedMMU();
         ExecutionContext ctx = createContext(mmu);
         ctx.initialize();
         ctx.registers().set(RegisterFile.R0, 0x1234);
-        ctx.reset();
+        ctx.initialize();
         assertEquals(0, ctx.registers().get(RegisterFile.R0));
     }
 

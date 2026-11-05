@@ -113,7 +113,7 @@
     }
     Suite.views.renderCanvas('iflow');
     Suite.views.renderStatus();
-    console.log('%cSuite Web Editor v2.1 · schema v2.2 · ServiceLoader id', 'color:#6ee7a0');
+    console.log('%cSuite Web Editor v1.0.0 · schema v2.2 · ServiceLoader id', 'color:#6ee7a0');
   }
 
   if (document.readyState === 'loading') {

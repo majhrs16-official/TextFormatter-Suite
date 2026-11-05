@@ -580,8 +580,8 @@ consumidor de SpEL es el motor legacy opcional de `iflow-firewall`.
   soportado.
 - `spring-expression`/`spring-core`/`spring-jcl` vuelven solo al classpath de `iflow-firewall`.
 - `core-api` no incorpora SPI de expresión de un solo módulo.
-- El default `iflow.engine.kind: vm` conserva el comportamiento anterior; el motor legacy solo se
-  ejecuta si está instalado y se selecciona `firewall`.
+- El hub usa `iflow-firewall` por defecto; el motor legacy solo se ejecuta si está instalado y se
+  selecciona en `config/iflow/config.yml`.
 - Tests: 44 en `iflow-firewall` (motor, SpEL, loader, validador) y 3 de integración en `host`
   (selección VM/firewall y descriptores alternativos).
 
@@ -761,9 +761,9 @@ módulos deben registrar rutas relativas, no la raíz.
 5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
    `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
    permiten mantener `/suite` y `/tf` a la vez.
-6. El `base-name` actual de `commands.yml` se sustituye por `root`. Se acepta
-   solo como migración con aviso y se elimina en **F8**; no es un fallback
-   permanente. La migración y el esquema exacto están en `commands-v2.md`.
+6. `base-name`, `actions` y `commands` están retirados: se ignoran y no hay
+   migración en runtime. El esquema vigente es `root` + `aliases` en
+   `commands.yml`.
 7. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
    plataforma no permite desregistrar o restaurar, se marca
    `RESTART_REQUIRED` y no se publica la nueva raíz como activa. Si el nuevo
@@ -1769,7 +1769,7 @@ publica la fachada estable y descubre proveedores por servicio.
    selección ni conocen al hub.
 3. La configuración canónica del hub es `config/iflow/config.yml`:
    `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
-   `engine` acepta los alias `firewall`, `vm` y `wasm`; `default-backend` es un alias de `engine`.
+   Solo se aceptan los nombres canónicos; no hay alias cortos ni `default-backend` en este archivo.
    Las rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml` son incorrectas
    y no se aceptan como fallback.
 4. El valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y
@@ -1778,14 +1778,12 @@ publica la fachada estable y descubre proveedores por servicio.
    los módulos. Si no hay ninguno, `IflowHub.router()` devuelve `null` y el runtime deja el pipeline
    sin motor; las llamadas directas al hub fallan cerradas con `REJECT`. El orden se fija con un
    test de aceptación; no se deduce del orden de registro del `ServiceRegistry`.
-5. `IflowHub` extiende `Router`. Mientras la purga pre-1.0 no elimine el camino legacy, `SuiteRuntime`
-   prefiere `IflowHub` sobre un `Router` publicado por un motor. Ese fallback es deuda P0.3, no un
-   contrato de compatibilidad ni un modo soportado.
+5. `IflowHub` extiende `Router`. `SuiteRuntime` exige `IflowHub`: un motor no puede sustituirlo
+   publicando un `Router` suelto.
 6. Los motores pueden coexistir instalados; el hub activa uno solo. La regla histórica de
    exclusividad de paquetes queda sustituida por la selección del hub para el runtime.
-7. `HostConfig.Engine`/`iflow.engine.kind` es una compatibilidad legacy del host y no es la fuente
-   de verdad cuando el hub está instalado. El hub lee su propio `config.yml`. La purga pre-1.0 de
-   ADR-034 lo elimina; no se conserva como fallback permanente.
+7. `HostConfig.Engine` e `iflow.engine.kind` fueron eliminados por ADR-034. El hub lee únicamente
+   su propio `config/iflow/config.yml`.
 
 **Alternativas consideradas.**
 

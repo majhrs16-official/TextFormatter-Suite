@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Grafo legacy de {@code rules.yml}, tal como lo edita el panel web.
+ * Grafo de {@code rules.yml}, tal como lo edita el panel web.
  *
  * <p>Es un modelo inmutable y sin ejecución: el runtime no evalúa este grafo.
  * Los valores inválidos se descartan durante la carga y se reportan como

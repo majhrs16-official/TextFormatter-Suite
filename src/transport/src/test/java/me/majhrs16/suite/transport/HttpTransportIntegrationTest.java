@@ -56,6 +56,18 @@ class HttpTransportIntegrationTest {
     }
 
     @Test
+    @DisplayName("envía el User-Agent de la base 1.0.0")
+    void sendsCanonicalUserAgent() throws Exception {
+        wireMock.stubFor(get(urlEqualTo("/agent"))
+            .willReturn(aResponse().withStatus(200).withBody("ok")));
+
+        transport.get("http://localhost:" + wireMock.port() + "/agent");
+
+        verify(getRequestedFor(urlEqualTo("/agent"))
+            .withHeader("User-Agent", equalTo("TextFormatterSuite/1.0.0")));
+    }
+
+    @Test
     @DisplayName("POST request con JSON body funciona")
     void postWithJsonBody() throws Exception {
         wireMock.stubFor(post(urlEqualTo("/post"))

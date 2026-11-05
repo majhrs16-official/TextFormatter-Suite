@@ -81,7 +81,7 @@ public record CommandRoot(List<String> segments, List<List<String>> aliases) {
         return of(trimmed.split("\\s+"));
     }
 
-    /** @return the default root with its legacy {@code txf} alias. */
+    /** @return the default root with its {@code txf} alias. */
     public static CommandRoot suite() {
         return new CommandRoot(List.of("suite"), List.of(List.of("txf")));
     }

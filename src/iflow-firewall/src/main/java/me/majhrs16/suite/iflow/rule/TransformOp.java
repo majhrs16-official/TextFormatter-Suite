@@ -15,7 +15,7 @@ import java.util.Map;
  * disposition decision. They modify the message content, sounds, or add delays.
  * </p>
  * <p>
- * Supported operations (F7+):
+ * Supported operations:
  * </p>
  * <ul>
  *   <li>{@link Rewrite} — replace the message template/text</li>

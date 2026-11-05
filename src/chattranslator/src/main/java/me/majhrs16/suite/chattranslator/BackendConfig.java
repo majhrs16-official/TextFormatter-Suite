@@ -33,8 +33,9 @@ public final class BackendConfig {
     private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
     /**
-     * Legacy host path only. Module activators pass their providers explicitly,
-     * so they never trigger a ServiceLoader scan against the host classpath.
+     * Host-facing registry for the standalone {@link #load(Path)} entry point.
+     * Module activators pass their providers explicitly and never scan the host
+     * classpath.
      */
     private static final class ServiceLoaderRegistry {
         private static final Map<String, TranslatorProvider> INSTANCE = discoverProviders();
@@ -45,10 +46,8 @@ public final class BackendConfig {
 
     /**
      * Construye el manager desde {@code dir/config/chattranslator/translators/*.yml}.
-     * <p>
-     * Se mantienen las rutas heredadas ({@code chattranslator/translators/} y
-     * {@code translators/}) durante la migración al layout de {@code storage.md}.
-     * </p>
+     * Solo se lee la ruta canónica; las rutas planas no se migran ni se usan
+     * como fallback.
      *
      * @param dir directorio base del suite (ej. plugin data folder)
      * @return TranslatorManager poblado con proveedores activos

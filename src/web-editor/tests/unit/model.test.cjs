@@ -135,6 +135,8 @@ assert(
   Object.keys(files).some(k => k.startsWith('channels/')),
   'exports channels'
 );
+const manifest = JSON.parse(files['manifest.json']);
+assertEq(manifest['suite-version'], '1.0.0', 'manifest uses the 1.0.0 suite version');
 const imported = Suite.model.importFromFiles(Suite.model.defaults(), files);
 assertEq(imported.channels['chat.global'].name, 'chat.global', 'import restores channel');
 assertEq(imported.graph.nodes.length, 8, 'import restores nodes');

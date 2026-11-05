@@ -12,7 +12,7 @@ import me.majhrs16.suite.api.spi.TranslatorProvider;
  * Runtime activator of the {@code gtranslate} package.
  *
  * <p>Publishes the Google Translate provider. The provider reads its
- * configuration from {@code chattranslator/translators/*.yml} when the
+ * configuration from {@code config/chattranslator/translators/*.yml} when the
  * translation facade builds its backends.</p>
  */
 public final class GTranslateActivator implements ModuleActivator {

@@ -16,7 +16,7 @@ import java.util.Optional;
  * first); the first matching rule wins. Values come from the
  * {@code rules.yml} config of iFlow.</p>
  * <p>
- * <b>Transform (F7):</b> A {@link #transforms()} list of expressions that modifies the
+ * <b>Transform:</b> A {@link #transforms()} list of expressions that modifies the
  * message before delivery. Syntax: {@code "key=value,key2=value2"} or a SpEL
  * expression operating on message fields ({@code #message.text}, {@code #message.id},
  * {@code #message.langSource}, etc.). When present, the transform is applied
@@ -32,7 +32,7 @@ public final class Rule {
     private final String emitterPattern; // future-proof: prefix/regex, nullable
     private final String receiverPattern;
     private final Direction.Kind kind;
-    private final List<TransformOp> transforms; // F7+: list of transform operations
+    private final List<TransformOp> transforms;
     private final String redirectChannel; // for CHANNEL_REDIRECT target
     private final String condition; // SpEL condition expression
     private final String action; // SpEL action expression
@@ -149,11 +149,10 @@ public final class Rule {
         private String emitterPattern;
         private String receiverPattern;
         private Direction.Kind kind;
-        private String transform; // F7
         private String redirectChannel; // for CHANNEL_REDIRECT
         private String condition; // SpEL condition
         private String action; // SpEL action
-        private List<TransformOp> transforms; // F7+
+        private List<TransformOp> transforms;
 
         private Builder(PolicyTarget target) {
             this.target = target;
@@ -199,31 +198,25 @@ public final class Rule {
             return this;
         }
 
-        /** F7: set a transform expression that modifies the message before delivery. */
-        public Builder transform(String transform) {
-            this.transform = transform;
-            return this;
-        }
-
         /** For CHANNEL_REDIRECT target: set the channel to redirect to. */
         public Builder redirectChannel(String redirectChannel) {
             this.redirectChannel = redirectChannel;
             return this;
         }
 
-        /** F7+: set a list of transform operations (rewrite, sounds, sleep, etc.). */
+        /** Set a list of transform operations (rewrite, sounds, sleep, etc.). */
         public Builder transforms(List<TransformOp> transforms) {
             this.transforms = transforms;
             return this;
         }
 
-        /** F7: set a SpEL condition expression (evaluated per message/recipient). */
+        /** Set a SpEL condition expression (evaluated per message/recipient). */
         public Builder condition(String condition) {
             this.condition = condition;
             return this;
         }
 
-        /** F7: set a SpEL action expression (executed when condition matches). */
+        /** Set a SpEL action expression (executed when condition matches). */
         public Builder action(String action) {
             this.action = action;
             return this;

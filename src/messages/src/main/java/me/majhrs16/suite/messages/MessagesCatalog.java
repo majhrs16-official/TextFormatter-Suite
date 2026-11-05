@@ -1,8 +1,6 @@
 package me.majhrs16.suite.messages;
 
-import java.util.Collections;
 import java.util.Locale;
-import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.PropertyResourceBundle;
 import java.util.ResourceBundle;
@@ -64,27 +62,12 @@ public final class MessagesCatalog {
         }
     }
 
-    /**
-     * Returns all messages as a map for legacy compatibility.
-     */
-    public Map<String, String> getAllMessages() {
-        ResourceBundle bundle = cache.computeIfAbsent(Locale.ENGLISH, this::loadBundle);
-        return Collections.unmodifiableMap(
-            Collections.list(bundle.getKeys()).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    k -> k,
-                    k -> bundle.getString(k)
-                ))
-        );
-    }
-
     private ResourceBundle loadBundle(Locale locale) {
         return PropertyResourceBundle.getBundle("messages.messages", locale);
     }
 
     /**
-     * Substitutes positional {@code {} } placeholders with arguments.
-     * Also supports {@code %s } for backwards compatibility.
+     * Substitutes positional {@code {}} placeholders with arguments.
      */
     public static String substitute(String template, Object... args) {
         if (args == null || args.length == 0 || template == null) {
@@ -92,12 +75,10 @@ public final class MessagesCatalog {
         }
         String out = template;
         for (Object arg : args) {
-            int braces = out.indexOf("{}");
-            int percent = out.indexOf("%s");
-            if (braces < 0 && percent < 0) {
+            int at = out.indexOf("{}");
+            if (at < 0) {
                 break;
             }
-            int at = braces < 0 ? percent : (percent < 0 ? braces : Math.min(braces, percent));
             out = out.substring(0, at) + arg + out.substring(at + 2);
         }
         return out;

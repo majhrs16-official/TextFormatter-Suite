@@ -19,12 +19,6 @@ public record DispatchReport(int considered, int delivered, int silenced,
         return new DispatchReport(0, 0, 0, 0, 0, reason);
     }
 
-    // Backwards compatibility constructor
-    public DispatchReport(int considered, int delivered, int silenced,
-                          int redirected, String skipReason) {
-        this(considered, delivered, silenced, redirected, 0, skipReason);
-    }
-
     public boolean anythingSent() {
         return delivered > 0 || redirected > 0 || channelRedirected > 0;
     }

@@ -10,8 +10,7 @@ import java.util.Map;
  * Configuración de los sinks TCP y UDP.
  *
  * <p>Ambos comparten esquema y defaults; solo cambia el archivo del que se
- * leen ({@code config/sync-socket/tcp.yml} y {@code .../udp.yml}, con fallback
- * a {@code sync/tcp.yml} y {@code sync/udp.yml}).</p>
+ * leen ({@code config/sync-socket/tcp.yml} y {@code .../udp.yml}).</p>
  *
  * @param enabled    si el sink debe arrancar
  * @param remoteHost host remoto

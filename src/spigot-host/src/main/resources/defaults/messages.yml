@@ -1,5 +1,5 @@
 # TextFormatter Suite — strings de UI del host.
-# Todo valor es editable; {} / %s son argumentos posicionales.
+# Todo valor es editable; {} es el argumento posicional.
 # Restaurar originales: /suite reset (respaldo en backup/).
 prefix: "[suite] "
 not-initialized: "[suite] no inicializado"

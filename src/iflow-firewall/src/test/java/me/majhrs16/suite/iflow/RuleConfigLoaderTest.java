@@ -178,7 +178,7 @@ class RuleConfigLoaderTest {
     }
 
     @Test
-    void legacyTransformStringBecomesRewrite() throws Exception {
+    void legacyTransformStringIsIgnored() throws Exception {
         Files.writeString(canonical(), """
             rules:
               - id: rewrite
@@ -190,7 +190,7 @@ class RuleConfigLoaderTest {
         List<Rule> rules = RuleConfigLoader.loadRules(dir, null);
 
         assertEquals(1, rules.size());
-        assertInstanceOf(TransformOp.Rewrite.class, rules.get(0).transforms().get(0));
+        assertTrue(rules.get(0).transforms().isEmpty());
     }
 
     @Test

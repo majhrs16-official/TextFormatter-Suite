@@ -313,8 +313,8 @@ config-version: 1.0
 ## Message Configuration (`config/suite/messages.yml`)
 
 `messages.yml` is a string catalog. Keys are dotted paths and values are
-user-visible text; `{}` and `%s` are positional placeholders. The file is
-copied on first boot and must declare `config-version: 1.0`:
+user-visible text; `{}` is the positional placeholder. The file is copied on
+first boot and must declare `config-version: 1.0`:
 
 ```yaml
 prefix: "[suite] "

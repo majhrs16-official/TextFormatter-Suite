@@ -161,7 +161,7 @@ public final class HttpTransport implements Transport {
         conn.setReadTimeout((int) timeout.toMillis());
         // Disable automatic redirects - we handle them manually with validation
         conn.setInstanceFollowRedirects(false);
-        conn.setRequestProperty("User-Agent", "TextFormatterSuite/2.1");
+        conn.setRequestProperty("User-Agent", "TextFormatterSuite/1.0.0");
 
         // For HTTPS, configure SSL to use original hostname for SNI and verification
         if (conn instanceof HttpsURLConnection && pinnedAddress != null) {

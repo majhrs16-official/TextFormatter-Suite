@@ -32,9 +32,4 @@ public record RoutingResult(
     public boolean silenced() {
         return decision != null && !decision.delivered();
     }
-
-    /** Compatibility constructor for existing code. */
-    public RoutingResult(RouteDecision decision, Component rendered, boolean redirect) {
-        this(decision, rendered, null, redirect);
-    }
 }

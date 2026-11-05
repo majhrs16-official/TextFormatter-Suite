@@ -59,11 +59,7 @@ public final class IflowConfig {
             }
             ConfigVersion.require(map, file);
             String engine = string(map.get("engine"));
-            if (engine == null || engine.isBlank()) {
-                engine = string(map.get("default-backend"));
-            }
-            boolean fallback = bool(map.get("fallback-on-unavailable"),
-                bool(map.get("fallback"), true));
+            boolean fallback = bool(map.get("fallback-on-unavailable"), true);
             return new IflowConfig(engine, fallback);
         } catch (ConfigVersionException e) {
             throw e;
@@ -82,20 +78,16 @@ public final class IflowConfig {
     }
 
     /**
-     * Acepta tanto el nombre canónico del paquete como el alias corto usado en
-     * la configuración histórica.
+     * Normaliza el nombre del paquete. Solo se aceptan los nombres canónicos
+     * {@code iflow-firewall}, {@code iflow-vm} e {@code iflow-wasm}; un valor
+     * desconocido se conserva para que el hub falle cerrado con un mensaje
+     * explícito.
      */
     public static String normalize(String value) {
         if (value == null || value.isBlank()) {
             return DEFAULT_BACKEND;
         }
-        String trimmed = value.trim().toLowerCase(Locale.ROOT);
-        return switch (trimmed) {
-            case "firewall", "legacy", "iflow-firewall" -> "iflow-firewall";
-            case "vm", "iflow-vm" -> "iflow-vm";
-            case "wasm", "iflow-wasm" -> "iflow-wasm";
-            default -> trimmed;
-        };
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     private static String string(Object value) {

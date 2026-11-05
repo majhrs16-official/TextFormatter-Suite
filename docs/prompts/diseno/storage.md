@@ -155,9 +155,9 @@ fallback-on-unavailable: true
 config-version: 1.0
 ```
 
-`engine` acepta los alias `firewall`, `vm` y `wasm`; `default-backend` es un alias de `engine`. El
-valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y el fallback
-está activo, el hub usa el primer backend disponible según la prioridad fijada en ADR-032.
+Solo se aceptan los nombres canónicos. El valor por defecto es `iflow-firewall`. Si el backend
+configurado no está disponible y el fallback está activo, el hub usa el primer backend disponible
+según la prioridad fijada en ADR-032.
 
 ### 4.2 `config/iflow-firewall/rules.yml` — motor SpEL legacy
 

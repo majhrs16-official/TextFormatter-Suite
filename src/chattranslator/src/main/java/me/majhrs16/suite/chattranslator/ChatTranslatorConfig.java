@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Carga la configuración específica de {@code chattranslator/config.yml}.
+ * Carga la configuración específica de {@code config/chattranslator/config.yml}.
  * <p>
  * Este archivo es independiente de {@code config.yml} (global) y
  * {@code translators/*.yml} (backends individuales).
@@ -30,10 +30,7 @@ public final class ChatTranslatorConfig {
 
     /**
      * Carga la configuración desde {@code dir/config/chattranslator/config.yml}.
-     * <p>
-     * Se mantiene la ruta heredada {@code chattranslator/config.yml} durante la
-     * migración al layout de {@code storage.md}.
-     * </p>
+     * No se leen rutas heredadas: el layout canónico es el único soportado.
      *
      * @param dir directorio base del suite (ej. plugin data folder)
      * @return configuración cargada, o defaults si no existe

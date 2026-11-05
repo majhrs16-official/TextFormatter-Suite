@@ -204,7 +204,7 @@ public final class ConfigSchemaGenerator {
         addPath(paths, "sync.tcp-udp.outbound-port", "Outbound Port (TCP/UDP)", "", "integer", 0);
         addPath(paths, "sync.tcp-udp.inbound-port", "Inbound Port (TCP/UDP)", "", "integer", 0);
 
-        addPath(paths, "sync.velocity.enabled", "Habilitado (Velocity)", "Proxy plugin (F7+)", "boolean", false);
+        addPath(paths, "sync.velocity.enabled", "Habilitado (Velocity)", "Proxy plugin Velocity", "boolean", false);
         addPath(paths, "sync.velocity.secret", "Secret (Velocity)", "", "string", "");
         addPath(paths, "sync.velocity.servers", "Servers (Velocity)", "", "array", new String[]{});
         addPath(paths, "sync.velocity.mapping", "Mapping (Velocity)", "", "string", "* → chat.hub");

@@ -12,7 +12,7 @@ import me.majhrs16.suite.api.spi.TranslatorProvider;
  * Runtime activator of the {@code ltranslate} package.
  *
  * <p>Publishes the LibreTranslate provider. Its {@code base-url} and optional
- * API key are read from {@code chattranslator/translators/libre.yml}.</p>
+ * API key are read from {@code config/chattranslator/translators/libre.yml}.</p>
  */
 public final class LTranslateActivator implements ModuleActivator {
 
