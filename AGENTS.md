@@ -11,7 +11,7 @@ Antes de trabajar, lee como mínimo:
 - `docs/workdir/ADR.md`
 - `docs/workdir/AUDITORIA.md`
 
-Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. Como mínimo se leen los cuatro documentos anteriores. No se edita, ejecuta ni reanuda ninguna tarea hasta terminar esa lectura. Solo después se continúa con el trabajo. El resumen de compactación es una ayuda, no la autoridad: no sustituye la relectura de los documentos.
+Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. Como mínimo se leen los cuatro documentos anteriores. Cada uno se lee completo, de principio a fin; no basta con la cabecera, el índice, un resumen, las secciones de estado ni fragmentos. No se edita, ejecuta ni reanuda ninguna tarea hasta terminar esa lectura. Solo después se continúa con el trabajo. El resumen de compactación es una ayuda, no la autoridad: no sustituye la relectura de los documentos.
 
 La primera respuesta tras una compactación debe incluir literalmente esta frase:
 
