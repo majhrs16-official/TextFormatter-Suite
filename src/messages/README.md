@@ -69,5 +69,5 @@ None — static library.
 ## 9. Related Modules
 
 - [transport](../transport/README.md) — Uses catalog for `MessageCodec`
-- [sync-http](../sync-http/README.md) / [sync-tcpudp](../sync-tcpudp/README.md) / etc. — Serialize messages
+- [sync-http](../sync-http/README.md) / [sync-socket](../sync-socket/README.md) / etc. — Serialize messages
 - [host](../host/README.md) — References catalog in config

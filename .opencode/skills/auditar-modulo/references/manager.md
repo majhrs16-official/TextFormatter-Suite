@@ -144,10 +144,10 @@ Verifica que APT no sea la fuente de verdad sobre los paquetes instalados y que 
 
 Examina los contratos reales de:
 
-- `repositories.yml`.
+- `repo.yml`.
 - `packages.list`.
 - `METADATA/package.list`.
-- `status`.
+- `library/status`.
 
 Si alguno no existe, documenta la ausencia en lugar de inventar su contenido.
 
@@ -342,13 +342,16 @@ Para cada comando, comprueba:
 
 Contrasta sus contratos con las operaciones requeridas:
 
-- `/suite update`
-- `/suite install`
-- `/suite remove`
-- `/suite list`
-- `/suite files`
-- `/suite dpkg -i`
-- `/suite dpkg -r`
+- `/suite repo update`
+- `/suite repo install`
+- `/suite repo remove`
+- `/suite repo upgrade`
+- `/suite repo fix-broken`
+- `/suite package install`
+- `/suite package list`
+- `/suite package remove`
+- `/suite package files`
+- `/suite package verify`
 
 Identifica los comandos ausentes, incompletos o con semántica distinta. No inventes que existen rutas de comandos que no hayas encontrado.
 
@@ -468,13 +471,13 @@ Incluye al menos las siguientes áreas:
 | Arquitectura | Separación de responsabilidades e integración con TxF |
 | APT | Repositorios, índices, candidatos, descargas y planificación |
 | dpkg | Instalación local, eliminación y estado instalado |
-| Configuración | `repositories.yml` y `config.yml` |
+| Configuración | `repo.yml` y el estado local (`library/status`) |
 | Índices | `packages.list` y validación de registros |
 | Metadatos | `METADATA/package.list` y todos sus campos |
 | Versiones | Comparación, restricciones y selección de candidatos |
 | Compatibilidad | Arquitectura, sistema operativo y plataforma |
 | Dependencias | Resolución, ciclos, conflictos y transitividad |
-| Almacenamiento | `tmp/`, `lists/`, `status` y `library/` |
+| Almacenamiento | `cache/`, `journal/`, `backup/`, `trash/`, `tmp/`, `lists/` y `library/status` |
 | Integridad | Tamaño, SHA-256 y coherencia de artefactos |
 | Inventario | Propiedad de archivos y validación de rutas |
 | Transacciones | Preparación, confirmación, rollback y recuperación |

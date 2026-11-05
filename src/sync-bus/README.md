@@ -143,6 +143,6 @@ checks that the running bus unregisters it.
 - [sync-discord](../sync-discord/README.md) — Discord sink
 - [sync-telegram](../sync-telegram/README.md) — Telegram sink
 - [sync-http](../sync-http/README.md) — HTTP sink
-- [sync-tcpudp](../sync-tcpudp/README.md) — TCP/UDP sinks
+- [sync-socket](../sync-socket/README.md) — TCP/UDP sinks
 - [sync-websocket](../sync-websocket/README.md) — WebSocket sink
 - [host](../host/README.md) — produces outbound messages

@@ -42,7 +42,7 @@
 | Consumer | Usage |
 |----------|-------|
 | `sync-http` | `HttpTransport` for webhook delivery |
-| `sync-tcpudp` | `MessageCodec` for TCP/UDP framing |
+| `sync-socket` | `MessageCodec` for TCP/UDP framing |
 | `sync-discord` | `MessageCodec` for Discord payload encoding |
 | `gtranslate` | `HttpTransport` for Google API calls |
 | `ltranslate` | `HttpTransport` for LibreTranslate API calls |
@@ -122,7 +122,7 @@ Return to caller
 
 - [core-api](../core-api/README.md) — `Message` type for codec
 - [sync-http](../sync-http/README.md) — Webhook sync sink
-- [sync-tcpudp](../sync-tcpudp/README.md) — TCP/UDP sync sinks
+- [sync-socket](../sync-socket/README.md) — TCP/UDP sync sinks
 - [sync-discord](../sync-discord/README.md) — Discord sync sink
 - [gtranslate](../gtranslate/README.md) — Google Translate
 - [ltranslate](../ltranslate/README.md) — LibreTranslate

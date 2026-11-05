@@ -101,7 +101,7 @@
 Platform Adapter (spigot-host/fabric-host)
        ↓ implements
 ActorDirectory ←──────────────────
-SyncSink ←──────────────────────── sync-http, sync-discord, sync-tcpudp, etc.
+SyncSink ←──────────────────────── sync-http, sync-discord, sync-socket, etc.
 PlaceholderResolver ←───────────── Platform adapter
 
 Module package (ModuleActivator)

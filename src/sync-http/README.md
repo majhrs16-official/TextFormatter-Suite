@@ -72,7 +72,7 @@
 | `SyncHttpActivator` | Registers/unregisters `HttpSink` with the running bus |
 | `SyncHttpModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
 
-### sync-tcpudp
+### sync-socket
 | Component | Role |
 |-----------|------|
 | `TcpSink` | Implements `SyncSink`: TCP client with `MessageCodec` framing |
@@ -187,7 +187,7 @@ that the running bus is empty.
 4. transport/MessageCodec.java → Wire format used by send()
 ```
 
-### sync-tcpudp
+### sync-socket
 ```
 1. TcpSink.java / UdpSink.java → SyncSink implementations
 2. MessageCodec.java           → Framing codec

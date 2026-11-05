@@ -4,7 +4,7 @@
 backend iFlow entre los instalados:
 
 - `iflow-firewall` — motor de reglas SpEL legacy.
-- `iflow-vm` — VM propia de 32 bits.
+- `iflow-vm` — VM propia (implementación v2 de 16 bits; objetivo v3 de 32 bits).
 - `iflow-wasm` — políticas WebAssembly con Chicory.
 
 El host no importa ninguno de esos paquetes. Solo consume `Router` y, para
@@ -20,7 +20,7 @@ Archivo canónico:
 
 ```yaml
 engine: iflow-firewall        # iflow-firewall | iflow-vm | iflow-wasm
-fallback-on-unavailable: true # usa el primer backend disponible si el elegido no lo está
+fallback-on-unavailable: true # usa el backend disponible según la prioridad explícita
 ```
 
 `engine` también acepta los alias `firewall`, `vm` y `wasm`, y la clave
@@ -54,23 +54,22 @@ motor se activa o desactiva, el hub se refresca con `ModuleActivatedEvent` y
 
 1. Si el backend configurado está disponible, se selecciona.
 2. Si no está disponible y `fallback-on-unavailable` es `true`, se selecciona
-   el primer backend disponible en orden de registro.
+   el primer backend disponible según la prioridad explícita
+   `iflow-firewall` → `iflow-vm` → `iflow-wasm`, independiente del orden de
+   registro.
 3. Si no hay backend disponible, el hub no publica un router operativo: el
    pipeline del runtime queda sin motor y `IflowHub.router()` devuelve `null`.
    Las llamadas directas al hub fallan cerradas (`REJECT`).
 
 ## Integración con el runtime
 
-`SuiteRuntime` prefiere `IflowHub` sobre cualquier `Router` legacy:
+`SuiteRuntime` resuelve el router desde `IflowHub`; el hub registra además
+`Router` para los consumidores que lo resuelvan por tipo.
 
-```java
-IflowHub hub = services.find(IflowHub.class).orElse(null);
-Router router = hub != null ? hub.router() : services.find(Router.class).orElseThrow();
-```
-
-Esto permite instalar el hub sin romper instalaciones que todavía publican un
-`Router` directamente desde un motor. El hub registra además `Router` para los
-consumidores que lo resuelvan por tipo.
+> **Deuda P0.** El código todavía conserva un fallback a un `Router` publicado
+> directamente por un motor cuando el hub no está instalado. Ese camino es
+> deuda de la purga pre-1.0 (PLAN P0.3), no un contrato de compatibilidad ni
+> un modo soportado.
 
 ## Build y tests
 
