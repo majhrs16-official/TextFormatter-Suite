@@ -1,152 +1,96 @@
-# Migration Guide
+# Migration Guide (pre-1.0)
 
-## From 2.0.x to 2.1.0
+## Scope
 
-### Breaking Changes
+The current runtime does **not** migrate old layouts or old schema versions.
+`1.0.0` is the release label of the integrated base; `1.0` is the YAML schema
+version. If a file cannot declare `config-version: 1.0`, it is rejected.
 
-#### Configuration
+This is deliberate: pre-1.0 removes compatibility paths instead of carrying a
+second reader.
 
-| Old | New | Notes |
-|-----|-----|-------|
-| `chat.claim-mode: cancel` | `chat.claim-mode: cancel-event` | Values renamed |
-| `chat.claim-mode: clear` | `chat.claim-mode: clear-recipients` | Values renamed |
+## Canonical layout
 
-#### API Changes
+Move or recreate configuration in the canonical locations:
 
-| Old | New | Notes |
-|-----|-----|-------|
-| `ModuleDescriptor.dependencies` | `ModuleDescriptor.requires` | Renamed |
-| `ModuleDescriptor.provides` | `ModuleDescriptor.provides` | Same |
-| `SyncSink.send()` | `SyncSink.send()` | Same signature |
-| `ChatDelivery.deliver()` | `ChatDelivery.deliver()` | Added `Message original` param |
+| Old flat path | Current canonical path |
+|---------------|------------------------|
+| `config.yml` | `config/suite/config.yml` |
+| `messages.yml` | `config/suite/messages.yml` |
+| `commands.yml` | `config/suite/commands.yml` |
+| `channels/*.yml` | `config/textformatter/channels/*.yml` |
+| `translators/*.yml` | `config/chattranslator/translators/*.yml` |
+| `sync/discord.yml` | `config/sync-discord/config.yml` |
+| `sync/telegram.yml` | `config/sync-telegram/config.yml` |
+| `sync/http.yml` | `config/sync-http/config.yml` |
+| `sync/websocket.yml` | `config/sync-websocket/config.yml` |
+| `sync/tcp.yml` | `config/sync-socket/tcp.yml` |
+| `sync/udp.yml` | `config/sync-socket/udp.yml` |
+| `sync/velocity.yml` | `config/sync-velocity-core/config.yml` |
+| `rules.yml` | `config/iflow-firewall/rules.yml` |
+| `iflow.yml` | `config/iflow/config.yml` |
+| `inworld.yml` | `config/inworld/config.yml` |
 
-#### Commands
+The old paths are ignored. The installer only writes defaults to the canonical
+destination and never overwrites an existing file.
 
-| Old | New |
-|-----|-----|
-| `/suite module install <id>` | `/suite module install <id> [version]` |
-| `/suite module update <id>` | `/suite module update <id> [version]` |
-| N/A | `/suite module remove <id>` |
-| N/A | `/suite module enable <id>` |
-| N/A | `/suite module disable <id>` |
-| N/A | `/suite module reload <id>` |
-| N/A | `/suite module config <id>` |
-| N/A | `/suite module info <id>` |
-| N/A | `/suite suite update` |
-| N/A | `/suite suite update force` |
+## Schema changes
 
-### Migration Steps
+1. Add `config-version: 1.0` at the root of every runtime configuration YAML (preferably last).
+   `plugin.yml` is the only exception.
+2. Remove `iflow.engine.kind`. Backend selection lives in
+   `config/iflow/config.yml`:
+   ```yaml
+   engine: iflow-firewall
+   fallback-on-unavailable: true
+   config-version: 1.0
+   ```
+3. If you use the firewall, put executable rules under `rules:`:
+   ```yaml
+   rules:
+     - id: drop-private
+       target: DROP
+       channel: private
+   config-version: 1.0
+   ```
+   A root-level list is rejected because it cannot declare a version. The editor
+   graph stays under `nodes:`/`edges:`.
+4. Use the module-specific sync keys (`outboundUrl`, `inboundPort`, `chatId`,
+   `remoteHost`, …) documented in [Configuration](02-Configuration.md).
+5. Rename `chat.claim-mode` values to `cancel-event`, `clear-recipients` or
+   `none`.
 
-1. **Update config.yml:**
-```yaml
-# Old
-chat:
-  claim-mode: cancel
+## Module contracts
 
-# New
-chat:
-  claim-mode: cancel-event
-```
+Modules declare a full SemVer contract. The accepted range is
+`[1.0.0, host]`:
 
-2. **Update module dependencies:**
-```gradle
-// Old
-implementation 'me.majhrs16:suite-core-api:2.0.x'
+- Below `1.0.0`: rejected.
+- Above the host version: rejected.
+- Abbreviated forms such as `1.5` or `2.5` are not accepted.
 
-// New
-implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-```
+Installing an incompatible package leaves it installed but reports the activation
+failure; no files are rolled back.
 
-3. **Update module descriptors:**
-```java
-// Old
-return ModuleDescriptor.builder("my-module")
-    .dependencies(List.of("other-module"))
-    .build();
+## What was removed
 
-// New
-return ModuleDescriptor.builder("my-module")
-    .requires(List.of("other-module"))
-    .provides(Set.of(Capability.of("my-cap", SemVer.of(1, 0, 0))))
-    .build();
-```
+- Flat runtime paths and their fallback readers.
+- The `DefaultConfigInstaller` migration step.
+- `HostConfig.Engine` / `iflow.engine.kind`.
+- The `Router` fallback in `SuiteRuntime`; the iFlow hub is required.
+- Root-level `rules.yml` list support.
+- Compatibility tests that asserted the old contract.
 
-### Module Descriptor Changes
+`CoreTranslator` remains an independent deprecated Bukkit-only PlaceholderAPI
+expansion (`%cot_*`); it is not a compatibility shim.
 
-| Old Field | New Field | Required |
-|-----------|-----------|----------|
-| `id` | `id` | Yes |
-| `name` | `name` | Yes |
-| `version` | `version` | Yes |
-| `contractVersion` | `contractVersion` | Yes |
-| `jvmRange` | `jvmRangeMin` | Yes |
-| `dependencies` | `requires` | No |
-| `provides` | `provides` | No |
-| `autoLoad` | N/A | No |
+## Upgrade checklist
 
-### SPI Changes
-
-| Interface | Change |
-|-----------|--------|
-| `Translator` | Added `translateAsync` |
-| `PlaceholderResolver` | Added `available()` |
-| `SyncSink` | Added `setListener` |
-| `ChatDelivery` | Added `original` param to `deliver()` |
-
-### Command Changes
-
-| Old Command | New Command |
-|-------------|-------------|
-| `/suite module install <id>` | `/suite module install <id> [version]` |
-| `/suite module update <id>` | `/suite module update <id> [version]` |
-| N/A | `/suite module remove <id>` |
-| N/A | `/suite module enable <id>` |
-| N/A | `/suite module disable <id>` |
-| N/A | `/suite module reload <id>` |
-| N/A | `/suite module config <id>` |
-| N/A | `/suite module info <id>` |
-| N/A | `/suite suite update` |
-
-### Configuration Migration
-
-Run `/suite reload` after updating - the system will attempt to migrate configs automatically.
-
-### Breaking Changes Checklist
-
-- [ ] Update `chat.claim-mode` values in config.yml
-- [ ] Update module `build.gradle` dependencies
-- [ ] Update `ModuleDescriptor` in custom modules
-- [ ] Update SPI implementations
-- [ ] Test `/suite module` commands
-- [ ] Test `/suite suite update`
-- [ ] Verify config validation passes
-
-### Compatibility
-
-| Component | 2.0.x Config | 2.1.0 Config |
-|-----------|--------------|--------------|
-| config.yml | ✅ Auto-migrated | ✅ |
-| channels/*.yml | ✅ Compatible | ✅ |
-| rules.yml | ✅ Compatible | ✅ |
-| translators/*.yml | ✅ Compatible | ✅ |
-| sync/*.yml | ✅ Compatible | ✅ |
-| messages.yml | ✅ Compatible | ✅ |
-
-### Rollback Procedure
-
-If issues arise:
-
-1. Stop server
-2. Restore backup of config files
-3. Revert to 2.0.x jars
-4. Run `/suite reload`
-
-### Support
-
-- GitHub Issues: https://github.com/majhrs16-official/TextFormatter-Suite/issues
-- Discord: https://discord.gg/textformatter
-- Wiki: https://github.com/majhrs16-official/TextFormatter-Suite/wiki
-
----
-
-*Migration Guide v2.1 - Part of TextFormatter Suite Documentation*
+- [ ] Back up `plugins/TextFormatterSuite/` (or the mod data directory).
+- [ ] Move files to `config/suite/` and `config/<module>/`.
+- [ ] Add `config-version: 1.0` to every runtime configuration YAML.
+- [ ] Remove `iflow.engine.kind` and configure `config/iflow/config.yml`.
+- [ ] Convert `rules.yml` to the map form with `rules:` or `nodes:`/`edges:`.
+- [ ] Restart the server to load module configuration. `/suite reload` only
+      re-reads `config/suite/commands.yml`.
+- [ ] Check the console for explicit version/path errors.

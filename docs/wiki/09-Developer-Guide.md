@@ -41,7 +41,7 @@ plugins {
 }
 
 group = 'me.majhrs16'
-version = '2.1.0-SNAPSHOT'
+version = '1.0.0'
 
 repositories {
     mavenLocal()
@@ -49,10 +49,10 @@ repositories {
 }
 
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-host:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:host')
 
-    testImplementation 'me.majhrs16:suite-kernel:2.1.0-SNAPSHOT'
+    testImplementation project(':src:kernel')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -92,7 +92,7 @@ public final class MyModule implements Module {
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("my-module")
             .version(SemVer.of(1, 0, 0))
-            .contractVersion(SemVer.of(2, 1, 0))
+            .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("my-capability", SemVer.of(1, 0, 0)))
             .build();
@@ -113,12 +113,13 @@ me.majhrs16.suite.mymodule.MyModule
 
 ```gradle
 dependencies {
-    implementation 'me.majhrs16:suite-core-api:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-textformatter:2.1.0-SNAPSHOT'
-    implementation 'me.majhrs16:suite-iflow-vm:2.1.0-SNAPSHOT'
-    // Alternativas mutuamente excluyentes (elija una):
-    // implementation 'me.majhrs16:suite-iflow-firewall:2.1.0-SNAPSHOT'
-    // implementation 'me.majhrs16:suite-iflow-wasm:2.1.0-SNAPSHOT'
+    implementation project(':src:core-api')
+    implementation project(':src:textformatter')
+    // The three iFlow backends can coexist; the hub selects one at runtime.
+    implementation project(':src:iflow')
+    implementation project(':src:iflow-vm')
+    implementation project(':src:iflow-firewall')
+    implementation project(':src:iflow-wasm')
     // Add other suite modules as needed
 }
 ```
@@ -266,7 +267,7 @@ public class MyExtension implements Extension {
     public SemVer version() { return SemVer.of(1, 0, 0); }
     
     @Override
-    public SemVer requiredCoreApi() { return SemVer.of(2, 1, 0); }
+    public SemVer requiredCoreApi() { return SemVer.of(1, 0, 0); }
     
     @Override
     public List<String> dependencies() { return List.of(); }
@@ -409,14 +410,11 @@ void testMessageFormatting() {
 ### Integration Tests
 
 ```java
-@SpringBootTest
 class IntegrationTest {
-    
-    @Autowired
-    SuiteHost host;
-    
+
     @Test
     void testFullPipeline() {
+        var host = createTestHost();
         var message = Message.builder()
             .type(MessageType.CHAT)
             .sender(testActor)
@@ -424,7 +422,7 @@ class IntegrationTest {
             .channel("chat.global")
             .text("Hello world")
             .build();
-        
+
         var report = host.dispatch(message);
         assertTrue(report.delivered() > 0);
     }
@@ -484,24 +482,22 @@ those files will be served; a blank or placeholder URL is rejected.
 ### Publishing
 
 ```bash
-# Publish to mavenLocal
+# Publish to mavenLocal for local integration tests
 ./gradlew publishToMavenLocal
 
-# Publish the three mutually exclusive iFlow engines as separate packages
+# Publish the three iFlow backend packages
 ./gradlew publishIflowEngines
-
-# Publish to Maven Central (requires credentials)
-./gradlew publish
 ```
+
+Maven Central publication is not part of the 1.0.0 gate.
 
 ### Version Management
 
-```gradle
-// In gradle.properties
-version=2.1.0-SNAPSHOT
+The build defaults to `1.0.0`; override it with the Gradle property:
 
-# For release
-version=2.1.0
+```bash
+./gradlew build -Pversion=1.0.0-SNAPSHOT
+./gradlew build -Pversion=1.0.0
 ```
 
 ## Code Style
@@ -656,7 +652,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
-      - run: ./gradlew :suite:loadtest:jmh
+      - run: ./gradlew :src:loadtest:jmh
 ```
 
 ## Release Process
@@ -665,43 +661,32 @@ jobs:
 
 ```
 Major.Minor.Patch[-SNAPSHOT]
-2.1.0-SNAPSHOT  → Development
-2.1.0           → Release
-2.1.1           → Patch release
+1.0.0-SNAPSHOT  → Development
+1.0.0           → Release
+1.0.1           → Patch release
 ```
 
 ### Release Checklist
 
-- [ ] All tests pass
-- [ ] Version bumped in `gradle.properties`
-- [ ] Changelog updated (`CHANGELOG.md`)
-- [ ] Git tag created (`v2.1.0`)
-- [ ] GitHub Release created
-- [ ] Artifacts published to Maven Central
-- [ ] Docker images built
-- [ ] Documentation updated
-- [ ] Announcement posted
+- [ ] Full gate passes (`build checkArchitecture checkLocks`).
+- [ ] `PLAN.md` and `AUDITORIA.md` reflect the current state.
+- [ ] Release notes updated.
+- [ ] Git tag created only after maintainer approval (`v1.0.0`).
+- [ ] No push of commits or tags without explicit authorization.
+- [ ] Real-server E2E remains deferred until after `1.0.0`.
 
 ### Release Script
 
 ```bash
 #!/bin/bash
-# release.sh
+# release.sh — run only with maintainer approval.
 
 VERSION=$1
 
-# Update version
-sed -i "s/version=.*/version=$VERSION/" gradle.properties
-
-# Build
-./gradlew clean build publish -x test
-
-# Tag
+./gradlew build checkArchitecture checkLocks --no-daemon -Pversion="$VERSION"
 git tag -a "v$VERSION" -m "Release v$VERSION"
-git push origin "v$VERSION"
 
-# Create GitHub release
-gh release create "v$VERSION" --generate-notes
+# Do not push. A maintainer must authorize the tag and the release.
 ```
 
 ## Contributing
@@ -763,4 +748,4 @@ Closes #123
 
 ---
 
-*Developer Guide v2.1 - Part of TextFormatter Suite*
+*Developer Guide v1.0 - Part of TextFormatter Suite*

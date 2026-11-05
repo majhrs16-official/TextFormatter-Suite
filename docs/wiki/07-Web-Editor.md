@@ -101,6 +101,11 @@ The editor is automatically deployed to: `https://majhrs16-official.github.io/Te
 
 ### Export Project
 
+The exported ZIP is an **editor project**, not a runtime data folder. Its flat
+paths (`config.yml`, `channels/`, `sync/`, `rules.yml`) are editor conventions;
+the runtime never reads them directly. Copy each file to its canonical location
+under `config/suite/` or `config/<module>/` before restarting the server.
+
 1. Click **Export** in toolbar
 2. Downloads `textformatter-suite.zip` containing:
    ```
@@ -225,7 +230,7 @@ The editor is automatically deployed to: `https://majhrs16-official.github.io/Te
 - **Fan-out**: One node → multiple outputs
 - **Cycles**: Allowed (max-steps guard)
 
-### Rules Graph Editor (v2.1.0)
+### Rules Graph Editor (schema v2.2)
 
 The **Rules** view provides a dedicated visual editor for complex iFlow rules.yml configurations.
 
@@ -257,7 +262,13 @@ The Condition node has the most comprehensive properties panel:
 - **Receiver** — recipient name pattern
 - **Direction** — INITIATOR, OTHERS, ALL, CONSOLE, WORLD, RADIUS, PERMISSION, SPECIFIC
 
-> **Legacy graph only:** the condition expression field is not part of the editor graph. `rules.yml` is not evaluated by the iFlow VM; policy logic lives in `policy.flow`. A previously imported `condition` key may be preserved on round-trip. The mutually exclusive `iflow-firewall` engine can execute a top-level rule list with `condition`/`action` when `iflow.engine.kind: firewall`.
+> **Routing note:** the condition expression field is not part of the editor graph.
+> `rules.yml` is not evaluated by the iFlow VM; VM policy logic lives in
+> `policy.flow`. The `iflow-firewall` backend can execute the `rules:` list from
+> the same file when the hub selects it, while the editor graph uses
+> `nodes:`/`edges:`. A previously imported `condition` key may be preserved on
+> round-trip. Selection is owned by `config/iflow/config.yml`; `iflow.engine.kind`
+> does not exist.
 
 **Actions** (10 available):
 | Action | Description |
@@ -347,9 +358,10 @@ textformatter-suite.zip
 
 ```json
 {
-  "schema": "v2.2",
-  "suite-version": "2.1.0",
-  "generated-at": "2024-01-15T10:30:00Z",
+  "schema": "2.2",
+  "suite-version": "1.0.0",
+  "config-version": "1.0",
+  "generated-at": "2026-01-15T10:30:00Z",
   "capabilities": { "transforms": true },
   "validation": { "errors": 0, "warnings": 0, "blocking": false, "issues": [] }
 }

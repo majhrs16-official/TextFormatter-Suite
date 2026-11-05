@@ -3,49 +3,57 @@
 ## A
 
 **Actor**
-An entity that can send or receive messages. Types: `PLAYER`, `CONSOLE`, `SYSTEM`.
+An entity that can send or receive messages: player, console or system.
 
 **ADR**
-Architecture Decision Record - documents important architectural decisions.
+Architecture Decision Record. The canonical record is
+[`docs/workdir/ADR.md`](../workdir/ADR.md).
 
 ## B
 
-**Built-in Preset**
-Pre-configured preset shipped with the suite (standard, rpg, staff, minimal).
+**Built-in preset**
+A preset shipped with the suite: `standard`, `rpg`, `staff` and `minimal`.
 
 ## C
 
 **Capability**
-A named, versioned feature that modules can provide or require.
+A named, versioned feature that a module provides or requires.
 
 **Channel**
-A named message route with formatting, permissions, and translation settings.
-
-**CHANNEL_REDIRECT**
-PolicyTarget that redirects a message to a different channel.
+A named message route with formatting, permissions, rate limit and language
+settings. Channels live in `config/textformatter/channels/<id>.yml`.
 
 **ChannelRegistry**
-Registry managing all channels, accessible via `SuiteHost.channels()`.
+Registry of loaded channels. Accessible through `SuiteHost.channels()`.
 
-**Claim Mode**
-How the plugin claims chat events: `cancel-event` or `clear-recipients`.
+**Claim mode**
+How the platform adapter claims vanilla chat: `cancel-event`,
+`clear-recipients` or `none`.
 
-**ConfigLoader**
-Utility for loading `config.yml` and `channels/*.yml` into `HostConfig` and `ChannelRegistry`.
+**ConfigVersion**
+The `config-version` marker required at the root of every runtime `.yml` file.
+The current schema is `1.0`; the only exception is `plugin.yml`.
 
 **Core API**
-The `suite-core-api` module containing SPI interfaces and domain models.
+The `core-api` module: SPI interfaces and platform-neutral domain models.
+
+**CoreTranslator**
+An independent, deprecated Bukkit-only PlaceholderAPI expansion
+(`me.majhrs16.cot.CoreTranslator`). It uses the modern suite services and is not
+a compatibility shim.
 
 ## D
 
 **Direction**
-Message audience: `INITIATOR`, `OTHERS`, `ALL`, `CONSOLE`, `WORLD`, `RADIUS`, `PERMISSION`, `SPECIFIC`.
+Message audience: `INITIATOR`, `OTHERS`, `ALL`, `CONSOLE`, `WORLD`, `RADIUS`,
+`PERMISSION`, `SPECIFIC`.
 
 **Dispatcher**
 See `MessageDispatcher`.
 
 **DispatchReport**
-Result of message dispatch: `considered`, `delivered`, `silenced`, `redirected`, `channelRedirected`.
+Result of a dispatch: considered, delivered, silenced, redirected and
+channel-redirected counts.
 
 ## E
 
@@ -53,252 +61,200 @@ Result of message dispatch: `considered`, `delivered`, `silenced`, `redirected`,
 A dynamically loadable addon implementing the `Extension` SPI.
 
 **ExtensionContext**
-Context provided to extensions on enable, granting access to suite services.
+Context granted to an extension: services, language store, channels, dispatch
+and config access.
 
 **ExtensionManager**
-Manages extension lifecycle: discovery, loading, unloading, reloading.
-
-**ExtensionConfig**
-Immutable configuration holder for extensions.
+Manages extension discovery, loading, unloading and reloading.
 
 ## F
 
 **Format**
-Message template with MiniMessage syntax and placeholders.
+A message template with MiniMessage/legacy syntax and placeholders.
 
 **Formats**
-Pair of template arrays: `messages` and `tooltips`.
-
-## G
-
-**Glossary**
-Key-value store for hover tooltips, accessible via click/hover events.
-
-## G (continued)
-
-**Gradle**
-Build system used by the project.
-
-**Gatling**
-Load testing framework used for stress testing.
-
-**GTranslate**
-Google Translate provider implementation.
-
-**GCloud**
-Google Cloud Translation API adapter (planned).
+A pair of template arrays: messages and tooltips.
 
 ## H
 
-**Hexagonal Architecture**
-Ports & Adapters architecture pattern used by the suite.
-
 **Host**
-See `SuiteHost`.
+The platform-neutral composition root. `SuiteHost` assembles channels,
+dispatch, translation and the iFlow hub.
 
 **HostConfig**
-Immutable configuration object for the suite host.
+Immutable view of `config/suite/config.yml`.
 
-**HotspotDetector**
-Real-time performance bottleneck detector.
+**Hub**
+See `IflowHub`.
 
 ## I
 
 **iFlow**
-The iFlow policy engines (`suite-iflow-vm`, `suite-iflow-firewall`, `suite-iflow-wasm`) for message routing and transformation; they are mutually exclusive packages.
+The policy subsystem. The `iflow` hub selects one installed backend and
+publishes `IflowHub`.
 
-**InWorld**
-Module for in-world interactions (signs, chests, books, WORLD/RADIUS channels).
+**IflowBackend**
+SPI implemented by `iflow-firewall`, `iflow-vm` and `iflow-wasm`.
 
-**IFlow**
-See iFlow.
+**IflowHub**
+Stable facade over the active backend. `SuiteRuntime` requires the hub; an
+engine cannot replace it by publishing a `Router` directly.
 
-## J
+**iflow-firewall**
+Legacy SpEL backend. Executes rules under `rules:` in
+`config/iflow-firewall/rules.yml`; validates the editor graph but does not
+execute `nodes:`/`edges:`.
 
-**JMH**
-Java Microbenchmark Harness - used for microbenchmarks.
+**iflow-vm**
+Deterministic VM backend. Executes a binary `.flow` program, normally
+`config/iflow-vm/policy.flow`.
 
-**JMH Benchmark**
-Microbenchmark written using JMH.
+**iflow-wasm**
+WebAssembly backend (Chicory). Requires a pinned module and reloads when the
+pin changes.
 
 ## K
 
 **Kernel**
-The `suite-kernel` module: ModuleLoader, ModuleGraph, ServiceLoader discovery.
+The `kernel` module: `ModuleLoader`, `ModuleGraph` and ServiceLoader discovery.
 
 ## L
 
+**Language**
+ISO language code used by a channel or a player preference. `auto` detects the
+source and `off` disables translation.
+
 **LibreTranslate**
-Open-source translation provider (LibreTranslate).
-
-**LibreTranslate (LTranslate)**
-LibreTranslate provider implementation.
-
-**LibreTranslate Module**
-`suite-ltranslate` module.
-
-**LibreTranslate Provider**
-LibreTranslate translation provider implementation.
+Self-hosted or public translation provider (`ltranslate`).
 
 ## M
 
 **Message**
 Immutable message object flowing through the pipeline.
 
-**MessageCodec**
-Encodes/decodes messages to/from JSON/bytes.
-
-**MessageCodec**
-See `MessageCodec`.
-
-**MessageCodec (interface)**
-Interface for encoding/decoding messages.
-
 **MessageDispatcher**
 Routes and delivers messages through the pipeline.
 
 **Module**
-A JAR implementing the `Module` SPI, discovered via ServiceLoader.
+A JAR implementing the module SPI and discovered through
+`ModuleActivator`.
 
 **ModuleDescriptor**
-Metadata describing a module: id, version, capabilities, dependencies.
-
-**ModuleDescriptor**
-See `ModuleDescriptor`.
-
-**ModuleLoader**
-Loads modules via ServiceLoader, resolves dependencies, detects cycles.
+Module metadata: id, version, contract version, platform and capabilities.
 
 **ModuleGraph**
-Dependency graph for module loading order.
+Dependency graph used to order module activation and detect cycles.
+
+**ModuleHost**
+Runtime owner of classloaders, activation, deactivation and hot upgrades.
 
 **ModuleManager**
-Manages module lifecycle: discovery, loading, unloading, reloading.
-
-## N
-
-**NMS**
-Net Minecraft Server - internal Minecraft server classes (Spigot).
-
-## O
-
-**Observability**
-Module providing metrics, debugging endpoints, and health checks.
+Package-level manager: acquisition, journaled commit, status and repository
+operations.
 
 ## P
 
-**PerformanceProfiler**
-Tracks CPU time and heap usage per test/operation.
+**PackageRuntime**
+The only bridge between installed package facts and live module state.
 
 **PlaceholderResolver**
-SPI for resolving placeholders (PAPI on Spigot, identity on Fabric).
+SPI for placeholder resolution (PlaceholderAPI on Spigot, identity or platform
+equivalent on Fabric).
 
 **PolicyTarget**
-Disposition applied to a message: `LOG`, `DROP`, `REJECT`, `REDIRECT`, `CHANNEL_REDIRECT`, `RATE_LIMIT`.
+Disposition applied to a message: `LOG`, `DROP`, `REJECT`, `REDIRECT`,
+`CHANNEL_REDIRECT`, `RATE_LIMIT`.
 
 **Preset**
-Pre-configured configuration snapshot (standard, rpg, staff, minimal).
-
-**PresetManager**
-Manages preset loading, application, and YAML serialization.
-
-## Q
+A versioned configuration snapshot. `presets apply` writes the files and
+reloads active modules in dependency order.
 
 ## R
 
 **RateLimiter**
-Token bucket implementation for message rate limiting.
+Token-bucket limiter used by channels and backend policies.
 
 **RouteDecision**
-Result of routing a message for one recipient.
+Result of routing one message for one recipient.
 
 **Router**
-Interface for message routing (iFlow).
-
-**Router (iFlow)**
-See `VmPolicyEngine` and `VmInterpreter`.
+Neutral routing SPI. The hub exposes the active backend's router.
 
 ## S
 
 **ScriptSurface**
-Service surface exposed to VM programs for atomic message operations.
+Service surface exposed to VM programs for controlled message operations.
 
 **SemVer**
-Semantic Versioning (major.minor.patch).
+Semantic Versioning with full `major.minor.patch` components.
 
 **ServiceLoader**
-Java SPI mechanism for module discovery.
+Java SPI mechanism used for module and provider discovery.
 
 **SPI**
-Service Provider Interface - Java's extension mechanism.
+Service Provider Interface; the extension points in `core-api`.
 
 **SuiteHost**
-Composition root: assembles channels, dispatcher, translators, modules.
+Composition root for channels, dispatch, translation and routing.
+
+**SuiteRuntime**
+Runtime that owns the module host, package runtime, commands and the message
+pipeline.
+
+**SyncBus**
+Unified outbound/inbound pipeline with deduplication, per-sink isolation and
+retry/backoff.
 
 **SyncSink**
-SPI for external message sinks (Discord, Telegram, HTTP, etc.).
-
-**SyncListener**
-Callback interface for inbound sync messages.
-
-**SyncSink**
-Interface for external synchronization sinks.
+SPI for external sinks such as Discord, Telegram, HTTP, TCP/UDP, WebSocket and
+Velocity.
 
 ## T
 
 **Template**
-Message template with MiniMessage syntax and placeholders.
+Message template with MiniMessage or legacy formatting and placeholders.
 
 **TemplateRenderer**
-Renders templates with context (sender, recipient, content, languages).
-
-**TemplateContext**
-Rendering context: sender, recipient, content, languages, variables.
-
-**TemplateRenderer**
-Renders templates to Adventure Components.
+Renders templates with sender, recipient, content and language context.
 
 **TextFormatter**
-Module for MiniMessage rendering and channel formatting.
+Module that owns the channel registry and template rendering.
 
 **TransformOp**
-Atomic transform operation: `rewrite`, `sounds`, `sleep`, `setLangSource`, `setLangTarget`, `setColorMode`, `setFormatPapi`, `setChannel`.
-
-**Translator**
-Interface for translation providers (Google, LibreTranslate).
+Atomic policy operation: rewrite, sounds, sleep, language source/target, color
+mode, PAPI formatting and channel override.
 
 **TranslationService**
-Manages translation providers, caching, fallback.
+Manages active providers, caching, detection and fallback to the source text.
+
+**Translator**
+Provider contract for translation and language detection.
 
 ## U
+
+**UserLanguageStore**
+Service that persists each player's language preference in `storage.yml`.
 
 ## V
 
 **Velocity**
-Minecraft proxy platform supported via the `sync-velocity-core` sink and the `sync-velocity` proxy plugin.
+Minecraft proxy supported through `sync-velocity-core` and the
+`sync-velocity` proxy plugin.
 
 ## W
 
 **Web Editor**
-Browser-based configuration editor (static HTML/JS).
+Static browser application for importing, editing, validating and exporting
+editor project ZIPs.
 
 **WebSocket**
-Real-time communication protocol used by `sync-websocket`.
-
-**WebSocketSyncSink**
-WebSocket-based sync sink implementation.
-
-## X
+Real-time transport used by `sync-websocket`.
 
 ## Y
 
-**YAML**
-Configuration file format used throughout the suite.
-
-**YAML (config)**
-Configuration file format used throughout the suite.
-
-## Z
+**YAML schema**
+The configuration contract version. The current value is `1.0`, written as
+`config-version: 1.0`.
 
 ---
-*Glossary v2.1 - Part of TextFormatter Suite Documentation*
+*Glossary v1.0 - Part of TextFormatter Suite Documentation*

@@ -9,6 +9,7 @@ El árbol de comandos tiene una raíz configurable en
 root: [suite]
 aliases:
   - [txf]
+config-version: 1.0
 ```
 
 La raíz puede tener varios segmentos y los aliases pueden ser cadenas o listas:
@@ -18,6 +19,7 @@ root: [suite, module]
 aliases:
   - [sm]
   - [txf, module]
+config-version: 1.0
 ```
 
 Los módulos registran rutas **relativas**; cambiar la raíz no requiere

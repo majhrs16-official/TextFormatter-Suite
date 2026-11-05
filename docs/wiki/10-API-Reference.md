@@ -362,8 +362,12 @@ record HostConfig(
     Language defaultLanguage,
     boolean engineParallel,
     boolean soundEnabled,
-    ClaimMode claimMode
+    ClaimMode claimMode,
+    boolean logChatToConsole,
+    List<Repository> repositories,
+    List<String> moduleAllowlist
 ) {
+    record Repository(String name, String url, String type, boolean enabled) {}
     static HostConfig defaults();
 }
 ```
@@ -786,13 +790,10 @@ Suite.events.on('export-complete', (files) => {})
 
 ## Version History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 2.1.0 | 2024-01-15 | FASE 1-15 complete |
-| 2.0.0 | 2023-12-01 | Major rewrite |
-| 1.5.0 | 2023-06-15 | iFlow engine |
-| 1.0.0 | 2023-01-01 | Initial release |
+The integrated base is `1.0.0` (release label) with YAML schema `1.0`. No `2.x`
+line is supported. Pre-1.0 history is available in Git; it is not a current API
+contract.
 
 ---
 
-*API Reference v2.1 - Part of TextFormatter Suite Documentation*
+*API Reference v1.0 - Part of TextFormatter Suite Documentation*

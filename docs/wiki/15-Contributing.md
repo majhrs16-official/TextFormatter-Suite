@@ -1,179 +1,155 @@
 # Contributing Guide
 
-## Welcome
+## Before you start
 
-Thank you for your interest in contributing to TextFormatter Suite! This guide will help you get started.
+TextFormatter Suite is pre-1.0. The base is `1.0.0` and the YAML schema is
+`1.0`. There is no supported `2.x` line. Changes must keep code, tests,
+documentation and the architecture/lockfile gates green.
 
-## Code of Conduct
+Read these documents first:
 
-- Be respectful and inclusive
-- Follow the code of conduct
-- Help others learn
-- No harassment, discrimination, or toxic behavior
+- [ADR](../workdir/ADR.md) — accepted architecture decisions.
+- [PLAN](../workdir/PLAN.md) — operational status and current phase.
+- [Storage layout](../prompts/diseno/storage.md) — canonical disk paths.
+- [Configuration schema](../prompts/especificaciones/config-schema-v2.2.md) —
+  editor and runtime key contract.
 
-## Getting Started
+The wiki explains usage; it is not the normative source.
 
-### Prerequisites
+## Requirements
 
-- Java 21 (or 17)
-- Gradle 8.5+
-- Git
-- IDE with Gradle support (IntelliJ IDEA recommended)
+- Java 17 or 21 (Java 21 recommended).
+- Git.
+- Gradle is provided by the wrapper; do not install a separate Gradle.
+- Node.js 20+ only for `src/web-editor`.
+- No real Spigot/Paper/Fabric/Velocity server is required for unit and
+  integration tests. Real-server E2E is deferred until after `1.0.0`.
 
-### Setup
+## Setup
 
 ```bash
-# Clone repository
 git clone https://github.com/majhrs16-official/TextFormatter-Suite.git
 cd TextFormatter-Suite
 
-# Build
-./gradlew build
-
-# Run tests
-./gradlew test
-
-# Run benchmarks
-./gradlew :suite:loadtest:jmh
+./gradlew build --no-daemon
+./gradlew test --no-daemon
 ```
 
-### IDE Setup
-
-**IntelliJ IDEA:**
-1. File → Open → Select `build.gradle`
-2. Enable "Auto-import" for Gradle
-3. Run `./gradlew idea` to generate project files
-
-**VS Code:**
-1. Install "Extension Pack for Java"
-3. Open folder
-3. Run `./gradlew build` to generate classpath
-
-## Development Workflow
-
-### Branching Strategy
-
-```
-main                    # Stable releases
-├── develop             # Integration branch
-│   ├── feature/xyz     # Feature branches
-│   ├── fix/xyz         # Bug fixes
-│   └── docs/xyz        # Documentation
-```
-
-### Commit Convention
-
-```
-type(scope): description
-
-[optional body]
-
-[optional footer]
-```
-
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation
-- `refactor`: Code restructuring
-- `test`: Adding tests
-- `chore`: Maintenance
-- `perf`: Performance
-- `security`: Security fix
-
-**Examples:**
-```
-feat(iflow): add CHANNEL_REDIRECT target
-fix(iflow): fix rate limiter memory leak
-docs(wiki): add translation guide
-refactor(core-api): simplify ModuleDescriptor
-test(loadtest): add message pipeline benchmarks
-```
-
-### Pull Request Process
-
-1. Fork repository
-2. Create feature branch from `develop`
-3. Write code + tests
-4. Run `./gradlew check` locally
-5. Update documentation
-5. Submit PR to `develop`
-
-### PR Checklist
-
-- [ ] Tests pass (`./gradlew check`)
-- [ ] Code formatted (`./gradlew spotlessCheck`)
-- [ ] Tests added/updated
-- [ ] Documentation updated
-- [ ] CHANGELOG.md updated
-- [ ] No breaking changes (or marked)
-- [ ] CI passes
-
-## Code Standards
-
-### Java Version
-
-- **Target**: Java 17/21
-- **Language Level**: 17/21
-- **Preview Features**: Enabled where stable
-
-### Formatting
+Full local gate:
 
 ```bash
-# Format code
-./gradlew spotlessApply
+./gradlew build checkArchitecture checkLocks --no-daemon
+```
 
-# Check formatting
+Useful focused commands:
+
+```bash
+./gradlew :src:textformatter:test --no-daemon
+./gradlew :src:iflow-vm:test --no-daemon
+./gradlew :src:suite-runtime:test --no-daemon
+./gradlew spotlessApply
 ./gradlew spotlessCheck
 ```
 
-### Linting
+The load-test module is `src/loadtest`:
 
 ```bash
-# Checkstyle
-./gradlew checkstyleMain
-
-# SpotBugs
-./gradlew spotbugsMain
+./gradlew :src:loadtest:jmh
 ```
 
-### Imports
+## Working rules
 
-```java
-// Order:
-// 1. java.* / javax.*
-// 2. Third-party (alphabetical)
-// 3. me.majhrs16.suite.* (project packages)
-// 4. Static imports
+- One change per commit: code, tests, documentation and gate together.
+- Every bug fix needs a regression test.
+- Do not add legacy readers, aliases, shims or runtime migrations. This is the
+  pre-1.0 regime from ADR-034.
+- `1.0.0` is the release label; `1.0` is the YAML schema version.
+- Every runtime configuration `.yml` declares `config-version: 1.0` at the root, preferably as
+  the last key. `plugin.yml` is the only exception.
+- Missing `config-version` fails with
+  `version de configuracion no identificada (archivo editado o corrupto?)`.
+- Do not add plans, phases or roadmaps to the ADR. Status belongs in `PLAN.md`.
+- Do not push commits, tags or releases without explicit maintainer
+  authorization.
+
+## Branches and commits
+
+The repository currently uses `main`. Create a short-lived branch for your
+change:
+
+```bash
+git switch -c feat/descripcion-corta
 ```
 
-### Documentation
+Commit messages are written in Spanish and follow Conventional Commits:
 
-```java
-/**
- * Brief description.
- * 
- * <p>Detailed explanation if needed.</p>
- * 
- * @param param description
- * @return description
- * @throws ExceptionType when condition
- */
-public ReturnType methodName(ParamType param) {
-    // Implementation
-}
+```text
+tipo(alcance): descripción
+
+[cuerpo opcional]
+
+[pie opcional]
 ```
+
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `security`.
+
+Examples:
+
+```text
+feat(iflow): añadir destino CHANNEL_REDIRECT
+fix(iflow): corregir fuga del limitador de tasa
+docs(wiki): documentar el layout canónico
+refactor(core-api): simplificar ModuleDescriptor
+test(loadtest): añadir benchmarks del pipeline
+```
+
+## Pull requests
+
+1. Branch from `main`.
+2. Add or update tests.
+3. Update documentation in the same change.
+4. Run the full gate.
+5. Open a pull request with the problem, the change and the evidence.
+
+Checklist:
+
+- [ ] `./gradlew test --no-daemon` passes.
+- [ ] `./gradlew build checkArchitecture checkLocks --no-daemon` passes.
+- [ ] `./gradlew spotlessCheck` passes.
+- [ ] Tests cover the bug or the new behaviour.
+- [ ] Documentation matches the ADR and the real code.
+- [ ] No legacy path, alias or migration was introduced.
+- [ ] No secrets, tokens or machine-local paths were committed.
+
+## Code standards
+
+- Java 17/21.
+- JUnit 5 for tests.
+- Spotless for formatting; do not reformat unrelated files.
+- Javadoc for public API.
+- Keep platform code in the host adapters and neutral code in the modules.
+- Do not import platform classes into `core-api`, `kernel` or `suite-runtime`.
+- Do not add feature classes to the host Shadow JAR.
+
+Import order:
+
+1. `java.*` / `javax.*`
+2. Third-party libraries
+3. `me.majhrs16.suite.*`
+4. Static imports
 
 ## Testing
 
-### Unit Tests
+Use plain JUnit 5. There is no Spring context in this project.
+
+Unit test:
 
 ```java
 @Test
-void testMessageFormatting() {
+void dispatchDeliversToRecipient() {
     var host = createTestHost();
     var sender = new Actor(UUID.randomUUID(), "Test", ActorKind.PLAYER, Language.EN, null);
-    
+
     var message = Message.builder()
         .type(MessageType.CHAT)
         .sender(sender)
@@ -181,163 +157,93 @@ void testMessageFormatting() {
         .channel("chat.global")
         .text("Hello world")
         .build();
-    
+
     var report = host.dispatch(message);
-    
+
     assertTrue(report.delivered() > 0);
 }
 ```
 
-### Integration Tests
+Integration test:
 
 ```java
-@SpringBootTest
-class IntegrationTest {
-    
-    @Autowired
-    SuiteHost host;
-    
-    @Test
-    void testFullPipeline() {
-        var message = Message.builder()
-            .type(MessageType.CHAT)
-            .sender(testActor)
-            .direction(Direction.OTHERS)
-            .channel("chat.global")
-            .text("Hello world")
-            .build();
-        
-        var report = host.dispatch(message);
-        assertTrue(report.delivered() > 0);
-    }
+@Test
+void fullPipelineDispatches() {
+    var host = createTestHost();
+    var message = messageFor("chat.global", "Hello world");
+
+    var report = host.dispatch(message);
+
+    assertTrue(report.delivered() > 0);
 }
 ```
 
-### Performance Tests
+Use real ZIPs, JARs and temporary directories for manager/runtime tests. Mock
+only external transports that cannot run in CI.
 
-```java
-@Benchmark
-@BenchmarkMode(Mode.AverageTime)
-@OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Warmup(iterations = 3, time = 10, timeUnit = TimeUnit.SECONDS)
-@Measurement(iterations = 5, time = 10, timeUnit = TimeUnit.SECONDS)
-@Fork(2)
-public void benchmarkTemplateRendering() {
-    // Benchmark code
-}
-```
-
-### Running Tests
+## Web editor
 
 ```bash
-# All tests
-./gradlew test
-
-# Specific module
-./gradlew :suite:textformatter:test
-
-# Specific test
-./gradlew :suite:textformatter:test --tests "TemplateRendererTest"
-
-# With coverage
-./gradlew jacocoTestReport
+cd src/web-editor
+npm install
+npm run check
+npm run test:integration
 ```
 
-## Code Review
+The editor exports a project ZIP with flat paths (`config.yml`, `channels/`,
+`sync/`). Those are editor-project paths, not runtime paths. The runtime layout
+is `config/suite/` and `config/<module>/`.
 
-### Review Checklist
+## Documentation
 
-- [ ] Code compiles and tests pass
-- [ ] Follows code style
-- [ ] Tests added/updated
-- [ ] Documentation updated
-- [ ] No breaking changes (or documented)
-- [ ] Performance considered
-- [ ] Security considered
-- [ ] Logging appropriate
+- User documentation belongs in `docs/wiki/`.
+- Architecture decisions belong in `docs/workdir/ADR.md`.
+- Operational status belongs in `docs/workdir/PLAN.md`.
+- Specifications belong in `docs/prompts/especificaciones/`.
+- Do not duplicate ADR bodies in the wiki; link to them.
+- Do not advertise commands, keys or paths that the code does not implement.
 
-### Review Guidelines
+## Release process
 
-- Be constructive and respectful
-- Focus on code, not person
-- Explain reasoning
-- Suggest improvements, don't demand
-- Approve when ready, request changes when needed
+`1.0.0` is the release label of the integrated base. It is not a claim that
+real-server E2E has passed; those tests run after the release.
 
-## Issue Reporting
+Version source:
 
-### Bug Reports
+```bash
+# The build defaults to 1.0.0 unless -Pversion is supplied.
+./gradlew build -Pversion=1.0.0
+```
+
+Checklist:
+
+- [ ] Full gate passes.
+- [ ] `PLAN.md` and `AUDITORIA.md` reflect the current state.
+- [ ] Release notes are updated.
+- [ ] Tag is created only after maintainer approval: `git tag -a v1.0.0`.
+- [ ] No push of commits or tags without explicit authorization.
+- [ ] Artifacts are attached to the release only if the maintainer requests it.
+
+Maven Central publication and container images are not part of the 1.0.0 gate.
+
+## Reporting issues
 
 Include:
-- Version/commit hash
-- Platform (Spigot/Fabric/Velocity)
-- Java version
-- Server version
-- Steps to reproduce
-- Expected vs actual behavior
-- Logs/config snippets
-- Steps to reproduce
 
-### Feature Requests
+- version or commit hash;
+- platform and server version;
+- Java version;
+- steps to reproduce;
+- expected and actual behaviour;
+- logs and the failing YAML file;
+- whether the file declares `config-version: 1.0`.
 
-1. Check existing issues
-2. Describe use case
-3. Explain expected behavior
-4. Consider alternatives
-5. Implementation ideas welcome
+## Support
 
-## Release Process
-
-### Versioning
-
-```
-Major.Minor.Patch[-SNAPSHOT]
-2.1.0-SNAPSHOT  → Development
-2.1.0           → Release
-2.1.1           → Patch release
-```
-
-### Release Checklist
-
-- [ ] All tests pass
-- [ ] Version bumped in `gradle.properties`
-- [ ] CHANGELOG.md updated
-- [ ] Git tag created (`v2.1.0`)
-- [ ] GitHub Release created
-- [ ] Artifacts published to Maven Central
-- [ ] Docker images built
-- [ ] Documentation updated
-- [ ] Announcement posted
-
-### Release Script
-
-```bash
-#!/bin/bash
-# release.sh
-
-VERSION=$1
-
-# Update version
-sed -i "s/version=.*/version=$VERSION/" gradle.properties
-
-# Build
-./gradlew clean build publish -x test
-
-# Tag
-git tag -a "v$VERSION" -m "Release v$VERSION"
-git push origin "v$VERSION"
-
-# Create GitHub release
-gh release create "v$VERSION" --generate-notes
-```
-
-## Support Channels
-
-- **GitHub Issues**: Bug reports, feature requests
-- **GitHub Discussions**: Questions, ideas
-- **Discord**: Community chat
-- **Wiki**: Documentation
+- GitHub Issues: bugs and concrete proposals.
+- GitHub Discussions: questions and design discussion.
+- Wiki: user documentation.
 
 ---
 
-*Contributing Guide v2.1 - Part of TextFormatter Suite Documentation*
+*Contributing Guide v1.0 - Part of TextFormatter Suite Documentation*

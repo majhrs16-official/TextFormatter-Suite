@@ -238,7 +238,7 @@ The complete command reference is [Commands Reference](08-Commands.md).
 
 ## Repository Configuration
 
-Repositories are declared in `config/suite/repo.yml`:
+Repositories are declared in `manager/repo.yml`:
 
 ```yaml
 repositories:
@@ -247,9 +247,10 @@ repositories:
     url: https://example.com/suite
     enabled: true
     priority: 10
+config-version: 1.0
 ```
 
-Supported types are `http`, `file` and `github`. The manager reads
+Supported types are `http`, `local` and `github`. The manager reads
 `packages.list` from each repository, not `releases.json`. Every package entry
 declares its SHA-256; downloads without a valid checksum are rejected.
 

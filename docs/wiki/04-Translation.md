@@ -2,177 +2,114 @@
 
 ## Overview
 
-TextFormatter Suite provides a flexible, multi-provider translation system with automatic language detection and per-player language preferences.
+Translation is provided by `chattranslator` and the active `TranslatorProvider`
+from the installed provider packages (`gtranslate`, `ltranslate`, …). The host
+asks `TranslationService` for a translated fragment; the service caches results,
+deduplicates in-flight requests and falls back to the original text on failure.
 
-## Supported Providers
+## Providers
 
-| Provider | API Key | Cost | Latency | Quality |
-|----------|---------|------|---------|---------|
-| Google Translate | No (free tier) | Free | Low | High |
-| LibreTranslate | Optional | Free/Self-hosted | Medium | Good |
+| Provider | Package | API key | Notes |
+|----------|---------|---------|-------|
+| Google Translate | `gtranslate` | No | Free public endpoint |
+| LibreTranslate | `ltranslate` | Optional | Self-hosted or public instance |
+
+Only the **active** provider registered in `TranslatorManager` is used. The
+console command `/suite state` shows the module state; the backend selection is
+stored in `config/chattranslator/config.yml`.
 
 ## Configuration
 
-### Google Translate (Default)
+### Facade defaults (`config/chattranslator/config.yml`)
 
 ```yaml
-# translators/google.yml
+default-backend: google
+context-override-enabled: true
+config-version: 1.0
+```
+
+`default-backend` is the preferred provider. If it is unavailable, the first
+active provider registered by a provider package is used.
+
+### Google (`config/chattranslator/translators/google.yml`)
+
+```yaml
 provider: google
 active: true
-# No API key required (uses free web endpoint)
-# Optional: pool settings for concurrent requests
-pool:
-  max-concurrent: 6
+config-version: 1.0
 ```
 
-### LibreTranslate
+### LibreTranslate (`config/chattranslator/translators/libre.yml`)
 
 ```yaml
-# translators/libre.yml
 provider: libre
 active: false
-base-url: https://libretranslate.example.com  # Your instance URL
-api-key: ""                                   # Optional API key
-pool:
-  max-concurrent: 6
+base-url: https://libretranslate.example.com
+api-key: ""
+config-version: 1.0
 ```
 
-### Provider Selection
+The flat `translators/` directory in the data root is ignored. Only
+`config/chattranslator/translators/` is read. A translator file without
+`config-version: 1.0` is rejected (the activator reports the error).
 
-The suite automatically selects the first active provider. Priority order:
-1. Google (if active)
-2. LibreTranslate (if active)
+## Languages
 
-## Language Support
+`Language` is an ISO 639-1/639-3 enum with the special values:
 
-### Supported Languages
+| Code | Meaning |
+|------|---------|
+| `auto` | Detect the source language |
+| `off` | Do not translate; pass the original text through |
 
-| Code | Language | Google | LibreTranslate |
-|------|----------|--------|----------------|
-| `en` | English | ✅ | ✅ |
-| `es` | Spanish | ✅ | ✅ |
-| `fr` | French | ✅ | ✅ |
-| `de` | German | ✅ | ✅ |
-| `pt` | Portuguese | ✅ | ✅ |
-| `it` | Italian | ✅ | ✅ |
-| `ru` | Russian | ✅ | ✅ |
-| `ja` | Japanese | ✅ | ✅ |
-| `ko` | Korean | ✅ | ✅ |
-| `zh` | Chinese (Simplified) | ✅ | ✅ |
-| `zh-TW` | Chinese (Traditional) | ✅ | ✅ |
-| `ar` | Arabic | ✅ | ✅ |
-| `hi` | Hindi | ✅ | ✅ |
-| `pt` | Portuguese | ✅ | ✅ |
-| `nl` | Dutch | ✅ | ✅ |
-| `pl` | Polish | ✅ | ✅ |
-| `tr` | Turkish | ✅ | ✅ |
-| `vi` | Vietnamese | ✅ | ✅ |
-| `th` | Thai | ✅ | ✅ |
-| `id` | Indonesian | ✅ | ✅ |
+`TranslationService` compares source and target; if they are equal, translation
+is skipped and the original text is returned. Detection failures also fall back
+to the original text.
 
-Total: **100+ languages** supported
+## Player language preferences
 
-### Special Language Codes
-
-| Code | Description |
-|------|-------------|
-| `auto` | Auto-detect source language |
-| `off` | Disable translation for this player |
-
-## Player Language Management
-
-### Commands
-
-```
-# Player commands
-/suite lang                    # Show your current language
-/suite lang <code>             # Set your language (en, es, auto, off, etc.)
-/suite toggle                  # Toggle translation on/off
-
-# Admin commands
-/suite lang <player> <code>    # Admin: set another player's language
-/suite toggle <player>         # Admin: toggle for another player
-/suite lang list               # List supported languages
-/suite lang list codes         # List language codes only
-```
-
-### Language Persistence
-
-Player language preferences are stored in `storage.yml`:
+The neutral `UserLanguageStore` contract persists a player's preferred language.
+The integrated runtime provides `YamlUserLanguageStore`, backed by
+`storage.yml` in the data folder:
 
 ```yaml
-# storage.yml
-players:
-  "uuid-here":
-    language: "es"          # or "auto", "off", "en", etc.
-    updated: "2024-01-15T10:30:00Z"
+# storage.yml (flat UUID -> value)
+"00000000-0000-0000-0000-000000000000": es
+"11111111-1111-1111-1111-111111111111": auto
 ```
 
-### Language Codes
+The store is hot-reloaded when the file timestamp changes. The current core does
+not register `/suite lang` or `/suite toggle`; adapters and extensions use the
+`UserLanguageStore` service directly.
 
-Use ISO 639-1 codes (2-letter) or ISO 639-1 + region:
+## Channel language settings
 
-| Code | Language | Region Variants |
-|------|----------|-----------------|
-| `en` | English | `en-US`, `en-GB`, `en-AU` |
-| `es` | Spanish | `es-ES`, `es-MX`, `es-AR` |
-| `fr` | French | `fr-FR`, `fr-CA` |
-| `de` | German | `de-DE`, `de-AT` |
-| `zh` | Chinese | `zh-CN`, `zh-TW`, `zh-HK` |
-| `pt` | Portuguese | `pt-BR`, `pt-PT` |
-
-### Special Language Codes
-
-| Code | Behavior |
-|------|----------|
-| `auto` | Auto-detect source, translate to server default |
-| `off` | Disable translation (show original text) |
-| `<code>` | Force specific source→target |
-
-## Translation in Channels
-
-### Channel Language Configuration
+Each channel declares its language pair:
 
 ```yaml
-# channels/chat.global.yml
+# config/textformatter/channels/chat.global.yml
 name: chat.global
-lang-source: auto      # Source: auto, en, es, etc.
-lang-target: auto      # Target: auto, en, es, etc.
-translate: true        # Enable translation for this channel
-```
-
-### Per-Channel Translation
-
-```yaml
-# chat.global - Translated chat
 lang-source: auto
 lang-target: auto
-translate: true
-
-# staff.chat - No translation (staff reads original)
-translate: false
-
-# rp.chat - Force English source
-lang-source: en
-lang-target: auto
-translate: true
+messages:
+  - "<green>%content%</green>"
+config-version: 1.0
 ```
-
-### Translation Behavior
 
 | Setting | Behavior |
 |---------|----------|
-| `translate: false` | No translation, show original |
-| `translate: true` + `lang-source: auto` | Auto-detect, translate to recipient's language |
-| `lang-source: en` | Force English as source |
-| `lang-target: auto` | Translate to recipient's language |
-| `lang-target: es` | Force Spanish output |
+| `lang-source: auto` | Detect the source language |
+| `lang-source: en` | Force English as the source |
+| `lang-target: auto` | Translate to the recipient's language |
+| `lang-target: es` | Force Spanish as the target |
 
-## Translation Tags
+There is no per-channel `translate` boolean. Translation is applied by the
+pipeline when the recipient language differs from the source; an unavailable
+provider returns the original text.
 
-### Inline Translation Tags
+## Translation tags
 
-Use `<tr>` tags to mark text for translation:
+Templates can mark translatable spans with `<tr>`:
 
 ```yaml
 messages:
@@ -180,187 +117,41 @@ messages:
   - "Server: <tr>Welcome to our server!</tr>"
 ```
 
-### Tag Behavior
+`<tr>` spans are excluded from MiniMessage formatting and sent to the
+translation service; placeholders inside the span are resolved first.
 
-| Tag | Behavior |
-|-----|----------|
-| `<tr>text</tr>` | Mark text for translation |
-| `<tr>` without `</tr>` | Translate until end or next tag |
-| Nested tags | Not supported (flattened) |
+## Cache and deduplication
 
-### Placeholder Translation
+`TranslationService` keeps:
 
-Placeholders are translated based on recipient's language:
+- A translation cache keyed by `source|target|text`.
+- A detection cache keyed by `detect|text`.
+- In-flight maps that deduplicate concurrent requests for the same key.
 
-```yaml
-messages:
-  - "Welcome <tr>%player_name%</tr> to <tr>%server_name%</tr>!"
+The current implementation uses fixed safety limits (`10,000` translations,
+`5,000` detections, `30 s` timeout). Cache entries are not persisted across
+restarts. Provider timeouts and failures return the source text, so a message is
+never dropped because translation failed.
+
+## Tests
+
+```bash
+./gradlew :src:core-api:test --tests '*TranslationService*' --no-daemon
+./gradlew :src:chattranslator:test --no-daemon
+./gradlew :src:gtranslate:test :src:ltranslate:test --no-daemon
 ```
 
-Result for Spanish player:
-```
-"¡Bienvenido Juan al Servidor Principal!"
-```
-
-## Translation Providers Detail
-
-### Google Translate
-
-- **Endpoint**: `translate.googleapis.com` (free web endpoint)
-- **Rate Limit**: ~100 requests/second (unofficial)
-- **Format**: HTML-escaped text
-- **Cache**: In-memory, 1-hour TTL
-- **Fallback**: Returns original text on failure
-
-### LibreTranslate
-
-```yaml
-# translators/libre.yml
-provider: libre
-active: true
-base-url: https://libretranslate.com  # Or your self-hosted instance
-api-key: "your-api-key"              # Optional
-pool:
-  max-concurrent: 6
-  timeout-ms: 5000
-```
-
-### Self-hosted LibreTranslate
-
-```yaml
-# For self-hosted instance
-base-url: https://translate.yourdomain.com
-api-key: "your-api-key"
-```
-
-## Translation Cache & Deduplication
-
-### Cache Configuration
-
-```yaml
-# In config.yml
-translation:
-  cache:
-    enabled: true
-    ttl-minutes: 60          # Cache TTL in minutes
-    max-entries: 10000       # Max cache entries
-```
-
-### Cache Behavior
-
-- **Key**: `source_text|source_lang|target_lang` (SHA-256 hash)
-- **TTL**: 60 minutes default
-- **Max Entries**: 10,000 entries
-- **Eviction**: LRU when max reached
-- **Deduplication**: Identical source text across multiple recipients shares cache entry
-
-### Cache Statistics
-
-The cache provides detailed statistics for monitoring:
-
-```java
-TranslationService.CacheStats stats = service.getCacheStats();
-stats.translationCacheSize();     // Current entries
-stats.detectionCacheSize();       // Language detection cache
-stats.maxTranslationCacheSize();  // Configured limit
-stats.maxDetectionCacheSize();    // Configured limit
-```
-
-### Cache Commands
-
-```
-/suite translation cache stats     # Show cache stats
-/suite translation cache clear     # Clear translation cache
-/suite translation cache warm <file>  # Pre-warm from file
-```
-
-## Translation Quality
-
-### Quality Comparison
-
-| Aspect | Google | LibreTranslate |
-|--------|--------|----------------|
-| Accuracy | ★★★★★ | ★★★★☆ |
-| Speed | Fast | Medium |
-| Formality | Good | Good |
-| Slang/Idioms | Excellent | Good |
-| Technical Terms | Excellent | Good |
-
-### Best Practices
-
-1. **Use Google for production** - Best quality/speed balance
-2. **Use LibreTranslate for privacy** - Self-hosted, no data leaves your server
-3. **Enable cache** - Reduces API calls and latency
-4. **Set appropriate TTL** - 60 min balances freshness/performance
-5. **Monitor API usage** - Watch for rate limits
-
-## Translation Commands Reference
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `/suite lang` | Show your language | `/suite lang` |
-| `/suite lang <code>` | Set language | `/suite lang es` |
-| `/suite lang <player> <code>` | Set other's language (admin) | `/suite lang Player123 es` |
-| `/suite toggle` | Toggle on/off | `/suite toggle` |
-| `/suite toggle <player>` | Toggle other's translation (admin) | `/suite toggle Player123` |
-| `/suite lang list` | List supported languages | `/suite lang list` |
-| `/suite lang list codes` | List language codes | `/suite lang list codes` |
+The tests cover cache hit/miss, size limits, per-language isolation,
+deduplication, detection caching, provider failures, malformed responses and
+unicode input.
 
 ## Troubleshooting
 
-### Common Issues
-
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| Translation not working | Provider inactive | Check `active: true` in translator config |
-| Wrong language | Wrong lang code | Use ISO 639-1 codes |
-| Slow translation | No cache / high load | Enable cache, increase pool size |
-| "Translation failed" | API error | Check logs, verify API key (LibreTranslate) |
-| Auto-detect wrong | Short text | Use explicit `lang-source` |
-
-### Debug Commands
-
-```
-/suite translation test "Hello world" en es     # Test translation
-/suite translation cache stats                  # Cache statistics
-/suite translation cache clear                  # Clear cache
-/suite translation test "Hello" auto es         # Test auto-detect
-```
-
-### Debug Logging
-
-```yaml
-# In config.yml
-debug:
-  translation: true
-  cache: true
-```
-
-Or JVM flag:
-```bash
--Dtextformattersuite.translation.debug=true
-```
-
-## Testing (New in v2.1)
-
-### Translation Cache Tests
-
-The suite includes comprehensive cache tests:
-
-```bash
-./gradlew :src:core-api:test --tests TranslationServiceCacheTest --offline
-```
-
-Tests cover:
-- Cache hit/miss behavior
-- Size limits and LRU eviction
-- Per-language cache isolation
-- `translateAll()` deduplication
-- `clearCaches()` functionality
-- Auto-source language detection caching
-
-### Extended Provider Tests
-
-Extended test suites for edge cases:
-- **GTranslateExtendedTest** (19 tests): malformed responses, empty arrays, null handling, unicode, rate limits
-- **LTranslateExtendedTest** (15 tests): error handling, missing fields, rate limits, unicode, transport exceptions
+| Translation not working | No active provider | Set `active: true` in a provider file and install its package |
+| Wrong language | Unsupported or wrong code | Use a value accepted by `Language` |
+| Slow translation | Provider latency / cache miss | Reduce provider latency; repeated text is cached in memory |
+| Translation failed | Provider error or timeout | Check the log; the source text is returned |
+| Auto-detect wrong | Very short text | Set an explicit `lang-source` |
+| File ignored | Flat path | Move it to `config/chattranslator/translators/` |

@@ -4,315 +4,331 @@
 
 ### What is TextFormatter Suite?
 
-TextFormatter Suite is a modular, high-performance chat formatting and translation platform for Minecraft servers. It provides advanced chat formatting, translation, message routing, cross-server synchronization, and extensibility through a modular plugin architecture.
+A modular chat formatting, routing, translation and synchronization platform for
+Minecraft servers. It integrates a neutral host pipeline, `textformatter`
+channels, `chattranslator` providers, the iFlow policy hub, sync sinks, the
+module manager and a web editor.
 
 ### What platforms are supported?
 
-- **Spigot/Paper**: 1.16.5 - 1.21+
-- **Fabric**: 1.21+ (Fabric Loader 0.16+)
-- **Velocity**: 3.2+ (via `sync-velocity` plugin)
-- **BungeeCord**: Planned
+- Spigot/Paper: 1.20.6+ (compiles against Paper API 1.21.4).
+- Fabric: 1.21+ (Fabric Loader 0.16+); compiles.
+- Velocity: through `sync-velocity-core` on backends and `sync-velocity` on the
+  proxy.
+- BungeeCord: not implemented.
 
 ### What Java version is required?
 
-**Java 17 or 21** (Java 21 recommended for best performance)
+Java 17 or 21. Java 21 is recommended.
 
 ### Is it compatible with other chat plugins?
 
-TextFormatter Suite replaces chat formatting plugins. It may conflict with other chat formatting plugins. Disable other chat formatting plugins before installing.
+It replaces chat formatting. Disable other chat formatters to avoid double
+formatting or competing event claims.
 
 ## Installation
 
-### How do I install on Spigot/Paper?
+### Spigot/Paper
 
-1. Download `textformatter-suite-spigot.jar`
-2. Place in `plugins/` folder
-3. Start server
-4. Configure `plugins/TextFormatterSuite/config.yml`
-5. Run `/suite reload`
+1. Place `textformatter-suite-spigot.jar` in `plugins/`.
+2. Start the server.
+3. Edit `plugins/TextFormatterSuite/config/suite/config.yml`.
+4. Restart the server to load module configuration.
 
-### How do I install on Fabric?
+### Fabric
 
-1. Install Fabric Loader 0.16+
-2. Download `textformatter-suite-fabric.jar`
-3. Place in `mods/` folder
-4. Start server
-5. Configure `config/textformatter-suite/config.yml`
-6. Run `/suite reload`
+1. Install Fabric Loader 0.16+.
+2. Place `textformatter-suite-fabric.jar` in `mods/`.
+3. Start the server.
+4. The data root is `<server run dir>/textformatter-suite/` with the same
+   `config/` layout.
+5. Restart the server to load module configuration.
 
-### Does it work on BungeeCord/Velocity?
+### Velocity / BungeeCord
 
-- **Velocity**: Yes, via the `sync-velocity-core` sink and the `sync-velocity` proxy plugin
-- **BungeeCord**: Planned for future release
+Velocity is supported through the sync modules. BungeeCord is not implemented.
 
 ## Configuration
 
 ### Where are config files located?
 
-**Spigot/Paper:** `plugins/TextFormatterSuite/`
-**Fabric:** `config/textformatter-suite/`
+- Spigot/Paper: `plugins/TextFormatterSuite/config/`.
+- Fabric: the mod data directory, with the same `config/` structure.
+
+The host reads `config/suite/`; each module reads `config/<module>/`. Flat files
+in the data root are ignored.
 
 ### How do I reload configuration?
 
-```
-/suite reload
-```
+`/suite reload` only re-reads `config/suite/commands.yml` and re-registers the
+command root. If the platform cannot unregister the old root, the runtime
+reports `RESTART_REQUIRED`.
+
+All other runtime configuration (host, channels, translators, sync, iFlow) is
+read when the pipeline or module starts. Restart the server after editing those
+files. `/<root> presets apply <preset>` is the only built-in operation that
+rewrites files and reloads active modules.
 
 ### How do I reset to defaults?
 
-```
-/suite reset
-```
-This creates a backup in `backup/<timestamp>/` and regenerates default configs.
+There is no `/suite reset` command in the integrated core. Stop the server, back
+up the data directory, remove the files you want to regenerate, and start again:
+`DefaultConfigInstaller` writes only missing canonical defaults.
 
 ### Can I use environment variables?
 
-Yes, configuration values can be overridden:
+No. The current host and module parsers read YAML files only. Environment
+variables such as `TFS_GENERAL_LANGUAGE` are not supported.
 
-```bash
-export TFS_GENERAL_LANGUAGE=es
-export TFS_IFLOW_PARALLEL=true
-export TFS_SONIDO_ENABLED=false
-```
+### Why was my file rejected?
+
+Every runtime configuration YAML must declare `config-version: 1.0` at the root. The parser
+reports `version de configuracion no identificada (archivo editado o
+corrupto?)` when it is absent. `plugin.yml` is excluded.
 
 ## Translation
 
-### Which translation providers are supported?
+### Which providers are supported?
 
-- **Google Translate** (free, no API key needed)
-- **LibreTranslate** (self-hosted or public instances)
+- Google Translate (`gtranslate`, no API key).
+- LibreTranslate (`ltranslate`, optional API key).
 
 ### How do I enable translation?
 
-1. Enable in `translators/google.yml` or `translators/libre.yml`
-2. Set `active: true`
-3. Run `/suite reload`
+1. Install the provider package.
+2. Set `active: true` in `config/chattranslator/translators/google.yml` or
+   `config/chattranslator/translators/libre.yml`.
+3. Set `default-backend` in `config/chattranslator/config.yml` if needed.
+4. Restart the server.
 
-### How do I set player language?
+### How do I set a player's language?
 
-```
-/suite lang es          # Set your language
-/suite lang Player123 es  # Admin: set other player's language
-/suite toggle            # Toggle on/off
-/suite lang auto         # Auto-detect
-/suite lang off          # Disable translation
-```
+The core persists preferences through `UserLanguageStore`
+(`storage.yml`, flat UUID → value). The integrated core does **not** register
+`/suite lang` or `/suite toggle`; adapters or extensions write through the
+service.
 
 ### How does auto-detection work?
 
-When `lang-source: auto` is set, the system detects the message language automatically using the translation provider's detection API.
+With `lang-source: auto`, the pipeline asks the active provider to detect the
+source language. On failure it falls back to the original text.
 
-### Can I use custom translation providers?
+### Can I use custom providers?
 
-Yes, implement `TranslationService` SPI and register via `Module` or `Extension`.
+Yes. Implement `Translator`/`TranslatorProvider` and register them from a module
+or extension.
 
 ## iFlow Policies
 
 ### How do I create a policy?
 
-1. Compile a VM program to binary `.flow` (external `iflow-compiler`).
-2. Place it as `policy.flow` in the suite config directory.
-3. Restart the server; `VmConfigLoader` loads it at startup.
-4. If `policy.flow` is missing or invalid, the VM falls back to a pass-through program.
+Choose a backend in `config/iflow/config.yml`:
 
-`rules.yml` is a legacy graph used only by the web editor. It is **not** compiled or evaluated by the runtime.
+```yaml
+engine: iflow-vm
+fallback-on-unavailable: true
+config-version: 1.0
+```
 
-### What are the legacy editor node types?
+For the VM, compile a `.flow` program and place it at
+`config/iflow-vm/policy.flow`. For the firewall, put SpEL rules under `rules:`
+in `config/iflow-firewall/rules.yml`.
+
+### What are the editor node types?
 
 | Type | Description |
 |------|-------------|
 | `input` | Entry point |
 | `cond` | Matcher/filter (no inline expression) |
-| `transform` | Transform message |
+| `transform` | Rewrite, sounds, sleep |
 | `loop` | Loop/retry |
 | `sleep` | Delay |
 | `output` | Deliver to channel |
 | `redirect` | Forward to channel |
 
+The editor graph uses `nodes:`/`edges:` and is validated by `iflow-firewall`; it
+is not executed by the VM.
+
 ### How do I write conditions?
 
-There is no inline condition language or SpEL in `iflow-vm`. Conditions and actions are bytecode
-in the `.flow` program, executed by `VmPolicyEngine`/`VmInterpreter`. The legacy `condition` key in
-`rules.yml` is ignored by the VM and by the editor graph; only the mutually exclusive
-`iflow-firewall` engine (selected with `iflow.engine.kind: firewall`; install only one iFlow
-engine) executes SpEL rules.
+`iflow-vm` has no inline condition language or SpEL. Conditions and actions are
+bytecode in the `.flow` program. The `condition` key in `rules.yml` belongs to
+the legacy firewall's `rules:` list.
+
+### Can several iFlow engines be installed?
+
+Yes. `iflow-firewall`, `iflow-vm` and `iflow-wasm` may coexist. The `iflow` hub
+activates exactly one and publishes `IflowHub`; `SuiteRuntime` requires the hub.
+There is no `iflow.engine.kind`.
 
 ## Sync
 
 ### How do I set up Discord sync?
 
-1. Create Discord bot at https://discord.com/developers/applications
-2. Enable `GUILD_MESSAGES` and `MESSAGE_CONTENT` intents
-3. Copy bot token
-4. Configure `sync/discord.yml`:
+1. Create a bot at <https://discord.com/developers/applications>.
+2. Enable `GUILD_MESSAGES` and `MESSAGE_CONTENT`.
+3. Configure `config/sync-discord/config.yml`:
+
 ```yaml
 enabled: true
 token: "YOUR_BOT_TOKEN"
 channel: 123456789012345678
 intents: [GUILD_MESSAGES, MESSAGE_CONTENT]
+config-version: 1.0
 ```
 
 ### How do I set up Velocity sync?
 
-1. Install `suite-sync-velocity-core` on all backend servers
-2. Install the `suite-sync-velocity` plugin on the proxy
-3. Configure same `secret` on all servers
-3. Configure `servers` list and `mapping`
+1. Install `sync-velocity-core` on every backend.
+2. Install `sync-velocity` on the proxy.
+3. Use the same `secret` everywhere.
+4. Configure `servers` and `mapping` in
+   `config/sync-velocity-core/config.yml`.
 
 ### How do I set up WebSocket sync?
 
-1. Enable in `sync/websocket.yml`
-2. Set `port` and optional `token`
-3. Connect to `ws://host:port/ws/chat`
+1. Enable `config/sync-websocket/config.yml`.
+2. Set `port`, `bind` and optional `token`.
+3. Connect to the configured host/port; the integrated core does not expose a
+   `/ws/chat` path router.
 
 ## Commands
 
 ### How do I change the command name?
 
 Edit `config/suite/commands.yml`:
+
 ```yaml
 root: [myname]
-aliases: [suite, txf, custom]
+aliases:
+  - [suite]
+  - [txf]
+  - [custom]
+config-version: 1.0
 ```
 
-Aplica el cambio con `/<raíz-actual> reload` (por defecto `/suite reload`); tras
-el re-registro, el comando pasa a estar en `/myname`. Reinicia el servidor si el
-runtime informa `RESTART_REQUIRED`. `base-name` está retirado: se ignora y la
-raíz por defecto es `suite`.
+Apply with `/<current-root> reload`. If the runtime reports
+`RESTART_REQUIRED`, restart the server. `base-name` is retired.
 
 ### How do I add custom commands?
 
-`commands.yml` solo declara la raíz. Los comandos se registran desde un paquete
-mediante `api.command` (`CommandSpec` y `ModuleContext.commands()`); no hay un
-intérprete de acciones en YAML.
+`commands.yml` declares only the root. Packages register `CommandSpec` nodes
+through `ModuleContext.commands()`; there is no YAML action interpreter.
 
 ## Troubleshooting
 
 ### Messages not appearing
 
-1. Check channel permissions: `cht.<channel>`
-2. Verify channel exists in `channels/`
-3. Check `/suite debug channels on`
+1. Check `permission`, `send-permission` and `receive-permission`.
+2. Verify the channel file is in `config/textformatter/channels/`.
+3. Use `/suite state` to confirm `textformatter` is active.
+4. Check the console for channel load errors.
 
 ### Translation not working
 
-1. Verify translator config: `active: true`
-2. Check `/suite translation test "hello" en es`
-3. Check `/suite translation cache stats`
-4. Check logs for errors
+1. Confirm the provider package is active (`/suite state`).
+2. Check `active: true` in `config/chattranslator/translators/*.yml`.
+3. Verify `config-version: 1.0`.
+4. Check logs for HTTP or provider errors.
 
 ### Sync not working
 
-1. Check `/suite sync status`
-2. Run `/suite sync test <sink>`
-3. Check logs for errors
-4. Verify config in `sync/*.yml`
+1. Check `/suite state` for the sync package.
+2. Verify the canonical `config/sync-*/` file.
+3. Check tokens, secrets and ports.
+4. Check the console; there are no `/suite sync` commands.
 
 ### Commands not working
 
-1. Check permissions: `textformattersuite.admin`
-2. Verify command registration: `/suite help`
-3. Check for conflicts with other plugins
+1. Check `textformatter.suite.admin` (or the root command permission).
+2. Run `/suite help`.
+3. Look for command conflicts with other plugins.
+4. Check `config/suite/commands.yml` for collision errors.
 
 ### High memory usage
 
-1. Check `/suite metrics`
-2. Run `/suite debug dump`
-3. Check `/suite health`
-
-### Translation not working
-
-1. Verify `translators/google.yml` has `active: true`
-2. Check `/suite translation test "hello" en es`
-3. Check cache: `/suite translation cache stats`
-4. Check logs for HTTP errors
+1. Reduce installed packages and active sync sinks.
+2. Check the JVM heap (`-Xmx`).
+3. Use the observability module if installed.
 
 ### Rate limiting not working
 
-1. Check channel config: `rate-limit-per-second`
-2. Verify `/suite debug channels on`
-3. Check iFlow rules for rate limiting
+1. Check `rate-limit-per-second` in the channel YAML.
+2. Confirm the channel file is canonical and has `config-version`.
+3. Check the firewall rules if that backend is active.
 
 ## Performance
 
 ### How to improve performance?
 
-1. Enable `iflow.engine.parallel: true`
-2. Enable translation cache (default: 60 min)
-3. Use `engine.parallel: true` in config
-4. Limit concurrent translations: `pool.max-concurrent`
-5. Disable unused sync sinks
+1. Enable `iflow.engine.parallel: true` for parallel recipient routing.
+2. Disable unused sync sinks.
+3. Keep channel files small and avoid unnecessary transforms.
+4. Use the observability module to measure before changing settings.
 
-### Recommended settings for large servers (1000+ players)
+### Recommended settings for large servers
 
 ```yaml
+# config/suite/config.yml
 iflow:
   engine:
     parallel: true
-translators:
-  google:
-    pool:
-      max-concurrent: 20
-translation:
-  cache:
-    ttl-minutes: 60
-    max-entries: 50000
+config-version: 1.0
 ```
+
+There is no configurable translation-cache TTL or size in the integrated core;
+`TranslationService` uses fixed safety limits.
 
 ## Development
 
-### How to build from source?
+### Build from source
 
 ```bash
 ./gradlew build
 ```
 
-### How to run tests?
+### Run tests
 
 ```bash
-./gradlew test
+./gradlew test --no-daemon
 ```
 
-### How to run benchmarks?
+### Run the full gate
 
 ```bash
-./gradlew :suite:loadtest:jmh
+./gradlew build checkArchitecture checkLocks --no-daemon
 ```
 
-### How to run load tests?
+### Run benchmarks / load tests
 
 ```bash
-export SUITE_BASE_URL=http://localhost:9090
-export LOAD_USERS=100
-export LOAD_DURATION=60
-./gradlew :suite:loadtest:loadTest
+./gradlew :src:loadtest:jmh
 ```
+
+The load-test module is `src/loadtest`; it is not a `:suite:loadtest` project.
 
 ## Contributing
 
-### How to contribute?
-
-1. Fork repository
-2. Create feature branch
-3. Write tests
-4. Ensure CI passes
-5. Update documentation
-6. Submit PR
+1. Fork the repository.
+2. Create a feature branch.
+3. Add tests for every bug fix.
+4. Keep code, docs and the gate green.
+5. Submit a pull request.
 
 ### Code style
 
-- Java 17/21
-- Spotless formatting (`./gradlew spotlessApply`)
-- JUnit 5 tests
-- Javadoc for public APIs
+- Java 17/21.
+- Spotless (`./gradlew spotlessApply`).
+- JUnit 5 tests.
+- Javadoc for public APIs.
 
 ### Reporting bugs
 
-1. Check existing issues
-2. Create minimal reproduction
-3. Include version, platform, logs
-4. Submit on GitHub Issues
+1. Check existing issues.
+2. Create a minimal reproduction.
+3. Include version, platform, logs and the failing config.
+4. Open a GitHub issue.
 
 ---
 
-*FAQ v2.1 - Part of TextFormatter Suite Documentation*
+*FAQ v1.0 - Part of TextFormatter Suite Documentation*

@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; D-009 cerrado con prioridad explícita y test; P0.2, P0.3, P0.5 y P0.7 cerrados con gate verde.**)
+> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; D-009 cerrado con prioridad explícita y test; P0.2, P0.3, P0.5, P0.7 y P0.8b cerrados con gate verde.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -55,7 +55,7 @@
 | **P0.6** | Auditoría vigente | `AUDITORIA.md` refleja la auditoría documental de 2026-11-04 (D-001…D-010) con evidencia y estado; este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Corregir P0/P1 con test de regresión antes de avanzar. Al cerrar el ciclo, reemplazar el archivo por completo. | Parcial (auditoría documental 2026-11-04) |
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
 | **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Parcial (2026-11-04) |
-| **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Pendiente |
+| **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Completado (2026-11-04) |
 
 **Estado de la auditoría vigente (2026-11-04):** auditoría documental abierta, HEAD `c5992230`.
 `AUDITORIA.md` contiene el informe vigente (D-001…D-010) y se reemplaza al cerrar el ciclo. El
@@ -74,7 +74,8 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
 - `CoreTranslator` fue eliminado en `7dd164a4`; se restauró la feature real de ChatTranslator
   (expansión PAPI `%cot_*`) en `src/coretranslator`. El `LegacyBridge` y `suite-common-legacy` no
   se recuperan (ADR-035).
-- La wiki (`docs/wiki/`) permanece fuera de alcance hasta P0.8b.
+- La wiki (`docs/wiki/`) quedó alineada en P0.8b: 17 páginas revisadas, sin duplicar ADRs,
+  sin comandos inexistentes y sin `iflow.engine.kind` presentado como vigente.
 - `gradle/verification-metadata.xml` conserva entradas históricas de artefactos propios
   `2.1.0-SNAPSHOT`; no participan en la resolución actual.
 - W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
@@ -121,9 +122,8 @@ cuando ambas estén listas.
 > solo en `config/iflow/config.yml` y el hub es el único punto de resolución.
 >
 > Los contratos neutrales (`Router`, `IflowHub`, `IflowBackend`) viven en `core-api` bajo
-> `me.majhrs16.suite.iflow`; cada motor usa su propio subpaquete. `SuiteRuntime` prefiere
-> `IflowHub` sobre un `Router` legacy mientras dure la transición; el camino legacy se retira en la
-> purga pre-1.0. `iflow-wasm` ya publica su backend con hash y watcher.
+> `me.majhrs16.suite.iflow`; cada motor usa su propio subpaquete. `SuiteRuntime` exige
+> `IflowHub` y no acepta un `Router` suelto. `iflow-wasm` ya publica su backend con hash y watcher.
 >
 > El monorepo compila los tres motores y el hub; `./gradlew publishIflowEngines` publica
 > `suite-iflow`, `suite-iflow-vm`, `suite-iflow-wasm` y `suite-iflow-firewall` en `build/repo`.

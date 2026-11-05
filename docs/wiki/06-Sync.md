@@ -2,443 +2,223 @@
 
 ## Overview
 
-The sync system enables cross-server and cross-platform message synchronization. Supports Discord, Telegram, HTTP webhooks, TCP/UDP, Velocity proxy, and WebSocket connections.
-
-## Architecture
+The sync layer bridges Minecraft chat and typed server events to external
+platforms. A `sync-bus` implementation fans outgoing messages to every
+registered `SyncSink`; each sink can also push inbound messages back through the
+neutral pipeline.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Sync Architecture                          │
-├─────────────────────────────────────────────────────────────┤
-│  Minecraft Server 1  ◄───┐                                  │
-│                           │                                  │
-│  Minecraft Server 2  ◄───┼──► Sync Manager ◄───► External   │
-│                           │         │          Services      │
-│  Minecraft Server N  ◄───┘         ▼                        │
-│                    ┌─────────────────────────────────────┐   │
-│                    │  Discord  │ Telegram │ HTTP │ WS    │   │
-│                    └─────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+Minecraft event
+      │
+      ▼
+SyncEventProcessor  (channel selection, translation gating)
+      │
+      ▼
+MessageDispatch ──► host pipeline (format, translate, iFlow)
+      │
+      ▼
+SyncBus.broadcast()
+      ├─► DiscordSink
+      ├─► TelegramSink
+      ├─► HttpSink
+      ├─► TcpSink / UdpSink
+      ├─► VelocitySink
+      └─► WebSocketSink
 ```
 
-## Sync Sinks
+## Configuration paths
 
-Each sync protocol is implemented as a `SyncSink`:
+Each sync package owns a directory under `config/`. The flat `sync/` directory
+is an editor-project convention; the runtime never reads it.
 
-| Sink | Protocol | Direction | Config File |
-|------|----------|-----------|-------------|
-| Discord | Discord Gateway + REST | Bidirectional | `sync/discord.yml` |
-| Telegram | Long Polling | Bidirectional | `sync/telegram.yml` |
-| HTTP | Webhook + REST | Bidirectional | `sync/http.yml` |
-| TCP/UDP | Raw sockets | Bidirectional | `sync/tcp-udp.yml` |
-| Velocity | Plugin messaging | Bidirectional | `sync/velocity.yml` |
-| WebSocket | WebSocket | Bidirectional | `sync/websocket.yml` |
+| Sink | Canonical file |
+|------|----------------|
+| Bus | `config/sync-bus/config.yml` |
+| Discord | `config/sync-discord/config.yml` |
+| Telegram | `config/sync-telegram/config.yml` |
+| HTTP/webhook | `config/sync-http/config.yml` |
+| TCP | `config/sync-socket/tcp.yml` |
+| UDP | `config/sync-socket/udp.yml` |
+| Velocity | `config/sync-velocity-core/config.yml` |
+| WebSocket | `config/sync-websocket/config.yml` |
+| Bukkit events | `config/sync-bukkit/config.yml` |
+| Fabric events | `config/sync-fabric/config.yml` |
 
-## Discord Sync
+All files declare `config-version: 1.0` at the root. A file without it is
+rejected with `version de configuracion no identificada (archivo editado o
+corrupto?)`; the sink reports the error and does not start.
 
-### Configuration
+## Discord
 
 ```yaml
-# sync/discord.yml
+# config/sync-discord/config.yml
 enabled: true
 token: "YOUR_BOT_TOKEN"
-channel: 123456789012345678          # Discord channel ID (snowflake)
+channel: 123456789012345678
+format: "{sender}: {content}"
+transport: jda                 # jda | jdk
 intents:
   - GUILD_MESSAGES
   - MESSAGE_CONTENT
+config-version: 1.0
 ```
 
-### Bot Setup
+Create a bot at <https://discord.com/developers/applications>, enable the
+`MESSAGE_CONTENT` intent and invite it with read/send permissions. `channel` is
+the Discord snowflake used for inbound/outbound chat.
 
-1. Create application at https://discord.com/developers/applications
-2. Create bot user
-3. Enable **MESSAGE_CONTENT** intent
-3. Copy token to config
-4. Invite bot to server with `Send Messages`, `Read Messages`, `Read Message History` permissions
-
-### Message Format
-
-**Minecraft → Discord:**
-```
-[Server] PlayerName: Hello world!
-```
-
-**Discord → Minecraft:**
-```
-[Discord] UserName: Hello from Discord!
-```
-
-### Embeds
+## Telegram
 
 ```yaml
-# sync/discord.yml
-embeds:
-  enabled: true
-  color: 0x00FF00
-  show-server-name: true
-  show-channel: true
-```
-
-## Telegram Sync
-
-### Configuration
-
-```yaml
-# sync/telegram.yml
+# config/sync-telegram/config.yml
 enabled: true
 token: "YOUR_BOT_TOKEN"
-chat-id: -1001234567890        # Chat ID (negative for groups)
-hub: false                      # Hub mode (relay between servers)
+chatId: -1001234567890        # Negative for groups
+config-version: 1.0
 ```
 
-### Bot Setup
+Create the bot with BotFather and add it to the target group. The current parser
+reads `enabled`, `token` and `chatId`; there is no Telegram command bridge in the
+integrated core.
 
-1. Message @BotFather on Telegram
-2. Create bot with `/newbot`
-3. Copy token to config
-3. Add bot to group/channel
-4. Get chat ID (message the bot, check `getUpdates`)
-
-### Commands
+## HTTP/webhook
 
 ```yaml
-# sync/telegram.yml
-commands:
-  enabled: true
-  prefix: "/tf"
-  commands:
-    - name: "status"
-      description: "Show server status"
-    - name: "players"
-      description: "List online players"
-```
-
-## HTTP/Webhook Sync
-
-### Configuration
-
-```yaml
-# sync/http.yml
+# config/sync-http/config.yml
 enabled: true
-webhook-url: "https://your-server.com/webhook"
-inbound-port: 8080
-path: "/webhook/tf-suite"
-secret: "optional-shared-secret"
+outboundUrl: "https://your-server.com/hook"
+inboundPort: 8080
+inboundPath: "/hook"
+bind: "127.0.0.1"
+authToken: ""
+hmacSecret: ""
+config-version: 1.0
 ```
 
-### Outbound (Minecraft → External)
+`outboundUrl` receives POSTed messages. The inbound listener binds to
+`bind:inboundPort` and serves `inboundPath`. `authToken` and `hmacSecret` are
+optional validation secrets; use TLS at the reverse proxy when exposing the
+endpoint publicly.
 
-POST to `webhook-url`:
-```json
-{
-  "type": "chat",
-  "sender": "PlayerName",
-  "channel": "chat.global",
-  "content": "Hello world!",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "uuid": "player-uuid"
-}
-```
-
-### Inbound (External → Minecraft)
-
-POST to `http://your-server:8080/webhook/tf-suite`:
-
-```json
-{
-  "type": "chat",
-  "sender": "ExternalBot",
-  "channel": "chat.global",
-  "content": "Message from external",
-  "source": "webhook"
-}
-```
-
-### Security
+## TCP/UDP
 
 ```yaml
-# sync/http.yml
-secret: "shared-secret"              # Optional: validate incoming requests
-verify-ssl: true                     # Verify SSL certificates
-timeout-ms: 5000                     # Request timeout
-retry-attempts: 3                    # Retry failed sends
-```
-
-## TCP/UDP Sync
-
-### Configuration
-
-```yaml
-# sync/tcp-udp.yml
+# config/sync-socket/tcp.yml
 enabled: true
-protocol: "TCP"                       # TCP or UDP
-host: "127.0.0.1"
-outbound-port: 9093                   # Port to send to
-inbound-port: 9094                    # Port to listen on
-protocol-version: 1                   # Protocol version
+remoteHost: "127.0.0.1"
+remotePort: 9093
+localPort: 9094
+config-version: 1.0
 ```
-
-### Message Format
-
-```json
-{
-  "type": "chat",
-  "sender": "PlayerName",
-  "channel": "chat.global",
-  "content": "Hello",
-  "timestamp": 1705312200000,
-  "uuid": "player-uuid"
-}
-```
-
-### Protocol Details
-
-- **TCP**: Length-prefixed JSON (4-byte big-endian length + JSON)
-- **UDP**: Raw JSON datagrams (max 64KB)
-- **Encoding**: UTF-8 JSON
-
-## Velocity Proxy Sync
-
-### Configuration
 
 ```yaml
-# sync/velocity.yml
+# config/sync-socket/udp.yml
 enabled: false
+remoteHost: "127.0.0.1"
+remotePort: 9093
+localPort: 9094
+config-version: 1.0
+```
+
+TCP is ordered and at-least-once; UDP is best-effort and unordered. Both use the
+neutral message serialization. Keep the ports open only on trusted networks.
+
+## Velocity
+
+```yaml
+# config/sync-velocity-core/config.yml
+enabled: false
+transport: plugin-messaging
+channel: "textformatter:velocity"
+subchannel: ""
 secret: "shared-secret"
 servers:
-  - "survival"
-  - "creative"
-  - "lobby"
+  - survival
+  - creative
+  - lobby
 mapping: "* -> chat.hub"
+config-version: 1.0
 ```
 
-### Requirements
+The same `secret` is required on the proxy and every backend. The Velocity plugin
+uses the `sync-velocity` adapter and the neutral `sync-velocity-core` config.
 
-- Velocity proxy 3.2+
-- TextFormatter Suite installed on **all** backend servers
-- Same `secret` on all servers
-- Velocity plugin messaging channel: `textformatter:velocity`
-
-### Channel Mapping
+## WebSocket
 
 ```yaml
-mapping: "* -> chat.hub"
-# Format: "source_channel -> target_channel"
-# * = all channels
-# Supports multiple: "chat.* -> hub.chat, staff.* -> staff.global"
-```
-
-## WebSocket Sync
-
-### Configuration
-
-```yaml
-# sync/websocket.yml
+# config/sync-websocket/config.yml
 enabled: false
+token: ""
 port: 9092
-token: ""                          # Auth token (optional)
-max-connections: 100
-heartbeat-interval: 30000          # ms
+bind: "127.0.0.1"
+config-version: 1.0
 ```
 
-### Endpoints
+The WebSocket sink accepts authenticated clients when `token` is set. It is a
+neutral JSON endpoint; there is no per-path `/ws/chat` router in the integrated
+core.
 
-| Endpoint | Purpose |
-|----------|---------|
-| `/ws/chat` | Chat messages |
-| `/ws/events` | Server events |
-| `/ws/sync` | Cross-server sync |
-| `/ws/logs` | Log streaming |
+## Neutral contracts
 
-### Client Example (JavaScript)
+`SyncSink` declares the transport and lifecycle:
 
-```javascript
-const ws = new WebSocket('ws://localhost:9092/ws/chat?token=secret');
-
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    action: 'subscribe',
-    path: '/ws/chat'
-  }));
-});
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received:', data);
-});
-
-// Send message
-ws.send(JSON.stringify({
-  action: 'message',
-  channel: 'chat.global',
-  content: 'Hello from web!'
-}));
-```
-
-## Sync Architecture
-
-### Message Flow
-
-```
-Minecraft Chat Event
-       │
-       ▼
-MessagePipeline (format, translate, iFlow)
-       │
-       ▼
-MessageDispatcher
-       │
-       ├──► Local Delivery (players)
-       │
-       ├──► DiscordSink.send()
-       │
-       ├──► TelegramSink.send()
-       │
-       ├──► HttpSink.send()
-       │
-       ├──► TcpUdpSink.send()
-       │
-       ├──► VelocitySink.send()
-       │
-       └──► WebSocketSink.send()
-```
-
-### Message Serialization
-
-All sync messages use a common format:
-
-```json
-{
-  "type": "chat",
-  "id": "uuid-v4",
-  "timestamp": 1705312200000,
-  "sender": {
-    "name": "PlayerName",
-    "uuid": "uuid-v4",
-    "kind": "PLAYER",
-    "language": "en"
-  },
-  "channel": "chat.global",
-  "type": "CHAT",
-  "direction": "OTHERS",
-  "content": "Hello world!",
-  "raw": "Hello world!",
-  "translated": "Hola mundo!",
-  "langSource": "en",
-  "langTarget": "es"
+```java
+public interface SyncSink {
+    String name();
+    DeliverySemantics deliverySemantics();
+    Ordering ordering();
+    void start() throws Exception;
+    void stop();
+    void send(Message message) throws Exception;
+    void setListener(SyncListener listener);
 }
 ```
 
-## Sync Listener
-
-### Implementing Custom Sync
+`SyncBus` aggregates sinks:
 
 ```java
-public class CustomSyncSink implements SyncSink {
-    @Override
-    public String name() {
-        return "custom";
-    }
-    
-    @Override
-    public void send(Message message) throws IOException, InterruptedException {
-        // Send to external system
-    }
-    
-    @Override
-    public void setListener(SyncListener listener) {
-        this.listener = listener;
-    }
-    
-    @Override
-    public void start() throws IOException {
-        // Initialize connection
-    }
-    
-    @Override
-    public void stop() {
-        // Cleanup
-    }
-}
+void register(SyncSink sink);
+boolean unregister(String name);
+Collection<SyncSink> sinks();
+int broadcast(Message message);
+Map<String, CompletableFuture<Void>> broadcastAsync(Message message);
+boolean sendTo(String sinkName, Message message);
+void setInboundListener(SyncListener listener);
+void start() throws Exception;
+void stop();
 ```
 
-### Registering Custom Sink
+Delivery semantics belong to each sink: `BEST_EFFORT` (UDP), `AT_LEAST_ONCE`
+(TCP, WebSocket, HTTP) and `EXACTLY_ONCE` (Velocity with acknowledgements).
+`broadcast` is best-effort per sink; one failure does not stop the others.
 
-```java
-// In your extension or module
-SyncSinkRegistry.register(new CustomSyncSink());
-```
+## Inbound messages
 
-## Sync Commands
+A sink invokes its `SyncListener` with a neutral `Message`. The bus forwards it to
+the host pipeline, which applies normal channel permissions, translation and
+routing. Inbound sources should set a stable `source`/actor id so the host can
+avoid loops when the same message is relayed back.
 
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/suite sync status` | Show sync status | `textformattersuite.admin` |
-| `/suite sync reload` | Reload sync config | `textformattersuite.admin` |
-| `/suite sync test <sink>` | Test sink connection | `textformattersuite.admin` |
-| `/suite sync send <sink> <msg>` | Send test message | `textformattersuite.admin` |
+## Commands and diagnostics
 
-## Monitoring & Debugging
+The integrated command tree exposes `/suite reload`, `/suite list`,
+`/suite state`, `/suite install`, `/suite remove`, `/suite upgrade` and
+`/suite repo`. There are no `/suite sync ...` commands.
 
-### Status Commands
-
-```
-/suite sync status           # Show all sink statuses
-/suite sync status discord   # Show Discord sink details
-/suite sync test discord     # Send test message
-/suite sync reload           # Reload all sync configs
-```
-
-### Debug Logging
-
-```yaml
-# In config.yml
-debug:
-  sync: true
-  discord: true
-  websocket: true
-```
-
-### Metrics
-
-```prometheus
-# Prometheus metrics (if observability enabled)
-textformatter_sync_messages_sent_total{sink="discord"} 1234
-textformatter_sync_messages_received_total{sink="discord"} 567
-textformatter_sync_latency_seconds{sink="discord"} 0.045
-textformatter_sync_errors_total{sink="discord",type="timeout"} 3
-```
+Use `/suite state` to see whether the sync packages are active. Restart the
+server after editing `config/sync-*/` files; `/suite reload` only reloads
+`config/suite/commands.yml`. `SyncBus` exposes counters such as
+`getTotalBroadcast()`, `getTotalDropped()`, `getTotalRetries()` and
+`getTotalDeduped()` for adapters and tests.
 
 ## Troubleshooting
 
-### Common Issues
-
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| Discord not sending | Invalid token/permissions | Check bot token & permissions |
-| Telegram not receiving | Wrong chat ID | Verify chat ID (negative for groups) |
-| HTTP webhook failing | Firewall/SSL | Check port 8080, SSL cert |
-| Velocity not syncing | Secret mismatch | Verify secret on all servers |
-| WebSocket disconnecting | Timeout/heartbeat | Increase heartbeat interval |
-
-### Debug Commands
-
-```
-/suite sync debug discord        # Verbose Discord logging
-/suite sync trace message_id     # Trace message through pipeline
-/suite sync dump                 # Dump sync state
-/suite sync test all             # Test all sinks
-```
-
-## Best Practices
-
-1. **Use Velocity for multi-server** - Best for proxy setups
-2. **Use Discord for community** - Rich formatting, wide adoption
-3. **Use Telegram for alerts** - Lightweight, mobile-friendly
-4. **Use HTTP for integrations** - Flexible, firewall-friendly
-5. **Use TCP/UDP for low-latency** - High-frequency, local sync
-6. **Use WebSocket for web clients** - Real-time web dashboards
-7. **Enable encryption** - Use TLS/SSL for all external connections
-8. **Monitor metrics** - Set up alerts for sync failures
-9. **Test failover** - Verify redundancy works
-10. **Document your setup** - Keep sync topology documented
+| Discord not sending | Invalid token, missing intent or permission | Check token, `MESSAGE_CONTENT`, read/send permissions |
+| Telegram not receiving | Wrong `chatId` | Use the group id (negative) |
+| HTTP webhook failing | Bind/port or TLS | Check `bind`, `inboundPort`, `inboundPath` and reverse proxy |
+| Velocity not syncing | Secret mismatch | Use the same `secret` on proxy and backends |
+| WebSocket disconnecting | Auth or network | Check `token`, `bind` and firewall |
+| Sink ignored after edit | Flat path | Move the file to `config/sync-*/`; flat `sync/` is not read |
+| Config rejected | Missing `config-version` | Add `config-version: 1.0` at the root |

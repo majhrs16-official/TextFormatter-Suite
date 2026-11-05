@@ -4,8 +4,9 @@
 > **Baseline auditado:** `5735b3c3` (2026-11-04) más los cambios de `CoreTranslator`; commit de
 > cierre del baseline: `c5992230`.
 > **Alcance:** `README.md`, `docs/README.md`, `docs/prompts/**`, `docs/workdir/{PLAN,ADR}.md`,
-> READMEs de módulo y skills de auditoría. **Fuera de alcance:** `docs/wiki/`. Los arreglos de
-> código se ejecutaron después en P0.2/P0.3 con tests de regresión.
+> READMEs de módulo y skills de auditoría. `docs/wiki/` quedó fuera de la ronda original y se
+> alineó después en P0.8b (véase el addendum). Los arreglos de código se ejecutaron después en
+> P0.2/P0.3 con tests de regresión.
 > **Método:** lectura del árbol real, verificación de cada ruta citada, contraste con ADR y
 > especificaciones, y comprobación de enlaces locales. No se usó el contenido de la auditoría
 > anterior como evidencia: auditaba `3aaba49` (2026-10-24), 104 commits por detrás.
@@ -52,7 +53,8 @@ Reglas derivadas:
 - Una especificación no puede prometer compatibilidad que el ADR prohíbe.
 - Un README de módulo describe el módulo real; si el módulo diverge, se corrige el módulo o se
   declara la deuda, no se inventa una ruta alternativa.
-- `docs/wiki/` no es fuente de verdad y queda fuera de esta ronda (P0.8b).
+- `docs/wiki/` no es fuente de verdad; se alineó en P0.8b y sigue supeditada al ADR y a las
+  especificaciones.
 
 ---
 
@@ -91,8 +93,8 @@ Reglas derivadas:
   `iflow-firewall` → `iflow-vm` → `iflow-wasm`; descripción de `iflow-firewall` corregida.
 - **Resolución de código (P0.3):** `ConfigLoader` y `HostConfig` ya no tienen `Engine` ni
   `iflow.engine.kind`; los defaults de `spigot-host`/`fabric-host` tampoco lo declaran.
-  `SuiteRuntime.resolveRouter()` exige `IflowHub` y no acepta un `Router` suelto. Queda actualizar
-  `docs/wiki/02-Configuration.md` en P0.8b.
+  `SuiteRuntime.resolveRouter()` exige `IflowHub` y no acepta un `Router` suelto. La wiki quedó
+  actualizada en P0.8b.
 
 ### D-003 — Especificaciones con contrato legacy y versiones `2.x`
 
@@ -286,8 +288,9 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 
 ## 6. Riesgos y límites
 
-1. **La wiki sigue desalineada.** `docs/wiki/02-Configuration.md` aún presenta
-   `iflow.engine.kind` y la exclusividad. Está fuera de alcance por decisión explícita (P0.8b).
+1. **La wiki quedó alineada, pero no es normativa.** P0.8b eliminó `iflow.engine.kind` como
+   estado vigente, la exclusividad de motores, comandos inexistentes y la duplicación de ADRs.
+   Sigue supeditada al ADR, a las especificaciones y al código real.
 2. **Las rutas planas se ignoran, no se migran.** `HostPaths`, `DefaultConfigInstaller`,
    `ConfigLoader`, `SyncConfigPaths`, `ChannelConfig`, `ChatTranslatorConfig`, `BackendConfig` y
    `iflow-firewall` usan solo el layout canónico; los tests verifican que el camino viejo no se
@@ -309,7 +312,9 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 2. ~~Ejecutar P0.3~~ **Hecho (2026-11-04):** eliminados `iflow.engine.kind`, `HostConfig.Engine`,
    rutas planas, migración de `DefaultConfigInstaller` y el fallback de `Router`; `rules.yml`
    exige mapa con `config-version` y las rutas antiguas se ignoran con tests de regresión.
-3. Ejecutar P0.8b: alinear `docs/wiki/` (fuera de esta ronda).
+3. ~~Ejecutar P0.8b~~ **Hecho (2026-11-04):** 17 páginas de `docs/wiki/` alineadas con el hub,
+   `1.0.0`/`1.0`, el layout canónico y los comandos reales; `14-ADR.md` quedó como índice del
+   ADR canónico.
 4. Retomar W3.5 (paridad `.flow` v3/VM) y después V6 (compilador C).
 5. E2E real solo después de `1.0.0`, incluido el smoke test de `CoreTranslator` con
    Bukkit/Paper + PlaceholderAPI.
@@ -338,3 +343,33 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 - `docs/prompts/diseno/storage.md`: layout canónico.
 - `docs/prompts/especificaciones/`: contratos de `commands.yml`, `extension.yml` y editor.
 - `ModuleGraphTest`: aceptación de `1.0.0` y rechazo de `0.9.0`.
+
+
+---
+
+## 10. Addendum — P0.8b (wiki)
+
+**Estado:** cerrado el 2026-11-04. `docs/wiki/` ya no se presenta como contrato ni como estado
+vigente alternativo.
+
+- `01-Introduction.md`: reescrita como introducción de usuario; elimina `31 modules`,
+  `production-ready`, rutas Fabric falsas y comandos `/suite module ...`.
+- `02-Configuration.md`: layout canónico, `manager/repo.yml`, `packages.list`, sin
+  `iflow.engine.kind`, sin comando de módulos inventado y sin hot-reload ficticio.
+- `03-Channels.md`, `04-Translation.md`, `05-iFlow-Rules.md`, `06-Sync.md`: hub y backends
+  coexistentes, configuración real, límites reales de caché/timeout y ausencia de recarga
+  genérica.
+- `07-Web-Editor.md`: el ZIP del editor es un proyecto con rutas planas, no el layout de runtime.
+- `08-Commands.md`, `10-Module-Manager.md`: comandos reales, permiso `textformatter.suite.admin`
+  y `manager/repo.yml`.
+- `09-Developer-Guide.md`, `10-API-Reference.md`: base `1.0.0`, sin Spring, sin Maven Central y
+  con el gate real.
+- `11-Release-Notes.md`, `12-Migration-Guide.md`, `13-FAQ.md`: régimen pre-1.0, sin migraciones,
+  sin variables de entorno y sin comandos inexistentes.
+- `14-ADR.md`: índice que remite a `docs/workdir/ADR.md`; no duplica ADRs ni decisiones
+  históricas.
+- `15-Contributing.md`, `16-Glossary.md`: reescritas para Java/Gradle/JUnit reales, el hub iFlow,
+  `CoreTranslator` y el régimen pre-1.0.
+
+**Validación:** `git diff --check` sin salida; checker de enlaces locales sobre `docs/wiki/*.md`
+con **0 enlaces rotos**. No se ejecutó E2E real; sigue siendo posterior a `1.0.0`.
