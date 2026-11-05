@@ -380,7 +380,7 @@ con **0 enlaces rotos**. No se ejecutó E2E real; sigue siendo posterior a `1.0.
 
 **Estado:** P0.1 y P0.4 cerrados; P0.6 y P0.8 siguen pendientes.
 
-- Inventario completo en `docs/workdir/P0.1-inventory.md`: 34 YAML con `config-version: 1.0`,
+- Inventario completo en `PLAN.md` («Inventario P0.1 — versiones y compatibilidad»): 34 YAML con `config-version: 1.0`,
   `plugin.yml` excluido, 0 aliases legacy en producción, 0 lectores de rutas planas, 0 shims y
   `CoreTranslator` como único módulo `@Deprecated` de la base.
 - P0.4 eliminó los aliases de `IflowConfig` (`firewall`/`vm`/`wasm`, `default-backend`, `fallback`),

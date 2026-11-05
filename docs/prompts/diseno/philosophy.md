@@ -78,7 +78,7 @@ Estas son las costumbres de código y de diseño que guían el trabajo diario. L
 
 ## C1. Documento vivo
 
-El PLAN, `docs/workdir/ADR.md` y los documentos de diseño son documentos vivos: se reescriben, podan y actualizan constantemente. `docs/workdir/ADR.md` es el registro vivo de decisiones de arquitectura y se actualiza en el mismo cambio que introduce una decisión estructural; no se trata como un archivo histórico. El PLAN resume el estado, las fases y el detalle operativo. Solo lo vigente permanece en el documento activo. El historial de git conserva todo lo necesario; no se acumula histórico cerrado en los documentos activos.
+El PLAN y `docs/workdir/ADR.md` son documentos vivos: se reescriben, podan y actualizan constantemente. `docs/workdir/ADR.md` es el registro vivo de decisiones de arquitectura y se actualiza en el mismo cambio que introduce una decisión estructural; no se trata como un archivo histórico. El PLAN resume el estado, las fases y el detalle operativo. Solo lo vigente permanece en el documento activo. El historial de git conserva todo lo necesario; no se acumula histórico cerrado en los documentos activos. Los documentos de diseño (`docs/prompts/`) son de solo lectura: se consultan como referencia y no se reescriben ni se podan como documentos vivos, salvo instrucción explícita.
 
 ## C2. Romper para reestructurar
 
@@ -155,6 +155,10 @@ Esto obliga a dos disciplinas concretas:
 2. **Invariantes validados o soporte completo.** Cuando aparece una asimetría, se elige una de dos salidas: implementar la capacidad completa en todas las rutas, o declarar un invariante formal, validarlo en la frontera y fallar con un mensaje explícito cuando se incumpla. Lo que no se permite es asumir que la entrada siempre cumplirá el invariante sin comprobarlo.
 
 La misma regla se aplica al estado de recuperación. Un rollback no es exitoso porque el código lo diga: hay que verificar que cada versión anterior quedó activa y que cada versión nueva quedó fuera. Si la compensación falla, no se finge éxito ni se borran artefactos que aún pueden hacer falta: se conservan ambos lados y se marca `RESTART_REQUIRED` con una causa verificable. Los estados `FAILED`, `RESTART_REQUIRED` y «desconocido» existen para decir la verdad, no para decorar logs.
+
+## C14. Documentación mínima y autorizada
+
+No se agrega documentación adicional dentro de `docs/workdir/` ni `docs/prompts/` sin una pregunta explícita y su autorización. El estado operativo, los inventarios y las notas de cierre viven en `PLAN.md`, `ADR.md` y `AUDITORIA.md`; no se crean archivos auxiliares para almacenar evidencia temporal, inventarios de una fase ni addendas. Los documentos de diseño (`docs/prompts/`) son de solo lectura y no se usan como almacén de notas. `docs/wiki/` queda excluida de esta regla porque es documentación de usuario.
 
 ---
 

@@ -47,7 +47,7 @@
 
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
-| **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Completado (2026-11-05, `docs/workdir/P0.1-inventory.md`) |
+| **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Completado (2026-11-05; inventario integrado en este PLAN) |
 | **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0` en la raíz, preferentemente al final. `plugin.yml` queda excluido. Si falta `config-version`, el parser falla con un error explícito. Un sufijo de build no cambia la base funcional, pero su publicación se rige por la política de artefactos. | Completado (2026-11-04) |
 | **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata como retirado), lectores de la raíz plana de `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`) y cualquier fallback que acepte el esquema viejo. Los `config/<module>/config.yml` canónicos se conservan. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Completado (2026-11-04) |
 | **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no como shim ni recuperando `suite-common-legacy`. El `LegacyBridge` de `7dd164a4^` no se restaura. Actualizar todos los consumidores en el mismo cambio. | Completado (2026-11-05) |
@@ -56,6 +56,140 @@
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
 | **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Parcial (2026-11-04) |
 | **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Completado (2026-11-04) |
+
+### Inventario P0.1 — versiones y compatibilidad (2026-11-05)
+
+> Evidencia de cierre de P0.1. Alcance: código Java, recursos YAML, editor web, Gradle y
+> documentación normativa. Se excluyen `node_modules/`, `build/`, `.git/` y los workflows de CI.
+> Las referencias son `archivo:línea`; si una línea se mueve, la cadena citada sigue siendo la
+> evidencia.
+
+**Resultado**
+
+| Comprobación | Resultado |
+|---|---|
+| Versión base de la suite | `1.0.0` en `build.gradle:6`; manifiestos y capabilities en `1.0.0` |
+| Versión de esquema YAML | `1.0`; contrato único en `ConfigVersion` (`src/core-api/.../ConfigVersion.java:16`) |
+| Archivos `.yml` de configuración | 34, todos con `config-version: 1.0` en la raíz y como última línea |
+| Excepción de `config-version` | `src/spigot-host/src/main/resources/plugin.yml` (descriptor de plugin) |
+| Aliases de configuración legacy | 0 en producción; eliminados en P0.4 y cubiertos por tests de rechazo |
+| Lectores de rutas planas | 0 en producción; los tests demuestran que las rutas planas se ignoran |
+| Adaptadores, shims y fachadas de compatibilidad | 0; `LegacyBridge`/`suite-common-legacy` no existen |
+| Módulos *deprecated* | Solo `CoreTranslator` (`@Deprecated`); `iflow-firewall` es motor legacy permitido, no shim |
+| Deuda de metadatos | Ninguna: las entradas propias `2.1.0-SNAPSHOT` se retiraron de `verification-metadata.xml` |
+| Deuda documental | `docs/workdir/REPORT.md` es histórico; la guía manual de migración no implica soporte runtime |
+
+**Versiones `2.x` / `3.x`**
+
+| Evidencia | Clasificación | Estado |
+|---|---|---|
+| `build.gradle:6` — `1.0.0` | Base de release | Vigente |
+| `src/core-api/.../ConfigVersion.java:22-23` — mensaje exacto de ausencia | Esquema `1.0` | Vigente |
+| `src/transport/.../HttpTransport.java:164` — `TextFormatterSuite/1.0.0` | User-Agent de la suite | Corregido en P0.4 (antes `2.1`) |
+| `src/textformatter/.../TextFormatterModule.java:12-13` — capability `1.0.0` | Contrato de módulo | Corregido en P0.4 (antes `3.0.0`) |
+| `src/web-editor/js/model.js:372` y `src/host/.../web-editor-schema/model.js:454` — `suite-version: 1.0.0` | Manifiesto del editor | Corregido en P0.4 (antes `2.1.0`) |
+| `src/web-editor/js/kernel.js:12-18`, `js/core.js:116`, `index.html:14` y `prototype.html` | Versión mostrada por la UI | Corregido en P0.4 (antes `2.1.0`/`v2.1`) |
+| `src/web-editor/js/validate.js:107`, `js/paths.js:336`, `paths.json:300` y `src/host/.../web-editor-schema/*` | Etiquetas `F7+` de proxy/transform sustituidas por capability o «plugin Velocity» | Corregido en P0.4 |
+| `src/*/build.gradle` — comentarios `F5`/`F6`/`F8` | Etiquetas históricas de fase en comentarios de build | Deuda cosmética; no afectan al runtime |
+| `src/web-editor/js/model.js:3,371` y `docs/prompts/especificaciones/config-schema-v2.2.md:8` | Revisión del schema del editor (`v2.2`) | Eje distinto de la versión de la suite; documentado y permitido |
+| `src/iflow-wasm/README.md:31,289` — ISA v2 / paridad `.flow` v3 | Nota histórica y trabajo W3.5 | Sin autoridad de contrato; W3.5 bloqueado |
+| `src/core-api/src/test/.../SemVerTest.java:13-33` — `2.1.0` | Datos del comparador SemVer | Test intencional |
+| `src/extension-api/src/test/.../ExtensionMetadataTest.java:45-58`, `ExtensionContractTest.java:28` | Versiones arbitrarias de prueba | Test intencional |
+| `src/manager-spi/src/test/.../VersionContractTest.java`, `VersionTest.java`, `ManifestParserTest.java` | SemVer 2.0.0 y versiones de paquete de prueba | Test intencional |
+| `src/manager-core/src/test/.../LocalPackageDatabaseTest.java:162,246` | Versiones de paquete de prueba | Test intencional |
+| `gradle/verification-metadata.xml` | Se retiraron las entradas propias `2.1.0-SNAPSHOT` | Limpieza P0.4; no participan en la resolución actual |
+
+No quedan cadenas `2.1.0`, `3.0.0` ni `TextFormatterSuite/2.1` en código de producción, recursos
+del host o UI del editor. Las apariciones restantes son tests, dependencias de terceros o la
+revisión independiente del schema del editor.
+
+**`config-version` por archivo**
+
+Los 34 YAML de configuración tienen `config-version: 1.0` como clave raíz y última línea no vacía:
+
+- Defaults de `spigot-host`: `config.yml:25`, `commands.yml`, `messages.yml:53`, `iflow.yml`,
+  `rules.yml:14`, canales, `sync/discord.yml`, `sync/websocket.yml`, `translators/google.yml`.
+- Defaults de `fabric-host`: el mismo conjunto, con sus rutas canónicas.
+- Defaults de módulos: `inworld.yml`, `sync-bukkit/config.yml`, `sync-fabric/config.yml`,
+  `sync-velocity/sync/velocity.yml`.
+- Fixtures del editor: `src/host/src/test/resources/editor-default/config/suite/config.yml:16` y
+  los cuatro canales de `config/textformatter/channels/`.
+- Excluido por contrato: `src/spigot-host/src/main/resources/plugin.yml`.
+
+La comprobación automatizada usada para este inventario fue:
+
+```text
+34 archivos; todos con config-version; todos en la última línea no comentada.
+```
+
+**Aliases y compatibilidad eliminados en P0.4**
+
+| Elemento | Evidencia actual | Regresión |
+|---|---|---|
+| `iflow.engine` ya no normaliza `firewall`/`vm`/`wasm` ni lee `default-backend` | `src/iflow/.../IflowConfig.java:61-62,86-89` | `IflowConfigTest.java:46,53` |
+| `fallback` ya no es alias de `fallback-on-unavailable` | `src/iflow/.../IflowConfig.java:62` | `IflowConfigTest.java:53` |
+| `transform: "<...>"` en `rules.yml` ya no se convierte en `Rewrite` | `src/iflow-firewall/.../RuleConfigLoader.java`; `Rule.Builder.transform(String)` eliminado | `RuleConfigLoaderTest.java:181` |
+| Constructores de compatibilidad sin uso eliminados | `RoutingResult`, `DispatchReport`, `HttpSink` | Compilación y tests de host/sync |
+| `ChatTranslator` ya no tiene constructor de dos argumentos | `ChatTranslatorTest.java:51-52` usa configuración explícita | Test de ChatTranslator |
+| `WasmContract` ya no tiene constructor W2 sin firmas | `WasmContract`; tests con constructor canónico | `WasmModuleLoaderTest.java` |
+| `ExecutionContext.reset()` eliminado; se usa `initialize()` | `ExecutionContextPool.java` | `ExecutionContextTest.java` |
+| `MessagesCatalog.getAllMessages()` y placeholders `%s` eliminados | `MessagesCatalog.java`; `MessagesConfig.java` | `MessagesCatalogTest.java` |
+| Javadocs de rutas heredadas corregidos | `BackendConfig`, `ChatTranslator`, `ChatTranslatorConfig`, `SocketConfig`, `WebSocketSyncConfig` | Revisión de documentación |
+
+`CoreTranslatorPlaceholders` conserva `sendDiscord;<uuid>[;<channels>]` porque pertenece al módulo
+legacy permitido por ADR-035; no es una fachada de compatibilidad del runtime nuevo.
+
+**Rutas planas y dobles lectores**
+
+No hay lectores de rutas planas en producción. Las rutas canónicas son:
+
+- `config/suite/{config,commands,messages}.yml`
+- `config/textformatter/channels/*.yml`
+- `config/chattranslator/{config.yml,translators/*.yml}`
+- `config/sync-*/…`
+- `config/iflow/config.yml`
+- `config/iflow-firewall/rules.yml`
+- `config/inworld/config.yml`
+- `manager/repo.yml`
+
+Las rutas planas aparecen solo en tests que demuestran que se ignoran:
+
+- `src/sync-common/src/test/.../SyncConfigPathsTest.java:42-57`
+- `src/sync-websocket/src/test/.../WebSocketSyncConfigTest.java:88`
+- `src/sync-socket/src/test/.../SocketConfigTest.java:90`
+- `src/suite-runtime/src/test/.../DefaultConfigInstallerTest.java` (rutas legacy ignoradas)
+- `src/suite-runtime/src/test/.../CommandRootConfigTest.java:53` (`base-name` retirado)
+- `src/core-api/src/test/.../ConfigVersionTest.java:52` (`2.0` y abreviaturas rechazadas)
+
+**Adaptadores, puentes y shims**
+
+| Elemento | Clasificación |
+|---|---|
+| `src/spigot-host/.../bridge/NmsLocaleBridge.java:23` | Puente de plataforma Bukkit/NMS; integración vigente, no compatibilidad |
+| `src/spigot-host/.../SpigotPlaceholderResolver.java:19` | Integración con PlaceholderAPI; vigente, no shim |
+| `src/coretranslator/.../CoreTranslatorModule.java:14` | Mención histórica a `LegacyBridge`; el shim no existe |
+| `src/iflow-firewall/.../IflowFirewallModule.java:10` | Motor SpEL legacy independiente permitido por ADR-032 |
+| `src/iflow/.../IflowBackendManager.java:23` | Orden de fallback del hub; política vigente, no compatibilidad |
+| `src/suite-runtime/.../SuiteRuntime.java:243-253` | El runtime exige `IflowHub`; no acepta un `Router` suelto |
+
+Las implementaciones `sync-*`, `gtranslate` y `ltranslate` son módulos de integración actuales, no
+adaptadores de versiones anteriores.
+
+**Módulos *deprecated***
+
+| Módulo | Evidencia | Estado |
+|---|---|---|
+| `CoreTranslator` | `src/coretranslator/.../CoreTranslatorModule.java:19-20` y las cuatro clases `@Deprecated` | Legacy independiente, Bukkit-only por PlaceholderAPI; ADR-035 |
+| `iflow-firewall` | `src/iflow-firewall/.../IflowFirewallModule.java:10` | Motor legacy permitido; no está `@Deprecated` ni es shim |
+
+No hay otros `@Deprecated` en `src/*/src/main`.
+
+**Deuda abierta asignada**
+
+1. **P0.8:** revisar si la guía manual `docs/wiki/12-Migration-Guide.md` se conserva como ayuda de
+   usuario o se reduce; no afecta al runtime.
+2. **W3.5:** la mención a ISA v2 en `src/iflow-wasm/README.md` es histórica y debe resolverse con
+   la matriz de paridad `.flow` v3/VM.
 
 **Estado de la auditoría vigente (2026-11-04):** auditoría documental abierta, HEAD `c5992230`.
 `AUDITORIA.md` contiene el informe vigente (D-001…D-010) y se reemplaza al cerrar el ciclo. El
@@ -76,8 +210,8 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
   se recuperan (ADR-035).
 - La wiki (`docs/wiki/`) quedó alineada en P0.8b: 17 páginas revisadas, sin duplicar ADRs,
   sin comandos inexistentes y sin `iflow.engine.kind` presentado como vigente.
-- P0.1 cerró el inventario en `docs/workdir/P0.1-inventory.md`; P0.4 eliminó los aliases de
-  iFlow, el `transform` legacy, los constructores de compatibilidad sin uso, `%s`, `reset`, W2, las
+- P0.1 cerró el inventario y lo integró en este PLAN; P0.4 eliminó los aliases de iFlow, el
+  `transform` legacy, los constructores de compatibilidad sin uso, `%s`, `reset`, W2, las
   etiquetas `F7+` de la UI, las versiones `2.1`/`3.0` y los metadatos propios
   `2.1.0-SNAPSHOT`. Queda P0.8.
 - W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
