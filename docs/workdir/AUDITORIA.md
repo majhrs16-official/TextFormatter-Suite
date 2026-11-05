@@ -376,9 +376,9 @@ con **0 enlaces rotos**. No se ejecutó E2E real; sigue siendo posterior a `1.0.
 
 ---
 
-## 11. Addendum — P0.1 y avance de P0.4 (2026-11-05)
+## 11. Addendum — P0.1 y P0.4 (2026-11-05)
 
-**Estado:** P0.1 cerrado; P0.4 parcial, sin declarar cerrado.
+**Estado:** P0.1 y P0.4 cerrados; P0.6 y P0.8 siguen pendientes.
 
 - Inventario completo en `docs/workdir/P0.1-inventory.md`: 34 YAML con `config-version: 1.0`,
   `plugin.yml` excluido, 0 aliases legacy en producción, 0 lectores de rutas planas, 0 shims y
@@ -394,8 +394,10 @@ con **0 enlaces rotos**. No se ejecutó E2E real; sigue siendo posterior a `1.0.
 - Se corrigieron Javadocs que describían rutas heredadas inexistentes (`BackendConfig`,
   `ChatTranslatorConfig`, `SocketConfig`, `WebSocketSyncConfig`) y las menciones de alias en
   `storage.md`, `ADR-032` y `src/iflow/README.md`.
-- Deuda que permanece: entradas `2.1.0-SNAPSHOT` en `gradle/verification-metadata.xml`, revisión
-  final de P0.4 y coherencia documental de P0.8. No se declara E2E ni estabilidad.
+- Se retiraron las seis entradas propias `2.1.0-SNAPSHOT` de `gradle/verification-metadata.xml`;
+  no participaban en la resolución actual.
+- Deuda que permanece: coherencia documental de P0.8 y cierre de P0.6. No se declara E2E ni
+  estabilidad.
 
 **Validación:** gate completo `./gradlew build checkArchitecture checkLocks --no-daemon` en verde;
 `npm run check` del editor web en verde; regresiones de `IflowConfig`, `RuleConfigLoader`,
