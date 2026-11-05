@@ -1,171 +1,328 @@
-# Auditoría Exhaustiva de Inconsistencias — TextFormatter Suite
+# Auditoría documental — TextFormatter Suite
 
-**Commit auditado:** `3aaba49` (HEAD, 15 commits ahead de origin/main)  
-**Fecha:** 2026-10-24  
-**Cobertura:** 33 módulos en `src/`, todos los `build.gradle`, `settings.gradle`, `docs/prompts/diseno/*.md`, `docs/workdir/PLAN.md`
-
----
-
-## Resumen Ejecutivo
-
-| Categoría | Crítica | Alta | Media | Baja | Total |
-|-----------|---------|------|-------|------|-------|
-| **Bugs** | 0 | 5 | 2 | 2 | 9 |
-| **Defectos de diseño** | 0 | 5 | 4 | 2 | 11 |
-| **Deuda técnica** | 0 | 2 | 0 | 0 | 2 |
-| **Total** | **0** | **12** | **6** | **4** | **22** |
-
-> **Nota:** Se encontraron 20 hallazgos únicos (algunos combinan múltiples ubicaciones).
+> **Tipo:** pseudoauditoría documental (Fase 1 de lectura y Fase 3 de ejecución documental).
+> **Baseline auditado:** `5735b3c3` (2026-11-04) más los cambios de `CoreTranslator`; commit de
+> cierre del baseline: `c5992230`.
+> **Alcance:** `README.md`, `docs/README.md`, `docs/prompts/**`, `docs/workdir/{PLAN,ADR}.md`,
+> READMEs de módulo y skills de auditoría. **Fuera de alcance:** `docs/wiki/` y el código de
+> producción (los arreglos van a P0.2/P0.3).
+> **Método:** lectura del árbol real, verificación de cada ruta citada, contraste con ADR y
+> especificaciones, y comprobación de enlaces locales. No se usó el contenido de la auditoría
+> anterior como evidencia: auditaba `3aaba49` (2026-10-24), 104 commits por detrás.
 
 ---
 
-## Hallazgos Críticos por Área
+## 1. Resumen ejecutivo
 
-### 🔴 Arquitectura de Módulos (Module System)
+La documentación no estaba alineada con las decisiones vigentes. El problema dominante no era la
+falta de documentos, sino la convivencia de **tres regímenes** en el mismo árbol:
 
-| ID | Hallazgo | Severidad |
-|----|----------|-----------|
-| **INCONSISTENCY-002** | 5/6 submódulos `sync-*` no declaran `require('sync-bus')` | **Alta** |
-| **INCONSISTENCY-006** | `iflow-vm` y `iflow-wasm` no tienen `Module` implementation | Media |
-| **INCONSISTENCY-007** | 19/33 módulos carecen de `ModuleDescriptor` (incluye `host`, `core-api`, `kernel`) | Media |
-| **INCONSISTENCY-013** | `kernel` solo tiene `Module` en test fixtures | Baja |
-| **INCONSISTENCY-015** | Contrato `sync-bus` existe pero no se usa | Media |
+1. el régimen pre-1.0 de ADR-034 (`1.0`, sin compatibilidad, sin migraciones);
+2. el régimen anterior (`2.1.0`, `iflow.engine.kind`, exclusividad de motores, rutas planas);
+3. documentos históricos presentados como estado actual.
 
-### 🔴 ChatTranslator — Fachada Unificada (CT4/CT5 pendientes)
+Resultado: **10 hallazgos confirmados** (D-001…D-010). Se cerraron 6; 3 quedan parciales porque su
+cierre exige código (D-002, D-003 y D-009) y 1 sigue pendiente de código (D-004). El baseline de
+código quedó limpio en `c5992230` (CoreTranslator + contrato `>= 1.0.0`).
 
-| ID | Hallazgo | Severidad |
-|----|----------|-----------|
-| **INCONSISTENCY-003** | Dualidad `TranslationService` vs `ChatTranslator`; pipeline real usa el primero | **Alta** |
-| **INCONSISTENCY-005** | `SuiteHost.bootstrap()` no inicializa `ChatTranslator` | **Alta** |
-| **INCONSISTENCY-008** | `ChatTranslatorModule` provee `chattranslator` no `translator` | **Alta** |
-| **INCONSISTENCY-009** | `host` usa `ServiceLoader<TranslatorProvider>` en lugar de delegar a `chattranslator` | Media |
-| **INCONSISTENCY-014** | Confusión semántica: backends requieren `chattranslator` pero proveen `translator` | **Alta** |
-| **INCONSISTENCY-016** | Default `default-backend`: código `null` vs doc `'google'` | Baja |
-
-### 🔴 Ownership de Configuración (storage.md vs realidad)
-
-| ID | Hallazgo | Severidad |
-|----|----------|-----------|
-| **INCONSISTENCY-004** | Carga de `channels`, `translators`, `sync` sigue en `host`/`spigot-host` | **Alta** |
-| **INCONSISTENCY-011** | `textformatter` no carga sus `channels` (está en `ConfigLoader.loadChannels()`) | **Alta** |
-| **INCONSISTENCY-012** | `spigot-host` carga sync desde `sync/*.yml` plano, no `config/sync-*/config.yml` | **Alta** |
-| **INCONSISTENCY-017** | `copyDefaultsIfMissing` crea configs en ubicaciones obsoletas | **Alta** |
-| **INCONSISTENCY-018** | `resetConfigs` no hace backup de nuevos directorios `config/<modulo>/` | Media |
-
-### 🔴 iflow-firewall — Módulo Fantasma
-
-| ID | Hallazgo | Severidad |
-|----|----------|-----------|
-| **INCONSISTENCY-001** | `iflow-firewall` documentado en `storage.md` pero **no existe en código** | Media |
-
-### 🔴 Diferencias Spigot vs Fabric
-
-| ID | Hallazgo | Severidad |
-|----|----------|-----------|
-| **INCONSISTENCY-019** | `fabric-host` no incluye `gtranslate`, `ltranslate`, `chattranslator` | Media |
+| Severidad | Hallazgos | Estado documental |
+|---|---|---|
+| Alta (P0) | D-001, D-002, D-003, D-004, D-008 | 2 corregidos (D-001, D-008); 2 parciales (D-002, D-003); 1 pendiente de código (D-004) |
+| Media (P1) | D-005, D-007, D-009, D-010 | 3 corregidos (D-005, D-007, D-010); 1 parcial (D-009) |
+| Baja (P2) | D-006 | Corregido |
 
 ---
 
-## Matriz de Módulos vs ModuleDescriptor
+## 2. Matriz de autoridad documental
 
-| Módulo | Tiene Module | Capability Provided | Requires | Estado |
-|--------|-------------|---------------------|----------|--------|
-| `chattranslator` | ✅ | `chattranslator` | — | ⚠️ Debería proveer `translator` |
-| `gtranslate` | ✅ | `translator` | `chattranslator` | ✅ |
-| `ltranslate` | ✅ | `translator` | `chattranslator` | ✅ |
-| `sync-bus` | ✅ | `sync-bus` | — | ✅ |
-| `sync-discord` | ✅ | `sync-sink` | ❌ **falta `sync-bus`** | **INCONSISTENCIA** |
-| `sync-websocket` | ✅ | `sync-sink`, `websocket-server` | ❌ **falta `sync-bus`** | **INCONSISTENCIA** |
-| `sync-telegram` | ✅ | `sync-sink` | ❌ **falta `sync-bus`** | **INCONSISTENCIA** |
-| `sync-http` | ✅ | `sync-sink` | ❌ **falta `sync-bus`** | **INCONSISTENCIA** |
-| `sync-socket` | ✅ | `sync-sink` | ✅ `sync-bus` | ✅ (fix reciente) |
-| `sync-velocity` | ✅ | `sync-sink` | ❌ **falta `sync-bus`** | **INCONSISTENCIA** |
-| `textformatter` | ✅ | `channel-api` | — | ⚠️ No carga su config |
-| `inworld` | ✅ | `inworld-*`, `channel-*` | — | ✅ |
-| `observability` | ✅ | `observability` | — | ✅ |
-| `presets` | ✅ | `presets` | — | ✅ |
-| `tester` | ✅ | `test-service` | `channel-api`, `router`, `formatter` | ✅ |
-| `iflow-vm` | ❌ | — | — | **INCONSISTENCIA** |
-| `iflow-wasm` | ❌ | — | — | **INCONSISTENCIA** |
-| `host` | ❌ | — | — | **INCONSISTENCIA** |
-| `kernel` | ❌* | — | — | **INCONSISTENCIA** (*solo test) |
-| `core-api` | ❌ | — | — | **INCONSISTENCIA** |
-| `transport` | ❌ | — | — | **INCONSISTENCIA** |
-| `messages` | ❌ | — | — | **INCONSISTENCIA** |
-| `logger` | ❌ | — | — | **INCONSISTENCIA** |
-| `extension-api` | ❌ | — | — | **INCONSISTENCIA** |
-| `manager-spi` | ❌ | — | — | **INCONSISTENCIA** |
-| `manager-core` | ❌ | — | — | **INCONSISTENCIA** |
-| `performance` | ❌ | — | — | **INCONSISTENCIA** |
-| `loadtest` | ❌ | — | — | **INCONSISTENCIA** |
-| `common-legacy` | ❌ | — | — | **INCONSISTENCIA** |
+Ante una contradicción, se aplica este orden:
+
+1. **ADR aceptado** (`docs/workdir/ADR.md`).
+2. **Especificación vigente** (`docs/prompts/especificaciones/`, `docs/prompts/diseno/storage.md`).
+3. **Código real**: evidencia de comportamiento, no autoridad normativa. Si diverge de 1 o 2, el
+   código es el bug.
+4. **PLAN** (`docs/workdir/PLAN.md`): estado y hoja de ruta; no crea contratos.
+5. **Skills** (`.opencode/skills/`): procedimientos; no crean contratos.
+6. **Documentos históricos, auditorías anteriores y wiki**: contexto, nunca estado vigente.
+
+Reglas derivadas:
+
+- Un ADR no contiene planes, fases ni roadmaps; el estado vive en `PLAN.md`.
+- Una especificación no puede prometer compatibilidad que el ADR prohíbe.
+- Un README de módulo describe el módulo real; si el módulo diverge, se corrige el módulo o se
+  declara la deuda, no se inventa una ruta alternativa.
+- `docs/wiki/` no es fuente de verdad y queda fuera de esta ronda (P0.8b).
 
 ---
 
-## Próximos Pasos Recomendados (Roadmap)
+## 3. Hallazgos
 
-### P0 — Crítico (bloquean CT4/CT5 y arquitectura correcta)
+### D-001 — Rutas alucinadas en el contexto del proyecto
 
-1. **Añadir `require('sync-bus')` a todos los submódulos sync** — `sync-discord`, `sync-websocket`, `sync-telegram`, `sync-http`, `sync-velocity`
-2. **Implementar `ChatTranslator` en `SuiteHost.bootstrap()`** — Cargar `ChatTranslatorConfig`, `BackendConfig`, crear `ChatTranslator`, inyectar en `TranslationService` o reemplazarlo
-3. **Migrar carga de config a módulos dueños**:
-   - `ConfigLoader.loadChannels()` → `textformatter.ChannelConfig.load()`
-   - `TranslatorsConfig.load()` → `chattranslator.BackendConfig.load()`
-   - Sync config loading → cada submódulo en su `onLoad()`
-4. **Corregir `copyDefaultsIfMissing` y `resetConfigs`** en `spigot-host` para usar nuevas rutas `config/<modulo>/`
-5. **Añadir dependencias `gtranslate`, `ltranslate`, `chattranslator` a `fabric-host/build.gradle`**
+- **Severidad:** Alta (P0).
+- **Estado:** **Corregido**.
+- **Evidencia (baseline):** `docs/prompts/contexto/proyecto.md` citaba `docs/PLAN.md`,
+  `docs/ADR.md`, `docs/PROMPT.md`, `docs/PROMPT_NOW.md` y `/docs/web-editor/`.
+- **Realidad verificada:** `docs/workdir/PLAN.md`, `docs/workdir/ADR.md`,
+  `docs/prompts/contexto/proyecto.md`, `docs/workdir/PLAN.md` y `src/web-editor/`.
+- **Impacto:** un agente o colaborador que siguiera el contexto leía rutas inexistentes y tomaba
+  documentos históricos como estado actual.
+- **Resolución:** `proyecto.md` reescrito con rutas existentes, régimen pre-1.0, precedencia
+  documental, estado real (sin E2E) y protocolo de trabajo. No se conservan las rutas falsas.
 
-### P1 — Alto (completan arquitectura de módulos)
+### D-002 — iFlow: `iflow.engine.kind` y exclusividad de motores
 
-6. **Añadir `Module` implementations** a `iflow-vm`, `iflow-wasm`, `host`, `kernel`, `core-api`, `transport`, `messages`, `logger`, `extension-api`, `manager-spi`, `manager-core`
-7. **Resolver confusión capability `chattranslator` vs `translator`** — Decidir si `ChatTranslatorModule` provee `translator` o si hay capability distinta para façade
-8. **Crear `src/iflow-firewall/` módulo legacy** (o eliminar referencias de `storage.md` si no se va a implementar)
-9. **Alinear `ChatTranslatorConfig.defaults()` con `storage.md`** (default-backend: null vs 'google')
+- **Severidad:** Alta (P0).
+- **Estado:** **Parcial** (documentación corregida; código pendiente en P0.3).
+- **Evidencia (baseline):**
+  - `docs/prompts/diseno/storage.md` presentaba `iflow.engine.kind` como selector vigente y la
+    instalación como exclusiva.
+  - `src/spigot-host/src/main/resources/defaults/config.yml` todavía contenía
+    `iflow.engine.kind: vm`.
+  - `src/iflow-firewall/build.gradle` se describía como «alternativa mutuamente excluyente a
+    iflow-vm».
+  - `src/iflow/README.md` decía «primer backend disponible en orden de registro».
+  - `src/host/.../ConfigLoader.java:125,159` todavía lee `iflow.engine.kind`.
+- **Norma vigente:** ADR-032: los tres motores pueden coexistir; el hub `iflow` activa uno solo y
+  la selección vive en `config/iflow/config.yml`. ADR-034: no hay rutas ni claves legacy.
+- **Resolución documental:** `storage.md` reescrito (hub, layout canónico, sin `engine.kind`);
+  `src/iflow/README.md` alineado a la prioridad explícita; `ADR.md` con la prioridad
+  `iflow-firewall` → `iflow-vm` → `iflow-wasm`; descripción de `iflow-firewall` corregida.
+- **Pendiente:** eliminar `iflow.engine.kind` de `ConfigLoader`, defaults y tests (P0.3); actualizar
+  `docs/wiki/02-Configuration.md` (P0.8b).
 
-### P2 — Medio (calidad y consistencia)
+### D-003 — Especificaciones con contrato legacy y versiones `2.x`
 
-10. **Mover `MessagesConfig` a platform adapters** o documentar claramente ownership compartido
-11. **Añadir `ModuleDescriptor` a `performance`, `loadtest`, `common-legacy`** si son módulos reales
-12. **Documentar en `storage.md` la decisión sobre `iflow-firewall`** (implementar vs retirar)
+- **Severidad:** Alta (P0).
+- **Estado:** **Parcial** (documentación corregida; código pendiente en P0.2).
+- **Evidencia (baseline):**
+  - `docs/prompts/especificaciones/commands-v2.md` documentaba `commands.yml` en la raíz del data
+    folder, prioridad de la ruta canónica y migración de `base-name` («se elimina en F8»).
+  - `docs/prompts/especificaciones/config-schema-v2.2.md` afirmaba que el host parsea el layout
+    plano del editor (`config.yml`, `channels/`, `sync/tcp-udp.yml`) y que el motor «consumirá»
+    el grafo.
+  - `docs/prompts/especificaciones/extension-v1.md` fijaba `minSuiteVersion: "2.1.0"`.
+- **Norma vigente:** ADR-034: base `1.0`, `config-version: 1.0`, sin migración en runtime; el
+  layout de runtime es el de `storage.md`; el grafo del editor se valida, no se ejecuta.
+- **Resolución documental:** las tres especificaciones tienen cabecera de estado/autoridad, base
+  `1.0`, ruta canónica única, `config-version: "1.0"` en los ejemplos y `minSuiteVersion: "1.0.0"`.
+  `config-schema-v2.2.md` ahora separa el ZIP del editor del layout de runtime con una tabla de
+  correspondencia.
+- **Pendiente:** `ExtensionMetadata.java:36` sigue con `2.1.0`; reset general de versiones y
+  `config-version` en todos los YAML (P0.2).
 
-### P3 — Bajo (mejoras opcionales)
+### D-004 — Código con deuda P0 que contradice la documentación
 
-13. **Unificar `TranslationService` y `ChatTranslator`** en una sola fachada (ADR pendiente)
-14. **Validación de config al arranque** en cada módulo (`onLoad()`) per `storage.md` sección 6.1
+- **Severidad:** Alta (P0).
+- **Estado:** **Pendiente (código)**. No se modificó código de producción en esta ronda.
+- **Evidencia:**
+  - `src/host/.../HostPaths.java:66-85`: `suiteConfig`, `suiteMessages` y `suiteCommands` aceptan
+    `config.yml`, `messages.yml` y `commands.yml` en la raíz del data folder.
+  - `src/suite-runtime/.../DefaultConfigInstaller.java:97-120`: copia archivos legacy a la ruta
+    canónica y registra «Config migrated».
+  - `src/host/.../ConfigLoader.java:125,159`: lee `iflow.engine.kind`.
+  - `src/sync-common/.../SyncConfigPaths.java` y `src/sync-socket/.../SocketConfig.java`:
+    siguen aceptando las rutas planas `sync/*.yml` como fallback.
+  - `src/extension-api/.../ExtensionMetadata.java:36`: `minSuiteVersion = "2.1.0"`.
+  - Varios `build.gradle` de módulo (`gtranslate`, `ltranslate`, `logger`, `transport`,
+    `chattranslator`, `web-editor`) declaran `2.1.0` o `>=2.1.0`.
+- **Impacto:** la documentación ya describe el contrato correcto, pero el runtime todavía acepta
+  el esquema viejo. Mientras P0.2/P0.3 no cierren, la deuda es real y no una excepción.
+- **Resolución:** registrada en `PLAN.md` (P0.2/P0.3 y deuda conocida). El código se corrige con
+  tests de regresión en una tarea autorizada específica.
+
+### D-005 — Enlaces rotos y READMEs ausentes
+
+- **Severidad:** Media (P1).
+- **Estado:** **Corregido**.
+- **Evidencia (baseline):**
+  - `README.md:381` enlazaba a `CHANGELOG.md` (inexistente).
+  - `docs/README.md:10-11,40` enlazaba a `RELEASE_NOTES.md` y `../CHANGELOG.md` (inexistentes).
+  - Cinco READMEs de módulo enlazaban a `../sync-tcpudp/` (el módulo real es `sync-socket`).
+  - Faltaban READMEs de `core-render`, `suite-runtime`, `iflow-firewall`, `web-editor` y
+    `fixtures`.
+- **Resolución:** el enlace a `CHANGELOG.md` se sustituyó por la referencia a Git; las filas de
+  `RELEASE_NOTES.md`/`CHANGELOG.md` se retiraron y se añadió `AUDITORIA.md`; `sync-tcpudp` se
+  reemplazó por `sync-socket`; se crearon los cinco READMEs. El checker local de enlaces devuelve
+  **0 enlaces rotos**.
+
+### D-006 — Índice de prompts incompleto
+
+- **Severidad:** Baja (P2).
+- **Estado:** **Corregido**.
+- **Evidencia (baseline):** `docs/prompts/README.md` no indexaba `philosophy.md`, `storage.md`,
+  `chattranslator.md` ni `metrics.md`, y la tabla de skills omitía `@juzgar-rubrica`.
+- **Resolución:** índice y tabla de skills completados; se aclara que `v2`/`v2.2`/`v1.0` son
+  revisiones de esquema, no versiones de la suite.
+
+### D-007 — `PLAN.md` acumulaba historial cerrado
+
+- **Severidad:** Media (P1).
+- **Estado:** **Corregido**.
+- **Evidencia (baseline):** cabecera con una cadena de «Antes: …» desde 2026-07; notas de estado
+  de 2026-10-23, 24, 27, 29 y 31; sección «Fixes de Inconsistencia» con ítems ya cerrados;
+  «Estado real del proyecto (2026-10-04; actualizado 2026-10-23)» duplicado y desactualizado.
+- **Resolución:** cabecera condensada; notas históricas reemplazadas por un bloque de estado
+  actual; sección de fixes cerrada eliminada; snapshot duplicado reemplazado por una declaración
+  de lo verificado y lo desconocido; decisiones pendientes y próxima acción actualizadas. El
+  historial completo sigue en Git.
+
+### D-008 — ADR con contenido obsoleto y contradicciones internas
+
+- **Severidad:** Alta (P0).
+- **Estado:** **Corregido**.
+- **Evidencia (baseline):**
+  - La cabecera «## iFlow» enumeraba targets `LOG`, `DROP`, `REJECT`, `REDIRECT`, `RATE-LIMIT`,
+    contradiciendo ADR-031 (`DELIVER`, `CANCEL_EVENT`, `ERROR`).
+  - ADR-034 ejemplificaba el contrato con `1.5`, `2.5`, `3.0`, pero `SemVer.parse` exige
+    `x.y.z`.
+  - ADR-032 no fijaba una prioridad de fallback; remitía al orden de registro.
+- **Nota:** el ADR **no** contiene planes, fases ni roadmaps: su sección «Fases y estado» delega
+  expresamente en `PLAN.md`. El problema era contenido obsoleto y ambigüedad, no invasión de
+  roadmap.
+- **Resolución:** cabecera iFlow alineada a ADR-031; contrato descrito como intervalo cerrado
+  `[1.0.0, host]` con SemVer completo; fallback con prioridad explícita y referencia a test.
+
+### D-009 — Fallback de iFlow dependiente del orden de registro
+
+- **Severidad:** Media (P1).
+- **Estado:** **Parcial** (documentación resuelta; código pendiente).
+- **Evidencia:** `src/iflow/.../IflowBackendManager.java:60-69` recorre `discovered` y elige el
+  primer backend disponible; `RuntimeServiceRegistry` usa `LinkedHashMap`, por lo que el resultado
+  depende del orden de activación. ADR-032 no definía prioridad.
+- **Resolución documental:** ADR-032, `src/iflow/README.md` y `storage.md` fijan la prioridad
+  `iflow-firewall` → `iflow-vm` → `iflow-wasm`. Se añadió la deuda a `PLAN.md`.
+- **Pendiente:** implementar la prioridad en `IflowBackendManager` y cubrirla con un test de
+  aceptación. No se hizo en esta ronda por ser código.
+
+### D-010 — Contrato y SemVer: ejemplos inválidos y techo del host
+
+- **Severidad:** Media (P1).
+- **Estado:** **Corregido** (documentación y código ya alineados).
+- **Evidencia:** ADR-034 citaba `1.5`, `2.5`, `3.0`; `SemVer.parse` solo acepta `x.y.z`;
+  `ModuleGraph` rechaza contratos superiores al host `2.1.0` (`Environment.java:26`).
+- **Resolución:** ADR-034 ahora define `[1.0.0, host]`, exige SemVer completo y aclara que
+  «contrato exacto» significa base mínima. `ModuleGraph` ya implementa la aceptación de `1.0.0` y
+  el rechazo de `0.9.0`; `ModuleGraphTest` cubre ambos casos. No se requiere cambio de código.
 
 ---
 
-## Evidencia de Verificación
+## 4. Cambios aplicados en esta ronda
 
-```bash
-# Verificar Module implementations
-for dir in /home/majhrs16/Documentos/textformatter-suite/src/*/; do
-    mod=$(basename "$dir")
-    if grep -r "implements Module" "$dir" --include="*.java" -q 2>/dev/null; then
-        echo "$mod: YES"
-    else
-        echo "$mod: NO"
-    fi
-done
+### 4.1 Baseline de código (commit `c5992230`)
 
-# Verificar require sync-bus
-grep -r "require.*sync-bus" /home/majhrs16/Documentos/textformatter-suite/src/sync-*/
+- `src/coretranslator/`: módulo legacy, activador, hook Bukkit, expansión PAPI `%cot_*`,
+  placeholders, servicios SPI, README y 13 tests.
+- `ModuleGraph`: contrato `[1.0.0, host]`; tests de aceptación/rechazo.
+- `ADR.md` (ADR-035), `PLAN.md`, `README.md` raíz, `src/README.md` y `settings.gradle`.
 
-# Verificar iflow-firewall
-find /home/majhrs16/Documentos/textformatter-suite -name "*iflow-firewall*"
+### 4.2 Documentación (esta ronda)
 
-# Verificar ChatTranslator en bootstrap
-grep -n "ChatTranslator" /home/majhrs16/Documentos/textformatter-suite/src/host/src/main/java/me/majhrs16/suite/host/SuiteHost.java
-```
+Commits: `0a7550ab` (contexto, storage y contratos) y `9ffc0230` (índices, enlaces y READMEs).
+El informe se publica en el commit de cierre de la auditoría.
+
+| Archivo | Cambio |
+|---|---|
+| `docs/prompts/contexto/proyecto.md` | Reescritura: rutas reales, régimen pre-1.0, precedencia, estado sin E2E |
+| `docs/prompts/diseno/storage.md` | Reescritura: layout canónico único, sin `engine.kind` ni rutas legacy |
+| `docs/prompts/especificaciones/commands-v2.md` | Ruta única, sin migración, `config-version` |
+| `docs/prompts/especificaciones/config-schema-v2.2.md` | ZIP del editor vs runtime, base 1.0, `config-version` |
+| `docs/prompts/especificaciones/extension-v1.md` | `minSuiteVersion 1.0.0`, `config-version`, cabecera de autoridad |
+| `docs/prompts/diseno/manager-v2.md` | Precedencia ADR-027, layout de `library/`, commit/activación separados |
+| `docs/prompts/diseno/iflow-cpu-design.md` | Nota histórica corregida (SpEL, hub, targets v3) |
+| `docs/workdir/ADR.md` | iFlow v3, contrato `[1.0.0, host]`, prioridad de fallback |
+| `docs/workdir/PLAN.md` | Poda de historial, estado actual, D-009 y fallback de router como deuda |
+| `docs/prompts/README.md` | Índice completo y `@juzgar-rubrica` |
+| `docs/README.md`, `README.md` | Enlaces corregidos; referencias iFlow, versiones y presets alineadas |
+| `src/{core-render,suite-runtime,iflow-firewall,web-editor,fixtures}/README.md` | READMEs nuevos |
+| `src/{core-api,messages,sync-bus,sync-http,transport}/README.md` | `sync-tcpudp` → `sync-socket` |
+| `.opencode/skills/auditar-iflow/SKILL.md` | Spec v3 como contrato; design como histórico |
+| `.opencode/skills/auditar-modulo/references/manager.md` | `repo.yml`, `library/status`, comandos actuales |
+| `src/iflow/README.md` | Prioridad de fallback, VM v2/v3, deuda del router |
+| `src/iflow-firewall/build.gradle` | Descripción sin «mutuamente excluyente» |
+
+### 4.3 Orden de ejecución
+
+| Orden | Cambio | Depende de |
+|---|---|---|
+| 1 | Baseline: CoreTranslator + contrato `[1.0.0, host]` + docs pendientes (`c5992230`) | Autorización A2 |
+| 2 | Contexto y `storage.md` (rutas y régimen) | 1 |
+| 3 | Especificaciones (commands, extension, config schema) | 2 |
+| 4 | ADR, PLAN y skills | 2, 3 |
+| 5 | Índices, enlaces y READMEs de módulo | 2–4 |
+| 6 | Informe final en `AUDITORIA.md` | 2–5 |
+| 7 | P0.2/P0.3 de código (versiones, `config-version`, purga legacy) | 1–6 + autorización específica |
+| 8 | D-009 (prioridad de fallback + test) | 7 |
+| 9 | P0.8b (wiki) | 7 |
 
 ---
 
-## Conclusión
+## 5. Validación
 
-El proyecto tiene **arquitectura documentada sólida** (`storage.md`, `chattranslator.md`, `PLAN.md`) pero **implementación parcial**:
+- **Enlaces locales:** checker recursivo sobre todos los `*.md` versionados → **0 rotos**.
+- **Rutas citadas:** las cinco rutas alucinadas de D-001 fueron sustituidas por rutas existentes.
+- **Términos prohibidos:** se revisó `iflow.engine.kind`, `config/manager/`, `manager/config/`,
+  `sync-tcpudp`, `RELEASE_NOTES.md`, `CHANGELOG.md` y `2.1.0` en la documentación del alcance.
+  Quedan menciones históricas explícitas (p. ej. la nota de `iflow-cpu-design.md`) y deuda de
+  código (D-004), no contratos vigentes.
+- **Código de producción:** `git diff --stat` no muestra cambios en `.java`; los únicos cambios
+  fuera de documentación son la descripción de `src/iflow-firewall/build.gradle` y los READMEs
+  nuevos. El baseline `c5992230` ya estaba verificado con
+  `./gradlew :src:coretranslator:test :src:kernel:test` y el gate parcial
+  `checkArchitecture checkLocks :src:coretranslator:build`.
+- **Gate completo:** no ejecutado en esta ronda. Sigue pendiente en P0.7; no se declara verde.
 
-- ✅ **Bien**: Scaffold de módulos, tests, build, SPI contracts, kernel/ModuleGraph, sync-socket fix
-- ⚠️ **En progreso**: ChatTranslator (CT0-CT3 ✅, CT4-CT5 ❌), migración config ownership, iflow-wasm (W0 ✅, W1-W3 ❌)
-- ❌ **Pendiente**: ModuleDescriptor en 19/33 módulos, require capabilities en submódulos sync, iflow-firewall, bootstrap ChatTranslator
+---
 
-**La prioridad inmediata es CT4 (integrar ChatTranslator en SuiteHost) + corregir requires de sync-bus**, ya que desbloquean la arquitectura frontend/backend y el grafo de módulos correcto.
+## 6. Riesgos y límites
+
+1. **La wiki sigue desalineada.** `docs/wiki/02-Configuration.md` aún presenta
+   `iflow.engine.kind` y la exclusividad. Está fuera de alcance por decisión explícita (P0.8b).
+2. **El código todavía acepta rutas legacy.** La documentación describe el contrato correcto, pero
+   `HostPaths`, `DefaultConfigInstaller`, `ConfigLoader` y `ExtensionMetadata` no están corregidos.
+   Hasta P0.2/P0.3, la deuda es real.
+3. **D-009 no está cerrado.** La prioridad de fallback está decidida en ADR-032 y documentada, pero
+   `IflowBackendManager` sigue usando el orden de registro. Falta código y test.
+4. **No hay E2E.** Ni Spigot/Paper, ni Fabric, ni Velocity, ni `CoreTranslator` con PlaceholderAPI
+   se han probado en un servidor real. El smoke test de Paper 1.20.6 no es E2E. El E2E pertenece a
+   la fase posterior a `1.0.0`.
+5. **Los READMEs nuevos son CodeGuide, no contratos.** Describen la estructura observada; no
+   sustituyen a las especificaciones ni a los ADR.
+6. **`fixtures/` no tiene consumidores en el código.** Su README lo declara como directorio de
+   datos; si se convierte en módulo, necesita build propio y entrada en `settings.gradle`.
+
+---
+
+## 7. Próximos pasos
+
+1. Commitear esta auditoría y los cambios documentales (sin push).
+2. Ejecutar P0.2: reset de versiones a `1.0.0`, `config-version: 1.0` en todos los YAML y
+   `minSuiteVersion: "1.0.0"`, con test de parser que falle si falta.
+3. Ejecutar P0.3: eliminar `iflow.engine.kind`, rutas planas, fallbacks de `HostPaths`,
+   migración de `DefaultConfigInstaller` y el fallback de `Router` en `SuiteRuntime`, con tests de
+   regresión.
+4. Cerrar D-009: prioridad explícita en `IflowBackendManager` + test de aceptación.
+5. Ejecutar P0.8b: alinear `docs/wiki/` (fuera de esta ronda).
+6. Retomar W3.5 (paridad `.flow` v3/VM) y después V6 (compilador C).
+7. E2E real solo después de `1.0.0`, incluido el smoke test de `CoreTranslator` con
+   Bukkit/Paper + PlaceholderAPI.
+
+---
+
+## 8. Decisiones de la ronda
+
+- **A1:** `AUDITORIA.md` se reescribe como informe final; no se crea `PSEUDOAUDITORIA.md`.
+- **A2:** se commiteó primero el baseline de CoreTranslator + contrato `>= 1.0.0` + docs
+  pendientes, sin push (`c5992230`).
+- **A3:** esta ejecución es solo documentación; los arreglos de código van a P0.2/P0.3.
+
+---
+
+## 9. Referencias
+
+- `docs/workdir/ADR.md`: ADR-001 (SpEL), ADR-027 (Manager), ADR-031 (política v3), ADR-032 (hub
+  iFlow), ADR-034 (régimen pre-1.0), ADR-035 (CoreTranslator).
+- `docs/workdir/PLAN.md`: P0.2, P0.3, P0.6, P0.8, P0.8b, deuda conocida.
+- `docs/prompts/diseno/storage.md`: layout canónico.
+- `docs/prompts/especificaciones/`: contratos de `commands.yml`, `extension.yml` y editor.
+- `ModuleGraphTest`: aceptación de `1.0.0` y rechazo de `0.9.0`.
