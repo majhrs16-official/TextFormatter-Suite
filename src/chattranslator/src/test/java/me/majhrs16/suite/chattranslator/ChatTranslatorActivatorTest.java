@@ -65,6 +65,7 @@ class ChatTranslatorActivatorTest {
         Files.writeString(translators.resolve("google.yml"), """
             provider: google
             active: true
+            config-version: 1.0
             """);
 
         FakeRegistry registry = new FakeRegistry();

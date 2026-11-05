@@ -22,3 +22,5 @@ repositories:
     url: "file:///opt/textformatter-modules"
     type: "local"
     enabled: false
+
+config-version: 1.0

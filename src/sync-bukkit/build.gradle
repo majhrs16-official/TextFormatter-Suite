@@ -64,7 +64,7 @@ publishing {
 }
 
 // F4c — platform event capture package. The host JAR never contains this code.
-ext.moduleVersion = '2.1.0'
+ext.moduleVersion = '1.0.0'
 ext.modulePlatform = 'spigot'
-ext.moduleDependencies = 'sync-common@>=2.1.0'
+ext.moduleDependencies = 'sync-common@>=1.0.0'
 apply from: rootProject.file('gradle/module-package.gradle')

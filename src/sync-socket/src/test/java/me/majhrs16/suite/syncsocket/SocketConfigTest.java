@@ -40,11 +40,13 @@ class SocketConfigTest {
             remoteHost: 10.0.0.1
             remotePort: 9090
             localPort: 9091
+            config-version: 1.0
             """);
         Files.writeString(canonical("udp"), """
             enabled: true
             remoteHost: 10.0.0.2
             remotePort: 9092
+            config-version: 1.0
             """);
 
         SocketConfig tcp = SocketConfig.loadTcp(dir);
@@ -61,7 +63,7 @@ class SocketConfigTest {
 
     @Test
     void enabledWithoutRemoteIsNotUsable() throws Exception {
-        Files.writeString(canonical("tcp"), "enabled: true\n");
+        Files.writeString(canonical("tcp"), "enabled: true\nconfig-version: 1.0\n");
 
         assertFalse(SocketConfig.loadTcp(dir).usable());
     }
@@ -73,6 +75,7 @@ class SocketConfigTest {
             remoteHost: host
             remotePort: 99999
             localPort: -1
+            config-version: 1.0
             """);
 
         SocketConfig config = SocketConfig.loadTcp(dir);
@@ -86,7 +89,8 @@ class SocketConfigTest {
     void legacyFilesAreReadDuringMigration() throws Exception {
         Path legacy = dir.resolve("sync/tcp.yml");
         Files.createDirectories(legacy.getParent());
-        Files.writeString(legacy, "enabled: true\nremoteHost: legacy\nremotePort: 9090\n");
+        Files.writeString(legacy,
+            "enabled: true\nremoteHost: legacy\nremotePort: 9090\nconfig-version: 1.0\n");
 
         SocketConfig config = SocketConfig.loadTcp(dir);
 
@@ -103,12 +107,14 @@ class SocketConfigTest {
             remoteHost: 10.0.0.1
             remotePort: 7000
             localPort: 0
+            config-version: 1.0
             """);
         Files.writeString(configDir.resolve("udp.yml"), """
             enabled: true
             remoteHost: 10.0.0.2
             remotePort: 7001
             localPort: 0
+            config-version: 1.0
             """);
 
         assertEquals(new SocketConfig(true, "10.0.0.1", 7000, 0),

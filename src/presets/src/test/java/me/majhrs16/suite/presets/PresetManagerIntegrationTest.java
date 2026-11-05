@@ -90,7 +90,7 @@ class PresetManagerIntegrationTest {
             description: A custom preset for testing
             author: Test Author
             version: 1.0.0
-            minSuiteVersion: 2.1.0
+            minSuiteVersion: 1.0.0
             tags: [custom, test]
             config:
               quickLook: true
@@ -171,7 +171,7 @@ class PresetManagerIntegrationTest {
     @DisplayName("register y unregister presets personalizados")
     void registerAndUnregisterCustomPresets() {
         Preset custom = new Preset(
-            "custom-id", "Custom", "Description", "Author", "1.0.0", "2.1.0",
+            "custom-id", "Custom", "Description", "Author", "1.0.0", "1.0.0",
             List.of("custom"), null, List.of(), List.of(), List.of()
         );
         

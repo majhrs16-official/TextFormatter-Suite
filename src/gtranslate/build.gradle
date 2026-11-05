@@ -66,6 +66,6 @@ configurations.configureEach {
 }
 
 // F6 — distribution ZIP for the manager
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'transport@>=2.1.0,json@>=2024.3.3'
+ext.moduleVersion = '1.0.0'
+ext.moduleDependencies = 'transport@>=1.0.0,json@>=2024.3.3'
 apply from: rootProject.file('gradle/module-package.gradle')

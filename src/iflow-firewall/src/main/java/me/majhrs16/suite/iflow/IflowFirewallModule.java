@@ -20,11 +20,11 @@ public final class IflowFirewallModule implements Module {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("iflow-firewall")
-            .version(SemVer.of(2, 1, 0))
-            .contractVersion(SemVer.of(2, 1, 0))
+            .version(SemVer.of(1, 0, 0))
+            .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
-            .provide(Capability.of("router", SemVer.of(2, 1, 0)))
-            .require(Requirement.atLeast("channel-api", SemVer.of(2, 1, 0)))
+            .provide(Capability.of("router", SemVer.of(1, 0, 0)))
+            .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
             .build();
     }
 }

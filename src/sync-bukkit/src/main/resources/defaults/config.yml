@@ -6,3 +6,5 @@ enabled: true
 claim-mode: cancel-event
 # Send an extra chat copy to the server console.
 log-chat-to-console: true
+
+config-version: 1.0

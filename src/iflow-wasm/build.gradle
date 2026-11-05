@@ -55,6 +55,6 @@ publishing {
 }
 
 // F5 — distribution ZIP for the manager
-ext.moduleVersion = '2.1.0'
+ext.moduleVersion = '1.0.0'
 ext.moduleDependencies = 'chicory@>=1.4.0'
 apply from: rootProject.file('gradle/module-package.gradle')

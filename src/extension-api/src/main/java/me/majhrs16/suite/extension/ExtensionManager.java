@@ -322,7 +322,7 @@ public final class ExtensionManager {
                 id != null ? id : "",
                 name != null ? name : "",
                 versionStr != null ? SemVer.parse(versionStr) : SemVer.of(1, 0, 0),
-                coreApiStr != null ? SemVer.parse(coreApiStr) : SemVer.of(2, 1, 0),
+                coreApiStr != null ? SemVer.parse(coreApiStr) : SemVer.of(1, 0, 0),
                 depsStr != null ? Arrays.asList(depsStr.split(",")) : List.of(),
                 providedStr != null ? parseCapabilities(providedStr) : Set.of(),
                 requiredStr != null ? parseCapabilities(requiredStr) : Set.of(),

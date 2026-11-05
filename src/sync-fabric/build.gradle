@@ -67,8 +67,8 @@ jacocoTestReport {
 
 // F4c — Fabric event capture package. remapJar is the production artifact
 // loaded by the Fabric mod classloader; the thin jar is not distributed.
-ext.moduleVersion = '2.1.0'
+ext.moduleVersion = '1.0.0'
 ext.modulePlatform = 'fabric'
-ext.moduleDependencies = 'sync-common@>=2.1.0'
+ext.moduleDependencies = 'sync-common@>=1.0.0'
 ext.moduleJarTaskName = 'remapJar'
 apply from: rootProject.file('gradle/module-package.gradle')

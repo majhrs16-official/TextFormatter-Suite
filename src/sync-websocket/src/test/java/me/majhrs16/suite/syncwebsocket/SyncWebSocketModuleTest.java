@@ -16,12 +16,12 @@ class SyncWebSocketModuleTest {
         ModuleDescriptor descriptor = new SyncWebSocketModule().descriptor();
 
         assertEquals("sync-websocket", descriptor.name());
-        assertEquals(SemVer.of(2, 1, 0), descriptor.version());
-        assertEquals(SemVer.of(2, 1, 0), descriptor.contractVersion());
+        assertEquals(SemVer.of(1, 0, 0), descriptor.version());
+        assertEquals(SemVer.of(1, 0, 0), descriptor.contractVersion());
         assertEquals(17, descriptor.jvmMin());
         assertEquals(0, descriptor.jvmMax());
-        assertTrue(descriptor.provides().contains(Capability.of("sync-sink", SemVer.of(2, 1, 0))));
-        assertTrue(descriptor.provides().contains(Capability.of("websocket-server", SemVer.of(2, 1, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("sync-sink", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("websocket-server", SemVer.of(1, 0, 0))));
         assertTrue(descriptor.requires().stream()
             .anyMatch(r -> r.name().equals("sync-bus")));
     }

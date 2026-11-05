@@ -72,7 +72,7 @@ configurations.configureEach {
 
 // F6 — neutral Velocity sink package. The Velocity plugin lives in
 // src:sync-velocity and is the only project that imports the Velocity API.
-ext.moduleVersion = '2.1.0'
+ext.moduleVersion = '1.0.0'
 ext.moduleId = 'sync-velocity-core'
-ext.moduleDependencies = 'sync-common@>=2.1.0,transport@>=2.1.0,json@>=2024.3.3'
+ext.moduleDependencies = 'sync-common@>=1.0.0,transport@>=1.0.0,json@>=2024.3.3'
 apply from: rootProject.file('gradle/module-package.gradle')

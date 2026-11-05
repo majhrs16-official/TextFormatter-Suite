@@ -171,7 +171,7 @@ public final class DebugEndpoint {
 
             Map<String, Object> state = Map.of(
                 "host", "TextFormatter Suite",
-                "version", "2.1.0-SNAPSHOT",
+                "version", "1.0.0",
                 "uptimeMs", System.currentTimeMillis() - startTime,
                 "channelsLoaded", channels.paths().size(),
                 "timestamp", java.time.Instant.now().toString()

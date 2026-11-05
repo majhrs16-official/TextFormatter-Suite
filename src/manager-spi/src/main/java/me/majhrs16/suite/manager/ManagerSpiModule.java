@@ -14,10 +14,10 @@ public final class ManagerSpiModule implements Module {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("manager-spi")
-            .version(SemVer.of(2, 1, 0))
-            .contractVersion(SemVer.of(2, 1, 0))
+            .version(SemVer.of(1, 0, 0))
+            .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
-            .provide(Capability.of("manager-spi", SemVer.of(2, 1, 0)))
+            .provide(Capability.of("manager-spi", SemVer.of(1, 0, 0)))
             .build();
     }
 }

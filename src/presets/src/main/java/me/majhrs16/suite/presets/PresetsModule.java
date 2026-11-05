@@ -13,10 +13,10 @@ public final class PresetsModule implements Module {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("presets")
-            .version(SemVer.of(2, 1, 0))
-            .contractVersion(SemVer.of(2, 1, 0))
+            .version(SemVer.of(1, 0, 0))
+            .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
-            .provide(Capability.of("presets", SemVer.of(2, 1, 0)))
+            .provide(Capability.of("presets", SemVer.of(1, 0, 0)))
             .build();
     }
 }

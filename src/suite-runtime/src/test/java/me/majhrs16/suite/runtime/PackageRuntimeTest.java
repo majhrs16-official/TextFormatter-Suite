@@ -826,7 +826,7 @@ class PackageRuntimeTest {
             Path sinkJar = FixtureModules.buildSinkJar(
                     tempDir, "sink-fixture", "1.0.0", "fixture-sink");
             Path sinkZip = FixtureModules.buildPackageZip(
-                    tempDir, "sink-fixture", "1.0.0", "stable", sinkJar, "sync-bus@>=2.1.0");
+                    tempDir, "sink-fixture", "1.0.0", "stable", sinkJar, "sync-bus@>=1.0.0");
 
             List<PackageChange> sinkActivation = fixture.runtime.installLocal(sinkZip, false);
             assertTrue(sinkActivation.get(0).isSuccess(),
@@ -859,6 +859,7 @@ class PackageRuntimeTest {
                     token: test-token
                     channel: 42
                     transport: fake
+                    config-version: 1.0
                     """);
 
             // The neutral package activates before its transport adapter exists.
@@ -887,7 +888,7 @@ class PackageRuntimeTest {
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading the transport adapter must remove the sink");
 
-            fixture.runtime.removeLocal("sync-discord", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-discord", "1.0.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading sync-discord must unregister its sink");
         }
@@ -913,6 +914,7 @@ class PackageRuntimeTest {
                     transport: fake
                     servers: [server1]
                     mapping: "* -> server1"
+                    config-version: 1.0
                     """);
 
             List<PackageChange> activation = fixture.runtime.installLocal(velocityZip, false);
@@ -940,7 +942,7 @@ class PackageRuntimeTest {
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading the Velocity adapter must remove the sink");
 
-            fixture.runtime.removeLocal("sync-velocity-core", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-velocity-core", "1.0.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading sync-velocity-core must unregister its sink");
         }
@@ -966,12 +968,14 @@ class PackageRuntimeTest {
                     remoteHost: 127.0.0.1
                     remotePort: 9
                     localPort: 0
+                    config-version: 1.0
                     """);
             Files.writeString(configDir.resolve("udp.yml"), """
                     enabled: true
                     remoteHost: 127.0.0.1
                     remotePort: 9
                     localPort: 0
+                    config-version: 1.0
                     """);
 
             List<PackageChange> activation = fixture.runtime.installLocal(socketZip, false);
@@ -981,7 +985,7 @@ class PackageRuntimeTest {
             SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
             assertEquals(Set.of("tcp", "udp"), bus.sinkNames());
 
-            fixture.runtime.removeLocal("sync-socket", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-socket", "1.0.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading sync-socket must unregister both sinks");
         }
@@ -1006,6 +1010,7 @@ class PackageRuntimeTest {
                     enabled: true
                     token: test-token
                     chatId: 123456
+                    config-version: 1.0
                     """);
 
             List<PackageChange> activation = fixture.runtime.installLocal(telegramZip, false);
@@ -1015,7 +1020,7 @@ class PackageRuntimeTest {
             SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
             assertEquals(Set.of("telegram"), bus.sinkNames());
 
-            fixture.runtime.removeLocal("sync-telegram", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-telegram", "1.0.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading sync-telegram must unregister its sink");
         }
@@ -1042,6 +1047,7 @@ class PackageRuntimeTest {
                     inboundPort: 0
                     inboundPath: "/hook"
                     bind: "127.0.0.1"
+                    config-version: 1.0
                     """);
 
             List<PackageChange> activation = fixture.runtime.installLocal(httpZip, false);
@@ -1051,7 +1057,7 @@ class PackageRuntimeTest {
             SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
             assertEquals(Set.of("http"), bus.sinkNames());
 
-            fixture.runtime.removeLocal("sync-http", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-http", "1.0.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading sync-http must unregister its sink");
         }
@@ -1078,6 +1084,7 @@ class PackageRuntimeTest {
                     token: test-token
                     port: %d
                     bind: 127.0.0.1
+                    config-version: 1.0
                     """.formatted(port));
 
             List<PackageChange> activation = fixture.runtime.installLocal(webSocketZip, false);
@@ -1087,7 +1094,7 @@ class PackageRuntimeTest {
             SyncBus bus = fixture.host.services().find(SyncBus.class).orElseThrow();
             assertEquals(Set.of("websocket"), bus.sinkNames());
 
-            fixture.runtime.removeLocal("sync-websocket", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("sync-websocket", "1.0.0", "stable", false);
             assertTrue(bus.sinkNames().isEmpty(),
                     "unloading sync-websocket must unregister its sink");
         }
@@ -1109,6 +1116,7 @@ class PackageRuntimeTest {
                     enabled: true
                     metricsPort: %d
                     metricsBind: 127.0.0.1
+                    config-version: 1.0
                     """.formatted(port));
 
             List<PackageChange> activation = fixture.runtime.installLocal(observabilityZip, false);
@@ -1126,7 +1134,7 @@ class PackageRuntimeTest {
             assertEquals(200, response.statusCode());
             assertTrue(response.body().contains("\"status\": \"UP\""));
 
-            fixture.runtime.removeLocal("observability", "2.1.0", "stable", false);
+            fixture.runtime.removeLocal("observability", "1.0.0", "stable", false);
             assertEquals(ModuleState.INSTALLED,
                     fixture.host.state("observability").orElseThrow(),
                     "unloading observability must deactivate the package");

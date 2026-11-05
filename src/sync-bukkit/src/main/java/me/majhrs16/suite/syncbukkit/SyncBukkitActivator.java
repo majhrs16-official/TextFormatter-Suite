@@ -38,11 +38,11 @@ public final class SyncBukkitActivator implements ModuleActivator {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("sync-bukkit")
-                .version(SemVer.of(2, 1, 0))
-                .contractVersion(SemVer.of(2, 1, 0))
+                .version(SemVer.of(1, 0, 0))
+                .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(21, 0)
-                .provide(Capability.of("sync-bukkit", SemVer.of(2, 1, 0)))
-                .require(Requirement.atLeast("channel-api", SemVer.of(2, 1, 0)))
+                .provide(Capability.of("sync-bukkit", SemVer.of(1, 0, 0)))
+                .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
                 .build();
     }
 

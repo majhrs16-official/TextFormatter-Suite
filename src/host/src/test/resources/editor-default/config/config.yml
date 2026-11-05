@@ -12,3 +12,5 @@ sonido:
   enabled: true
 chat:
   claim-mode: cancel-event
+
+config-version: 1.0

@@ -1,5 +1,6 @@
 package me.majhrs16.suite.host;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.config.ConfigLoader;
@@ -60,6 +61,7 @@ class ConfigLoaderTest {
               enabled: false
             chat:
               claim-mode: clear-recipients
+            config-version: 1.0
             """);
 
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
@@ -79,6 +81,7 @@ class ConfigLoaderTest {
         Files.writeString(dir.resolve("config.yml"), """
             chat:
               claim-mode: no-existe
+            config-version: 1.0
             """);
 
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
@@ -92,12 +95,39 @@ class ConfigLoaderTest {
             iflow:
               engine:
                 kind: no-existe
+            config-version: 1.0
             """);
 
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
 
         assertEquals(HostConfig.Engine.VM, result.config().engine());
         assertTrue(result.isValid());
+    }
+
+    @Test
+    void rejectsConfigWithoutConfigVersion() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+            quick-look: false
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream()
+                .anyMatch(error -> error.contains(ConfigVersion.MISSING_MESSAGE)));
+    }
+
+    @Test
+    void rejectsUnsupportedConfigVersion() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+            config-version: 2.0
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream()
+                .anyMatch(error -> error.contains("config-version '2.0'")));
     }
 
     @Test

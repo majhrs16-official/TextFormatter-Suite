@@ -40,7 +40,7 @@ jar {
             'Extension-Id': 'example-extension',
             'Extension-Name': 'Example Extension',
             'Extension-Version': '1.0.0',
-            'Extension-Required-Core-Api': '2.1.0',
+            'Extension-Required-Core-Api': '1.0.0',
             'Extension-Dependencies': '',
             'Extension-Provides': 'custom-command',
             'Extension-Requires': '',

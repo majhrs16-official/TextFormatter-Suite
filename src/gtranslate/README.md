@@ -34,7 +34,7 @@
 | `org.json` | Compile | JSON request/response parsing (external library; final packaging is F8) |
 | `kernel` | Test | Test fixtures |
 
-> **Runtime**: the package declares `Dependencies: transport@>=2.1.0` and
+> **Runtime**: the package declares `Dependencies: transport@>=1.0.0` and
 > `GTranslateActivator` registers the provider. The host's legacy compile-time
 > wiring is removed in F6/F4b.
 

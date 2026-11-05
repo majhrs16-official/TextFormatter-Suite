@@ -15,3 +15,5 @@ sounds:
   - name: ping-message.mp3
     volume: 1
     pitch: 1
+
+config-version: 1.0

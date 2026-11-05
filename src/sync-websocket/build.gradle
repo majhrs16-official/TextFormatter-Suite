@@ -74,6 +74,6 @@ configurations.configureEach {
 // F6 — optional package loaded by the module runtime.
 // Java-WebSocket, Gson and org.json are provided by the host parent classpath
 // until F8 packages third-party libraries as DEPENDENCY packages.
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'sync-common@>=2.1.0,transport@>=2.1.0,json@>=2024.3.3,gson@>=2.11.0,java-websocket@>=1.5.4'
+ext.moduleVersion = '1.0.0'
+ext.moduleDependencies = 'sync-common@>=1.0.0,transport@>=1.0.0,json@>=2024.3.3,gson@>=2.11.0,java-websocket@>=1.5.4'
 apply from: rootProject.file('gradle/module-package.gradle')

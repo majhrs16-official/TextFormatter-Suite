@@ -7,6 +7,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -55,6 +57,7 @@ public final class IflowConfig {
                 warn(logger, "iFlow config is not a map; using defaults");
                 return defaults();
             }
+            ConfigVersion.require(map, file);
             String engine = string(map.get("engine"));
             if (engine == null || engine.isBlank()) {
                 engine = string(map.get("default-backend"));
@@ -62,6 +65,8 @@ public final class IflowConfig {
             boolean fallback = bool(map.get("fallback-on-unavailable"),
                 bool(map.get("fallback"), true));
             return new IflowConfig(engine, fallback);
+        } catch (ConfigVersionException e) {
+            throw e;
         } catch (IOException | RuntimeException e) {
             warn(logger, "Cannot read iFlow config " + file + ": " + e.getMessage());
             return defaults();

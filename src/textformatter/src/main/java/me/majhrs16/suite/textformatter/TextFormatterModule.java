@@ -18,11 +18,11 @@ public final class TextFormatterModule implements Module {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("textformatter")
-                .version(SemVer.of(2, 1, 0))
-                .contractVersion(SemVer.of(2, 1, 0))
+                .version(SemVer.of(1, 0, 0))
+                .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
-                .provide(Capability.of("channel-api", SemVer.of(2, 1, 0)))
-                .provide(Capability.of("formatter", SemVer.of(2, 1, 0)))
+                .provide(Capability.of("channel-api", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("formatter", SemVer.of(1, 0, 0)))
                 .build();
     }
 }

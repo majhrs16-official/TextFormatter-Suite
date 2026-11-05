@@ -1,5 +1,7 @@
 package me.majhrs16.suite.chattranslator;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslatorProvider;
@@ -156,6 +158,7 @@ public final class BackendConfig {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) root;
+            ConfigVersion.require(map, file);
 
             String kind = str(map.get("provider"), fileName(file));
             boolean active = bool(map.get("active"), false);
@@ -185,6 +188,8 @@ public final class BackendConfig {
             }
 
             return java.util.Optional.of(new Provider(kind, active, settings));
+        } catch (ConfigVersionException e) {
+            throw e;
         } catch (IOException | RuntimeException e) {
             // YAML malformado o provider desconocido: se ignora ese archivo,
             // el resto de translators/*.yml sigue cargando.

@@ -25,7 +25,7 @@ class ExtensionMetadataTest {
         assertEquals("GPL-3.0", metadata.license());
         assertEquals(List.of(), metadata.tags());
         assertEquals(Map.of(), metadata.links());
-        assertEquals("2.1.0", metadata.minSuiteVersion());
+        assertEquals("1.0.0", metadata.minSuiteVersion());
         assertEquals("", metadata.maxSuiteVersion());
         assertTrue(metadata.stable());
         assertFalse(metadata.experimental());

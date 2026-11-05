@@ -74,6 +74,6 @@ configurations.configureEach {
 // F6 — optional package loaded by the module runtime.
 // Prometheus is provided by the host parent classpath until F8 packages
 // third-party libraries as DEPENDENCY packages.
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'sync-common@>=2.1.0,prometheus@>=0.16.0'
+ext.moduleVersion = '1.0.0'
+ext.moduleDependencies = 'sync-common@>=1.0.0,prometheus@>=0.16.0'
 apply from: rootProject.file('gradle/module-package.gradle')

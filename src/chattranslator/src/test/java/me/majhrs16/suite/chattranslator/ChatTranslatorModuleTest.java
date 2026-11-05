@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatTranslatorModuleTest {
 
     private static final Environment ENV =
-        new Environment(SemVer.of(2, 1, 0), SemVer.of(21, 0, 0));
+        new Environment(SemVer.of(1, 0, 0), SemVer.of(21, 0, 0));
 
     @Test
     @DisplayName("la façade provee 'chattranslator' y no exige backends")

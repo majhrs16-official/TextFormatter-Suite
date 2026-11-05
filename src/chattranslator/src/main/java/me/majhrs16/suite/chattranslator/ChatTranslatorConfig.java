@@ -1,5 +1,8 @@
 package me.majhrs16.suite.chattranslator;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
+
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -61,6 +64,7 @@ public final class ChatTranslatorConfig {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) root;
+            ConfigVersion.require(map, configFile);
 
             String defaultBackend = str(map.get("default-backend"), null);
             boolean contextOverrideEnabled = bool(map.get("context-override-enabled"), true);
@@ -70,6 +74,8 @@ public final class ChatTranslatorConfig {
 
             return new Config(defaultBackend, contextOverrideEnabled, cacheMaxSize,
                 detectionCacheMaxSize, translationTimeoutMs);
+        } catch (ConfigVersionException e) {
+            throw e;
         } catch (IOException | RuntimeException e) {
             // Config inválido → usar defaults
             return Config.defaults();

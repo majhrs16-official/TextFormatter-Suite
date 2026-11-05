@@ -9,3 +9,4 @@ messages:
   - "<red>-</red> %player_name% left the game"
 tooltips: []
 sounds: []
+config-version: 1.0

@@ -21,3 +21,4 @@ glossary:
 cache:
   enabled: true
   ttl-minutes: 60
+config-version: 1.0

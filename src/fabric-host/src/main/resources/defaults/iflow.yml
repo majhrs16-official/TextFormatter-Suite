@@ -5,3 +5,5 @@ engine: iflow-firewall
 # Si el backend configurado no está disponible, usa el primer backend
 # disponible en orden de registro. Si es false, el pipeline queda sin motor.
 fallback-on-unavailable: true
+
+config-version: 1.0

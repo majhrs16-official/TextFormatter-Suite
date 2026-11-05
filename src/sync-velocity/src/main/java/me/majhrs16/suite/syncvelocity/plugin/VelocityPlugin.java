@@ -27,7 +27,7 @@ import java.nio.file.Path;
 @Plugin(
     id = "textformatter-suite-velocity",
     name = "TextFormatter Suite (Velocity)",
-    version = "2.1.0",
+    version = "1.0.0",
     description = "Velocity proxy sync module for TextFormatter Suite",
     authors = {"majhrs16"}
 )

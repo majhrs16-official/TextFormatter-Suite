@@ -58,7 +58,7 @@ publishing {
 }
 
 // F6 — shared library package used by sync-bus and every sync-* sink.
-ext.moduleVersion = '2.1.0'
+ext.moduleVersion = '1.0.0'
 ext.moduleType = 'DEPENDENCY'
 ext.moduleDependencies = 'snakeyaml@>=2.2.0'
 apply from: rootProject.file('gradle/module-package.gradle')

@@ -1,5 +1,7 @@
 package me.majhrs16.suite.host.config;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 import org.yaml.snakeyaml.Yaml;
@@ -50,9 +52,12 @@ public final class MessagesConfig {
         if (Files.exists(file)) {
             try {
                 Object root = YAML.load(Files.readString(file));
-                if (root instanceof Map) {
+                if (root instanceof Map<?, ?> map) {
+                    ConfigVersion.require(map, file);
                     flatten("", root, merged);
                 }
+            } catch (ConfigVersionException e) {
+                throw e;
             } catch (IOException | RuntimeException e) {
                 // archivo corrupto: se conservan los defaults del recurso
             }
@@ -67,10 +72,13 @@ public final class MessagesConfig {
         try (InputStream in = MessagesConfig.class.getResourceAsStream(resourcePath)) {
             if (in != null) {
                 Object root = YAML.load(new String(in.readAllBytes()));
-                if (root instanceof Map) {
+                if (root instanceof Map<?, ?> map) {
+                    ConfigVersion.require(map, resourcePath);
                     flatten("", root, into);
                 }
             }
+        } catch (ConfigVersionException e) {
+            throw e;
         } catch (IOException | RuntimeException ignored) {
             // Recurso no disponible: merged queda vacío (keys faltantes → key literal en format())
         }

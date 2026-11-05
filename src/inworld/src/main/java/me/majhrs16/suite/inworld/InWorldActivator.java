@@ -23,16 +23,16 @@ public final class InWorldActivator implements ModuleActivator {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("inworld")
-            .version(SemVer.of(2, 1, 0))
-            .contractVersion(SemVer.of(2, 1, 0))
+            .version(SemVer.of(1, 0, 0))
+            .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
-            .provide(Capability.of("inworld-signs", SemVer.of(2, 1, 0)))
-            .provide(Capability.of("inworld-containers", SemVer.of(2, 1, 0)))
-            .provide(Capability.of("inworld-books", SemVer.of(2, 1, 0)))
-            .provide(Capability.of("channel-world", SemVer.of(2, 1, 0)))
-            .provide(Capability.of("channel-radius", SemVer.of(2, 1, 0)))
-            .provide(Capability.of("click-hover", SemVer.of(2, 1, 0)))
-            .require(Requirement.atLeast("channel-api", SemVer.of(2, 1, 0)))
+            .provide(Capability.of("inworld-signs", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("inworld-containers", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("inworld-books", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("channel-world", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("channel-radius", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("click-hover", SemVer.of(1, 0, 0)))
+            .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
             .build();
     }
 

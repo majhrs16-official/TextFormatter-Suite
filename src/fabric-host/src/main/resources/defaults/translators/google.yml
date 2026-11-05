@@ -6,3 +6,5 @@ timeout-ms: 3000
 rate-limit:
   requests-per-second: 10
   burst: 20
+
+config-version: 1.0

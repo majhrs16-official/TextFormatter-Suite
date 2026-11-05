@@ -43,7 +43,7 @@ public final class PresetManager {
             "Default configuration for general-purpose chat formatting and translation",
             "TextFormatter Suite Team",
             "1.0.0",
-            "2.1.0",
+            "1.0.0",
             List.of("default", "standard", "general"),
             new Preset.PresetConfig(true, "en", false, true, "cancel-event"),
             List.of(
@@ -90,7 +90,7 @@ public final class PresetManager {
             "Immersive chat with roleplay formatting, custom channels, and lore-friendly formatting",
             "TextFormatter Suite Team",
             "1.0.0",
-            "2.1.0",
+            "1.0.0",
             List.of("rpg", "survival", "roleplay", "immersive"),
             new Preset.PresetConfig(true, "en", false, true, "cancel-event"),
             List.of(
@@ -145,7 +145,7 @@ public final class PresetManager {
             "Tools for server moderation with alerts, logs, and staff channels",
             "TextFormatter Suite Team",
             "1.0.0",
-            "2.1.0",
+            "1.0.0",
             List.of("staff", "moderation", "admin", "moderation"),
             new Preset.PresetConfig(true, "en", true, true, "cancel-event"),
             List.of(
@@ -192,7 +192,7 @@ public final class PresetManager {
             "Minimal configuration for low-resource servers or testing",
             "TextFormatter Suite Team",
             "1.0.0",
-            "2.1.0",
+            "1.0.0",
             List.of("minimal", "lightweight", "testing"),
             new Preset.PresetConfig(true, "en", false, false, "cancel-event"),
             List.of(

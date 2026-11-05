@@ -16,17 +16,17 @@ class InWorldModuleTest {
         ModuleDescriptor descriptor = new InWorldModule().descriptor();
 
         assertEquals("inworld", descriptor.name());
-        assertEquals(SemVer.of(2, 1, 0), descriptor.version());
-        assertEquals(SemVer.of(2, 1, 0), descriptor.contractVersion());
+        assertEquals(SemVer.of(1, 0, 0), descriptor.version());
+        assertEquals(SemVer.of(1, 0, 0), descriptor.contractVersion());
         assertEquals(17, descriptor.jvmMin());
         assertEquals(0, descriptor.jvmMax());
-        assertTrue(descriptor.provides().contains(Capability.of("inworld-signs", SemVer.of(2, 1, 0))));
-        assertTrue(descriptor.provides().contains(Capability.of("inworld-containers", SemVer.of(2, 1, 0))));
-        assertTrue(descriptor.provides().contains(Capability.of("inworld-books", SemVer.of(2, 1, 0))));
-        assertTrue(descriptor.provides().contains(Capability.of("channel-world", SemVer.of(2, 1, 0))));
-        assertTrue(descriptor.provides().contains(Capability.of("channel-radius", SemVer.of(2, 1, 0))));
-        assertTrue(descriptor.provides().contains(Capability.of("click-hover", SemVer.of(2, 1, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("inworld-signs", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("inworld-containers", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("inworld-books", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("channel-world", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("channel-radius", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.provides().contains(Capability.of("click-hover", SemVer.of(1, 0, 0))));
         assertTrue(descriptor.requires().contains(
-            Requirement.atLeast("channel-api", SemVer.of(2, 1, 0))));
+            Requirement.atLeast("channel-api", SemVer.of(1, 0, 0))));
     }
 }

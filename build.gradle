@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'me.majhrs16'
-version = providers.gradleProperty('version').getOrElse('2.1.0-SNAPSHOT')
+version = providers.gradleProperty('version').getOrElse('1.0.0')
 
 allprojects {
     group = rootProject.group

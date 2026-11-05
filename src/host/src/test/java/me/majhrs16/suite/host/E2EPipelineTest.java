@@ -129,6 +129,7 @@ class E2EPipelineTest {
                 parallel: false
             sonido:
               enabled: true
+            config-version: 1.0
             """);
     }
 
@@ -143,7 +144,8 @@ class E2EPipelineTest {
         String content = "name: " + name + "\n" +
             "messages:\n" +
             "  - '" + format + "'\n" +
-            soundBlock;
+            soundBlock +
+            "config-version: 1.0\n";
         Files.writeString(dir.resolve("config/textformatter/channels/" + name + ".yml"), content);
     }
 
@@ -159,6 +161,7 @@ class E2EPipelineTest {
               - name: entity.experience_orb.pickup
                 volume: 1.0
                 pitch: 1.0
+            config-version: 1.0
             """);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
@@ -317,6 +320,7 @@ class E2EPipelineTest {
               - name: entity.experience_orb.pickup
                 volume: 1.0
                 pitch: 1.0
+            config-version: 1.0
             """);
 
         SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
@@ -409,6 +413,7 @@ class E2EPipelineTest {
               language: en
             sonido:
               enabled: false
+            config-version: 1.0
             """);
         writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
 

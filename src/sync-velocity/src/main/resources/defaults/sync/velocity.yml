@@ -2,3 +2,4 @@ enabled: false
 secret: ""
 servers: []
 mapping: "* -> chat.hub"
+config-version: 1.0

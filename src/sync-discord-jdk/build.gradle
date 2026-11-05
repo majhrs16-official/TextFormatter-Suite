@@ -69,6 +69,6 @@ configurations.configureEach {
 }
 
 // F6 — Discord transport adapter package.
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'transport@>=2.1.0'
+ext.moduleVersion = '1.0.0'
+ext.moduleDependencies = 'transport@>=1.0.0'
 apply from: rootProject.file('gradle/module-package.gradle')

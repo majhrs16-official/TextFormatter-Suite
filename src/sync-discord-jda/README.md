@@ -61,5 +61,5 @@ is intentionally out of scope for CI.
 ## 6. Packaging
 
 The Gradle project applies `gradle/module-package.gradle` and produces
-`sync-discord-jda-2.1.0.zip`. JDA remains on the host classpath until F8
+`sync-discord-jda-1.0.0.zip`. JDA remains on the host classpath until F8
 packages third-party libraries as `DEPENDENCY` artifacts.

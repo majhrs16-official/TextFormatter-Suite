@@ -40,11 +40,11 @@ class IflowFirewallModuleTest {
     void declaresRouterCapabilityAndChannelApiRequirement() {
         ModuleDescriptor descriptor = new IflowFirewallModule().descriptor();
 
-        assertEquals("2.1.0", descriptor.contractVersion().toString());
+        assertEquals("1.0.0", descriptor.contractVersion().toString());
         assertTrue(descriptor.provides().contains(
-            Capability.of("router", SemVer.of(2, 1, 0))));
+            Capability.of("router", SemVer.of(1, 0, 0))));
         assertTrue(descriptor.requires().contains(
-            me.majhrs16.suite.api.Requirement.atLeast("channel-api", SemVer.of(2, 1, 0))));
+            me.majhrs16.suite.api.Requirement.atLeast("channel-api", SemVer.of(1, 0, 0))));
     }
 
     @Test

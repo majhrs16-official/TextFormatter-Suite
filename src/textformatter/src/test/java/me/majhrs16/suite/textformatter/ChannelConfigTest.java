@@ -32,6 +32,7 @@ class ChannelConfigTest {
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
+            config-version: 1.0
             """);
 
         ChannelRegistry registry = ChannelConfig.load(dir).config();
@@ -52,12 +53,14 @@ class ChannelConfigTest {
             name: absent
             messages:
               - '<gray>%content%</gray>'
+            config-version: 1.0
             """);
         Files.writeString(channels.resolve("blank.yml"), """
             name: blank
             permission: ""
             send-permission: "  "
             receive-permission:
+            config-version: 1.0
             """);
 
         ChannelRegistry registry = ChannelConfig.load(dir).config();
@@ -81,6 +84,7 @@ class ChannelConfigTest {
             type: chat
             rate-limit-per-second: 3
             lang-target: es
+            config-version: 1.0
             """);
 
         Channel channel = ChannelConfig.load(dir).config().get("private.owner").orElseThrow();
@@ -99,6 +103,7 @@ class ChannelConfigTest {
             type: no-existe
             messages:
               - '<gray>%content%</gray>'
+            config-version: 1.0
             """);
 
         Channel channel = ChannelConfig.load(dir).config().get("weird").orElseThrow();
@@ -117,6 +122,7 @@ class ChannelConfigTest {
               - name: block.note_block.pling
                 volume: 0.5
                 pitch: 1.2
+            config-version: 1.0
             """);
 
         Channel chat = ChannelConfig.load(dir).config().get("chat").orElseThrow();
@@ -134,6 +140,7 @@ class ChannelConfigTest {
         Files.createDirectories(legacy);
         Files.writeString(legacy.resolve("chat.yml"), """
             name: chat
+            config-version: 1.0
             """);
 
         assertEquals(legacy, ChannelConfig.resolveChannelsDir(dir));
@@ -143,10 +150,12 @@ class ChannelConfigTest {
     @Test
     void canonicalLocationWinsOverLegacy() throws Exception {
         Path canonical = canonicalChannels();
-        Files.writeString(canonical.resolve("chat.yml"), "name: chat\nmessages:\n  - canónica\n");
+        Files.writeString(canonical.resolve("chat.yml"),
+            "name: chat\nmessages:\n  - canónica\nconfig-version: 1.0\n");
         Path legacy = dir.resolve("channels");
         Files.createDirectories(legacy);
-        Files.writeString(legacy.resolve("chat.yml"), "name: chat\nmessages:\n  - legacy\n");
+        Files.writeString(legacy.resolve("chat.yml"),
+            "name: chat\nmessages:\n  - legacy\nconfig-version: 1.0\n");
 
         Channel chat = ChannelConfig.load(dir).config().get("chat").orElseThrow();
 

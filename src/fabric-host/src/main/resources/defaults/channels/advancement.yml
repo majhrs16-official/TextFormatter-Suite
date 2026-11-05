@@ -9,3 +9,4 @@ messages:
   - "<yellow>%player_name% has made the advancement [%content%]</yellow>"
 tooltips: []
 sounds: []
+config-version: 1.0

@@ -35,6 +35,7 @@ class TelegramConfigTest {
             enabled: true
             token: bot-token
             chatId: -1001234567890
+            config-version: 1.0
             """);
 
         TelegramConfig config = TelegramConfig.load(dir);
@@ -46,14 +47,14 @@ class TelegramConfigTest {
 
     @Test
     void enabledWithoutChatIdIsNotUsable() throws Exception {
-        Files.writeString(canonical(), "enabled: true\ntoken: bot-token\n");
+        Files.writeString(canonical(), "enabled: true\ntoken: bot-token\nconfig-version: 1.0\n");
 
         assertFalse(TelegramConfig.load(dir).usable());
     }
 
     @Test
     void enabledWithoutTokenIsNotUsable() throws Exception {
-        Files.writeString(canonical(), "enabled: true\nchatId: 42\n");
+        Files.writeString(canonical(), "enabled: true\nchatId: 42\nconfig-version: 1.0\n");
 
         assertFalse(TelegramConfig.load(dir).usable());
     }
@@ -62,7 +63,8 @@ class TelegramConfigTest {
     void legacyFileIsReadDuringMigration() throws Exception {
         Path legacy = dir.resolve("sync/telegram.yml");
         Files.createDirectories(legacy.getParent());
-        Files.writeString(legacy, "enabled: true\ntoken: viejo\nchatId: 7\n");
+        Files.writeString(legacy,
+            "enabled: true\ntoken: viejo\nchatId: 7\nconfig-version: 1.0\n");
 
         TelegramConfig config = TelegramConfig.load(dir);
 
@@ -78,6 +80,7 @@ class TelegramConfigTest {
             enabled: true
             token: module-token
             chatId: 99
+            config-version: 1.0
             """);
 
         TelegramConfig config = TelegramConfig.loadFromConfigDir(configDir);

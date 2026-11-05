@@ -39,11 +39,13 @@ class BackendConfigTest {
             active: true
             pool:
               max-concurrent: 6
+            config-version: 1.0
             """);
         Files.writeString(translators.resolve("libre.yml"), """
             provider: libre
             active: false
             base-url: https://libretranslate.example
+            config-version: 1.0
             """);
 
         TranslatorManager manager = BackendConfig.load(dir);
@@ -58,6 +60,7 @@ class BackendConfigTest {
         Files.writeString(translators.resolve("libre.yml"), """
             provider: libre
             active: true
+            config-version: 1.0
             """);
 
         TranslatorManager manager = BackendConfig.load(dir);
@@ -72,6 +75,7 @@ class BackendConfigTest {
         Files.writeString(translators.resolve("google.yml"), """
             provider: google
             active: true
+            config-version: 1.0
             """);
 
         TranslatorManager manager = BackendConfig.load(dir);
@@ -87,10 +91,12 @@ class BackendConfigTest {
             provider: libre
             active: true
             base-url: https://libretranslate.example
+            config-version: 1.0
             """);
         Files.writeString(translators.resolve("google.yml"), """
             provider: google
             active: true
+            config-version: 1.0
             """);
 
         TranslatorManager manager = BackendConfig.load(dir);
@@ -107,6 +113,7 @@ class BackendConfigTest {
         Files.writeString(legacy.resolve("google.yml"), """
             provider: google
             active: true
+            config-version: 1.0
             """);
 
         assertEquals(legacy, BackendConfig.resolveTranslatorsDir(dir));
@@ -116,10 +123,12 @@ class BackendConfigTest {
     @Test
     void canonicalTranslatorsWinOverLegacy() throws Exception {
         Path canonical = canonicalTranslators();
-        Files.writeString(canonical.resolve("google.yml"), "provider: google\nactive: true\n");
+        Files.writeString(canonical.resolve("google.yml"),
+            "provider: google\nactive: true\nconfig-version: 1.0\n");
         Path legacy = dir.resolve("translators");
         Files.createDirectories(legacy);
-        Files.writeString(legacy.resolve("libre.yml"), "provider: libre\nactive: true\nbase-url: https://x\n");
+        Files.writeString(legacy.resolve("libre.yml"),
+            "provider: libre\nactive: true\nbase-url: https://x\nconfig-version: 1.0\n");
 
         TranslatorManager manager = BackendConfig.load(dir);
 
@@ -135,6 +144,7 @@ class BackendConfigTest {
             default-backend: libre
             context-override-enabled: false
             cache-max-size: 42
+            config-version: 1.0
             """);
 
         ChatTranslatorConfig.Config config = ChatTranslatorConfig.load(dir);
@@ -147,7 +157,8 @@ class BackendConfigTest {
     @Test
     void legacyChatTranslatorConfigStillLoads() throws Exception {
         Files.createDirectories(dir.resolve("chattranslator"));
-        Files.writeString(dir.resolve("chattranslator/config.yml"), "default-backend: google\n");
+        Files.writeString(dir.resolve("chattranslator/config.yml"),
+            "default-backend: google\nconfig-version: 1.0\n");
 
         ChatTranslatorConfig.Config config = ChatTranslatorConfig.load(dir);
 

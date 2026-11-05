@@ -36,6 +36,7 @@ class HttpConfigTest {
             bind: "127.0.0.1"
             authToken: "secret"
             hmacSecret: "hmac"
+            config-version: 1.0
             """);
 
         HttpConfig config = HttpConfig.loadFromConfigDir(configDir);
@@ -52,7 +53,8 @@ class HttpConfigTest {
     void enabledWithoutOutboundUrlIsNotUsable() throws Exception {
         Path configDir = dir.resolve("config/sync-http");
         Files.createDirectories(configDir);
-        Files.writeString(configDir.resolve("config.yml"), "enabled: true\ninboundPort: 8080\n");
+        Files.writeString(configDir.resolve("config.yml"),
+            "enabled: true\ninboundPort: 8080\nconfig-version: 1.0\n");
 
         assertFalse(HttpConfig.loadFromConfigDir(configDir).usable());
     }
@@ -65,6 +67,7 @@ class HttpConfigTest {
             enabled: true
             outboundUrl: "https://example.test/hook"
             inboundPort: 70000
+            config-version: 1.0
             """);
 
         assertFalse(HttpConfig.loadFromConfigDir(configDir).usable());

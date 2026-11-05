@@ -44,7 +44,7 @@ public final class ExampleExtension implements Extension {
 
     @Override
     public SemVer requiredCoreApi() {
-        return SemVer.of(2, 1, 0);
+        return SemVer.of(1, 0, 0);
     }
 
     @Override
@@ -119,7 +119,7 @@ public final class ExampleExtension implements Extension {
                 "wiki", "https://github.com/majhrs16/textformatter-suite/wiki",
                 "issues", "https://github.com/majhrs16/textformatter-suite/issues"
             ))
-            .minSuiteVersion("2.1.0")
+            .minSuiteVersion("1.0.0")
             .stable(true)
             .experimental(false)
             .build();

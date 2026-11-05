@@ -23,7 +23,7 @@ public final class Environment {
         String version = System.getProperty("java.version");
         int major = versionMajor(version);
         return new Environment(
-                SemVer.parse("2.1.0"),
+                SemVer.parse("1.0.0"),
                 SemVer.of(major, 0, 0));
     }
 

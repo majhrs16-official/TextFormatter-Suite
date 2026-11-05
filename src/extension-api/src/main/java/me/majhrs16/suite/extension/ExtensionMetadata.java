@@ -33,7 +33,7 @@ public record ExtensionMetadata(
         private String license = "GPL-3.0";
         private List<String> tags = List.of();
         private Map<String, String> links = Map.of();
-        private String minSuiteVersion = "2.1.0";
+        private String minSuiteVersion = "1.0.0";
         private String maxSuiteVersion = "";
         private boolean stable = true;
         private boolean experimental = false;

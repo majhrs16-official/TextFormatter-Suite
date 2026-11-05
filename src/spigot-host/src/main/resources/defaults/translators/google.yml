@@ -2,3 +2,5 @@ provider: google
 active: true
 pool:
   max-concurrent: 6
+
+config-version: 1.0

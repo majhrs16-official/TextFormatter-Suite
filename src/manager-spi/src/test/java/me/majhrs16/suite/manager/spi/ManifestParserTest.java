@@ -153,7 +153,7 @@ class ManifestParserTest {
 
     @Test
     void parseManifest_excludeAndProvide() throws Exception {
-        String content = "Name: iflow-vm\nVersion: 2.1.0\nChannel: stable\nType: PACKAGE\n"
+        String content = "Name: iflow-vm\nVersion: 1.0.0\nChannel: stable\nType: PACKAGE\n"
                 + "Dependencies: core-api\nExclude: iflow-firewall iflow-wasm\nProvide: iflow router\n"
                 + "Arch: none\nPlatform: common\nURL: \nOS: none\nSHA256: "
                 + "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\nSize: 0\nFiles: \n";
@@ -168,7 +168,7 @@ class ManifestParserTest {
     @Test
     void serialize_excludeAndProvideRoundTrip() throws Exception {
         PackageEntry entry = new PackageEntry(
-                "iflow-vm", "2.1.0", "stable", PackageType.PACKAGE,
+                "iflow-vm", "1.0.0", "stable", PackageType.PACKAGE,
                 List.of("core-api"), List.of("iflow-firewall", "iflow-wasm"), List.of("iflow"),
                 "none", "common", "", "none",
                 "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",

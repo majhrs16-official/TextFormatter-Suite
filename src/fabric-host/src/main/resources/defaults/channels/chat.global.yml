@@ -6,3 +6,5 @@ tooltips: []
 sounds:
   - { name: "entity.experience_orb.pickup", volume: 0.5, pitch: 1.0 }
 show-sender: true
+
+config-version: 1.0

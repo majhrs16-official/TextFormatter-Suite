@@ -36,7 +36,7 @@ class SyncTelegramModuleTest {
     void providesSyncSinkCapability() {
         ModuleDescriptor descriptor = new SyncTelegramModule().descriptor();
         assertTrue(descriptor.provides().contains(
-            Capability.of("sync-sink", SemVer.of(2, 1, 0))));
+            Capability.of("sync-sink", SemVer.of(1, 0, 0))));
         assertTrue(descriptor.requires().stream()
             .anyMatch(r -> r.name().equals("sync-bus")));
     }

@@ -63,6 +63,21 @@ class CommandRootConfigTest {
     }
 
     @Test
+    void missingConfigVersionIsReported() throws Exception {
+        Path file = dir.resolve("config/suite/commands.yml");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "root: [suite]\n");
+
+        ConfigLoader.LoadResult<CommandRoot> loaded =
+                CommandRootConfig.load(dir, FixtureModules.logger());
+
+        assertFalse(loaded.isValid());
+        assertEquals(CommandRoot.suite(), loaded.config());
+        assertTrue(loaded.errors().stream()
+                .anyMatch(error -> error.contains("version de configuracion no identificada")));
+    }
+
+    @Test
     void invalidRootIsReportedAndFallsBackToTheDefault() throws Exception {
         write("root: [Suite]\n");
 
@@ -105,6 +120,6 @@ class CommandRootConfigTest {
     private void write(String yaml) throws Exception {
         Path file = dir.resolve("config/suite/commands.yml");
         Files.createDirectories(file.getParent());
-        Files.writeString(file, yaml);
+        Files.writeString(file, yaml + "\nconfig-version: 1.0\n");
     }
 }

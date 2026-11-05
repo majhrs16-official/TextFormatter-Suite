@@ -18,7 +18,7 @@ class ExampleExtensionTest {
         assertEquals("example-extension", extension.id());
         assertEquals("Example Extension", extension.name());
         assertEquals(SemVer.of(1, 0, 0), extension.version());
-        assertEquals(SemVer.of(2, 1, 0), extension.requiredCoreApi());
+        assertEquals(SemVer.of(1, 0, 0), extension.requiredCoreApi());
         assertTrue(extension.dependencies().isEmpty());
         assertTrue(extension.requiredCapabilities().isEmpty());
     }

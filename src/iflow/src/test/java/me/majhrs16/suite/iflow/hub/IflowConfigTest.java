@@ -2,6 +2,7 @@ package me.majhrs16.suite.iflow.hub;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -9,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -31,6 +33,7 @@ class IflowConfigTest {
         Files.writeString(dir.resolve("config.yml"), """
                 engine: wasm
                 fallback-on-unavailable: false
+                config-version: 1.0
                 """);
 
         IflowConfig config = IflowConfig.load(dir, logger());
@@ -41,9 +44,16 @@ class IflowConfigTest {
 
     @Test
     void acceptsDefaultBackendAlias() throws Exception {
-        Files.writeString(dir.resolve("config.yml"), "default-backend: vm\n");
+        Files.writeString(dir.resolve("config.yml"), "default-backend: vm\nconfig-version: 1.0\n");
 
         assertEquals("iflow-vm", IflowConfig.load(dir, logger()).engine());
+    }
+
+    @Test
+    void missingConfigVersionFailsExplicitly() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), "engine: wasm\n");
+
+        assertThrows(ConfigVersionException.class, () -> IflowConfig.load(dir, logger()));
     }
 
     @Test

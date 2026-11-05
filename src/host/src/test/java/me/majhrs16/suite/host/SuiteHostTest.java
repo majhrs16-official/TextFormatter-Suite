@@ -71,19 +71,23 @@ class SuiteHostTest {
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
+            config-version: 1.0
             """);
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
+            config-version: 1.0
             """);
         Files.writeString(dir.resolve("chattranslator/config.yml"), """
             default-backend: "fake"
             context-override-enabled: true
+            config-version: 1.0
             """);
         Files.writeString(dir.resolve("chattranslator/translators/fake.yml"), """
             provider: "fake"
             active: true
+            config-version: 1.0
             """);
     }
 
@@ -164,6 +168,7 @@ class SuiteHostTest {
             send-permission: cht.chat.send
             messages:
               - '<gray><tr>%content%</tr></gray>'
+            config-version: 1.0
             """);
         PermissionChecker onlySenderCanSend = (actor, permission) -> !permission.equals("cht.chat.send");
         SuiteHost host = HostFixture.bootstrap(dir, onlySenderCanSend,

@@ -122,6 +122,7 @@ class MessageDispatcherTest {
         Files.writeString(dir.resolve("config.yml"), """
             general:
               language: en
+            config-version: 1.0
             """);
         String soundBlock = withSound ? """
             sounds:
@@ -133,7 +134,9 @@ class MessageDispatcherTest {
             name: chat
             messages:
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
-            """ + soundBlock);
+            """ + soundBlock + """
+            config-version: 1.0
+            """);
     }
 
     private MessageDispatcher dispatcher(RecordingDelivery delivery,
@@ -338,6 +341,7 @@ class MessageDispatcherTest {
               language: en
             sonido:
               enabled: false
+            config-version: 1.0
             """);
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
@@ -347,6 +351,7 @@ class MessageDispatcherTest {
               - name: entity.experience_orb.pickup
                 volume: 1.0
                 pitch: 1.0
+            config-version: 1.0
             """);
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");

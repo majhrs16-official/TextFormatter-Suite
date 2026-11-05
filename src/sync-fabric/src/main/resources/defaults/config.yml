@@ -2,3 +2,5 @@ enabled: true
 # Send an extra chat copy to the server console.
 # Fabric API has no cancellable chat event; vanilla chat remains visible.
 log-chat-to-console: true
+
+config-version: 1.0

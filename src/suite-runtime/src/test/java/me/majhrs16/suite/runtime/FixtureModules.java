@@ -130,7 +130,7 @@ final class FixtureModules {
                     public ModuleDescriptor descriptor() {
                         return ModuleDescriptor.builder("MODULE_ID")
                                 .version(SemVer.parse("MODULE_VERSION"))
-                                .contractVersion(SemVer.of(2, 1, 0))
+                                .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
                                 .build();
                     }
@@ -213,7 +213,7 @@ final class FixtureModules {
                         if (descriptor == null) {
                             ModuleDescriptor.Builder builder = ModuleDescriptor.builder("MODULE_ID")
                                     .version(SemVer.parse("MODULE_VERSION"))
-                                    .contractVersion(SemVer.of(2, 1, 0))
+                                    .contractVersion(SemVer.of(1, 0, 0))
                                     .jvmRange(17, 0);
                             PROVIDE_LINE
                             REQUIRE_LINE
@@ -306,7 +306,7 @@ final class FixtureModules {
                     public ModuleDescriptor descriptor() {
                         return ModuleDescriptor.builder("MODULE_ID")
                                 .version(SemVer.parse("MODULE_VERSION"))
-                                .contractVersion(SemVer.of(2, 1, 0))
+                                .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
                                 .build();
                     }
@@ -396,7 +396,7 @@ final class FixtureModules {
                     public ModuleDescriptor descriptor() {
                         return ModuleDescriptor.builder("MODULE_ID")
                                 .version(SemVer.parse("MODULE_VERSION"))
-                                .contractVersion(SemVer.of(2, 1, 0))
+                                .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
                                 .build();
                     }
@@ -454,9 +454,9 @@ final class FixtureModules {
                     public ModuleDescriptor descriptor() {
                         return ModuleDescriptor.builder("MODULE_ID")
                                 .version(SemVer.parse("MODULE_VERSION"))
-                                .contractVersion(SemVer.of(2, 1, 0))
+                                .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
-                                .require(Requirement.atLeast("sync-bus", SemVer.of(2, 1, 0)))
+                                .require(Requirement.atLeast("sync-bus", SemVer.of(1, 0, 0)))
                                 .build();
                     }
 
@@ -544,9 +544,9 @@ final class FixtureModules {
                     public ModuleDescriptor descriptor() {
                         return ModuleDescriptor.builder("MODULE_ID")
                                 .version(SemVer.parse("MODULE_VERSION"))
-                                .contractVersion(SemVer.of(2, 1, 0))
+                                .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
-                                .provide(Capability.of("discord-transport", SemVer.of(2, 1, 0)))
+                                .provide(Capability.of("discord-transport", SemVer.of(1, 0, 0)))
                                 .build();
                     }
 
@@ -630,9 +630,9 @@ final class FixtureModules {
                     public ModuleDescriptor descriptor() {
                         return ModuleDescriptor.builder("MODULE_ID")
                                 .version(SemVer.parse("MODULE_VERSION"))
-                                .contractVersion(SemVer.of(2, 1, 0))
+                                .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
-                                .provide(Capability.of("velocity-transport", SemVer.of(2, 1, 0)))
+                                .provide(Capability.of("velocity-transport", SemVer.of(1, 0, 0)))
                                 .build();
                     }
 

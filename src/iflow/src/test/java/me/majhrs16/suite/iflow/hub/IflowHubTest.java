@@ -64,6 +64,7 @@ class IflowHubTest {
         Files.writeString(dir.resolve("config.yml"), """
                 engine: iflow-wasm
                 fallback-on-unavailable: true
+                config-version: 1.0
                 """);
         FakeContext context = new FakeContext(dir);
         FakeRouter firewall = new FakeRouter();
@@ -84,6 +85,7 @@ class IflowHubTest {
         Files.writeString(dir.resolve("config.yml"), """
                 engine: iflow-wasm
                 fallback-on-unavailable: true
+                config-version: 1.0
                 """);
         FakeContext context = new FakeContext(dir);
         FakeRouter vm = new FakeRouter();
@@ -107,6 +109,7 @@ class IflowHubTest {
         Files.writeString(dir.resolve("config.yml"), """
                 engine: iflow-wasm
                 fallback-on-unavailable: false
+                config-version: 1.0
                 """);
         FakeContext context = new FakeContext(dir);
         context.services.register(IflowBackend.class,

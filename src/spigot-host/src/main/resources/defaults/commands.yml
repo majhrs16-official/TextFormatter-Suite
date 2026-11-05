@@ -10,3 +10,5 @@
 root: [suite]
 aliases:
   - [txf]
+
+config-version: 1.0

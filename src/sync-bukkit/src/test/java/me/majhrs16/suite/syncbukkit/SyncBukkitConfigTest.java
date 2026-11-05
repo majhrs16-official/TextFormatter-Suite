@@ -30,6 +30,7 @@ class SyncBukkitConfigTest {
                 enabled: false
                 claim-mode: clear-recipients
                 log-chat-to-console: false
+                config-version: 1.0
                 """);
 
         SyncBukkitConfig config = SyncBukkitConfig.loadFromConfigDir(configDir);

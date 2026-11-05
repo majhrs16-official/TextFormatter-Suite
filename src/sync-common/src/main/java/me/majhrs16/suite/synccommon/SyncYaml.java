@@ -1,5 +1,7 @@
 package me.majhrs16.suite.synccommon;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -37,7 +39,13 @@ public final class SyncYaml {
         }
         try {
             Object root = YAML.load(Files.readString(file));
-            return root instanceof Map<?, ?> ? (Map<String, Object>) root : Map.of();
+            if (!(root instanceof Map<?, ?> map)) {
+                return Map.of();
+            }
+            ConfigVersion.require(map, file);
+            return (Map<String, Object>) map;
+        } catch (ConfigVersionException exception) {
+            throw exception;
         } catch (IOException | RuntimeException ignored) {
             return Map.of();
         }

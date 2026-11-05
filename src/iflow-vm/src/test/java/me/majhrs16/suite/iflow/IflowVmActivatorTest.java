@@ -39,7 +39,7 @@ class IflowVmActivatorTest {
     @Test
     void declaresRouterCapabilityForNeutralConsumers() {
         assertTrue(new IflowVmActivator().descriptor().provides()
-                .contains(Capability.of("router", SemVer.of(2, 1, 0))));
+                .contains(Capability.of("router", SemVer.of(1, 0, 0))));
     }
 
     @Test

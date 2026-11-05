@@ -32,6 +32,7 @@ class ObservabilityConfigTest {
             enabled: true
             metricsPort: 0
             metricsBind: 127.0.0.1
+            config-version: 1.0
             """);
 
         ObservabilityConfig config = ObservabilityConfig.loadFromConfigDir(configDir);
@@ -44,7 +45,8 @@ class ObservabilityConfigTest {
     void disabledConfigIsNotUsable() throws Exception {
         Path configDir = dir.resolve("config/observability");
         Files.createDirectories(configDir);
-        Files.writeString(configDir.resolve("config.yml"), "enabled: false\nmetricsPort: 9090\n");
+        Files.writeString(configDir.resolve("config.yml"),
+            "enabled: false\nmetricsPort: 9090\nconfig-version: 1.0\n");
 
         assertFalse(ObservabilityConfig.loadFromConfigDir(configDir).usable());
     }
@@ -53,7 +55,8 @@ class ObservabilityConfigTest {
     void invalidPortIsNotUsable() throws Exception {
         Path configDir = dir.resolve("config/observability");
         Files.createDirectories(configDir);
-        Files.writeString(configDir.resolve("config.yml"), "enabled: true\nmetricsPort: 70000\n");
+        Files.writeString(configDir.resolve("config.yml"),
+            "enabled: true\nmetricsPort: 70000\nconfig-version: 1.0\n");
 
         assertFalse(ObservabilityConfig.loadFromConfigDir(configDir).usable());
     }

@@ -2,3 +2,5 @@ enabled: false
 token: ""
 channel: 0
 intents: [GUILD_MESSAGES, MESSAGE_CONTENT]
+
+config-version: 1.0

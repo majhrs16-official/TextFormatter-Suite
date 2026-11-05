@@ -70,6 +70,6 @@ configurations.configureEach {
 }
 
 // F6 — neutral package. The technology adapter is a separate package.
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'sync-common@>=2.1.0'
+ext.moduleVersion = '1.0.0'
+ext.moduleDependencies = 'sync-common@>=1.0.0'
 apply from: rootProject.file('gradle/module-package.gradle')

@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CoreTranslatorModuleTest {
 
     private static final Environment ENV =
-        new Environment(SemVer.of(2, 1, 0), SemVer.of(21, 0, 0));
+        new Environment(SemVer.of(1, 0, 0), SemVer.of(21, 0, 0));
 
     @Test
     @DisplayName("declara versión/contrato 1.0.0 y la capability coretranslator")
@@ -47,7 +47,7 @@ class CoreTranslatorModuleTest {
         Requirement requirement = descriptor.requires().iterator().next();
 
         assertThat(requirement.satisfiedBy(SemVer.of(1, 0, 0))).isTrue();
-        assertThat(requirement.satisfiedBy(SemVer.of(2, 1, 0))).isTrue();
+        assertThat(requirement.satisfiedBy(SemVer.of(1, 0, 0))).isTrue();
         assertThat(requirement.satisfiedBy(SemVer.of(0, 9, 0))).isFalse();
     }
 

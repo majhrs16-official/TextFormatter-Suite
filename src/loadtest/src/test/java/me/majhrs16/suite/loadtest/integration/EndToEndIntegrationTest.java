@@ -168,6 +168,7 @@ class EndToEndIntegrationTest {
               enabled: true
             chat:
               claim-mode: cancel-event
+            config-version: 1.0
             """;
         Files.writeString(dir.resolve("config.yml"), configYaml);
 
@@ -183,12 +184,14 @@ class EndToEndIntegrationTest {
               - "<green>%content%</green>"
             tooltips: []
             sounds: []
+            config-version: 1.0
             """;
         Files.writeString(dir.resolve("config/textformatter/channels/chat.global.yml"), channelYaml);
         
         String translatorYaml = """
             provider: google
             active: true
+            config-version: 1.0
             """;
         Files.writeString(dir.resolve("translators/google.yml"), translatorYaml);
     }

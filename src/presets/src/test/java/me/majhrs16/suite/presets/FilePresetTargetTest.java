@@ -33,7 +33,7 @@ class FilePresetTargetTest {
             List.of("<green>%content%</green>"), List.of("<gray>tip</gray>"),
             List.of(new Preset.PresetSound("bell", 0.8f, 1.2f)));
         Preset preset = new Preset(
-            "demo", "Demo", "", "", "1.0.0", "2.1.0", List.of(),
+            "demo", "Demo", "", "", "1.0.0", "1.0.0", List.of(),
             new Preset.PresetConfig(true, "es", true, false, "clear-recipients"),
             List.of(channel),
             List.of(new Preset.PresetTranslator("libre", true, "https://libre", "key", 4)),

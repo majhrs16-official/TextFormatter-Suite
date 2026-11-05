@@ -1,6 +1,6 @@
 # TextFormatter Suite Information
 name=TextFormatter Suite
-version=2.1.0-SNAPSHOT
+version=1.0.0
 group=me.majhrs16
 description=Chat translation and formatting platform
 persistence=basic

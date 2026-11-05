@@ -41,12 +41,12 @@ class TextFormatterModuleTest {
         ModuleDescriptor descriptor = new TextFormatterModule().descriptor();
 
         assertEquals("textformatter", descriptor.name());
-        assertEquals("2.1.0", descriptor.version().toString());
-        assertEquals("2.1.0", descriptor.contractVersion().toString());
+        assertEquals("1.0.0", descriptor.version().toString());
+        assertEquals("1.0.0", descriptor.contractVersion().toString());
         assertTrue(descriptor.jvmMin() <= Runtime.version().feature());
 
-        Capability channelApi = Capability.of("channel-api", me.majhrs16.suite.api.SemVer.of(2, 1, 0));
-        Capability formatter = Capability.of("formatter", me.majhrs16.suite.api.SemVer.of(2, 1, 0));
+        Capability channelApi = Capability.of("channel-api", me.majhrs16.suite.api.SemVer.of(1, 0, 0));
+        Capability formatter = Capability.of("formatter", me.majhrs16.suite.api.SemVer.of(1, 0, 0));
         assertTrue(descriptor.provides().contains(channelApi));
         assertTrue(descriptor.provides().contains(formatter));
     }

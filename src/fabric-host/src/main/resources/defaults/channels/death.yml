@@ -9,3 +9,4 @@ messages:
   - "<red>%content%</red>"
 tooltips: []
 sounds: []
+config-version: 1.0

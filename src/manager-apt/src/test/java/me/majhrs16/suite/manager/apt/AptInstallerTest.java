@@ -39,10 +39,10 @@ class AptInstallerTest {
     @Test
     void confirmationResultBuildsAptStylePrompt() {
         RepositoryManager.PackageCandidate candidate = new RepositoryManager.PackageCandidate(
-                "iflow-vm", "2.1.0", "stable", "local", "https://example.com/iflow-vm.zip",
+                "iflow-vm", "1.0.0", "stable", "local", "https://example.com/iflow-vm.zip",
                 100, "sha256", 0);
         PackageEntry installed = new PackageEntry(
-                "iflow-firewall", "2.1.0", "stable", PackageType.PACKAGE,
+                "iflow-firewall", "1.0.0", "stable", PackageType.PACKAGE,
                 List.of(), List.of("iflow-vm"), List.of("iflow"),
                 "none", "common", "", "none", "sha256", 100,
                 Map.of(), "", "", Map.of());
@@ -53,8 +53,8 @@ class AptInstallerTest {
         AptInstaller.InstallResult result = AptInstaller.InstallResult.confirmation(plan);
 
         assertTrue(result.requiresConfirmation());
-        assertEquals("Deseas instalar estos paquetes?: iflow-vm 2.1.0\n"
-                + "  Reemplazarán a: iflow-firewall 2.1.0", result.confirmationMessage());
+        assertEquals("Deseas instalar estos paquetes?: iflow-vm 1.0.0\n"
+                + "  Reemplazarán a: iflow-firewall 1.0.0", result.confirmationMessage());
     }
 
     @Test

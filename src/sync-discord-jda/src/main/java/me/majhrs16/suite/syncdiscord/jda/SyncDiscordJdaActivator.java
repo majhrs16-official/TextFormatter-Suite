@@ -16,10 +16,10 @@ public final class SyncDiscordJdaActivator implements ModuleActivator {
     @Override
     public ModuleDescriptor descriptor() {
         return ModuleDescriptor.builder("sync-discord-jda")
-                .version(SemVer.of(2, 1, 0))
-                .contractVersion(SemVer.of(2, 1, 0))
+                .version(SemVer.of(1, 0, 0))
+                .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
-                .provide(Capability.of("discord-transport", SemVer.of(2, 1, 0)))
+                .provide(Capability.of("discord-transport", SemVer.of(1, 0, 0)))
                 .build();
     }
 

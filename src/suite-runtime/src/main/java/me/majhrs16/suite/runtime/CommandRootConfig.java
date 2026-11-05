@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 import me.majhrs16.suite.api.command.CommandRoot;
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostPaths;
@@ -53,6 +55,7 @@ final class CommandRootConfig {
                 errors.add("commands.yml root is not a map");
                 return degraded(errors);
             }
+            ConfigVersion.require(map, file);
 
             List<String> segments = null;
             Object rootValue = map.get("root");
@@ -72,6 +75,9 @@ final class CommandRootConfig {
                 return degraded(errors);
             }
             return ConfigLoader.LoadResult.success(new CommandRoot(segments, aliases));
+        } catch (ConfigVersionException failure) {
+            errors.add(failure.getMessage());
+            return degraded(errors);
         } catch (IOException | RuntimeException failure) {
             errors.add("cannot read commands.yml: " + failure.getMessage());
             if (logger != null) {

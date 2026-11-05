@@ -21,13 +21,14 @@ falta de documentos, sino la convivencia de **tres regímenes** en el mismo árb
 2. el régimen anterior (`2.1.0`, `iflow.engine.kind`, exclusividad de motores, rutas planas);
 3. documentos históricos presentados como estado actual.
 
-Resultado: **10 hallazgos confirmados** (D-001…D-010). Se cerraron 7; 2 quedan parciales porque su
-cierre exige código (D-002 y D-003) y 1 sigue pendiente de código (D-004). El baseline de
-código quedó limpio en `c5992230` (CoreTranslator + contrato `>= 1.0.0`).
+Resultado: **10 hallazgos confirmados** (D-001…D-010). Se cerraron 8; D-002 y D-004 quedan
+parciales porque su cierre exige la purga de rutas y esquema legacy de P0.3. El baseline de
+código quedó limpio en `c5992230` (CoreTranslator + contrato `>= 1.0.0`); P0.2 cerró el reset de
+versiones, los `config-version` y los validadores principales el 2026-11-04.
 
 | Severidad | Hallazgos | Estado documental |
 |---|---|---|
-| Alta (P0) | D-001, D-002, D-003, D-004, D-008 | 2 corregidos (D-001, D-008); 2 parciales (D-002, D-003); 1 pendiente de código (D-004) |
+| Alta (P0) | D-001, D-002, D-003, D-004, D-008 | 3 corregidos (D-001, D-003, D-008); 2 parciales (D-002, D-004) |
 | Media (P1) | D-005, D-007, D-009, D-010 | 4 corregidos (D-005, D-007, D-009, D-010) |
 | Baja (P2) | D-006 | Corregido |
 
@@ -94,7 +95,7 @@ Reglas derivadas:
 ### D-003 — Especificaciones con contrato legacy y versiones `2.x`
 
 - **Severidad:** Alta (P0).
-- **Estado:** **Parcial** (documentación corregida; código pendiente en P0.2).
+- **Estado:** **Corregido** (documentación y código, 2026-11-04).
 - **Evidencia (baseline):**
   - `docs/prompts/especificaciones/commands-v2.md` documentaba `commands.yml` en la raíz del data
     folder, prioridad de la ruta canónica y migración de `base-name` («se elimina en F8»).
@@ -108,14 +109,18 @@ Reglas derivadas:
   `1.0`, ruta canónica única, `config-version: "1.0"` en los ejemplos y `minSuiteVersion: "1.0.0"`.
   `config-schema-v2.2.md` ahora separa el ZIP del editor del layout de runtime con una tabla de
   correspondencia.
-- **Pendiente:** `ExtensionMetadata.java:36` sigue con `2.1.0`; reset general de versiones y
-  `config-version` en todos los YAML (P0.2).
+- **Resolución de código (P0.2):** `ExtensionMetadata` y los `build.gradle` de módulo quedaron en
+  `1.0.0`/`>= 1.0.0`; los 29 YAML de `src/*/src/main/resources` (todos salvo `plugin.yml`)
+  declaran `config-version: 1.0`. `ConfigVersion`/`ConfigVersionException` validan la clave y
+  fallan con el mensaje contractual cuando falta. Los `rules.yml` con raíz de lista quedan para
+  P0.3 porque ese esquema no admite la clave raíz.
 
 ### D-004 — Código con deuda P0 que contradice la documentación
 
 - **Severidad:** Alta (P0).
-- **Estado:** **Pendiente (código)**. No se modificó código de producción en esta ronda.
-- **Evidencia:**
+- **Estado:** **Parcial (código, 2026-11-04)**. P0.2 corrigió versiones y `config-version`; las
+  rutas planas, `iflow.engine.kind` y el esquema de reglas legacy se eliminan en P0.3.
+- **Evidencia (baseline):**
   - `src/host/.../HostPaths.java:66-85`: `suiteConfig`, `suiteMessages` y `suiteCommands` aceptan
     `config.yml`, `messages.yml` y `commands.yml` en la raíz del data folder.
   - `src/suite-runtime/.../DefaultConfigInstaller.java:97-120`: copia archivos legacy a la ruta
@@ -127,9 +132,10 @@ Reglas derivadas:
   - Varios `build.gradle` de módulo (`gtranslate`, `ltranslate`, `logger`, `transport`,
     `chattranslator`, `web-editor`) declaran `2.1.0` o `>=2.1.0`.
 - **Impacto:** la documentación ya describe el contrato correcto, pero el runtime todavía acepta
-  el esquema viejo. Mientras P0.2/P0.3 no cierren, la deuda es real y no una excepción.
-- **Resolución:** registrada en `PLAN.md` (P0.2/P0.3 y deuda conocida). El código se corrige con
-  tests de regresión en una tarea autorizada específica.
+  parte del esquema viejo. Mientras P0.3 no cierre, la deuda es real y no una excepción.
+- **Resolución:** P0.2 eliminó las versiones `2.x` y añadió la validación de `config-version`.
+  `PLAN.md` mantiene P0.3 como la tarea que retira rutas planas, `iflow.engine.kind`, el fallback
+  de `Router` y el esquema de reglas legacy, con tests de regresión.
 
 ### D-005 — Enlaces rotos y READMEs ausentes
 
@@ -294,8 +300,8 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 
 ## 7. Próximos pasos
 
-1. Ejecutar P0.2: reset de versiones a `1.0.0`, `config-version: 1.0` en todos los YAML y
-   `minSuiteVersion: "1.0.0"`, con test de parser que falle si falta.
+1. ~~Ejecutar P0.2~~ **Hecho (2026-11-04):** versiones a `1.0.0`, `config-version: 1.0` en los
+   29 YAML de runtime, `minSuiteVersion: "1.0.0"` y validadores con test de regresión.
 2. Ejecutar P0.3: eliminar `iflow.engine.kind`, rutas planas, fallbacks de `HostPaths`,
    migración de `DefaultConfigInstaller` y el fallback de `Router` en `SuiteRuntime`, con tests de
    regresión.
@@ -313,6 +319,9 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
   pendientes, sin push (`c5992230`).
 - **A3:** la auditoría documental fue solo documentación; el cierre de D-009 se hizo después con
   código y test. El resto de arreglos de código van a P0.2/P0.3.
+- **A4:** P0.2 se ejecutó con reset de versiones, `config-version` en los YAML de runtime y
+  `ConfigVersion` como contrato único de validación. El esquema de reglas con raíz de lista se
+  difiere a P0.3 porque no puede declarar la clave en la raíz.
 
 ---
 

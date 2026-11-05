@@ -38,6 +38,7 @@ class WebSocketSyncConfigTest {
             token: secreto
             port: 9099
             bind: 0.0.0.0
+            config-version: 1.0
             """);
 
         WebSocketSyncConfig config = WebSocketSyncConfig.load(dir);
@@ -50,14 +51,15 @@ class WebSocketSyncConfigTest {
 
     @Test
     void enabledWithoutTokenIsNotUsable() throws Exception {
-        Files.writeString(canonical(), "enabled: true\n");
+        Files.writeString(canonical(), "enabled: true\nconfig-version: 1.0\n");
 
         assertFalse(WebSocketSyncConfig.load(dir).usable());
     }
 
     @Test
     void invalidPortFallsBackToDefault() throws Exception {
-        Files.writeString(canonical(), "enabled: true\ntoken: t\nport: 70000\n");
+        Files.writeString(canonical(),
+            "enabled: true\ntoken: t\nport: 70000\nconfig-version: 1.0\n");
 
         assertEquals(WebSocketSyncConfig.DEFAULT_PORT, WebSocketSyncConfig.load(dir).port());
     }
@@ -71,6 +73,7 @@ class WebSocketSyncConfigTest {
             token: module-token
             port: 9098
             bind: 127.0.0.1
+            config-version: 1.0
             """);
 
         WebSocketSyncConfig config = WebSocketSyncConfig.loadFromConfigDir(configDir);
@@ -84,7 +87,8 @@ class WebSocketSyncConfigTest {
     void legacyFileIsReadDuringMigration() throws Exception {
         Path legacy = dir.resolve("sync/websocket.yml");
         Files.createDirectories(legacy.getParent());
-        Files.writeString(legacy, "enabled: true\ntoken: viejo\nport: 9080\n");
+        Files.writeString(legacy,
+            "enabled: true\ntoken: viejo\nport: 9080\nconfig-version: 1.0\n");
 
         WebSocketSyncConfig config = WebSocketSyncConfig.load(dir);
 

@@ -9,3 +9,4 @@ messages:
   - "<green>+</green> %player_name% joined the game"
 tooltips: []
 sounds: []
+config-version: 1.0

@@ -35,7 +35,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };
@@ -63,7 +63,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };
@@ -88,7 +88,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };
@@ -114,7 +114,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };
@@ -146,7 +146,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };
@@ -172,7 +172,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };
@@ -200,7 +200,7 @@ class ExtensionContractTest {
                     .name("Test Extension")
                     .description("Description")
                     .author("Author")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build(); 
             }
         };
@@ -230,7 +230,7 @@ class ExtensionContractTest {
                 return ExtensionMetadata.builder()
                     .id("test")
                     .name("Test")
-                    .minSuiteVersion("2.1.0")
+                    .minSuiteVersion("1.0.0")
                     .build();
             }
         };

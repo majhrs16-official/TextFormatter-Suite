@@ -2,6 +2,7 @@ package me.majhrs16.suite.textformatter;
 
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.config.ConfigVersion;
 import me.majhrs16.suite.api.message.Formats;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.SoundSpec;
@@ -126,6 +127,7 @@ public final class ChannelConfig {
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) root;
+        ConfigVersion.require(map, file);
 
         String configuredName = str(map.get("name"), null);
         String name = configuredName == null || configuredName.isBlank()

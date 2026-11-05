@@ -36,7 +36,7 @@ class GTranslateModuleTest {
     void providesTranslatorCapability() {
         ModuleDescriptor descriptor = new GTranslateModule().descriptor();
         assertTrue(descriptor.provides().contains(
-            Capability.of("translator", SemVer.of(2, 1, 0))));
+            Capability.of("translator", SemVer.of(1, 0, 0))));
     }
 
     @Test

@@ -447,7 +447,7 @@ class SuiteRuntimeTest {
     private void writeCommands(String yaml) throws Exception {
         Path file = tempDir.resolve("data/config/suite/commands.yml");
         Files.createDirectories(file.getParent());
-        Files.writeString(file, yaml);
+        Files.writeString(file, yaml + "\nconfig-version: 1.0\n");
     }
 
     @Test

@@ -35,6 +35,7 @@ class DiscordConfigTest {
             enabled: true
             token: discord-token
             channel: 12345
+            config-version: 1.0
             """);
 
         DiscordConfig config = DiscordConfig.load(dir);
@@ -54,6 +55,7 @@ class DiscordConfigTest {
             token: discord-token
             channel: 12345
             transport: jdk
+            config-version: 1.0
             """);
 
         assertEquals("jdk", DiscordConfig.load(dir).transport());
@@ -61,14 +63,14 @@ class DiscordConfigTest {
 
     @Test
     void enabledWithoutTokenIsNotUsable() throws Exception {
-        Files.writeString(canonical(), "enabled: true\nchannel: 1\n");
+        Files.writeString(canonical(), "enabled: true\nchannel: 1\nconfig-version: 1.0\n");
 
         assertFalse(DiscordConfig.load(dir).usable());
     }
 
     @Test
     void missingChannelStillAllowsConnection() throws Exception {
-        Files.writeString(canonical(), "enabled: true\ntoken: t\n");
+        Files.writeString(canonical(), "enabled: true\ntoken: t\nconfig-version: 1.0\n");
 
         DiscordConfig config = DiscordConfig.load(dir);
 
@@ -81,7 +83,8 @@ class DiscordConfigTest {
     void legacyFileIsReadDuringMigration() throws Exception {
         Path legacy = dir.resolve("sync/discord.yml");
         Files.createDirectories(legacy.getParent());
-        Files.writeString(legacy, "enabled: true\ntoken: viejo\nchannel: 9\n");
+        Files.writeString(legacy,
+            "enabled: true\ntoken: viejo\nchannel: 9\nconfig-version: 1.0\n");
 
         DiscordConfig config = DiscordConfig.load(dir);
 

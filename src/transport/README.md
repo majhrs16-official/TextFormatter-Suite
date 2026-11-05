@@ -4,7 +4,7 @@
 >
 > **Packaging**: `transport` is a `DEPENDENCY` package. The manager installs
 > `manager/library/dependencies/transport.jar` and exposes it to modules that
-> declare `transport@>=2.1.0`; it is not activated as a feature.
+> declare `transport@>=1.0.0`; it is not activated as a feature.
 
 ---
 

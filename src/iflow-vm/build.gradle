@@ -140,6 +140,6 @@ tasks.register('iflowAsm', Exec) {
 
 // F5 — distribution ZIP for the manager. The logger is a shared dependency
 // package, loaded from library/dependencies by the module classloader.
-ext.moduleVersion = '2.1.0'
-ext.moduleDependencies = 'logger@>=2.1.0,jackson-databind@>=2.17.1'
+ext.moduleVersion = '1.0.0'
+ext.moduleDependencies = 'logger@>=1.0.0,jackson-databind@>=2.17.1'
 apply from: rootProject.file('gradle/module-package.gradle')

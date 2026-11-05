@@ -14,7 +14,7 @@ module classloader makes it visible to consumers such as `iflow-vm`.
 - No `ModuleActivator`: dependency packages are not activated; they are only
   added to the classpath of the modules that declare them.
 - Consumers declare the dependency in `METADATA/package.list`, for example
-  `Dependencies: logger@>=2.1.0`.
+  `Dependencies: logger@>=1.0.0`.
 - `LoggerModule` remains the legacy `Module` descriptor for kernel-based
   loaders; the package runtime does not activate it.
 

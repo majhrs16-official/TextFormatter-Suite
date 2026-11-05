@@ -2,6 +2,7 @@ package me.majhrs16.suite.synccommon;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -9,6 +10,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -51,6 +54,7 @@ class SyncYamlTest {
             servers: [lobby, " survival "]
             delay: PT5S
             millis: 250
+            config-version: 1.0
             """);
 
         Map<String, Object> map = SyncYaml.readMap(file);
@@ -64,6 +68,14 @@ class SyncYamlTest {
         assertEquals(List.of("lobby", "survival"), SyncYaml.stringList(map, "servers"));
         assertEquals(Duration.ofSeconds(5), SyncYaml.duration(map, "delay", Duration.ZERO));
         assertEquals(Duration.ofMillis(250), SyncYaml.duration(map, "millis", Duration.ZERO));
+    }
+
+    @Test
+    void missingConfigVersionFailsExplicitly() throws Exception {
+        Path file = dir.resolve("noversion.yml");
+        Files.writeString(file, "enabled: true\n");
+
+        assertThrows(ConfigVersionException.class, () -> SyncYaml.readMap(file));
     }
 
     @Test

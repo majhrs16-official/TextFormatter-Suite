@@ -1,5 +1,7 @@
 package me.majhrs16.suite.host.config;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
@@ -81,6 +83,8 @@ public final class ConfigLoader {
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) root;
 
+            ConfigVersion.require(map, file);
+
             boolean quickLook = bool(map.get(ConfigPath.QUICK_LOOK.key()), true);
             boolean parallel = bool(nested(map, ConfigPath.IFLOW, ConfigPath.IFLOW_ENGINE, ConfigPath.IFLOW_ENGINE_PARALLEL), false);
             HostConfig.Engine engine = engine(nested(map, ConfigPath.IFLOW, ConfigPath.IFLOW_ENGINE, ConfigPath.IFLOW_ENGINE_KIND), logger);
@@ -93,6 +97,11 @@ public final class ConfigLoader {
             List<String> moduleAllowlist = parseModuleAllowlist(map);
 
             return LoadResult.success(new HostConfig(quickLook, defaultLang, parallel, engine, sound, claimMode, logChatToConsole, repositories, moduleAllowlist));
+        } catch (ConfigVersionException e) {
+            String msg = e.getMessage();
+            if (logger != null) logger.error(msg);
+            errors.add(msg);
+            return LoadResult.degraded(HostConfig.defaults(), errors);
         } catch (IOException | RuntimeException e) {
             String msg = "Failed to load config.yml: " + e.getMessage();
             if (logger != null) logger.error(msg, e);

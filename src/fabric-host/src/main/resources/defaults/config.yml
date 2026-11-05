@@ -11,3 +11,5 @@ iflow:
 
 chat:
   global-prefix: ""
+
+config-version: 1.0

@@ -387,7 +387,7 @@ Module.initialize() called in order
 
 > ⚠️ **Duplicate MessageCodec**: Both `transport` and `sync-http`/`sync-socket`/`sync-discord` have `MessageCodec` classes. The `transport` one is the base abstraction; sync modules have their own (possibly for historical reasons).
 
-> ⚠️ **Incomplete migration**: `fabric-host` uses Maven coordinates for dependencies (e.g., `me.majhrs16:suite-core-api:2.1.0-SNAPSHOT`) while `spigot-host` uses Gradle project dependencies. This suggests `fabric-host` may be built/published separately.
+> ℹ️ **Dependency coordinates**: `fabric-host` and `spigot-host` both consume the suite modules as Gradle project dependencies. Maven coordinates only appear in external dependency examples, not in the host build.
 
 ---
 

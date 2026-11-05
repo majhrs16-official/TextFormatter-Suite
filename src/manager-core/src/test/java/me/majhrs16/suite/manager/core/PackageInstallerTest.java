@@ -432,12 +432,12 @@ class PackageInstallerTest {
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
         Path firewallZip = tempDir.resolve("iflow-firewall.zip");
-        createZipWithMetadata(firewallZip, "iflow-firewall", "2.1.0", "stable",
+        createZipWithMetadata(firewallZip, "iflow-firewall", "1.0.0", "stable",
                 "firewall.jar", "firewall".getBytes(), "", "iflow-vm", "iflow");
         installer.install(firewallZip, false);
 
         Path vmZip = tempDir.resolve("iflow-vm.zip");
-        createZipWithMetadata(vmZip, "iflow-vm", "2.1.0", "stable",
+        createZipWithMetadata(vmZip, "iflow-vm", "1.0.0", "stable",
                 "vm.jar", "vm".getBytes(), "", "", "iflow");
 
         InstallException ex = assertThrows(InstallException.class, () -> installer.install(vmZip, false));
@@ -456,12 +456,12 @@ class PackageInstallerTest {
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
         Path firewallZip = tempDir.resolve("iflow-firewall-force.zip");
-        createZipWithMetadata(firewallZip, "iflow-firewall", "2.1.0", "stable",
+        createZipWithMetadata(firewallZip, "iflow-firewall", "1.0.0", "stable",
                 "firewall-force.jar", "firewall".getBytes(), "", "iflow-vm", "iflow");
         installer.install(firewallZip, false);
 
         Path vmZip = tempDir.resolve("iflow-vm-force.zip");
-        createZipWithMetadata(vmZip, "iflow-vm", "2.1.0", "stable",
+        createZipWithMetadata(vmZip, "iflow-vm", "1.0.0", "stable",
                 "vm-force.jar", "vm".getBytes(), "", "", "iflow");
 
         // force is a deliberate operator decision: both exclusive packages coexist.
@@ -481,13 +481,13 @@ class PackageInstallerTest {
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
         Path providerZip = tempDir.resolve("provider.zip");
-        createZipWithMetadata(providerZip, "iflow-vm", "2.1.0", "stable",
+        createZipWithMetadata(providerZip, "iflow-vm", "1.0.0", "stable",
                 "provider.jar", "provider".getBytes(), "", "", "iflow");
         installer.install(providerZip, false);
 
         Path consumerZip = tempDir.resolve("consumer.zip");
         createZipWithMetadata(consumerZip, "consumer", "1.0.0", "stable",
-                "consumer.jar", "consumer".getBytes(), "iflow@>=2.0.0", "", "");
+                "consumer.jar", "consumer".getBytes(), "iflow@>=1.0.0", "", "");
         installer.install(consumerZip, false);
 
         assertTrue(db.isInstalled("consumer"));

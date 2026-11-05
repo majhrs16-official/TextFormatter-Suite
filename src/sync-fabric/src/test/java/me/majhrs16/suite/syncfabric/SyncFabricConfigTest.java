@@ -27,6 +27,7 @@ class SyncFabricConfigTest {
         Files.writeString(configDir.resolve("config.yml"), """
                 enabled: false
                 log-chat-to-console: false
+                config-version: 1.0
                 """);
 
         SyncFabricConfig config = SyncFabricConfig.loadFromConfigDir(configDir);

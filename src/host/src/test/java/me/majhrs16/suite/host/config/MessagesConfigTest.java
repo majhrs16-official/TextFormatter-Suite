@@ -34,6 +34,7 @@ class MessagesConfigTest {
             status:
               channels: "canales: {}"
             extra: conservado
+            config-version: 1.0
             """);
 
         MessagesConfig config = MessagesConfig.load(dir, "/defaults/messages.yml");

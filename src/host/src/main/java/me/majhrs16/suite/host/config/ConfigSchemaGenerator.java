@@ -687,7 +687,7 @@ public final class ConfigSchemaGenerator {
                 "    const hasTransform = state.graph.nodes.some(n => n.kind === 'transform');\n" +
                 "    return {\n" +
                 "      schema: 'v2.2',\n" +
-                "      'suite-version': '2.1.0',\n" +
+                "      'suite-version': '1.0.0',\n" +
                 "      'generated-at': new Date().toISOString(),\n" +
                 "      capabilities: { transforms: hasTransform },\n" +
                 "      validation: {\n" +

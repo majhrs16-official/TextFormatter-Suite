@@ -205,13 +205,13 @@ class LocalPackageDatabaseTest {
     void saveAndLoad_preservesExcludeAndProvide() throws Exception {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
-        db.registerPackage(packageEntry("iflow-vm", "2.1.0", List.of(),
+        db.registerPackage(packageEntry("iflow-vm", "1.0.0", List.of(),
                 List.of("iflow-firewall", "iflow-wasm"), List.of("iflow")));
 
         LocalPackageDatabase reloaded = new LocalPackageDatabase(tempDir);
         reloaded.initialize();
 
-        PackageEntry entry = reloaded.getPackage("iflow-vm", "2.1.0", "stable").orElseThrow();
+        PackageEntry entry = reloaded.getPackage("iflow-vm", "1.0.0", "stable").orElseThrow();
         assertEquals(List.of("iflow-firewall", "iflow-wasm"), entry.excludes());
         assertEquals(List.of("iflow"), entry.provides());
     }
@@ -221,9 +221,9 @@ class LocalPackageDatabaseTest {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
 
-        PackageEntry firewall = packageEntry("iflow-firewall", "2.1.0", List.of(),
+        PackageEntry firewall = packageEntry("iflow-firewall", "1.0.0", List.of(),
                 List.of("iflow-vm"), List.of("iflow"));
-        PackageEntry vm = packageEntry("iflow-vm", "2.1.0", List.of(),
+        PackageEntry vm = packageEntry("iflow-vm", "1.0.0", List.of(),
                 List.of(), List.of("iflow"));
 
         db.registerPackage(firewall);
@@ -238,10 +238,10 @@ class LocalPackageDatabaseTest {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
 
-        db.registerPackage(packageEntry("iflow-vm", "2.1.0", List.of(),
+        db.registerPackage(packageEntry("iflow-vm", "1.0.0", List.of(),
                 List.of(), List.of("iflow")));
 
-        assertTrue(db.isDependencySatisfied("iflow", ">=2.0.0"));
+        assertTrue(db.isDependencySatisfied("iflow", ">=1.0.0"));
         assertTrue(db.findInstalledProvider("iflow").isPresent());
         assertFalse(db.isDependencySatisfied("iflow", ">=3.0.0"));
     }
@@ -251,9 +251,9 @@ class LocalPackageDatabaseTest {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
 
-        PackageEntry vm = packageEntry("iflow-vm", "2.1.0", List.of(),
+        PackageEntry vm = packageEntry("iflow-vm", "1.0.0", List.of(),
                 List.of(), List.of("iflow"));
-        PackageEntry firewall = packageEntry("iflow-firewall", "2.1.0", List.of(),
+        PackageEntry firewall = packageEntry("iflow-firewall", "1.0.0", List.of(),
                 List.of(), List.of("iflow"));
         PackageEntry consumer = packageEntry("consumer", "1.0.0", List.of("iflow"),
                 List.of(), List.of());

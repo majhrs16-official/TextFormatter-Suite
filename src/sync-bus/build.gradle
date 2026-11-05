@@ -70,5 +70,5 @@ configurations.configureEach {
 }
 
 // F6 — optional package loaded by the module runtime.
-ext.moduleVersion = '2.1.0'
+ext.moduleVersion = '1.0.0'
 apply from: rootProject.file('gradle/module-package.gradle')

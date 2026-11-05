@@ -14,3 +14,5 @@ sounds:
   - name: alert.wav
     volume: 0.8
     pitch: 1.2
+
+config-version: 1.0

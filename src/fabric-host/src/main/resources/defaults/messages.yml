@@ -44,3 +44,5 @@ suite:
   update.started: "Iniciando actualización completa de la suite ({})"
   update.finished: "Actualización de la suite completada"
   update.failed: "Error en actualización: {}"
+
+config-version: 1.0
