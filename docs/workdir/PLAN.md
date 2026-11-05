@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; purga pre-1.0 pendiente en P0.2/P0.3.**)
+> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; D-009 cerrado con prioridad explícita y test; purga pre-1.0 pendiente en P0.2/P0.3.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -64,15 +64,15 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
 
 **Orden de trabajo:** purga P0 → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
 
+**Cerrado en esta ronda:** D-009. `IflowBackendManager` aplica la prioridad explícita
+`iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
+
 **Deuda conocida al abrir esta hoja (verificar antes de cerrar P0.2/P0.3):**
 
 - `build.gradle` declara `2.1.0-SNAPSHOT`; `src/chattranslator/build.gradle` declara `2.1.0`.
 - Varios módulos (`gtranslate`, `ltranslate`, `logger`, `transport`, `web-editor`) declaran
   `2.1.0` o `>=2.1.0`; se alinean a `1.0.0`/`>=1.0.0` en P0.2.
 - `iflow-wasm` exige `channel-api >= 2.1.0` en su descriptor/activador; debe alinearse a `>= 1.0.0`.
-- **D-009 (código):** `IflowBackendManager` usa el primer backend en orden de registro; el contrato
-  ADR-032 exige la prioridad explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`. Falta el test
-  de aceptación y el ajuste.
 - **Fallback de router:** `SuiteRuntime.resolveRouter()` acepta un `Router` publicado directamente
   por un motor si el hub no está instalado. Es un camino legacy; se elimina en la purga, no se
   documenta como compatibilidad.

@@ -19,6 +19,15 @@ import me.majhrs16.suite.api.runtime.ModuleContext;
  */
 final class IflowBackendManager {
 
+    /**
+     * Orden de fallback fijado por ADR-032. No depende del orden en que el
+     * {@code ServiceRegistry} descubra o active los módulos.
+     */
+    private static final List<String> FALLBACK_PRIORITY = List.of(
+            "iflow-firewall",
+            "iflow-vm",
+            "iflow-wasm");
+
     private final ModuleContext context;
     private final IflowConfig config;
 
@@ -58,8 +67,9 @@ final class IflowBackendManager {
         }
 
         if (config.fallback()) {
-            for (IflowBackend candidate : discovered) {
-                if (candidate.isAvailable()) {
+            for (String name : FALLBACK_PRIORITY) {
+                IflowBackend candidate = byName.get(name);
+                if (candidate != null && candidate.isAvailable()) {
                     this.active = candidate;
                     this.lastError = "configured backend " + config.engine()
                         + " is unavailable; using " + candidate.name();

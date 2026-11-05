@@ -80,6 +80,29 @@ class IflowHubTest {
     }
 
     @Test
+    void fallbackUsesExplicitPriorityRegardlessOfRegistrationOrder() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-wasm
+                fallback-on-unavailable: true
+                """);
+        FakeContext context = new FakeContext(dir);
+        FakeRouter vm = new FakeRouter();
+        FakeRouter firewall = new FakeRouter();
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-vm", vm, true));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-firewall", firewall, true));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-wasm", new FakeRouter(), false));
+
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+        assertEquals("iflow-firewall", hub.activeBackend());
+        assertSame(firewall, hub.router());
+    }
+
+    @Test
     void noFallbackFailsClosed() throws Exception {
         Files.writeString(dir.resolve("config.yml"), """
                 engine: iflow-wasm

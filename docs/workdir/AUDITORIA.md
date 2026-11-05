@@ -21,14 +21,14 @@ falta de documentos, sino la convivencia de **tres regímenes** en el mismo árb
 2. el régimen anterior (`2.1.0`, `iflow.engine.kind`, exclusividad de motores, rutas planas);
 3. documentos históricos presentados como estado actual.
 
-Resultado: **10 hallazgos confirmados** (D-001…D-010). Se cerraron 6; 3 quedan parciales porque su
-cierre exige código (D-002, D-003 y D-009) y 1 sigue pendiente de código (D-004). El baseline de
+Resultado: **10 hallazgos confirmados** (D-001…D-010). Se cerraron 7; 2 quedan parciales porque su
+cierre exige código (D-002 y D-003) y 1 sigue pendiente de código (D-004). El baseline de
 código quedó limpio en `c5992230` (CoreTranslator + contrato `>= 1.0.0`).
 
 | Severidad | Hallazgos | Estado documental |
 |---|---|---|
 | Alta (P0) | D-001, D-002, D-003, D-004, D-008 | 2 corregidos (D-001, D-008); 2 parciales (D-002, D-003); 1 pendiente de código (D-004) |
-| Media (P1) | D-005, D-007, D-009, D-010 | 3 corregidos (D-005, D-007, D-010); 1 parcial (D-009) |
+| Media (P1) | D-005, D-007, D-009, D-010 | 4 corregidos (D-005, D-007, D-009, D-010) |
 | Baja (P2) | D-006 | Corregido |
 
 ---
@@ -186,14 +186,15 @@ Reglas derivadas:
 ### D-009 — Fallback de iFlow dependiente del orden de registro
 
 - **Severidad:** Media (P1).
-- **Estado:** **Parcial** (documentación resuelta; código pendiente).
-- **Evidencia:** `src/iflow/.../IflowBackendManager.java:60-69` recorre `discovered` y elige el
+- **Estado:** **Corregido** (documentación, código y test).
+- **Evidencia:** `src/iflow/.../IflowBackendManager.java:60-69` recorría `discovered` y elegía el
   primer backend disponible; `RuntimeServiceRegistry` usa `LinkedHashMap`, por lo que el resultado
-  depende del orden de activación. ADR-032 no definía prioridad.
+  dependía del orden de activación. ADR-032 no definía prioridad.
 - **Resolución documental:** ADR-032, `src/iflow/README.md` y `storage.md` fijan la prioridad
-  `iflow-firewall` → `iflow-vm` → `iflow-wasm`. Se añadió la deuda a `PLAN.md`.
-- **Pendiente:** implementar la prioridad en `IflowBackendManager` y cubrirla con un test de
-  aceptación. No se hizo en esta ronda por ser código.
+  `iflow-firewall` → `iflow-vm` → `iflow-wasm`.
+- **Resolución de código:** `IflowBackendManager` aplica `FALLBACK_PRIORITY` de forma explícita;
+  `IflowHubTest.fallbackUsesExplicitPriorityRegardlessOfRegistrationOrder` registra `iflow-vm`
+  antes que `iflow-firewall` y verifica que el hub elige igualmente `iflow-firewall`.
 
 ### D-010 — Contrato y SemVer: ejemplos inválidos y techo del host
 
@@ -218,8 +219,8 @@ Reglas derivadas:
 
 ### 4.2 Documentación (esta ronda)
 
-Commits: `0a7550ab` (contexto, storage y contratos) y `9ffc0230` (índices, enlaces y READMEs).
-El informe se publica en el commit de cierre de la auditoría.
+Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlaces y READMEs) y
+`34ceb7f9` (informe). El cierre de D-009 se registra junto con el código y su test.
 
 | Archivo | Cambio |
 |---|---|
@@ -231,7 +232,7 @@ El informe se publica en el commit de cierre de la auditoría.
 | `docs/prompts/diseno/manager-v2.md` | Precedencia ADR-027, layout de `library/`, commit/activación separados |
 | `docs/prompts/diseno/iflow-cpu-design.md` | Nota histórica corregida (SpEL, hub, targets v3) |
 | `docs/workdir/ADR.md` | iFlow v3, contrato `[1.0.0, host]`, prioridad de fallback |
-| `docs/workdir/PLAN.md` | Poda de historial, estado actual, D-009 y fallback de router como deuda |
+| `docs/workdir/PLAN.md` | Poda de historial, estado actual y fallback de router como deuda |
 | `docs/prompts/README.md` | Índice completo y `@juzgar-rubrica` |
 | `docs/README.md`, `README.md` | Enlaces corregidos; referencias iFlow, versiones y presets alineadas |
 | `src/{core-render,suite-runtime,iflow-firewall,web-editor,fixtures}/README.md` | READMEs nuevos |
@@ -251,9 +252,9 @@ El informe se publica en el commit de cierre de la auditoría.
 | 4 | ADR, PLAN y skills | 2, 3 |
 | 5 | Índices, enlaces y READMEs de módulo | 2–4 |
 | 6 | Informe final en `AUDITORIA.md` | 2–5 |
-| 7 | P0.2/P0.3 de código (versiones, `config-version`, purga legacy) | 1–6 + autorización específica |
-| 8 | D-009 (prioridad de fallback + test) | 7 |
-| 9 | P0.8b (wiki) | 7 |
+| 7 | D-009 (prioridad de fallback + test) | 1–6 |
+| 8 | P0.2/P0.3 de código (versiones, `config-version`, purga legacy) | 7 + autorización específica |
+| 9 | P0.8b (wiki) | 8 |
 
 ---
 
@@ -281,30 +282,26 @@ El informe se publica en el commit de cierre de la auditoría.
 2. **El código todavía acepta rutas legacy.** La documentación describe el contrato correcto, pero
    `HostPaths`, `DefaultConfigInstaller`, `ConfigLoader` y `ExtensionMetadata` no están corregidos.
    Hasta P0.2/P0.3, la deuda es real.
-3. **D-009 no está cerrado.** La prioridad de fallback está decidida en ADR-032 y documentada, pero
-   `IflowBackendManager` sigue usando el orden de registro. Falta código y test.
-4. **No hay E2E.** Ni Spigot/Paper, ni Fabric, ni Velocity, ni `CoreTranslator` con PlaceholderAPI
+3. **No hay E2E.** Ni Spigot/Paper, ni Fabric, ni Velocity, ni `CoreTranslator` con PlaceholderAPI
    se han probado en un servidor real. El smoke test de Paper 1.20.6 no es E2E. El E2E pertenece a
    la fase posterior a `1.0.0`.
-5. **Los READMEs nuevos son CodeGuide, no contratos.** Describen la estructura observada; no
+4. **Los READMEs nuevos son CodeGuide, no contratos.** Describen la estructura observada; no
    sustituyen a las especificaciones ni a los ADR.
-6. **`fixtures/` no tiene consumidores en el código.** Su README lo declara como directorio de
+5. **`fixtures/` no tiene consumidores en el código.** Su README lo declara como directorio de
    datos; si se convierte en módulo, necesita build propio y entrada en `settings.gradle`.
 
 ---
 
 ## 7. Próximos pasos
 
-1. Commitear esta auditoría y los cambios documentales (sin push).
-2. Ejecutar P0.2: reset de versiones a `1.0.0`, `config-version: 1.0` en todos los YAML y
+1. Ejecutar P0.2: reset de versiones a `1.0.0`, `config-version: 1.0` en todos los YAML y
    `minSuiteVersion: "1.0.0"`, con test de parser que falle si falta.
-3. Ejecutar P0.3: eliminar `iflow.engine.kind`, rutas planas, fallbacks de `HostPaths`,
+2. Ejecutar P0.3: eliminar `iflow.engine.kind`, rutas planas, fallbacks de `HostPaths`,
    migración de `DefaultConfigInstaller` y el fallback de `Router` en `SuiteRuntime`, con tests de
    regresión.
-4. Cerrar D-009: prioridad explícita en `IflowBackendManager` + test de aceptación.
-5. Ejecutar P0.8b: alinear `docs/wiki/` (fuera de esta ronda).
-6. Retomar W3.5 (paridad `.flow` v3/VM) y después V6 (compilador C).
-7. E2E real solo después de `1.0.0`, incluido el smoke test de `CoreTranslator` con
+3. Ejecutar P0.8b: alinear `docs/wiki/` (fuera de esta ronda).
+4. Retomar W3.5 (paridad `.flow` v3/VM) y después V6 (compilador C).
+5. E2E real solo después de `1.0.0`, incluido el smoke test de `CoreTranslator` con
    Bukkit/Paper + PlaceholderAPI.
 
 ---
@@ -314,7 +311,8 @@ El informe se publica en el commit de cierre de la auditoría.
 - **A1:** `AUDITORIA.md` se reescribe como informe final; no se crea `PSEUDOAUDITORIA.md`.
 - **A2:** se commiteó primero el baseline de CoreTranslator + contrato `>= 1.0.0` + docs
   pendientes, sin push (`c5992230`).
-- **A3:** esta ejecución es solo documentación; los arreglos de código van a P0.2/P0.3.
+- **A3:** la auditoría documental fue solo documentación; el cierre de D-009 se hizo después con
+  código y test. El resto de arreglos de código van a P0.2/P0.3.
 
 ---
 

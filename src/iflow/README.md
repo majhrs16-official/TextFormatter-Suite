@@ -81,5 +81,5 @@ motor se activa o desactiva, el hub se refresca con `ModuleActivatedEvent` y
 Tests actuales:
 
 - `IflowConfigTest`: defaults, alias, YAML inválido y normalización.
-- `IflowHubTest`: registro del hub, refresco por eventos, fallback, fallo
-  cerrado y delegación al backend activo.
+- `IflowHubTest`: registro del hub, refresco por eventos, fallback con prioridad
+  explícita, fallo cerrado y delegación al backend activo.
