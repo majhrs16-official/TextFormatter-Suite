@@ -158,7 +158,7 @@ La misma regla se aplica al estado de recuperación. Un rollback no es exitoso p
 
 ## C14. Documentación mínima y autorizada
 
-No se agrega documentación adicional dentro de `docs/workdir/` ni `docs/prompts/` sin una pregunta explícita y su autorización. El estado operativo, los inventarios y las notas de cierre viven en `PLAN.md`, `ADR.md` y `AUDITORIA.md`; no se crean archivos auxiliares para almacenar evidencia temporal, inventarios de una fase ni addendas. Los documentos de diseño (`docs/prompts/`) son de solo lectura y no se usan como almacén de notas. `docs/wiki/` queda excluida de esta regla porque es documentación de usuario.
+No se agrega documentación adicional dentro de `docs/workdir/` ni `docs/prompts/` sin una pregunta explícita y su autorización. El estado operativo, los inventarios y las notas de cierre viven en `PLAN.md` y, cuando sean decisiones estructurales, en `ADR.md`; no se crean archivos auxiliares para almacenar evidencia temporal, inventarios de una fase ni addendas. `AUDITORIA.md` no se modifica: contiene el informe de la auditoría vigente y no se le añaden notas, addendas ni referencias; solo se reemplaza por completo al cerrar su ciclo. Los documentos de diseño (`docs/prompts/`) son de solo lectura y no se usan como almacén de notas. `docs/wiki/` queda excluida de esta regla porque es documentación de usuario.
 
 ---
 
