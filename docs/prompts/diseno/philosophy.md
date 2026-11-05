@@ -162,7 +162,7 @@ No se agrega documentación adicional dentro de `docs/workdir/` ni `docs/prompts
 
 ## C15. Relectura obligatoria tras limpiar el contexto
 
-Siempre que se limpie el contexto de trabajo —por compactación, resumen, checkpoint o reinicio de sesión— la primera acción obligatoria es releer el contexto normativo completo. Como mínimo se leen `docs/workdir/AUDITORIA.md`, `docs/workdir/PLAN.md`, `docs/workdir/ADR.md` y `docs/prompts/diseno/philosophy.md`. No se edita, ejecuta ni reanuda ninguna tarea hasta terminar esa lectura. Solo después se continúa con el trabajo. El resumen de contexto es una ayuda, no la autoridad: no sustituye la relectura de los documentos. **Eso incluye mencionar explícitamente este principio dentro del contexto de compactación.**
+Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. Como mínimo se leen `docs/workdir/AUDITORIA.md`, `docs/workdir/PLAN.md`, `docs/workdir/ADR.md` y `docs/prompts/diseno/philosophy.md`. No se edita, ejecuta ni reanuda ninguna tarea hasta terminar esa lectura. Solo después se continúa con el trabajo. El resumen de compactación es una ayuda, no la autoridad: no sustituye la relectura de los documentos. **Eso incluye mencionar explícitamente este principio dentro del contexto de compactación**, con esta frase: «Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. (véase docs/prompts/diseno/philosophy.md - C15)». Un resumen, un checkpoint o un reinicio de sesión que conserven el contexto no exigen esta relectura.
 
 ---
 
