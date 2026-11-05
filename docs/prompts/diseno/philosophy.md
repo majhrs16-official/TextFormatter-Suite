@@ -160,6 +160,10 @@ La misma regla se aplica al estado de recuperación. Un rollback no es exitoso p
 
 No se agrega documentación adicional dentro de `docs/workdir/` ni `docs/prompts/` sin una pregunta explícita y su autorización. El estado operativo, los inventarios y las notas de cierre viven en `PLAN.md` y, cuando sean decisiones estructurales, en `ADR.md`; no se crean archivos auxiliares para almacenar evidencia temporal, inventarios de una fase ni addendas. `AUDITORIA.md` no se modifica: contiene el informe de la auditoría vigente y no se le añaden notas, addendas ni referencias; solo se reemplaza por completo al cerrar su ciclo. Los documentos de diseño (`docs/prompts/`) son de solo lectura y no se usan como almacén de notas. `docs/wiki/` queda excluida de esta regla porque es documentación de usuario.
 
+## C15. Relectura obligatoria tras limpiar el contexto
+
+Cada vez que se limpie el contexto de trabajo —por compactación, resumen, checkpoint o reinicio de sesión— es obligatorio releer el contexto normativo antes de continuar. Como mínimo se leen `docs/workdir/AUDITORIA.md`, `docs/workdir/PLAN.md`, `docs/workdir/ADR.md` y `docs/prompts/diseno/philosophy.md`. Solo después de esa lectura se reanuda el trabajo. El resumen de contexto es una ayuda, no la autoridad: no sustituye la relectura de los documentos.
+
 ---
 
 # Principios de Diseño del Proyecto
