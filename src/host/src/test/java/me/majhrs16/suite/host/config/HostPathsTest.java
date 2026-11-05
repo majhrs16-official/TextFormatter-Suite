@@ -44,14 +44,14 @@ class HostPathsTest {
     }
 
     @Test
-    void legacyConfigIsUsedDuringMigration() throws Exception {
+    void legacyFlatConfigIsIgnored() throws Exception {
         Files.writeString(dir.resolve("config.yml"), "quick-look: false\n");
         Files.writeString(dir.resolve("messages.yml"), "prefix: legacy\n");
         Files.writeString(dir.resolve("commands.yml"), "root: [legacy]\n");
 
-        assertEquals(dir.resolve("config.yml"), HostPaths.suiteConfig(dir));
-        assertEquals(dir.resolve("messages.yml"), HostPaths.suiteMessages(dir));
-        assertEquals(dir.resolve("commands.yml"), HostPaths.suiteCommands(dir));
+        assertEquals(dir.resolve("config/suite/config.yml"), HostPaths.suiteConfig(dir));
+        assertEquals(dir.resolve("config/suite/messages.yml"), HostPaths.suiteMessages(dir));
+        assertEquals(dir.resolve("config/suite/commands.yml"), HostPaths.suiteCommands(dir));
     }
 
     @Test

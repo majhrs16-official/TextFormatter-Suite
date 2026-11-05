@@ -7,7 +7,7 @@ general:
 
 iflow:
   engine:
-    kind: vm
+    parallel: false
 
 chat:
   global-prefix: ""

@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; D-009 cerrado con prioridad explícita y test; P0.2 ejecutado en versiones, YAML y validadores principales; P0.3 pendiente para rutas y esquema legacy.**)
+> Última actualización: 2026-11-04 (**auditoría documental en curso; CoreTranslator restaurado como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; D-009 cerrado con prioridad explícita y test; P0.2, P0.3, P0.5 y P0.7 cerrados con gate verde.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -23,8 +23,8 @@
 > motores publican `IflowBackend`; el hub publica `IflowHub` y `Router`, elige un backend y aplica
 > fallback configurable. Configuración canónica: `config/iflow/config.yml` con
 > `engine: iflow-firewall|iflow-vm|iflow-wasm` y `fallback-on-unavailable`. Default
-> `iflow-firewall`. `SuiteRuntime` prefiere `IflowHub` sobre `Router`; `iflow.engine.kind` es deuda
-> legacy y se elimina en la purga pre-1.0 (ADR-034), no se conserva como fallback permanente.
+> `iflow-firewall`. `SuiteRuntime` exige `IflowHub`; un motor no puede publicar un `Router` que
+> sustituya al hub. `iflow.engine.kind` fue eliminado en P0.3 (ADR-034).
 > `iflow-firewall`, `iflow-vm` e `iflow-wasm` ya publican su backend; Wasm exige SHA-256 y recarga automáticamente.
 
 > **Estado actual (2026-11-04).** Base integrada en construcción; no hay versión estable ni
@@ -48,12 +48,12 @@
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
 | **P0.1** | Inventario de versiones y compatibilidad | Lista `archivo:línea` de todo `2.x`/`3.x`, `config-version`, aliases legacy, rutas planas, adaptadores, shims y módulos *deprecated*. Sin elementos sin clasificar. | Pendiente |
-| **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0` en la raíz, preferentemente al final. `plugin.yml` queda excluido. Si falta `config-version`, el parser falla con un error explícito. Un sufijo de build no cambia la base funcional, pero su publicación se rige por la política de artefactos. | Parcial (2026-11-04: versiones, 29 YAML y validadores principales; los `rules.yml` legacy se cierran en P0.3) |
-| **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata como retirado), lectores de la raíz plana de `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`) y cualquier fallback que acepte el esquema viejo. Los `config/<module>/config.yml` canónicos se conservan. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Pendiente |
+| **P0.2** | Reset de versiones a la base `1.0` | `build.gradle` raíz y de módulos en `1.0.0`; manifiestos, capabilities y contratos `*-api` en `1.0.0`; todo `.yml` con `config-version: 1.0` en la raíz, preferentemente al final. `plugin.yml` queda excluido. Si falta `config-version`, el parser falla con un error explícito. Un sufijo de build no cambia la base funcional, pero su publicación se rige por la política de artefactos. | Completado (2026-11-04) |
+| **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata como retirado), lectores de la raíz plana de `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`) y cualquier fallback que acepte el esquema viejo. Los `config/<module>/config.yml` canónicos se conservan. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Completado (2026-11-04) |
 | **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no como shim ni recuperando `suite-common-legacy`. El `LegacyBridge` de `7dd164a4^` no se restaura. Actualizar todos los consumidores en el mismo cambio. | Parcial (CoreTranslator, 2026-11-04) |
-| **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Parcial (contrato `>= 1.0.0`, `config-version` y CoreTranslator, 2026-11-04) |
+| **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Completado (2026-11-04) |
 | **P0.6** | Auditoría vigente | `AUDITORIA.md` refleja la auditoría documental de 2026-11-04 (D-001…D-010) con evidencia y estado; este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Corregir P0/P1 con test de regresión antes de avanzar. Al cerrar el ciclo, reemplazar el archivo por completo. | Parcial (auditoría documental 2026-11-04) |
-| **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Parcial (gate `buildAll checkLocks checkArchitecture` verde 2026-11-04; se reejecuta al cerrar P0.3) |
+| **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
 | **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Parcial (2026-11-04) |
 | **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Pendiente |
 
@@ -67,16 +67,17 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
 **Cerrado en esta ronda:** D-009. `IflowBackendManager` aplica la prioridad explícita
 `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
 
-**Deuda conocida al cerrar P0.2 (2026-11-04):**
+**Deuda conocida tras P0.2/P0.3 (2026-11-04):**
 
-- **Fallback de router:** `SuiteRuntime.resolveRouter()` acepta un `Router` publicado directamente
-  por un motor si el hub no está instalado. Es un camino legacy; se elimina en P0.3, no se
-  documenta como compatibilidad.
-- Quedan aliases y rutas legacy en configuración y tests; se eliminan en P0.3, no se migran.
-- `iflow-firewall` conserva el lector de listas de reglas y el mapa `rules:` sin
-  `config-version`; P0.3 retira ese esquema y exige el mapa canónico con versión.
-- `CoreTranslator` fue eliminado en `7dd164a4`; se restauró la feature real de ChatTranslator (expansión PAPI `%cot_*`) en `src/coretranslator`. El `LegacyBridge` y `suite-common-legacy` no se recuperan (ADR-035).
-- La auditoría documental vigente debe cerrarse antes de añadir features.
+- `iflow-firewall` sigue siendo un módulo legacy independiente con expresiones SpEL; no es shim
+  ni compite con el hub, que lo selecciona como backend.
+- `CoreTranslator` fue eliminado en `7dd164a4`; se restauró la feature real de ChatTranslator
+  (expansión PAPI `%cot_*`) en `src/coretranslator`. El `LegacyBridge` y `suite-common-legacy` no
+  se recuperan (ADR-035).
+- La wiki (`docs/wiki/`) permanece fuera de alcance hasta P0.8b.
+- `gradle/verification-metadata.xml` conserva entradas históricas de artefactos propios
+  `2.1.0-SNAPSHOT`; no participan en la resolución actual.
+- W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
 
 ### Después de 1.0.0 — betatesting/E2E real
 
@@ -116,9 +117,8 @@ cuando ambas estén listas.
 >
 > Configuración canónica: `config/iflow/config.yml` con
 > `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
-> El default es `iflow-firewall`. `iflow.engine.kind` es una compatibilidad legacy del host y no
-> selecciona el backend cuando el hub está presente; ADR-034 la elimina en la purga pre-1.0, sin
-> fallback permanente.
+> El default es `iflow-firewall`. `iflow.engine.kind` ya no existe: la selección de motor vive
+> solo en `config/iflow/config.yml` y el hub es el único punto de resolución.
 >
 > Los contratos neutrales (`Router`, `IflowHub`, `IflowBackend`) viven en `core-api` bajo
 > `me.majhrs16.suite.iflow`; cada motor usa su propio subpaquete. `SuiteRuntime` prefiere
@@ -1266,7 +1266,7 @@ completion, desregistro explícito y desregistro por ciclo de vida.
 
 **F4e cerrada (2026-10-31):** `CommandRootConfig` carga
 `config/suite/commands.yml` y valida `root` multi-segmento y `aliases`; el
-fallback heredado `commands.yml` es deuda a purgar (ADR-034), no una ruta
+fallback heredado `commands.yml` fue eliminado en P0.3 (ADR-034), no es una ruta
 soportada. `base-name` fue retirado en F8 y ya no define la raíz. `RuntimeCommandRegistry` permite cambiar la raíz sin tocar los comandos
 registrados por los módulos. `SuiteRuntime.reloadCommandRoot()` devuelve
 `CommandRootChange` con `UNCHANGED`, `APPLIED`, `FAILED` o `RESTART_REQUIRED`,

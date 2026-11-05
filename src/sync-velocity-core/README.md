@@ -57,8 +57,8 @@ Ports in `core-api` (`me.majhrs16.suite.api.velocity`):
 
 ## 4. Configuration
 
-Canonical path: `config/sync-velocity-core/config.yml`. The legacy
-`sync/velocity.yml` is read during migration.
+Canonical path: `config/sync-velocity-core/config.yml`. The flat
+`sync/velocity.yml` layout is ignored.
 
 ```yaml
 enabled: true

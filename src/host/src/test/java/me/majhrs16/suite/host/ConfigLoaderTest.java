@@ -34,28 +34,32 @@ class ConfigLoaderTest {
         };
     }
 
+    private Path suiteConfig() throws Exception {
+        Path file = dir.resolve("config/suite/config.yml");
+        Files.createDirectories(file.getParent());
+        return file;
+    }
+
     @Test
     void loadsConfigWithDefaultsWhenFileMissing() {
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
         HostConfig config = result.config();
 
-        assertEquals(true, config.quickLook());
+        assertTrue(config.quickLook());
         assertEquals(Language.EN, config.defaultLanguage());
         assertFalse(config.engineParallel());
-        assertEquals(HostConfig.Engine.VM, config.engine());
         assertTrue(config.soundEnabled());
         assertFalse(result.isValid()); // missing file = degraded
     }
 
     @Test
     void readsConfigValuesFromYaml() throws Exception {
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(suiteConfig(), """
             quick-look: false
             general:
               language: es
             iflow:
               engine:
-                kind: firewall
                 parallel: true
             sonido:
               enabled: false
@@ -70,7 +74,6 @@ class ConfigLoaderTest {
         assertFalse(config.quickLook());
         assertEquals(Language.ES, config.defaultLanguage());
         assertTrue(config.engineParallel());
-        assertEquals(HostConfig.Engine.FIREWALL, config.engine());
         assertFalse(config.soundEnabled());
         assertEquals(HostConfig.ClaimMode.CLEAR_RECIPIENTS, config.claimMode());
         assertTrue(result.isValid());
@@ -78,7 +81,7 @@ class ConfigLoaderTest {
 
     @Test
     void invalidClaimModeFallsBackToCancelEvent() throws Exception {
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(suiteConfig(), """
             chat:
               claim-mode: no-existe
             config-version: 1.0
@@ -90,23 +93,24 @@ class ConfigLoaderTest {
     }
 
     @Test
-    void unknownEngineFallsBackToVm() throws Exception {
-        Files.writeString(dir.resolve("config.yml"), """
+    void legacyEngineKindIsIgnored() throws Exception {
+        Files.writeString(suiteConfig(), """
             iflow:
               engine:
-                kind: no-existe
+                kind: firewall
+                parallel: true
             config-version: 1.0
             """);
 
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
 
-        assertEquals(HostConfig.Engine.VM, result.config().engine());
         assertTrue(result.isValid());
+        assertTrue(result.config().engineParallel());
     }
 
     @Test
     void rejectsConfigWithoutConfigVersion() throws Exception {
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(suiteConfig(), """
             quick-look: false
             """);
 
@@ -119,7 +123,7 @@ class ConfigLoaderTest {
 
     @Test
     void rejectsUnsupportedConfigVersion() throws Exception {
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(suiteConfig(), """
             config-version: 2.0
             """);
 
@@ -133,7 +137,7 @@ class ConfigLoaderTest {
     @Test
     void parsesEditorExportedDefaultConfig() throws Exception {
         Path cfg = Path.of(ConfigLoaderTest.class
-            .getResource("/editor-default/config").toURI());
+            .getResource("/editor-default").toURI());
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(cfg, quietLogger());
         ChannelConfig.LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(cfg);
         HostConfig config = configResult.config();

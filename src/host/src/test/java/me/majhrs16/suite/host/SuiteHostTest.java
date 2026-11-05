@@ -66,9 +66,10 @@ class SuiteHostTest {
     }
 
     private void writeDefaultLayout() throws Exception {
+        Files.createDirectories(dir.resolve("config/suite"));
         Files.createDirectories(dir.resolve("config/textformatter/channels"));
-        Files.createDirectories(dir.resolve("chattranslator/translators"));
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.createDirectories(dir.resolve("config/chattranslator/translators"));
+        Files.writeString(dir.resolve("config/suite/config.yml"), """
             general:
               language: en
             config-version: 1.0
@@ -79,12 +80,12 @@ class SuiteHostTest {
               - '<gray>%player_name%: <tr>%content%</tr></gray>'
             config-version: 1.0
             """);
-        Files.writeString(dir.resolve("chattranslator/config.yml"), """
+        Files.writeString(dir.resolve("config/chattranslator/config.yml"), """
             default-backend: "fake"
             context-override-enabled: true
             config-version: 1.0
             """);
-        Files.writeString(dir.resolve("chattranslator/translators/fake.yml"), """
+        Files.writeString(dir.resolve("config/chattranslator/translators/fake.yml"), """
             provider: "fake"
             active: true
             config-version: 1.0

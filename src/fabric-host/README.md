@@ -26,8 +26,8 @@
   `PermissionChecker`, `UserLanguageStore`, `PlaceholderResolver` y
   `PluginLogger` y `PlatformHandle`, y llama a `runtime.start()`.
 - **Default configuration** — `DefaultConfigInstaller` copia los defaults del
-  host a `config/suite/` y los de cada módulo a `config/<module>/`;
-  migra archivos legacy sin sobrescribir la configuración existente.
+  host a `config/suite/` y los de cada módulo a `config/<module>/`; no migra
+  archivos de la raíz plana ni sobrescribe configuración existente.
 - **In-world adapter** — `FabricInWorldHandler` consume `InWorldService` y
   `MessageRenderer`.
 - **Test probe adapter** — `FabricTestProbe` implementa el puerto neutral

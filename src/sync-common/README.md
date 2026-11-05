@@ -11,8 +11,8 @@
   non-map YAML file yields an empty map instead of throwing.
 - Coerce scalar YAML values (`string`, `bool`, `integer`, `longValue`) with
   explicit fallbacks.
-- Resolve the canonical `config/sync-*/` paths and the legacy `sync/*.yml`
-  fallback used during migration.
+- Resolve the canonical `config/sync-*/` paths; the flat `sync/*.yml` layout is
+  neither read nor migrated.
 - Provide the platform-neutral event helpers used by `sync-bukkit` and
   `sync-fabric`: channel selection, translation gating, `Message` construction
   and dispatch.
@@ -61,7 +61,7 @@ declared dependency scope.
 | Component | Role |
 |-----------|------|
 | `SyncYaml` | Tolerant YAML reader and scalar coercion helpers |
-| `SyncConfigPaths` | Canonical and legacy configuration path resolution |
+| `SyncConfigPaths` | Canonical `config/sync-*/` path resolution |
 | `ChannelSelector` | Chooses the first permitted `CHAT` channel, with `chat` fallback |
 | `EventRules` | Conventional event channels and `off` translation gating |
 | `EventMessages` | Builds neutral `Message` values for chat and typed events |
@@ -76,7 +76,7 @@ declared dependency scope.
 ```
 
 `SyncYamlTest` covers missing/scalar/invalid YAML and scalar coercion.
-`SyncConfigPathsTest` covers canonical paths, legacy fallback and canonical
-destination selection.
+`SyncConfigPathsTest` covers canonical paths and that the flat `sync/` layout is
+ignored.
 `SyncEventProcessorTest` covers chat fan-out, console copy, `off` translation,
 channel fallback and typed-event gating.

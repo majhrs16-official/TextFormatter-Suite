@@ -772,11 +772,13 @@ class PackageRuntimeTest {
             Files.writeString(translators.resolve("google.yml"), """
                 provider: google
                 active: true
+                config-version: 1.0
                 """);
             Files.writeString(translators.resolve("libre.yml"), """
                 provider: libre
                 active: true
                 base-url: https://libre.example
+                config-version: 1.0
                 """);
 
             assertTrue(fixture.runtime.installLocal(transportZip, false).isEmpty(),

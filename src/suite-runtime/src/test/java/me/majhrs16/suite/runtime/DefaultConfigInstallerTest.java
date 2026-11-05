@@ -57,7 +57,7 @@ class DefaultConfigInstallerTest {
     }
 
     @Test
-    void migratesLegacyModuleConfigToCanonicalPath() throws Exception {
+    void ignoresLegacyModuleConfigAndWritesTheDefault() throws Exception {
         Path legacy = dir.resolve("channels/chat.global.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy, "path: legacy\n");
@@ -65,7 +65,7 @@ class DefaultConfigInstallerTest {
         install(Map.of("/defaults/channels/chat.global.yml", "path: default\n"));
 
         assertThat(dir.resolve("config/textformatter/channels/chat.global.yml"))
-                .hasContent("path: legacy\n");
+                .hasContent("path: default\n");
         assertThat(legacy).hasContent("path: legacy\n");
     }
 
@@ -87,7 +87,7 @@ class DefaultConfigInstallerTest {
     }
 
     @Test
-    void canonicalModuleConfigWinsOverLegacyAndIncorrectPath() throws Exception {
+    void canonicalModuleConfigWinsAndLegacyPathsStayUntouched() throws Exception {
         Path canonical = dir.resolve("config/textformatter/channels/chat.global.yml");
         Files.createDirectories(canonical.getParent());
         Files.writeString(canonical, "path: canonical\n");
@@ -106,13 +106,14 @@ class DefaultConfigInstallerTest {
     }
 
     @Test
-    void migratesLegacySuiteConfigToCanonicalPath() throws Exception {
+    void ignoresLegacySuiteConfigAndWritesTheDefault() throws Exception {
         Files.writeString(dir.resolve("config.yml"), "quick-look: false\n");
 
         install(Map.of("/defaults/config.yml", "quick-look: true\n"));
 
         assertThat(dir.resolve("config/suite/config.yml"))
-                .hasContent("quick-look: false\n");
+                .hasContent("quick-look: true\n");
+        assertThat(dir.resolve("config.yml")).hasContent("quick-look: false\n");
     }
 
     private void install(Map<String, String> resources) {

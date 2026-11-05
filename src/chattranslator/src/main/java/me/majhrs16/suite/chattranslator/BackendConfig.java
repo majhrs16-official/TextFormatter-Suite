@@ -104,21 +104,9 @@ public final class BackendConfig {
         return registry;
     }
 
-    /** @return el primer directorio de backends existente, o la ruta canónica. */
+    /** @return la ruta canónica de {@code config/chattranslator/translators}. */
     public static Path resolveTranslatorsDir(Path dir) {
-        Path canonical = dir.resolve("config").resolve("chattranslator").resolve("translators");
-        if (Files.isDirectory(canonical)) {
-            return canonical;
-        }
-        Path intermediate = dir.resolve("chattranslator").resolve("translators");
-        if (Files.isDirectory(intermediate)) {
-            return intermediate;
-        }
-        Path legacy = dir.resolve("translators");
-        if (Files.isDirectory(legacy)) {
-            return legacy;
-        }
-        return canonical;
+        return dir.resolve("config").resolve("chattranslator").resolve("translators");
     }
 
     /**

@@ -181,9 +181,9 @@ class SuiteIntegrationTest {
     // Helper methods
     private static void createDefaultConfigs(Path dir) throws Exception {
         // Create minimal config files for testing
+        Files.createDirectories(dir.resolve("config/suite"));
         Files.createDirectories(dir.resolve("config/textformatter/channels"));
-        Files.createDirectories(dir.resolve("translators"));
-        Files.createDirectories(dir.resolve("sync"));
+        Files.createDirectories(dir.resolve("config/chattranslator/translators"));
 
         // Minimal config.yml
         String configYaml = """
@@ -199,7 +199,7 @@ class SuiteIntegrationTest {
               claim-mode: cancel-event
             config-version: 1.0
             """;
-        Files.writeString(dir.resolve("config.yml"), configYaml);
+        Files.writeString(dir.resolve("config/suite/config.yml"), configYaml);
 
         // Default channels
         String channelYaml = """
@@ -224,7 +224,7 @@ class SuiteIntegrationTest {
             active: true
             config-version: 1.0
             """;
-        Files.writeString(dir.resolve("translators/google.yml"), translatorYaml);
+        Files.writeString(dir.resolve("config/chattranslator/translators/google.yml"), translatorYaml);
     }
 
     private static class DummyTranslator implements Translator {

@@ -1,5 +1,7 @@
 package me.majhrs16.suite.iflow;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.iflow.rule.Rule;
@@ -19,15 +21,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Loads the legacy iFlow rules from {@code rules.yml} into {@link Rule} objects.
+ * Loads the executable iFlow rules from {@code rules.yml} into {@link Rule}
+ * objects.
  *
- * <p>Este es el motor histórico (SpEL) restaurado desde {@code 933bdd3^:src/iflow}.
- * Acepta dos formas de raíz:</p>
- *
- * <ul>
- *   <li>una lista de reglas (formato histórico de ejecución);</li>
- *   <li>un mapa con la clave {@code rules} que contiene esa lista.</li>
- * </ul>
+ * <p>La raíz debe ser un mapa con {@code config-version: 1.0} y una clave
+ * {@code rules} que contenga la lista. Una raíz de lista no se acepta porque no
+ * puede declarar la versión de esquema.</p>
  *
  * <p>El grafo del editor web ({@code nodes}/{@code edges}) no se ejecuta: se
  * detecta y se ignora, dejando el conjunto de reglas vacío (default-accept).</p>
@@ -45,17 +44,9 @@ public final class RuleConfigLoader {
             .resolve("config").resolve("iflow-firewall").resolve("rules.yml");
     }
 
-    /**
-     * Resuelve el archivo efectivo: canónico si existe, si no el plano
-     * heredado, y si no existe ninguno, el canónico.
-     */
+    /** Resuelve el archivo canónico, exista o no. */
     public static Path rulesFile(Path dataFolder) {
-        Path canonical = canonicalRulesFile(dataFolder);
-        Path legacy = Objects.requireNonNull(dataFolder, "dataFolder").resolve("rules.yml");
-        if (Files.exists(canonical) || !Files.exists(legacy)) {
-            return canonical;
-        }
-        return legacy;
+        return canonicalRulesFile(dataFolder);
     }
 
     /**
@@ -86,7 +77,15 @@ public final class RuleConfigLoader {
         try {
             String content = Files.readString(rulesFile);
             Object root = YAML.load(content);
-            List<?> rawRules = extractRawRules(root);
+            if (!(root instanceof Map<?, ?> map)) {
+                if (logger != null) {
+                    logger.error("rules.yml at " + rulesFile
+                        + " must be a map with config-version; using empty rule set");
+                }
+                return List.of();
+            }
+            ConfigVersion.require(map, rulesFile);
+            List<?> rawRules = extractRawRules(map);
             if (rawRules == null) {
                 if (logger != null) {
                     logger.info("rules.yml at " + rulesFile
@@ -123,6 +122,11 @@ public final class RuleConfigLoader {
             }
             return rules;
 
+        } catch (ConfigVersionException exception) {
+            if (logger != null) {
+                logger.error("Failed to read rules.yml: " + exception.getMessage(), exception);
+            }
+            return List.of();
         } catch (IOException | RuntimeException e) {
             if (logger != null) {
                 logger.error("Failed to read rules.yml: " + e.getMessage(), e);
@@ -135,14 +139,8 @@ public final class RuleConfigLoader {
      * @return la lista cruda de reglas, o {@code null} si el contenido es un
      *         grafo del editor o una raíz inválida.
      */
-    private static List<?> extractRawRules(Object root) {
-        if (root instanceof List<?> list) {
-            return list;
-        }
-        if (root instanceof Map<?, ?> map && map.get("rules") instanceof List<?> list) {
-            return list;
-        }
-        return null;
+    private static List<?> extractRawRules(Map<?, ?> map) {
+        return map.get("rules") instanceof List<?> list ? list : null;
     }
 
     private static Rule parseRule(Map<String, Object> map, int index) {

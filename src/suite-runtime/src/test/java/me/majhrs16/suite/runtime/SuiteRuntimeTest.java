@@ -487,6 +487,8 @@ class SuiteRuntimeTest {
                     .get(0).isSuccess());
             assertTrue(runtime.installLocal(packageFromProperty("chattranslator.package"), false)
                     .get(0).isSuccess());
+            assertTrue(runtime.installLocal(packageFromProperty("iflow.package"), false)
+                    .get(0).isSuccess());
             assertTrue(runtime.installLocal(packageFromProperty("iflow-vm.package"), false)
                     .get(0).isSuccess());
 

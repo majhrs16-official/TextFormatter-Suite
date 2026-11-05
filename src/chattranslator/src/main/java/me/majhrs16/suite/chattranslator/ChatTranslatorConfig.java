@@ -82,14 +82,9 @@ public final class ChatTranslatorConfig {
         }
     }
 
-    /** @return la ruta canónica si existe, o la heredada; la canónica si no hay ninguna. */
+    /** @return la ruta canónica de {@code config/chattranslator/config.yml}. */
     public static Path resolveConfigFile(Path dir) {
-        Path canonical = dir.resolve("config").resolve("chattranslator").resolve("config.yml");
-        if (Files.exists(canonical)) {
-            return canonical;
-        }
-        Path intermediate = dir.resolve("chattranslator").resolve("config.yml");
-        return Files.exists(intermediate) ? intermediate : canonical;
+        return dir.resolve("config").resolve("chattranslator").resolve("config.yml");
     }
 
     private static String str(Object o, String def) {

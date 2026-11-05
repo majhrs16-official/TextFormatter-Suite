@@ -1,5 +1,6 @@
 package me.majhrs16.suite.chattranslator;
 
+import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BackendConfigTest {
@@ -107,7 +109,7 @@ class BackendConfigTest {
     }
 
     @Test
-    void resolvesLegacyTranslatorsLocationDuringMigration() throws Exception {
+    void legacyTranslatorsLocationIsIgnored() throws Exception {
         Path legacy = dir.resolve("translators");
         Files.createDirectories(legacy);
         Files.writeString(legacy.resolve("google.yml"), """
@@ -116,8 +118,9 @@ class BackendConfigTest {
             config-version: 1.0
             """);
 
-        assertEquals(legacy, BackendConfig.resolveTranslatorsDir(dir));
-        assertEquals("google", BackendConfig.load(dir).active().name());
+        assertEquals(dir.resolve("config/chattranslator/translators"),
+                BackendConfig.resolveTranslatorsDir(dir));
+        assertEquals("none", BackendConfig.load(dir).active().name());
     }
 
     @Test
@@ -155,14 +158,31 @@ class BackendConfigTest {
     }
 
     @Test
-    void legacyChatTranslatorConfigStillLoads() throws Exception {
+    void legacyChatTranslatorConfigIsIgnored() throws Exception {
         Files.createDirectories(dir.resolve("chattranslator"));
         Files.writeString(dir.resolve("chattranslator/config.yml"),
-            "default-backend: google\nconfig-version: 1.0\n");
+            "default-backend: libre\nconfig-version: 1.0\n");
 
         ChatTranslatorConfig.Config config = ChatTranslatorConfig.load(dir);
 
         assertEquals("google", config.defaultBackend());
+    }
+
+    @Test
+    void missingConfigVersionInTranslatorFileFailsExplicitly() throws Exception {
+        Path translators = canonicalTranslators();
+        Files.writeString(translators.resolve("google.yml"), "provider: google\nactive: true\n");
+
+        assertThrows(ConfigVersionException.class, () -> BackendConfig.load(dir));
+    }
+
+    @Test
+    void missingConfigVersionInChatTranslatorConfigFailsExplicitly() throws Exception {
+        Path configDir = dir.resolve("config/chattranslator");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("config.yml"), "default-backend: libre\n");
+
+        assertThrows(ConfigVersionException.class, () -> ChatTranslatorConfig.load(dir));
     }
 
     @Test

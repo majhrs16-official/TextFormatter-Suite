@@ -4,8 +4,8 @@
 > **Baseline auditado:** `5735b3c3` (2026-11-04) más los cambios de `CoreTranslator`; commit de
 > cierre del baseline: `c5992230`.
 > **Alcance:** `README.md`, `docs/README.md`, `docs/prompts/**`, `docs/workdir/{PLAN,ADR}.md`,
-> READMEs de módulo y skills de auditoría. **Fuera de alcance:** `docs/wiki/` y el código de
-> producción (los arreglos van a P0.2/P0.3).
+> READMEs de módulo y skills de auditoría. **Fuera de alcance:** `docs/wiki/`. Los arreglos de
+> código se ejecutaron después en P0.2/P0.3 con tests de regresión.
 > **Método:** lectura del árbol real, verificación de cada ruta citada, contraste con ADR y
 > especificaciones, y comprobación de enlaces locales. No se usó el contenido de la auditoría
 > anterior como evidencia: auditaba `3aaba49` (2026-10-24), 104 commits por detrás.
@@ -21,14 +21,14 @@ falta de documentos, sino la convivencia de **tres regímenes** en el mismo árb
 2. el régimen anterior (`2.1.0`, `iflow.engine.kind`, exclusividad de motores, rutas planas);
 3. documentos históricos presentados como estado actual.
 
-Resultado: **10 hallazgos confirmados** (D-001…D-010). Se cerraron 8; D-002 y D-004 quedan
-parciales porque su cierre exige la purga de rutas y esquema legacy de P0.3. El baseline de
-código quedó limpio en `c5992230` (CoreTranslator + contrato `>= 1.0.0`); P0.2 cerró el reset de
-versiones, los `config-version` y los validadores principales el 2026-11-04.
+Resultado: **10 hallazgos confirmados** (D-001…D-010). Los 10 quedaron cerrados: D-002 y D-004
+se resolvieron con la purga de código de P0.2/P0.3 (versiones, `config-version`, rutas canónicas,
+`iflow.engine.kind` y router). El baseline de código quedó limpio en `c5992230` (CoreTranslator +
+contrato `>= 1.0.0`); el gate `build checkArchitecture checkLocks` pasó el 2026-11-04.
 
 | Severidad | Hallazgos | Estado documental |
 |---|---|---|
-| Alta (P0) | D-001, D-002, D-003, D-004, D-008 | 3 corregidos (D-001, D-003, D-008); 2 parciales (D-002, D-004) |
+| Alta (P0) | D-001, D-002, D-003, D-004, D-008 | 5 corregidos (D-001, D-002, D-003, D-004, D-008) |
 | Media (P1) | D-005, D-007, D-009, D-010 | 4 corregidos (D-005, D-007, D-009, D-010) |
 | Baja (P2) | D-006 | Corregido |
 
@@ -74,7 +74,7 @@ Reglas derivadas:
 ### D-002 — iFlow: `iflow.engine.kind` y exclusividad de motores
 
 - **Severidad:** Alta (P0).
-- **Estado:** **Parcial** (documentación corregida; código pendiente en P0.3).
+- **Estado:** **Corregido** (documentación y código, 2026-11-04).
 - **Evidencia (baseline):**
   - `docs/prompts/diseno/storage.md` presentaba `iflow.engine.kind` como selector vigente y la
     instalación como exclusiva.
@@ -89,8 +89,10 @@ Reglas derivadas:
 - **Resolución documental:** `storage.md` reescrito (hub, layout canónico, sin `engine.kind`);
   `src/iflow/README.md` alineado a la prioridad explícita; `ADR.md` con la prioridad
   `iflow-firewall` → `iflow-vm` → `iflow-wasm`; descripción de `iflow-firewall` corregida.
-- **Pendiente:** eliminar `iflow.engine.kind` de `ConfigLoader`, defaults y tests (P0.3); actualizar
-  `docs/wiki/02-Configuration.md` (P0.8b).
+- **Resolución de código (P0.3):** `ConfigLoader` y `HostConfig` ya no tienen `Engine` ni
+  `iflow.engine.kind`; los defaults de `spigot-host`/`fabric-host` tampoco lo declaran.
+  `SuiteRuntime.resolveRouter()` exige `IflowHub` y no acepta un `Router` suelto. Queda actualizar
+  `docs/wiki/02-Configuration.md` en P0.8b.
 
 ### D-003 — Especificaciones con contrato legacy y versiones `2.x`
 
@@ -118,8 +120,9 @@ Reglas derivadas:
 ### D-004 — Código con deuda P0 que contradice la documentación
 
 - **Severidad:** Alta (P0).
-- **Estado:** **Parcial (código, 2026-11-04)**. P0.2 corrigió versiones y `config-version`; las
-  rutas planas, `iflow.engine.kind` y el esquema de reglas legacy se eliminan en P0.3.
+- **Estado:** **Corregido (código, 2026-11-04)**. P0.2 corrigió versiones y `config-version`;
+  P0.3 eliminó las rutas planas, `iflow.engine.kind`, el fallback de `Router` y el esquema de
+  reglas con raíz de lista.
 - **Evidencia (baseline):**
   - `src/host/.../HostPaths.java:66-85`: `suiteConfig`, `suiteMessages` y `suiteCommands` aceptan
     `config.yml`, `messages.yml` y `commands.yml` en la raíz del data folder.
@@ -131,11 +134,12 @@ Reglas derivadas:
   - `src/extension-api/.../ExtensionMetadata.java:36`: `minSuiteVersion = "2.1.0"`.
   - Varios `build.gradle` de módulo (`gtranslate`, `ltranslate`, `logger`, `transport`,
     `chattranslator`, `web-editor`) declaran `2.1.0` o `>=2.1.0`.
-- **Impacto:** la documentación ya describe el contrato correcto, pero el runtime todavía acepta
-  parte del esquema viejo. Mientras P0.3 no cierre, la deuda es real y no una excepción.
+- **Impacto:** en el baseline, la documentación describía el contrato correcto mientras el
+  runtime aceptaba parte del esquema viejo.
 - **Resolución:** P0.2 eliminó las versiones `2.x` y añadió la validación de `config-version`.
-  `PLAN.md` mantiene P0.3 como la tarea que retira rutas planas, `iflow.engine.kind`, el fallback
-  de `Router` y el esquema de reglas legacy, con tests de regresión.
+  P0.3 retiró las rutas planas, `iflow.engine.kind`, el fallback de `Router` y el esquema de
+  reglas legacy. Los tests ahora verifican que las rutas antiguas se ignoran y que `rules.yml`
+  exige un mapa con `config-version`.
 
 ### D-005 — Enlaces rotos y READMEs ausentes
 
@@ -270,14 +274,13 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 - **Rutas citadas:** las cinco rutas alucinadas de D-001 fueron sustituidas por rutas existentes.
 - **Términos prohibidos:** se revisó `iflow.engine.kind`, `config/manager/`, `manager/config/`,
   `sync-tcpudp`, `RELEASE_NOTES.md`, `CHANGELOG.md` y `2.1.0` en la documentación del alcance.
-  Quedan menciones históricas explícitas (p. ej. la nota de `iflow-cpu-design.md`) y deuda de
-  código (D-004), no contratos vigentes.
-- **Código de producción:** `git diff --stat` no muestra cambios en `.java`; los únicos cambios
-  fuera de documentación son la descripción de `src/iflow-firewall/build.gradle` y los READMEs
-  nuevos. El baseline `c5992230` ya estaba verificado con
-  `./gradlew :src:coretranslator:test :src:kernel:test` y el gate parcial
-  `checkArchitecture checkLocks :src:coretranslator:build`.
-- **Gate completo:** no ejecutado en esta ronda. Sigue pendiente en P0.7; no se declara verde.
+  Quedan menciones históricas explícitas (p. ej. la nota de `iflow-cpu-design.md`); el código ya
+  no acepta el esquema viejo.
+- **Código de producción:** P0.2/P0.3 modificaron `host`, `suite-runtime`, `sync-common`,
+  `textformatter`, `chattranslator`, `iflow-firewall` y los fixtures de `loadtest`. La suite
+  `./gradlew test --no-daemon` pasó completa.
+- **Gate completo:** `./gradlew build checkArchitecture checkLocks --no-daemon` pasó el
+  2026-11-04 (36 módulos, 44 lockfiles, 0 sin lockfile).
 
 ---
 
@@ -285,9 +288,10 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 
 1. **La wiki sigue desalineada.** `docs/wiki/02-Configuration.md` aún presenta
    `iflow.engine.kind` y la exclusividad. Está fuera de alcance por decisión explícita (P0.8b).
-2. **El código todavía acepta rutas legacy.** La documentación describe el contrato correcto, pero
-   `HostPaths`, `DefaultConfigInstaller`, `ConfigLoader` y `ExtensionMetadata` no están corregidos.
-   Hasta P0.2/P0.3, la deuda es real.
+2. **Las rutas planas se ignoran, no se migran.** `HostPaths`, `DefaultConfigInstaller`,
+   `ConfigLoader`, `SyncConfigPaths`, `ChannelConfig`, `ChatTranslatorConfig`, `BackendConfig` y
+   `iflow-firewall` usan solo el layout canónico; los tests verifican que el camino viejo no se
+   lee. `iflow-firewall` conserva SpEL como módulo legacy independiente, no como shim.
 3. **No hay E2E.** Ni Spigot/Paper, ni Fabric, ni Velocity, ni `CoreTranslator` con PlaceholderAPI
    se han probado en un servidor real. El smoke test de Paper 1.20.6 no es E2E. El E2E pertenece a
    la fase posterior a `1.0.0`.
@@ -302,9 +306,9 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 
 1. ~~Ejecutar P0.2~~ **Hecho (2026-11-04):** versiones a `1.0.0`, `config-version: 1.0` en los
    29 YAML de runtime, `minSuiteVersion: "1.0.0"` y validadores con test de regresión.
-2. Ejecutar P0.3: eliminar `iflow.engine.kind`, rutas planas, fallbacks de `HostPaths`,
-   migración de `DefaultConfigInstaller` y el fallback de `Router` en `SuiteRuntime`, con tests de
-   regresión.
+2. ~~Ejecutar P0.3~~ **Hecho (2026-11-04):** eliminados `iflow.engine.kind`, `HostConfig.Engine`,
+   rutas planas, migración de `DefaultConfigInstaller` y el fallback de `Router`; `rules.yml`
+   exige mapa con `config-version` y las rutas antiguas se ignoran con tests de regresión.
 3. Ejecutar P0.8b: alinear `docs/wiki/` (fuera de esta ronda).
 4. Retomar W3.5 (paridad `.flow` v3/VM) y después V6 (compilador C).
 5. E2E real solo después de `1.0.0`, incluido el smoke test de `CoreTranslator` con
@@ -320,8 +324,9 @@ Commits: `0a7550ab` (contexto, storage y contratos), `9ffc0230` (índices, enlac
 - **A3:** la auditoría documental fue solo documentación; el cierre de D-009 se hizo después con
   código y test. El resto de arreglos de código van a P0.2/P0.3.
 - **A4:** P0.2 se ejecutó con reset de versiones, `config-version` en los YAML de runtime y
-  `ConfigVersion` como contrato único de validación. El esquema de reglas con raíz de lista se
-  difiere a P0.3 porque no puede declarar la clave en la raíz.
+  `ConfigVersion` como contrato único de validación.
+- **A5:** P0.3 eliminó el esquema de configuración legacy y cerró P0.5/P0.7: tests reescritos,
+  rutas canónicas, hub obligatorio y gate completo en verde.
 
 ---
 

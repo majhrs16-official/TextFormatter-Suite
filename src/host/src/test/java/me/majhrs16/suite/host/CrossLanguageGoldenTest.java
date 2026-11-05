@@ -62,9 +62,12 @@ class CrossLanguageGoldenTest {
 
     @Test
     void renderMatchesGolden() throws Exception {
+        Files.createDirectories(dir.resolve("config/suite"));
         Files.createDirectories(dir.resolve("config/textformatter/channels"));
-        Files.writeString(dir.resolve("config.yml"), "general:\n  language: en");
-        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), "name: chat\nmessages:\n  - '<gray>%player_name%: %content%</gray>'\n");
+        Files.writeString(dir.resolve("config/suite/config.yml"),
+            "general:\n  language: en\nconfig-version: 1.0\n");
+        Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"),
+            "name: chat\nmessages:\n  - '<gray>%player_name%: %content%</gray>'\nconfig-version: 1.0\n");
 
         // Pre-create the translator service outside the test to avoid nested anonymous classes in loop
         me.majhrs16.suite.api.spi.TranslationService TRANS_SERVICE =

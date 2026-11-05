@@ -19,11 +19,9 @@ import me.majhrs16.suite.host.config.HostPaths;
  * {@code ModuleHost} passes to each activator. Existing canonical files are
  * never overwritten.</p>
  *
- * <p>Las rutas {@code config/manager/<module>/} y {@code manager/config/<module>/}
- * son incorrectas: no se leen, no se aceptan como fallback ni como layouts
- * legacy y el instalador no las migra ni las elimina. Las rutas planas antiguas
- * ({@code channels/...}, {@code translators/...}, {@code sync/...}, etc.) sí se
- * conservan como legacy durante la migración.</p>
+ * <p>Las rutas {@code config/manager/<module>/}, {@code manager/config/<module>/}
+ * y las rutas planas en la raíz del data folder no se leen, no se migran y no
+ * se eliminan. El instalador solo escribe defaults canónicos ausentes.</p>
  */
 public final class DefaultConfigInstaller {
 
@@ -47,58 +45,42 @@ public final class DefaultConfigInstaller {
         Objects.requireNonNull(logger, "logger");
 
         install(resources, logger, "defaults/config.yml",
-                HostPaths.canonicalSuiteConfig(dataFolder),
-                dataFolder.resolve("config.yml"));
+                HostPaths.canonicalSuiteConfig(dataFolder));
         install(resources, logger, "defaults/commands.yml",
-                HostPaths.canonicalSuiteCommands(dataFolder),
-                dataFolder.resolve("commands.yml"));
+                HostPaths.canonicalSuiteCommands(dataFolder));
         install(resources, logger, "defaults/messages.yml",
-                HostPaths.canonicalSuiteMessages(dataFolder),
-                dataFolder.resolve("messages.yml"));
+                HostPaths.canonicalSuiteMessages(dataFolder));
 
         for (String name : CHANNELS) {
             Path canonical = HostPaths.moduleConfigDir(dataFolder, "textformatter")
                     .resolve("channels/" + name + ".yml");
-            install(resources, logger, "defaults/channels/" + name + ".yml", canonical,
-                    dataFolder.resolve("channels/" + name + ".yml"));
+            install(resources, logger, "defaults/channels/" + name + ".yml", canonical);
         }
         Path googleTranslator = HostPaths.moduleConfigDir(dataFolder, "chattranslator")
                 .resolve("translators/google.yml");
-        install(resources, logger, "defaults/translators/google.yml", googleTranslator,
-                dataFolder.resolve("translators/google.yml"));
+        install(resources, logger, "defaults/translators/google.yml", googleTranslator);
 
         Path discord = HostPaths.moduleConfigDir(dataFolder, "sync-discord").resolve("config.yml");
-        install(resources, logger, "defaults/sync/discord.yml", discord,
-                dataFolder.resolve("sync/discord.yml"));
+        install(resources, logger, "defaults/sync/discord.yml", discord);
 
         Path websocket = HostPaths.moduleConfigDir(dataFolder, "sync-websocket").resolve("config.yml");
-        install(resources, logger, "defaults/sync/websocket.yml", websocket,
-                dataFolder.resolve("sync/websocket.yml"));
+        install(resources, logger, "defaults/sync/websocket.yml", websocket);
 
         Path inworld = HostPaths.moduleConfigDir(dataFolder, "inworld").resolve("config.yml");
-        install(resources, logger, "defaults/inworld.yml", inworld,
-                dataFolder.resolve("inworld.yml"));
+        install(resources, logger, "defaults/inworld.yml", inworld);
 
         Path firewallRules = HostPaths.moduleConfigDir(dataFolder, "iflow-firewall")
                 .resolve("rules.yml");
-        install(resources, logger, "defaults/rules.yml", firewallRules,
-                dataFolder.resolve("rules.yml"));
+        install(resources, logger, "defaults/rules.yml", firewallRules);
 
         Path iflowHub = HostPaths.moduleConfigDir(dataFolder, "iflow").resolve("config.yml");
-        install(resources, logger, "defaults/iflow.yml", iflowHub,
-                dataFolder.resolve("iflow.yml"));
+        install(resources, logger, "defaults/iflow.yml", iflowHub);
     }
 
     private static void install(Function<String, InputStream> resources, PluginLogger logger,
-                                String resourcePath, Path canonical, Path... legacy) {
+                                String resourcePath, Path canonical) {
         if (Files.exists(canonical)) {
             return;
-        }
-        for (Path candidate : legacy) {
-            if (candidate != null && Files.isRegularFile(candidate)) {
-                copyFile(logger, candidate, canonical);
-                return;
-            }
         }
         try (InputStream in = resources.apply("/" + resourcePath)) {
             if (in == null) {
@@ -112,14 +94,4 @@ public final class DefaultConfigInstaller {
         }
     }
 
-    private static void copyFile(PluginLogger logger, Path source, Path target) {
-        try {
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-            logger.info("Config migrated: " + source + " -> " + target);
-        } catch (IOException exception) {
-            logger.warn("Cannot migrate " + source + " to " + target + ": "
-                    + exception.getMessage());
-        }
-    }
 }

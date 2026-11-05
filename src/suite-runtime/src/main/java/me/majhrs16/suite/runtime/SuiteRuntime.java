@@ -238,15 +238,14 @@ public final class SuiteRuntime implements AutoCloseable {
     }
 
     /**
-     * Prefiere el hub iFlow cuando está instalado; si no, conserva el router
-     * legacy publicado por un motor. El hub es el único punto que elige entre
-     * {@code iflow-firewall}, {@code iflow-vm} e {@code iflow-wasm}.
+     * El hub iFlow es el único punto que elige entre {@code iflow-firewall},
+     * {@code iflow-vm} e {@code iflow-wasm}. Un motor no puede publicar un
+     * {@link Router} que sustituya al hub.
      */
     private Router resolveRouter() {
-        IflowHub hub = moduleHost.services().find(IflowHub.class).orElse(null);
-        if (hub == null) {
-            return requireService(Router.class);
-        }
+        IflowHub hub = moduleHost.services().find(IflowHub.class)
+                .orElseThrow(() -> new IllegalStateException(
+                        "iFlow hub is not installed; install the iflow package"));
         Router router = hub.router();
         if (router == null) {
             throw new IllegalStateException(

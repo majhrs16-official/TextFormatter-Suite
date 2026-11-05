@@ -84,7 +84,7 @@ class WebSocketSyncConfigTest {
     }
 
     @Test
-    void legacyFileIsReadDuringMigration() throws Exception {
+    void legacyFileIsIgnored() throws Exception {
         Path legacy = dir.resolve("sync/websocket.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy,
@@ -92,7 +92,7 @@ class WebSocketSyncConfigTest {
 
         WebSocketSyncConfig config = WebSocketSyncConfig.load(dir);
 
-        assertTrue(config.usable());
-        assertEquals(9080, config.port());
+        assertFalse(config.usable());
+        assertEquals(WebSocketSyncConfig.DEFAULT_PORT, config.port());
     }
 }

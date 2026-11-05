@@ -29,7 +29,7 @@ manager in sync with the module lifecycle.
 |-------|----------------|
 | `ChatTranslatorActivator` | Registers the facade/service, tracks resources and subscribes to lifecycle events |
 | `ChatTranslatorConfig` | Loads the facade configuration |
-| `BackendConfig` | Reads `translators/*.yml`, validates provider config and creates translators |
+| `BackendConfig` | Reads `config/chattranslator/translators/*.yml`, validates provider config and creates translators |
 | `ChatTranslator` | Public facade used by the host |
 | `TranslationService` | Translation/detection service with caches and executor |
 

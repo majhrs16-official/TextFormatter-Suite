@@ -34,9 +34,8 @@ public final class MessagesConfig {
     }
 
     /**
-     * Builds the message table from {@code config/suite/messages.yml}
-     * (legacy {@code messages.yml}). If the file doesn't exist, loads the
-     * default resource from classpath.
+     * Builds the message table from {@code config/suite/messages.yml}. If the
+     * file doesn't exist, loads the default resource from classpath.
      *
      * @param dir configuration directory (e.g. plugin data folder)
      * @param defaultResource classpath path to default messages.yml (e.g. "/defaults/messages.yml")

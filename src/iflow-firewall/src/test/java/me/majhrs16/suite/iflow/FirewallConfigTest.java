@@ -58,6 +58,7 @@ class FirewallConfigTest {
             edges:
               - from: in
                 to: out
+            config-version: 1.0
             """);
         Files.writeString(legacy(), "guard:\n  max-steps: 1\n");
 
@@ -73,7 +74,7 @@ class FirewallConfigTest {
     }
 
     @Test
-    void legacyFileIsReadDuringMigration() throws Exception {
+    void legacyFlatFileIsIgnored() throws Exception {
         Files.writeString(legacy(), """
             guard:
               max-steps: 32
@@ -84,21 +85,32 @@ class FirewallConfigTest {
 
         FirewallConfig config = FirewallConfig.load(dir);
 
-        assertEquals(legacy(), config.source());
-        assertEquals(32, config.graph().maxSteps());
-        assertEquals(1, config.graph().nodes().size());
+        assertEquals(FirewallConfig.canonicalRulesFile(dir), config.source());
+        assertEquals(RuleGraph.empty(), config.graph());
+    }
+
+    @Test
+    void missingConfigVersionIsAnError() throws Exception {
+        Files.writeString(canonical(), "guard:\n  max-steps: 32\n");
+
+        FirewallConfig config = FirewallConfig.load(dir);
+
+        assertFalse(config.valid());
+        assertTrue(hasIssue(config, FirewallIssue.Level.ERROR, "rules.yml"));
+        assertTrue(config.issues().stream()
+            .anyMatch(issue -> issue.message().contains("version de configuracion no identificada")));
     }
 
     @Test
     void topLevelPriorityIsUsedWhenFilterHasNone() throws Exception {
-        Files.writeString(canonical(), "priority: round-robin\n");
+        Files.writeString(canonical(), "priority: round-robin\nconfig-version: 1.0\n");
 
         assertEquals("round-robin", FirewallConfig.load(dir).graph().priority());
     }
 
     @Test
     void invalidGuardIsAnErrorAndFallsBackToDefault() throws Exception {
-        Files.writeString(canonical(), "guard:\n  max-steps: 0\n");
+        Files.writeString(canonical(), "guard:\n  max-steps: 0\nconfig-version: 1.0\n");
 
         FirewallConfig config = FirewallConfig.load(dir);
 
@@ -109,7 +121,7 @@ class FirewallConfigTest {
 
     @Test
     void nonNumericGuardIsAnError() throws Exception {
-        Files.writeString(canonical(), "guard:\n  max-steps: muchos\n");
+        Files.writeString(canonical(), "guard:\n  max-steps: muchos\nconfig-version: 1.0\n");
 
         FirewallConfig config = FirewallConfig.load(dir);
 
@@ -119,7 +131,7 @@ class FirewallConfigTest {
 
     @Test
     void invalidFilterIsAWarningButNotFatal() throws Exception {
-        Files.writeString(canonical(), "filter:\n  dedup-fanout: \"si\"\n");
+        Files.writeString(canonical(), "filter:\n  dedup-fanout: \"si\"\nconfig-version: 1.0\n");
 
         FirewallConfig config = FirewallConfig.load(dir);
 
@@ -141,6 +153,7 @@ class FirewallConfigTest {
               - id: sin-kind
               - id: malo
                 kind: inventado
+            config-version: 1.0
             """);
 
         FirewallConfig config = FirewallConfig.load(dir);
@@ -164,6 +177,7 @@ class FirewallConfigTest {
               - from: in
               - from: in
                 to: out
+            config-version: 1.0
             """);
 
         FirewallConfig config = FirewallConfig.load(dir);
@@ -187,7 +201,7 @@ class FirewallConfigTest {
     }
 
     @Test
-    void legacyRuleListIsAcceptedAsInfo() throws Exception {
+    void rootListIsRejectedBecauseItCannotDeclareConfigVersion() throws Exception {
         Files.writeString(canonical(), """
             - id: drop-private
               target: DROP
@@ -196,17 +210,18 @@ class FirewallConfigTest {
 
         FirewallConfig config = FirewallConfig.load(dir);
 
-        assertTrue(config.valid(), config.issues().toString());
-        assertTrue(hasIssue(config, FirewallIssue.Level.INFO, "rules.yml"));
+        assertFalse(config.valid());
+        assertTrue(hasIssue(config, FirewallIssue.Level.ERROR, "rules.yml"));
         assertEquals(RuleGraph.empty(), config.graph());
     }
 
     @Test
-    void legacyRulesKeyIsAcceptedAsInfo() throws Exception {
+    void ruleListIsAcceptedAsInfo() throws Exception {
         Files.writeString(canonical(), """
             rules:
               - id: drop-private
                 target: DROP
+            config-version: 1.0
             """);
 
         FirewallConfig config = FirewallConfig.load(dir);

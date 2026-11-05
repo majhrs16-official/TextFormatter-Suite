@@ -60,7 +60,7 @@ class TelegramConfigTest {
     }
 
     @Test
-    void legacyFileIsReadDuringMigration() throws Exception {
+    void legacyFileIsIgnored() throws Exception {
         Path legacy = dir.resolve("sync/telegram.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy,
@@ -68,8 +68,8 @@ class TelegramConfigTest {
 
         TelegramConfig config = TelegramConfig.load(dir);
 
-        assertTrue(config.usable());
-        assertEquals(7L, config.chatId());
+        assertFalse(config.usable());
+        assertEquals(0L, config.chatId());
     }
 
     @Test

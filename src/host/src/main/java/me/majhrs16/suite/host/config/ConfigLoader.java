@@ -24,9 +24,9 @@ import java.util.ArrayList;
  * {@code me.majhrs16.suite.textformatter.ChannelConfig}.
  *
  * <p>Every field is optional; defaults mirror the suite defaults. Unknown
- * keys are ignored so older configs degrade gracefully. Errors are logged
- * at ERROR level so administrators can see them; a degraded config is
- * returned but config validity state is tracked.</p>
+ * keys are ignored. Errors are logged at ERROR level so administrators can
+ * see them; a degraded config is returned but config validity state is
+ * tracked.</p>
  */
 public final class ConfigLoader {
 
@@ -62,7 +62,7 @@ public final class ConfigLoader {
         public List<String> errors() { return errors; }
     }
 
-    /** Loads {@code config/suite/config.yml} (legacy {@code config.yml}); missing → defaults. */
+    /** Loads {@code config/suite/config.yml}; missing → defaults. */
     public static LoadResult<HostConfig> loadConfig(Path dir, PluginLogger logger) {
         List<String> errors = new ArrayList<>();
         Path file = HostPaths.suiteConfig(dir);
@@ -87,7 +87,6 @@ public final class ConfigLoader {
 
             boolean quickLook = bool(map.get(ConfigPath.QUICK_LOOK.key()), true);
             boolean parallel = bool(nested(map, ConfigPath.IFLOW, ConfigPath.IFLOW_ENGINE, ConfigPath.IFLOW_ENGINE_PARALLEL), false);
-            HostConfig.Engine engine = engine(nested(map, ConfigPath.IFLOW, ConfigPath.IFLOW_ENGINE, ConfigPath.IFLOW_ENGINE_KIND), logger);
             boolean sound = bool(nested(map, ConfigPath.SONIDO, ConfigPath.SONIDO_ENABLED), true);
             Language defaultLang = Language.of(str(nested(map, ConfigPath.GENERAL, ConfigPath.GENERAL_LANGUAGE), "en"))
                 .orElse(Language.EN);
@@ -96,7 +95,7 @@ public final class ConfigLoader {
             List<HostConfig.Repository> repositories = parseRepositories(map, logger);
             List<String> moduleAllowlist = parseModuleAllowlist(map);
 
-            return LoadResult.success(new HostConfig(quickLook, defaultLang, parallel, engine, sound, claimMode, logChatToConsole, repositories, moduleAllowlist));
+            return LoadResult.success(new HostConfig(quickLook, defaultLang, parallel, sound, claimMode, logChatToConsole, repositories, moduleAllowlist));
         } catch (ConfigVersionException e) {
             String msg = e.getMessage();
             if (logger != null) logger.error(msg);
@@ -120,22 +119,6 @@ public final class ConfigLoader {
             current = ((Map<String, Object>) current).get(key.key());
         }
         return current;
-    }
-
-    private static HostConfig.Engine engine(Object raw, PluginLogger logger) {
-        if (!(raw instanceof String value) || value.isBlank()) {
-            return HostConfig.Engine.VM;
-        }
-        return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
-            case "vm", "iflow-vm" -> HostConfig.Engine.VM;
-            case "firewall", "iflow-firewall", "legacy" -> HostConfig.Engine.FIREWALL;
-            default -> {
-                if (logger != null) {
-                    logger.warn("Unknown iflow.engine.kind '" + value + "'; using vm");
-                }
-                yield HostConfig.Engine.VM;
-            }
-        };
     }
 
     private static HostConfig.ClaimMode claimMode(Object raw) {
@@ -165,7 +148,6 @@ public final class ConfigLoader {
         IFLOW("iflow"),
         IFLOW_ENGINE("engine"),
         IFLOW_ENGINE_PARALLEL("parallel"),
-        IFLOW_ENGINE_KIND("kind"),
         SONIDO("sonido"),
         SONIDO_ENABLED("enabled"),
         GENERAL("general"),

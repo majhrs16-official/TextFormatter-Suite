@@ -135,7 +135,7 @@ class ChannelConfigTest {
     }
 
     @Test
-    void resolvesLegacyLocationsDuringMigration() throws Exception {
+    void legacyChannelsLocationIsIgnored() throws Exception {
         Path legacy = dir.resolve("channels");
         Files.createDirectories(legacy);
         Files.writeString(legacy.resolve("chat.yml"), """
@@ -143,8 +143,9 @@ class ChannelConfigTest {
             config-version: 1.0
             """);
 
-        assertEquals(legacy, ChannelConfig.resolveChannelsDir(dir));
-        assertTrue(ChannelConfig.load(dir).config().get("chat").isPresent());
+        assertEquals(dir.resolve("config/textformatter/channels"),
+            ChannelConfig.resolveChannelsDir(dir));
+        assertFalse(ChannelConfig.load(dir).config().get("chat").isPresent());
     }
 
     @Test
@@ -160,6 +161,19 @@ class ChannelConfigTest {
         Channel chat = ChannelConfig.load(dir).config().get("chat").orElseThrow();
 
         assertEquals("canónica", chat.messages().format(0));
+    }
+
+    @Test
+    void channelWithoutConfigVersionIsReported() throws Exception {
+        Path channels = canonicalChannels();
+        Files.writeString(channels.resolve("chat.yml"), "name: chat\n");
+
+        ChannelConfig.LoadResult<ChannelRegistry> result = ChannelConfig.load(dir);
+
+        assertFalse(result.isValid());
+        assertTrue(result.config().get("chat").isEmpty());
+        assertTrue(result.errors().stream()
+            .anyMatch(error -> error.contains("version de configuracion no identificada")));
     }
 
     @Test

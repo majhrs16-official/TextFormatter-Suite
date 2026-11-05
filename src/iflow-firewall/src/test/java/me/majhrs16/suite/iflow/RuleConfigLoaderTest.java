@@ -37,21 +37,23 @@ class RuleConfigLoaderTest {
     @Test
     void canonicalRuleListIsLoadedWithConditionActionAndTransforms() throws Exception {
         Files.writeString(canonical(), """
-            - id: drop-private
-              target: DROP
-              channel: private
-              priority: 5
-              reason: staff only
-              condition: "#content == 'hola'"
-              action: "#surface.cancel()"
-              transforms:
-                - op: rewrite
-                  template: nuevo
-                - op: sleep
-                  millis: 10
-            - id: move
-              target: CHANNEL_REDIRECT
-              redirect-channel: staff
+            rules:
+              - id: drop-private
+                target: DROP
+                channel: private
+                priority: 5
+                reason: staff only
+                condition: "#content == 'hola'"
+                action: "#surface.cancel()"
+                transforms:
+                  - op: rewrite
+                    template: nuevo
+                  - op: sleep
+                    millis: 10
+              - id: move
+                target: CHANNEL_REDIRECT
+                redirect-channel: staff
+            config-version: 1.0
             """);
 
         List<Rule> rules = RuleConfigLoader.loadRules(dir, null);
@@ -76,6 +78,7 @@ class RuleConfigLoaderTest {
             rules:
               - id: only
                 target: REJECT
+            config-version: 1.0
             """);
 
         List<Rule> rules = RuleConfigLoader.loadRules(dir, null);
@@ -93,6 +96,7 @@ class RuleConfigLoaderTest {
               - id: in
                 kind: input
             edges: []
+            config-version: 1.0
             """);
 
         assertTrue(RuleConfigLoader.loadRules(dir, null).isEmpty());
@@ -101,14 +105,18 @@ class RuleConfigLoaderTest {
     @Test
     void canonicalWinsOverLegacy() throws Exception {
         Files.writeString(canonical(), """
-            - id: canonical
-              target: DROP
+            rules:
+              - id: canonical
+                target: DROP
+            config-version: 1.0
             """);
         Files.writeString(legacy(), """
-            - id: legacy-a
-              target: LOG
-            - id: legacy-b
-              target: LOG
+            rules:
+              - id: legacy-a
+                target: LOG
+              - id: legacy-b
+                target: LOG
+            config-version: 1.0
             """);
 
         List<Rule> rules = RuleConfigLoader.loadRules(dir, null);
@@ -118,25 +126,37 @@ class RuleConfigLoaderTest {
     }
 
     @Test
-    void legacyFlatFileIsUsedDuringMigration() throws Exception {
+    void legacyFlatFileIsIgnored() throws Exception {
         Files.writeString(legacy(), """
-            - id: legacy
-              target: DROP
+            rules:
+              - id: legacy
+                target: DROP
+            config-version: 1.0
             """);
 
-        List<Rule> rules = RuleConfigLoader.loadRules(dir, null);
+        assertTrue(RuleConfigLoader.loadRules(dir, null).isEmpty());
+    }
 
-        assertEquals(1, rules.size());
-        assertEquals("legacy", rules.get(0).id());
+    @Test
+    void missingConfigVersionYieldsNoExecutableRules() throws Exception {
+        Files.writeString(canonical(), """
+            rules:
+              - id: only
+                target: REJECT
+            """);
+
+        assertTrue(RuleConfigLoader.loadRules(dir, null).isEmpty());
     }
 
     @Test
     void invalidTargetIsSkippedButValidRulesSurvive() throws Exception {
         Files.writeString(canonical(), """
-            - id: malo
-              target: EXPLODE
-            - id: bueno
-              target: LOG
+            rules:
+              - id: malo
+                target: EXPLODE
+              - id: bueno
+                target: LOG
+            config-version: 1.0
             """);
 
         List<Rule> rules = RuleConfigLoader.loadRules(dir, null);
@@ -148,8 +168,10 @@ class RuleConfigLoaderTest {
     @Test
     void channelRedirectWithoutTargetIsSkipped() throws Exception {
         Files.writeString(canonical(), """
-            - id: sin-destino
-              target: CHANNEL_REDIRECT
+            rules:
+              - id: sin-destino
+                target: CHANNEL_REDIRECT
+            config-version: 1.0
             """);
 
         assertTrue(RuleConfigLoader.loadRules(dir, null).isEmpty());
@@ -158,9 +180,11 @@ class RuleConfigLoaderTest {
     @Test
     void legacyTransformStringBecomesRewrite() throws Exception {
         Files.writeString(canonical(), """
-            - id: rewrite
-              target: LOG
-              transform: "<green>hola</green>"
+            rules:
+              - id: rewrite
+                target: LOG
+                transform: "<green>hola</green>"
+            config-version: 1.0
             """);
 
         List<Rule> rules = RuleConfigLoader.loadRules(dir, null);

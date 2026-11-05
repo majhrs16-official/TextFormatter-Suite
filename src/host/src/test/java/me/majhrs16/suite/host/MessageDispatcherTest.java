@@ -118,8 +118,9 @@ class MessageDispatcherTest {
     }
 
     private void writeLayout(boolean withSound) throws Exception {
+        Files.createDirectories(dir.resolve("config/suite"));
         Files.createDirectories(dir.resolve("config/textformatter/channels"));
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(dir.resolve("config/suite/config.yml"), """
             general:
               language: en
             config-version: 1.0
@@ -335,8 +336,9 @@ class MessageDispatcherTest {
 
     @Test
     void soundDisabledInConfigSilencesAllChannelSounds() throws Exception {
+        Files.createDirectories(dir.resolve("config/suite"));
         Files.createDirectories(dir.resolve("config/textformatter/channels"));
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(dir.resolve("config/suite/config.yml"), """
             general:
               language: en
             sonido:

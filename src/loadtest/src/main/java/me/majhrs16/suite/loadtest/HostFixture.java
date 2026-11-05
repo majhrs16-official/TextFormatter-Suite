@@ -15,9 +15,6 @@ import me.majhrs16.suite.chattranslator.BackendConfig;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
-import me.majhrs16.suite.iflow.DefaultRouter;
-import me.majhrs16.suite.iflow.RuleConfigLoader;
-import me.majhrs16.suite.iflow.RuleExpressionEvaluator;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -65,8 +62,7 @@ public final class HostFixture {
 
         TranslatorManager translators = BackendConfig.load(configDir);
         TranslationService translation = new TranslationService(translators);
-        Router router = router(config, configDir, channels, permissions,
-                placeholders, translation, logger);
+        Router router = router(configDir, channels, permissions, placeholders, translation, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
         TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
@@ -74,16 +70,9 @@ public final class HostFixture {
                 renderer, renderer, logger, delivery);
     }
 
-    private static Router router(HostConfig config, Path configDir, ChannelRegistry channels,
+    private static Router router(Path configDir, ChannelRegistry channels,
                                  PermissionChecker permissions, PlaceholderResolver placeholders,
                                  TranslationService translation, PluginLogger logger) {
-        if (config.engine() == HostConfig.Engine.FIREWALL) {
-            RuleExpressionEvaluator evaluator =
-                    new RuleExpressionEvaluator(placeholders, translation, logger);
-            DefaultRouter firewall = new DefaultRouter(channels, permissions::has, evaluator);
-            firewall.setRules(RuleConfigLoader.loadRules(configDir, logger));
-            return firewall;
-        }
         ProgramImage program = VmConfigLoader.loadProgram(configDir, logger);
         VmPolicyEngine vm = new VmPolicyEngine(channels, permissions, new RateLimiter());
         vm.setProgram(program);

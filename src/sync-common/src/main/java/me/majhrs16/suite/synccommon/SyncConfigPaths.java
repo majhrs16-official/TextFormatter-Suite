@@ -1,6 +1,5 @@
 package me.majhrs16.suite.synccommon;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -8,13 +7,8 @@ import java.nio.file.Path;
  * {@code docs/prompts/diseno/storage.md}.
  * <p>
  * Cada submódulo ({@code sync-discord}, {@code sync-websocket}, ...) es dueño de
- * su carpeta dentro de {@code config/}. Las rutas planas heredadas
- * ({@code sync/}) se mantienen como fallback para no romper instalaciones
- * existentes.
- * </p>
- * <p>
- * Regla de resolución: canónica si existe → heredada si existe → canónica
- * (destino de escritura del primer arranque).
+ * su carpeta dentro de {@code config/}. Las rutas planas {@code sync/} no se
+ * leen ni se migran.
  * </p>
  */
 public final class SyncConfigPaths {
@@ -22,12 +16,6 @@ public final class SyncConfigPaths {
     public static final String CONFIG_DIR = "config";
 
     private SyncConfigPaths() {
-    }
-
-    // -- rutas heredadas (solo lectura durante la migración) -----------------
-
-    private static Path legacyDir(Path dataFolder) {
-        return dataFolder.resolve("sync");
     }
 
     // -- rutas canónicas (destino de escritura) ------------------------------
@@ -64,47 +52,37 @@ public final class SyncConfigPaths {
         return dataFolder.resolve(CONFIG_DIR).resolve("sync-socket").resolve("udp.yml");
     }
 
-    // -- rutas resueltas (canónica si existe, si no la heredada) -------------
+    // -- rutas resueltas -----------------------------------------------------
 
     public static Path bus(Path dataFolder) {
-        return resolve(canonicalBus(dataFolder), legacyDir(dataFolder).resolve("bus.yml"));
+        return canonicalBus(dataFolder);
     }
 
     public static Path discord(Path dataFolder) {
-        return resolve(canonicalDiscord(dataFolder), legacyDir(dataFolder).resolve("discord.yml"));
+        return canonicalDiscord(dataFolder);
     }
 
     public static Path webSocket(Path dataFolder) {
-        return resolve(canonicalWebSocket(dataFolder), legacyDir(dataFolder).resolve("websocket.yml"));
+        return canonicalWebSocket(dataFolder);
     }
 
     public static Path telegram(Path dataFolder) {
-        return resolve(canonicalTelegram(dataFolder), legacyDir(dataFolder).resolve("telegram.yml"));
+        return canonicalTelegram(dataFolder);
     }
 
     public static Path http(Path dataFolder) {
-        return resolve(canonicalHttp(dataFolder), legacyDir(dataFolder).resolve("http.yml"));
+        return canonicalHttp(dataFolder);
     }
 
     public static Path velocity(Path dataFolder) {
-        return resolve(canonicalVelocity(dataFolder), legacyDir(dataFolder).resolve("velocity.yml"));
+        return canonicalVelocity(dataFolder);
     }
 
     public static Path tcp(Path dataFolder) {
-        return resolve(canonicalTcp(dataFolder), legacyDir(dataFolder).resolve("tcp.yml"));
+        return canonicalTcp(dataFolder);
     }
 
     public static Path udp(Path dataFolder) {
-        return resolve(canonicalUdp(dataFolder), legacyDir(dataFolder).resolve("udp.yml"));
-    }
-
-    private static Path resolve(Path canonical, Path legacy) {
-        if (Files.exists(canonical)) {
-            return canonical;
-        }
-        if (Files.exists(legacy)) {
-            return legacy;
-        }
-        return canonical;
+        return canonicalUdp(dataFolder);
     }
 }

@@ -86,7 +86,7 @@ class SocketConfigTest {
     }
 
     @Test
-    void legacyFilesAreReadDuringMigration() throws Exception {
+    void legacyFilesAreIgnored() throws Exception {
         Path legacy = dir.resolve("sync/tcp.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy,
@@ -94,8 +94,8 @@ class SocketConfigTest {
 
         SocketConfig config = SocketConfig.loadTcp(dir);
 
-        assertTrue(config.usable());
-        assertEquals("legacy", config.remoteHost());
+        assertFalse(config.usable());
+        assertEquals("", config.remoteHost());
     }
 
     @Test

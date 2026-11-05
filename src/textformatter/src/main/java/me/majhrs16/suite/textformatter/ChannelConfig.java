@@ -60,11 +60,6 @@ public final class ChannelConfig {
 
     /**
      * Carga el registro de canales desde {@code dir/config/textformatter/channels/}.
-     * <p>
-     * Se mantienen dos rutas heredadas ({@code textformatter/channels/} y
-     * {@code channels/}) para no romper instalaciones previas durante la migración
-     * al layout de {@code storage.md}.
-     * </p>
      *
      * @param dir directorio base del suite (ej. plugin data folder)
      * @return LoadResult con ChannelRegistry y errores
@@ -73,21 +68,9 @@ public final class ChannelConfig {
         return loadChannels(resolveChannelsDir(dir));
     }
 
-    /** @return el primer directorio de canales existente, o la ruta canónica. */
+    /** @return la ruta canónica del directorio de canales. */
     public static Path resolveChannelsDir(Path dir) {
-        Path canonical = dir.resolve("config").resolve("textformatter").resolve("channels");
-        if (Files.isDirectory(canonical)) {
-            return canonical;
-        }
-        Path intermediate = dir.resolve("textformatter").resolve("channels");
-        if (Files.isDirectory(intermediate)) {
-            return intermediate;
-        }
-        Path legacy = dir.resolve("channels");
-        if (Files.isDirectory(legacy)) {
-            return legacy;
-        }
-        return canonical;
+        return dir.resolve("config").resolve("textformatter").resolve("channels");
     }
 
     /**

@@ -3,17 +3,25 @@ package me.majhrs16.suite.host.config;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import me.majhrs16.suite.api.config.ConfigVersionException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MessagesConfigTest {
 
     @TempDir
     Path dir;
+
+    private Path suiteMessages() throws Exception {
+        Path file = dir.resolve("config/suite/messages.yml");
+        Files.createDirectories(file.getParent());
+        return file;
+    }
 
     @Test
     void missingFileFallsBackToResourceDefaults() {
@@ -29,7 +37,7 @@ class MessagesConfigTest {
     @Test
     void userFileOverridesResourceDefaults() throws Exception {
         // Create a custom messages.yml
-        Files.writeString(dir.resolve("messages.yml"), """
+        Files.writeString(suiteMessages(), """
             prefix: "[TFS] "
             status:
               channels: "canales: {}"
@@ -46,12 +54,20 @@ class MessagesConfigTest {
 
     @Test
     void corruptFileKeepsResourceDefaults() throws Exception {
-        Files.writeString(dir.resolve("messages.yml"), "prefix: [suite");
+        Files.writeString(suiteMessages(), "prefix: [suite");
 
         MessagesConfig config = MessagesConfig.load(dir, "/defaults/messages.yml");
 
         // Corrupt file → resource defaults (or key itself if no resource)
         assertEquals("prefix", config.format("prefix"));
+    }
+
+    @Test
+    void missingConfigVersionFailsExplicitly() throws Exception {
+        Files.writeString(suiteMessages(), "prefix: \"[TFS] \"\n");
+
+        assertThrows(ConfigVersionException.class,
+            () -> MessagesConfig.load(dir, "/defaults/messages.yml"));
     }
 
     @Test

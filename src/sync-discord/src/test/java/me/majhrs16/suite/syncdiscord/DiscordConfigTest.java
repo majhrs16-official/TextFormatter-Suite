@@ -80,7 +80,7 @@ class DiscordConfigTest {
     }
 
     @Test
-    void legacyFileIsReadDuringMigration() throws Exception {
+    void legacyFileIsIgnored() throws Exception {
         Path legacy = dir.resolve("sync/discord.yml");
         Files.createDirectories(legacy.getParent());
         Files.writeString(legacy,
@@ -88,8 +88,7 @@ class DiscordConfigTest {
 
         DiscordConfig config = DiscordConfig.load(dir);
 
-        assertTrue(config.usable());
-        assertEquals(9L, config.channelId());
-        assertEquals(DiscordConfig.DEFAULT_FORMAT, config.format());
+        assertFalse(config.usable());
+        assertEquals(0L, config.channelId());
     }
 }

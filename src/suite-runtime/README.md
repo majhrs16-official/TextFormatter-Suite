@@ -69,9 +69,9 @@ El layout canónico está en `docs/prompts/diseno/storage.md`. El runtime lee
 `config/suite/` para el host y entrega `config/<module>/` a cada módulo. No
 existe un lector de la raíz plana ni de `config/manager/`.
 
-> **Estado de implementación.** La eliminación de los fallbacks legacy de
-> `DefaultConfigInstaller` y de `HostPaths` está rastreada en `PLAN.md` (P0.3).
-> Mientras siga abierta, esa divergencia es deuda P0, no una ruta soportada.
+`DefaultConfigInstaller` solo escribe defaults canónicos ausentes; no migra ni
+lee archivos de la raíz plana. `SuiteRuntime.resolveRouter()` exige el hub
+`iflow` y no acepta un `Router` publicado directamente por un motor.
 
 ## 7. Verification
 

@@ -59,7 +59,7 @@
 | `RoutingResult` | Resultado de una entrega (entregado, silenciado, redirigido) |
 | `DispatchReport` | Contadores de una operación de despacho |
 | `ConfigLoader` | Carga `HostConfig` desde YAML |
-| `HostPaths` | `config/suite/` para el host y `config/<module>/` para módulos; fallback legacy solo para el host |
+| `HostPaths` | `config/suite/` para el host y `config/<module>/` para módulos; sin fallback a la raíz plana |
 | `MessagesConfig` | Catálogo de mensajes con defaults empaquetados |
 | `ConfigSchemaGenerator` | Esquema para el editor web |
 | `DebugEndpoint` | Endpoint HTTP de simulación/estado |

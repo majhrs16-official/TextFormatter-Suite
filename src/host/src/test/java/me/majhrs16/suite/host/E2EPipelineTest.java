@@ -120,8 +120,9 @@ class E2EPipelineTest {
     }
 
     private void writeConfig() throws Exception {
+        Files.createDirectories(dir.resolve("config/suite"));
         Files.createDirectories(dir.resolve("config/textformatter/channels"));
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(dir.resolve("config/suite/config.yml"), """
             general:
               language: en
             iflow:
@@ -408,7 +409,7 @@ class E2EPipelineTest {
 
         writeConfig();
         // Disable sounds globally
-        Files.writeString(dir.resolve("config.yml"), """
+        Files.writeString(dir.resolve("config/suite/config.yml"), """
             general:
               language: en
             sonido:

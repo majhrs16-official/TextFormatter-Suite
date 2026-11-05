@@ -43,7 +43,7 @@ unloaded. This keeps install order irrelevant and makes adapter hot-swap real.
 |-----------|------|
 | `SyncDiscordActivator` | Resolves `SyncBus` and `DiscordConnectionFactory`, registers `DiscordSink`. |
 | `DiscordSink` | Neutral `SyncSink`: start/stop, outbound send, inbound translation. |
-| `DiscordConfig` | Reads `config/sync-discord/config.yml` (legacy `sync/discord.yml` is read during migration). |
+| `DiscordConfig` | Reads `config/sync-discord/config.yml`; the flat `sync/discord.yml` is ignored. |
 | `SyncDiscordModule` | Legacy kernel descriptor, kept for the kernel graph. |
 
 Ports (in `core-api`):

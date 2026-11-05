@@ -152,6 +152,9 @@ public class MessageProcessingBenchmark {
 
         // Create a minimal SuiteHost for dispatcher using bootstrap
         Path tempDir = Files.createTempDirectory("benchmark-config");
+        Files.createDirectories(tempDir.resolve("config/suite"));
+        Files.writeString(tempDir.resolve("config/suite/config.yml"),
+            "general:\n  language: en\nconfig-version: 1.0\n");
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(tempDir, mockLogger);
         ChannelConfig.LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(tempDir);
 
@@ -459,10 +462,12 @@ public class MessageProcessingBenchmark {
                 parallel: true
             sonido:
               enabled: true
+            config-version: 1.0
             """;
 
         Path tempDir = Files.createTempDirectory("benchmark-config");
-        Files.writeString(tempDir.resolve("config.yml"), yaml);
+        Files.createDirectories(tempDir.resolve("config/suite"));
+        Files.writeString(tempDir.resolve("config/suite/config.yml"), yaml);
         ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(tempDir, new PluginLogger() {
             @Override public void info(String m, Object... a) {}
             @Override public void warn(String m, Object... a) {}

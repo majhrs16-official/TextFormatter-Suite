@@ -1,5 +1,8 @@
 package me.majhrs16.suite.iflow;
 
+import me.majhrs16.suite.api.config.ConfigVersion;
+import me.majhrs16.suite.api.config.ConfigVersionException;
+
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -15,8 +18,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Carga y valida {@code config/iflow-firewall/rules.yml} (con fallback a
- * {@code rules.yml}).
+ * Carga y valida {@code config/iflow-firewall/rules.yml}.
  *
  * <p>El módulo es el dueño del archivo: el host delega aquí la validación y el
  * editor web consume el mismo grafo. La carga es tolerante: nunca lanza por
@@ -44,19 +46,13 @@ public final class FirewallConfig {
     }
 
     /**
-     * Resuelve el archivo efectivo: canónico si existe, si no el plano
-     * heredado, y si no existe ninguno, el canónico (destino de escritura).
+     * Resuelve el archivo canónico, exista o no.
      *
      * @param dataFolder carpeta de datos de la suite
      * @return ruta a leer o crear
      */
     public static Path rulesFile(Path dataFolder) {
-        Path canonical = canonicalRulesFile(dataFolder);
-        Path legacy = Objects.requireNonNull(dataFolder, "dataFolder").resolve("rules.yml");
-        if (Files.exists(canonical) || !Files.exists(legacy)) {
-            return canonical;
-        }
-        return legacy;
+        return canonicalRulesFile(dataFolder);
     }
 
     /**
@@ -82,10 +78,6 @@ public final class FirewallConfig {
             return error(file, "error parseando YAML: " + exception.getMessage());
         }
 
-        if (root instanceof List<?>) {
-            return legacyRules(file);
-        }
-
         if (!(root instanceof Map<?, ?> raw)) {
             return new FirewallConfig(file, RuleGraph.empty(), List.of(new FirewallIssue(
                 FirewallIssue.Level.ERROR,
@@ -96,8 +88,13 @@ public final class FirewallConfig {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) raw;
+        try {
+            ConfigVersion.require(map, file);
+        } catch (ConfigVersionException exception) {
+            return error(file, exception.detail());
+        }
         if (map.get("rules") instanceof List<?>) {
-            return legacyRules(file);
+            return ruleListFile(file);
         }
         List<FirewallIssue> issues = new ArrayList<>();
 
@@ -119,14 +116,14 @@ public final class FirewallConfig {
     }
 
     /**
-     * El formato histórico de ejecución es una lista de reglas (o un mapa con
-     * {@code rules:}). No es un grafo del editor: se acepta sin modelarlo.
+     * Un mapa con {@code rules:} contiene reglas ejecutables, no el grafo del
+     * editor. Se acepta sin modelarlo; {@link RuleConfigLoader} las valida.
      */
-    private static FirewallConfig legacyRules(Path file) {
+    private static FirewallConfig ruleListFile(Path file) {
         return new FirewallConfig(file, RuleGraph.empty(), List.of(new FirewallIssue(
             FirewallIssue.Level.INFO,
             "rules.yml",
-            "rules.yml legacy (lista de reglas); lo valida iflow-firewall al cargar"
+            "rules.yml contiene una lista de reglas; no es un grafo del editor"
         )));
     }
 
