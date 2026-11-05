@@ -77,9 +77,9 @@ potencial se llama **TextFormatter Suite**.
 
 ## iFlow
 
-Firewall por receptor/emisor con default-policy por canal y targets `LOG`,
-`DROP`, `REJECT` (`connectionLostMarker`), `REDIRECT` (a consola),
-`RATE-LIMIT`.
+Hub de routing/firewall con default deny. La política v3 entrega con `DELIVER`, cancela el evento
+con `CANCEL_EVENT` o falla con `ERROR` (ADR-031). Los motores `iflow-firewall`, `iflow-vm` e
+`iflow-wasm` son backends seleccionables por el hub (ADR-032); no son targets de política.
 
 ## Fases y estado
 
@@ -329,7 +329,7 @@ Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `cor
 | **B-06** WebSocket rate limit sliding | Fix obligatorio | Ventana fija alineada a época (`now / 1000 * 1000`) |
 | **M-01** GTranslate solo primera oración | Fix obligatorio | Loop concatena `root[0][i][0]` |
 | **M-02** Thundering herd traducciones | Fix obligatorio | Cache `inFlightTranslations` con dedup + cleanup automático |
-| **M-03** MessageCodec ArrayStoreException | Fix obligatorio | Validación elemento a elemento en sync-http/sync-tcpudp |
+| **M-03** MessageCodec ArrayStoreException | Fix obligatorio | Validación elemento a elemento en sync-http/sync-socket |
 | **M-04** HttpTransport issues | Fix obligatorio | Null-check getErrorStream, 307/308 preservan method/body, MAX_RESPONSE_SIZE, `read()` |
 | **M-05** SSRF IPv6 ULA + deny property | Fix obligatorio | Patrones `^fc[0-9a-f]:`, `^fd[0-9a-f]:`; property amplía no reemplaza |
 | **M-08** InterruptedException tragado | Fix obligatorio | Catch separado + `Thread.currentThread().interrupt()` |
@@ -1773,11 +1773,14 @@ publica la fachada estable y descubre proveedores por servicio.
    Las rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml` son incorrectas
    y no se aceptan como fallback.
 4. El valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y
-   `fallback-on-unavailable` es `true`, el hub usa el primer backend disponible en orden de
-   registro. Si no hay ninguno, `IflowHub.router()` devuelve `null` y el runtime deja el pipeline
-   sin motor; las llamadas directas al hub fallan cerradas con `REJECT`.
-5. `IflowHub` extiende `Router`. `SuiteRuntime` prefiere `IflowHub` sobre un `Router` legacy, de
-   modo que el hub gana aunque los motores sigan publicando `Router` durante la transición.
+   `fallback-on-unavailable` es `true`, el hub usa el primer backend disponible según la prioridad
+   explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`, independiente del orden de activación de
+   los módulos. Si no hay ninguno, `IflowHub.router()` devuelve `null` y el runtime deja el pipeline
+   sin motor; las llamadas directas al hub fallan cerradas con `REJECT`. El orden se fija con un
+   test de aceptación; no se deduce del orden de registro del `ServiceRegistry`.
+5. `IflowHub` extiende `Router`. Mientras la purga pre-1.0 no elimine el camino legacy, `SuiteRuntime`
+   prefiere `IflowHub` sobre un `Router` publicado por un motor. Ese fallback es deuda P0.3, no un
+   contrato de compatibilidad ni un modo soportado.
 6. Los motores pueden coexistir instalados; el hub activa uno solo. La regla histórica de
    exclusividad de paquetes queda sustituida por la selección del hub para el runtime.
 7. `HostConfig.Engine`/`iflow.engine.kind` es una compatibilidad legacy del host y no es la fuente
@@ -1918,10 +1921,14 @@ y Velocity. La estabilidad y la producción no se declaran hasta cerrar ese cicl
    shims: se mantienen como implementaciones alternativas bajo C6. Un cambio incompatible se aplica
    en el mismo cambio que actualiza a todos sus consumidores; no hay ciclo de deprecación ni
    periodo de convivencia.
-3. **Contrato base `1.0.0`.** La resolución de dependencias exige `>= 1.0.0`: acepta `1.0.0`,
-   `1.5`, `2.5`, `3.0`, etc., pero rechaza cualquier versión inferior. No se declaran rangos que
-   prometan compatibilidad con versiones ficticias ni se degrada un mismatch mediante un adaptador.
-   «Contrato exacto» se refiere a la base mínima, no a igualdad estricta.
+3. **Contrato base `1.0.0`.** La resolución de dependencias acepta contratos en el intervalo
+   cerrado `[1.0.0, host]`: el mínimo es `1.0.0` y el máximo es la versión de contrato que expone
+   el host. Rechaza cualquier contrato inferior a `1.0.0` y cualquiera superior al host. Las
+   versiones son SemVer completas (`mayor.menor.parche`); no se aceptan formas abreviadas como
+   `1.5` o `2.5`. Un módulo `1.0.0` funciona sobre un host `2.1.0`; un módulo `2.1.1` se rechaza
+   hasta que el host suba su contrato. No se declaran rangos que prometan compatibilidad con
+   versiones ficticias ni se degrada un mismatch mediante un adaptador. La aceptación y el rechazo
+   se cubren en `ModuleGraphTest`.
 4. **Configuración sin migración silenciosa.** Todos los `.yml` declaran `config-version: 1.0` en
    la raíz, preferentemente al final. Aplica a defaults, configuración instalada y configuración
    generada; no aplica a `plugin.yml`, que es formato propio de Bukkit. Si falta o no coincide, el

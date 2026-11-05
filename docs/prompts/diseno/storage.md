@@ -1,183 +1,173 @@
 # Estructura de Almacenamiento (Storage Layout)
 
-> **Fuente de verdad**: Este documento describe cómo la suite organiza sus archivos de configuración en disco. Es la referencia única para rutas, precedencia y ciclo de vida de los archivos YAML.
+> **Fuente de verdad.** Este documento define el layout canónico de disco de TextFormatter Suite:
+> rutas, propiedad, precedencia y ciclo de vida. Si el código diverge, el código es el bug; no se
+> añade un lector alternativo para acomodarlo.
 >
-> **Principio**: Cada módulo Java (`src/<modulo>/`) es dueño de su directorio de configuración en `config/<modulo>/`. El host/plataforma solo gestiona el directorio raíz y delega.
+> **Principio.** Cada módulo (`src/<modulo>/`) es dueño de su directorio `config/<modulo>/`. El
+> host/plataforma solo gestiona `config/suite/` y delega el resto. El Manager es dueño de
+> `manager/`.
 >
-> **Layout vigente del runtime de módulos:** el host lee su configuración de `<data>/config/suite/` y `ModuleHost` entrega a cada módulo `<data>/config/<module>/`. El diagrama de la sección 1.3 refleja ese layout canónico. Las rutas `config/manager/<module>/` y `manager/config/<module>/` son incorrectas: no son layouts legacy, no son versiones alternativas y no se aceptan como fallback. `DefaultConfigInstaller` solo las detecta para repararlas moviendo el archivo a `config/<module>/`; las rutas planas antiguas sí se conservan como legacy durante la migración. `FilePresetTarget` y `DefaultConfigInstaller` escriben en las dos raíces canónicas.
+> **Régimen pre-1.0 (ADR-034).** No hay rutas legacy, aliases, dobles lectores ni migraciones en
+> runtime. Una ruta no canónica se ignora o se rechaza explícitamente. Todo `.yml` declara
+> `config-version: 1.0` en la raíz, preferentemente al final; `plugin.yml` es la única excepción
+> porque es formato propio de Bukkit.
 
 ---
 
-## 1.2 Terminología: Módulo vs Submódulo
-
-> **Convención de arquitectura** usada en toda la suite:
+## 1. Terminología: módulo vs submódulo
 
 | Término | Definición | Ejemplos |
-|---------|------------|----------|
-| **Módulo** | Mini-aplicación central con responsabilidad cohesiva, ciclo de vida propio, y capacidad de registro vía SPI (`ModuleDescriptor`). Puede funcionar independientemente o como núcleo para submódulos. | `chattranslator`, `sync-bus`, `textformatter`, `iflow-vm`, `host`, `observability` |
-| **Submódulo** | Derivación/especialización que **extiende** un módulo central. Se registra como proveedor de capability del módulo padre. No existe sin su módulo padre. | `gtranslate`/`ltranslate` (submódulos de `chattranslator`), `sync-discord`/`sync-websocket`/`sync-telegram` (submódulos de `sync-bus`) |
+|---|---|---|
+| **Módulo** | Aplicación con responsabilidad cohesiva, ciclo de vida propio y registro vía SPI (`ModuleDescriptor`). | `chattranslator`, `sync-bus`, `textformatter`, `iflow`, `host`, `observability` |
+| **Submódulo** | Especialización que extiende un módulo central y se registra como proveedor de su capability. No existe sin el módulo padre. | `gtranslate`/`ltranslate` (de `chattranslator`), `sync-discord`/`sync-telegram` (de `sync-bus`) |
 
-**Reglas:**
-1. Un **módulo** declara `provide(Capability.of("nombre-módulo", ...))`
-2. Un **submódulo** declara `require(Capability.of("módulo-padre", ...))` y `provide(Capability.of("translator|sync-sink", ...))`
-3. Cada **submódulo** es dueño de su `config/<submódulo>/config.yml`
-3. El **módulo padre** solo gestiona config genérica (`config/<módulo>/config.yml`) y coordina el registro de submódulos
+Reglas:
+
+1. Un módulo declara `provide(Capability.of("<nombre>", ...))`.
+2. Un submódulo declara `require(...)` del padre y `provide(...)` de su propia capability.
+3. Cada módulo y submódulo es dueño de `config/<id>/config.yml` (o de sus subarchivos).
+4. El módulo padre solo coordina; no parsea la configuración de sus submódulos.
 
 ---
 
-## 1.3 Layout General (Arquitectura Objetivo)
+## 2. Layout canónico
 
-```
-<servidor>/                          ← Raíz del servidor (Paper, Fabric, etc.)
-└── <manager>/                       ← Directorio del gestor (plugins/TextFormatterSuite, mods/textformatter)
-    ├── config/                      ← **Directorio raíz de configuración de la suite**
-    │   ├── suite/                   ← Configuración GLOBAL del host (solo lo que el core necesita)
-    │   │   ├── config.yml           ← Config principal: idioma, claim-mode, sound, parallel, repositorios
-    │   │   ├── commands.yml         ← Raíz del árbol de comandos (`root`/`aliases`)
-    │   │   └── messages.yml         ← Strings de UI del host/platform (comandos /suite, prefijos)
-    │   │
-    │   └── manager/                 ← Configuración de los módulos gestionados
-    │       ├── iflow-firewall/      ← **Módulo iflow-firewall** (motor SpEL legacy + grafo del editor)
-    │       │   └── rules.yml        ← Reglas legacy ejecutables o grafo del editor (no se ejecuta)
-    │       │
-    │       ├── textformatter/       ← **Módulo textformatter** - Dueño de canales y formatos
-    │       │   ├── channels/        ← Definición de canales (chat.global, join, quit, etc.)
-    │       │   │   ├── chat.global.yml
-    │       │   │   ├── join.yml
-    │       │   │   └── ...
-    │       │   └── config.yml       ← Config específica de textformatter (si aplica)
-    │       │
-    │       ├── chattranslator/      ← **Módulo chattranslator** - Dueño de backends de traducción
-    │       │   ├── translators/     ← Configuración de backends SPI (google, libre, etc.)
-    │       │   │   ├── google.yml
-    │       │   │   ├── libre.yml
-    │       │   │   └── ...
-    │       │   └── config.yml       ← Config de la fachada: default-backend, cache, timeouts
-    │       │
-    │       ├── sync-bus/            ← **Módulo sync-bus** - Bus central de sincronización
-    │       │   └── config.yml       ← Config genérica del bus (timeouts, retries, límites)
-    │       │
-    │       ├── sync-discord/        ← **Submódulo** (sink Discord)
-    │       │   └── config.yml       ← token, channels, guild, etc.
-    │       │
-    │       ├── sync-websocket/      ← **Submódulo** (sink WebSocket)
-    │       │   └── config.yml       ← port, bind, token, enabled
-    │       │
-    │       ├── sync-telegram/       ← **Submódulo** (sink Telegram)
-    │       │   └── config.yml       ← token, chat-id
-    │       │
-    │       ├── sync-http/           ← **Submódulo** (sink HTTP)
-    │       │   └── config.yml       ← endpoints, auth, timeouts
-    │       │
-    │       ├── sync-socket/         ← **Submódulo** (sinks TCP/UDP)
-    │       │   ├── tcp.yml
-    │       │   └── udp.yml
-    │       │
-    │       ├── inworld/             ← **Módulo inworld** - Dueño de interacciones en mundo
-    │       │   └── config.yml       ← Formatos sign/cofre/libro, radios, etc.
-    │       │
-    │       ├── observability/       ← **Módulo observability** - Dueño de métricas/debug/health
-    │       │   └── config.yml       ← Puerto, bind, auth-token, métricas habilitadas
-    │       │
-    │       └── <modulo>/            ← **Cada módulo/submódulo tiene su propio directorio**
-    │           └── config.yml
-    │
-    ├── data/                        ← Datos persistentes en runtime (no configs editables)
-    │   ├── languages.yml            ← Almacenamiento de idiomas de jugadores (UserLanguageStore)
-    │   ├── cache/                   ← Cachés serializadas (traducción, detección)
-    │   └── journal/                 ← Journal de políticas iFlow (si habilitado)
-    │
-    ├── modules/                     ← JARs de módulos descargados/instalados (manager)
-    │   └── <modulo>-<version>.jar
-    │
-    ├── backup/                      ← Backups automáticos al hacer /suite reset
-    │   └── <timestamp>/
-    │       ├── config.yml
-    │       ├── textformatter/
-    │       ├── chattranslator/
-    │       └── ...
-    │
-    └── logs/                        ← Logs específicos de la suite (opcional)
+```text
+<data>/                                  ← data folder del plugin/mod (plugins/TextFormatterSuite)
+├── config/
+│   ├── suite/                           ← configuración global del host
+│   │   ├── config.yml
+│   │   ├── commands.yml
+│   │   └── messages.yml
+│   ├── iflow/                           ← hub iFlow (selección de motor)
+│   │   └── config.yml
+│   ├── iflow-firewall/                  ← motor SpEL legacy
+│   │   └── rules.yml
+│   ├── textformatter/
+│   │   ├── config.yml
+│   │   └── channels/
+│   │       ├── chat.global.yml
+│   │       ├── join.yml
+│   │       └── ...
+│   ├── chattranslator/
+│   │   ├── config.yml
+│   │   └── translators/
+│   │       ├── google.yml
+│   │       └── libre.yml
+│   ├── sync-bus/config.yml
+│   ├── sync-discord/config.yml
+│   ├── sync-websocket/config.yml
+│   ├── sync-telegram/config.yml
+│   ├── sync-http/config.yml
+│   ├── sync-socket/
+│   │   ├── tcp.yml
+│   │   └── udp.yml
+│   ├── sync-velocity-core/config.yml
+│   ├── inworld/config.yml
+│   └── observability/config.yml
+│
+├── manager/                             ← estado del Manager (ADR-027)
+│   ├── repo.yml
+│   ├── runtime/
+│   └── library/
+│       ├── packages/<packageId>/<version>/...
+│       ├── dependencies/<dependencyId>/<version>/...
+│       ├── status
+│       ├── cache/
+│       │   ├── downloads/<sha256>/
+│       │   └── operations/<operationId>.json
+│       ├── journal/<operationId>.log
+│       ├── backup/<operationId>/
+│       ├── trash/<operationId>/
+│       ├── lists/
+│       └── tmp/<operationId>/
+│
+├── storage.yml                          ← UserLanguageStore (uuid → idioma)
+└── suite.log                            ← log de la suite (también /tmp/TextFormatter-Suite.log como fallback)
 ```
 
-> **Motores iFlow mutuamente excluyentes.** `iflow-vm`, `iflow-wasm` e `iflow-firewall` ocupan
-> el mismo slot de instalación de motor iFlow y comparten el paquete base
-> `me.majhrs16.suite.iflow`. Solo uno puede
-> estar en `modules/`/classpath a la vez; instalar otro **desinstala/reemplaza** al anterior. No se
-> soporta la convivencia de dos motores ni un sufijo de paquete por motor (por ejemplo `.firewall`).
-> El monorepo compila los tres y `./gradlew publishIflowEngines` los publica como paquetes
-> Maven separados en `build/repo`; el classpath de ejecución debe contener uno solo y
-> `SuiteBootstrap` activa el seleccionado.
+No existe `config/manager/`, `manager/config/`, `modules/` ni un `config.yml` plano en la raíz del
+data folder. Esas rutas no son alternativas válidas.
 
 ---
 
-## 2. Estado Actual vs Objetivo (Migración Pendiente)
+## 3. Configuración global del host
 
-| Directorio Canónico | Dueño Real (Código) | Dueño Correcto (Arquitectura) | Estado |
-|-------------------|---------------------|------------------------------|--------|
-| `config/textformatter/channels/` | `textformatter` carga (`ChannelConfig`) | **`textformatter`** | ✅ Migrado (I-011) |
-| `config/chattranslator/translators/` | `chattranslator` carga (`BackendConfig`) | **`chattranslator`** | ✅ Migrado (I-004) |
-| `config/sync-*/` | cada submódulo sync carga su config (`SyncYaml`) | **cada submódulo sync** | ✅ Migrado (I-004) |
-| `config/sync-discord/config.yml` | `sync-discord` carga (`DiscordConfig`) | **`sync-discord`** (submódulo) | ✅ Migrado (I-004) |
-| `config/sync-websocket/config.yml` | `sync-websocket` carga (`WebSocketSyncConfig`) | **`sync-websocket`** (submódulo) | ✅ Migrado (I-004) |
-| `config/sync-telegram/config.yml` | `sync-telegram` carga (`TelegramConfig`) | **`sync-telegram`** (submódulo) | ✅ Migrado (I-004) |
-| `config/sync-socket/tcp.yml` / `udp.yml` | `sync-socket` carga (`SocketConfig`) | **`sync-socket`** (submódulo) | ✅ Migrado (I-004) |
-| `config/suite/messages.yml` | `host` carga (`MessagesConfig`) | **`host` (core)** o platform adapter | ✅ OK (ADR I-020 pendiente) |
-| `config/suite/config.yml` | `host` carga (`HostConfig`/`HostPaths`) | **`suite` (host core)** | ✅ Migrado |
-| `config/suite/commands.yml` | `suite-runtime` carga (`CommandRootConfig`) | **`suite-runtime` (raíz neutral)** | ✅ Migrado (F4e) |
-| `config/iflow-firewall/rules.yml` | `iflow-firewall` carga reglas (`RuleConfigLoader`) y valida el grafo (`FirewallConfig`) | **`iflow-firewall`** | ✅ Migrado (I-001) |
+### 3.1 `config/suite/config.yml`
 
-> **Nota**: `textformatter`, `chattranslator`, `suite` y los submódulos sync ya usan el layout canónico con fallback a las rutas heredadas y son dueños de su propio parseo. `config/suite/messages.yml` lo carga `host` (ADR-020) y `config/suite/commands.yml` lo carga `suite-runtime` (ADR-022).
-
----
-
-## 3. Especificación por Archivo (Por Módulo Dueño)
-
-### 3.1 `config/suite/config.yml` — Host Core (Global)
+Dueño: `host` (`ConfigLoader` → `HostConfig`).
 
 ```yaml
-# Configuración global del host/core suite
 quick-look: true
-language: en
+general:
+  language: en
 iflow:
   engine:
-    kind: vm                      # vm (iflow-vm, .flow) | firewall (iflow-firewall, SpEL legacy)
     parallel: false
-sound:
+sonido:
   enabled: true
 chat:
   claim-mode: CANCEL_EVENT        # CANCEL_EVENT | CLEAR_RECIPIENTS | NONE
   log-to-console: true
 repositories:
-  - name: "official"
-    url: "https://github.com/majhrs16-official/TextFormatter-Suite/releases"
-    type: "github"
+  - name: official
+    url: https://github.com/majhrs16-official/TextFormatter-Suite/releases
+    type: github
     enabled: true
 module-allowlist: []
+config-version: 1.0
 ```
 
-**Cargado por**: `ConfigLoader.loadConfig(folder)` → `HostConfig` (en `host`)  
-**Dueño**: `host` module (core)
+`iflow.engine.kind` no existe. La selección de motor pertenece al hub (`config/iflow/config.yml`,
+§4.1). `iflow.engine.parallel` es una opción del pipeline, no un selector de motor.
 
----
+### 3.2 `config/suite/commands.yml`
 
-### 3.2 `rules.yml` — propiedad de `iflow-firewall`
-
-> **Histórico:** el antiguo `config/suite/rules.yml` con `rules: [{condition, action}]` se movió a
-> `config/iflow-firewall/rules.yml` (§3.3.1). SpEL se conserva **solo** en `iflow-firewall`
-> (ADR-001, 2026-10-27); `iflow-vm` e `iflow-wasm` no lo usan.
-
----
-
-### 3.3.1 `config/iflow-firewall/rules.yml` — Módulo iflow-firewall
-
-> **Nota**: el archivo admite dos esquemas. La **lista de reglas** (o un mapa con `rules:`) la
-> ejecuta el motor SpEL legacy cuando `iflow.engine.kind: firewall`. El **grafo del editor**
-> (`guard`/`filter`/`nodes`/`edges`) se valida pero no se ejecuta. Con `iflow.engine.kind: vm`
-> (default) el archivo no participa en el runtime.
+Dueño: `suite-runtime` (`CommandRootConfig`).
 
 ```yaml
-# Esquema legacy ejecutable (motor SpEL de iflow-firewall)
+root: [suite]
+aliases:
+  - [txf]
+config-version: 1.0
+```
+
+Solo `root` y `aliases`. `base-name`, `actions` y `commands` están retirados y se ignoran.
+
+### 3.3 `config/suite/messages.yml`
+
+Dueño: el adaptador de plataforma (`spigot-host`/`fabric-host`, `MessagesConfig`). Contiene los
+strings de UI de los comandos y prefijos; no pertenece al core ni a módulos compartidos.
+
+---
+
+## 4. Configuración por módulo
+
+### 4.1 `config/iflow/config.yml` — hub iFlow
+
+Dueño: `iflow` (`IflowConfig`). Selecciona el backend activo entre los motores instalados; los
+motores pueden coexistir (ADR-032).
+
+```yaml
+engine: iflow-firewall            # iflow-firewall | iflow-vm | iflow-wasm
+fallback-on-unavailable: true
+config-version: 1.0
+```
+
+`engine` acepta los alias `firewall`, `vm` y `wasm`; `default-backend` es un alias de `engine`. El
+valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y el fallback
+está activo, el hub usa el primer backend disponible según la prioridad fijada en ADR-032.
+
+### 4.2 `config/iflow-firewall/rules.yml` — motor SpEL legacy
+
+Dueño: `iflow-firewall` (`RuleConfigLoader`, `FirewallConfig`). Solo participa cuando el hub activa
+este backend.
+
+El archivo admite dos esquemas:
+
+```yaml
+# Esquema ejecutable del motor SpEL
 - id: drop-private
   target: DROP
   channel: private
@@ -186,7 +176,7 @@ module-allowlist: []
 ```
 
 ```yaml
-# Esquema del editor web (solo validación, no ejecución)
+# Grafo del editor: se valida, no se ejecuta
 guard:
   max-steps: 512
 filter:
@@ -197,375 +187,190 @@ nodes: []
 edges: []
 ```
 
-**Cargado por**: `RuleConfigLoader.loadRules(folder)` (reglas) y `FirewallConfig.load(folder)`
-(validación del grafo), ambos en `me.majhrs16.suite.iflow`
-**Dueño**: `iflow-firewall` module
-**Resolución**: `config/iflow-firewall/rules.yml` (canónico) → `rules.yml` (heredado)
-**Selección de motor**: `iflow.engine.kind` en `config/suite/config.yml` (`vm` default | `firewall`)
-**Exclusividad**: `iflow-vm`, `iflow-wasm` e `iflow-firewall` son mutuamente excluyentes; solo uno
-se instala, comparten `me.majhrs16.suite.iflow` y el host usa el motor instalado
+### 4.3 `config/textformatter/channels/*.yml` — canales
 
----
-
-### 3.3 `config/suite/messages.yml` — Platform Adapter (Spigot/Fabric)
+Dueño: `textformatter` (`ChannelConfig`). Un archivo por canal.
 
 ```yaml
-# Strings de UI específicos de la plataforma (comandos /suite, prefijos)
-prefix: "[suite] "
-not-initialized: "[suite] no inicializado"
-usage: "[suite] uso: /suite <lang|reload|status|toggle|reset|module|suite>"
-enabled: "[suite] activo: {} canales, traductor '{}'"
-# ... resto de mensajes de comandos
-```
-
-**Cargado por**: `MessagesConfig.load(folder)` en `spigot-host` / `fabric-host`  
-**Dueño**: Cada **platform adapter** (específico de Spigot/Fabric)  
-**No pertenece** al core ni a módulos compartidos.
-
----
-
-### 3.4 `config/textformatter/channels/*.yml` — Módulo textformatter
-
-```yaml
-# config/textformatter/channels/chat.global.yml
-name: "chat.global"
-permission: "suite.chat.global"
-send-permission: "suite.chat.global.send"
-receive-permission: "suite.chat.global.receive"
-type: "CHAT"                      # CHAT | SYSTEM | LOG | WORLD | RADIUS | PRIVATE
+name: chat.global
+permission: cht.chat.global
+send-permission: cht.chat.global.send
+receive-permission: cht.chat.global.receive
+type: CHAT                        # CHAT | EVENT
 show-sender: true
 rate-limit-per-second: 5
-lang-source: "auto"               # auto | <lang-code>
-lang-target: "auto"               # auto | <lang-code>
-messages: []                      # Formatos MiniMessage (ver Formats)
+lang-source: auto
+lang-target: auto
+messages: []
 tooltips: []
 sounds: []
+config-version: 1.0
 ```
 
-**Cargado por**: `textformatter` (nuevo: `ChannelConfig.load(folder)`)  
-**Dueño**: `textformatter` module  
-**Usado por**: `ChannelRegistry`, `Router`, `ChatTranslator` (validar `SET_CHANNEL`)
+### 4.4 `config/chattranslator/` — fachada y backends
 
-> **Migración completada (I-011)**: `ConfigLoader.loadChannels()` se eliminó de `host`; la carga vive en `textformatter.ChannelConfig`. Rutas resueltas: `config/textformatter/channels/` (canónica) → `textformatter/channels/` → `channels/` (legacy).
+Dueño: `chattranslator`.
 
----
-
-### 3.5 `config/chattranslator/translators/*.yml` — Módulo chattranslator
+```yaml
+# config/chattranslator/config.yml
+default-backend: google
+context-override-enabled: true
+cache-max-size: 10000
+detection-cache-max-size: 5000
+translation-timeout-ms: 30000
+config-version: 1.0
+```
 
 ```yaml
 # config/chattranslator/translators/google.yml
-provider: "google"                # Debe coincidir con TranslatorProvider.name()
+provider: google
 active: true
-timeout: 10                       # segundos
+timeout: 10
+config-version: 1.0
 ```
 
-```yaml
-# config/chattranslator/translators/libre.yml
-provider: "libre"
-active: true
-base-url: "https://translate.example.com"
-api-key: ""
-timeout: 15
-```
+Los backends se descubren por `ServiceLoader<TranslatorProvider>`. Añadir un backend no requiere
+tocar el host.
 
-**Cargado por**: `chattranslator` (nuevo: `BackendConfig.load(folder)`)  
-**Descubierto por**: `ServiceLoader<TranslatorProvider>` (SPI)  
-**Dueño**: `chattranslator` module  
-**Usado por**: `TranslatorManager`, `TranslationService`, `ChatTranslator`
+### 4.5 Sinks de sincronización
 
-> **Migración completada (I-004)**: `TranslatorsConfig` se eliminó de `host`; `chattranslator.BackendConfig` carga `config/chattranslator/translators/` y `ChatTranslatorConfig` carga `config/chattranslator/config.yml` (con fallback a las rutas heredadas).
-
----
-
-### 3.6 `config/chattranslator/config.yml` — Módulo chattranslator (Fachada)
+Cada submódulo es dueño de su archivo. Ejemplos mínimos:
 
 ```yaml
-# Configuración de la fachada ChatTranslator
-default-backend: "google"         # Backend por defecto (null = auto: primer disponible)
-context-override-enabled: true    # Permitir setContextBackend(key, backend) en runtime
-cache-max-size: 10000             # Límite entradas caché traducción
-detection-cache-max-size: 5000    # Límite entradas caché detección
-translation-timeout-ms: 30000     # Timeout peticiones traducción (ms)
-```
-
-**Cargado por**: `ChatTranslatorConfig.load(folder)` → `ChatTranslatorConfig.Config`  
-**Dueño**: `chattranslator` module
-
----
-
-### 3.7 `config/sync-bus/config.yml` — Módulo sync-bus (Bus Central)
-
-```yaml
-# Configuración genérica del bus de sincronización
+# config/sync-bus/config.yml
 default-timeout-ms: 5000
 max-retries: 3
 backoff-base-ms: 1000
 max-concurrent-deliveries: 100
+config-version: 1.0
 ```
 
-**Cargado por**: `sync-bus` (`SyncBusConfig.load(folder)`)  
-**Dueño**: `sync-bus` module (módulo central)  
-**Usado por**: `DefaultSyncBus`, registro de sinks, health checks
-
----
-
-### 3.7.1 `config/sync-discord/config.yml` — Submódulo sync-discord
-
 ```yaml
+# config/sync-discord/config.yml
 enabled: true
 token: ""
 channels: []
+config-version: 1.0
 ```
-
-**Cargado por**: `sync-discord` (en su `onLoad`)  
-**Dueño**: `sync-discord` module (submódulo)  
-**Require**: `Capability.of("sync-bus", ...)`  
-**Provide**: `Capability.of("sync-sink", ...)`
-
----
-
-### 3.7.2 `config/sync-websocket/config.yml` — Submódulo sync-websocket
-
-```yaml
-enabled: false
-port: 9092
-bind: "127.0.0.1"
-token: "changeme"
-```
-
-**Cargado por**: `sync-websocket` (en su `onLoad`)  
-**Dueño**: `sync-websocket` module (submódulo)  
-**Require**: `Capability.of("sync-bus", ...)`  
-**Provide**: `Capability.of("sync-sink", ...)`
-
----
-
-### 3.7.3 `config/sync-telegram/config.yml` — Submódulo sync-telegram
-
-```yaml
-enabled: false
-token: ""
-chat-id: 0
-```
-
-**Cargado por**: `sync-telegram` (en su `onLoad`)  
-**Dueño**: `sync-telegram` module (submódulo)  
-**Require**: `Capability.of("sync-bus", ...)`  
-**Provide**: `Capability.of("sync-sink", ...)`
-
----
-
-### 3.7.4 `config/sync-socket/` — Submódulo sync-socket (TCP/UDP)
 
 ```yaml
 # config/sync-socket/tcp.yml
 enabled: false
-host: "127.0.0.1"
+host: 127.0.0.1
 port: 9093
-
-# config/sync-socket/udp.yml
-enabled: false
-remote-host: "127.0.0.1"
-remote-port: 9094
-local-port: 9095
+config-version: 1.0
 ```
 
-**Cargado por**: `sync-socket` (en su `onLoad`)  
-**Dueño**: `sync-socket` module (submódulo)  
-**Require**: `Capability.of("sync-bus", ...)`  
-**Provide**: `Capability.of("sync-sink", ...)` (doble: tcp + udp)
+`sync-velocity-core` usa `config/sync-velocity-core/config.yml`. El schema exacto de cada sink vive
+en su módulo y en su README; este documento fija la ruta y la propiedad.
 
-> **Migración completada (I-012/I-004)**: los adapters resuelven cada archivo con `syncbus.SyncConfigPaths` (`config/sync-*/` canónico, `config/sync-*/` y `sync/*.yml` como fallback) y cada submódulo expone su config (`DiscordConfig`, `WebSocketSyncConfig`, `SocketConfig`, `TelegramConfig`) sobre `syncbus.SyncYaml`; el adapter ya no parsea YAML de sync.
+### 4.6 `config/inworld/config.yml` y `config/observability/config.yml`
+
+Dueños: `inworld` y `observability`. Cada módulo parsea su propio archivo; no hay un lector central
+de configuración de módulos.
+
+### 4.7 `coretranslator`
+
+No tiene archivo YAML. Es una expansión PlaceholderAPI (`%cot_*`) que se configura desde
+PlaceholderAPI/otros plugins; su estado es en memoria y no persiste configuración propia.
 
 ---
 
-### 3.8 `config/inworld/config.yml` — Módulo inworld
+## 5. Datos persistentes y logs
 
-```yaml
-sign-format: "<gray>[Sign]</gray> <content>"
-chest-format: "<gold>[Chest]</gold> <content>"
-book-format: "<green>[Book]</green> <content>"
-radius-format: "<aqua>[Local]</aqua> <sender>: <content>"
-world-format: "<blue>[World]</blue> <sender>: <content>"
-```
+| Ruta | Dueño | Contenido |
+|---|---|---|
+| `<data>/storage.yml` | `suite-runtime` (`YamlUserLanguageStore`) | Idioma por UUID. Lectura por `lastModified`; escritura atómica (temp + move). |
+| `<data>/suite.log` | `logger` | Log de la suite. Fallback: `/tmp/TextFormatter-Suite.log`. |
+| `<data>/manager/library/` | Manager | Estado, artefactos, caché, journal, backup y trash de paquetes. |
 
-**Cargado por**: `inworld` (ya lo hace en `InWorldHandler`)  
-**Dueño**: `inworld` module
+No se usa `data/languages.yml`, `data/cache/` ni `data/journal/` como rutas canónicas.
 
 ---
 
-### 3.9 `config/observability/config.yml` — Módulo observability
+## 6. Manager
 
-```yaml
-port: 9091
-bind: "127.0.0.1"
-auth-token: "changeme"
-metrics-enabled: true
-debug-enabled: true
-health-enabled: true
-```
+El Manager no usa `modules/` ni un `status` en la raíz. Su layout es el de ADR-027:
 
-**Cargado por**: `observability` (ya lo hace en `Observability.createDefault`)  
-**Dueño**: `observability` module
+- `manager/repo.yml`: fuentes de paquetes.
+- `manager/library/status`: única fuente de verdad del estado local.
+- `manager/library/packages/<packageId>/<version>/`: artefactos instalados.
+- `manager/library/dependencies/<dependencyId>/<version>/`: dependencias compartidas.
+- `manager/library/cache/downloads/<sha256>/`: caché content-addressed.
+- `manager/library/journal/<operationId>.log`: journal durable del commit.
+- `manager/library/backup/<operationId>/` y `trash/<operationId>/`: recuperación y retirada.
+- `manager/runtime/`: estado de ejecución del Manager.
 
----
-
-### 3.10 `data/languages.yml` — Host Core (UserLanguageStore)
-
-```yaml
-# Almacenamiento persistente de idiomas por jugador
-"uuid-1": "es"
-"uuid-2": "en"
-"uuid-3": "fr"
-```
-
-**Gestionado por**: `YamlUserLanguageStore` (Spigot) / equivalente Fabric  
-**Interfaz**: `UserLanguageStore` SPI  
-**Dueño**: `host` module (core, no platform-specific)
+El commit de archivos es la única etapa con rollback automático; un fallo de activación no revierte
+la instalación (ADR-027).
 
 ---
 
-## 4. Ciclo de Vida de Archivos
+## 7. Ciclo de vida
 
-### 4.1 Arranque (Bootstrap) — Orden Módulos → Submódulos
+### 7.1 Arranque
 
-```
-1. SuiteHost.bootstrap(folder) / SuiteBootstrap.bootstrap(folder)
-   │
-   ├─► MÓDULOS CORE (independientes, sin requires de otros módulos suite)
-   │   ├─► ConfigLoader.loadConfig(folder.resolve("suite"))              → HostConfig (suite/config.yml)
-   │   ├─► iflow.FirewallConfig.load(folder)                             → RuleGraph (iflow-firewall/rules.yml)
-   │   ├─► textformatter.ChannelConfig.load(folder.resolve("textformatter")) → ChannelRegistry
-   │   ├─► inworld.InWorldConfig.load(folder.resolve("inworld"))         → InWorldHandler
-   │   ├─► observability.ObservabilityConfig.load(folder.resolve("observability")) → Observability
-   │   └─► MessagesConfig.load(folder.resolve("suite"))                  → Messages (platform adapter)
-   │
-   ├─► MÓDULOS CON DEPENDENCIAS (cargan después de sus requires)
-   │   ├─► chattranslator.BackendConfig.load(folder.resolve("chattranslator")) → TranslatorManager
-   │   ├─► chattranslator.ChatTranslatorConfig.load(folder.resolve("chattranslator")) → ChatTranslator
-   │   └─► syncbus.SyncBusConfig.load(folder.resolve("sync-bus"))        → SyncBus (config genérica)
-   │
-   └─► SUBMÓDULOS (cargan tras sus módulos padre; auto-registran vía SPI)
-       ├─► gtranslate/ltranslate → se registran en TranslatorManager
-       ├─► sync-discord → se registra en SyncBus
-       ├─► sync-websocket → se registra en SyncBus
-       ├─► sync-telegram → se registra en SyncBus
-       ├─► sync-http → se registra en SyncBus
-       └─► sync-socket → se registra en SyncBus
-```
+1. El adaptador de plataforma resuelve `<data>` e instala los defaults que falten.
+2. El host carga `config/suite/config.yml`, `commands.yml` y `messages.yml`.
+3. El runtime descubre módulos y resuelve el grafo de dependencias.
+4. Cada módulo carga su `config/<modulo>/` cuando se activa.
+5. El hub iFlow lee `config/iflow/config.yml` y selecciona el backend.
 
-### 4.2 Recarga (`/suite reload`)
+### 7.2 Recarga
 
-```
-1. Cierra runtime anterior (close() en todos los módulos)
-2. Vuelve a ejecutar bootstrap completo (paso 4.1)
-3. Los archivos en disco son la fuente de verdad absoluta
-```
+`/suite reload` cierra el runtime, vuelve a resolver el grafo y reconstruye el estado desde disco.
+Los archivos son la fuente de verdad; no hay estado de configuración paralelo en memoria.
 
-### 4.3 Reset (`/suite reset`)
+### 7.3 Presets
 
-```
-1. Mueve configs de usuario a backup/<timestamp>/
-   - config/suite/config.yml
-   - config/suite/commands.yml
-   - config/suite/messages.yml
-   - config/iflow-firewall/
-   - config/textformatter/
-   - config/chattranslator/
-   - config/sync-bus/
-   - config/sync-discord/
-   - config/sync-websocket/
-   - config/sync-telegram/
-   - config/sync-http/
-   - config/sync-socket/
-   - config/inworld/
-   - config/observability/
-   - config/<modulo>/ (todos)
-2. Regenera defaults desde resources/defaults/ de cada módulo
-3. Notifica al admin: "Configs reseteados. Reinicia para aplicar."
-```
+El paquete `presets` aplica un layout canónico y recarga los módulos activos. No escribe en rutas
+legacy ni en `config/manager/`.
 
 ---
 
-## 5. Convenciones de Nombrado
+## 8. Convenciones de nombres
 
 | Elemento | Convención | Ejemplo |
-|----------|------------|---------|
-| Directorio **módulo** | `kebab-case` | `textformatter`, `chattranslator`, `sync-bus`, `inworld` |
-| Directorio **submódulo** | `kebab-case` | `gtranslate`, `ltranslate`, `sync-discord`, `sync-websocket` |
-| Archivo config principal | `config.yml` | `config/chattranslator/config.yml`, `config/sync-discord/config.yml` |
-| Sub-archivos (colecciones) | `<nombre>.yml` | `config/textformatter/channels/chat.global.yml` |
-| Backends (colección) | `<provider>.yml` | `config/chattranslator/translators/google.yml` |
-| Sinks (colección — ya no aplica, cada submódulo tiene su config.yml) | — | `config/sync-discord/config.yml`, `config/sync-socket/config.yml` |
-| Backup timestamp | `yyyyMMdd-HHmmss` | `backup/20261024-153045/` |
-| JAR módulo | `<modulo>-<version>.jar` | `chattranslator-2.1.0.jar` |
-| JAR submódulo | `<submodulo>-<version>.jar` | `gtranslate-2.1.0.jar`, `sync-discord-2.1.0.jar` |
+|---|---|---|
+| Directorio de módulo/submódulo | `kebab-case` | `textformatter`, `sync-bus`, `sync-discord` |
+| Config principal | `config.yml` | `config/chattranslator/config.yml` |
+| Colección de canales | `<canal>.yml` | `config/textformatter/channels/chat.global.yml` |
+| Backends | `<provider>.yml` | `config/chattranslator/translators/google.yml` |
+| JAR de módulo | `<modulo>-<version>.jar` | `chattranslator-1.0.0.jar` |
+| `config-version` | `1.0` | al final del YAML |
 
 ---
 
-## 6. Validación y Migración
+## 9. Validación y `config-version`
 
-### 6.1 Validación al Arranque
+- Todo `.yml` declara `config-version: 1.0` en la raíz, preferentemente al final.
+- Si falta o no coincide, el parser falla con:
+  `version de configuracion no identificada (archivo editado o corrupto?)`.
+- `plugin.yml` queda excluido.
+- Los campos desconocidos se ignoran; los valores faltantes usan defaults. Un cambio de esquema se
+  aplica reescribiendo la configuración en el mismo cambio, no con un lector del esquema viejo.
+- Cada módulo valida su propio archivo al activarse. Un error se registra y degrada la config, pero
+  no se acepta una ruta o un esquema no canónico como fallback.
 
-- `ConfigValidator.validate(HostConfig, logger, folder)` valida `config/suite/config.yml`
-- Cada módulo valida su propio `config/<modulo>/config.yml` en su `onLoad()`
-- Errores → log ERROR + config degradado (defaults) + suite sigue arrancando
-
-### 6.2 Migración de Versiones
-
-- Los campos desconocidos en YAML se **ignoran** (compatibilidad hacia adelante)
-- Valores faltantes → **defaults** (compatibilidad hacia atrás)
-- Migraciones rompedoras → version en `HostConfig` / `ModuleDescriptor` + lógica en `ConfigValidator`
-
----
-
-## 7. Ejemplo: Cómo un Módulo Carga su Config
-
-```java
-// En ChatTranslatorModule.onLoad(SuiteHost host)
-public void onLoad(SuiteHost host) {
-    // host.config() expone el directorio base de módulos (folder)
-    Path folder = host.config().getConfigDirectory(); // Path al <manager>/config
-    
-    // Cargar config propia (config/chattranslator/config.yml)
-    ChatTranslatorConfig.Config facadeConfig = ChatTranslatorConfig.load(folder);
-    
-    // Cargar backends (config/chattranslator/translators/*.yml)
-    TranslatorManager manager = BackendConfig.load(folder);
-    
-    // Crear fachada
-    TranslationService translation = host.translation(); // ya creado con manager
-    ChatTranslator chatTranslator = new ChatTranslator(manager, translation, facadeConfig);
-    
-    // Registrar en host para acceso global
-    host.setChatTranslator(chatTranslator);
-}
-```
-
-> **Nota**: `HostConfig` debe exponer `getConfigDirectory()` que devuelve `Path` al directorio `<manager>/config`. Los módulos resuelven `folder.resolve("<modulo>").resolve("config.yml")`.
+> **Estado de implementación.** El reset de versiones, la adición de `config-version` y la
+> eliminación de los lectores legacy están rastreados en `PLAN.md` (P0.2/P0.3). Este documento fija
+> el contrato; mientras esas tareas no cierren, el código puede seguir divergiendo y esa divergencia
+> es deuda P0, no una excepción del layout.
 
 ---
 
-## 8. Referencias de Código (Estado Actual vs Migración)
+## 10. Referencias de código
 
-| Componente | Archivo Actual | Archivo Objetivo (Post-Migración) |
-|------------|----------------|-----------------------------------|
-| `ConfigLoader.loadConfig` | `src/host/.../ConfigLoader.java` | `src/host/.../ConfigLoader.java` (solo suite) |
-| `ConfigLoader.loadChannels` | — (eliminado) | ✅ `src/textformatter/.../ChannelConfig.java` |
-| `TranslatorsConfig.load` | `src/host/.../TranslatorsConfig.java` | `src/chattranslator/.../BackendConfig.java` |
-| `ChatTranslatorConfig.load` | `src/chattranslator/.../ChatTranslatorConfig.java` | ✅ Ya en módulo correcto |
-| `SyncConfig.load` | `src/spigot-host/.../TextFormatterSuitePlugin.java` | `src/sync-bus/.../SyncConfig.java` |
-| `MessagesConfig.load` | `src/spigot-host/.../MessagesConfig.java` | ✅ En platform adapter (correcto) |
-| `YamlUserLanguageStore` | `src/host/.../YamlUserLanguageStore.java` | ✅ En host core (correcto) |
-| `InWorldConfig` | `src/inworld/.../InWorldHandler.java` | ✅ En inworld (correcto) |
-| `Observability` | `src/observability/.../Observability.java` | ✅ En observability (correcto) |
-
----
-
-## 9. Próximos Pasos de Migración
-
-1. ~~**textformatter**: Crear `ChannelConfig`~~ ✅ I-011
-2. ~~**chattranslator**: Crear `BackendConfig`~~ ✅ I-004
-3. ~~**sync-bus**: Cada sink con su config~~ ✅ I-004
-4. **host**: `ConfigLoader` solo maneja `config/suite/config.yml`; `rules.yml` vive en `iflow-firewall` (I-001) y `messages.yml` en `host` por ADR-020
-5. ~~**spigot-host/fabric-host**: Eliminar carga directa de sync/channels/translators~~ ✅ I-004/I-011
+| Componente | Archivo |
+|---|---|
+| `HostPaths` (rutas canónicas) | `src/host/src/main/java/me/majhrs16/suite/host/config/HostPaths.java` |
+| `ConfigLoader` (host) | `src/host/src/main/java/me/majhrs16/suite/host/config/ConfigLoader.java` |
+| `CommandRootConfig` | `src/suite-runtime/src/main/java/me/majhrs16/suite/runtime/CommandRootConfig.java` |
+| `ChannelConfig` | `src/textformatter/src/main/java/me/majhrs16/suite/textformatter/ChannelConfig.java` |
+| `BackendConfig` / `ChatTranslatorConfig` | `src/chattranslator/src/main/java/me/majhrs16/suite/chattranslator/` |
+| `IflowConfig` (hub) | `src/iflow/src/main/java/me/majhrs16/suite/iflow/hub/IflowConfig.java` |
+| `RuleConfigLoader` / `FirewallConfig` | `src/iflow-firewall/src/main/java/me/majhrs16/suite/iflow/` |
+| `SyncConfigPaths` | `src/sync-common/src/main/java/me/majhrs16/suite/synccommon/SyncConfigPaths.java` |
+| `YamlUserLanguageStore` | `src/suite-runtime/src/main/java/me/majhrs16/suite/runtime/YamlUserLanguageStore.java` |
+| `PackageLayout` (Manager) | `src/manager-core/src/main/java/me/majhrs16/suite/manager/core/PackageLayout.java` |
+| `DefaultConfigInstaller` | `src/suite-runtime/src/main/java/me/majhrs16/suite/runtime/DefaultConfigInstaller.java` |

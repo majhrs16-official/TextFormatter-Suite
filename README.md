@@ -42,7 +42,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
 | **Module Manager (runtime)** | ✅ Núcleo y hot upgrade probados | Repositorios HTTP/file, resolver SemVer y dependencias, SHA-256 obligatorio, JARs versionados, classloader aislado, activación/desactivación real, hot upgrade con journal y detección de hilos/recursos/registros filtrados; un fallo de activación deja `ACTIVATION_FAILED` sin rollback de archivos; paquetes `DEPENDENCY` de terceros; `packages.list` es la metadata autoritativa; **no hay GitHub Releases públicos** (ver `PLAN.md`) |
 | **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
-| **Presets** | ✅ Catálogo y aplicación probados | Standard/RPG/Staff/Minimal, import/export YAML, aplicación real a `config/suite/` y `config/manager/<module>/`, recarga de módulos activos mediante `/suite presets apply`; sin motor de ejecución |
+| **Presets** | ✅ Catálogo y aplicación probados | Standard/RPG/Staff/Minimal, import/export YAML, aplicación real a `config/suite/` y `config/<module>/`, recarga de módulos activos mediante `/suite presets apply`; sin motor de ejecución |
 | **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
 | **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 9 tests |
 | **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 108 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
@@ -164,8 +164,8 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (397 tests) |
-| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; alternativa **mutuamente excluyente** de `iflow-vm` (mismo paquete base, solo uno instalado) | ✅ Probado (44 tests) |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W2: contrato, validación, instancia e invocación; sin ABI de host ni integración | 🧪 W2 |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-vm` e `iflow-wasm` | ✅ Probado (44 tests) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W0–W3 cerrados (loader, ABI `iflow.*`, `PolicySession`, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload); W3.5 paridad v3 pendiente | ✅ W0–W3 |
 | `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML, aplicación a la configuración canónica y recarga de módulos activos; sin motor de ejecución | ✅ Catálogo y aplicación probados |
 
 ### Traducción
@@ -358,7 +358,7 @@ cd src/web-editor && npm run check
 | Verificación dependencias | `gradle/verification-metadata.xml` + `--dependency-verification=strict` en CI | Activa; 626 componentes; excepción documentada solo para los classpaths de `fabric-host` (artefactos remapeados por Loom) |
 | Web editor check | `cd src/web-editor && npm run check` | Format + lint + tests unitarios |
 | Web editor tests integración | `cd src/web-editor && npm run test:integration` | Harnesses func/interact/click/chain/undo/diffing/bind |
-| **Build reproducible (release)** | `BUILD_TIMESTAMP=1728000000000 ./gradlew build -Pversion=2.1.0` | JAR con `Build-Timestamp` fijo |
+| **Build reproducible (release)** | `BUILD_TIMESTAMP=1728000000000 ./gradlew build -Pversion=1.0.0` | JAR con `Build-Timestamp` fijo |
 | **Verificar Build-Timestamp** | `unzip -p artifact.jar META-INF/MANIFEST.MF \| grep Build-Timestamp` | Debe coincidir con timestamp fijado |
 
 ---
@@ -378,7 +378,7 @@ Resumen del flujo:
 7. **Documenta**: Actualiza `src/<modulo>/README.md` y `docs/workdir/PLAN.md` si cambia estado/funcionalidad
 8. **PR**: Abre Pull Request contra `main`; el CI está configurado para build + tests + lockfiles + schema + javadoc + web-editor. No crees tags ni ejecutes el release: la publicación está descartada.
 
-El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
+El historial de cambios vive en Git (`git log`). No se mantiene un `CHANGELOG.md` en el árbol: las notas de versión se publican con el tag de release.
 
 ---
 
@@ -410,7 +410,7 @@ El historial de cambios está en [`CHANGELOG.md`](CHANGELOG.md).
 | **docs/workdir/ADR.md** | Architecture Decision Records: decisiones inmutables con contexto/fecha/consecuencias | [`docs/workdir/ADR.md`](docs/workdir/ADR.md) |
 | **docs/wiki/01-Introduction.md** | Entrada wiki usuario/dev: quick start, módulos, arquitectura, guías | [`docs/wiki/01-Introduction.md`](docs/wiki/01-Introduction.md) |
 | **docs/wiki/02-Configuration.md** | Guía configuración (config.yml, channels, rules, translators, sync) | [`docs/wiki/02-Configuration.md`](docs/wiki/02-Configuration.md) |
-| **docs/wiki/05-iFlow-Rules.md** | ⚠️ Legacy: describe el motor de reglas antiguo (`DefaultRouter`, SpEL), restaurado en `iflow-firewall` y seleccionable con `iflow.engine.kind: firewall`. La VM `.flow` y Wasm no usan SpEL | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
+| **docs/wiki/05-iFlow-Rules.md** | ⚠️ Legacy: describe el motor de reglas antiguo (`DefaultRouter`, SpEL), restaurado en `iflow-firewall` y seleccionable desde el hub (`config/iflow/config.yml`). La VM `.flow` y Wasm no usan SpEL | [`docs/wiki/05-iFlow-Rules.md`](docs/wiki/05-iFlow-Rules.md) |
 | **docs/wiki/08-Commands.md** | Referencia de comandos con raíz configurable (`commands.yml` v2) | [`docs/wiki/08-Commands.md`](docs/wiki/08-Commands.md) |
 | **docs/wiki/10-Module-Manager.md** | Module Manager runtime: install/update/remove/info, repos, firmas | [`docs/wiki/10-Module-Manager.md`](docs/wiki/10-Module-Manager.md) |
 | **docs/prompts/** | Material de referencia: contexto del proyecto, diseños de componentes y contratos de formato | [`docs/prompts/README.md`](docs/prompts/README.md) |
@@ -447,4 +447,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-10-27 — `iflow-firewall` restaura el motor SpEL legacy (ADR-001) como alternativa **mutuamente excluyente** de `iflow-vm`; el host selecciona el motor instalado con `iflow.engine.kind`. Antes: P0 de código, limpieza material, aislamiento de SpEL, lockfiles, schema, workflows, documentación de comunidad, Javadoc agregado y tests de contrato de 9 módulos remediados. El release está descartado por decisión del proyecto. El primer run de CI (#65) reveló metadata de verificación incompleta para un checkout limpio; la corrección se publicó y el run #66 completó los cuatro jobs en verde. Queda deuda P1 (editor web inestable, documentación histórica y pruebas de plataforma).*
+*Última actualización: 2026-11-04 — auditoría documental en curso; `CoreTranslator` restaurado como expansión PAPI legacy (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; el hub iFlow selecciona uno de los tres motores instalados (ADR-032). El release sigue descartado por decisión del proyecto. Queda deuda P0 (reset de versiones y `config-version`, purga legacy) y P1 (editor web, wiki y pruebas de plataforma).*

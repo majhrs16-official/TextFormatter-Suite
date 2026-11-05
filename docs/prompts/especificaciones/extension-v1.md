@@ -1,6 +1,14 @@
 # Schema extension.yml v1.0 — Validación de extensiones
 
-> El editor y el runtime validan contra este schema. Round-trip exacto: panel → YAML → panel sin pérdida.
+> **Estado:** vigente. **Autoridad:** contrato de `extension.yml`. Si contradice un ADR aceptado,
+> prevalece el ADR y este documento se corrige. **Ámbito:** metadatos y configuración de una
+> extensión. **Obligatoriedad:** la tabla de «Reglas de validación» es normativa; los ejemplos son
+> ilustrativos.
+>
+> El sufijo `v1.0` identifica la revisión del esquema. La base de la suite es `1.0`; `1.0.0` es la
+> versión mínima aceptada, no una igualdad estricta.
+
+El editor y el runtime validan contra este schema. Round-trip exacto: panel → YAML → panel sin pérdida.
 
 ## Estructura general
 
@@ -17,10 +25,11 @@ tags: ["example", "demo", "api"]         # opcional, para filtros
 links:                                   # opcional
   wiki: "https://..."
   issues: "https://..."
-minSuiteVersion: "2.1.0"                 # versión mínima de TextFormatter Suite
+minSuiteVersion: "1.0.0"                 # versión mínima de TextFormatter Suite
 maxSuiteVersion: ""                      # opcional, versión máxima compatible
 stable: true                             # true = release estable, false = beta/alpha
 experimental: false                      # usa APIs experimentales
+config-version: 1.0                    # versión del esquema de configuración
 
 # Configuración de carga
 mainClass: "me.majhrs16.suite.example.ExampleExtension"  # clase principal
@@ -69,8 +78,9 @@ configSchema:
 | license | ❌ | string | SPDX válido |
 | tags | ❌ | array[string] | kebab-case, max 10 |
 | links | ❌ | object | claves string, valores URLs |
-| minSuiteVersion | ✅ | string | semver |
-| maxSuiteVersion | ❌ | string | semver |
+| minSuiteVersion | ✅ | string | semver completo; mínimo `1.0.0` |
+| maxSuiteVersion | ❌ | string | semver completo; vacío = sin techo |
+| config-version | ✅ | string | `1.0` |
 | stable | ✅ | boolean | |
 | experimental | ✅ | boolean | |
 | mainClass | ✅ | string | FQCN válido |
@@ -94,7 +104,7 @@ configSchema:
 ```
 example-extension.zip
 ├── extension.yml          # obligatorio
-├── config.yml             # configuración por defecto
+├── config.yml             # configuración por defecto (declara config-version: 1.0)
 ├── plugin.jar             # código compilado
 └── assets/                # recursos opcionales
 ```
@@ -130,10 +140,11 @@ tags: ["translation", "provider", "custom"]
 links:
   wiki: "https://github.com/example/custom-translator/wiki"
   issues: "https://github.com/example/custom-translator/issues"
-minSuiteVersion: "2.1.0"
+minSuiteVersion: "1.0.0"
 maxSuiteVersion: ""
 stable: true
 experimental: false
+config-version: 1.0
 mainClass: "com.example.CustomTranslatorExtension"
 autoLoad: true
 dependencies: []

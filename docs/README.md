@@ -7,8 +7,7 @@ Archivo | Propósito | Audiencia |
 | `workdir/PLAN.md` | Plan de ejecución: estado actual, fases completadas, próximos pasos, deuda técnica | Equipo / Mantenedores |
 | `prompts/diseno/iflow-cpu-implement.md` | Especificación técnica de referencia v3 de iFlow VM (32 bits), derivada de la auditoría manual 2026-10-20: hallazgos `IFLOW-MAN-*`, propuestas, arquitectura objetivo ROM/BIOS/kernel/32 bits y ruta pendiente | Equipo / Arquitectos |
 | `workdir/ADR.md` | Decisiones de arquitectura (fuente de verdad) | Arquitectos / Equipo |
-| `RELEASE_NOTES.md` | Notas de versión por fase (FASE 0-17), breaking changes, comandos CI | Equipo / Auditores |
-| `../CHANGELOG.md` | Cambios relevantes desde la última revisión; **no implica releases públicos** | Usuarios / Contribuidores |
+| `workdir/AUDITORIA.md` | Auditoría vigente y hallazgos verificables | Equipo / Auditores |
 | `../SECURITY.md` | Reporte privado de vulnerabilidades y alcance de seguridad | Usuarios / Auditores |
 | `../CONTRIBUTING.md` | Entorno, build, tests, estilo de commits y Pull Requests | Contribuidores |
 
@@ -23,7 +22,7 @@ La wiki cubre introducción, configuración, canales, traducción, iFlow (VM act
 | Directorio | Propósito |
 |------------|-----------|
 | `prompts/contexto/` | Contexto del proyecto: objetivos, reglas, módulos. |
-| `prompts/diseno/` | Especificaciones de diseño y reingeniería de componentes (iflow, logger, Manager v2, Web Editor). |
+| `prompts/diseno/` | Especificaciones de diseño y reingeniería de componentes (philosophy, storage, iflow, logger, Manager v2, chattranslator, metrics, Web Editor). |
 | `prompts/especificaciones/` | Contratos de formato que valida el código: `commands.yml` v2, `extension.yml` v1.0, config schema v2.2. |
 
 El criterio completo —qué es un prompt frente a una skill, cómo se nombran las carpetas y cuándo se elimina un documento— está en [`prompts/README.md`](prompts/README.md).
@@ -37,7 +36,7 @@ prompts/especificaciones/commands-v2.md  →  implementación en src/core-api/ap
 prompts/especificaciones/extension-v1.md →  implementación en src/extension-api/
 skills auditar-*                         →  auditorías contra la spec v3 (prompts/diseno/iflow-cpu-implement.md)
 skills generar-*                         →  README raíz y CodeGuide (src/README.md)
-workdir/{PLAN,ADR} + prompts/diseno      →  derivan wiki/ y RELEASE_NOTES.md
+workdir/{PLAN,ADR} + prompts/diseno      →  derivan la wiki y las notas de versión del tag
 ```
 
 ### Regla de archivado

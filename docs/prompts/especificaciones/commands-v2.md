@@ -1,20 +1,26 @@
-# TextFormatter Suite — commands.yml v2
+# commands.yml — contrato vigente (base 1.0)
+
+> **Estado:** vigente. **Autoridad:** contrato de `commands.yml`. Si contradice un ADR aceptado,
+> prevalece el ADR y este documento se corrige. **Ámbito:** raíz del árbol de comandos.
+> **Obligatoriedad:** las reglas de «Reglas de validación» son normativas; los ejemplos son
+> ilustrativos.
+>
+> El sufijo `v2` del nombre del archivo identifica la revisión del esquema, no una versión
+> publicada de la suite. La base vigente es `1.0`.
 
 `commands.yml` declara la **raíz** del árbol de comandos. No declara acciones ni
 subcomandos: los comandos son código neutral en los paquetes y se registran por
 `api.command`. La raíz es configuración; los módulos siempre usan rutas
 relativas.
 
-## Ubicación y migración
+## Ubicación
 
-- Ruta canónica: `config/suite/commands.yml`.
-- Ruta heredada: `commands.yml` en la raíz del data folder.
-- La ruta canónica tiene prioridad si existen ambas.
-- `base-name` se acepta solo como migración: se interpreta como `root` de un
-  segmento y se descarta un alias idéntico a la raíz (los archivos antiguos
-  solían repetir el nombre base). Se elimina en **F8**.
-- Las claves antiguas `actions` y `commands` ya no se leen. La topología
-  dinámica se retiró con el árbol de comandos legacy en F4d.
+- Ruta canónica única: `config/suite/commands.yml`.
+- No se lee `commands.yml` en la raíz del data folder. Una ruta no canónica se
+  ignora; no hay migración en runtime (ADR-034).
+- `base-name`, `actions` y `commands` están retirados y se ignoran. La topología
+  dinámica se retiró con el árbol de comandos legacy.
+- Todo archivo declara `config-version: 1.0` en la raíz, preferentemente al final.
 
 ## Esquema
 
@@ -23,6 +29,7 @@ relativas.
 root: [suite]
 aliases:
   - [txf]
+config-version: 1.0
 ```
 
 | Clave | Tipo | Obligatoria | Descripción |
@@ -37,6 +44,7 @@ root: [suite, module]
 aliases:
   - [sm]
   - [txf, module]
+config-version: 1.0
 ```
 
 El adaptador de plataforma registra solo el primer segmento (`suite`). El
@@ -88,12 +96,14 @@ Mantener `/suite` y añadir `/tf`:
 ```yaml
 root: [suite]
 aliases: [tf]
+config-version: 1.0
 ```
 
 Mover todo el árbol a `/tf` sin alias:
 
 ```yaml
 root: [tf]
+config-version: 1.0
 ```
 
 Mover el árbol a `/suite module` y conservar `/sm`:
@@ -101,6 +111,7 @@ Mover el árbol a `/suite module` y conservar `/sm`:
 ```yaml
 root: [suite, module]
 aliases: [sm]
+config-version: 1.0
 ```
 
 ## Contrato de implementación

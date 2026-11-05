@@ -33,14 +33,18 @@ especificación es el prompt.
 
 ```text
 contexto/proyecto.md                     objetivos, reglas y módulos del proyecto
-diseno/iflow-cpu-design.md               diseño del CPU virtual de iFlow
+diseno/philosophy.md                     filosofía y principios de ingeniería
+diseno/storage.md                        layout canónico de configuración en disco
+diseno/iflow-cpu-design.md               documento histórico de diseño del CPU virtual de iFlow
 diseno/iflow-cpu-implement.md            especificación técnica de referencia v3 de iflow-vm (32 bits)
 diseno/logger.md                         diseño del sistema de logging
 diseno/manager-v2.md                     reingeniería del Module Manager (APT/dpkg)
+diseno/chattranslator.md                 fachada de traducción y contrato de proveedores
+diseno/metrics.md                        métricas y rúbrica de madurez
 diseno/web-editor.md                     diseño del Web Editor (F6)
-especificaciones/commands-v2.md          contrato de commands.yml v2
-especificaciones/extension-v1.md         contrato de extension.yml v1.0
-especificaciones/config-schema-v2.2.md   config schema v2.2 del Web Editor
+especificaciones/commands-v2.md          contrato de commands.yml (base 1.0; v2 = revisión del esquema)
+especificaciones/extension-v1.md         contrato de extension.yml (base 1.0)
+especificaciones/config-schema-v2.2.md   contrato de import/export del Web Editor (base 1.0)
 ```
 
 ### Criterio de carpetas
@@ -64,6 +68,7 @@ detallado, que el agente lee solo si lo necesita).
 | `@auditar-modulo` | Auditoría de un módulo contra su especificación de referencia. |
 | `@generar-codeguide` | Genera o regenera la CodeGuide (`src/README.md` y módulos). |
 | `@generar-readme` | Reestructura y mantiene el `/README.md` raíz. |
+| `@juzgar-rubrica` | Evalúa documentación e implementación real y escribe `judge_scores.csv`. |
 
 ## Cuándo se elimina un prompt
 

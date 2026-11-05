@@ -1,6 +1,21 @@
 # DISEÑO ARQUITECTÓNICO INTEGRAL DEL CPU VIRTUAL DE IFLOW
 
-> **Nota de estado (2026-10-20):** documento histórico de diseño. La migración descrita ya se completó: SpEL fue eliminado del repositorio y la VM `.flow` es la única superficie de políticas ejecutables. Las menciones a SpEL son contexto de partida, no estado actual.
+> **Nota de estado (revisada 2026-11-04):** documento **histórico de diseño** (2026-10-20). No es
+> una fuente normativa ni el contrato vigente.
+>
+> - La eliminación de SpEL descrita aquí fue sustituida por ADR-001 (2026-10-27): SpEL se conserva
+>   **solo** en `iflow-firewall`, como motor legacy independiente. `iflow-vm` e `iflow-wasm` no lo
+>   usan.
+> - ADR-032 sustituyó la exclusividad de motores por el hub `iflow`: los tres motores pueden estar
+>   instalados y el hub activa uno solo.
+> - La lista de `PolicyTarget` de este documento (`LOG`, `DROP`, `REJECT`, `REDIRECT`,
+>   `CHANNEL_REDIRECT`, `RATE_LIMIT`) es histórica. El contrato v3 de ADR-031 la reduce a `DELIVER`,
+>   `CANCEL_EVENT` y `ERROR`.
+> - La implementación actual de `src/iflow-vm` es la v2 de 16 bits; el objetivo v3 de 32 bits vive
+>   en `iflow-cpu-implement.md`. `src/iflow-wasm/` es una línea separada que no hereda este diseño.
+>
+> Las menciones a SpEL, a la exclusividad y a los targets antiguos son contexto de partida, no
+> estado actual.
 
 ## Especificación técnica de la ISA, el modelo de ejecución, la memoria, el firmware y la integración con el motor de enrutamiento de mensajes
 

@@ -1,5 +1,12 @@
 # REINGENIERÍA COMPLETA DEL MODULE MANAGER — TEXTFORMATTER SUITE
 
+> **Estado:** especificación funcional vigente, enmendada por ADR-027.
+> **Precedencia:** en instalación por etapas, commit con journal, recuperación y activación prevalece
+> **ADR-027**. Esta especificación describe el contrato funcional (repositorios, dependencias,
+> comandos y seguridad) y no puede contradecir ese ADR. Si hay conflicto, se corrige este documento.
+> **Obligatoriedad:** «debe» es normativo; «puede» es opcional. Los ejemplos son ilustrativos.
+> **Ámbito:** diseño del Manager; no es una auditoría del código actual ni un plan de release.
+
 ## 1. Objetivo principal
 
 Reemplaza por completo el Module Manager actual de **TextFormatter Suite** por un gestor de paquetes inspirado en la separación arquitectónica de **APT y dpkg de Debian 13**.
@@ -71,11 +78,13 @@ APT no debe implementar una segunda vía de instalación que omita las validacio
 
 ## 3. Repositorios
 
-Debe existir un archivo independiente llamado `repo.yml`, separado de `config.yml`.
+Debe existir un archivo independiente llamado `repo.yml`.
 
 - `repo.yml` configura las fuentes de paquetes.
-- `config.yml` conserva la configuración general del sistema y no debe convertirse en el archivo de repositorios.
-- La implementación debe respetar el mecanismo de configuración existente cuando sea compatible con esta separación.
+- No hay un `config.yml` propio del Manager: su configuración operativa es `repo.yml`; el resto vive
+  en `config/suite/` y en la configuración de cada módulo.
+- La implementación debe respetar el mecanismo de configuración existente cuando sea compatible con
+  esta separación.
 - No inventes repositorios remotos ni publiques URLs ficticias como si fueran funcionales.
 
 Los repositorios deben poder proporcionar un índice de paquetes denominado `packages.list`.
@@ -272,26 +281,39 @@ La estructura conceptual obligatoria es:
 ```text
 <manager-dir>/
 ├── repo.yml
-├── config.yml
+├── runtime/
 └── library/
     ├── status
-    ├── tmp/
+    ├── cache/
+    │   ├── downloads/<sha256>/
+    │   └── operations/<operationId>.json
+    ├── journal/<operationId>.log
+    ├── backup/<operationId>/
+    ├── trash/<operationId>/
+    ├── tmp/<operationId>/
     ├── lists/
     │   └── <repository-indexes>
     ├── packages/
-    │   └── <package-artifacts>
+    │   └── <packageId>/<version>/<module>.jar
     └── dependencies/
-        └── <dependency-artifacts>
+        └── <dependencyId>/<version>/
 ```
 
 Adapta los nombres concretos solo cuando la integración existente lo justifique. No cambies su semántica.
 
 - `repo.yml` configura los repositorios.
-- `library/tmp/` almacena descargas y operaciones temporales.
+- `library/cache/downloads/<sha256>/` es la caché content-addressed de artefactos.
+- `library/cache/operations/` guarda el plan de cada operación antes de mutar archivos.
+- `library/journal/<operationId>.log` es el journal durable del commit.
+- `library/backup/<operationId>/` y `library/trash/<operationId>/` sostienen la recuperación y la
+  retirada segura.
+- `library/tmp/<operationId>/` almacena trabajo temporal aislado por operación.
 - `library/lists/` almacena los índices descargados.
-- `library/status` registra el estado instalado.
+- `library/status` registra el estado instalado y es la única fuente de verdad local.
 - `library/packages/` almacena los artefactos de paquetes instalados.
 - `library/dependencies/` almacena las dependencias compartidas.
+
+No existe `config.yml` en el directorio del Manager ni un `status` paralelo en la raíz.
 
 Los paquetes instalados y las dependencias no deben instalarse indiscriminadamente en `/plugins` o `/mods`. La presencia de un JAR en el directorio de almacenamiento del gestor no implica que Bukkit o Fabric lo carguen automáticamente.
 
@@ -406,12 +428,18 @@ Toda operación debe validarse antes de modificar el estado instalado.
 5. Validar metadatos y contenido.
 6. Verificar el inventario y los SHA-256 individuales.
 7. Comprobar dependencias y conflictos.
-8. Preparar los archivos en una ubicación temporal.
-9. Instalar de forma controlada.
-10. Actualizar `library/status` de forma atómica.
-11. Limpiar temporales y conservar un estado coherente.
+8. Adquirir y verificar todo en la caché content-addressed; no mutar archivos todavía.
+9. Escribir el plan de la operación y abrir su journal durable.
+10. Commit de archivos (etapa 2): es la **única etapa con rollback automático**. Si falla, se
+    restaura íntegramente la instalación anterior, incluido `library/status`.
+11. Actualizar `library/status` de forma atómica como parte del commit.
+12. Activar los módulos en orden jerárquico (etapa 3). Un fallo de activación **no revierte** la
+    instalación: el paquete queda `ACTIVATION_FAILED` y la activación puede reintentarse sin
+    reinstalar.
+13. Limpiar temporales y cerrar el journal.
 
-El sistema debe definir cómo revierte o recupera las operaciones que fallen a mitad del proceso.
+La adquisición, el commit y la activación son etapas separadas (ADR-027). No se mezcla red con
+mutación de archivos ni se activa un módulo dentro del callback de instalación.
 
 La instalación desde repositorio debe delegar la aplicación del plan en las operaciones controladas de dpkg.
 
@@ -511,7 +539,9 @@ Por ejemplo, `/suite package install iflow textformatter` debe resolver primero 
 
 Las actualizaciones globales, las instalaciones de metapaquetes y las reparaciones deben usar el mismo principio de coherencia.
 
-Implementa transacciones o una estrategia equivalente de preparación, confirmación, reversión y recuperación. Documenta las garantías reales: no afirmes que existe atomicidad total si las modificaciones del sistema de archivos o la activación de servicios no pueden revertirse por completo.
+La transacción cubre la adquisición y el commit de archivos (etapas 1-2). La activación (etapa 3) es
+un paso separado y no revierte la instalación. Documenta las garantías reales: no afirmes atomicidad
+total si la activación de servicios no puede revertirse (ADR-027).
 
 ## 10. Integración con el runtime de TextFormatter Suite
 
@@ -539,7 +569,10 @@ Ese contrato debe contemplar, según corresponda:
 - Desactivación de la versión anterior.
 - Liberación de listeners, tareas, threads, recursos y referencias.
 - Confirmación del cambio.
-- Recuperación o rollback cuando sea posible.
+- Recuperación de la activación; la instalación ya confirmada no se revierte (ADR-027).
+
+La activación puede reintentarse sin reinstalar. Un fallo de activación no se registra como una
+instalación fallida ni deshace los archivos ya confirmados.
 
 No afirmes que cualquier plugin o mod puede descargarse y actualizarse de forma segura en caliente. Si una operación requiere reinicio por las limitaciones del cargador o del paquete, debe detectarse y comunicarse explícitamente.
 
