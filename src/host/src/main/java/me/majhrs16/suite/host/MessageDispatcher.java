@@ -229,8 +229,9 @@ public final class MessageDispatcher {
     /**
      * Materializes the direction into a de-duplicated recipient list.
      *
-     * <p>Fail-open policy: an empty qualifier on {@code PERMISSION} or
-     * {@code WORLD} resolves to every online player instead of nobody.</p>
+     * <p>Fail-closed policy: a {@code PERMISSION} or {@code WORLD} direction
+     * without a qualifier resolves to nobody and logs a warning. An omitted
+     * field must never widen a restricted message into a broadcast.</p>
      */
     private List<Actor> expand(Message message) {
         Direction direction = message.direction();
@@ -260,7 +261,8 @@ public final class MessageDispatcher {
 
     private List<Actor> withPermission(List<Actor> candidates, String permission) {
         if (permission == null || permission.isEmpty()) {
-            return candidates;
+            logger.warn("PERMISSION direction without qualifier; delivering to nobody");
+            return List.of();
         }
         List<Actor> allowed = new ArrayList<>(candidates.size());
         for (Actor candidate : candidates) {
@@ -272,8 +274,9 @@ public final class MessageDispatcher {
     }
 
     private List<Actor> playersInWorld(String world) {
-        if (world == null) {
-            return actors.onlinePlayers();
+        if (world == null || world.isEmpty()) {
+            logger.warn("WORLD direction without qualifier; delivering to nobody");
+            return List.of();
         }
         List<Actor> located = actors.playersInWorld(world);
         if (located.isEmpty()) {

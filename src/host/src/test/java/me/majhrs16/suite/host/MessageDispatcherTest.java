@@ -264,6 +264,34 @@ class MessageDispatcherTest {
     }
 
     @Test
+    void permissionDirectionWithoutQualifierDeliversNobody() throws Exception {
+        writeLayout(false);
+        RecordingDelivery delivery = new RecordingDelivery();
+
+        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL)
+            .dispatch(chatFrom(STEVE, Direction.permission(null)));
+
+        assertEquals(0, report.delivered());
+        assertTrue(delivery.toPlayers.isEmpty(),
+            "a missing permission qualifier must never broadcast to every player");
+    }
+
+    @Test
+    void permissionDirectionWithBlankQualifierDeliversNobody() throws Exception {
+        writeLayout(false);
+        RecordingDelivery delivery = new RecordingDelivery();
+
+        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL)
+            .dispatch(chatFrom(STEVE, Direction.permission("")));
+
+        assertEquals(0, report.delivered());
+        assertTrue(delivery.toPlayers.isEmpty(),
+            "a blank permission qualifier must never broadcast to every player");
+    }
+
+    @Test
     void specificDirectionDeliversExactlyTheListedActors() throws Exception {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
@@ -377,6 +405,20 @@ class MessageDispatcherTest {
 
         assertEquals(0, report.delivered());
         assertTrue(delivery.toPlayers.isEmpty());
+    }
+
+    @Test
+    void worldDirectionWithoutQualifierDeliversNobody() throws Exception {
+        writeLayout(false);
+        RecordingDelivery delivery = new RecordingDelivery();
+
+        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL)
+            .dispatch(chatFrom(STEVE, Direction.world(null)));
+
+        assertEquals(0, report.delivered());
+        assertTrue(delivery.toPlayers.isEmpty(),
+            "a missing world qualifier must never broadcast to every player");
     }
 
     @Test
