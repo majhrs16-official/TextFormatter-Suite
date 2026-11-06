@@ -241,11 +241,12 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 ### Feature propuesta — pipeline secuencial configurable (PL-1, 2026-11-05)
 
-> **Estado:** propuesta, no implementada y no contractual. Requiere un ADR aceptado que sustituya o
-> enmiende ADR-019 (composition root y dependencias), ADR-024/025 (puertos neutrales y adapters) y
-> ADR-032 (hub iFlow) en lo relativo a los requisitos entre features y al orden del pipeline.
-> **No se inicia** hasta cerrar la purga P0 (ADR-034). Cualquier cambio en `docs/prompts/` requiere
-> autorización explícita.
+> **Estado:** propuesta, no implementada y no contractual. **ADR-036 redactado (2026-11-06),
+> pendiente de aceptación explícita.** Sustituye o enmienda ADR-019 (composition root y
+> dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow) y ADR-008
+> (backend→fachada) en lo relativo a los requisitos entre features y al orden del pipeline; adopta
+> ADR-031 sin cambios. **No se inicia** hasta que el usuario acepte ADR-036 y se cierre la purga P0
+> (ADR-034). Cualquier cambio en `docs/prompts/` requiere autorización explícita.
 
 #### Hallazgo estructural
 
@@ -353,7 +354,7 @@ actual** (`SuiteHost`/`MessageDispatcher`), el modelo de requisitos del grafo y 
 de canales. La lista de módulos es la superficie visible; el cambio de fondo es quién posee los
 servicios neutrales y cómo se compone el procesamiento.
 
-#### Preguntas abiertas (para el ADR)
+#### Preguntas abiertas (resueltas por ADR-036, pendiente de aceptación)
 
 1. ¿`pipeline` o `workflow` como nombre canónico? Se recomienda `pipeline`; el otro no será alias.
 2. ¿El catálogo de canales vive en `core-api`, en `suite-runtime` o en el `PipelineContext`?
@@ -393,12 +394,12 @@ servicios neutrales y cómo se compone el procesamiento.
 
 #### Bloqueos
 
-- ADR de pipeline (siguiente número libre) que sustituya o enmiende ADR-019, ADR-024/025 y
-  ADR-032 en composition root, requisitos entre features y orden del pipeline.
+- **ADR-036 pendiente de aceptación explícita** (redactado el 2026-11-06). Resuelve las doce
+  preguntas abiertas y enmienda ADR-019, ADR-024/025, ADR-032 y ADR-008; adopta ADR-031.
 - Cierre de la purga P0 (ADR-034); P0.6 cerrado (2026-11-06).
 - Autorización explícita para modificar `docs/prompts/diseno/storage.md`,
   `docs/prompts/especificaciones/config-schema-v2.2.md` y el resto de documentos de diseño.
-- No se implementa código mientras el ADR no esté aceptado.
+- No se implementa código mientras el ADR-036 no esté aceptado.
 
 ---
 

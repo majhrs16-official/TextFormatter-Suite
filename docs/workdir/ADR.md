@@ -1246,3 +1246,403 @@ placeholders. `%cot_translate%` resuelve de forma síncrona porque PAPI exige un
 apoya en la caché de `TranslationService`. `send`/`broadcast`/`clone` operan sobre mensajes creados
 por `cot_new`/`cot_clone`; no capturan el historial del chat vivo. `CoreTranslator` no se elimina en
 la purga P0.4; se mantiene como feature legacy.
+
+---
+
+## ADR-036 — Pipeline secuencial configurable y features opcionales
+
+**Estado:** Propuesta (2026-11-06). Pendiente de aceptación explícita del usuario. No se implementa
+mientras el estado sea «Propuesta». Enmienda ADR-019, ADR-024, ADR-025, ADR-032 y ADR-008 en los
+puntos que se indican; adopta ADR-031 sin cambios.
+
+**Contexto.** El diseño declara que todo feature es un paquete opcional, pero el composition root
+decide lo contrario en tiempo de ejecución. `SuiteRuntime.rebuildPipeline()` exige ocho servicios
+concretos (`ChannelRegistry`, `TranslationService`, `IflowHub`/`Router`, `MessageComponentRenderer`,
+`MessageRenderer`, `ChatDelivery`, `ActorDirectory` y `PermissionChecker`) y, si falta uno, deja el
+pipeline «unavailable» (`SuiteRuntime.java:203-211, 245-253`). Es `TF-001`: la suite no arranca
+funcional sin `textformatter`, sin `chattranslator` o sin un motor iFlow. Además, el orden de
+procesamiento está cableado en `SuiteHost.deliver()` y `MessageDispatcher.dispatch()`; el catálogo de
+canales pertenece a `textformatter`; y los descriptores convierten features en requisitos de otras
+features (`channel-api`, `chattranslator`).
+
+El usuario ha fijado el criterio que gobierna esta decisión: **si falta iFlow, el pipeline no se
+bloquea; continúa con la siguiente etapa**. La ausencia de una etapa es un hecho explícito y
+trazable, no un fallo del pipeline.
+
+### 1. Alcance y enmiendas
+
+| Documento | Lo que se enmienda | Lo que se conserva |
+|---|---|---|
+| ADR-019 | El composition root puede exigir servicios de una feature; el grafo impone el orden. | Ciclo de vida, `ModuleHost`, classloaders, paquetes, guard de imports, «no doble camino». |
+| ADR-024 | `SuiteHost` como ensamblador del render y el pipeline cableado. | `core-render` como módulo neutral de contratos con Adventure; `MessageComponentRenderer` como puerto. |
+| ADR-025 | El adapter construye y posee el pipeline. | Adapters delgados, `PlatformPorts`, captura de eventos en `sync-*`. |
+| ADR-032 | `SuiteRuntime` exige `IflowHub` y un `Router` no nulo para construir el pipeline. | Selección de backend por el hub, prioridad de fallback, configuración `config/iflow/config.yml`. |
+| ADR-008 | El backend de traducción requiere `chattranslator` para activarse. | La fachada `ChatTranslator` y `TranslationService` como punto de uso de la traducción. |
+
+ADR-031 se adopta íntegra: `PolicyTarget` se reduce a `DELIVER`, `CANCEL_EVENT` y `ERROR`; `SET_CHANNEL`
+es la única mutación de canal; `REDIRECT` y `CHANNEL_REDIRECT` desaparecen. Este ADR no los
+reintroduce con otro nombre.
+
+### 2. Regla de independencia
+
+1. **El núcleo arranca sin features.** Comandos, ciclo de vida, configuración, eventos, captura de
+   plataforma y catálogo de canales no exigen ningún paquete de feature.
+2. **Ninguna feature requiere otra feature.** Un descriptor solo puede requerir capacidades
+   publicadas por el entorno del runtime o por módulos técnicos neutrales (`api`, `jvm`,
+   `channel-catalog`, `kernel`, `manager-spi`, `platform`); nunca una capacidad publicada por una
+   feature (`channel-api`, `formatter`, `router`, `chattranslator`, `sync-bus`, `stage:*`).
+   Las capacidades `stage:*` son declarativas y nunca pueden ser objeto de un `Requirement`.
+3. **Todo feature es opcional.** Instalar una feature no es requisito para arrancar; desinstalarla no
+   invalida el pipeline, solo elimina su etapa.
+4. **La ausencia de etapa es explícita.** Se registra como `SKIPPED` con su motivo y el mensaje
+   continúa. No se convierte en error de configuración, en éxito falso ni en bloqueo.
+5. **Un solo camino.** La lista `pipeline` es la única fuente de orden. No se conserva el pipeline
+   cableado como fallback ni se deduce el orden del grafo o del orden de activación.
+6. **El grafo se conserva para el ciclo de vida y los servicios neutrales**, no para imponer el orden
+   del procesamiento.
+
+### 3. Configuración canónica
+
+La clave vive en `config/suite/config.yml` y se llama `pipeline`. `workflow` no se acepta como alias
+ni como clave alternativa (ADR-034 prohíbe aliases).
+
+```yaml
+# Orden base instalado por defecto. No es un orden obligatorio.
+pipeline:
+  - route
+  - translate
+  - format
+  - sync
+config-version: 1.0
+```
+
+Reglas:
+
+- Cada entrada es un `stageId` estable, no un `moduleId`. El `moduleId` es un detalle de instalación;
+  el `stageId` es el contrato del pipeline.
+- El orden es literal: la primera etapa del archivo se ejecuta antes que la segunda dentro de la misma
+  fase. La primera y la última entrada de una fase cierran su recorrido.
+- `DefaultConfigInstaller` escribe la lista base al instalar. Si el archivo existe y le falta
+  `pipeline`, `ConfigLoader` produce un error y el plan queda `INVALID`; no hay lista oculta de
+  rescate. Si no existe el archivo entero, se aplican los defaults de primera instalación del
+  instalador.
+- Una lista vacía es válida y significa «sin etapas»: el pipeline queda `NO_PIPELINE` y el despacho
+  devuelve ese estado explícito. No se entrega nada ni se finge éxito.
+- Duplicados en la lista, `stageId` sintácticamente inválido o etapa no declarada por ningún módulo
+  instalado producen `INVALID`. Un `stageId` declarado por un módulo instalado pero no activo, o no
+  publicado por un módulo activo, produce `SKIPPED`.
+- `sync` es terminal: cualquier entrada posterior a `sync` en la lista produce `INVALID`.
+
+### 4. Catálogo de etapas y contrato
+
+Cada módulo declara las etapas que puede publicar como capacidades `stage:<id>` en su descriptor, por
+ejemplo `stage:route` o `stage:format`. La declaración permite distinguir «no instalado» (conocido o
+desconocido) de «instalado pero inactivo». La publicación real es un servicio `PipelineStage`
+registrado en el `ServiceRegistry` del módulo.
+
+- Un módulo puede publicar varias etapas distintas.
+- Dos módulos no pueden publicar el mismo `stageId`; la ambigüedad produce `INVALID`.
+- `stageId` canónico: `^[a-z][a-z0-9-]*$`. Los ids base son `route` (`iflow`), `translate`
+  (`chattranslator`), `format` (`textformatter`) y `sync` (`sync-bus`). Son ids de contrato, no una
+  lista cerrada: una feature nueva puede declarar `stage:normalize` sin tocar el núcleo.
+
+Los contratos viven en `core-api` bajo `me.majhrs16.suite.api.pipeline`. `core-api` sigue sin
+depender de Adventure: el resultado renderizado se expresa con el marcador neutral `RenderedOutput`;
+`core-render` aporta `ComponentRenderedOutput`, que envuelve el `Component` y es el único punto que
+conoce Adventure.
+
+```java
+public interface PipelineStage {
+    String id();
+    Set<PipelineScope> scopes();
+
+    default StageResult beforeMessage(PipelineMessage message, PipelineContext context) {
+        return StageResult.continueWith(message);
+    }
+    default StageResult perRecipient(PipelineMessage message, PipelineContext context) {
+        return StageResult.continueWith(message);
+    }
+    default StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+        return StageResult.continueWith(message);
+    }
+}
+```
+
+```java
+public record PipelineMessage(
+        Message message,
+        Actor recipient,              // null en MESSAGE_PRE y MESSAGE_POST
+        RouteDecision decision,       // null si no hay etapa route
+        RenderedOutput rendered,      // null hasta que la etapa format lo produce
+        boolean cancelEvent
+) {}
+
+public interface PipelineContext {
+    String messageId();
+    PipelineScope scope();
+    ChannelRegistry channels();
+    ActorDirectory actors();
+    PermissionChecker permissions();
+    PipelineSettings settings();
+    PipelineServices services();      // find/findAll de puertos neutrales
+    PluginLogger logger();
+    PipelineTrace trace();
+    long planVersion();
+}
+```
+
+`PipelineSettings` es un subconjunto neutral de `HostConfig` (`defaultLanguage`, `engineParallel`,
+`soundEnabled`). `HostConfig` se conserva como configuración del host, pero no cruza la frontera del
+pipeline. Las etapas reciben sus dependencias concretas por constructor desde su propio módulo: la
+etapa `format` ya tiene su `TextFormatter`, la etapa `translate` su `TranslationService`, la etapa
+`route` su `Router` y la etapa `sync` su `SyncBus`. El contexto solo expone servicios transversales
+neutrales.
+
+**Fases.** El motor recorre la misma lista ordenada en tres fases:
+
+1. `MESSAGE_PRE`: una vez por emisión, antes de expandir destinatarios. Sirve para rate limit de
+   emisión y normalizaciones globales. La etapa `route` puede declarar esta fase.
+2. `RECIPIENT`: una vez por destinatario. Aquí viven `route`, `translate` y `format`.
+3. `MESSAGE_POST`: una vez por emisión, después de las entregas. Aquí vive `sync`.
+
+Entre `MESSAGE_PRE` y `RECIPIENT` el motor materializa los destinatarios con `ActorDirectory`. Esa
+expansión no es una etapa opcional: es la definición de «entrega» y no depende de ninguna feature.
+Una etapa declara en `scopes()` las fases en las que participa; el motor solo invoca los métodos
+correspondientes. El orden dentro de cada fase es el de la lista.
+
+### 5. Semántica de resultados
+
+| Resultado | Efecto en la unidad | Traza | ¿Termina el pipeline? |
+|---|---|---|---|
+| `CONTINUE` | Sustituye el mensaje por el devuelto y sigue. | `RUN` | No. |
+| `DROP` | Descarta la unidad sin entregar. | `DROP` + motivo | Sí, para esa unidad. |
+| `REJECT` | Descarta y marca rechazo explícito (equivalente a `REJECT` de ADR-031). | `REJECT` + motivo | Sí, para esa unidad. |
+| `ERROR` | Falla la unidad; no se entrega y se registra el error. | `ERROR` + motivo | Sí, para esa unidad. |
+| `NOT_APPLICABLE` | No transforma; sigue con el mismo mensaje. | `NOT_APPLICABLE` | No. |
+
+`ERROR` no se degrada a éxito ni se reintenta en silencio. `DROP` y `REJECT` no lanzan excepción al
+adaptador: se contabilizan en el resultado del despacho.
+
+**Etapa ausente.** Si una entrada de la lista no tiene etapa publicada, el motor registra `SKIPPED`
+con el motivo (`module-inactive` o `stage-unpublished`) y continúa. El pipeline global sigue siendo
+válido. En particular:
+
+| Etapa ausente | Comportamiento por defecto | Traza |
+|---|---|---|
+| `route` | Se entrega a los destinatarios expandidos. El default deny de ADR-031 pertenece a la política del motor iFlow instalado, no a la ausencia de motor. | `SKIPPED` + `DEFAULT_ALLOW` |
+| `translate` | El mensaje no se traduce. | `SKIPPED` |
+| `format` | Se entrega texto plano neutral (`Component.text`). | `SKIPPED` + `PASS_THROUGH` |
+| `sync` | No hay fan-out a sinks. | `SKIPPED` |
+
+Si la lista no tiene ninguna etapa efectiva, el estado es `NO_PIPELINE`: no se entrega nada y el
+resultado del despacho lo declara. `MessageDispatch.dispatch()` no lanza excepción en ese caso
+(romper el evento de plataforma sería peor), pero registra un `warn` una sola vez por versión del
+plan y deja el estado en la traza. Los accesos de diagnóstico (`SuiteRuntime.pipelineStatus()`,
+`pipelineError()`) sí fallan de forma explícita.
+
+### 6. Traza por etapa
+
+`PipelineTrace` acumula, por despacho, una entrada `StageTrace` por etapa y fase ejecutada o saltada:
+
+```java
+public record StageTrace(
+        String stageId,
+        String moduleId,
+        PipelineScope scope,
+        Actor recipient,        // null fuera de RECIPIENT
+        StageStatus status,     // RUN, SKIPPED, DROP, REJECT, ERROR, NOT_APPLICABLE
+        String detail,
+        long durationNanos
+) {}
+```
+
+El runtime conserva las últimas 256 trazas en un búfer circular; `tester` las consume mediante
+`TestProbe.lastTrace(String messageId)` y `TestProbe.recentTraces()`. El punto exacto de fallo de P12
+es la primera entrada con `ERROR` o `REJECT` para el `message.id()`; si no hay ninguna, el fallo está
+en la entrega y la traza lo indica con una entrada terminal del motor. La traza no captura el
+contenido del mensaje ni datos personales, y no sustituye a las métricas.
+
+### 7. `SET_CHANNEL` y segunda fase de routing
+
+`route` se ejecuta una vez por destinatario. Si la decisión incluye `SET_CHANNEL` y el nuevo canal
+puede cambiar permisos o destinatarios, el motor ejecuta una **segunda pasada de routing solo para los
+destinatarios afectados**, con `phase=secondary`:
+
+- No hay reentrega recursiva ni reentrada en `translate`, `format` o `sync`.
+- Una segunda mutación de canal en la misma unidad produce `DECISION_CONFLICT` y la unidad se
+  rechaza, conforme a ADR-031.
+- Si el cambio de canal añade destinatarios, se añaden a la lista de entrega y se les aplica la
+  pasada secundaria de routing.
+- La consola es un actor (`Actor.console()`); no hay `REDIRECT` ni `CHANNEL_REDIRECT`.
+
+### 8. Recarga en caliente
+
+`reloadPipeline()` relee `config/suite/config.yml` y el catálogo de canales, construye un
+`PipelinePlan` inmutable y lo publica con un swap atómico. Estados:
+
+- `APPLIED`: el plan nuevo es válido y se publicó. Los despachos en vuelo conservan el plan anterior.
+- `FAILED`: el archivo es inválido o una etapa lanzó al construirse. Se conserva el plan anterior y
+  se devuelve el detalle.
+- `RESTART_REQUIRED`: el plan anterior no pudo drenarse en el plazo acordado o un módulo dejó recursos
+  vivos. No se declara éxito.
+
+Cambiar la lista no reinicia módulos ni recarga classloaders. Instalar, desinstalar o actualizar un
+paquete reconstruye el plan después de confirmar la activación o desactivación, igual que hoy.
+
+### 9. Sustitución de `SuiteHost` y `MessageDispatcher`
+
+El pipeline configurable **sustituye** el cableado actual; no lo envuelve ni conserva como fallback:
+
+- `SuiteHost` desaparece como fachada. Sus accesos pasan a `PipelineContext` (lectura) y a
+  `SuiteRuntime` (diagnóstico y administración).
+- `MessageDispatcher` se divide en tres piezas neutrales:
+  `PipelineEngine` (orden, fases, traza, resultado), `RecipientResolver` (expansión de `Direction` con
+  `ActorDirectory`) y `DeliveryExecutor` (pool acotado, timeout, `sleepMillis` y cierre determinista).
+- `RoutingResult` y `DispatchReport` se retiran. `DispatchOutcome` gana `PipelineStatus status` y
+  `int failed`; todos sus consumidores se actualizan en el mismo cambio.
+- `MessageDispatch` conserva su firma. `dispatchAndReport` devuelve el estado del pipeline; `dispatch`
+  es la variante sin informe.
+- `TestProbe` gana `lastTrace`/`recentTraces` y pierde los métodos que expongan `SuiteHost`.
+
+No queda un segundo camino de composición en `host`, en los adapters ni en los tests de producción.
+
+### 10. Catálogo de canales neutral
+
+- Los contratos `Channel` y `ChannelRegistry` ya viven en `core-api`; se conservan.
+- La carga se mueve de `textformatter` a `suite-runtime` (`ChannelCatalogLoader`), que publica una
+  única instancia en el `ServiceRegistry` antes de activar features.
+- Ruta canónica: `config/suite/channels/`. No se usa `config/channels/` (prohibida por ADR-034) ni
+  `config/textformatter/channels/` (pertenece a una feature). El cambio de `storage.md` y de
+  `config-schema-v2.2.md` requiere autorización explícita y se hace en la misma unidad de trabajo.
+- `textformatter` consume el catálogo y deja de publicarlo. `iflow-*`, `inworld`, `sync-bukkit`,
+  `sync-fabric` y `tester` consumen el mismo servicio neutral. El descriptor que necesite declarar la
+  dependencia usa `channel-catalog`, capacidad del entorno del runtime, nunca `channel-api` de otra
+  feature.
+- `suite-runtime` publica `channel-catalog@1.0.0` como capacidad de entorno en `kernel.Environment`,
+  junto a `api` y `jvm`.
+
+### 11. Traducción
+
+`translate` es una etapa propia de `chattranslator`, con fase `RECIPIENT`, ejecutada después de
+`route` y antes de `format` en el orden base. Consecuencias:
+
+- `textformatter` deja de traducir dentro del render; renderiza el mensaje ya traducido. La
+  regresión contra el comportamiento base se cubre con el criterio 8 de cierre.
+- `TranslationService` conserva su contrato en `core-api`; no cambia su firma.
+- Los backends `gtranslate`, `ltranslate` y `coretranslator` dejan de requerir `chattranslator` para
+  activarse. Publican `TranslatorProvider` y quedan inertes si la fachada no está instalada; el
+  `translate` se registra como `SKIPPED`. La fachada sigue siendo el único punto de uso de la
+  traducción y descubre proveedores por `findAll` y `ServiceLoader`, como ya hace.
+- Un backend sin fachada no traduce nada, pero no bloquea el arranque ni el resto del pipeline.
+
+### 12. Sincronización
+
+`sync-bus` publica una única etapa terminal `sync`, con fase `MESSAGE_POST` y fan-out best-effort a
+todos los sinks registrados. Los sinks no son etapas: publican `SyncSink` y el bus los descubre; no
+imponen orden. `sync` se ejecuta una vez por emisión, después de las entregas, y no altera el
+mensaje. Si el bus no está instalado, la etapa se salta y el resto del pipeline no cambia.
+
+### 13. Qué mensajes recorren el pipeline
+
+Todos los `Message` inyectados por `MessageDispatch` recorren el mismo pipeline, con independencia de
+`MessageType` (chat, join/quit/death, sistema o evento). Los adaptadores deciden cómo capturan el
+evento y si lo cancelan (`CANCEL_EVENT`); eso no es una etapa de feature. Una etapa que no aplique a
+un tipo devuelve `NOT_APPLICABLE` y la traza lo registra.
+
+### 14. Guard de independencia
+
+`checkArchitecture` gana una regla: ningún descriptor de `src/*` puede declarar un `Requirement`
+sobre una capacidad publicada por una feature. La regla se implementa en la tarea Gradle contra una
+lista de capacidades neutrales publicadas por el entorno y por los módulos técnicos (`api`, `jvm`,
+`channel-catalog`, `kernel`, `manager-spi`, `platform`), y se refuerza con un test que construye el
+grafo y comprueba que una feature no puede satisfacer el requisito de otra. Las capacidades `stage:*`
+se validan como `provide` y se rechazan como `require`. El guard falla el build; no se degrada a
+advertencia.
+
+### 15. Migración de descriptores
+
+El cambio de modelo obliga a corregir los descriptores en la misma unidad de trabajo:
+
+| Módulos | Antes | Después |
+|---|---|---|
+| `iflow-*`, `inworld`, `sync-bukkit`, `sync-fabric`, `tester` | `require("channel-api")` | `require("channel-catalog")` (entorno) |
+| `gtranslate`, `ltranslate`, `coretranslator` | `require("chattranslator")` | sin requisito; publican `TranslatorProvider` |
+| sinks `sync-*` | `require("sync-bus")` | sin requisito; publican `SyncSink` y el bus los descubre |
+| `tester` | `require("formatter")`, `require("router")` | sin requisito; sondas opcionales con `SKIPPED` |
+| `textformatter` | `provide("channel-api")` | `provide("stage:format")`; consume el catálogo |
+| `iflow` | — | `provide("stage:route")` |
+| `chattranslator` | — | `provide("stage:translate")` |
+| `sync-bus` | — | `provide("stage:sync")`; descubre `SyncSink` |
+
+`DefaultSyncBus` deja de depender de que cada sink lo busque al activarse: indexa los `SyncSink`
+publicados y se suscribe a `ModuleActivatedEvent`/`ModuleDeactivatedEvent`, igual que hace el hub de
+iFlow con sus backends.
+
+### Respuestas a las preguntas abiertas de `PLAN.md`
+
+| # | Pregunta | Decisión |
+|---|---|---|
+| 1 | ¿`pipeline` o `workflow`? | `pipeline`. `workflow` no es alias. |
+| 2 | ¿Dónde vive el catálogo de canales? | Contratos en `core-api`; carga y propiedad en `suite-runtime`; el `PipelineContext` lo expone en solo lectura. |
+| 3 | ¿`moduleId` o `stageId`? ¿Varias etapas por módulo? | `stageId`. Un módulo puede publicar varias; dos no pueden publicar el mismo id. |
+| 4 | ¿Traducción como etapa? | Sí: `translate`, fase `RECIPIENT`, tras `route` y antes de `format`. |
+| 5 | ¿Etapa ausente: error o `SKIPPED`? ¿Lista por defecto? | `SKIPPED` y continúa. La lista base la instala `DefaultConfigInstaller`; falta de clave en un archivo existente es `INVALID`. Lista vacía es `NO_PIPELINE`. |
+| 6 | ¿Syncs como etapa? | Una etapa terminal `sync` (`MESSAGE_POST`); los sinks no son etapas. |
+| 7 | ¿Sustituye o envuelve a `SuiteHost`/`MessageDispatcher`? | Sustituye. `PipelineEngine` + `RecipientResolver` + `DeliveryExecutor`. |
+| 8 | `SET_CHANNEL` y segunda fase | Segunda pasada de routing solo para afectados, sin reentrega recursiva; segunda mutación → `DECISION_CONFLICT`. |
+| 9 | Cambio en caliente | `APPLIED` con swap atómico, `FAILED` conservando el plan anterior, `RESTART_REQUIRED` si no se puede drenar. |
+| 10 | Traza para `tester` | `PipelineTrace`/`StageTrace` con estado, fase, destinatario y duración; búfer de 256 y acceso por `TestProbe`. |
+| 11 | ¿Todo mensaje o solo chat? | Todo `Message`; la captura y `CANCEL_EVENT` son del adaptador. |
+| 12 | ¿Backend sin fachada? | Sí, instalable e inerte; la fachada es el único punto de uso y descubre proveedores. |
+
+### Criterios de aceptación y tests
+
+1. **Arranque sin features:** el núcleo arranca, registra comandos y gestiona el ciclo de vida; un
+   despacho sin etapas devuelve `NO_PIPELINE`, no un éxito falso.
+2. **Solo `textformatter`:** formatea y entrega sin iFlow, sin traducción y sin syncs.
+3. **Solo iFlow:** enruta con el catálogo neutral, sin `textformatter` ni `chattranslator`; sin
+   `format` se entrega texto plano y la traza lo declara.
+4. **Solo `chattranslator`:** traduce con render pass-through, sin `textformatter` ni iFlow.
+5. **Orden configurable:** el mismo conjunto en dos órdenes produce resultados distintos y trazables;
+   el orden no depende del grafo ni del orden de registro.
+6. **Etapa ausente o no listada:** comportamiento explícito y probado, sin éxito fingido.
+7. **Guard de independencia:** un descriptor de feature no declara `Requirement` sobre otra feature;
+   solo sobre contratos neutrales.
+8. **Regresión:** la configuración base reproduce el comportamiento actual cuando declara el orden
+   vigente; los tests de `E2EPipelineTest` y de render se conservan o se adaptan sin relajar
+   aserciones.
+9. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`; si se toca el editor,
+   `npm run check`.
+
+Tests adicionales obligatorios: ausencia de `iflow` con el resto instalado (debe entregar, no
+bloquear); `iflow` instalado sin backend (etapa `SKIPPED`); duplicado de etapa (`INVALID`); dos
+módulos publicando el mismo `stageId` (`INVALID`); `sync` seguido de otra entrada (`INVALID`);
+recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo durante un swap
+(usa el plan anterior y no falla); y `SET_CHANNEL` con segunda pasada sin recursión.
+
+### Consecuencias
+
+- El pipeline deja de ser un grafo implícito de servicios obligatorios y pasa a ser una lista
+  explícita de etapas opcionales con trazabilidad por unidad.
+- Instalar o quitar una feature cambia el procesamiento sin bloquear el arranque ni el resto de
+  etapas.
+- `SuiteRuntime` deja de conocer `SuiteHost`, `MessageDispatcher`, `IflowHub` y los tipos concretos
+  del render; solo conoce contratos neutrales y el plan.
+- El catálogo de canales y la traducción dejan de pertenecer a features; `textformatter` y
+  `chattranslator` se convierten en consumidores/publicadores de etapas.
+- La recarga en caliente gana un estado verificable (`APPLIED`/`FAILED`/`RESTART_REQUIRED`) y deja de
+  tener la carrera de `TF-010` en el rebuild.
+- El cambio es incompatible: descriptores, configuración, esquema, presets, instalador, tests y
+  documentación se actualizan en la misma unidad de trabajo. No hay periodo de convivencia.
+
+### Lo que este ADR no promete
+
+- No promete que un pipeline vacío entregue mensajes: `NO_PIPELINE` es un estado explícito, no un
+  fallback.
+- No promete que las etapas sean puras ni sin estado; solo que el motor no impone su orden fuera de
+  la lista.
+- No convierte `sync` en entrega garantizada: el fan-out sigue siendo best-effort y no hay
+  reintentos nuevos.
+- No sustituye el E2E real ni declara estable la integración; eso sigue en ADR-034.
+- No autoriza por sí mismo cambios en `docs/prompts/`: `storage.md` y el esquema requieren
+  autorización explícita.
