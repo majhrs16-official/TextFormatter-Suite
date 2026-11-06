@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -202,11 +202,18 @@ evidencia ejecutada. El ciclo documental anterior (D-001…D-010, HEAD `c5992230
 informe fue reemplazado por completo (C14/ADR-034). Mapeo de severidades: P0 = Alta, P1 = Media,
 P2 = Baja. El cierre se rastrea en P0.6.
 
+**Corrección de hallazgos P0 (2026-11-06):** TF-002 y TF-005 cerrados con test de regresión.
+TF-002 aplica fail-closed en `MessageDispatcher`: `PERMISSION` y `WORLD` sin qualifier entregan a
+cero y registran un aviso, en lugar de ensanchar el mensaje a todos los jugadores. TF-005 hace que
+`DefaultSyncBus.broadcast` ejecute el fan-out en el hilo llamante, devuelva cuántos sinks aceptaron
+realmente y libere la marca de dedup cuando ninguno acepta, de modo que el reintento es posible tras
+drenar las colas. Siguiente P0 de la auditoría: TF-001 (PL-1).
+
 **Nota sobre la cita a `P0.1-inventory.md`:** el informe anterior remitía a
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
 PLAN. El informe de 2026-11-06 ya no contiene esa cita. No se crea un archivo auxiliar.
 
-**Orden de trabajo:** purga P0 → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
+**Orden de trabajo:** cierre de los P0 de la auditoría (TF-002 ✅ → TF-005 ✅ → TF-001/PL-1) → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
 
 **Cierre del ciclo anterior:** D-009 quedó resuelto. `IflowBackendManager` aplica la prioridad
 explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
@@ -412,7 +419,7 @@ servicios son obligatorios y cómo se compone el procesamiento.
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
 > **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §16** (aceptado el
-> 2026-11-06) y de cerrar **TF-005** y **TF-006**.
+> 2026-11-06) y de cerrar **TF-006**; TF-005 quedó cerrado el 2026-11-06.
 
 #### Objetivo
 
@@ -442,7 +449,7 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | Hecho | Evidencia | Efecto |
 |---|---|---|
 | `SyncSink` solo envía mensajes | `SyncSink.java` (`send`, `start`, `stop`, `setListener`) | No hay superficie de acciones ni descubrimiento. |
-| `broadcast` devuelve el número de sinks, no de éxitos | `DefaultSyncBus.broadcast`; TF-005 | Un `invoke` construido encima mentiría sobre el resultado. |
+| `broadcast` devuelve los sinks que aceptaron | `DefaultSyncBus.broadcast`; TF-005 cerrado | La base de `invoke` ya no confunde fan-out intentado con aceptado. |
 | `broadcastAsync` sondea la cola sin timeout ni identidad | `DefaultSyncBus.broadcastAsync`; TF-006 | No sirve como base de acciones con timeout. |
 | `set_channel` es un import dedicado de v3 | `PolicyAbiV3.SET_CHANNEL`; `PolicyHost.setChannel` | No es genérico ni está sujeto a concesiones por acción. |
 | Los sinks requieren `sync-bus` | descriptores `sync-*`; `storage.md` §2 | Feature→feature; contradice ADR-036 §2. |
@@ -467,9 +474,9 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 
 #### Pasos de implementación
 
-1. **Prerrequisito TF-005/TF-006.** Corregir `SyncBus.broadcast` para contar éxitos reales y
-   `broadcastAsync` para completar con timeout e identidad de mensaje. Tests de regresión que fallen
-   sin el arreglo.
+1. **Prerrequisito TF-006.** `broadcast` ya cuenta éxitos reales y libera el dedup (TF-005,
+   cerrado el 2026-11-06). Falta que `broadcastAsync` complete con timeout e identidad de mensaje.
+   Tests de regresión que fallen sin el arreglo.
 2. **Contratos neutrales.** Añadir los tipos de §16.3 a `core-api` y ampliar `SyncSink`/`SyncBus`.
    `checkArchitecture` prohíbe JDA, Telegram, Bukkit, Fabric y cualquier SDK en `core-api` y
    `sync-bus`. Test de que una superficie se serializa sin tipos de plataforma.
@@ -520,7 +527,7 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 #### Dependencias y orden
 
 - **ADR-036 aceptado** y, en particular, §16.
-- **TF-005/TF-006 cerrados** antes de exponer `invoke`.
+- **TF-006 cerrado** antes de exponer `invoke` (TF-005 cerrado el 2026-11-06).
 - **PL-1** para la etapa `sync`, el contexto del pipeline y la segunda fase de routing.
 - **W3.5** para el puente Wasm; la VM y Wasm comparten conformidad.
 - Los backends pueden avanzar en paralelo después de los contratos y el bus.
@@ -534,13 +541,13 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | ADR-019 | Permite `feature → feature` con dependencia declarada. | ADR-036 §2 elimina la excepción; §15 migra los descriptores. |
 | `storage.md` §2 | Un submódulo declara `require(...)` del padre (`sync-*` → `sync-bus`). | Contradice §15 y §16; actualizar el documento requiere autorización. |
 | Especificación iFlow v3 | El guest solo transforma contenido/metadatos; no hay efectos de host. | §16 amplía la autoridad a acciones de backend con concesión; requiere autorización para la spec. |
-| Auditoría TF-005/TF-006 | `broadcast` y `broadcastAsync` no son fiables. | No es contradicción: es prerrequisito. No se expone `invoke` hasta corregirlos. |
+| Auditoría TF-006 | `broadcastAsync` no es fiable. | No es contradicción: es prerrequisito. No se expone `invoke` hasta corregirlo; TF-005 ya está cerrado. |
 | ADR-035 | `CoreTranslator.sendDiscord` usa el bus actual. | Pasa al LCM `message.send`; no usa acciones nativas. Sin contradicción. |
 | ADR-034 | Prohíbe aliases y compatibilidad. | El cambio es incompatible y se aplica en una sola unidad; `set_channel` se retira, no se conserva como alias. |
 
 #### Bloqueos
 
-- TF-005 y TF-006 abiertos.
+- TF-006 abierto; TF-005 cerrado el 2026-11-06.
 - Autorización para `storage.md`, el esquema de configuración y la especificación iFlow, solo si sus
   rutas o contratos cambian; el namespace `textformatter` y la ruta de canales no cambian.
 - Paridad W3.5 para el puente Wasm; el puente VM puede adelantarse con conformidad propia.
@@ -641,7 +648,7 @@ pipeline.
 - **ADR-036 aceptado**, §17 en particular.
 - **PL-1** para el `PipelineContext`, la traza y las etapas.
 - **PL-2** para `SyncSurface`/`invoke` y la selección por backend.
-- **TF-005/TF-006** para el resultado fiable del fan-out.
+- **TF-006** para el resultado fiable del fan-out asíncrono (TF-005 cerrado el 2026-11-06).
 - **ADR-032/ADR-035** se conservan como default y fallback.
 
 #### Contradicciones detectadas
@@ -660,7 +667,7 @@ pipeline.
 
 - Autorización para `config-schema-v2.2.md` solo si se añaden `outputs`/`outputs-parallel` al
   esquema; la wiki es documentación de usuario y no requiere esa autorización.
-- PL-1/PL-2 y TF-005/TF-006 para el flujo completo.
+- PL-1/PL-2 y TF-006 para el flujo completo (TF-005 cerrado el 2026-11-06).
 
 ---
 
