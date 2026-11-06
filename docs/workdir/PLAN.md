@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`) y `ComponentRenderedOutput` en `core-render`, todavía sin cableado. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -246,13 +246,15 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 ### Feature propuesta — pipeline secuencial configurable (PL-1, 2026-11-05)
 
-> **Estado:** propuesta de implementación, no implementada y no contractual. **ADR-036 aceptado
+> **Estado:** propuesta de implementación en curso. **ADR-036 aceptado
 > (2026-11-06).** Sustituye o enmienda ADR-019 (composition root y
 > dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow), ADR-008
 > (backend→fachada) y ADR-003 (§16, autoridad del guest) en lo relativo a los requisitos entre
 > features y al orden del pipeline; adopta ADR-031 en la semántica de routing (§16 regula la
 > exposición de `SET_CHANNEL` sin alterar D01–D05). La purga P0 está cerrada (P0.6, 2026-11-06),
-> así que no queda bloqueo documental; la implementación aún no se ha iniciado. Cualquier cambio en
+> así que no queda bloqueo documental. La implementación arrancó el 2026-11-06 con los contratos
+> neutrales del pipeline en `core-api` y `ComponentRenderedOutput` en `core-render`; el motor, el
+> plan del runtime y la migración de descriptores siguen pendientes. Cualquier cambio en
 > `docs/prompts/` requiere autorización explícita. La multiplexación de salidas de §17 se planifica
 > en PL-3.
 
@@ -414,7 +416,11 @@ servicios son obligatorios y cómo se compone el procesamiento.
   `docs/prompts/especificaciones/config-schema-v2.2.md`, `docs/prompts/diseno/iflow-cpu-design.md`,
   `docs/prompts/diseno/iflow-cpu-implement.md` y el resto de documentos de diseño **solo si** la
   implementación cambia sus rutas o su esquema; la ruta de canales no cambia.
-- La implementación de PL-1 no se ha iniciado; no hay código nuevo asociado a este plan.
+- Implementación en curso: los contratos neutrales (`PipelineStage`, `PipelineContext`,
+  `PipelineMessage`, `StageResult`, `PipelinePlan`, `StageTrace`, `OutputPlan`) ya existen en
+  `core-api`; faltan `PipelineEngine`, `RecipientResolver`, `DeliveryExecutor`, la construcción del
+  plan en `suite-runtime`, las etapas `route`/`translate`/`format`/`sync`, la migración de
+  descriptores y el guard de independencia de `checkArchitecture`.
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
