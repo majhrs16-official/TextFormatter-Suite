@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-05 (**P0.1 y P0.4 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7 y P0.8b cerrados con gate verde.**)
+> Última actualización: 2026-11-05 (**P0.1, P0.4 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registra `PL-1` —pipeline secuencial configurable— como feature propuesta, bloqueada por ADR y por el cierre de la purga P0; no hay código ni contrato nuevo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -28,8 +28,8 @@
 > `iflow-firewall`, `iflow-vm` e `iflow-wasm` ya publican su backend; Wasm exige SHA-256 y recarga automáticamente.
 
 > **Estado actual (2026-11-04).** Base integrada en construcción; no hay versión estable ni
-> producción. Cerradas en su alcance: F4c, F4d, F4e, F7 y F8 (comandos, sync de plataforma,
-> empaquetado reproducible, paquetes de terceros y presets). ADR-027 implementado: adquisición,
+> producción. Cerrados en su alcance: comandos neutrales y raíz configurable, sincronizadores de
+> plataforma, empaquetado reproducible, paquetes de terceros y presets. ADR-027 implementado: adquisición,
 > commit con journal y activación separada; la etapa 2 es el único rollback automático. `iflow-vm`
 > (v2 de 16 bits, objetivo v3) e `iflow-wasm` (Chicory) son líneas paralelas; W3.5 (paridad `.flow`
 > v3/VM) sigue pendiente y V6 (compilador C) está bloqueado por V1 y V5. `CoreTranslator` se
@@ -44,6 +44,12 @@
 > compatibilidad y los bugs estructurales P0/P1 de la auditoría vigente. Cada tarea termina con
 > código, tests, documentación y gate verde; no se aceptan cambios a medias ni “arreglos” que
 > conserven el camino viejo.
+>
+> **Excepción registrada (2026-11-05):** `PL-1` (pipeline secuencial configurable) queda
+> **propuesta y documentada**, pero **no se inicia** hasta que un ADR aceptado sustituya o enmiende
+> ADR-019, ADR-024/025 y ADR-032 en lo relativo al composition root, las dependencias entre
+> features y el orden del pipeline, y hasta que cierre la purga P0 (ADR-034). La nota de esta
+> sección no autoriza implementación ni cambios en `docs/prompts/`.
 
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
@@ -54,7 +60,7 @@
 | **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Completado (2026-11-04) |
 | **P0.6** | Auditoría vigente | `AUDITORIA.md` refleja la auditoría documental de 2026-11-04 (D-001…D-010) con evidencia y estado; este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Corregir P0/P1 con test de regresión antes de avanzar. Al cerrar el ciclo, reemplazar el archivo por completo. | Parcial (auditoría documental 2026-11-04) |
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
-| **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Parcial (2026-11-04) |
+| **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Completado (2026-11-05) |
 | **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Completado (2026-11-04) |
 
 ### Inventario P0.1 — versiones y compatibilidad (2026-11-05)
@@ -186,8 +192,9 @@ No hay otros `@Deprecated` en `src/*/src/main`.
 
 **Deuda abierta asignada**
 
-1. **P0.8:** revisar si la guía manual `docs/wiki/12-Migration-Guide.md` se conserva como ayuda de
-   usuario o se reduce; no afecta al runtime.
+1. **P0.8 (resuelto, 2026-11-05):** `docs/wiki/12-Migration-Guide.md` se conserva como guía de
+   usuario para recrear el layout canónico; declara explícitamente que el runtime no migra y no
+   introduce lectores legacy. No es contrato ni estado vigente.
 2. **W3.5:** la mención a ISA v2 en `src/iflow-wasm/README.md` es histórica y debe resolverse con
    la matriz de paridad `.flow` v3/VM.
 
@@ -195,6 +202,11 @@ No hay otros `@Deprecated` en `src/*/src/main`.
 `AUDITORIA.md` contiene el informe vigente (D-001…D-010) y se reemplaza al cerrar el ciclo. El
 snapshot de código `3aaba49` (2026-10-24) queda en Git como histórico y no es estado vigente.
 Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en P0.6.
+
+**Nota sobre la cita a `P0.1-inventory.md`:** `AUDITORIA.md` remite a
+`docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
+PLAN. La cita es histórica del ciclo de auditoría y desaparecerá cuando `AUDITORIA.md` se reemplace
+por completo al cerrar P0.6 (C14/ADR-034). No se crea un archivo auxiliar.
 
 **Orden de trabajo:** purga P0 → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
 
@@ -213,7 +225,7 @@ Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en 
 - P0.1 cerró el inventario y lo integró en este PLAN; P0.4 eliminó los aliases de iFlow, el
   `transform` legacy, los constructores de compatibilidad sin uso, `%s`, `reset`, W2, las
   etiquetas `F7+` de la UI, las versiones `2.1`/`3.0` y los metadatos propios
-  `2.1.0-SNAPSHOT`. Queda P0.8.
+  `2.1.0-SNAPSHOT`. P0.8 cerrado; queda P0.6.
 - W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
 
 ### Después de 1.0.0 — betatesting/E2E real
@@ -224,6 +236,169 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
 | **E2E.1** | Betatesting/E2E posterior a 1.0.0 | Probar manualmente todas las features de la suite en servidores reales Spigot/Paper, Fabric y Velocity, con matriz de versiones y evidencia. No es un smoke test de carga. Registrar resultado y declarar **desconocida** toda combinación no probada. Los fallos se corrigen en la línea beta; la estabilidad/producción se declara solo al cerrar este ciclo. | Pendiente |
+
+---
+
+### Feature propuesta — pipeline secuencial configurable (PL-1, 2026-11-05)
+
+> **Estado:** propuesta, no implementada y no contractual. Requiere un ADR aceptado que sustituya o
+> enmiende ADR-019 (composition root y dependencias), ADR-024/025 (puertos neutrales y adapters) y
+> ADR-032 (hub iFlow) en lo relativo a los requisitos entre features y al orden del pipeline.
+> **No se inicia** hasta cerrar la purga P0 (ADR-034). Cualquier cambio en `docs/prompts/` requiere
+> autorización explícita.
+
+#### Hallazgo estructural
+
+Hoy la suite no es una colección de módulos opcionales: el grafo de módulos convierte features en
+requisitos de otras features y el orden de procesamiento está cableado en código. Evidencia
+verificada el 2026-11-05 sobre `2f5d3b27`:
+
+| Hecho verificado | Evidencia | Efecto |
+|---|---|---|
+| `textformatter` es el único proveedor de `channel-api` | `TextFormatterModule.java:24`; `TextFormatterActivator.java:32` | El catálogo de canales y su capability pertenecen a un módulo opcional. |
+| Los tres motores iFlow requieren `channel-api` | `IflowFirewallModule.java:27`; `IflowVmActivator.java:35`; `IfowWasmModule.java:23`; `IflowWasmActivator.java:34` | Instalar solo iFlow deja los tres motores inactivos o sin backend activo. |
+| `inworld`, `sync-bukkit`, `sync-fabric` y `tester` también requieren `channel-api` | `InWorldModule.java:27`; `SyncBukkitActivator.java:45`; `SyncFabricActivator.java:46`; `TesterModule.java:25` | Cuatro features más dependen de que `textformatter` esté instalado. |
+| `SuiteRuntime` exige servicios concretos para construir el pipeline | `SuiteRuntime.java:203-211`; `resolveRouter()` en `245-253` | Sin `ChannelRegistry`, `TranslationService`, `IflowHub`, `MessageRenderer`, `ChatDelivery`, `ActorDirectory` o `PermissionChecker` no hay pipeline utilizable. El fallo se registra como «pipeline unavailable» (`SuiteRuntime.java:225-232`), no como arranque funcional. |
+| El orden del pipeline está hardcodeado | `SuiteHost` (`SuiteHost.java:150-162`) y `MessageDispatcher` (`MessageDispatcher.java:40`) | No existe una lista ordenada configurable; el orden lo imponen el cableado y el grafo. |
+| El catálogo de canales vive en `textformatter` | `ChannelConfig.java:22,73`; `TextFormatterActivator.java:34-39` | Un dominio neutral (canales, permisos y políticas de canal) pertenece a una feature. |
+| La ruta `config/textformatter/channels/` está fijada fuera del módulo | `FilePresetTarget.java:96`; `DefaultConfigInstaller.java:54-57`; `config-schema-v2.2.md`; `storage.md` | Mover el catálogo obliga a tocar presets, instalador, esquema y documentación. |
+| Los backends de traducción requieren `chattranslator` | `GTranslateModule.java:23`; `LTranslateModule.java:23`; `CoreTranslatorModule.java:32`; ADR-008 | La relación backend→fachada es hoy un requisito de activación entre features; PL-1 debe decidir si un backend es instalable solo o si la fachada es su único punto de entrada. |
+| El dispatcher conserva semántica de routing retirada | `MessageDispatcher.java` procesa `PolicyTarget.CHANNEL_REDIRECT` y reentrega; `PolicyTarget.java:23` conserva el valor | ADR-031 retira `REDIRECT`/`CHANNEL_REDIRECT`; el rediseño del pipeline debe alinear el código con ese contrato. |
+
+Matiz importante: `textformatter` sí tolera la ausencia de `ChatTranslator`
+(`TextFormatterActivator.java:48` usa `TextFormatters.emptyTranslation()`), de modo que el
+acoplamiento no es de compilación de TextFormatter hacia ChatTranslator. El acoplamiento real está
+en el grafo de requisitos y en el composition root: el runtime no tolera la ausencia de
+`ChannelRegistry`, de `TranslationService` ni del hub iFlow para construir el pipeline.
+
+`config/channels/` (ruta plana) está prohibida por P0.3/ADR-034 y no puede reutilizarse como ruta
+canónica del catálogo neutral.
+
+#### Principio propuesto
+
+1. **La suite arranca y opera sin features.** El núcleo (comandos, ciclo de vida, registro de
+   servicios, configuración y captura de plataforma) no exige ningún módulo de feature.
+2. **Ninguna feature requiere otra feature.** Un módulo solo puede requerir contratos neutrales del
+   núcleo o del runtime; nunca la capability de otro módulo opcional.
+3. **La ausencia de una etapa es un paso explícito, no un fallo ni un no-op silencioso.** El mensaje
+   continúa sin esa transformación y la traza registra la etapa como ausente/saltada.
+4. **El pipeline es secuencial e inyectivo.** Cada etapa recibe el mensaje, lo transforma y lo
+   entrega a la siguiente. El orden se declara en configuración; no se deduce del grafo de
+   dependencias ni del orden de activación.
+5. **El grafo de módulos se conserva para el ciclo de vida y los servicios neutrales**, pero no
+   impone el orden del pipeline ni convierte una feature en requisito de otra.
+6. **El catálogo de canales es neutral.** Vive en el núcleo/runtime o viaja en el contexto del
+   pipeline; no pertenece a `textformatter` ni a ningún módulo opcional.
+7. **Sin doble camino.** La lista configurada es la única fuente de orden; no se conserva el
+   pipeline cableado como fallback.
+
+#### Semántica de la sección `pipeline`
+
+La configuración canónica de la suite es `config/suite/config.yml`. Se propone una clave
+`pipeline` con los `moduleId` en orden de ejecución:
+
+```yaml
+# Ejemplo, no orden fijo.
+pipeline:
+  - textformatter
+  - iflow
+  - chattranslator
+  - sync-bus
+config-version: 1.0
+```
+
+Reglas propuestas, sujetas al ADR:
+
+- `pipeline` es el nombre canónico; `workflow` no se acepta como alias (ADR-034 prohíbe aliases).
+- El orden es literal: la primera entrada procesa primero y la última cierra el recorrido.
+- Una entrada debe identificar una etapa publicada por un módulo. Nombre de módulo y nombre de
+  etapa pueden coincidir; si un módulo publica varias etapas, se necesita un identificador estable
+  (pregunta abierta).
+- Nombres duplicados, etapas desconocidas o etapas declaradas pero no disponibles fallan de forma
+  explícita; no se ignoran en silencio.
+- Una etapa no listada no se ejecuta. Su ausencia no se convierte en éxito falso ni en error de
+  activación del resto.
+- El contrato de etapa es neutral y mínimo; el siguiente es un boceto, no un contrato cerrado:
+
+```java
+interface PipelineStage {
+    String name();
+    PipelineResult process(PipelineMessage message, PipelineContext context);
+}
+```
+
+  `PipelineContext` debe exponer solo servicios neutrales (catálogo de canales, actores,
+  permisos, configuración y traza). `PipelineResult` debe distinguir al menos continuar con mensaje,
+  descartar y rechazar; la semántica exacta pertenece al ADR.
+- El fan-out a sinks puede ser una etapa terminal (`sync-bus`) o vivir fuera del pipeline; debe
+  decidirse antes de implementar.
+
+#### Impacto previsto
+
+| Área | Cambio necesario |
+|---|---|
+| `core-api` | Contratos neutrales de catálogo de canales, etapa, contexto, resultado y traza. |
+| `suite-runtime` | Construir el pipeline desde `pipeline` + `ServiceRegistry`; dejar de exigir servicios concretos y de fijar el orden en código. |
+| `textformatter` | Dejar de proveer `channel-api`; consumir el catálogo neutral y publicar una etapa de formato. |
+| `iflow` y motores | Requerir el servicio neutral de canales, no la capability de `textformatter`; publicar una etapa de routing. |
+| `chattranslator` y backends | Publicar una etapa de traducción; revisar el requisito backend→fachada de ADR-008. |
+| `sync-*`, `inworld`, `tester` | Consumir el mensaje final o una etapa; no requerir `channel-api` de un feature. |
+| `presets` | Dejar de hardcodear `textformatter/channels`; escribir el catálogo neutral en su ruta canónica. |
+| `DefaultConfigInstaller` y hosts | Instalar el catálogo neutral y un `pipeline` por defecto coherente con lo instalado. |
+| `checkArchitecture` | Guard nuevo: ninguna feature declara `Requirement` sobre otra feature; el orden del pipeline no se deriva del grafo. |
+| Configuración y documentación | `config/suite/config.yml`, `storage.md`, `config-schema-v2.2.md`, wiki y READMEs. Los documentos de `docs/prompts/` requieren autorización. |
+
+**Nota de alcance:** PL-1 no es solo añadir una lista. Potencialmente exige **rediseñar el pipeline
+actual** (`SuiteHost`/`MessageDispatcher`), el modelo de requisitos del grafo y el lugar del catálogo
+de canales. La lista de módulos es la superficie visible; el cambio de fondo es quién posee los
+servicios neutrales y cómo se compone el procesamiento.
+
+#### Preguntas abiertas (para el ADR)
+
+1. ¿`pipeline` o `workflow` como nombre canónico? Se recomienda `pipeline`; el otro no será alias.
+2. ¿El catálogo de canales vive en `core-api`, en `suite-runtime` o en el `PipelineContext`?
+3. ¿La entrada identifica un `moduleId` o un `stageId`? ¿Puede un módulo publicar más de una etapa?
+4. ¿La traducción es una etapa propia después de iFlow o permanece dentro del render de
+   `textformatter`? Moverla cambia el contrato de `TranslationService` y el orden observable.
+5. Si una etapa listada no está instalada o activa: ¿error de configuración explícito o
+   `SKIPPED`? ¿El `pipeline` por defecto es vacío o una lista base?
+6. ¿Los syncs son una etapa terminal única (`sync-bus`) o varias etapas? ¿El fan-out pertenece al
+   pipeline o queda fuera?
+7. ¿El pipeline sustituye `SuiteHost`/`MessageDispatcher` o los envuelve como adaptadores?
+8. ¿Cómo se integra `SET_CHANNEL` y la segunda fase de routing de ADR-031 en un pipeline
+   secuencial, sin reentrega recursiva?
+9. ¿Qué ocurre al cambiar `pipeline` en caliente: `APPLIED`, `FAILED` o `RESTART_REQUIRED`?
+10. ¿Qué contrato de traza por etapa necesita `tester` para señalar el punto exacto de fallo (P12)?
+11. ¿Todo mensaje (chat, join/quit/death, sistema) recorre el mismo pipeline o solo el chat?
+12. Bajo el principio de independencia, ¿un backend de traducción puede activarse sin la fachada
+    `chattranslator`, o la fachada es el único punto de entrada y el backend no es instalable solo?
+
+#### Criterios de cierre y tests
+
+1. **Arranque sin features:** el núcleo arranca, registra comandos y gestiona el ciclo de vida; un
+   despacho sin etapas devuelve un estado explícito de «sin pipeline», no un éxito falso.
+2. **Solo `textformatter`:** formatea y entrega sin iFlow, sin traducción y sin syncs.
+3. **Solo iFlow:** enruta con el catálogo neutral, sin `textformatter` ni `chattranslator`.
+4. **Solo `chattranslator`:** traduce con un render/pass-through neutral, sin `textformatter` ni
+   iFlow.
+5. **Orden configurable:** el mismo conjunto en dos órdenes produce resultados distintos y
+   trazables; el orden no depende del grafo ni del orden de registro.
+6. **Etapa ausente o no listada:** comportamiento explícito y probado, sin éxito fingido.
+7. **Guard de independencia:** un descriptor de feature no declara `Requirement` sobre otra feature;
+   solo sobre contratos neutrales.
+8. **Regresión:** la configuración base reproduce el comportamiento actual cuando declara el orden
+   vigente.
+9. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`; si se toca el editor,
+   `npm run check`.
+
+#### Bloqueos
+
+- ADR de pipeline (siguiente número libre) que sustituya o enmiende ADR-019, ADR-024/025 y
+  ADR-032 en composition root, requisitos entre features y orden del pipeline.
+- Cierre de la purga P0 (ADR-034); P0.6 sigue pendiente.
+- Autorización explícita para modificar `docs/prompts/diseno/storage.md`,
+  `docs/prompts/especificaciones/config-schema-v2.2.md` y el resto de documentos de diseño.
+- No se implementa código mientras el ADR no esté aceptado.
 
 ---
 
@@ -707,1427 +882,11 @@ el esquema legacy, deuda que la purga pre-1.0 elimina (ADR-034). Publicación se
 wiki); esa exclusividad fue sustituida por el hub en ADR-032. `./gradlew build` y
 `./gradlew publishIflowEngines` pasan.
 
----
-
-#### ADR-019: Reestructuración integral — runtime de módulos, hot unload/upgrade y adapters delgados
-
-**Estado:** Aceptado (2026-10-27). Reescrito por decisión del usuario. Sustituye por completo la versión anterior de este ADR.
-
-**Implementación:** F0 cerrada (inventario y decisiones), F1 completada (API de ciclo de vida en `core-api`), F2 completada como POC (`suite-runtime` con `ModuleClassLoader`/`ModuleHost`), F3 completada (puente `PackageRuntime` entre manager y runtime, estado de instalación y estado runtime separados), F4a completada (`SuiteRuntime` como composition root neutral con comandos), F5 cerrada (los seis paquetes base con activadores, ZIP de distribución y activación real; contratos compartidos en `core-api`; `logger` como paquete de dependencia) y F6 de paquetes neutrales completada (`transport` como paquete de dependencia; `gtranslate`/`ltranslate` como proveedores activables; eventos `ModuleActivatedEvent`/`ModuleDeactivatedEvent` para refrescar `chattranslator` sin reiniciar; `presets` empaquetado con `FilePresetTarget` real; `tester` empaquetado con `TestProbe` neutral; `inworld` empaquetado con `InWorldHandler`/`InWorldPlatform` y el listener Bukkit en `spigot-host`). F4b, F4c, F4d y F4e están cerradas.
-
-> **Ubicación:** el detalle operativo de ADR-019 vive en `docs/workdir/PLAN.md`;
-> la decisión de arquitectura se registra también en `docs/workdir/ADR.md`, que
-> es el documento vivo de ADRs. Se reescribe este ADR en lugar de crear uno
-> nuevo para evitar fragmentar todavía más la arquitectura.
-
-##### Decisión del usuario (2026-10-27)
-
-- **I-019 no es un arreglo de dependencias**: es una reestructuración de la
-  arquitectura de la suite.
-- El objetivo es **hot unload/upgrade real**, no solo carga inicial de módulos.
-- La solución no es empezar por el loader manteniendo la suite actual. Hay que
-  **romper la suite, desarmar todo, reestructurar lo que debe ir y lo que no, y
-  volver a armarla** como debería haber sido desde el principio.
-- No se aceptan implementaciones a medias, stubs, no-ops, adaptadores de
-  compatibilidad sin fecha de eliminación ni parches que preserven el
-  acoplamiento actual.
-- El Manager debe ser el origen de la composición: actualizar índice, descargar
-  paquetes, resolver dependencias, instalar, **inicializar en memoria**, y
-  gestionar el ciclo de vida completo.
-- Spigot y Fabric no deben conocer la existencia de ningún módulo de feature.
-  Solo implementan una API común entre plataformas y adaptan, en reversa, los
-  eventos de su Minecraft a una representación interna agnóstica.
-
-##### Estado vigente (F7 cerrado; ADR-027 implementada)
-
-- El Manager instala y registra paquetes; `SuiteRuntime` construye el
-  `ModuleHost`, activa los módulos desde `library/packages` y mantiene el
-  estado runtime separado de `library/status`.
-- `spigot-host` y `fabric-host` solo construyen `PlatformPorts`, registran los
-  puertos del adapter y arrancan `SuiteRuntime`; no importan features.
-- `sync-bukkit`/`sync-fabric` traducen eventos de plataforma y despachan por
-  `MessageDispatch`; el fan-out vive en `sync-bus`.
-- Los comandos y la configuración son APIs module-scoped; la raíz se configura
-  en `commands.yml` y se recarga en caliente con `RESTART_REQUIRED` cuando el
-  registro de plataforma no permite reemplazarla.
-- ADR-027 sustituye el rollback de activación por un pipeline de tres etapas:
-  adquisición en caché, commit con journal duradero y activación. La etapa 2 es
-  el único rollback automático; un fallo de activación detiene en orden inverso
-  lo ya arrancado, conserva la instalación y marca `ACTIVATION_FAILED`. La
-  implementación usa `PackageCache`, `PackageJournal`, `PackageLayout` y
-  `PackageRuntime.activateCommitted`; no queda el flujo de activación/rollback de
-  F7.
-- Un `PACKAGE` puede contener uno o más JARs de módulo. El nombre del paquete no
-  identifica al módulo: cada JAR declara su `moduleId` en el descriptor y
-  `PackageRuntime` mapea activación, upgrade y retirada por ese id. Los ids
-  deben ser únicos dentro del paquete; cero JARs o ids duplicados son errores
-  explícitos. Las librerías compartidas son paquetes `DEPENDENCY`.
-
-##### Principios no negociables
-
-1. **El core no conoce features.** `core-api`, `kernel`, `manager-*` y
-   `suite-runtime` no importan `sync-*`, `textformatter`, `iflow-*`,
-   `chattranslator`, `gtranslate`, `ltranslate`, `observability`, etc.
-2. **Los adapters solo conocen la plataforma y la API.** `spigot-host` y
-   `fabric-host` son bootstrap y dependen de `core-api` + `suite-runtime` + SDK
-   de plataforma. La captura de eventos vive en `sync-bukkit`/`sync-fabric`.
-3. **El Manager es el orquestador.** Instalar, activar, desactivar, actualizar
-   y reparar pasan por el Manager.
-4. **Instalar no es activar.** El estado instalado y el estado activo se
-   registran por separado; una activación fallida no se marca como éxito.
-5. **El ciclo de vida es obligatorio para hot unload/upgrade.** Sin
-   `start/stop` y liberación de recursos, no se promete hot reload.
-6. **No hay doble camino.** Cuando una feature se migra al runtime, se elimina
-   su cableado compilado en el mismo cambio. No se mantienen dos formas de
-   arrancar.
-7. **No hay stubs silenciosos.** Lo no soportado lanza un error explícito o se
-   marca como `RESTART_REQUIRED`; nunca se devuelve `parent`, `false` o vacío
-   fingiendo éxito.
-8. **La arquitectura se verifica.** Un guard de dependencias/imports falla el
-   build si aparece una violación.
-
-##### Principios adicionales de diseño del ADR-019
-
-Estos principios complementan los no negociables y definen el modelo de
-dominio del reestructuramiento:
-
-- **C2. `force` significa forzar de verdad.** El parámetro `force` no omite
-  conflictos de forma silenciosa. Si un administrador usa `force`, es porque
-  quiere forzar las cosas y sabe lo que hace. Esto incluye permitir la
-  instalación de paquetes excluyentes si el administrador así lo decide, con
-  la advertencia correspondiente. `force` es una señal de intención
-  deliberada del operador, no un sinónimo de «ignorar problemas».
-
-- **C3. Las librerías compartidas son dependencias, no parte del host.**
-  Las librerías compartidas (SnakeYAML, JDA, Adventure, transporte y otras)
-  no deberían vivir en el host. Son dependencias, paquetes aparte de tipo
-  «dependencia». Es el manager quien se asegura de relocalizar y cargar
-  dichas dependencias para cada paquete tipo módulo. No se deberían compilar
-  dentro del JAR del host ni de los módulos.
-
-- **C4. Los metadatos autoritativos vienen del repositorio, no del JAR.**
-  No se incluye una lista de paquetes dentro del JAR. Eso es trabajo del
-  manager: descargar del repositorio (en el directorio `repo`) el archivo
-  `packages.list`, y a partir de ahí listar la URL de cada ZIP y por ende
-  cada módulo. El manager nunca infiere paquetes mirando el contenido de un
-  JAR; consulta el índice remoto.
-
-- **C6. `library/status` es una BD de programas instalados, no de ejecución.**
-  La presencia de un paquete implica que está instalado y que debe iniciarse.
-  El estado de ejecución (encendido/apagado, fallido, requiere reinicio) no
-  pertenece a `library/status`; si es necesario rastrearlo, se hace en un
-  directorio temporal dentro del directorio del manager, nunca en el estado
-  de instalación.
-
-- **C7. `tester` es un módulo de producción.** El módulo `tester` no es una
-  herramienta de desarrollo excluida del artefacto final. Es un módulo
-  pensado para hacer benchmarking en tiempo de ejecución, además de probar
-  toda la suite en todo el pipeline. Si algo está mal hecho, existe la alta
-  probabilidad de que `tester` detecte el fallo, en qué punto, y cuál es la
-  diferencia vs lo esperado. Para esto, `tester` tiene que simular el envío
-  de un jugador, ir trazando la ejecución manualmente del mensaje, comprobar
-  el resultado de cada etapa inspeccionando directamente el comportamiento
-  del sistema, y lanzar un check si la comprobación de todo el pipeline es
-  correcto. Es complejo, sí. Es potencialmente útil para fallos delicados,
-  sí.
-
-- **C9. Versiones concurrentes al estilo Debian.** A la hora de upgradear,
-  se instalan versiones modernas remplazando al mismo paquete en su versión
-  anterior, repitiendo el mismo proceso con todos los módulos y
-  dependencias, resolviendo el grafo sin más. Esto es normal y es el camino
-  de Debian en cuestión de apt y dpkg.
-
-- **C10. La captura de eventos de plataforma es un sincronizador descargable.**
-  El bloque del host que registra listeners de plataforma, traduce el evento a
-  `Message` y lo entrega al núcleo no pertenece al host. Es un paquete de
-  plataforma: `sync-bukkit` para Spigot/Paper y `sync-fabric` para Fabric. Cada
-  entorno descarga únicamente el sincronizador compatible; ninguno se embebe en
-  el JAR del host.
-
-##### Decisión 2026-10-29 — sincronizadores de plataforma
-
-La captura de eventos de Minecraft deja de ser código compilado en
-`spigot-host`/`fabric-host`. El bloque que hoy registra
-`AsyncPlayerChatEvent`/`ServerMessageEvents.CHAT_MESSAGE`, traduce el evento y
-lo manda al núcleo agnóstico se convierte en un paquete de plataforma:
-
-| Paquete | Entorno | Responsabilidad |
-|---|---|---|
-| `sync-bukkit` | Spigot/Paper/Purpur (API Bukkit/Paper) | Registra los listeners de chat/join/quit/death, traduce el evento a `Message` y lo despacha por `MessageDispatch`. |
-| `sync-fabric` | Fabric Loader/Minecraft compatible | Igual, usando `ServerMessageEvents` y la API de Fabric. |
-
-Reglas de la decisión:
-
-1. **El host queda como bootstrap.** `spigot-host`/`fabric-host` construyen
-   `PlatformPorts`, arrancan `SuiteRuntime`, publican los servicios neutrales y
-   registran comandos. No contienen `@EventHandler`, no registran
-   `ServerMessageEvents.CHAT_MESSAGE`, no traducen eventos y no importan
-   features.
-2. **Son paquetes, no código embebido.** `sync-bukkit` y `sync-fabric` se
-   descargan e instalan como cualquier paquete. `packages.list` declara su
-   plataforma/entorno y el Manager instala solo el compatible con
-   `PlatformInfo`; un paquete incompatible no se activa.
-3. **Son adaptadores de plataforma.** Pueden importar Bukkit/Paper o Fabric,
-   pero no features, no `host` concreto y no otros sincronizadores. Consumen
-   `MessageDispatch`, `ActorDirectory`, `PermissionChecker`,
-   `UserLanguageStore` y los puertos neutrales que necesiten desde
-   `ServiceRegistry`.
-4. **Ciclo de vida real.** El paquete registra sus listeners en `start()` y los
-   desregistra en `stop()`. Si la API de la plataforma no permite desregistrar
-   un listener, la desactivación se marca `RESTART_REQUIRED`; no se deja un
-   listener huérfano ni se finge que el unload fue limpio.
-5. **La traducción termina en `Message`.** El sincronizador no decide formato,
-   routing, traducción, canales ni entrega. Solo convierte el evento de
-   plataforma a la representación neutral y la inyecta en el pipeline. No es un
-   `SyncSink`: es una fuente de eventos local; el fan-out a sinks lo hace
-   `sync-bus`.
-6. **El guard lo verifica.** `checkArchitecture` permite el SDK de plataforma
-   solo en `sync-bukkit`, `sync-fabric` y el bootstrap del host; falla si un
-   módulo neutral o un adapter de feature importa Bukkit/Paper/Fabric.
-7. **No hay doble camino.** Al cerrar F4c se borran los listeners de los hosts.
-   No se conserva un fallback compilado ni una activación implícita.
-
-##### Arquitectura objetivo
-
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ spigot-host / fabric-host                                            │
-│ - bootstrap del runtime                                              │
-│ - implementa PlatformPorts y registra comandos                       │
-│ - NO registra listeners de eventos ni traduce mensajes               │
-│ - NO importa ningún módulo de feature                                │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                │ core-api + suite-runtime
-┌───────────────────────────────▼──────────────────────────────────────┐
-│ suite-runtime                                                        │
-│ - SuiteRuntime: ciclo de vida del conjunto                           │
-│ - ModuleHost: carga, activa, desactiva, actualiza y descarga         │
-│ - ModuleClassLoader: aislamiento por módulo                          │
-│ - ServiceRegistry, EventBus, Scheduler, ResourceTracker              │
-│ - SuiteHost/MessageDispatcher construidos desde servicios            │
-│ - ManagerFacade como orquestador de paquetes                         │
-└───────────────┬───────────────────────────────────┬──────────────────┘
-                │                                   │
-┌───────────────▼───────────────────┐   ┌───────────▼──────────────────┐
-│ core-api + kernel                 │   │ manager-spi / core / apt     │
-│ contratos, mensajes, puertos,     │   │ paquetes, estado, resolver,  │
-│ ModuleActivator, ModuleContext    │   │ instalación, activación      │
-└───────────────▲───────────────────┘   └──────────────────────────────┘
-                │ solo core-api
-┌───────────────┴──────────────────────────────────────────────────────┐
-│ library/packages/<packageId>/<version>/*.jar (módulos instalados)     │
-│ textformatter, iflow-*, chattranslator, gtranslate, ltranslate,      │
-│ sync-*, observability, presets, messages, ...                        │
-│ implementan ModuleActivator y usan ModuleContext                     │
-│                                                                      │
-│ sync-bukkit / sync-fabric: paquetes de plataforma, uno por entorno   │
-│ registran listeners, traducen a Message y despachan al pipeline      │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-No existe una flecha `suite-runtime -> feature`. Las features se descubren
-desde `library/status` y se cargan desde `library/packages`; nunca se importan
-en tiempo de compilación.
-
-##### Contrato de módulo
-
-`Module` se conserva como descriptor (la spec prohíbe convertirlo en una clase
-que el bootstrap instancie reflectivamente). Se añade un contrato de activación
-separado:
-
-```java
-public interface ModuleActivator {
-    ModuleDescriptor descriptor();
-    void start(ModuleContext context) throws Exception;
-    void stop() throws Exception;
-}
-```
-
-El JAR declara:
-
-```text
-META-INF/services/me.majhrs16.suite.api.ModuleActivator
-```
-
-El `ModuleHost` lo descubre con:
-
-```java
-ServiceLoader.load(ModuleActivator.class, moduleClassLoader);
-```
-
-`ModuleContext` no expone Bukkit ni Fabric:
-
-```java
-public interface ModuleContext extends AutoCloseable {
-    String moduleId();
-    Path configDir();
-    PluginLogger logger();
-    ServiceRegistry services();
-    EventBus events();
-    Scheduler scheduler();
-    ResourceTracker resources();
-    PlatformInfo platform();
-}
-```
-
-`ServiceRegistry` sustituye a `ServiceLoader` para servicios vivos:
-
-```java
-public interface ServiceRegistry {
-    <T> Registration register(Class<T> type, T service);
-    <T> Optional<T> find(Class<T> type);
-    <T> List<T> findAll(Class<T> type);
-
-    interface Registration extends AutoCloseable {
-        void close();
-    }
-}
-```
-
-Cada registro queda asociado al `moduleId`; al desactivar el módulo se cierran
-sus registros, se cancelan sus tareas y se liberan sus recursos.
-
-##### `ModuleHost`: carga, activación y hot upgrade
-
-```java
-public final class ModuleHost implements AutoCloseable {
-    public List<ActivationResult> loadInstalled();  // utilidad de inspección; el arranque usa library/status
-    public ActivationResult activate(Path jarPath); // carga JAR + start()
-    public UpgradeResult upgrade(String id, Path newJar, List<Path> dependencyJars);
-    public DeactivationResult deactivate(String id);
-    public Map<String, ModuleState> snapshot();
-}
-```
-
-Estados:
-
-```java
-public enum ModuleState {
-    INSTALLED,
-    ACTIVATION_PENDING,
-    ACTIVE,
-    FAILED,
-    ACTIVATION_FAILED,
-    RESTART_REQUIRED,
-    REMOVED
-}
-```
-
-Reglas del loader:
-
-- Un `ModuleClassLoader` por módulo, con parent común de API.
-- Parent-first solo para `me.majhrs16.suite.api.*` y `java.*`.
-- Los contratos que cruzan paquetes viven en `me.majhrs16.suite.api.*`
-  (`api.channel`, `api.iflow`, `api.message`); una feature no expone sus tipos
-  propios a otra feature.
-- Child-first para las clases de implementación del módulo.
-- El classloader recibe primero el JAR del módulo y después los JARs de los
-  paquetes de tipo dependencia; un paquete `PACKAGE` no se añade al
-  classloader de otro módulo.
-- Las librerías compartidas no viven en el host: el manager las entrega como
-  paquetes de dependencia relocalizados y el classloader del módulo las resuelve
-  desde el scope que el manager le asigna (C3).
-- Acceso a dependencias desde `library/dependencies`; un JAR de dependencia
-  fuera de ese directorio se rechaza y se registra.
-- Cierre del classloader al desactivar.
-- Si el classloader no puede cerrarse o quedan hilos/listeners, el estado pasa
-  a `RESTART_REQUIRED`; no se marca como desactivado limpio.
-
-Secuencia de activación:
-
-1. Recibir del manager las entradas instaladas (o escanear `library/packages` en
-   el arranque; `library/status` sigue siendo la fuente de qué está instalado).
-2. Resolver orden y dependencias con `kernel.ModuleGraph` y
-   `DependencyResolver`.
-3. Crear classloader y alcance de servicios.
-4. Cargar `ModuleActivator`.
-5. Validar descriptor, versión de API, plataforma y capacidades.
-6. Crear `ModuleContext`.
-7. Ejecutar `start()`.
-8. Si falla: cerrar registros, ejecutar `stop()` de limpieza, cerrar
-   classloader y marcar `FAILED`.
-9. Si funciona: confirmar servicios y marcar `ACTIVE`.
-
-Secuencia de instalación por etapas (ADR-027):
-
-1. **Adquisición.** El manager resuelve paquetes, dependencias transitivas,
-   versiones, conflictos, plataforma y orden jerárquico. Descarga todos los ZIP y
-   dependencias a `library/cache/downloads/<sha256>/` y verifica tamaño y
-   SHA-256 antes de tocar las rutas finales. Cada artefacto es `PENDING` o
-   `COMPLETE`; reanudar solo descarga los pendientes. `/<root> cache clean` borra
-   la caché y los manifiestos de operaciones, no la instalación.
-2. **Commit de archivos.** Aplica todo el plan con un journal durable en
-   `library/journal/<operationId>.log`: archivos preparados, reemplazados y
-   retirados, versiones anteriores, operaciones completadas y rollback por
-   operación. Los JAR viven en directorios versionados
-   (`library/packages/<id>/<version>/` y
-   `library/dependencies/<id>/<version>/`); la versión activa no se sobrescribe.
-   Instalar la misma versión ya presente se rechaza para no reemplazar un JAR
-   que un `ClassLoader` activo todavía referencia. El nuevo `library/status` se
-   publica con rename atómico al final y marca el
-   punto de commit. Antes del commit, la recuperación revierte el journal; después
-   del commit, completa la limpieza y no revierte. La etapa 2 es el único rollback
-   automático.
-3. **Activación.** Solo después del commit, el runtime detiene las versiones
-   anteriores en orden inverso y arranca los módulos nuevos en orden topológico.
-   Antes del primer `start()` persiste `ACTIVATION_PENDING`. Si un módulo falla,
-   detiene en orden inverso los módulos ya arrancados en ese intento, conserva
-   archivos y `library/status`, marca `ACTIVATION_FAILED` y permite reintentar sin
-   reinstalar. No restaura la versión anterior ni borra archivos nuevos. Si la
-   versión anterior ya está en `RESTART_REQUIRED`, no se arranca la nueva y el
-   paquete permanece en `RESTART_REQUIRED`. Tras un corte, el arranque vuelve a
-   activar los paquetes instalados desde `library/status`; no confía en el estado
-   runtime para decidir qué está instalado.
-
-La desinstalación usa las mismas etapas, pero la desactivación efectiva es una
-barrera al inicio de la etapa 2: si un módulo no se detiene limpio, no se toca
-ningún archivo. Después se mueven los archivos propios a
-`library/trash/<operationId>/`, se actualiza `library/status` y la etapa 3 limpia
-el estado runtime del paquete. La desactivación efectiva y la liberación de
-classloaders y recursos ya ocurrieron en la barrera de la etapa 2; la etapa 3 no
-muta archivos. Cuando `autoRemove` está activo, las dependencias huérfanas se
-retiran en la misma transacción de la etapa 2. Un fallo de la etapa 3 no revierte
-la retirada; si quedan referencias vivas, se marca `RESTART_REQUIRED`.
-
-Un reemplazo por `Exclude` usa la misma barrera: la etapa 2 desactiva los
-paquetes que el plan retira antes de mover sus archivos; la etapa 3 solo activa
-los paquetes nuevos.
-
-Estados persistentes de una operación:
-
-| Estado | Significado |
-|---|---|
-| `INSTALLED` | Archivos e inventario confirmados; activación no iniciada o detenida limpiamente. |
-| `ACTIVATION_PENDING` | Activación iniciada y no confirmada; el arranque debe reanudarla. |
-| `ACTIVE` | Todos los módulos esperados están activos. |
-| `ACTIVATION_FAILED` | Instalación confirmada, pero al menos un módulo no arrancó; se puede reintentar. |
-| `RESTART_REQUIRED` | La limpieza del runtime no pudo verificarse; hace falta reiniciar. |
-
-`library/status` registra la instalación; `runtime/modules.status` registra la
-activación. Las claves de módulo usan su `moduleId`; el resultado de activación
-del paquete se persiste con la clave `package:<nombre>`. Un módulo puede quedar
-`FAILED`; al retirar un paquete se elimina su entrada `package:<nombre>` en vez
-de persistir `REMOVED`. Una instalación puede estar correctamente instalada sin
-estar correctamente activada.
-
-No se arrancan dos versiones a la vez: comparten `moduleId`, namespaces de
-servicios/configuración, rutas de comandos y grupo de hilos. La coexistencia de
-directorios versionados se usa para preparar la versión nueva y conservar la
-anterior mientras exista una referencia de runtime. El commit no borra la
-versión anterior; sus archivos se retiran al desinstalar el paquete.
-
-Invariante de paquete: un `PACKAGE` contiene uno o más JARs de módulo, cada uno
-con un `moduleId` único declarado por su descriptor. El nombre del paquete no se
-usa como id de módulo. Las librerías adicionales van en `DEPENDENCY`.
-`PackageRuntime` inspecciona todos los JARs antes de activar o actualizar; cero
-JARs o ids duplicados son un error explícito. La activación arranca todos los
-módulos y el upgrade sustituye todos los módulos activos del paquete en una sola
-operación de runtime. Si la activación falla, se detienen los módulos ya
-arrancados en orden inverso y se registra `ACTIVATION_FAILED`; no se compensa
-reactivando la versión anterior. No se elige el primero en silencio ni se deja
-una ruta con capacidad distinta.
-
-Secuencia de desactivación:
-
-1. Ejecutar `stop()`.
-2. Cerrar `ResourceTracker` (listeners, tareas, sockets, executors).
-3. Cerrar registros de servicios del módulo.
-4. Cerrar classloader.
-5. Actualizar el módulo a `INSTALLED` y eliminar la entrada `package:<nombre>`
-   si se retiró el paquete.
-
-##### Manager: instalación y activación separadas
-
-```text
-repo update
-  → actualiza índices
-
-repo install <pkg>
-  → etapa 1: resuelve dependencias y conflictos (Exclude/Provide)
-  → etapa 1: descarga todo a library/cache y verifica SHA-256
-  → etapa 2: journal + commit atómico en directorios versionados
-  → etapa 2: publica library/status (punto de commit)
-  → etapa 3: activa en orden topológico
-  → anota ACTIVATION_PENDING y luego ACTIVE o ACTIVATION_FAILED
-
-repo remove <pkg>
-  → etapa 1: valida cierre inverso y dependencias afectadas
-  → etapa 2: detiene módulos en orden inverso (barrera)
-  → etapa 2: mueve los archivos propios a library/trash y publica library/status
-  → etapa 3: finaliza el estado runtime (sin mutar archivos)
-  → la etapa 3 no muta archivos; si falla, no se revierte la retirada
-
-repo upgrade
-  → etapa 1: resuelve y descarga todo
-  → etapa 2: commit de la versión nueva y puntero en library/status
-  → etapa 3: detiene la versión anterior y arranca la nueva
-  → si el arranque falla, detiene lo ya arrancado, conserva archivos
-    y marca ACTIVATION_FAILED; no hay rollback de instalación
-
-arranque
-  → ManagerFacade.initialize()
-  → recuperación del journal de etapas 2 incompletas
-  → PackageRuntime.activate(manager.packageList()) desde library/status
-  → reanudación de ACTIVATION_PENDING o activación en orden topológico
-  → SuiteRuntime construye el pipeline desde ServiceRegistry
-```
-
-`library/status` registra **solo instalación**: nombre, versión, canal,
-dependencias, directorio de versión, archivos y hashes. No guarda si un módulo
-está activo en un instante dado (C6/P2).
-
-El estado runtime se guarda aparte, en `<manager>/runtime/modules.status`
-(transitorio, no autoritativo):
-
-- `INSTALLED`: archivos e inventario confirmados; activación no iniciada o
-  detenida limpiamente.
-- `ACTIVATION_PENDING`: activación iniciada y no confirmada; el arranque debe
-  reanudarla.
-- `ACTIVE`: activación confirmada.
-- `ACTIVATION_FAILED`: instalación correcta, activación fallida; se puede
-  reintentar sin reinstalar.
-- `RESTART_REQUIRED`: activación/desactivación incompleta que requiere reinicio.
-
-La activación fallida no puede registrarse como correcta
-(`manager-v2.md:546-548`). Un paquete instalado y un módulo activo son hechos
-distintos y viven en archivos distintos. Una instalación puede estar
-correctamente instalada sin estar correctamente activada.
-
-##### Clasificación objetivo de módulos
-
-| Categoría | Módulos | Destino |
-|---|---|---|
-| Núcleo técnico | `core-api`, `kernel`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
-| Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma; bootstrap sin listeners de eventos |
-| Sincronizadores de plataforma | `sync-bukkit`, `sync-fabric` | Paquetes de plataforma descargables; capturan eventos, traducen a `Message` y despachan; el Manager instala solo el compatible; no se embeben en el host |
-| Paquetes de dependencia | `logger`, `transport`, SnakeYAML, JDA, Adventure y demás librerías compartidas | Paquetes de tipo dependencia; el manager los descarga, verifica, relocaliza y carga por módulo (C3) |
-| Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` | Paquetes instalados por defecto; `Exclude`/`Provide` para paquetes que no coexisten (los motores iFlow no se excluyen, ADR-032) |
-| Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `inworld`, `extension-api` | Paquetes neutrales; dependencias declaradas en `METADATA/package.list` |
-| Producción auxiliar | `tester` (`PACKAGE` neutral + `TestProbe`) | Módulo de producción: benchmarking en runtime y traza del pipeline completo (C7); no es harness |
-| Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
-| Retirado | `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, descubrimiento por classpath y cableado de features en adapters | Eliminados en F4b/F7; no se restauran |
-| Retirado | `common-legacy` (sin fuentes `main`, solo test de sanidad) | Eliminado en F8 |
-
-Decisión por defecto: **todo feature es paquete**, incluso `textformatter`,
-`iflow-*`, `chattranslator` y `messages`. El núcleo solo contiene contratos,
-kernel, manager y runtime; `logger` y `transport` son paquetes de dependencia,
-no código del host. Los hosts no contienen listeners de eventos: `sync-bukkit`
-y `sync-fabric` se instalan como paquetes de plataforma y el Manager elige el
-compatible con el entorno. La suite instala un conjunto base en el primer
-arranque; si falta, arranca en modo degradado con avisos explícitos, no con una
-implementación falsa.
-
-##### Reglas de dependencia
-
-```text
-spigot-host / fabric-host
-  → core-api
-  → suite-runtime
-  → SDK de plataforma
-
-suite-runtime
-  → core-api
-  → kernel
-  → manager-spi / manager-core / manager-apt
-  → logger / transport (librerías)
-  ✗ ningún módulo de feature
-
-core-api
-  → JDK
-  ✗ kernel, manager, host, features, plataforma
-
-core-api (api.command / api.config)
-  → JDK
-  ✗ Bukkit / Fabric / host / features
-
-kernel
-  → core-api
-
-manager-*
-  → core-api
-  → kernel
-  ✗ host, features, plataforma
-
-feature module
-  → core-api (y, si hace falta, APIs de host-core)
-  ✗ otros features salvo dependencia declarada
-  ✗ Bukkit / Fabric / Minecraft
-
-sync-bukkit / sync-fabric
-  → core-api
-  → SDK de plataforma (Bukkit/Paper o Fabric)
-  → MessageDispatch / ActorDirectory / PermissionChecker / UserLanguageStore
-  ✗ features, host concreto, otros sync
-
-módulo platform-specific
-  → core-api + SDK de plataforma
-  → el SDK lo provee el host; el loader neutral no importa la plataforma
-```
-
-##### Qué se elimina, no se envuelve
-
-- `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
-  `ModuleDescriptor` de `manager-spi` y `Environment`: eliminados en F7. La
-  metadata vive en `me.majhrs16.suite.api.ModuleDescriptor` y el ciclo de vida
-  en `ModuleActivator`/`ModuleContext`/`ModuleHost`.
-- `SuiteHost.bootstrap(...)` con features hardcodeados y `SuiteBootstrap`
-  duplicado: eliminados; `SuiteRuntime` es el único composition root.
-- `ManagerFacade.discoverAll()` basado en classpath: eliminado; el
-  descubrimiento sale de `library/status` y `library/packages`.
-- Dependencias de features en adapters y `host`: eliminadas o limitadas a
-  `testImplementation`; ningún host importa features de producción.
-- Listeners de chat/join/quit/death en `spigot-host`/`fabric-host`: movidos a
-  `sync-bukkit`/`sync-fabric` en F4c.
-- Árboles de comandos duplicados en `spigot-host` (`DynamicCommandRegistrar`/
-  `DynamicCommand`) y `fabric-host` (Brigadier): sustituidos por el
-  `CommandRegistry` neutral en F4d; el host solo conserva la invocación de
-  primer nivel. Los strings `/suite` hardcodeados se sustituyen por
-  `CommandContext.root()`.
-- `gtranslate`/`ltranslate` como `implementation` en adapters: son paquetes
-  neutrales; no son dependencia de compilación del adapter.
-- `presets` y `manager-*` sin uso en Fabric: `manager-*` vive en el runtime;
-  `presets` es un paquete neutral.
-- `tester` sigue siendo paquete de producción (C7): ya se empaqueta como
-  `PACKAGE` neutral; el adapter Spigot vive en `spigot-host` y Fabric deberá
-  implementar su `TestProbe`. Nunca se mueve a harness.
-- `common-legacy`: no tenía fuentes `main`; solo conservaba un test de sanidad.
-  Se eliminó en F8.
-- `sync-http` en Fabric: es un paquete compartido, no una diferencia de adapter.
-- `ExtensionManager` con loader propio: se unifica con `ModuleHost` o se
-  documenta como subsistema separado con contrato propio. No se mantienen dos
-  loaders sin justificación.
-
-##### Fases, puertas y definición de terminado
-
-Cada fase termina con código, tests, documentación, eliminación del camino
-viejo y guard de arquitectura. **Una fase no se cierra porque compile.**
-
-| Fase | Objetivo | Entregables | Puerta de cierre |
-|---|---|---|---|
-| **F0. Inventario y contrato** | Congelar el estado real y aprobar este ADR | Inventario de módulos, grafo actual, lista de deuda, contratos `ModuleActivator`/`ModuleContext`/`ServiceRegistry`/`PlatformPorts` | ✅ ADR aceptado; inventario verificable; decisiones cerradas en «Decisiones cerradas por F0» |
-| **F1. API de ciclo de vida** | Introducir contratos sin tocar aún el arranque | `ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `ModuleState`; tests de contrato | ✅ `core-api` compila sin dependencias de features; 8 tests de contrato verdes |
-| **F2. ModuleHost POC** | Cargar un JAR real de fixture desde disco | `ModuleClassLoader`, `ModuleHost`, activación/desactivación, orden topológico, aislamiento, cierre de classloader; test de dos versiones de una misma clase | ✅ `src/suite-runtime` carga JARs reales generados en test, activa en orden de dependencias, aísla dos versiones de la misma clase, libera recursos y marca `FAILED` sin registrar servicios |
-| **F3. Manager + activación** | Unir paquetes con runtime | `PackageRuntime` en `suite-runtime`; instalación local y repo, activación/desactivación, estado runtime separado en `<manager>/runtime/modules.status`; tests con ZIPs y JARs reales | ✅ Instalar activa; activación fallida no cambia `library/status`; remover desactiva; dependencias y `Exclude`/`Provide` cubiertos por manager-core/apt. Rollback de upgrade se cierra en F7 |
-| **F4a. SuiteRuntime y puertos** | Crear el composition root neutral | `SuiteRuntime` en `suite-runtime` (ManagerFacade + ModuleHost + PackageRuntime + RuntimeStateStore), comandos neutrales, tests con `PlatformPorts` falso | ✅ `suite-runtime` sin dependencias de features; `SuiteRuntime` instala, activa, desactiva y arranca módulos ya instalados; 4 tests verdes |
-| **F5. Migrar paquetes base** | Convertir features base en paquetes cargables | `textformatter`, `messages`, `chattranslator`, `iflow-vm`/`iflow-firewall`/`iflow-wasm` como `ModuleActivator`; contratos compartidos en `core-api` | ✅ Los seis paquetes base se instalan desde ZIP y activan; `ChannelRegistry`/`Channel` y `Router`/`RouteDecision`/`RouteOutcome`/`PolicyTarget`/`PermissionChecker`/`RateLimiter` viven en `core-api`; `logger` se carga como paquete de dependencia desde `library/dependencies`; tests reales verdes. El cableado compilado del host se retira en F6 |
-| **F6. Migrar paquetes opcionales** | Convertir el resto de features y retirar el cableado compilado | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `tester`, `inworld`, `extension-api`; neutralizar `inworld` y mover su listener a `spigot-host`; eliminar el cableado de features en el host | Todos los paquetes instalados se activan desde `library/status` + `library/packages`; ningún feature queda compilado en el host |
-| **F4b. Adapters delgados** | Cerrar el acoplamiento de los adapters | `SpigotPlatformPorts`, `FabricPlatformPorts`, cableado de `SuiteRuntime`, guard `checkArchitecture` | `spigot-host`/`fabric-host` compilan solo con `core-api` + `suite-runtime` + SDK; guard de arquitectura verde |
-| **F4c. Sincronizadores de plataforma** | Sacar la captura de eventos de los hosts | `sync-bukkit`, `sync-fabric`, metadata de entorno, listeners traducidos a `Message`, activación/desactivación y hot unload | ✅ `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; cada paquete se instala solo en su entorno, traduce y despacha; guard verde y tests de ciclo de vida |
-| **F4d. API de configuración y comandos** | Estandarizar la superficie de configuración de cada módulo | `api.command` (`CommandRegistry`, `CommandSpec`, `CommandContext`, `CommandRegistration`), `api.config` (`ConfigRegistry`, `ConfigSection`), comandos del runtime sobre la misma API, tab completion, permisos y desregistro por ciclo de vida | ✅ Un módulo registra y retira su árbol de comandos sin tocar el host; conflictos fallan explícitamente; `DynamicCommand*` y `CommandsConfig*` no existen; el Brigadier de Fabric queda como adaptador de invocación; tests de registro, desregistro, permisos, colisiones y tab completion |
-| **F4e. Raíz de comandos relocalizable** | Desacoplar la raíz `/suite` del código de módulos y hosts | `CommandRoot`, configuración `root`/aliases en `config/suite/commands.yml`, dispatcher neutral root-relative, re-registro en caliente o `RESTART_REQUIRED` | ✅ El mismo árbol funciona bajo `suite`, `suite module` y `tf` sin recompilar módulos; tests de root multi-segmento, aliases, colisión, cambio de raíz, restauración y `RESTART_REQUIRED` |
-| **F7. Hot upgrade/unload real** | Cerrar el objetivo del usuario | Upgrade v1→v2 con dos classloaders, detección de fugas, `RESTART_REQUIRED`, liberación de listeners/tareas/sockets, directorios de JAR versionados y transición manager/runtime | ✅ Upgrade exitoso y fallido sin rollback de archivos, lote multi-JAR, detección de fugas y estado runtime en `<manager>/runtime/modules.status`; `ModuleLifecycle` y el descubrimiento por classpath eliminados. **ADR-027 implementada:** caché de adquisición, commit con journal durable, layout versionado y activación con `ACTIVATION_FAILED` |
-| **F8. Empaquetado y seguridad** | Dejar el modelo reproducible | ZIPs de módulos reproducibles, paquetes `DEPENDENCY` de terceros, separación host/módulos, SHA-256 y `.sha256`, `moduleRepository` con `packages.list`/`SHA256SUMS`, modelo de responsabilidad del repositorio, documentación de límites; ADR-027 ya migrada (caché, journal, layout versionado por directorio) | ✅ `./gradlew build` y `checkArchitecture` verdes; shadow JAR del host sin features; `moduleRepository` verificable con `sha256sum -c`; documentación de hot reload y reinicio; pruebas de recuperación de etapa 2 y activación fallida |
-
-**F8 cerrada (2026-11-02; ADR-029):** los JARs de módulo y host se generan con
-`Build-Timestamp: 0` salvo que el release fije `BUILD_TIMESTAMP`; los ZIP de
-módulo usan orden estable y timestamps fijos, y `moduleChecksum` publica un
-sidecar `.sha256`. `moduleRepository` exige `-PrepositoryBaseUrl`, recopila todos
-los ZIP de módulo y de terceros, y genera `packages.list` + `SHA256SUMS`
-verificable con `sha256sum -c`. `thirdPartyPackages` resuelve y empaqueta como
-`DEPENDENCY` a `snakeyaml`, `json` (versión de paquete `2024.3.3` sobre el
-artefacto Maven `20240303`), `gson`, `java-websocket`, `chicory`, `prometheus`,
-`spring-expression`, `jackson-databind` y `jda`; los módulos consumidores los
-declaran en `moduleDependencies`. Adventure sigue en el host porque `core-render`
-expone sus tipos en el contrato. Los shadow JAR de Spigot y Fabric son
-reproducibles, contienen solo runtime del host y `verifyShadowJarHasNoFeatures`
-falla `check` si aparece una feature. `common-legacy` se eliminó y `base-name`
-dejó de migrarse. Documentación vigente: `docs/wiki/10-Module-Manager.md`
-(hot reload/reinicio, responsabilidad del repositorio, límites de confianza) y
-`docs/wiki/09-Developer-Guide.md` (tareas de empaquetado). Los tests de
-recuperación de etapa 2 y activación fallida ya cubren el journal, el status
-autoritativo y la ausencia de rollback de archivos. Límites: no hay firma de
-paquetes; el betatesting/E2E real posterior a 1.0.0 está pendiente (ADR-034). TLS + SHA-256 no prueba autoría.
-
-**F5 cerrada:** `textformatter`, `messages`, `chattranslator`, `iflow-vm`,
-`iflow-firewall` e `iflow-wasm` tienen activador y la tarea `modulePackage`
-genera sus ZIP con `METADATA/package.list`; `PackageRuntime` los instala y
-activa. El classloader resuelve JARs de paquetes `DEPENDENCY` desde
-`library/dependencies`; `logger` es el primer paquete de dependencia real de
-`iflow-vm`. Los contratos que cruzan módulos viven en `core-api`
-(`api.channel`, `api.iflow`) y los motores publican el servicio `Router`. La
-retirada del cableado compilado del host se cerró en F6/F4b; los listeners de
-eventos se mudaron a `sync-bukkit`/`sync-fabric` en F4c.
-
-**F6 de paquetes neutrales completada:** `transport` se empaqueta como `DEPENDENCY`; `gtranslate` y
-`ltranslate` tienen `ModuleActivator`, declaran `transport@>=1.0.0` y publican
-`TranslatorProvider` en el registro de servicios. `chattranslator` se suscribe a
-`ModuleActivatedEvent` y `ModuleDeactivatedEvent` y reconstruye su
-`TranslatorManager` cuando un proveedor aparece o desaparece, sin reiniciar el
-host. El test de `suite-runtime` instala los cuatro paquetes, comprueba que
-`chattranslator` ve google/libre y que al descargar `gtranslate` se queda solo
-con libre. `sync-bus` ya es paquete: su contrato `SyncBus` vive en `core-api`,
-`SyncBusActivator` publica el bus en el registro y un sink registrado después de
-`start()` arranca de inmediato; el test de `suite-runtime` instala el ZIP real,
-instala un paquete de sink y comprueba que al descargarlo el bus lo desregistra.
-Las utilidades YAML viven en `sync-common`, un paquete `DEPENDENCY` que los
-sinks declaran en su manifiesto. `sync-socket` ya es paquete: su activador lee
-`tcp.yml`/`udp.yml` de su carpeta privada, registra cada sink usable y los
-desregistra al descargarse; el test instala `sync-common`, `transport`,
-`sync-bus` y `sync-socket`, comprueba los dos sinks y descarga el paquete.
-`sync-telegram` sigue el mismo patrón con `config.yml`: registra el sink si hay
-token y chat, y lo desregistra al descargar el paquete. `sync-http` lee
-`outboundUrl`, `inboundPort` y credenciales de su `config.yml`, registra el sink
-y lo retira al descargarse. `sync-websocket` arranca su servidor en el puerto
-configurado, se registra en el bus y usa la fachada neutral
-`api.metrics.Metrics` en lugar de depender de `observability`. `observability`
-ya es paquete: publica `HealthCheckRegistry` y `Observability`, instala el sink
-Prometheus y sirve `/health`/`/metrics`; `DebugEndpoint` se movió a
-`host.debug` porque necesita estado del host. F8 ya empaqueta como `DEPENDENCY`
-Java-WebSocket, Gson, org.json, Prometheus, JDA, SnakeYAML, Chicory,
-Spring Expression y Jackson; Adventure sigue en el host por el contrato de
-`core-render`.
-
-**F4d cerrada (2026-10-31):** `core-api` publica `api.command`
-(`CommandRoot`, `CommandPath`, `CommandSpec`, `CommandOption`, `CommandSource`,
-`CommandContext`, `CommandRegistry`, `CommandRegistration`) y `api.config`
-(`ConfigRegistry`, `ConfigSection`, `ConfigRegistration`). `SuiteRuntime` crea
-`RuntimeCommandRegistry`/`RuntimeConfigRegistry`; `ModuleContext` entrega
-vistas module-scoped, exige que el árbol del módulo esté enraizado en su
-`moduleId` y que la sección de configuración use ese mismo namespace;
-`register(CommandPath, CommandSpec)` permite una rama explícita. Los comandos
-del runtime (`help`, `list`, `state`, `install`, `remove`, `upgrade`, `repo`)
-son nodos normales del mismo árbol. `SuiteCommand` se eliminó; el host solo
-registra el comando raíz que delega en el registro neutral, y ese registro puede
-cerrarse y volver a abrirse.
-
-Se eliminaron físicamente `CommandsConfig`, `CommandsConfigLoader` y
-`CommandExecutor` del módulo `host`, junto con los restos muertos
-`ChannelSelector`/`EventRules`/`SpigotScheduler` de los hosts. `SpigotPlatformPorts`
-y `FabricPlatformPorts` conservan únicamente el adaptador de invocación: el
-Brigadier de Fabric ya no contiene un árbol de features. `RuntimeCommandRegistry`
-valida el permiso de cada nodo del path, no solo del nodo final, y oculta de la
-tab completion los subárboles no permitidos. Tests: contrato de API, dispatch
-jerárquico, aliases, colisiones, permisos por ancestro, usage, opciones, tab
-completion, desregistro explícito y desregistro por ciclo de vida.
-
-**F4e cerrada (2026-10-31):** `CommandRootConfig` carga
-`config/suite/commands.yml` y valida `root` multi-segmento y `aliases`; el
-fallback heredado `commands.yml` fue eliminado en P0.3 (ADR-034), no es una ruta
-soportada. `base-name` fue retirado en F8 y ya no define la raíz. `RuntimeCommandRegistry` permite cambiar la raíz sin tocar los comandos
-registrados por los módulos. `SuiteRuntime.reloadCommandRoot()` devuelve
-`CommandRootChange` con `UNCHANGED`, `APPLIED`, `FAILED` o `RESTART_REQUIRED`,
-re-registra el comando de plataforma y restaura la raíz anterior si el nuevo
-registro falla; el comando built-in `reload` aplica el cambio. Los hosts copian
-`defaults/commands.yml` a la ruta canónica y el Brigadier/Bukkit solo adaptan la
-invocación. Tests: archivo ausente, raíz multi-segmento, aliases de cadena y de
-lista, retirada de `base-name`, raíz inválida, colisión de alias, recarga
-idempotente, cambio de raíz con comandos de módulo activos, fallo de
-desregistro (`RESTART_REQUIRED`), conflicto de registro con restauración y
-cambio antes de registrar el comando de plataforma.
-
-**`sync-discord` desacoplado (2026-10-29):** el paquete neutral ya no importa
-JDA ni `transport`. Los puertos `DiscordConnection`, `DiscordConnectionFactory`,
-`DiscordSettings`, `DiscordMessage` y `DiscordListener` viven en `core-api`
-(`api.discord`). `DiscordSink` contiene solo la lógica del módulo y resuelve el
-adaptador configurado (`transport: jda|jdk`). Hay dos paquetes adaptadores:
-`sync-discord-jda` (JDA, provee `discord-transport`) y `sync-discord-jdk`
-(WebSocket JDK + REST, provee `discord-transport`). Ambos devuelven de
-`connect()` sin esperar la red; el handshake corre en un hilo daemon y `send()`
-falla rápido si el transporte no está listo. El paquete neutral se activa
-aunque no haya adaptador: se suscribe a `ModuleActivatedEvent` y
-`ModuleDeactivatedEvent`, registra el sink cuando aparece la fábrica configurada
-y lo retira cuando el adaptador se descarga; el orden de instalación deja de
-importar. Tests: fake de `DiscordConnectionFactory` en el paquete neutral,
-servidor WebSocket loopback en el adaptador JDK, y un paquete adaptador falso
-instalado después del paquete neutral en `PackageRuntimeTest` (adjunta y retira
-el sink al instalar/descargar el adaptador). `spigot-host` ya usa `DiscordSink`
-+ `JdaDiscordConnectionFactory` en su cableado temporal.
-
-**`sync-velocity` desacoplado (2026-10-29):** el sink neutral es
-`sync-velocity-core` (cola, retry, mapping, codec, métricas y health) y no
-importa `com.velocitypowered`. Los puertos `VelocityConnection`,
-`VelocityConnectionFactory`, `VelocitySettings` y `VelocityListener` viven en
-`core-api` (`api.velocity`). El plugin Velocity real es `sync-velocity`, que
-registra el canal y traduce `PluginMessageEvent`; su JAR incluye las clases
-neutrales porque Velocity carga el plugin, no el runtime de la suite. El paquete neutral se activa sin adapter y
-se engancha/desengancha por `ModuleActivatedEvent`/`ModuleDeactivatedEvent`.
-Tests: `VelocitySinkTest` con `FakeConnection`, `VelocityProxyConnectionTest`
-con Mockito y `PackageRuntimeTest` con un adapter falso instalado después del
-paquete neutral.
-
-**F6 restante — bloqueado por F7/F8, no por falta de empaquetado:**
-- `inworld` ya es un `PACKAGE` neutral (`InWorldHandler`/`InWorldPlatform`) y
-  se empaqueta; el adapter Bukkit (`SpigotInWorldListener`) vive en
-  `spigot-host`. `tester` también es neutral (`TestProbe`) y su adapter Spigot
-  (`SpigotTestProbe`) vive en `spigot-host`.
-- `presets` ya se empaqueta como `PACKAGE` y aplica mediante el puerto neutral
-  `PresetTarget`; `FilePresetTarget` persiste el layout canónico,
-  `PresetsActivator` publica `PresetManager` y `PresetService`, y
-  `DefaultPresetService` selecciona, persiste y recarga el runtime. La
-  exposición por comando quedó implementada en `suite-runtime` (`presets list`
-  y `presets apply <id>`), fuera de F4e, que solo cerró la raíz configurable.
-- `extension-api` ya usa `MessageDispatch`, `PermissionChecker` y
-  `ActorDirectory`; no importa `host`.
-- F4b y F4c están cerradas: `spigot-host`/`fabric-host` ya no construyen
-  sinks, observability, inworld, extensiones ni features; solo registran sus
-  puertos y arrancan `SuiteRuntime`. La captura de eventos vive en
-  `sync-bukkit`/`sync-fabric`. Los árboles de comandos de host, la raíz
-  configurable y el hot upgrade/unload real se cerraron en F4d/F4e/F7; el
-  empaquetado de librerías de terceros como `DEPENDENCY` y la revisión de
-  límites se cerraron en F8.
-
-**F4b — punto de partida medido:** `spigot-host` importa directamente al menos
-9 paquetes de feature (`sync-socket`, `sync-websocket`, `sync-telegram`,
-`sync-discord`, `sync-http`, `syncbus`, `observability`, `inworld` y
-`extension`; `inworld` y `tester` ya son neutrales) y `fabric-host` al menos 7
-(sin `sync-http` ni `inworld`).
-El guard de arquitectura (`checkArchitecture`) ya existe y está verde: escanea
-los módulos neutrales y adaptadores allowlisted, y falla si un módulo neutral
-importa un SDK de plataforma o el host. Los listeners de eventos se extrajeron a
-`sync-bukkit`/`sync-fabric` en F4c; los hosts no los contienen.
-
-**Avance F4b (2026-10-29):** existen `SpigotPlatformPorts` y
-`FabricPlatformPorts` con implementación real de `info`, `deliver`, `send`,
-`findActor`, `onlineActors`, `hasPermission` y `registerCommand`. Spigot usa
-`CommandMap` y permisos Bukkit; Fabric encola comandos hasta que el bootstrap
-engancha el `CommandDispatcher` de Brigadier y usa el nivel de operador 2 como
-regla de permisos mientras no haya proveedor externo. La desregistración de
-comandos está cubierta con tests; Fabric retira los nodos raíz y Spigot retira
-las entradas de `CommandMap`. Ya están cableadas en los hosts; la sustitución de
-`SuiteHost`/cableado de features se cerró en F4b y la retirada de
-`DynamicCommand*`/`CommandsConfig*` se cerró en F4d. El Brigadier de Fabric queda
-solo como adaptador de invocación.
-
-**Avance F4b (2026-10-30):** `core-api` declara el puerto neutral
-`MessageRenderer` para renderizado plano; `textformatter` lo implementa con
-`TextFormatterMessageRenderer` y lo registra en su `ModuleContext`.
-`SpigotInWorldListener` ya consume `MessageRenderer` + `MessageDispatch` en vez
-de `SuiteHost`/`MessageDispatcher`/`TemplateContext`, por lo que el adapter de
-in-world deja de importar tipos de feature. `SpigotTestProbe` también quedó
-neutralizado: recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
-`MessageDispatch`, `TranslationService` y un contador de módulos, sin importar
-`SuiteHost`, `MessageDispatcher`, `DispatchReport` ni `TemplateContext`; su
-puerto `TestProbe` vive ahora en `core-api` (`api.spi`), no en `tester`.
-`TestRunner` y `TestRunnerFactory` también están en `core-api`: `tester`
-publica la factoría y el adapter solo resolverá el contrato neutral cuando el
-host monte el runtime.
-`core-api` añade `DispatchOutcome` y `MessageDispatch.dispatchAndReport(...)`;
-`SuiteHost` expone `renderer()` y `messageDispatch(dispatcher)` como adaptadores
-transitorios mientras el host siga construyendo el pipeline. `SuiteRuntime`
-publica `MessageDispatch` como servicio neutral enlazado a
-`PlatformPorts.deliver`, de modo que los paquetes lo resuelven sin conocer el
-dispatcher del host. También se añadió el puerto neutral `PresetService` en
-`core-api`; `presets` lo implementa con `DefaultPresetService` y lo registra en
-su `ModuleContext`, así el host deja de importar `presets` para seleccionar,
-persistir y recargar un preset. La selección por comando quedó implementada en
-`suite-runtime` (`presets list/apply`), fuera de F4e. En Fabric,
-`FabricInWorldHandler` dejó
-de ser un handler duplicado con stubs: ahora implementa `InWorldPlatform`,
-delega en `InWorldHandler` y registra los callbacks una sola vez con una
-instancia activa intercambiable; `unregister()` desengancha el adapter al
-cerrar el runtime. `SuiteRuntime.registerPlatformService(...)` permite además
-inyectar los puertos del adapter (`ActorDirectory`, `ChatDelivery`,
-`PermissionChecker`, `UserLanguageStore`) antes de que se activen los paquetes;
-el registro se cierra en `stop()` y se rechaza después de `start()`. La retirada
-completa de `SuiteHost` del adapter pertenece al cierre de F4b.
-
-**TestProbe Fabric (2026-11-03):** `FabricTestProbe` replica el contrato neutral
-de `SpigotTestProbe` y recibe `ChannelRegistry`, `Router`, `MessageRenderer`,
-`MessageDispatch`, `TranslationService`, el contador de módulos y el idioma por
-defecto. No importa `SuiteHost`, `MessageDispatcher`, `DispatchReport`,
-textformatter ni APIs de Minecraft/Fabric; los tests cubren readiness, dispatch,
-formato y detección de idioma. El host todavía no monta el comando `/test`; el
-adapter queda listo para que el bootstrap lo construya cuando el paquete
-`tester` esté activo.
-
-**Presets por comando (2026-11-03, ADR-030):** `suite-runtime` registra
-`presets list` y `presets apply <id>`. El comando resuelve el puerto neutral
-`PresetService`; si el paquete no está activo responde explícitamente y no
-inventa un catálogo. `FilePresetTarget` escribe la configuración del host en
-`config/suite/` y la de cada módulo en `config/<module>/`, que es el
-mismo layout que consume `ModuleHost`. Tras persistir, el callback llama a
-`SuiteRuntime.reloadActiveModules()`: cierra el pipeline, detiene los módulos
-activos en orden inverso, los reactiva en orden de dependencias y reconstruye
-el pipeline. Si un módulo no se libera limpiamente, el comando informa el fallo
-y el módulo queda `RESTART_REQUIRED`; no se simula una recarga exitosa. Los
-tests cubren el orden de reinicio y la conservación de servicios en
-`ModuleHostTest`, y los comandos `list/apply`, el preset desconocido y el
-paquete inactivo en `SuiteRuntimeTest`.
-
-**Defaults de módulos (2026-11-03, corregido 2026-11-04):** los hosts copiaban
-los defaults de canales, traductores, sync, inworld y reglas a rutas que no
-coincidían con las que leen los activadores. La ruta canónica de módulos es
-`config/<module>/` (por ejemplo, `config/chattranslator/config.yml`);
-`config/manager/<module>/` y `manager/config/<module>/` son rutas incorrectas,
-no layouts legacy ni versiones alternativas, y no se aceptan como fallback.
-`HostPaths` expone `moduleConfigRoot` y `moduleConfigDir`, y
-`DefaultConfigInstaller` centraliza la copia: el host conserva `config/suite/`
-y los módulos reciben `config/<module>/`. Si se detectan archivos en las rutas
-incorrectas, se ignoran: no se migran ni se eliminan, y nunca se sobrescribe
-una configuración existente. La regresión está cubierta por `HostPathsTest` y
-`DefaultConfigInstallerTest`.
-
-**Avance F4b (2026-10-30, render enriquecido):** se añadió el módulo neutral
-`core-render` con el puerto `MessageComponentRenderer` (Adventure, sin
-dependencias de features). `textformatter` lo implementa con
-`TextFormatterMessageRenderer` y lo registra junto a `MessageRenderer`;
-`SuiteHost` ya construye el pipeline contra ese puerto y no guarda
-`TextFormatter` ni `ChatTranslator` como tipos de feature. El constructor
-público de `SuiteHost` recibe `HostConfig`, `ChannelRegistry`,
-`TranslationService`, `Router`, `MessageComponentRenderer`, `MessageRenderer`,
-`PluginLogger` y `ChatDelivery`, que es la forma que usará `SuiteRuntime` al
-construir el pipeline desde `ServiceRegistry`. `SuiteHost.bootstrap(...)`
-permanece solo como camino de arranque heredado y se elimina al cerrar F4b.
-
-**Cierre F4b (2026-10-30, adapters delgados):** `spigot-host` y `fabric-host`
-ya no construyen features ni importan `host`, `kernel`, `manager` o paquetes
-de feature. Su bootstrap crea `SpigotPlatformPorts`/`FabricPlatformPorts`,
-registra en `SuiteRuntime` los puertos del adapter (`ChatDelivery`,
-`ActorDirectory`, `PermissionChecker`, `UserLanguageStore`, `PlaceholderResolver`
-y `PluginLogger`) y delega el arranque, los paquetes y el comando raíz al
-runtime. `ChatDelivery` se movió a `core-render` y `InWorldPlatform`/
-`InWorldService` a `core-api`, de modo que los adapters de in-world tampoco
-importan el paquete `inworld`. `YamlUserLanguageStore` pasó a `suite-runtime`.
-`SuiteRuntime.defaultLanguage()` expone el idioma por defecto sin publicar
-`HostConfig`. `checkArchitecture` ahora escanea también `spigot-host` y
-`fabric-host` y falla si importan features, `host`, `kernel` o `manager`.
-
-Se retiraron `SuiteHost.bootstrap(...)`, `SuiteBootstrap`, `RouterFactory`,
-`IflowEngineSelector` y `ConfigValidator` del módulo `host`; `host` ya no
-depende de `textformatter`, `chattranslator`, `iflow-vm`, `iflow-firewall`,
-`transport` ni `kernel`. Los tests de `host` y `loadtest` usan fixtures
-locales (`HostFixture`) que cablean las implementaciones reales solo en el
-classpath de pruebas/benchmarks. El `runtimeClasspath` de `suite-runtime` ya
-no arrastra paquetes de feature. La captura de eventos de chat/join/quit/death
-se eliminó de los hosts y se implementó en `sync-bukkit`/`sync-fabric` en F4c.
-
-**Cierre F4c (2026-10-31, sincronizadores de plataforma):** `core-api`
-publica `PlatformHandle`, un puerto opaco que los hosts registran antes de
-`start()` y que solo los paquetes de plataforma resuelven. `ModuleContext`
-expone `isShuttingDown()` para distinguir un apagado completo de un unload en
-caliente. `sync-common` incorpora `ChannelSelector`, `EventRules`,
-`EventMessages` y `SyncEventProcessor`, de modo que Bukkit y Fabric comparten
-selección de canal, gating de traducción (`off`), construcción de `Message` y
-despacho sin duplicar lógica.
-
-`sync-bukkit` (Platform `spigot`) captura `AsyncPlayerChatEvent`,
-`PlayerJoinEvent`, `PlayerQuitEvent` y `PlayerDeathEvent`; su `claim-mode`
-permite cancelar el evento, vaciar destinatarios o no tocarlo. `sync-fabric`
-(Platform `fabric`) captura `ServerMessageEvents.CHAT_MESSAGE`,
-`ServerPlayConnectionEvents.JOIN`/`DISCONNECT` y detecta muertes desde
-`ServerTickEvents.END_SERVER_TICK` con `FabricDeathTracker`. Ambos registran
-listeners en `start()`, los desactivan en `stop()` y no bloquean esperando red.
-Fabric API no permite desregistrar callbacks: un unload en caliente marca
-`RESTART_REQUIRED`; el apagado completo del servidor solo los deja inertes.
-
-`PackageRuntime` filtra la activación con `PlatformCompatibility`, que
-normaliza `bukkit`/`paper`/`purpur`/`spigot` a la familia `spigot` y acepta
-`common`/`any`. `checkArchitecture` escanea 34 módulos y permite el SDK de
-plataforma solo en `sync-bukkit`, `sync-fabric` y los hosts. Los hosts ya no
-contienen listeners de eventos. Los ZIP de ambos paquetes declaran
-`Platform: spigot`/`Platform: fabric`, incluyen su `META-INF/services` y su
-configuración por defecto. La validación automatizada es compilación + tests; el betatesting/E2E
-contra servidores reales se ejecuta después de la 1.0.0 (ADR-034) y se rastrea en la hoja de ruta.
-
-##### Dirección obligatoria: hexágono por módulo y frontera plataforma↔módulo
-
-**Decisión de arquitectura (2026-10-28):** cada módulo se estructura como un
-hexágono. El núcleo contiene la lógica y los contratos; los adaptadores
-implementan los puertos hacia tecnologías concretas. Ningún módulo neutral
-importa JDA, Velocity, Paper, Bukkit ni Fabric. Ningún adapter de plataforma
-importa paquetes de feature. La frontera es bidireccional y estricta.
-
-Reglas:
-
-1. **Núcleo neutral.** La lógica de `sync-discord`, `sync-velocity-core`, `inworld`,
-   `tester`, `presets` y `extension-api` vive en clases sin tipos de
-   plataforma. Los puertos se declaran en `core-api` (si los comparten varios
-   módulos) o en el `api` del propio paquete.
-2. **Adaptadores tecnológicos.** JDA, Velocity API, Paper/Bukkit y Fabric viven
-   solo en adaptadores: `adapters/jda`, `adapters/velocity`,
-   `sync-bukkit`, `sync-fabric` y el bootstrap de `spigot-host`/`fabric-host`.
-   El paquete neutral declara el puerto y el adapter lo implementa; el paquete
-   no depende del adapter.
-3. **Eventos agnósticos.** El sincronizador de plataforma
-   (`sync-bukkit`/`sync-fabric`) traduce el evento de Minecraft a un
-   `Message`/evento neutral y lo entrega al runtime. El módulo consume ese
-   evento; nunca registra listeners de Paper/Bukkit. El host solo aporta
-   `PlatformPorts` y el bootstrap.
-4. **Ciclo de vida no bloqueante.** `start()` de un paquete no espera red ni
-   servidores externos. Las conexiones (Discord, Velocity, etc.) se hacen en
-   un adaptador con estado propio, reintentos y `stop()` determinista; la
-   activación del paquete no depende de que el servicio externo esté vivo.
-5. **Sin stubs.** Un paquete no se empaqueta si su operación principal es un
-   no-op. `Preset.apply(...)` debe aplicar de verdad canales, traductores,
-   sync y configuración, con tests de cada efecto, antes de convertir
-   `presets` en paquete.
-6. **Sin compatibilidad indefinida.** No se añaden adaptadores de
-   compatibilidad sin fase de eliminación. `ModuleLifecycleAdapter`,
-   `SuiteHost.bootstrap()` hardcodeado y el cableado de features en adapters
-   se eliminaron en F4b/F7; no se conservan como fachada permanente.
-7. **Comandos y configuración neutrales.** Los módulos registran sus comandos
-   jerárquicos y su configuración por `api.command`/`api.config`; el host solo
-   traduce la invocación de plataforma. La raíz es un `CommandRoot`
-   configurable y los módulos usan paths relativos, nunca `/suite` literal.
-
-Aplicación por módulo:
-
-- **`sync-discord`** — separar `DiscordSink`/lógica neutral, puerto
-  `DiscordConnection` (conectar, enviar, recibir, cerrar) y adapter JDA.
-  Los tests usan un `FakeDiscordConnection`; no hay red ni espera de 30 s.
-  El adapter JDA es un paquete de plataforma/dependencia, no una dependencia
-  de compilación del paquete neutral.
-- **`sync-velocity`** — mismo patrón: `sync-velocity-core` contiene la lógica
-  neutral y `sync-velocity` es el plugin/adapter Velocity que implementa el
-  puerto de mensajería del proxy. El núcleo no importa `com.velocitypowered`.
-- **`sync-bukkit` / `sync-fabric`** — paquetes de plataforma descargables.
-  Registran los listeners de chat/join/quit/death, traducen el evento a
-  `Message` y lo despachan por `MessageDispatch`; no contienen features ni
-  lógica de formato, routing, traducción o entrega. El host no los embebe.
-- **`inworld`** — el dominio de “mensajes en el mundo” es neutral. El registro
-  del listener de Paper y la traducción del evento viven en `spigot-host`.
-  `fabric-host` implementa el mismo puerto con su API. El módulo no importa
-  Paper.
-- **`tester`** — el simulador de jugador y la traza del pipeline son
-  neutrales. `TestProbe` expone canales, router, dispatch, formato y detección
-  de idioma; la entrega/observación real vive en el adapter
-  (`SpigotTestProbe`). El paquete no importa Paper ni `host`; los tests usan un
-  `TestProbe` falso.
-- **`presets`** — `Preset.apply(PresetTarget)` convierte y aplica config,
-  canales, traductores y sync; `PresetTarget` es el puerto neutral y
-  `FilePresetTarget` implementa la persistencia canónica. El paquete ya se
-  empaqueta y activa; `DefaultPresetService` implementa el puerto neutral
-  `PresetService` y el host lo resuelve del runtime. Sin `host.config` en el
-  paquete.
-- **`extension-api`** — `ExtensionContext` expone un puerto neutral
-  (`dispatch`, `findActor`, `hasPermission`, `translation`, `channels`,
-  `languages`) en vez de `SuiteHost`/`MessageDispatcher`.
-
-Orden de F4b:
-
-1. Declarar puertos y eventos neutrales en `core-api`.
-2. Extraer la lógica neutral de `sync-discord`, `sync-velocity-core`,
-   `presets` y `extension-api`; `inworld` y `tester` ya están extraídos como
-   `PACKAGE` neutrales (`InWorldHandler`/`InWorldPlatform` y `TestProbe`).
-3. Implementar los adaptadores de plataforma/tecnología y el ciclo de vida
-   no bloqueante.
-4. Poner `spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` y
-   retirar todos los imports de features.
-5. `checkArchitecture` ya está verde: adapters sin features,
-   módulos neutrales sin SDK de plataforma, sin stubs.
-6. Extraer la captura de eventos a `sync-bukkit`/`sync-fabric` (F4c) y borrar
-   los listeners del host en el mismo cambio.
-
-**Estado:** `sync-discord`, `sync-velocity-core`/`sync-velocity`, `Preset.apply`
-con `FilePresetTarget`, el empaquetado/activación de `presets`, el empaquetado
-neutral de `tester` con `TestProbe`/`SpigotTestProbe`, el empaquetado neutral
-de `inworld` con `InWorldHandler`/`InWorldPlatform`/`SpigotInWorldListener` y
-el puerto neutral de `extension-api` y el puerto `MessageRenderer` con su
-implementación en `textformatter` completados al 2026-10-30. Después: el
-adapter de host de `PresetTarget` (selección y recarga) ya resuelto como
-`PresetService`, el adelgazamiento de
-`spigot-host`/`fabric-host` sobre `SuiteRuntime` + `PlatformPorts` (F4b) y la
-extracción de la captura de eventos a `sync-bukkit`/`sync-fabric` (F4c).
-
-Orden obligatorio: **F0 → F1 → F2 → F3 → F4a → F5/F6 → F4b → F4c → F4d → F4e → F7 → F8**.
-F5 y F6 pueden solaparse solo si cada paquete tiene su propia puerta y no se
-deja el camino viejo activo. F4b se ejecuta después de F5/F6 porque el
-adelgazamiento de los adapters depende de que los features ya sean paquetes.
-F4c se ejecuta después de F4b porque los sincronizadores necesitan el host
-delgado y `PlatformPorts`; F4d/F4e van después de F4c porque la API de comandos
-y la raíz relocalizable se apoyan en un host que ya no define features. F7 va
-después de F4e para probar el unload de listeners, comandos y raíz.
-
-##### Protocolo anti-vaguedad
-
-Para evitar que el cambio quede a medias:
-
-1. **Una fase, una entrega verificable.** No se abre la siguiente hasta que la
-   anterior tenga su puerta verde.
-2. **Cada fase incluye una lista de eliminación.** Si no se borra el camino
-   viejo, la fase no está terminada.
-3. **Prohibidos los no-ops.** Nada de `return parent`, `return false`, métodos
-   vacíos, `TODO` o `UnsupportedOperationException` silenciosa para aparentar
-   compatibilidad.
-4. **Prohibidos los adaptadores de compatibilidad sin fecha.** Si algo se
-   conserva, tiene que ser con contrato, tests y fecha de eliminación.
-5. **Cada PR incluye tests del nuevo camino y un guard que impida volver al
-   viejo.** El guard debe fallar el build, no solo avisar.
-6. **Cada PR declara qué se elimina.** El mensaje de commit y la descripción
-   deben incluir la sección «Eliminado».
-7. **Si una fase no se puede completar, se revierte.** No se deja código a
-   medias para «completarlo luego».
-8. **No se acepta «paridad inmediata» como cierre de I-019.** I-019 se cierra
-   solo cuando el host no conoce features y el Manager activa módulos.
-9. **No se acepta un `suite-runtime` que dependa de features.** Si depende de
-   ellas, es otro composition root disfrazado.
-10. **No se acepta un loader que solo funcione con módulos en el classpath.**
-    Debe cargar desde `library/packages`.
-11. **No se acepta hot reload sin liberación de recursos.** Si no se puede
-    liberar, se marca `RESTART_REQUIRED`.
-12. **No se acepta marcar `ACTIVE` si `start()` falló.**
-
-##### Criterios de aceptación finales
-
-- [x] `spigot-host/build.gradle` y `fabric-host/build.gradle` solo declaran
-      `core-api`, `core-render`, `suite-runtime` y SDK de plataforma.
-- [x] `suite-runtime/build.gradle` no declara ningún módulo de feature como
-      implementación; las dependencias de features son solo de test.
-- [x] `host` no declara `textformatter`, `iflow-*`, `chattranslator` ni
-      `transport` como implementaciones; solo APIs (las de test son fixtures).
-- [x] Los adapters no importan `me.majhrs16.suite.sync*`,
-      `me.majhrs16.suite.textformatter`, `me.majhrs16.suite.iflow*`,
-      `me.majhrs16.suite.chattranslator`, `me.majhrs16.suite.observability`,
-      `me.majhrs16.suite.manager*` ni `me.majhrs16.suite.presets`.
-- [x] `ModuleHost` carga un JAR desde `library/packages`, lo activa y lo
-      desactiva sin classpath de features.
-- [x] `library/status` registra solo la instalación; el estado runtime
-      (`ACTIVE`, `FAILED`, `RESTART_REQUIRED`) vive en
-      `<manager>/runtime/modules.status`, nunca en `library/status`.
-- [x] `package install` activa y `package remove` desactiva; `repo upgrade`
-      usa el listener transaccional probado en `PackageRuntimeTest`.
-- [x] Un test de upgrade v1→v2 demuestra que la v1 se detiene y se descarga, y
-      que la v2 queda activa.
-- [x] Un test de upgrade fallido demuestra que la v1 sigue activa.
-- [x] Un test de activación fallida demuestra que el paquete no se marca
-      `ACTIVE`.
-- [x] Un test de arquitectura falla si un adapter vuelve a declarar un feature
-      o reintroduce un árbol de comandos.
-- [x] No quedan `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado,
-      `ManagerFacade.discoverAll` por classpath ni dependencias muertas.
-- [x] `./gradlew build` y `./gradlew checkArchitecture` pasan.
-- [x] La documentación de módulos explica `ModuleActivator`, `ModuleContext`,
-      `library/packages`, `library/status`, hot upgrade y límites de reinicio.
-
-##### Decisiones cerradas por F0 (2026-10-27)
-
-Estas decisiones sustituyen la lista de preguntas abiertas anterior. F0 queda
-cerrada con ellas y F1 puede empezar.
-
-1. **Núcleo vs paquetes.** Todo feature es paquete. El núcleo técnico es
-   `core-api`, `kernel`, `manager-*` y `suite-runtime`. `logger` y `transport`
-   son paquetes de dependencia (C3), no código del host. Ningún JAR del host
-   contiene features.
-2. **`inworld` y `tester`.** `inworld` se parte en API neutral + implementación
-   de plataforma. `tester` es un módulo de producción (C7): se distribuye como
-   paquete neutral (`PACKAGE`) con `TestProbe` y adapters de plataforma, con
-   benchmarking en runtime y traza del pipeline completo; no se mueve a
-   harness.
-3. **Extensiones.** `ExtensionManager` se unifica con `ModuleHost`: una
-   extensión es un paquete de tipo extensión con el mismo ciclo de vida. No
-   existe un `enum` cerrado de módulos conocidos; cualquier repositorio de
-   terceros puede publicar paquetes custom (P11/C8).
-4. **Versiones concurrentes.** Al estilo Debian (C9): la versión nueva del mismo
-   paquete reemplaza a la anterior resolviendo el grafo. Durante un upgrade
-   pueden solaparse v1 y v2 solo hasta confirmar el swap; no hay coexistencia
-   permanente de dos versiones del mismo paquete.
-5. **Librerías compartidas.** Son paquetes de dependencia (C3). El manager las
-   descarga, verifica, relocaliza y carga; no viven en el host ni se compilan
-   dentro de los JAR de módulo. El classloader del módulo las resuelve desde el
-   scope de dependencias que el manager le asigna, no por parent-first contra el
-   classloader del host.
-6. **Metadatos.** El `packages.list` del repositorio es la fuente de verdad de
-   qué paquetes existen y desde dónde se descargan (C4). El
-   `METADATA/package.list` del ZIP es el manifiesto de instalación y se valida
-   contra el índice; si discrepa, la instalación falla.
-7. **Seguridad.** Hay sandbox por módulo, pero la responsabilidad principal es
-   del dueño del repositorio (D6/C9). El manager verifica integridad con
-   SHA-256 y el operador decide qué repositorios añadir. Firmas y allowlists son
-   mecanismos opcionales de defensa en profundidad, no requisitos de la
-   filosofía.
-
-##### Consecuencias
-
-*Positivas*
-- Los adapters dejan de ser composition roots y se vuelven reemplazables.
-- El Manager pasa a ser la fuente de verdad del ciclo de vida.
-- Los módulos se versionan, instalan y actualizan por separado.
-- Hot upgrade/unload se diseña con contrato, no con promesas.
-- La arquitectura se puede verificar automáticamente.
-
-*Negativas*
-- Es un cambio de alto riesgo que toca todos los módulos.
-- Introduce classloaders, registro de servicios, ciclo de vida y estados de
-  activación: más superficie de fallo.
-- El hot unload real es difícil con Bukkit/Fabric; habrá casos que requieran
-  reinicio.
-- Obliga a borrar código actual, no a envolverlo.
-- Exige tests nuevos y un guard de arquitectura desde la primera fase.
-
-##### Lo que este ADR no promete
-
-- No promete que todos los módulos puedan actualizarse sin reinicio.
-- No promete que todos los módulos sean neutrales a la plataforma.
-- No promete compatibilidad con ningún bootstrap anterior; los caminos
-  retirados no se restauran como fachada.
-- No promete que todos los módulos liberen recursos en todos los escenarios;
-  cuando no pueden, el estado es `RESTART_REQUIRED`, no un éxito fingido.
-- No promete que la suite haya quedado funcional sin pasar por las puertas de
-  calidad de cada fase.
-
----
-
-#### ADR-020: Un único `config/suite/messages.yml` para todas las plataformas
-
-**Estado:** Aceptado (decisión del usuario en `docs/workdir/REPORT.md:234`)
-
-**Contexto**
-
-- `MessagesConfig` vive en `host` (`MessagesConfig.java:24`) y `storage.md` lo asignaba a «cada platform adapter».
-- Duplicar el archivo por plataforma haría divergir los textos de UI entre Spigot y Fabric y obligaría a mantener dos copias de los defaults.
-- Decisión registrada: «No puede haber un directorio por cada plataforma, se debería abstraer en un mismo archivo para todas las plataformas, y ese es `<manager>/config/suite/`».
-- `Hecho verificado`: `HostPaths.suiteMessages()` resuelve `config/suite/messages.yml`; el fallback
-  a `messages.yml` es deuda legacy que la purga pre-1.0 elimina (ADR-034). `MessagesConfig.load()`
-  ya consume la ruta canónica.
-
-**Consecuencias**
-
-*Positivas*
-- Una sola fuente de verdad para los textos de UI, independiente de la plataforma.
-- El fallback al archivo plano anterior se elimina en la purga pre-1.0; las instalaciones con ese
-  layout se ignoran o se rechazan, no se migran en runtime (ADR-034).
-- `resetConfigs`/`copyDefaultsIfMissing` escriben y respaldan la misma ruta en Spigot y Fabric.
-
-*Negativas*
-- `host` (core) sigue conociendo un recurso de presentación; si en el futuro se quiere un `messages` por plataforma habría que introducir overrides por adapter.
-- El archivo compartido puede contener claves específicas de una plataforma; hoy no hay validación que lo impida.
-
-**Alternativas consideradas**
-
-1. **`messages.yml` por adapter (propuesta original de `storage.md`)**
-   - Ventajas: cada plataforma controla sus textos.
-   - Limitaciones: duplicación y divergencia; dos defaults que mantener.
-   - Evaluación: descartada por la decisión del usuario.
-
-2. **Un archivo único con loader en `host` (elegida)**
-   - Ventajas: fuente única, reutiliza `HostPaths`, sin duplicar clases.
-   - Limitaciones: acoplamiento de `host` a un recurso de presentación.
-   - Evaluación: aceptada; el acoplamiento se considera menor frente a la duplicación.
-
-3. **Mover el loader a un módulo `presentation`/`messages` compartido**
-   - Ventajas: separación estricta entre core y UI.
-   - Limitaciones: nuevo módulo y dependencia adicional en ambos adapters; el módulo `messages` existente gestiona catálogos, no el archivo de configuración.
-   - Evaluación: aplazada; no aporta valor inmediato sobre (2).
-
----
-
-#### ADR-008: Mantener `chattranslator` (façade) y `translator` (proveedor) como capabilities separadas
-
-**Estado:** Aceptado (2026-10-27).
-
-**Contexto**
-
-- `Hecho verificado`: `ChatTranslatorModule.java:22` provee `chattranslator`; `GTranslateModule.java:22-23` y `LTranslateModule.java:22-23` proveen `translator` y requieren `chattranslator`.
-- `Hecho verificado`: ningún módulo requiere `translator`; la façade no exige un backend concreto.
-- `Hecho verificado`: en `kernel.ModuleGraph` una `Requirement` no satisfecha deja el módulo inactivo (`ModuleGraph.java:259` y siguientes), es decir, los requisitos son obligatorios.
-- La traducción es opcional: una instalación sin backends debe arrancar con `TranslationService` en modo no-op.
-- La ambigüedad es de nomenclatura y de dirección del grafo, no de funcionamiento.
-
-**Consecuencias**
-
-*Positivas*
-- La façade puede activarse sin backends y el pipeline degrada a no-op, que es el comportamiento actual de `ChatTranslator`.
-- Los proveedores declaran explícitamente que necesitan la façade, lo que ordena la inicialización (façade primero, backends después).
-- No hay cambios de contrato ni migración de capacidades.
-
-*Negativas*
-- Dos nombres (`chattranslator`, `translator`) para un mismo dominio invitan a error al declarar nuevos módulos.
-- La dirección «proveedor requiere façade» es la inversa de la intuición habitual («façade requiere proveedor»); requiere documentación explícita.
-- Si en el futuro se quisiera exigir al menos un backend, el modelo actual de `Requirement` no permite expresar «opcional».
-
-**Alternativas consideradas**
-
-1. **Mantener ambas capabilities y documentar la dirección (recomendada)**
-   - Ventajas: cero churn; el grafo actual ya funciona y expresa la opcionalidad.
-   - Limitaciones: la nomenclatura sigue siendo confusa sin documentación.
-   - Evaluación: **recomendada**; añadir un test de kernel que verifique que `chattranslator` activa sin proveedores.
-
-2. **Unificar en `translator` para todos**
-   - Ventajas: un solo nombre.
-   - Limitaciones: `ModuleDescriptor` no distingue rol (façade vs proveedor); no se podría saber si un `translator` es coordinador o backend; además rompe CT3 y los tests existentes.
-   - Evaluación: descartada por pérdida de información semántica.
-
-3. **Renombrar a `translation-facade` y `translation-provider`**
-   - Ventajas: nombres autoexplicativos.
-   - Limitaciones: cambio de contrato en todos los descriptores y tests; obliga a versionar la capability.
-   - Evaluación: aplazada hasta una revisión mayor de contratos; no compensa ahora.
-
-**Implementación (2026-10-27).** Se mantiene la opción 1 sin cambios de contrato.
-`ChatTranslatorModuleTest` fija la semántica: `chattranslator` provee la façade y no
-requiere backends; `GTranslateModule` sin façade queda en
-`UNSATISFIED_REQUIREMENT`; con la façade presente ambos módulos resuelven. La
-dirección documentada es **proveedor (`translator`) requiere façade
-(`chattranslator`)**, nunca al revés, porque la traducción es opcional y el
-pipeline debe degradar a no-op cuando no hay backends instalados.
-
----
-
-#### ADR-021: API de configuración y comandos jerárquicos registrables
-
-**Estado:** Aceptado (2026-10-29).
-
-**Contexto**
-
-- `PlatformPorts.Command` solo registra un comando plano: no hay subcomandos,
-  tab completion ni registro por módulo.
-- `SuiteCommand` hardcodea `/suite` y su propio `switch`; `spigot-host`
-  mantiene `DynamicCommandRegistrar`/`DynamicCommand` con un árbol duplicado y
-  `fabric-host` otro árbol Brigadier.
-- Un módulo no puede aportar comandos propios sin tocar el host; al descargarse
-  no hay forma de retirar su subárbol.
-- La configuración de cada módulo no tiene una API neutral: cada paquete lee su
-  YAML y expone comandos a mano.
-
-**Decisión**
-
-1. `core-api` publica `api.command`: `CommandRegistry`, `CommandSpec`,
-   `CommandPath`, `CommandSource`, `CommandContext` y `CommandRegistration`.
-2. `CommandSpec` es un árbol: nombre, aliases, descripción, permiso, uso,
-   argumentos/opciones, hijos y ejecutor. El registro es por módulo y devuelve
-   `CommandRegistration` (`AutoCloseable`).
-3. `ModuleContext.commands()` entrega un registro module-scoped; el runtime
-   cierra todas las inscripciones después de `stop()`. El path por defecto es
-   el namespace del módulo; un path explícito se declara y también se retira al
-   desactivar. Un módulo no puede dejar comandos huérfanos.
-4. `core-api` publica `api.config`: `ConfigRegistry`, `ConfigSection` y
-   `ConfigRegistration`. Un módulo registra su sección (namespace, defaults,
-   esquema, validador y reload) y puede exponer comandos de configuración
-   generados o propios. La configuración persistida no se borra al
-   desregistrar; solo se retira la superficie de comandos/esquema.
-5. `CommandRegistry` es el único punto de composición: los comandos del runtime
-   (`list`, `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma API;
-   el host solo traduce la invocación de plataforma y no define comandos de
-   features.
-6. Conflictos de path/alias fallan explícitamente; no hay override silencioso.
-   La política `force` solo aplica si se define explícitamente y deja warning.
-7. Los comandos son neutrales: no importan Bukkit/Fabric; reciben
-   `CommandSource`/`CommandContext` y responden por `reply`. La tab completion
-   se deriva del árbol.
-8. El árbol de comandos del host (`DynamicCommandRegistrar`/`DynamicCommand` y
-   el Brigadier de Fabric) se elimina o se reduce a un adaptador de invocación;
-   no se mantiene duplicado.
-
-**Consecuencias**
-
-- Cada módulo puede publicar comandos bajo su namespace sin conocer la
-  plataforma.
-- Desactivar un módulo retira su subárbol; reactivarlo lo vuelve a registrar.
-- El host deja de ser dueño del árbol de comandos.
-- Requiere tests de registro/desregistro, colisiones, permisos, tab completion y
-  esquema de configuración.
-- La configuración existente de cada módulo sigue siendo suya; la API
-  estandariza la superficie, no impone un formato de archivo.
-
----
-
-#### ADR-022: Raíz de comandos relocalizable
-
-**Estado:** Aceptada e implementada en F4e (2026-10-31).
-
-**Contexto**
-
-- Antes de F4e, el literal `/suite` estaba hardcodeado en la raíz por defecto y
-  en los mensajes de ayuda; los árboles de host ya se retiraron en F4d.
-- Cambiar a `/suite module` o `/tf` obligaría a tocar la configuración y los
-  mensajes, no los módulos.
-- Los módulos deben registrar rutas relativas, no la raíz.
-
-**Decisión**
-
-1. `CommandRoot` es un value object con segmentos (`["suite"]`,
-   `["suite","module"]`, `["tf"]`) y aliases opcionales. Se declara en
-   `commands.yml` (ruta canónica `config/suite/commands.yml`, `root: [suite]`),
-   no en código.
-2. `CommandRegistry` almacena paths relativos al root. El runtime compone
-   `root + path` al registrar y al resolver. Los módulos nunca ven ni
-   hardcodean `/suite`.
-3. El adaptador de plataforma registra el primer segmento del root y delega el
-   resto al dispatcher neutral. Para roots multi-segmento (`suite module`), el
-   dispatcher consume el prefijo y enruta el resto.
-4. Help, usage y errores usan `CommandContext.root()`; no se concatenan strings
-   `/suite`.
-5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
-   `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
-   permiten mantener `/suite` y `/tf` a la vez. El antiguo `base-name` fue
-   sustituido por `root` y se retiró en **F8**; ya no se migra.
-6. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
-   plataforma no permite desregistrar o restaurar, se marca
-   `RESTART_REQUIRED` y no se publica la nueva raíz como activa. Si el nuevo
-   registro falla, se intenta restaurar la raíz anterior y se informa
-   `FAILED`.
-7. Conflictos de root con comandos existentes fallan explícitamente; no se roba
-   un comando ajeno.
-8. Tests: el mismo árbol de módulo bajo `suite`, `suite module` y `tf`; cambio
-   de root sin recompilar módulos; root multi-segmento; alias; colisión;
-   re-registro, restauración y `RESTART_REQUIRED`.
-
-**Consecuencias**
-
-- Migrar la raíz es configuración, no refactor.
-- Los módulos son independientes del nombre del comando raíz.
-- El host solo necesita un adaptador de invocación de primer nivel.
-- La documentación y los mensajes deben usar `CommandContext.root()`.
-
----
-
-#### ADR-028: Etiqueta MiniMessage `<regex>` en TextFormatter
-
-**Estado:** Aceptada e implementada. No modifica ADR-027 ni sustituye el regex del espacio de
-usuario de iFlow.
-
-**Contexto**
-
-- iFlow VM ya puede aplicar expresiones regulares en sus políticas de usuario. Esa es la vía
-  principal para routing, permisos y mutaciones.
-- Un template de TextFormatter puede necesitar una comprobación regex local para decidir si
-  muestra un fragmento, sin obligar a que la política preprocese el texto.
-- El usuario fija una sintaxis MiniMessage, no una variable `%regex%`: la construcción debe ser
-  visible en la plantilla y aplicar formato MiniMessage al texto que coincide.
-
-**Decisión**
-
-1. Sintaxis: `<regex match="PATRÓN">CONTENIDO</regex>`. No se añade `%regex%`, `${regex}` ni otra
-   variable escalar.
-2. `match` es un patrón Java obligatorio y no vacío. El atributo no se interpreta como MiniMessage;
-   las comillas dobles se escriben como `&quot;` y los caracteres XML se escapan.
-3. `CONTENIDO` es el texto candidato y la plantilla MiniMessage que se renderiza. Puede usar los
-   placeholders existentes (`%content%`, `%player_name%`, etc.) y las etiquetas MiniMessage
-   habituales.
-4. Si el patrón coincide con el contenido resuelto, el span se sustituye por `CONTENIDO`
-   interpretado como MiniMessage. Si no coincide, el span no emite texto. La etiqueta es una
-   condición de renderizado local, no un motor de reemplazo global.
-5. El formato MiniMessage se aplica al texto que satisface el patrón; los grupos de captura no se
-   interpolan automáticamente y el patrón no se colorea.
-6. No se permite anidar `<regex>` dentro de `<regex>`. `<tr>` conserva su tratamiento independiente.
-7. El patrón se compila una vez por plantilla y se reutiliza. Patrón inválido, vacío o fuera de
-   límite es error explícito de configuración.
-8. Se imponen límites duros y documentados al patrón y al contenido evaluado para acotar el coste de
-   backtracking. El patrón procede de la plantilla, nunca del mensaje recibido.
-9. La etiqueta no ejecuta código, no evalúa SpEL, no consulta la VM, no decide routing, permisos ni
-   entrega y no muta el `Message`.
-
-**Implementación aplicada**
-
-1. `Template.of(...)` parsea los spans `<regex>`, valida sintaxis, anidamiento y límites, y compila
-   cada `Pattern` una sola vez. Un template inválido falla al crearse.
-2. `TemplateRenderer` resuelve placeholders y `%content%` antes de evaluar el patrón. La condición
-   usa `Pattern.matcher(content).find()`; para coincidencia total deben usarse anclas `^...$`.
-3. Si el patrón coincide, el span emite `CONTENIDO` y el `deserialize` final aplica MiniMessage. Si
-   no coincide, emite cadena vacía.
-4. Los grupos de captura no se interpolan y el patrón nunca se colorea ni se transforma.
-5. Límites: patrón ≤ 512 unidades UTF-16, contenido evaluado ≤ 8192 unidades UTF-16 y ≤ 32 spans.
-   El límite de contenido se revalida tras resolver placeholders.
-6. `src/textformatter/README.md` documenta sintaxis, entidades XML, semántica `find` y límites.
-
-**Tests implementados**
-
-- Coincidencia simple con formato MiniMessage y ausencia de coincidencia.
-- Flags inline y grupos de captura sin interpolación automática.
-- Patrón inválido, vacío o ausente: fallo explícito al crear el template.
-- Límite de patrón, de contenido declarado y de contenido resuelto.
-- Anidamiento rechazado.
-- Convivencia con `<tr>` y placeholders existentes.
-- Entidades XML en el atributo y no mutación del template original.
-- El mensaje original no se muta y el regex de iFlow sigue siendo independiente.
-
-**Criterios de aceptación**
-
-- No existe ninguna ruta `%regex%` ni una variable escalar equivalente.
-- La etiqueta solo decide renderizado; no routing, permisos, entrega ni mutación.
-- Un template inválido no se activa silenciosamente.
-- Implementación y tests cerrados en la misma fase.
-
----
+### Índice de ADR
+
+Las decisiones de arquitectura viven únicamente en `docs/workdir/ADR.md`. Este PLAN no las
+duplica: conserva el estado operativo y el trabajo activo. El historial cerrado de implementación y
+fases vive en Git.
 
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
@@ -2408,7 +1167,7 @@ La sección del host que intercepta eventos de Minecraft y los entrega al núcle
 
 Cada módulo publica sus comandos jerárquicos a través de una API neutral (`api.command`) y su configuración a través de `api.config`. El registro devuelve un `CommandRegistration`/`ConfigRegistration` ligado al ciclo de vida del módulo; al desactivarlo, el runtime retira su subárbol y su esquema. El host solo traduce la invocación de plataforma; no define comandos de features ni mantiene un árbol duplicado.
 
-**Consecuencia:** `SuiteCommand` y los comandos del runtime usan la misma API que cualquier módulo. `DynamicCommandRegistrar`/`DynamicCommand` y `CommandsConfig*` se eliminaron en F4d; el Brigadier de Fabric queda como adaptador de invocación y no hay dos formas de registrar comandos.
+**Consecuencia:** `SuiteCommand` y los comandos del runtime usan la misma API que cualquier módulo. `DynamicCommandRegistrar`/`DynamicCommand` y `CommandsConfig*` se eliminaron cuando el registro neutral sustituyó al árbol duplicado del host; el Brigadier de Fabric queda como adaptador de invocación y no hay dos formas de registrar comandos.
 
 ### P19. La raíz de comandos es configuración, no código
 
@@ -2434,9 +1193,7 @@ requiere enmendar ADR-023.
 
 ## Referencias cruzadas al ADR-019
 
-Los siguientes principios se definen en detalle en el ADR-019 (sección «Principios adicionales de diseño del ADR-019») y se resumen aquí para visibilidad desde el PLAN:
-
-- **C7. `tester` es un módulo de producción** — resumen: `tester` no es herramienta de desarrollo excluida del artefacto final; es un módulo de benchmarking en tiempo de ejecución y de prueba del pipeline completo. Ver ADR-019, «Principios adicionales de diseño del ADR-019», punto C7.
-- **C8. Extensiones sin catálogo cerrado** — resumen: no existe un `enum` con todos los módulos posibles. Cualquier repositorio de paquetes de terceros puede otorgar paquetes custom, fuera de lo que hace esta suite. El sistema de descubrimiento debe estar abierto a paquetes arbitrarios declarados en índices remotos. Ver ADR-019, «Principios adicionales de diseño del ADR-019», y P11 de esta sección.
-- **D4. No hay doble camino** — resumen: cuando una funcionalidad se migra al runtime de módulos, su cableado compilado se elimina en el mismo cambio. No se mantienen dos formas de arrancar la suite ni dos mecanismos de descubrimiento de módulos. Ver ADR-019, «Principios no negociables», punto 6, y P7 de esta sección.
-- **C10. Sincronizadores de plataforma descargables** — resumen: la captura de eventos de Minecraft vive en `sync-bukkit`/`sync-fabric`, no en el host; el Manager instala solo el compatible y los hosts quedan como bootstrap. Ver ADR-019, «Principios adicionales de diseño del ADR-019», punto C10, y P17 de esta sección.
+La decisión de reestructuración modular vive en el ADR-019. Este PLAN no la duplica: sus principios
+operativos se resumen en P1–P3 (Manager como origen de composición, instalar no es activar y adapters
+delgados), P7 (no hay doble camino), P11 (extensiones sin catálogo cerrado), P12 (`tester` como
+módulo de producción) y P17 (sincronizadores de plataforma descargables).

@@ -1,7 +1,12 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-04
-> **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura. El estado operativo y las fases viven en `PLAN.md`.
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-05
+
+> **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
+> Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
+> `PLAN.md` y en Git. Este documento no mantiene roadmaps, tablas de estado ni registros de
+> implementación.
+>
 > **Régimen pre-1.0 (ADR-034, 2026-11-04):** no existe versión estable ni producción. Todos los
 > módulos, componentes, contratos y configuraciones se alinean a la base `1.0`; los números `2.x`,
 > `3.x` y superiores del historial son etiquetas de iteración, no versiones publicadas. No se
@@ -14,66 +19,58 @@ Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Úl
 
 ## Contexto
 
-Reemplaza el ChatTranslator monolítico (v4). ChatTranslator pasa a significar
-solo los traductores (`GTranslate` y `LTranslate`). El conjunto completo de
-módulos que arma todo lo que era ChatTranslator original + mucho mayor
-potencial se llama **TextFormatter Suite**.
+Reemplaza el ChatTranslator monolítico (v4). ChatTranslator pasa a significar solo los traductores
+(`GTranslate` y `LTranslate`). El conjunto completo de módulos que arma todo lo que era
+ChatTranslator original + mucho mayor potencial se llama **TextFormatter Suite**.
 
 ## Nombre
 
 - **Suite**: TextFormatter Suite (paraguas, el conjunto de módulos).
-- **ChatTranslator**: retirado como marca global; queda únicamente para los
-  traductores GTranslate/LTranslate.
-- Renombrado en código (respecto a v4): `FormatGroups` → `Channels`,
-  `FormatApplier` → `ChannelApplier`, `FormatCatalog` → `ChannelCatalog`,
-  `lastFormatPath` → `channel`.
+- **ChatTranslator**: retirado como marca global; queda únicamente para los traductores
+  GTranslate/LTranslate.
+- Renombrado en código (respecto a v4): `FormatGroups` → `Channels`, `FormatApplier` →
+  `ChannelApplier`, `FormatCatalog` → `ChannelCatalog`, `lastFormatPath` → `channel`.
 
 ## Principios (no negociables)
 
-- Módulos `.jar` independientes, **repositorios git dedicados** por módulo
-  (no subrepos/submódulos). Cada módulo es un **plugin/mod real** de la
-  plataforma (Spigot o Fabric) por derecho propio.
-- **Nada de modloader**: sin ciclo de vida gestionado (`load→enable→disable`),
-  sin manifiesto custom, sin reflexión de métodos privados. Solo
-  `ServiceLoader`/SPI.
+- Módulos `.jar` independientes, **repositorios git dedicados** por módulo (no subrepos/submódulos).
+  Cada módulo es un **plugin/mod real** de la plataforma (Spigot o Fabric) por derecho propio.
+- **Nada de modloader**: sin ciclo de vida gestionado (`load→enable→disable`), sin manifiesto
+  custom, sin reflexión de métodos privados. Solo `ServiceLoader`/SPI.
 - **Handshake doble, base mínima de contrato**:
   - Versión de la JVM (runtime): un módulo compilado contra X exige JVM ≥ Y.
-  - Versión del contrato SPI (compilación): todos los artefactos `*-api` comparten la base
-    `1.0.0` y el requisito se resuelve con `>= 1.0.0`; un mismatch por debajo de la base no se
-    degrada con un adaptador. El runtime rechaza el módulo y exige actualizar el contrato y sus
-    consumidores en el mismo cambio.
+  - Versión del contrato SPI (compilación): todos los artefactos `*-api` comparten la base `1.0.0`
+    y el requisito se resuelve con `>= 1.0.0`; un mismatch por debajo de la base no se degrada con
+    un adaptador. El runtime rechaza el módulo y exige actualizar el contrato y sus consumidores en
+    el mismo cambio.
 - **Kill switch limpio**: se rompe con la config v1.8 y con los tipos legacy
   `ChatMessage`/`ChatMessageType`. `CoreTranslator` se conserva como módulo legacy independiente
   (ADR-035), no como puente interno permanente: los consumidores nuevos usan el contrato vigente.
-- **Permisos por canal: ambos métodos a la vez.** Base = un único permiso
-  `cht.<channel>` (suscripción; poseerlo = estar adscrito al canal). Encima,
-  `send-permission` / `receive-permission` opcionales para la asimetría nativa
-  (p.ej. "todos leen, solo staff escribe"). Default ACCEPT si no se define
-  nada. Filosofía: cuando haya duda, se implementa la configuración
-  extra, nunca se quita control. El emisor se ve a sí mismo como parte del
-  tail de emisor, sin permiso extra.
+- **Permisos por canal: ambos métodos a la vez.** Base = un único permiso `cht.<channel>`
+  (suscripción; poseerlo = estar adscrito al canal). Encima, `send-permission` /
+  `receive-permission` opcionales para la asimetría nativa (p.ej. "todos leen, solo staff escribe").
+  Default ACCEPT si no se define nada. Filosofía: cuando haya duda, se implementa la configuración
+  extra, nunca se quita control. El emisor se ve a sí mismo como parte del tail de emisor, sin
+  permiso extra.
 
 ## Contratos SPI (lo que cada módulo implementa/publica)
 
 - `Translator` → GTranslate / LTranslate (herederos del nombre ChatTranslator).
 - `ChannelFormatter` → módulo TextFormatter (motor `core/template` + Channels).
-- `Router` → iFlow (firewall por receptor/emisor).
+- `Router` → hub iFlow y sus backends.
 - `SyncSink` → módulos de borde: Discord / Telegram / HTTP / TCP-UDP.
 - `ChannelRegistry` → índice centralizado (storage separado del formato).
-- `Message`: sin cambios conceptuales vs v4 — dirección-as-audiencia
-  (`Direction`), `languages()` por mensaje (`source`/`target`/`none`)
-  sobreescribiendo el default del canal.
+- `Message`: dirección-as-audiencia (`Direction`), `languages()` por mensaje
+  (`source`/`target`/`none`) sobreescribiendo el default del canal.
 
 ## Modelo Channel
 
 - Destino nombrado con base `permission: cht.<channel>` (suscripción) más
-  `send-permission`/`receive-permission` opcionales (asimetría nativa);
-  default ACCEPT. La asimetría también puede vivir en reglas de iFlow.
-  Suscripción ≡ poseer el permiso base.
-- Tail: textos MiniMessage, tooltips, sonidos, `languages` default,
-  `rate-limit` (ancho de banda por seg; no algoritmo CAKE).
-- Estructura por archivo (`channels/chat.yml`, `channels/private.yml`,
-  `channels/discord.yml`, …).
+  `send-permission`/`receive-permission` opcionales (asimetría nativa); default ACCEPT. La
+  asimetría también puede vivir en reglas de iFlow. Suscripción ≡ poseer el permiso base.
+- Tail: textos MiniMessage, tooltips, sonidos, `languages` default, `rate-limit` (ancho de banda
+  por seg; no algoritmo CAKE).
+- Estructura por archivo (`channels/chat.yml`, `channels/private.yml`, `channels/discord.yml`, …).
 
 ## iFlow
 
@@ -92,1094 +89,644 @@ roadmaps, tablas de estado ni historial de fases.
   todos comparten la base de versión `1.0.0` durante el régimen pre-1.0; no hay matriz de
   compatibilidad entre versiones ficticias.
 - El host de cada plataforma es mínimo (bootstrap + ServiceLoader/SPI).
-- La migración desde v4 es un corte limpio, no incremental: v4 queda solo como referencia
-  histórica y no se conservan adaptadores ni tipos legacy para convivir con él. Los módulos legacy
-  independientes se declaran explícitamente (ADR-035).
-
-## Decisión 2026-08-24 — Puertos de entrega (wiring suite → plataforma)
-
-**Contexto.** La suite no corre en ninguna plataforma: los adapters usan el
-núcleo legacy `common` y `SuiteHost` solo se ejecuta en tests. Faltaban tres
-piezas para que un host de plataforma pueda despachar un `Message` de punta a
-punta: expansión de `Direction` a receptores concretos, puerto de entrega
-renderizada y directorio de jugadores.
-
-**Decisión.**
-
-1. **`core-api` sigue siendo JDK-puro** (README §1, invariant). Se añade
-   `api/spi/ActorDirectory`: vista de solo lectura de la población conectada
-   (`onlinePlayers/byUuid/byName/console`) con métodos *default* para mundo y
-   radio (`playersInWorld`, `playersNear`) que devuelven vacío hasta que la
-   plataforma los implemente.
-2. **`ChatDelivery` vive en `host/port/`, NO en core-api**: su contrato lleva
-   Adventure `Component` (igual que `RoutingResult.rendered`). Moverlo a
-   core-api rompería su cero-dependencias. Desviación consciente del plan
-   previo (PLAN FASE 2.1), que lo situaba en core-api.
-3. **`MessageDispatcher` en `host`**: orquestador síncrono y thread-agnóstico.
-   Expande las 8 semánticas de `Direction.Kind` (INITIATOR/OTHERS/ALL/CONSOLE/
-   SPECIFIC nativas; PERMISSION vía `PermissionChecker`; WORLD/RADIUS vía los
-   métodos del directorio con warn si no hay resolución), deduplica por
-   identidad de `Actor`, ejecuta `SuiteHost.deliver` por receptor y empuja el
-   resultado: REDIRECT → `deliverConsole`; DROP/RATE_LIMIT/REJECT → log +
-   contador; LOG → `deliver` + sonidos del canal resuelto (con gate
-   `hasSound`). Devuelve `DispatchReport(considered, delivered, silenced,
-   redirected)`. El hilo lo elige el adapter; la entrega salta a main thread
-   dentro de cada implementación de `ChatDelivery`.
-4. **Migración de `Router`/`RouteDecision`/`PolicyTarget`/`PermissionChecker`
-   a core-api se APLAZA a FASE 3** (unificación de dominio): hoy ningún
-   consumidor se beneficia (el host construye `DefaultRouter` directamente y
-   los adapters hablan con `SuiteHost`), mover `Router` arrastra `Rule` (que
-   sigue evolucionando en F7 con transforms) y FASE 3 reestructurará el
-   dominio de todos modos — evitar doble churn.
-
-**Consecuencias.**
-- Un adapter de plataforma ya puede bootstrapear con: `SuiteHost.bootstrap` +
-  `MessageDispatcher(host, directory, delivery, permissions, logger)` — solo
-  debe implementar `ActorDirectory` y `ChatDelivery` (+ elegir hilos).
-- 15 tests nuevos (`MessageDispatcherTest`) cubren las 8 direcciones, reglas
-  REDIRECT/DROP, cancelación, sonidos conocidos/desconocidos/deshabilitados
-  (`sonido.enabled=false` gatea) y dedup.
-- Suite completa verificada verde sin Gradle (harness javac+JUnit manual):
-  **138 tests** (SemVer 5 · kernel 13 · textformatter 32 · iflow 19 ·
-  gtranslate/ltranslate 17 · sync-* 27 · host 25, incluidos los 15 nuevos).
-  `ModuleLoaderTest` requiere ejecución aislada (asume classpath sin otros
-  módulos SPI registrados).
-- `ConfigLoaderTest.parsesEditorExportedDefaultConfig` dejó de depender del
-  CWD (resuelve el fixture vía classpath); antes fallaba fuera de Gradle.
-
-## Decisión 2026-09-18 — Post-Auditoría: Module Manager F12, Security Sprint 3, Dependency Verification
-
-**Contexto.** Auditorías del 14 y 16 de septiembre revelaron: Module Manager (F12) con stubs en resolver/dependency/SHA256/register(); Security Sprint 3 pendiente (tokens, MiniEscape, SpEL cache, SSRF, DependencyVerification); bugs críticos (CT-01, OBS-01, CFG-01, MGR-02, SEC-01, SEC-02); dependency verification ausente.
-
-**Decisiones.**
-
-1. **Module Manager F12 — Núcleo Release-Ready**
-   - `register()` → **SPI-only**: no instancia `Module` (era violación del contrato SPI). Solo almacena descriptor + classloader.
-   - Nuevo método `discoverAll(ClassLoader parent)` → combina módulos en classpath + módulos runtime cargados via classloaders aislados para integración kernel (`ModuleLoader` + `ModuleGraph`).
-   - **Version resolver**: rangos semver (`[1.0,2.0)`, `^1.0.0`, `~1.0.0`) + compatibilidad env (Java, MC, contract, platform, capabilities) — usa `SemVer.satisfies()`. La política pre-1.0 (ADR-034) fija la base `1.0.0` y no declara rangos `2.x`/`3.x`.
-   - **Dependency resolver**: parsing de `module.yml`/`module.yaml` desde JAR descargado para dependencias transitivas (fallback a release metadata).
-   - **SHA256**: obligatorio. Asset `.sha256` separado verificado en download; falla si no existe.
-   - **Manifest validation**: obligatoria en `validateModuleManifest()` — lanza excepción si falta `module.yml`, versión mismatched, capabilities desconocidas.
-   - **Dependency relocator**: bug crítico arreglado (recursión infinita en `relocate()`).
-
-2. **Security Sprint 3 — Completado**
-   - **Tokens en `char[]`**: `JdaDiscordSink`, `DiscordSink`, `TelegramSink`, `LTranslate` usan `char[]` + `Arrays.fill('\0')` tras uso.
-   - **MiniEscape completo**: escapa `< > \ { } [ ] ( ) # @` (10 chars).
-   - **PAPI dynamic check**: ya existía en `SpigotPlaceholderResolver.available()`.
-   - **SpEL LRU cache**: `LruExpressionCache` (1024 entradas) en `SpelExpressionEvaluator` — `ConcurrentMap` + `LinkedHashMap` access-order.
-   - **SSRF protection**: `HttpTransport` valida IPs contra RFC 1918 (10/8, 172.16/12, 192.168/16), RFC 3927 (169.254/16), RFC 6598 (100.64/10), loopback, multicast, deny patterns configurables via `-Dtextformattersuite.http.deny`.
-   - **DependencyVerification**: `verification-metadata.xml` con SHA256/SHA512 generado; `dependencyLocking` en `build.gradle`; `dependencyVerification` en `settings.gradle` (comentado para CI).
-
-3. **Fixes Críticos (Auditoría 14/16 sep)**
-   - **CT-01**: `Message.toJson()` → serialización JSON real (antes `toString()`).
-   - **OBS-01**: `DebugEndpoint` executor shutdown en `stop()` (`executor.shutdown()` + `awaitTermination`).
-   - **CFG-01**: `ConfigLoader.LoadResult<T>` con errores explícitos, logging ERROR level (no degrada silenciosamente).
-   - **MGR-02**: `register()` SPI-only + `discoverAll()` para kernel.
-   - **SEC-01**: SpEL LRU cache (1024) implementado.
-   - **SEC-02**: SSRF protection en `HttpTransport`.
-
-**Consecuencias.**
-- Module Manager F12 núcleo listo para producción; pendiente GitHub Releases reales (requiere release pipeline).
-- Security Sprint 3 100% completado.
-- Dependency verification lista para CI/CD (`verification-metadata.xml` en repo raíz + `gradle/`).
-- `ConfigLoader.loadConfig/loadChannels` devuelven `LoadResult<T>` con `isValid()` y `errors()` — calling code debe checkear `isValid()`.
-- `register()` ya no instancia `Module` — solo descriptor SPI.
-
-**Implementación (2026-09-18).**
-Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpressionCache), `host` (ConfigLoader.LoadResult, ConfigLoader), `textformatter` (MiniEscape), `transport` (HttpTransport SSRF), `manager-impl` (DefaultModuleLifecycle: register SPI-only, discoverAll, version resolver, dependency resolver, SHA256, manifest validation), `sync-discord` (JdaDiscordSink, DiscordSink: char[] tokens), `sync-telegram` (TelegramSink: char[] tokens), `ltranslate` (LTranslate: char[] apiKey), `observability` (DebugEndpoint executor shutdown).
-## Decisión 2026-09-25 — Post-Auditoría 2026-09-23: Module Manager F12 Completo, Security Sprint 3 Completo, Composite Build, Testing Exhaustivo
-
-**Contexto.** Auditoría del 23/25 de septiembre reveló: Module Manager F12 con funcionalidad completa pero sin GitHub Releases reales; Security Sprint 3 completado; Composite build pendiente; Testing exhaustivo pendiente; spigot-host/inworld/loadtest con problemas de build; sync-velocity production-ready; Tests exhaustivos (E2E, SpEL security, Translation cache, Module Manager HTTP) pendientes.
-
-**Decisiones.**
-
-1. **Module Manager F12 — Núcleo 100% Completado**
-   - `discoverAvailableModules()` implementado para descubrimiento de módulos disponibles en repositorios.
-   - Repository Abstraction (F12-14): `repositories:` en `config.yml` con soporte GitHub, local (`file://`), HTTP; fallback ordenado; testing local sin GitHub.
-   - `discoverAvailableModules()` funciona con repositorios locales/HTTP.
-   - Manifest validation obligatoria integrada en `register()`.
-
-2. **Composite Build — Completado**
-   - Todos los módulos convertidos a `project(':src:...')` dependencies.
-   - `spigot-host` compila con project dependencies (Paper API 1.21.4).
-   - `loadtest` compila (Adventure deps, fixed TranslationService mock con TranslatorManager).
-   - `inworld` compila (Paper API 1.21.4).
-   - `spigot-host` compila con project deps (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry).
-
-3. **Security Sprint 3 — 100% Completado**
-   - Verificado: tokens en `char[]` + `Arrays.fill('\0')` en JdaDiscordSink, DiscordSink, TelegramSink, LTranslate.
-   - Verificado: MiniEscape completo (10 chars: `< > \ { } [ ] ( ) # @`).
-   - Verificado: SpEL LRU cache 1024 en `LruExpressionCache`.
-   - Verificado: SSRF protection con `getAllByName()` en `HttpTransport`.
-   - Verificado: `DependencyVerification` con `verification-metadata.xml` (SHA256/SHA512).
-   - Verificado: `SafeConstructor` en 4 loaders YAML.
-
-4. **Composite Build & Build Fixes**
-   - Todos los módulos convertidos a `project(':src:...')` dependencies (15+ módulos).
-   - `spigot-host` compila con project deps (Paper API 1.21.4).
-   - `loadtest` compila (Adventure deps, fixed TranslationService mock con TranslatorManager).
-   - `inworld` compila (Paper API 1.21.4).
-   - `spigot-host` compila con project deps (DynamicCommand, Registrar, Plugin reload, DiscordBridge, WS, HealthCheckRegistry).
-   - Dependency verification deshabilitada para tester, inworld, spigot-host, host (deps externas no en verification-metadata.xml).
-
-4. **Testing Exhaustivo — Completado**
-   - **E2E Pipeline Tests** (12 tests): `E2EPipelineTest.java` — chat → iFlow → format → delivery.
-   - **SpEL Security Tests** (14 tests): `SpelExpressionEvaluatorSecurityTest.java` — blocks T(), new, static, reflection, Runtime.exec, etc.
-   - **Translation Cache/Dedup Tests** (15 tests): `TranslationServiceCacheTest.java` — hit/miss, size limits, clear, translateAll.
-   - **Module Manager HTTP Repo Tests** (4 tests): `LocalHttpRepositoryTest.java` — local repo, HTTP repo, fallback order, discover available.
-   - **GTranslate Extended Tests** (19 tests): edge cases, malformed, unicode, rate limit.
-   - **LTranslate Extended Tests** (15 tests): error handling, unicode, rate limit, missing fields.
-   - **Total tests passing**: 79 tasks, 167+ tests verdes.
-
-4. **sync-velocity — Production-ready Confirmado**
-   - Async queue con retry/backoff exponencial.
-   - Métricas, health checks, dynamic discovery.
-   - Advanced mapping (regex, per-type).
-   - Config validation, graceful shutdown con queue drain.
-
-5. **Build & Infrastructure Fixes**
-   - `spigot-host`: Paper API 1.21.4 (fix spigot-api 1.16.5 SNAPSHOT unavailable).
-   - `inworld`: Paper API 1.21.4.
-   - `loadtest`: Compila (TranslationService mock con TranslatorManager).
-   - Composite build: 15+ módulos convertidos a `project(':src:...')`.
-   - Dependency verification deshabilitada para tester, inworld, spigot-host, host.
-
-**Consecuencias.**
-- Module Manager F12 núcleo 100% completado; pendiente solo GitHub Releases reales (requiere release pipeline).
-- Security Sprint 3 100% completado y verificado.
-- Composite build 100% completado — todos los módulos usan project dependencies.
-- Testing exhaustivo: 12 E2E + 14 SpEL security + 15 Translation cache + 4 HTTP repo + 19 GTranslate + 15 LTranslate = 79 tests nuevos.
-- Todos los módulos core compilan y pasan tests (79 tasks successful).
-- sync-velocity confirmado production-ready.
-- spigot-host, inworld, loadtest compilan correctamente.
-- Composite build 100% operativo.
-
-**Implementación (2026-09-25).**
-Módulos afectados: `core-api` (Message.toJson, SpelExpressionEvaluator.LruExpressionCache), `host` (ConfigLoader.LoadResult, ConfigLoader), `textformatter` (MiniEscape), `transport` (HttpTransport SSRF getAllByName), `manager-impl` (DefaultModuleLifecycle: discoverAvailableModules, register SPI-only, version resolver, dependency resolver, SHA256, manifest validation), `sync-discord` (JdaDiscordSink, DiscordSink: char[] tokens), `sync-telegram` (TelegramSink: char[] tokens), `ltranslate` (LTranslate: char[] apiKey), `observability` (DebugEndpoint executor shutdown), `transport` (HttpTransport getAllByName), `spigot-host` (project deps, Paper API 1.21.4), `inworld` (Paper API 1.21.4), `loadtest` (TranslationService mock con TranslatorManager), `textformatter` (SpelExpressionEvaluatorSecurityTest, TranslationServiceCacheTest), `gtranslate` (GTranslateExtendedTest), `ltranslate` (LTranslateExtendedTest), `kernel` (ModuleGraph self-cycle fix), `iflow` (RateLimiter ReentrantReadWriteLock), `sync-websocket` (bytes vs chars fix).
-
-## Decisión 2026-09-28 — Clean Architecture (Translator SPI), Release Pipeline CI/CD, Dependency Verification Completa
-
-**Contexto.** Tras completar Module Manager F12 y Security Sprint 3, quedaban pendientes: Clean Architecture (host sin deps compile-time a translators), Release Pipeline (GitHub Actions CI/CD), Dependency Verification completa (verification-metadata.xml con todos los checksums transitivos), gradle.lockfile portable, y sincronización de docs/codeguides.
-
-**Decisiones.**
-
-1. **Clean Architecture — TranslatorProvider SPI (FASE 13)**
-   - `host` **sin dependencias compile-time** a `gtranslate`/`ltranslate` (removidas de `host/build.gradle` líneas 24-25).
-   - Solo depende de `core-api` (SPI: `TranslatorProvider`, `TranslatorManager`, `Translator`, `TranslationException`).
-   - `TranslatorsConfig` descubre proveedores via `ServiceLoader` (META-INF/services) en runtime.
-   - Tests de `host` usan `testImplementation project(':src:gtranslate')` + `ltranslate` para que ServiceLoader los encuentre.
-   - `spigot-host` mantiene dependencias `implementation` a translators (necesarios para ServiceLoader en runtime del plugin, ya que el fat-jar los excluye pero el ModuleManager los carga).
-   - Decoupling completo: host compila sin translators; nuevos proveedores solo implementan `TranslatorProvider` + registran en META-INF.
-
-2. **Release Pipeline — GitHub Actions CI/CD**
-   - `.github/workflows/ci.yml`: build & test all modules, build Spigot plugin, upload artifact, dependency-check (lockfiles), web-editor checks, javadoc.
-   - `.github/workflows/release.yml`: trigger on `v*` tags; build all modules + publishToMavenLocal; build Spigot fat-jar; generate SHA256 for all JARs; create GitHub Release with artifacts + SHA256.
-   - Semantic versioning: tag `vX.Y.Z` → version `X.Y.Z`; prerelease si tag contiene `-`.
-
-3. **Dependency Verification — Completa**
-   - `gradle/verification-metadata.xml` con SHA256/SHA512 para todas las dependencias transitivas.
-   - Agregados checksums faltantes en esta sesión: `jackson-base-2.22.0.pom`, `junit-bom-5.14.3.module`, `junit-bom-5.14.3.pom`, `adventure-bom-4.13.1.module`, `adventure-bom-4.13.1.pom`.
-   - `dependencyLocking` en `build.gradle` (root + subprojects) → 29 proyectos con `gradle.lockfile` (root + 28 subprojects).
-   - `checkLocks` task actualizado para manejar proyecto intermedio `:src` (sin build.gradle).
-   - Verificación deshabilitada para módulos con deps externas: `tester`, `inworld`, `spigot-host`, `host`, `textformatter`, `loadtest`.
-
-4. **fabric-host — COMPILA (Fabric 1.21 + Fabric API 0.100.5)**
-   - Reescritura completa a Fabric APIs: `ServerCommandSource`, `FabricAudiences`, eventos Fabric (`ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`), Brigadier nativo.
-   - Incluido en `settings.gradle` y build CI.
-
-5. **Sincronización Documentación/Codeguides**
-   - `README.md` (root): arquitectura actualizada, fabric-host COMPILA, Clean Architecture documentada, dependencias host corregidas.
-   - `docs/PLAN.md`: FASE 13 completada, Release Pipeline completada, Dependency Verification completada, estado actualizado.
-   - Module READMEs (codeguides): `host`, `fabric-host`, `sync-velocity`, `transport`, `spigot-host`, `manager-impl`, `inworld` actualizados.
-
-**Consecuencias.**
-- Host compila sin translators; ServiceLoader discovery en runtime funcionando.
-- CI/CD pipeline operativo; builds reproducibles con lockfiles + verification metadata.
-- Build completo pasa con dependency verification estricta.
-- 29/29 proyectos con gradle.lockfile.
-- Todos los tests pasan (unit + integración).
-- fabric-host documentado como COMPILA (Fabric 1.21 + Fabric API 0.100.5).
-
-**Implementación (2026-09-28).**
-Módulos afectados: `host` (build.gradle, TranslatorsConfig ServiceLoader), `core-api` (ya tenía TranslatorProvider SPI), `gtranslate` (GTranslateProvider + META-INF/services), `ltranslate` (LTranslateProvider + META-INF/services), `spigot-host` (build.gradle mantiene deps), `build.gradle` (root: dependencyLocking, checkLocks fix), `settings.gradle` (fabric-host **incluido**), `gradle/verification-metadata.xml` (checksums agregados), `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `docs/PLAN.md`, `README.md`, module READMEs.
+- La migración desde v4 es un corte limpio, no incremental: v4 queda solo como referencia histórica
+  y no se conservan adaptadores ni tipos legacy para convivir con él. Los módulos legacy
+  independientes se declaran explícitamente (ADR-001 y ADR-035).
 
 ---
 
-## 6. **AUDITORIA.md Hallazgos Resueltos (2026-10-05)**
+## ADR-001 — SpEL solo en `iflow-firewall`
 
-**Contexto:** Auditoría técnica integral 2026-10-05 (commit `14fcf58`) identificó 8 bugs críticos/altos (TXF-001..TXF-008) y 17 hallazgos B/M/V que requerían corrección para alcanzar madurez operacional production-ready.
+**Estado:** Aceptada (2026-10-20; enmendada el 2026-10-27).
 
-**Decisiones tomadas:**
+**Decisión.** SpEL no forma parte de `textformatter`, presets, `<expr>`, el editor web ni del
+contrato de la VM. La única superficie ejecutable de políticas es iFlow. El motor
+`iflow-firewall` conserva SpEL como implementación legacy independiente, con sandbox, allowlist de
+clases, caché LRU acotada (1024) y `spring-expression` solo en su classpath. `iflow-vm` e
+`iflow-wasm` no usan SpEL. `rules.yml` acepta el esquema de reglas del motor legacy; el grafo del
+editor se valida pero no se ejecuta. Cualquier política nueva debe implementarse en la VM o en Wasm.
 
-| Hallazgo | Decisión | Implementación |
+**Consecuencias.** Una sola superficie de políticas por motor; `textformatter` no depende de Spring;
+los consumidores nuevos usan el contrato vigente y no el motor legacy.
+
+---
+
+## ADR-002 — Puertos de entrega y despacho neutral
+
+**Estado:** Aceptada.
+
+**Decisión.**
+
+1. `core-api` publica `ActorDirectory`: vista de solo lectura de la población conectada
+   (`onlinePlayers/byUuid/byName/console`) con métodos *default* para mundo y radio.
+2. `ChatDelivery` vive en `core-render`, no en `core-api`, porque su contrato usa Adventure
+   `Component`.
+3. `MessageDispatcher` vive en el host y es síncrono y thread-agnóstico. Expande `Direction`,
+   deduplica por identidad de `Actor`, entrega por receptor y devuelve un `DispatchReport`.
+4. La semántica de targets es la de ADR-031: `DELIVER`, `CANCEL_EVENT` y `ERROR`. No se conservan
+   `REDIRECT` ni `CHANNEL_REDIRECT` como targets; la consola es un canal/actor y el cambio de canal
+   se hace con `SET_CHANNEL` en una segunda fase de routing, sin reentrega recursiva.
+5. El hilo lo elige el adapter; la entrega salta a main thread dentro de cada implementación de
+   `ChatDelivery`.
+
+**Consecuencias.** El adapter solo implementa `ActorDirectory` y `ChatDelivery`; el despacho no
+depende de tipos de feature. Cualquier código que aún procese `CHANNEL_REDIRECT` es deuda de
+alineación con ADR-031 y se corrige en el rediseño del pipeline.
+
+---
+
+## ADR-003 — Invariantes de seguridad y verificación
+
+**Estado:** Aceptada.
+
+**Invariantes vigentes.**
+
+1. El registro de módulos es SPI-only: no se instancia un `Module` por reflexión. La validación de
+   manifiesto es obligatoria y falla explícitamente si falta o no coincide.
+2. SHA-256 es obligatorio para artefactos descargados; un asset sin hash se rechaza. La caché se
+   verifica antes de reutilizar cualquier artefacto.
+3. `verification-metadata.xml` y `dependencyLocking` cubren las dependencias; `checkLocks` forma
+   parte del gate.
+4. Los tokens sensibles se guardan en `char[]` y se limpian con `Arrays.fill('\0')` tras su uso.
+5. `MiniEscape` escapa `< > \ { } [ ] ( ) # @`.
+6. `HttpTransport` aplica protección SSRF: rechaza rangos privados, loopback, link-local, multicast
+   y patrones denegados configurables; resuelve por `getAllByName()` y no confía en el primer
+   registro.
+7. Los loaders YAML usan `SafeConstructor`.
+8. TLS + SHA-256 detectan corrupción y manipulación de transporte, no prueban autoría. La firma de
+   paquetes, el pinning y los certificados quedan fuera de esta fase (ADR-029).
+9. `library/status` registra solo instalación; el estado de ejecución vive en
+   `runtime/modules.status` y nunca se mezcla con el inventario.
+
+**Consecuencias.** La seguridad se apoya en el sandbox por módulo y en la responsabilidad del dueño
+del repositorio; las allowlists y firmas son defensa en profundidad opcional, no el fundamento.
+
+---
+
+## ADR-004 — Modelo de ejecución de la VM de iFlow
+
+**Estado:** Aceptada (2026-10-14).
+
+**Decisión.** El modelo «CPU / banco de registros / bus / firmware» de la especificación es un
+modelo mental, no un mapa de clases. La VM se implementa como intérprete con contexto de ejecución
+reutilizable (`VmInterpreter` + `ExecutionContext` + *fuel budget*) y el bus como `VmBus`; no se
+crean paquetes `cpu/`, `alu/` ni `bus/`. El boceto histórico de `ControlUnit`/`Cpu` no se importa.
+La contabilidad de ciclos/CPI no existe y, si se necesita, se añade como capacidad nueva.
+
+**Consecuencias.** Un único lugar para el ciclo y el despacho de IRQ; contexto pooled sin
+asignaciones por ejecución; el *fuel budget* acota la ejecución. La separación de responsabilidades
+se lee dentro del intérprete, no como estructura de paquetes.
+
+---
+
+## ADR-005 — La MMIO de dispositivos no la gobierna la PageTable
+
+**Estado:** Aceptada (2026-10-19).
+
+**Decisión.** La apertura MMIO de dispositivos (256 B en `0x0F00–0x0FFF`) es espacio de
+dispositivo, no memoria: no se traduce ni se comprueba por privilegio, igual que la MMIO real. La
+protección por propiedad de página se mantiene para la memoria (ROM, constantes). El programa puede
+escribir los registros de pantalla, PIC y su propia NVRAM; no hay escape al host porque el
+periférico vive en el contenedor del programa. Un test fija que un maestro `PROGRAM` recibe
+`PRIVILEGE_FAULT` al escribir RAM de la página kernel R/X pero sí configura la pantalla por la
+apertura.
+
+**Consecuencias.** El contrato queda escrito en `VmMemoryMap.DEVICE_MMIO_BASE` y referenciado desde
+`VmBus`/`VmDevice`; no se lee como un bypass accidental. Si en el futuro se aísla la NVRAM en el
+dominio supervisor, este ADR se enmienda.
+
+---
+
+## ADR-008 — `chattranslator` (fachada) y `translator` (proveedor)
+
+**Estado:** Aceptada (2026-10-27).
+
+**Decisión.** Se mantienen dos capabilities separadas: `chattranslator` publica la fachada y
+`translator` identifica a los proveedores. La fachada se activa sin backends y el pipeline degrada
+a no-op; los proveedores declaran que requieren la fachada. La dirección es **proveedor requiere
+fachada**, nunca al revés. `TranslationService` no se usa como fallback automático: el camino
+vigente es `ChatTranslator`. La capability se ata a la base `1.0.0`; no se versiona de forma
+independiente.
+
+**Consecuencias.** La traducción es opcional y el pipeline arranca sin proveedores. La nomenclatura
+exige documentación explícita; si en el futuro se quisiera exigir al menos un backend, el modelo de
+`Requirement` no expresa «opcional» y habría que enmendarlo.
+
+---
+
+## ADR-019 — Reestructuración modular: runtime, ciclo de vida y adaptadores delgados
+
+**Estado:** Aceptada e implementada.
+
+**Decisión del usuario (2026-10-27).** No es un arreglo de dependencias: es una reestructuración de
+la arquitectura. El objetivo es hot unload/upgrade real. La solución no es empezar por el loader
+manteniendo la suite actual: hay que romper la suite, desarmar todo, reestructurar lo que debe ir y
+lo que no, y volver a armarla como debería haber sido desde el principio. No se aceptan
+implementaciones a medias, stubs, no-ops, adaptadores de compatibilidad sin fecha de eliminación ni
+parches que preserven el acoplamiento actual. El Manager es el origen de la composición: actualiza
+índices, descarga paquetes, resuelve dependencias, instala, inicializa en memoria y gestiona el
+ciclo de vida. Spigot y Fabric no conocen ningún módulo de feature; solo implementan una API común
+entre plataformas y adaptan, en reversa, los eventos de su Minecraft a una representación interna
+agnóstica.
+
+### Principios no negociables
+
+1. **El core no conoce features.** `core-api`, `kernel`, `manager-*` y `suite-runtime` no importan
+   `sync-*`, `textformatter`, `iflow-*`, `chattranslator`, `gtranslate`, `ltranslate`,
+   `observability`, etc.
+2. **Los adapters solo conocen la plataforma y la API.** `spigot-host` y `fabric-host` son
+   bootstrap y dependen de `core-api` + `suite-runtime` + SDK de plataforma. La captura de eventos
+   vive en `sync-bukkit`/`sync-fabric`.
+3. **El Manager es el orquestador.** Instalar, activar, desactivar, actualizar y reparar pasan por
+   el Manager.
+4. **Instalar no es activar.** El estado instalado y el estado activo se registran por separado;
+   una activación fallida no se marca como éxito.
+5. **El ciclo de vida es obligatorio para hot unload/upgrade.** Sin `start/stop` y liberación de
+   recursos, no se promete hot reload.
+6. **No hay doble camino.** Cuando una feature se migra al runtime, se elimina su cableado
+   compilado en el mismo cambio. No se mantienen dos formas de arrancar.
+7. **No hay stubs silenciosos.** Lo no soportado lanza un error explícito o se marca como
+   `RESTART_REQUIRED`; nunca se devuelve `parent`, `false` o vacío fingiendo éxito.
+8. **La arquitectura se verifica.** Un guard de dependencias/imports falla el build si aparece una
+   violación.
+
+### Principios adicionales
+
+- **`force` significa forzar de verdad.** No omite conflictos de forma silenciosa: permite la
+  instalación de paquetes excluyentes si el administrador lo decide, con advertencia.
+- **Las librerías compartidas son dependencias, no parte del host.** Se empaquetan como
+  `DEPENDENCY`, se relocalizan y se cargan por módulo; no se compilan dentro del JAR del host ni de
+  los módulos.
+- **Los metadatos autoritativos vienen del repositorio, no del JAR.** El manager consulta
+  `packages.list`; el `METADATA/package.list` del ZIP se valida contra el índice.
+- **`library/status` es una BD de programas instalados, no de ejecución.** La presencia de un
+  paquete implica que está instalado y debe iniciarse; el estado de ejecución vive en
+  `runtime/modules.status`.
+- **`tester` es un módulo de producción.** Benchmarking en runtime y traza del pipeline completo;
+  no es harness ni herramienta de desarrollo excluida.
+- **Versiones concurrentes al estilo Debian.** La versión nueva reemplaza a la anterior resolviendo
+  el grafo; durante un upgrade pueden solaparse v1 y v2 solo hasta confirmar el swap.
+- **La captura de eventos de plataforma es un sincronizador descargable.** `sync-bukkit` y
+  `sync-fabric` registran listeners, traducen a `Message` y despachan; el host no los embebe.
+
+### Contrato de módulo
+
+`Module` se conserva como descriptor. Se añade un contrato de activación separado:
+
+```java
+public interface ModuleActivator {
+    ModuleDescriptor descriptor();
+    void start(ModuleContext context) throws Exception;
+    void stop() throws Exception;
+}
+```
+
+El JAR declara `META-INF/services/me.majhrs16.suite.api.ModuleActivator` y el `ModuleHost` lo
+descubre con `ServiceLoader.load(ModuleActivator.class, moduleClassLoader)`.
+
+`ModuleContext` no expone Bukkit ni Fabric:
+
+```java
+public interface ModuleContext extends AutoCloseable {
+    String moduleId();
+    Path configDir();
+    PluginLogger logger();
+    ServiceRegistry services();
+    EventBus events();
+    Scheduler scheduler();
+    ResourceTracker resources();
+    PlatformInfo platform();
+}
+```
+
+`ServiceRegistry` sustituye a `ServiceLoader` para servicios vivos:
+
+```java
+public interface ServiceRegistry {
+    <T> Registration register(Class<T> type, T service);
+    <T> Optional<T> find(Class<T> type);
+    <T> List<T> findAll(Class<T> type);
+
+    interface Registration extends AutoCloseable {
+        void close();
+    }
+}
+```
+
+Cada registro queda asociado al `moduleId`; al desactivar el módulo se cierran sus registros, se
+cancelan sus tareas y se liberan sus recursos.
+
+### `ModuleHost`: carga, activación y hot upgrade
+
+```java
+public final class ModuleHost implements AutoCloseable {
+    public List<ActivationResult> loadInstalled();
+    public ActivationResult activate(Path jarPath);
+    public UpgradeResult upgrade(String id, Path newJar, List<Path> dependencyJars);
+    public DeactivationResult deactivate(String id);
+    public Map<String, ModuleState> snapshot();
+}
+```
+
+Estados: `INSTALLED`, `ACTIVATION_PENDING`, `ACTIVE`, `FAILED`, `ACTIVATION_FAILED`,
+`RESTART_REQUIRED`, `REMOVED`.
+
+Reglas del loader:
+
+- Un `ModuleClassLoader` por módulo, con parent común de API.
+- Parent-first solo para `me.majhrs16.suite.api.*` y `java.*`.
+- Los contratos que cruzan paquetes viven en `me.majhrs16.suite.api.*`; una feature no expone sus
+  tipos propios a otra feature.
+- Child-first para las clases de implementación del módulo.
+- El classloader recibe primero el JAR del módulo y después los JARs de los paquetes de tipo
+  dependencia; un paquete `PACKAGE` no se añade al classloader de otro módulo.
+- Las librerías compartidas no viven en el host: el manager las entrega como paquetes de
+  dependencia relocalizados y el classloader del módulo las resuelve desde el scope asignado.
+- Acceso a dependencias desde `library/dependencies`; un JAR fuera de ese directorio se rechaza.
+- Cierre del classloader al desactivar. Si no puede cerrarse o quedan hilos/listeners, el estado
+  pasa a `RESTART_REQUIRED`; no se marca como desactivado limpio.
+
+Secuencia de activación:
+
+1. Recibir del manager las entradas instaladas; `library/status` es la fuente de qué está instalado.
+2. Resolver orden y dependencias con `kernel.ModuleGraph` y `DependencyResolver`.
+3. Crear classloader y alcance de servicios.
+4. Cargar `ModuleActivator`.
+5. Validar descriptor, versión de API, plataforma y capacidades.
+6. Crear `ModuleContext`.
+7. Ejecutar `start()`.
+8. Si falla: cerrar registros, ejecutar `stop()` de limpieza, cerrar classloader y marcar `FAILED`.
+9. Si funciona: confirmar servicios y marcar `ACTIVE`.
+
+La instalación y la desinstalación siguen las tres etapas de ADR-027. La desactivación efectiva de
+una desinstalación es una barrera al inicio de la etapa 2; si un módulo no se detiene limpio, no se
+toca ningún archivo. Un reemplazo por `Exclude` usa la misma barrera.
+
+Invariante de paquete: un `PACKAGE` contiene uno o más JARs de módulo, cada uno con un `moduleId`
+único declarado por su descriptor. El nombre del paquete no se usa como id de módulo. Las librerías
+adicionales van en `DEPENDENCY`. `PackageRuntime` inspecciona todos los JARs antes de activar o
+actualizar; cero JARs o ids duplicados son un error explícito.
+
+### Clasificación de módulos
+
+| Categoría | Módulos | Destino |
 |---|---|---|
-| **TXF-001** In-flight translation leak | Fix obligatorio | `whenComplete` handlers en `TranslationService.translate()` + `detect()` para limpiar `inFlightTranslations`/`inFlightDetections` en todos los paths de completación |
-| **TXF-002** RejectedExecutionException escapa | Fix obligatorio | Try-catch en `computeIfAbsent` + fallback a texto original / idioma default |
-| **TXF-003** DNS pinning rompe TLS/SNI | Fix obligatorio | Conexión via `Proxy` a IP pinned; `Host` header explícito; `SSLSocketFactory` custom para SNI + hostname verification contra hostname original |
-| **TXF-005** SyncBus.unregister() no llama sink.stop() | Fix obligatorio | `removed.sink.stop()` en `unregister()` con try-catch |
-| **TXF-006** SyncBus.start() parcial | Fix obligatorio | Start transaccional con rollback de sinks ya iniciados; reset flag `started` |
-| **TXF-004** engine.parallel ignorado | Fix obligatorio | Parámetro `engineParallel` en `MessageDispatcher`; procesamiento secuencial cuando false |
-| **TXF-007** broadcast() reporta éxito antes de entrega | Fix obligatorio | `broadcast()` retorna count de sinks que encolaron; `broadcastAsync()` retorna futures por sink |
-| **TXF-008** VelocitySink EXACTLY_ONCE no demostrado | Fix obligatorio | Cambiado a `AT_LEAST_ONCE` (sin protocolo ACK remoto) |
-| **B-01** Double delivery | Fix obligatorio | `broadcast()` solo construye; `onChat()` despacha una vez (Spigot + Fabric) |
-| **B-03** Join/quit/death bloquean main thread | Fix obligatorio | Executor async dedicado en `Runtime` (Fabric) + `runTaskAsynchronously` (Spigot) |
-| **V-01** WebSocket bind 0.0.0.0 + auth opcional | Fix obligatorio | Bind 127.0.0.1; `start()` lanza `IOException` si token vacío |
-| **B-04** TemplateRenderer İ corruption | Fix obligatorio | `Pattern.CASE_INSENSITIVE` en `findSpans()` sobre string original |
-| **B-05** Traducción sin re-escape | Fix obligatorio | `MiniEscape.escape(translated)` en `translateSpan()` |
-| **B-06** WebSocket rate limit sliding | Fix obligatorio | Ventana fija alineada a época (`now / 1000 * 1000`) |
-| **M-01** GTranslate solo primera oración | Fix obligatorio | Loop concatena `root[0][i][0]` |
-| **M-02** Thundering herd traducciones | Fix obligatorio | Cache `inFlightTranslations` con dedup + cleanup automático |
-| **M-03** MessageCodec ArrayStoreException | Fix obligatorio | Validación elemento a elemento en sync-http/sync-socket |
-| **M-04** HttpTransport issues | Fix obligatorio | Null-check getErrorStream, 307/308 preservan method/body, MAX_RESPONSE_SIZE, `read()` |
-| **M-05** SSRF IPv6 ULA + deny property | Fix obligatorio | Patrones `^fc[0-9a-f]:`, `^fd[0-9a-f]:`; property amplía no reemplaza |
-| **M-08** InterruptedException tragado | Fix obligatorio | Catch separado + `Thread.currentThread().interrupt()` |
-| **M-09** RWLock redundante RateLimiter | Fix obligatorio | Solo `ConcurrentHashMap` + `synchronized(bucket)` |
-| **M-10** WebSocketSyncSink port bug | Fix obligatorio | Verificado: ya usa `this.port` correctamente |
-| **M-11** MetricsEndpoint bind 0.0.0.0 | Fix obligatorio | Bind 127.0.0.1 por defecto via system property |
+| Núcleo técnico | `core-api`, `kernel`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
+| Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma; bootstrap sin listeners de eventos |
+| Sincronizadores de plataforma | `sync-bukkit`, `sync-fabric` | Paquetes de plataforma descargables; capturan eventos, traducen a `Message` y despachan |
+| Paquetes de dependencia | `logger`, `transport`, SnakeYAML, JDA, Adventure y demás librerías compartidas | Paquetes `DEPENDENCY`; el manager los descarga, verifica, relocaliza y carga por módulo |
+| Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow`, `iflow-vm`, `iflow-firewall`, `iflow-wasm` | Paquetes instalados por defecto; los motores iFlow no se excluyen |
+| Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `inworld`, `extension-api` | Paquetes neutrales; dependencias declaradas en `METADATA/package.list` |
+| Producción auxiliar | `tester` | `PACKAGE` neutral + `TestProbe`; benchmarking y traza del pipeline |
+| Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
+| Retirado | `ModuleLifecycleAdapter`, `SuiteHost.bootstrap` hardcodeado, descubrimiento por classpath, cableado de features en adapters, `common-legacy` | Eliminados; no se restauran |
 
-**Consecuencias:**
-- Todos los hallazgos críticos/altos/medios de AUDITORIA.md resueltos
-- Build, tests, javadoc, npm check: **todos pasan**
-- Proyecto en estado **production-ready** para Spigot/Paper y Fabric
-- Documentación sincronizada (README, PLAN, ADR, Wiki)
+Decisión por defecto: **todo feature es paquete**, incluso `textformatter`, `iflow-*`,
+`chattranslator` y `messages`. El núcleo solo contiene contratos, kernel, manager y runtime;
+`logger` y `transport` son paquetes de dependencia, no código del host. Los hosts no contienen
+listeners de eventos.
 
-**Implementación (2026-10-05).**
-Módulos afectados: `core-api` (TranslationService, TranslationExecutor), `transport` (HttpTransport), `sync-bus` (DefaultSyncBus), `sync-velocity` (VelocitySink), `sync-websocket` (WebSocketSyncSink), `textformatter` (TemplateRenderer), `gtranslate` (GTranslate), `host` (MessageDispatcher, SuiteHost), `spigot-host` (TextFormatterSuitePlugin), `fabric-host` (TextFormatterSuiteMod), `observability` (MetricsEndpoint), `docs` (README, PLAN, ADR, Wiki).
+### Reglas de dependencia
 
----
+```text
+spigot-host / fabric-host
+  → core-api
+  → suite-runtime
+  → SDK de plataforma
 
-## Decisión 2026-10-14 — Modelo «CPU física» descartado en la VM de iFlow
+suite-runtime
+  → core-api
+  → kernel
+  → manager-spi / manager-core / manager-apt
+  → logger / transport (librerías)
+  ✗ ningún módulo de feature
 
-*(Registrado retrospectivamente el 2026-10-19, al reaparecer el boceto original en una copia de trabajo fuera del repositorio.)*
+core-api
+  → JDK
+  ✗ kernel, manager, host, features, plataforma
 
-**Contexto.** La especificación de diseño de iFlow propone un modelo mental de máquina con «CPU, memoria, bus y firmware» (`docs/prompts/diseno/iflow-cpu-design.md` §4, líneas 100-112), con siete componentes conceptuales: CPU Core, banco de registros, espacio de direcciones, interfaz de E/S, bus lógico de servicios, firmware y controlador de interrupciones. El 2026-10-14 ese modelo se bocetó como **estructura de paquetes**: `vm/cpu/ControlUnit.java` (367 líneas: ciclo fetch/decode/execute y el `switch` completo de la ISA) y `vm/cpu/Cpu.java` (integración de subcomponentes), apoyados en `RegisterFile`, `Alu` y `SystemBus` como clases independientes.
+kernel
+  → core-api
 
-El boceto nunca entró en el repositorio: quedó en una copia suelta sin control de versiones y no existe en ninguna revisión (`git log --all -- '*ControlUnit.java' '*Cpu.java'` no devuelve nada). En su lugar se consolidó la implementación actual: `vm/execution/VmInterpreter` + `ExecutionContext` (con *fuel budget* y pooling) + `vm/engine/VmPolicyEngine` + `vm/irq/{VmPic,IrqTable}` + `vm/memory/VmBus`.
+manager-*
+  → core-api
+  → kernel
+  ✗ host, features, plataforma
 
-Hechos verificados (2026-10-19):
+feature module
+  → core-api (y, si hace falta, APIs de host-core)
+  ✗ otros features salvo dependencia declarada
+  ✗ Bukkit / Fabric / Minecraft
 
-- El boceto no compila contra el repo: importa `vm.bus.SystemBus`, `vm.cpu.RegisterFile` y `vm.cpu.Alu`, que no existen; `Cpu.java` además instancia componentes duplicados y pasa `null` como memoria y programa al `ControlUnit`.
-- `Cpu.setProgram()`, `Cpu.step()` y `Cpu.reset()` eran `TODO` sin implementación.
-- La ISA del boceto es la actual **menos** las variantes inmediatas `LDBI`, `LDWI`, `STBI` y `STWI`.
-- `ControlUnit.executeHost()` no recibía `HostServiceRegistry`, así que los servicios del host no podían resolverse.
-- Ninguna clase del módulo iFlow lleva contabilidad de ciclos ni CPI (`grep` sobre `src/iflow-vm/src/main/java/`); el límite de ejecución es el *fuel budget* de `vm/execution/ExecutionContext` (líneas 36, 93, 133).
-- El boceto es anterior al ABI de `HOST` v2 (2026-10-16/17) y al despacho de interrupciones en frontera de instrucción (D33).
+sync-bukkit / sync-fabric
+  → core-api
+  → SDK de plataforma
+  → MessageDispatch / ActorDirectory / PermissionChecker / UserLanguageStore
+  ✗ features, host concreto, otros sync
+```
 
-**Decisión.** El modelo «CPU física» **no se implementa como estructura de paquetes**. El «CPU / banco de registros / bus / firmware» de la especificación es un **modelo mental**, no un mapa de clases: la CPU se materializa como intérprete con contexto de ejecución reutilizable y el bus como `vm/memory/VmBus`. El boceto se descarta; no se importa.
+### Hexágono por módulo y frontera plataforma↔módulo
 
-**Alternativas consideradas.**
+Cada módulo se estructura como un hexágono. El núcleo contiene la lógica y los contratos; los
+adaptadores implementan los puertos hacia tecnologías concretas. Ningún módulo neutral importa JDA,
+Velocity, Paper, Bukkit ni Fabric. Ningún adapter de plataforma importa paquetes de feature.
 
-1. **Importar e integrar el boceto** (`vm/cpu/ControlUnit` + `vm/cpu/Cpu` + `RegisterFile` + `Alu` + `SystemBus`).
-   - Ventajas: refleja §4 con componentes explícitos y separa el ciclo de ejecución del motor de políticas.
-   - Limitaciones: no compila (faltan tres clases), su ISA es anterior a las variantes inmediatas, ignora el despacho de IRQ en frontera de instrucción (D33) y no usa el journal de persistencia.
-   - Evaluación: **descartada**. No aporta nada que el intérprete actual no cubra, y `Cpu.java` introduciría `TODO` y stubs en el recuento de deuda del propio proyecto (`tools/project-metrics`), además de contradecir el ABI v2.
+1. **Núcleo neutral.** La lógica de `sync-discord`, `sync-velocity-core`, `inworld`, `tester`,
+   `presets` y `extension-api` vive en clases sin tipos de plataforma.
+2. **Adaptadores tecnológicos.** JDA, Velocity API, Paper/Bukkit y Fabric viven solo en adaptadores:
+   `adapters/jda`, `adapters/velocity`, `sync-bukkit`, `sync-fabric` y el bootstrap de los hosts.
+3. **Eventos agnósticos.** El sincronizador traduce el evento de Minecraft a `Message`/evento
+   neutral y lo entrega al runtime; nunca registra listeners de Paper/Bukkit.
+4. **Ciclo de vida no bloqueante.** `start()` no espera red ni servidores externos. Las conexiones
+   se hacen en un adaptador con estado propio, reintentos y `stop()` determinista.
+5. **Sin stubs.** Un paquete no se empaqueta si su operación principal es un no-op.
+6. **Sin compatibilidad indefinida.** No se añaden adaptadores de compatibilidad sin fase de
+   eliminación.
+7. **Comandos y configuración neutrales.** Los módulos registran sus comandos y configuración por
+   `api.command`/`api.config`; el host solo traduce la invocación de plataforma.
 
-2. **Mantener la implementación actual** (`VmInterpreter` + `ExecutionContext` + PIC).
-   - Ventajas: un único lugar para el ciclo y el despacho de IRQ; contexto pooled sin asignaciones por ejecución; el *fuel budget* acota la ejecución; el journal persiste modificaciones selectivas.
-   - Limitaciones: sin contabilidad de ciclos/CPI no se puede instrumentar coste por instrucción sin añadirla; §4 no tiene correspondencia 1:1 con paquetes.
-   - Evaluación: **aceptada** (es lo implementado y lo que consolidaron la auditoría de iFlow y el ABI v2).
+### Decisiones de composición
 
-3. **Archivar el boceto dentro del repositorio** (como `.java` o como documento en `docs/workdir/`).
-   - Ventajas: conserva el rastro de la evolución del diseño.
-   - Limitaciones: no compila; como `.java` contaría en las métricas; como documento duplicaría lo que ya explica este ADR.
-   - Evaluación: **descartada**. El registro de la decisión es este ADR, no el código muerto.
+1. **Núcleo vs paquetes.** Todo feature es paquete. El núcleo técnico es `core-api`, `kernel`,
+   `manager-*` y `suite-runtime`. `logger` y `transport` son paquetes de dependencia.
+2. **`inworld` y `tester`.** `inworld` se parte en API neutral + implementación de plataforma.
+   `tester` es un módulo de producción y se distribuye como paquete neutral con adapters.
+3. **Extensiones.** `ExtensionManager` se unifica con `ModuleHost`: una extensión es un paquete de
+   tipo extensión con el mismo ciclo de vida. No existe un `enum` cerrado de módulos conocidos.
+4. **Versiones concurrentes.** Al estilo Debian: la versión nueva reemplaza a la anterior
+   resolviendo el grafo; no hay coexistencia permanente de dos versiones del mismo paquete.
+5. **Librerías compartidas.** Son paquetes `DEPENDENCY`; el classloader del módulo las resuelve
+   desde el scope que el manager le asigna.
+6. **Metadatos.** El `packages.list` del repositorio es la fuente de verdad; el manifiesto del ZIP
+   se valida contra el índice.
+7. **Seguridad.** Sandbox por módulo y responsabilidad del dueño del repositorio; SHA-256
+   obligatorio, firmas y allowlists opcionales (ADR-003).
 
-**Consecuencias.**
+### Lo que este ADR no promete
 
-- El boceto, que vivía fuera del repositorio en una copia de trabajo sin git, se elimina tras registrar esta decisión (2026-10-19).
-- Queda documentado por qué `vm/` no tiene `cpu/`, `bus/` ni `alu/` pese a lo que sugiere §4 de la especificación.
-- La separación «CPU Core» / «banco de registros» / «controlador de interrupciones» se lee como responsabilidades dentro del intérprete, no como paquetes.
-- Si en el futuro se quiere instrumentar coste por instrucción (ciclos/CPI), habrá que añadirlo: hoy no existe en ninguna clase del módulo.
-
-**Implementación (2026-10-19).**
-`docs/workdir/ADR.md` (esta entrada). Sin cambios de código: la implementación vigente no se toca.
-
----
-
-## Decisión 2026-10-19 — La MMIO de dispositivos no la gobierna la PageTable (AUD-031)
-
-**Contexto.** La tercera auditoría forense de iFlow registró `IFLOW-AUD-031` (Media-Alta, «aislamiento
-interno»): la apertura MMIO de 256 B (`0x0F00–0x0FFF`) vive dentro de la página del BIOS, declarada
-kernel R/X (`VmPolicyEngine` mapea la página 0 con `perm=R|X`), pero `VmBus` la decodifica **antes** de
-la MMU (`VmBus.java`, `readByte`/`writeByte`). Consecuencia: ni la propiedad de página ni el privilegio
-del maestro la gobiernan. Un programa puede reescribir la NVRAM del BIOS (bandera de arranque en frío,
-tabla de IRQ), el PIC y los registros de la pantalla.
-
-**Decisión.** **Aceptar el diseño y documentarlo explícitamente como contrato**, en lugar de añadir un
-portero de acceso. La apertura es **espacio de dispositivo**, no memoria: como la MMIO real, no se
-traduce ni se comprueba por privilegio. La protección por propiedad de página se mantiene para la
-**memoria** (ROM, constantes): un programa sigue sin poder escribir RAM de propiedad del kernel.
-
-Hechos que sostienen la decisión (verificados):
-
-- D31/D33 **requieren** que el programa escriba los registros de la pantalla y del PIC — el programa
-  habilita sus líneas (`ENABLE`), las dispara (`RAISE`) y las confirma (`ACK`) —, y la tabla de IRQ de
-  la NVRAM está pensada para ser reescrita por el programa.
-- El BIOS corre en el dominio `PROGRAM`, igual que el usuario: un portero por privilegio rompería
-  también el POST.
-- Lo único realmente privado del BIOS en la apertura es la **bandera de arranque en frío** de la NVRAM;
-  su impacto se limita a forzar el cold-boot de la propia máquina del programa (limpia su RAM volátil
-  `0x3000–0x4FFF`). **No hay escape al host**: el periférico vive en el contenedor del programa.
-
-**Alternativas consideradas.**
-
-1. **Mover los 256 B a una página propia** (segundo camino que propone el auditor: «sacar el apéndice
-   de la página R/X»). Ventajas: la `PageTable` pasa a ser la autoridad única y desaparece el
-   «bypass». Limitaciones: **no añade aislamiento** —la página tendría que seguir siendo escribible por
-   el programa, por D31/D33— y cuesta RAM de usuario (28 KB → 24 KB) o geometría de pantalla (80×24).
-   Evaluación: **descartada** para hoy (coste sin ganancia).
-2. **Pasar la bandera de arranque de la NVRAM al dominio supervisor** (servicio HOST o gestión por el
-   runtime), dejando el resto en el dominio del programa. Ventajas: es lo único que añadiría
-   aislamiento real (un `.flow` no podría alterar el próximo arranque). Limitaciones: coste alto en
-   firmware + motor + ABI. Evaluación: **no descartada para el futuro**; el riesgo actual es bajo.
-3. **Aceptar y documentar.** Ventajas: coste cero, coherente con D31/D33 y con el javadoc de `VmDevice`
-   (que ya describía la MMIO «como la MMIO real», sin traducción ni permisos). Limitaciones: un
-   programa puede seguir alterando su propia NVRAM/PIC/pantalla. Evaluación: **aceptada**.
-
-**Consecuencias.**
-
-- El contrato queda escrito en `VmMemoryMap.DEVICE_MMIO_BASE` (y referenciado desde `VmBus` y
-  `VmDevice`); deja de leerse como un «bypass accidental».
-- Se fija con un test: `VmDisplayTest.programMayDriveDeviceRegistersInsideTheKernelPage` comprueba que
-  un maestro `PROGRAM` recibe `PRIVILEGE_FAULT` al escribir **RAM** en la página kernel R/X pero **sí**
-  configura la pantalla a través de la apertura.
-- Si en el futuro se adopta la alternativa 2, este ADR se enmienda y se implementa el dominio supervisor
-  para la NVRAM.
-
-**Implementación (2026-10-19).**
-`VmMemoryMap.java` (javadoc del contrato), `VmBus.java`, `VmDevice.java` (referencias), `VmDisplayTest.java`
-(test que lo fija), `docs/workdir/PLAN.md` (D35), `src/iflow-vm/README.md` y `src/iflow-vm/HDL.md`. Sin cambios
-de comportamiento: el código ya se comportaba así; ahora está declarado y probado.
-
+- No promete que todos los módulos puedan actualizarse sin reinicio.
+- No promete que todos los módulos sean neutrales a la plataforma.
+- No promete compatibilidad con ningún bootstrap anterior; los caminos retirados no se restauran
+  como fachada.
+- No promete que todos los módulos liberen recursos en todos los escenarios; cuando no pueden, el
+  estado es `RESTART_REQUIRED`, no un éxito fingido.
+- No promete que la suite haya quedado funcional sin pasar por las puertas de calidad de cada fase.
 
 ---
 
-## Decisión 2026-10-20 — SpEL fuera del repositorio; la VM es la única superficie de políticas
+## ADR-020 — Un único `config/suite/messages.yml` para todas las plataformas
 
-**Contexto.** iFlow v2 ya había sustituido el motor de reglas basado en SpEL/regiones por una VM de
-16 bits con bytecode `.flow`. Sin embargo, quedaban restos activos o documentados como actuales:
+**Estado:** Aceptada (2026-10-27).
 
-- el SPI `ExpressionEvaluator` y su implementación `SpelExpressionEvaluator` en `textformatter`;
-- el paso `<expr>` de `TemplateRenderer`;
-- `TransformEngine` y las condiciones/acciones SpEL del modelo de presets;
-- el campo “Condition (SpEL)” del editor web;
-- las dependencias `spring-expression` y `spring-beans`;
-- documentación de módulos y wiki que seguía presentando SpEL como una capacidad vigente.
+**Decisión.** Los textos de UI viven en un único `config/suite/messages.yml`, independiente de la
+plataforma. `HostPaths.suiteMessages()` resuelve la ruta canónica y `MessagesConfig` la consume. El
+fallback al `messages.yml` plano anterior fue eliminado en P0.3; una ruta no canónica se ignora o
+se rechaza, no se migra en runtime. `resetConfigs`/`copyDefaultsIfMissing` escriben y respaldan la
+misma ruta en Spigot y Fabric.
 
-`TransformEngine` no tenía consumidores de producción y `Preset.apply(...)` ya era un placeholder. El
-arreglo de sus bindings registrado en el changelog anterior era mantenimiento de código muerto, **no**
-la corrección de un bug de producción.
-
-**Decisión.** Eliminar SpEL de todo el repositorio. La única superficie de políticas ejecutables es la
-VM de iFlow: programas binarios `.flow` cargados por `VmConfigLoader` y ejecutados por
-`VmPolicyEngine`/`VmInterpreter`, con servicios `HOST` y *fuel budget*. Las plantillas de
-`textformatter` quedan limitadas a placeholders, MiniMessage, traducción `<tr>` y la etiqueta
-`<regex>` definida en ADR-028.
-
-Cambios aplicados:
-
-1. Retirar `ExpressionEvaluator`, `ExpressionEvaluationException`, `SpelExpressionEvaluator` y el paso
-   `<expr>`.
-2. Retirar `TransformEngine`, su test, `PresetRule` y las condiciones/acciones SpEL de presets.
-3. Retirar el campo de condición del editor web; el grafo `rules.yml` queda como material legacy y no
-   se evalúa en runtime.
-4. Retirar `spring-expression`/`spring-beans`, actualizar lockfiles y metadata de verificación.
-5. Actualizar README, módulos, wiki, AUDITORIA, PLAN y CHANGELOG; dejar las menciones históricas
-   marcadas como tales.
-
-**Alternativas consideradas.**
-
-1. **Mantener SpEL solo en plantillas, con sandbox.** Ventajas: conserva una función existente.
-   Limitaciones: mantiene dos lenguajes de política, una dependencia Spring y una superficie de RCE que
-   la VM ya no necesita. Evaluación: **descartada**.
-2. **Migrar las condiciones SpEL de presets a `.flow`.** Ventajas: conserva la intención funcional.
-   Limitaciones: no hay consumidor de presets ni compilador integrado; sería diseñar una función nueva
-   sobre código muerto. Evaluación: **descartada**; si se necesita, se implementará como programa de la
-   VM, no como expresión inline.
-3. **Eliminación completa.** Ventajas: una sola superficie ejecutable, menos dependencias, documentación
-   coherente. Limitaciones: rompe APIs internas (`ExpressionEvaluator`, constructor de `Preset`) sin
-   consumidores de producción. Evaluación: **aceptada**.
-
-**Consecuencias.**
-
-- `textformatter` ya no depende de Spring; los lockfiles de los módulos que lo consumían dejan de
-  arrastrar `spring-core`, `spring-expression`, `spring-beans` y `spring-jcl`.
-- La metadata de verificación conserva los componentes Spring que usa el classpath de build de
-  Fabric Loom; no aparecen en ningún lockfile de runtime ni son dependencias de la aplicación.
-- El editor web no ofrece edición de condiciones; un `rules.yml` importado puede conservar la clave,
-  pero no se evalúa ni se vuelve a mostrar.
-- Las menciones a SpEL en documentos históricos (release notes antiguas, prompts de diseño, auditorías)
-  se conservan como registro, no como estado actual.
-- Cualquier política nueva debe implementarse en la VM y documentarse en `src/iflow-vm/README.md`.
-
-**Implementación (2026-10-20).** Código, build, lockfiles, metadata, schema del editor y documentación
-actualizados; `buildAll` pasa con 766 tests JVM (0 fallos, 11 skipped).
-
+**Consecuencias.** Una sola fuente de verdad para los textos de UI. `host` (core) conoce un recurso
+de presentación; si en el futuro se quiere un `messages` por plataforma, se introducen overrides por
+adapter. El archivo compartido puede contener claves específicas de una plataforma; hoy no hay
+validación que lo impida.
 
 ---
 
-## Decisión 2026-10-27 — Restauración del motor SpEL legacy en `iflow-firewall` (actualizada por ADR-032)
+## ADR-021 — API de configuración y comandos jerárquicos registrables
 
-> **Nota 2026-11-04 (ADR-032/ADR-034):** esta decisión se conserva como registro histórico.
-> ADR-032 sustituyó la exclusividad de instalación por el hub `iflow`: los tres motores pueden
-> estar instalados, pero el hub activa uno solo. La exclusividad es conceptual, no de paquetes.
-> ADR-034 elimina `iflow.engine.kind` y el esquema legacy en la purga pre-1.0. El motor SpEL sigue
-> existiendo como backend, pero ya no define la política de versiones ni de compatibilidad.
-
-**Estado:** Aceptada. Sustituye, **solo para `iflow-firewall`**, la decisión de 2026-10-20 de
-eliminar SpEL de todo el repositorio. La VM y Wasm siguen sin SpEL.
-
-**Contexto.** El usuario pidió restaurar el último commit donde existía el iFlow legacy y desarrollar
-`iflow-vm` e `iflow-firewall` en paralelo, sin que uno sustituya al otro en código. La búsqueda inicial
-no encontraba `iflow-firewall` porque la ruta original era `src/iflow`: en `933bdd3^` (padre del *VM
-architecture rewrite*) convivían `DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`,
-`ScriptSurface`, `Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, `PermissionChecker`,
-`RateLimiter` e `IflowModule`; el host tenía `RuleConfigLoader`. `933bdd3` los sustituyó por la VM,
-`e21e7d7` eliminó SpEL y `ead0523` renombró el módulo a `iflow-vm`.
-
-**Regla de producto (actualizada por ADR-032).** Los tres motores —`iflow-vm`, `iflow-wasm` e
-`iflow-firewall`— son **conceptualmente excluyentes para el routing**: solo uno puede estar activo.
-Los tres pueden estar instalados; el hub `iflow` evita la colisión y activa un único backend. Los
-tres comparten el paquete base `me.majhrs16.suite.iflow` (con subpaquetes propios: `.vm`, `.wasm`,
-`.rule`, etc.). El contrato `Router` tiene el mismo FQCN en los motores que lo implementan. El hub
-resuelve la convivencia en el classpath y no se usa un sufijo `.firewall` ni un módulo `iflow-api`
-compartido.
+**Estado:** Aceptada e implementada (2026-10-29).
 
 **Decisión.**
 
-1. Restaurar literalmente ese motor en `src/iflow-firewall`, con su propio contrato
-   (`Router`, `RouteDecision`, `RouteOutcome`, `PolicyTarget`, etc.) en el paquete
-   `me.majhrs16.suite.iflow`, y su descriptor `IflowFirewallModule` (nombre
-   `iflow-firewall`), que provee el capability `router`.
-2. Mantener los motores independientes: `iflow-firewall` no depende de `iflow-vm` y viceversa.
-   No se crea un módulo `iflow-api` compartido; cada JAR aporta las clases del contrato base.
-3. El host se compila contra `me.majhrs16.suite.iflow.Router`; `RouterFactory` selecciona el motor
-   con `iflow.engine.kind` (`vm` por defecto, `firewall` legacy). No hay adaptador: el motor
-   instalado implementa el mismo contrato.
-4. `ExpressionEvaluator` y `ExpressionEvaluationException` viven en `iflow-firewall`, no en
-   `core-api`, porque solo los usa este motor.
-5. `rules.yml` acepta la lista histórica de reglas (SpEL) o un mapa con `rules:`; el grafo del
-   editor se valida pero no se ejecuta.
-6. Se restaura `spring-expression:6.1.12` en `iflow-firewall`; el sandbox conserva el bloqueo de
-   `T()`, la allowlist de clases, la resolución de métodos sin argumentos y una caché LRU acotada
-   (1024).
+1. `core-api` publica `api.command`: `CommandRegistry`, `CommandSpec`, `CommandPath`,
+   `CommandSource`, `CommandContext`, `CommandOption` y `CommandRegistration`.
+2. `CommandSpec` es un árbol: nombre, aliases, descripción, permiso, uso, argumentos/opciones,
+   hijos y ejecutor. El registro es por módulo y devuelve un `CommandRegistration`
+   (`AutoCloseable`).
+3. `ModuleContext.commands()` entrega un registro module-scoped; el runtime cierra todas las
+   inscripciones después de `stop()`. El path por defecto es el namespace del módulo; un path
+   explícito se declara y también se retira al desactivar. Un módulo no puede dejar comandos
+   huérfanos.
+4. `core-api` publica `api.config`: `ConfigRegistry`, `ConfigSection` y `ConfigRegistration`. Un
+   módulo registra su sección (namespace, defaults, esquema, validador y reload). La configuración
+   persistida no se borra al desregistrar; solo se retira la superficie de comandos/esquema.
+5. `CommandRegistry` es el único punto de composición: los comandos del runtime (`help`, `list`,
+   `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma API; el host solo traduce la
+   invocación de plataforma.
+6. Conflictos de path/alias fallan explícitamente; no hay override silencioso. La política `force`
+   solo aplica si se define explícitamente y deja warning.
+7. Los comandos son neutrales: no importan Bukkit/Fabric; reciben `CommandSource`/`CommandContext`
+   y responden por `reply`. La tab completion se deriva del árbol.
+8. El árbol de comandos del host (`DynamicCommandRegistrar`/`DynamicCommand` y el Brigadier de
+   Fabric) se elimina o se reduce a un adaptador de invocación; no se mantiene duplicado.
 
-**Alcance de la revocación.** No se reintroduce SpEL en `textformatter`, presets, `<expr>` ni en el
-campo de condición del editor. Esas partes de la decisión de 2026-10-20 siguen vigentes. El único
-consumidor de SpEL es el motor legacy opcional de `iflow-firewall`.
-
-**Consecuencias.**
-
-- Los tres motores son alternativas instalables; pueden coexistir instalados y el hub activa uno.
-  Se compilan los tres y `./gradlew publishIflowEngines` los publica como paquetes Maven separados
-  (`suite-iflow-vm`, `suite-iflow-firewall`, `suite-iflow-wasm`) en `build/repo`. Mientras el
-  classpath de desarrollo contenga varios, `SuiteBootstrap` filtra los no seleccionados antes de
-  resolver el grafo.
-- Cada JAR duplica las clases del contrato base con el mismo FQCN. Es intencional y solo es seguro
-  porque el hub activa un único backend; un despliegue con dos motores activos a la vez no está
-  soportado.
-- `spring-expression`/`spring-core`/`spring-jcl` vuelven solo al classpath de `iflow-firewall`.
-- `core-api` no incorpora SPI de expresión de un solo módulo.
-- El hub usa `iflow-firewall` por defecto; el motor legacy solo se ejecuta si está instalado y se
-  selecciona en `config/iflow/config.yml`.
-- Tests: 44 en `iflow-firewall` (motor, SpEL, loader, validador) y 3 de integración en `host`
-  (selección VM/firewall y descriptores alternativos).
-
-**Implementación (2026-10-27).** Código restaurado en `me.majhrs16.suite.iflow`, descriptor
-`iflow-firewall`, SPI de expresión dentro del módulo, `RouterFactory` sin adaptador, `FirewallConfig`
-tolera el esquema legacy, selección de motor en `HostConfig`/`ConfigLoader`, y documentación de
-exclusividad (PLAN, ADR, storage, README, wiki). `./gradlew build` pasa.
+**Consecuencias.** Cada módulo publica comandos bajo su namespace sin conocer la plataforma.
+Desactivar un módulo retira su subárbol; reactivarlo lo vuelve a registrar. El host deja de ser
+dueño del árbol de comandos. La configuración existente sigue siendo del módulo; la API estandariza
+la superficie, no impone un formato de archivo.
 
 ---
 
-## Decisión 2026-10-29 — Sincronizadores de plataforma `sync-bukkit` y `sync-fabric`
+## ADR-022 — Raíz de comandos relocalizable
 
-**Contexto.** `spigot-host` y `fabric-host` interceptaban eventos de Minecraft
-(chat, join, quit y death), los traducían y los entregaban al núcleo. Ese bloque
-no es bootstrap del host: es sincronización de plataforma. Mantenerlo dentro del
-JAR del host impide que el Manager lo instale, versione, reemplace o descargue
-solo en el entorno compatible.
+**Estado:** Aceptada e implementada (2026-10-29).
 
 **Decisión.**
 
-1. La captura de eventos se mueve a dos paquetes de plataforma descargables:
-   `sync-bukkit` para Spigot/Paper/Purpur y `sync-fabric` para Fabric. No se
-   embeben en el JAR de `spigot-host` ni en el de `fabric-host`.
-2. `spigot-host`/`fabric-host` quedan como bootstrap: construyen
-   `PlatformPorts`, arrancan `SuiteRuntime`, publican servicios neutrales y
-   registran comandos. No contienen `@EventHandler`, no registran
-   `ServerMessageEvents.CHAT_MESSAGE`, no traducen eventos y no importan
-   features.
-3. `packages.list` declara la plataforma/entorno del paquete. El Manager
-   instala solo el compatible con `PlatformInfo`; un paquete incompatible no se
-   activa.
-4. `sync-bukkit`/`sync-fabric` pueden importar el SDK de su plataforma, pero no
-   features, no un `host` concreto y no otros sincronizadores. Consumen
-   `MessageDispatch`, `ActorDirectory`, `PermissionChecker`,
-   `UserLanguageStore` y los puertos neutrales que necesiten desde
-   `ServiceRegistry`.
-5. Traducen el evento de plataforma a `Message` y lo despachan por
-   `MessageDispatch`. No son `SyncSink`: son fuentes de eventos locales; el
-   fan-out a sinks lo hace `sync-bus`. No deciden formato, routing, traducción,
-   canales ni entrega.
-6. Registran sus listeners en `start()` y los retiran en `stop()`. Si la API de
-   la plataforma no permite desregistrar, la desactivación se marca
-   `RESTART_REQUIRED`; no se deja un listener huérfano.
-7. `checkArchitecture` permite el SDK de plataforma solo en `sync-bukkit`,
-   `sync-fabric` y el bootstrap del host; falla si un módulo neutral o un
-   adapter de feature importa Bukkit/Paper/Fabric.
-8. No hay doble camino: al cerrar F4c se eliminan los listeners de los hosts. No
-   se conserva un fallback compilado ni una activación implícita.
+1. `CommandRoot` es un value object con segmentos (`["suite"]`, `["suite","module"]`, `["tf"]`) y
+   aliases opcionales. Se declara en `config/suite/commands.yml`, no en código.
+2. `CommandRegistry` almacena paths relativos al root. El runtime compone `root + path` al registrar
+   y al resolver. Los módulos nunca ven ni hardcodean `/suite`.
+3. El adaptador de plataforma registra el primer segmento del root y delega el resto al dispatcher
+   neutral. Para roots multi-segmento, el dispatcher consume el prefijo y enruta el resto.
+4. Help, usage y errores usan `CommandContext.root()`; no se concatenan strings `/suite`.
+5. Cambiar la raíz es cambiar configuración: `root: [suite]` → `root: [suite, module]` o
+   `root: [tf]`; los módulos no cambian. Los aliases permiten mantener `/suite` y `/tf` a la vez.
+6. `base-name`, `actions` y `commands` están retirados: se ignoran y no hay migración en runtime.
+   El esquema vigente es `root` + `aliases`.
+7. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la plataforma no
+   permite desregistrar o restaurar, se marca `RESTART_REQUIRED` y no se publica la nueva raíz como
+   activa. Si el nuevo registro falla, se intenta restaurar la raíz anterior y se informa `FAILED`.
+8. Conflictos de root con comandos existentes fallan explícitamente; no se roba un comando ajeno.
 
-**Estado:** Aceptada e implementada (F4c cerrada el 2026-10-31).
-
-**Implementación (F4c).** `core-api` publica `PlatformHandle` (handle opaco que
-los hosts registran antes de `start()`) y `ModuleContext.isShuttingDown()`.
-`sync-common` concentra `ChannelSelector`, `EventRules`, `EventMessages` y
-`SyncEventProcessor`, compartidos por ambas plataformas. `sync-bukkit` captura
-chat/join/quit/death y aplica `claim-mode`; `sync-fabric` captura los eventos
-equivalentes de Fabric API y detecta muertes en el tick. `PackageRuntime`
-filtra por `PlatformCompatibility` y `checkArchitecture` permite el SDK solo en
-los dos paquetes y en los hosts. Los ZIP declaran `Platform: spigot` y
-`Platform: fabric`. La validación automatizada es compilación + tests; el betatesting/E2E en
-servidores reales se ejecuta después de la 1.0.0 y se rastrea en `PLAN.md` (ADR-034).
-
-**Consecuencias.**
-
-- El host deja de ser composition root de eventos; su única responsabilidad de
-  plataforma es `PlatformPorts` y el arranque del runtime.
-- Cada entorno descarga su propio sincronizador; no existe un paquete universal
-  de captura de eventos.
-- Se añade la fase F4c al PLAN, después de F4b (hosts delgados) y antes de F7
-  (hot upgrade/unload real). El detalle operativo vive en `PLAN.md`, sección
-  «Decisión 2026-10-29 — sincronizadores de plataforma».
-- Los tests de F4c deben cubrir instalación solo en el entorno compatible,
-  traducción a `Message`, despacho, desactivación y ausencia de listeners
-  huérfanos.
+**Consecuencias.** Migrar la raíz es configuración, no refactor. Los módulos son independientes del
+nombre del comando raíz. El host solo necesita un adaptador de invocación de primer nivel. La
+documentación y los mensajes deben usar `CommandContext.root()`.
 
 ---
 
-## Decisión 2026-10-29 — API de configuración y comandos jerárquicos registrables (ADR-021)
+## ADR-023 — Compilador C para iFlow VM
 
-**Estado:** Aceptada e implementada (F4d cerrada el 2026-10-31).
+**Estado:** Aceptada. Diseño congelado; implementación pendiente. El orden de trabajo vive en
+`PLAN.md`. No se implementa contra el ISA v2 de 16 bits.
 
-**Contexto.** `PlatformPorts.Command` solo registra un comando plano: no hay
-subcomandos, tab completion ni registro por módulo. `SuiteCommand` hardcodea
-`/suite` y su propio `switch`; `spigot-host` mantiene
-`DynamicCommandRegistrar`/`DynamicCommand` con un árbol duplicado y
-`fabric-host` otro árbol Brigadier. Un módulo no puede aportar comandos propios
-sin tocar el host, y al descargarse no hay forma de retirar su subárbol. La
-configuración de cada módulo tampoco tiene una API neutral: cada paquete lee su
-YAML y expone comandos a mano.
+**Contexto.** `tools/iflow-compiler/` solo ensambla `.flowasm` v2 a `.flow` v2. No hay frontend C,
+ni ABI C, ni runtime freestanding para la arquitectura v3. Escribir políticas en ensamblador es una
+barrera real para autores y para el editor. El compilador no pertenece al host: es una herramienta
+offline/CI; el servidor solo carga ROM ya compilada y verificada.
 
 **Decisión.**
 
-1. `core-api` publica `api.command`: `CommandRegistry`, `CommandSpec`,
-   `CommandPath`, `CommandSource`, `CommandContext` y `CommandRegistration`.
-   `CommandSpec` es un árbol con nombre, aliases, descripción, permiso, uso,
-   argumentos/opciones, hijos y ejecutor.
-2. El registro es propiedad del módulo y devuelve un `CommandRegistration`
-   (`AutoCloseable`). `ModuleContext.commands()` entrega un registro
-   module-scoped; el runtime cierra todas las inscripciones después de
-   `stop()`. El path por defecto es el namespace del módulo; un path explícito
-   se declara y también se retira al desactivar. Un módulo no puede dejar
-   comandos huérfanos.
-3. `core-api` publica `api.config`: `ConfigRegistry`, `ConfigSection` y
-   `ConfigRegistration`. Un módulo registra su sección (namespace, defaults,
-   esquema, validador y reload) y puede exponer comandos de configuración
-   generados o propios. La configuración persistida no se borra al
-   desregistrar; solo se retira la superficie de comandos/esquema.
-4. `CommandRegistry` es el único punto de composición. Los comandos del runtime
-   (`list`, `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma API;
-   el host solo traduce la invocación de plataforma y no define comandos de
-   features.
-5. Conflictos de path/alias fallan explícitamente; no hay override silencioso.
-   La política `force` solo aplica si se define explícitamente y deja warning.
-6. Los comandos son neutrales: no importan Bukkit/Fabric; reciben
-   `CommandSource`/`CommandContext` y responden por `reply`. La tab completion
-   se deriva del árbol.
-7. El árbol de comandos del host (`DynamicCommandRegistrar`/`DynamicCommand` y
-   el Brigadier de Fabric) se elimina o se reduce a un adaptador de invocación;
-   no se mantiene duplicado.
+1. **Herramienta separada.** Se añade `tools/iflow-c/` con el CLI `iflow-cc`, implementado en
+   TypeScript sobre Node.js 18+, igual que el assembler actual. No sustituye a
+   `tools/iflow-compiler/`: el compilador C emite `.flowasm` v3 y el assembler v3 sigue siendo el
+   único codificador de instrucciones y el único productor de ROM.
+2. **Pipeline.** Preprocesador → lexer → parser → análisis semántico → AST tipado → IR de tres
+   direcciones → optimización local → lowering al target → asignación de registros → emisión de
+   `.flowasm` v3. El assembler v3 resuelve símbolos, relocaciones, TOC, hash y segmentos.
+3. **Lenguaje.** Subconjunto C11 freestanding: tipos `void`, `_Bool`, `char` sin signo, `signed
+   char`, `short`, `int`/`long` de 32 bits, `long long` de 64 bits, `float` (binary32),
+   `double`/`long double` (binary64), punteros de 32 bits, arrays, `struct`, `union`, `enum`,
+   `typedef`, `const`, `volatile`, `_Atomic` escalar/puntero, control de flujo completo, funciones,
+   `static`/`extern`, `goto`, `switch`, `_Static_assert`, macros de objeto/función, `#include`,
+   condicionales, `#`/`##` y ensamblador inline estilo GNU (`asm`/`asm volatile` y forma extendida
+   con constraints `r`/`m`/`i`). `volatile` no se elimina, duplica ni reordena. `_Atomic` soporta
+   cargas, almacenes, intercambio, CAS y fetch-add/sub/and/or/xor.
+4. **Exclusiones explícitas.** `_Complex`, hilos, `setjmp`/`longjmp`, VLA, bitfields, caracteres
+   anchos, `_Generic`, `typeof`, `asm goto` y funciones variádicas. Un uso no soportado falla con
+   diagnóstico y ubicación; no se acepta en silencio ni se degrada. Las exclusiones se revisan con
+   ADR propio si una política real las necesita.
+5. **Preprocesador.** Incluye `#include` con rutas de búsqueda, macros de objeto y de función,
+   `#`/`##`, `#if`/`#ifdef`/`#ifndef`/`#elif`/`#else`/`#endif`, `#undef`, `#error` y `#pragma once`.
+6. **ABI C v3.** Se congela sobre el ISA v3: little-endian, alineación natural, pila de 4 bytes (8
+   para 64 bits), argumentos en pila de derecha a izquierda, limpieza del llamador, retorno en
+   `R0`/`R1:R0`, GPR caller-saved, `SP`/`FP` preservados, `struct`/`union` por valor con puntero
+   oculto, `char` sin signo y `size_t`/`uintptr_t`/`ptrdiff_t` de 32 bits. `float`/`double` se pasan
+   en pila y se retornan en `R0`/`R1:R0`; el baseline es soft-float. Un cambio de ABI requiere
+   enmendar este ADR.
+7. **Runtime `libiflow`.** Biblioteca freestanding enlazada en el programa: `crt0`, `mem*`, `str*`,
+   rutinas de 64 bits, helpers soft-float IEEE-754, helpers atómicos y arena allocator explícito. No
+   provee `stdio`, `printf` ni `malloc`/`free` estándar hasta que el kernel defina su ABI; lo no
+   implementado falla al enlazar, no se simula.
+8. **Modelo de programa.** El baseline compila un programa completo (una o varias unidades `.c` en
+   la misma invocación) a un único `.flowasm` v3. No hay formato de objeto estable ni linker de
+   objetos separado; si se necesita, se añade con ADR. El loader inicializa `.data` y zeroa `.bss`;
+   `crt0` llama a `main`. No hay constructores globales.
+9. **Optimización.** `-O0` es el default y debe ser correcto antes que rápido. `-O1` puede aplicar
+   plegado de constantes, propagación local, eliminación de código muerto y peephole, sin explotar
+   comportamiento indefinido, sin alterar `volatile` y sin reordenar operaciones atómicas. La coma
+   flotante mantiene semántica IEEE-754 por defecto; `-ffast-math` no es baseline. La salida es
+   determinista.
+10. **Seguridad.** El compilador no corre en el host ni en el servidor. No descarga dependencias en
+    tiempo de compilación ni ejecuta código del fuente. La ROM resultante es dato no confiable para
+    la VM: se valida por hash, segmentos, permisos y límites como cualquier otro artefacto. El
+    editor puede invocar el compilador en cliente/CI, nunca en el proceso del host.
 
-**Consecuencias.**
+**Prerrequisitos.** El ISA/ABI v3 y el assembler v3 deben estar congelados antes de implementar el
+compilador. El orden y las puertas de trabajo se rastrean en `PLAN.md`.
 
-- Cada módulo puede publicar comandos bajo su namespace sin conocer la
-  plataforma.
-- Desactivar un módulo retira su subárbol; reactivarlo lo vuelve a registrar.
-- El host deja de ser dueño del árbol de comandos.
-- Requiere tests de registro/desregistro, colisiones, permisos, tab completion y
-  esquema de configuración.
-- La configuración existente de cada módulo sigue siendo suya; la API
-  estandariza la superficie, no impone un formato de archivo.
-
-**Implementación (F4d).** `api.command` y `api.config` existen en `core-api`;
-`SuiteRuntime` compone `RuntimeCommandRegistry`/`RuntimeConfigRegistry`;
-`ModuleContext` entrega vistas module-scoped y exige que el árbol del módulo
-esté enraizado en su `moduleId`; `register(CommandPath, CommandSpec)` permite
-declarar una rama explícita y retirarla entera. Los comandos del runtime
-(`help`, `list`, `state`, `install`, `remove`, `upgrade`, `repo`) usan la misma
-API; `CommandOption` declara flags/valores para ayuda y tab completion;
-`ConfigSection.validate` comprueba tipos por defecto y `reload` es explícito, no
-un no-op; `SuiteCommand` se eliminó y el adaptador de plataforma solo necesita
-registrar el comando raíz que delega en el registro neutral. Los tests cubren registro, desregistro por
-ciclo de vida, aliases, colisiones, permisos por ancestro, usage, opciones y tab
-completion. La eliminación física de `DynamicCommandRegistrar`/`DynamicCommand`,
-`CommandsConfig`/`CommandsConfigLoader`/`CommandExecutor` y de los restos de
-eventos de los hosts se completó en F4d; el Brigadier de Fabric queda como
-adaptador de invocación. `RuntimeCommandRegistry` comprueba el permiso de cada
-nodo del path y oculta de la tab completion los subárboles no permitidos.
+**Consecuencias.** Los autores pueden escribir políticas en C sin aprender el ISA; el assembler
+sigue disponible para firmware y código de máximo control. No se promete C completo: libc estándar,
+objetos separados, VLA, bitfields, variádicas, `setjmp`/`longjmp`, `_Complex` y otras funciones
+quedan fuera hasta que una necesidad real y un ADR las incorporen. El mantenimiento del compilador
+es deuda explícita del proyecto; cada exclusión y limitación debe estar documentada y probada.
 
 ---
 
-## Decisión 2026-10-29 — Raíz de comandos relocalizable (ADR-022)
+## ADR-024 — Puerto neutral de renderizado enriquecido
 
-**Estado:** Aceptada e implementada en F4e. `CommandRoot` vive en `api.command`;
-`CommandRootConfig` carga `root`/`aliases` desde `config/suite/commands.yml`;
-`SuiteRuntime.reloadCommandRoot()` re-registra la raíz y distingue
-`APPLIED`/`UNCHANGED`/`FAILED`/`RESTART_REQUIRED`.
-
-**Contexto.** Antes de F4e, el literal `/suite` estaba hardcodeado en la raíz
-por defecto y en los mensajes de ayuda. Los árboles de host ya se retiraron en
-F4d; el Brigadier de Fabric solo adapta la invocación. Cambiar a `/suite module`
-o `/tf` obligaría a tocar la configuración y los mensajes, no los módulos. Los
-módulos deben registrar rutas relativas, no la raíz.
+**Estado:** Aceptada e implementada (2026-10-30).
 
 **Decisión.**
 
-1. `CommandRoot` es un value object con segmentos (`["suite"]`,
-   `["suite","module"]`, `["tf"]`) y aliases opcionales. Se declara en
-   `commands.yml` (ruta canónica `config/suite/commands.yml`), no en código.
-2. `CommandRegistry` almacena paths relativos al root. El runtime compone
-   `root + path` al registrar y al resolver. Los módulos nunca ven ni
-   hardcodean `/suite`.
-3. El adaptador de plataforma registra el primer segmento del root y delega el
-   resto al dispatcher neutral. Para roots multi-segmento (`suite module`), el
-   dispatcher consume el prefijo y enruta el resto.
-4. Help, usage y errores usan `CommandContext.root()`; no se concatenan strings
-   `/suite`.
-5. Cambiar la raíz es cambiar configuración: `root: [suite]` →
-   `root: [suite, module]` o `root: [tf]`; los módulos no cambian. Los aliases
-   permiten mantener `/suite` y `/tf` a la vez.
-6. `base-name`, `actions` y `commands` están retirados: se ignoran y no hay
-   migración en runtime. El esquema vigente es `root` + `aliases` en
-   `commands.yml`.
-7. Si la raíz cambia en caliente, el runtime re-registra el comando raíz; si la
-   plataforma no permite desregistrar o restaurar, se marca
-   `RESTART_REQUIRED` y no se publica la nueva raíz como activa. Si el nuevo
-   registro falla, se intenta restaurar la raíz anterior y se informa
-   `FAILED`.
-8. Conflictos de root con comandos existentes fallan explícitamente; no se roba
-   un comando ajeno.
-
-**Consecuencias.**
-
-- Migrar la raíz es configuración, no refactor.
-- Los módulos son independientes del nombre del comando raíz.
-- El host solo necesita un adaptador de invocación de primer nivel.
-- La documentación y los mensajes deben usar `CommandContext.root()`.
-- Tests obligatorios: el mismo árbol bajo `suite`, `suite module` y `tf`; root
-  multi-segmento; aliases; colisión; re-registro en caliente o
-  `RESTART_REQUIRED`.
-
----
-
-## Decisión 2026-10-29 — Compilador C para iFlow VM (ADR-023)
-
-**Estado:** Aceptada. Diseño congelado; implementación pendiente en la fase V6,
-después de V1 (ISA/ABI v3), V2 (núcleo), V3 (máquina persistente), V4
-(integración) y V5 (assembler v3). No se implementa contra el ISA v2 de 16 bits.
-
-**Contexto.**
-
-- La línea `iflow-vm` v3 es una máquina de 32 bits con ROM, BIOS, bootloader,
-  kernel, ISA jerárquica, ABI `HOST` v3 y memoria paginada. La especificación de
-  referencia es `docs/prompts/diseno/iflow-cpu-implement.md`.
-- `tools/iflow-compiler/` solo ensambla `.flowasm` v2 a `.flow` v2. No hay
-  frontend C, ni ABI C, ni runtime freestanding para la arquitectura v3.
-- Escribir políticas en ensamblador es una barrera real para autores y para el
-  editor. Un compilador C permite expresar políticas, firmware y utilidades sin
-  convertir el ensamblador en el único lenguaje de autoría.
-- El compilador no pertenece al host: es una herramienta offline/CI. El servidor
-  solo carga ROM ya compilada y verificada; no compila C en runtime.
-- El compilador debe ser determinista, auditable y no depender de una toolchain
-  nativa externa (Clang/LLVM, GCC, TinyCC) para producir el artefacto.
-
-**Decisión.**
-
-1. **Herramienta separada.** Se añade `tools/iflow-c/` con el CLI `iflow-cc`,
-   implementado en TypeScript sobre Node.js 18+, igual que el assembler actual.
-   No sustituye a `tools/iflow-compiler/`: el compilador C emite `.flowasm` v3 y
-   el assembler v3 sigue siendo el único codificador de instrucciones y el único
-   productor de ROM. No se duplica la tabla de opcodes ni el formato binario.
-2. **Pipeline.** El compilador ejecuta: preprocesador → lexer → parser →
-   análisis semántico → AST tipado → IR de tres direcciones → optimización
-   local → lowering al target → asignación de registros → emisión de
-   `.flowasm` v3. El assembler v3 resuelve símbolos, relocaciones, TOC, hash y
-   segmentos de la ROM.
-3. **Lenguaje.** Se implementa un **subconjunto C11 freestanding**, no ISO C
-   completo. Baseline:
-   - tipos: `void`, `_Bool`, `char` (8 bits sin signo), `signed char`, `short`
-     (16), `int`/`long` (32), `long long` (64), `float` (IEEE-754 binary32),
-     `double` y `long double` (IEEE-754 binary64), punteros de 32 bits, arrays,
-     `struct`, `union`, `enum`, `typedef`, `const`, `volatile` y `_Atomic`
-     escalar/puntero;
-   - expresiones: aritmética entera y de coma flotante, bitwise, shifts,
-     comparaciones, lógica, asignación y compuestas, ternario, coma, casts,
-     `sizeof`, dirección, desreferencia, acceso a miembros, indexación,
-     llamadas, literales de cadena, enteros y reales;
-   - sentencias: bloques, `if`/`else`, `switch`/`case`/`default`, `for`,
-     `while`, `do`/`while`, `break`, `continue`, `return`, `goto`/etiquetas y
-     declaraciones;
-   - funciones con prototipos, `static`, `extern`, `inline` como pista y
-     `_Static_assert`. Las funciones variádicas no son baseline.
-   - `volatile` se respeta: no se eliminan, duplican ni reordenan accesos
-     volátiles. Es obligatorio para MMIO.
-   - `_Atomic` incluye cargas, almacenes, intercambio, comparación-e-intercambio
-     y fetch-add/sub/and/or/xor para tipos escalares y punteros, con las
-     órdenes de memoria de C11. Los agregados atómicos quedan fuera del
-     baseline inicial y se revisan en C4.
-   - ensamblador inline estilo GNU: `asm("...")`, `asm volatile("...")` y la
-     forma extendida `asm volatile("..." : salidas : entradas : clobbers)`.
-     Se soportan operandos `%0`/`%1`, constraints `r`, `m` e `i`, clobbers de
-     registros y `"memory"`/`"cc"`. `asm goto` no es baseline.
-4. **Exclusiones explícitas.** No son baseline: `_Complex`, hilos, `setjmp`/
-   `longjmp`, VLA, bitfields, caracteres anchos, `_Generic`, `typeof` y
-   funciones variádicas. Un uso no soportado produce un error de compilación
-   con ubicación; nunca se acepta en silencio ni se degrada a otra semántica.
-   Las exclusiones se revisan con ADR propio si una política real las necesita.
-   Glosario:
-   - **VLA** (*variable-length array*): array local cuyo tamaño se calcula en
-     runtime, p. ej. `int n; int a[n];`. Exige asignación dinámica de pila y
-     controles de desbordamiento; no es lo mismo que un array de tamaño fijo.
-   - **Bitfields**: campos de bits dentro de `struct`, p. ej.
-     `unsigned flags : 3;`. Su layout es implementation-defined y debe fijarse
-     explícitamente antes de soportarlo.
-   - **Variádicas**: funciones con número variable de argumentos, p. ej.
-     `int f(int n, ...);` y `va_list`/`va_arg`. Requieren ABI de varargs y
-     `<stdarg.h>`.
-   - **`setjmp`/`longjmp`**: salto no local que restaura un contexto guardado;
-     requiere guardar/restaurar registros y pila y complica el unwind.
-   - **`_Complex`**: tipos complejos de C (`float _Complex`, etc.); no se
-     confunden con `_Atomic`.
-   - **Caracteres anchos**: `wchar_t`, `wint_t` y literales `L"..."`; exigen
-     una anchura y codificación fijadas por el target.
-   - **`_Generic`**: selección de expresión por tipo en C11; no es necesario
-     para el subconjunto actual.
-   - **`typeof`**: extensión GNU que obtiene el tipo de una expresión; no es
-     C11 estándar.
-
-   **Prioridad de extensiones.** Las exclusiones no son permanentes; se
-   incorporan después de V6, con enmienda de este ADR y tests propios:
-
-   1. **Variádicas** y **bitfields** son las primeras candidatas por uso común
-      en C. Variádicas exige ABI de varargs y `<stdarg.h>`; bitfields exige
-      fijar orden de bits, empaquetado, alineación y layout observable.
-   2. **VLA** y **`setjmp`/`longjmp`** solo se incorporan si una política real
-      los necesita. VLA requiere asignación dinámica de pila y comprobación de
-      desbordamiento; `setjmp`/`longjmp` requiere guardar/restaurar contexto y
-      definir el unwind.
-   Los agregados atómicos se revisan antes, en C4, porque no cambian el
-   subconjunto del lenguaje sino el alcance de `_Atomic`.
-5. **Preprocesador.** Incluye `#include` con rutas de búsqueda, macros de objeto
-   y de función, `#`/`##`, `#if`/`#ifdef`/`#ifndef`/`#elif`/`#else`/`#endif`,
-   `#undef`, `#error` y `#pragma once`. No hay `#include_next` ni dependencia
-   del preprocesador del sistema.
-6. **ABI C v3.** Se congela en V6.0 sobre el ISA v3 que fije V1. Baseline:
-   - little-endian único, alineación natural, pila de 4 bytes (8 para 64 bits)
-     que crece hacia abajo;
-   - argumentos en pila de derecha a izquierda; el llamador limpia; sin
-     registros de argumento obligatorios;
-   - retorno en `R0` (32 bits) o `R1:R0` (64 bits); `struct`/`union` por valor
-     usan puntero oculto del llamador y el callee devuelve ese puntero en `R0`;
-   - `float` (32 bits), `double`/`long double` (64 bits) se pasan en pila y se
-     retornan en `R0` o `R1:R0`; el baseline es **soft-float**, sin registros
-     FP obligatorios. Una FPU futura puede acelerar operaciones sin cambiar la
-     ABI;
-   - `_Atomic` escalar/puntero respeta la alineación natural y usa las
-     primitivas atómicas del ISA v3 o los helpers de `libiflow`; no se asume
-     lock-free si el target no lo garantiza;
-   - todos los GPR son caller-saved; `SP` y `FP` se preservan; no hay red zone;
-   - `char` sin signo, `size_t`/`uintptr_t` de 32 bits, `ptrdiff_t` de 32 bits;
-   - símbolos C sin name mangling; `_start` es el entry de `crt0` y el kernel
-     salta a él; `main` es la función del programa.
-   Cualquier cambio de ABI requiere enmendar este ADR; no se mantienen dos ABI
-   C en paralelo.
-7. **Runtime `libiflow`.** Es una biblioteca freestanding enlazada dentro del
-   segmento de programa, no un paquete del host. Provee `crt0`, `memcpy`,
-   `memmove`, `memset`, `memcmp`, `strlen`, `strcmp`, `strcpy`, `strncpy`,
-   rutinas de 64 bits, helpers **soft-float** (`__iflow_fadd`, `__iflow_fmul`,
-   conversiones, comparaciones y redondeo IEEE-754), helpers atómicos
-   (`__iflow_atomic_*`) y un arena allocator explícito (`iflow_alloc`). No
-   provee `stdio`, `printf`, `malloc`/`free` estándar ni `stdlib` hasta que el
-   ABI del kernel defina heap y errores. Una función no implementada falla
-   enlazando; no se añade un stub que devuelva éxito.
-8. **Modelo de programa.** El compilador compila un programa completo (una o
-   varias unidades `.c` en la misma invocación) a un único `.flowasm` v3. El
-   baseline no define un formato de objeto estable ni un linker de objetos
-   separado; si V6.4 demuestra que hace falta, se añade con ADR. El loader v3
-   inicializa `.data` y zeroa `.bss`; `crt0` llama a `main`, recibe el estado y
-   ejecuta la salida del programa. No hay constructores globales.
-9. **Optimización.** `-O0` es el default y debe ser correcto antes que rápido.
-   `-O1` puede aplicar plegado de constantes, propagación local, eliminación de
-   código muerto y peephole, sin explotar comportamiento indefinido, sin alterar
-   `volatile` y sin reordenar operaciones atómicas. La coma flotante mantiene
-   semántica IEEE-754 por defecto; `-ffast-math` no es baseline. La salida es
-   determinista: mismo fuente, flags y versión producen los mismos bytes y el
-   mismo orden de símbolos.
-10. **Seguridad.** El compilador no corre en el host ni en el servidor. No
-    descarga dependencias en tiempo de compilación ni ejecuta código del fuente.
-    La ROM resultante es dato no confiable para la VM: se valida por hash,
-    segmentos, permisos y límites como cualquier otro artefacto. El editor web
-    puede invocar el compilador en cliente/CI, nunca en el proceso del host.
-11. **Tests.** Deben cubrir lexer, preprocesador, parser, semántica, IR,
-    codegen y diagnóstico; golden tests de `.flowasm`; pruebas de ABI, `volatile`,
-    punteros, arrays, structs, `switch`, `goto`, 64 bits, coma flotante
-    (`float`/`double`, redondeo, NaN, cero con signo y conversiones), atómicos
-    (todas las órdenes y fetch/CAS) y ensamblador inline (operandos, clobbers y
-    barreras); corpus de políticas reales; determinismo byte a byte; y ejecución
-    contra la VM v3 cuando V2/V4 estén disponibles. Los casos no soportados
-    tienen tests negativos. El compilador no ejecuta servidores Minecraft; el E2E de la suite se
-    cubre después de la 1.0.0 (ADR-034).
-
-**Fases V6.**
-
-| Fase | Entregable | Puerta |
-|---|---|---|
-| **C0 — Contrato** | Subconjunto, gramática, ABI C v3, modelo de runtime y corpus de conformidad | ADR y lista de casos congelados; cada exclusión tiene diagnóstico y test |
-| **C1 — Frontend** | Preprocesador, lexer, parser, AST, análisis semántico y diagnósticos | Tests unitarios y de errores; ninguna construcción no soportada pasa en silencio |
-| **C2 — IR y backend** | IR de tres direcciones, lowering, asignación de registros y emisión `.flowasm` v3 | Golden tests y ensamblado con el assembler v3 |
-| **C3 — ABI y runtime** | `libiflow`, `crt0`, wrappers de `HOST` v3, punteros/arrays/structs/64 bits, soft-float, atómicos y ensamblador inline | Ejecución en VM v3 con el corpus; sin stubs |
-| **C4 — Optimización y robustez** | `-O1`, peephole, fuzz, determinismo, diagnóstico de límites y agregados atómicos | Mismos resultados observables; salida reproducible |
-| **C5 — Toolchain** | CLI, ejemplos, documentación, CI Node y paquete de herramientas | `npm test`, corpus y build reproducible verdes |
-
-**Criterios de cierre de V6.**
-
-1. Al menos tres políticas reales (rate limit, routing de canal y transformación
-   de contenido) se escriben en C, compilan a `.flowasm` v3 y producen la misma
-   decisión y el mismo mensaje observable que su equivalente de referencia.
-2. El corpus cubre punteros, arrays, structs, uniones, `switch`, `goto`,
-   `volatile`, 64 bits, `float`/`double`, atómicos, ensamblador inline y
-   llamadas a `HOST`; los casos no soportados fallan con diagnóstico, no con un
-   artefacto incorrecto.
-3. La salida es determinista y el assembler v3 produce una ROM verificable.
-4. No hay compilación C ni toolchain nativa en el host; no hay stubs de libc.
-5. Tests, documentación y ejemplos están en verde; el ADR se actualiza si cambia
-   el subconjunto o la ABI.
-
-**Alternativas consideradas.**
-
-1. **Clang/LLVM con un backend propio para iFlow.** Ventajas: frontend C
-   completo y optimizador maduro. Limitaciones: exige escribir y mantener un
-   target LLVM, una toolchain nativa enorme y un ABI propio; contradice la
-   independencia de toolchain y multiplica la superficie de build. Evaluación:
-   **descartada**.
-2. **Portar TinyCC o chibicc y sustituir su backend.** Ventajas: frontend C
-   probado y código compacto. Limitaciones: introduce un compilador nativo en C,
-   dependencias de build y supuestos x86; el port del backend sigue siendo
-   trabajo nuevo y difícil de auditar desde TypeScript. Evaluación: **descartada
-   como baseline**; se usa chibicc solo como referencia de arquitectura.
-3. **Compilar C a WebAssembly y traducir a `.flow`.** Ventajas: reutiliza
-   Clang/WASI y el motor Wasm. Limitaciones: no es la arquitectura v3, añade un
-   traductor Wasm→flow, pierde el ABI nativo y duplica semántica. Evaluación:
-   **descartada**.
-4. **Compilador propio en TypeScript con backend de pila (elegido).** Ventajas:
-   una sola toolchain, determinista, auditable, sin dependencias nativas y
-   alineado con el assembler existente. Limitaciones: implementar C es costoso;
-   se mitiga con subconjunto, fases y corpus. Evaluación: **aceptada**.
-
-**Consecuencias.**
-
-- Los autores pueden escribir políticas en C sin aprender el ISA; el assembler
-  sigue disponible para firmware y código de máximo control.
-- No se promete C completo: libc estándar, objetos separados, VLA, bitfields,
-  variádicas, `setjmp`/`longjmp`, `_Complex` y otras funciones quedan fuera
-  hasta que una necesidad real y un ADR los incorporen. `float`/`double`,
-  `_Atomic` e inline asm sí forman parte del baseline.
-- El compilador es una herramienta de build, no un módulo de la suite; el host
-  no crece y la frontera de seguridad de la ROM no cambia.
-- V6 no puede empezar antes de V1/V5 y no puede cerrarse antes de V2/V3/V4. El
-  orden evita implementar un backend contra un ISA o un ABI que aún no existen.
-- El mantenimiento del compilador es deuda explícita del proyecto; cada
-  exclusión y cada limitación debe estar documentada y probada.
-
----
-
-## Decisión 2026-10-30 — puerto neutral de renderizado enriquecido (ADR-024)
-
-**Estado:** Aceptada e implementada. `core-render` publica
-`MessageComponentRenderer`; `textformatter` lo implementa y `SuiteHost` ya no
-depende de `TextFormatter` ni de `ChatTranslator` para renderizar.
-
-**Contexto.** El pipeline de `SuiteHost` seguía compilado contra
-`TextFormatter` y `TemplateContext`, ambos del paquete `textformatter`. Eso
-impedía que `SuiteRuntime` construyera el pipeline desde `ServiceRegistry` sin
-crear una flecha `suite-runtime -> feature`, y obligaba a los adapters a
-conocer tipos del formateador.
-
-**Decisión.**
-
-1. `core-render` es un módulo neutral separado de `core-api` porque su contrato
-   usa `net.kyori.adventure.text.Component`. `core-api` sigue sin dependencias.
-2. `MessageComponentRenderer` recibe `Message`, `Actor`, idioma de origen e
-   idioma de destino ya resueltos. No decide routing, permisos ni entrega.
+1. `core-render` es un módulo neutral separado de `core-api` porque su contrato usa
+   `net.kyori.adventure.text.Component`. `core-api` sigue sin dependencias.
+2. `MessageComponentRenderer` recibe `Message`, `Actor`, idioma de origen e idioma de destino ya
+   resueltos. No decide routing, permisos ni entrega.
 3. `TextFormatterMessageRenderer` implementa `MessageRenderer` (texto plano) y
-   `MessageComponentRenderer` (componente enriquecido). `textformatter` registra
-   ambas interfaces en su `ModuleContext`.
-4. `SuiteHost` recibe el renderizador por constructor. Su constructor público
-   solo usa puertos neutrales y configuración del host, de modo que el runtime
-   puede ensamblarlo después de activar los paquetes.
-5. `SuiteHost.bootstrap(...)` queda como camino heredado de arranque y se
-   elimina al cerrar F4b; no se añade una fachada nueva ni un segundo pipeline.
+   `MessageComponentRenderer` (componente enriquecido). `textformatter` registra ambas interfaces en
+   su `ModuleContext`.
+4. `SuiteHost` recibe el renderizador por constructor. Su constructor público solo usa puertos
+   neutrales y configuración del host, de modo que el runtime puede ensamblarlo después de activar
+   los paquetes.
+5. No se conserva un segundo pipeline en los adapters ni un bootstrap heredado.
 
-**Consecuencias.**
-
-- El pipeline deja de importar tipos de `textformatter` y `chattranslator`.
-- `checkArchitecture` escanea `core-render` como módulo neutral.
-- La construcción real del pipeline desde `ServiceRegistry` y la retirada del
-  bootstrap heredado son el siguiente paso de F4b.
+**Consecuencias.** El pipeline deja de importar tipos de `textformatter` y `chattranslator`.
+`checkArchitecture` escanea `core-render` como módulo neutral. La construcción real del pipeline
+desde `ServiceRegistry` es responsabilidad de `suite-runtime`.
 
 ---
 
-## Decisión 2026-10-30 — adapters delgados sobre SuiteRuntime (ADR-025)
+## ADR-025 — Adapters delgados sobre `SuiteRuntime`
 
-**Estado:** Aceptada e implementada (F4b cerrado). Los adapters Spigot y
-Fabric son bootstrap neutral y el bootstrap heredado se retiró del módulo
-`host`.
-
-**Contexto.** Los adapters construían `SuiteHost`, `MessageDispatcher`, sinks,
-observability, in-world y extensiones directamente. Eso duplicaba el cableado,
-arrastraba features al classpath del host y hacía que instalar/descargar un
-paquete no fuera la única vía de composición.
+**Estado:** Aceptada e implementada (2026-10-30).
 
 **Decisión.**
 
-1. `spigot-host` y `fabric-host` solo crean `PlatformPorts`, registran los
-   puertos propiedad del adapter y arrancan `SuiteRuntime`. El comando raíz se
-   registra con `runtime.registerCommands()`.
+1. `spigot-host` y `fabric-host` solo crean `PlatformPorts`, registran los puertos propiedad del
+   adapter y arrancan `SuiteRuntime`. El comando raíz se registra con
+   `runtime.registerCommands()`.
 2. Los adapters no importan `host`, `kernel`, `manager` ni paquetes de feature.
-   `checkArchitecture` lo verifica para los 34 módulos neutrales/adapter.
-3. `ChatDelivery` vive en `core-render` porque su contrato usa Adventure.
-   `InWorldPlatform` e `InWorldService` viven en `core-api`; el paquete
-   `inworld` implementa y publica el servicio, y el adapter solo ve el puerto.
-4. `YamlUserLanguageStore` vive en `suite-runtime`; `SuiteRuntime` expone
-   `defaultLanguage()` sin publicar `HostConfig` a los adapters.
-5. La captura de eventos de chat/join/quit/death no pertenece al host: se
-   implementó en `sync-bukkit`/`sync-fabric` (F4c).
-6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`,
-   `SuiteBootstrap`, `RouterFactory`, `IflowEngineSelector` y `ConfigValidator`
-   se retiraron del módulo `host`. Los tests y benchmarks cablean las
-   implementaciones reales con fixtures locales (`HostFixture`), fuera del
-   classpath de producción.
+   `checkArchitecture` lo verifica.
+3. `ChatDelivery` vive en `core-render` porque su contrato usa Adventure. `InWorldPlatform` e
+   `InWorldService` viven en `core-api`; el paquete `inworld` implementa y publica el servicio, y el
+   adapter solo ve el puerto.
+4. `YamlUserLanguageStore` vive en `suite-runtime`; `SuiteRuntime` expone `defaultLanguage()` sin
+   publicar `HostConfig` a los adapters.
+5. La captura de eventos de chat/join/quit/death no pertenece al host: se implementó en
+   `sync-bukkit`/`sync-fabric`.
+6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`, `SuiteBootstrap`,
+   `RouterFactory`, `IflowEngineSelector` y `ConfigValidator` se retiraron del módulo `host`. Los
+   tests y benchmarks cablean las implementaciones reales con fixtures locales, fuera del classpath
+   de producción.
 
-**Consecuencias.**
-
-- Instalar o descargar un paquete es la única forma de cambiar features en
-  producción.
-- Los adapters pueden compilar contra `core-api`, `core-render`,
-  `suite-runtime` y el SDK de plataforma.
-- El `runtimeClasspath` de `suite-runtime` ya no arrastra paquetes de feature;
-  `host` solo depende de `core-api`, `core-render`, SnakeYAML y Gson.
+**Consecuencias.** Instalar o descargar un paquete es la única forma de cambiar features en
+producción. Los adapters pueden compilar contra `core-api`, `core-render`, `suite-runtime` y el SDK
+de plataforma. El `runtimeClasspath` de `suite-runtime` no arrastra paquetes de feature; `host` solo
+depende de `core-api`, `core-render`, SnakeYAML y Gson.
 
 ---
 
-## Decisión 2026-10-31 — hot upgrade, fugas y límites de dependencias (ADR-026)
+## ADR-026 — Hot upgrade, fugas y límites de dependencias
 
-**Estado:** Parcialmente sustituida por ADR-027. Se mantienen las reglas de
-detección de fugas, dependencias compartidas, paquetes multi-JAR y retirada de
-APIs legacy. La secuencia de activación, el contrato manager-runtime y la
-política de rollback pasan a ADR-027.
-
-**Contexto.** `ModuleHost` sabía activar y desactivar, pero no sustituir una
-versión activa. El manager instalaba la versión nueva y borraba la anterior
-antes de que el runtime pudiera confirmar el arranque; el empaquetado usaba
-`library/packages/<id>.jar`, así que dos versiones no podían coexistir en disco.
-Además, una desactivación podía cerrar el classloader y dejar hilos, recursos,
-listeners o registros apuntando a clases muertas sin que el estado lo reflejara.
+**Estado:** Aceptada. Parcialmente sustituida por ADR-027: se mantienen las reglas de detección de
+fugas, dependencias compartidas, paquetes multi-JAR y retirada de APIs legacy; la secuencia de
+activación, el contrato manager-runtime y la política de rollback pasan a ADR-027.
 
 **Decisión vigente.**
 
-1. Las rutas de instalación son versionadas por directorio:
-   `library/packages/<id>/<version>/` y
-   `library/dependencies/<id>/<version>/`, con la versión instalada referenciada
-   desde `library/status`. Ningún JAR activo se sobrescribe durante la
-   preparación. La política de commit, journal, backup y rollback de la
-   operación completa vive en ADR-027.
-2. La desactivación valida cuatro fugas antes de declarar `INSTALLED`:
-   fallo de `ResourceTracker`, registros de owner restantes, classloader no
-   cerrado e hilos vivos en el `ThreadGroup` del módulo. Cualquier fuga produce
-   `RESTART_REQUIRED`. Los hilos de `start`/`stop` se ejecutan dentro del grupo
-   del módulo para que la detección sea posible. Las tareas del scheduler que
-   siguen ejecutándose también cuentan como owner vivo.
-3. Un upgrade de una dependencia compartida se rechaza si algún módulo activo
-   la usa (directa o transitivamente); el mensaje exige reiniciar. Borrar el JAR
-   anterior mientras un classloader activo puede cargarlo después es peor que
-   bloquear el upgrade. La comprobación ocurre en la fase de preparación, antes
-   de tocar `library/packages`, `library/dependencies` o `library/status`.
-4. Un paquete `PACKAGE` contiene uno o más JARs de módulo. El paquete no
-   identifica al módulo: cada JAR declara su `moduleId` en
-   `ModuleActivator.descriptor()` y el runtime mapea activación, upgrade y
-   retirada por ese id. Los ids deben ser únicos dentro del paquete; cero JARs
-   o ids duplicados son un error explícito. La activación arranca todos los
-   JARs y el upgrade los sustituye en una sola operación de runtime. Un fallo de
-   la etapa de runtime no restaura la versión anterior; detiene los módulos ya
-   arrancados en ese intento y conserva la instalación (ADR-027). Las librerías
-   adicionales van en paquetes `DEPENDENCY`.
-5. `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`,
-   `ModuleDescriptor` y `Environment` de `manager-spi`, junto con
-   `ManagerFacade.discoverAll()`/`getLoadedModules()`, se eliminan. El
-   descubrimiento por classpath ya no es una vía de producción.
+1. Las rutas de instalación son versionadas por directorio: `library/packages/<id>/<version>/` y
+   `library/dependencies/<id>/<version>/`, con la versión instalada referenciada desde
+   `library/status`. Ningún JAR activo se sobrescribe durante la preparación.
+2. La desactivación valida cuatro fugas antes de declarar `INSTALLED`: fallo de `ResourceTracker`,
+   registros de owner restantes, classloader no cerrado e hilos vivos en el `ThreadGroup` del
+   módulo. Cualquier fuga produce `RESTART_REQUIRED`. Las tareas del scheduler que siguen
+   ejecutándose también cuentan como owner vivo.
+3. Un upgrade de una dependencia compartida se rechaza si algún módulo activo la usa (directa o
+   transitivamente); el mensaje exige reiniciar. La comprobación ocurre en la fase de preparación,
+   antes de tocar `library/packages`, `library/dependencies` o `library/status`.
+4. Un paquete `PACKAGE` contiene uno o más JARs de módulo. Cada JAR declara su `moduleId` en
+   `ModuleActivator.descriptor()` y el runtime mapea activación, upgrade y retirada por ese id. Los
+   ids deben ser únicos dentro del paquete; cero JARs o ids duplicados son un error explícito.
+5. `ModuleLifecycleAdapter`, `ModuleLifecycle`, `ModuleCoordinate`, `ModuleDescriptor` y
+   `Environment` de `manager-spi`, junto con `ManagerFacade.discoverAll()`/`getLoadedModules()`, se
+   eliminan. El descubrimiento por classpath ya no es una vía de producción.
 
-**Consecuencias.**
-
-- El manager conserva la propiedad de los hechos de instalación; el runtime
-  conserva la propiedad del estado vivo. Ninguno simula el estado del otro.
-- Una operación puede fallar en tres puntos con efectos distintos: preparación
-  (sin mutación; caché reutilizable), commit de archivos (se restaura la
-  instalación anterior) y runtime (la instalación nueva queda registrada y no
-  hay rollback). ADR-027 fija el contrato.
-- `manager-apt` deja de depender de `kernel`.
-- Las dependencias compartidas no se actualizan en caliente mientras estén en
-  uso; el reinicio es la vía segura.
-- La regla de evidencia de C13 aplica a este ADR: no se puede asumir que un
-  paquete tendrá un JAR, que una dependencia no estará en uso ni que una
-  compensación funcionará. Cada una se valida y se prueba.
+**Consecuencias.** El manager conserva la propiedad de los hechos de instalación; el runtime
+conserva la propiedad del estado vivo. Ninguno simula el estado del otro. Las dependencias
+compartidas no se actualizan en caliente mientras estén en uso; el reinicio es la vía segura.
 
 ---
 
-## Decisión 2026-10-31 — instalación por etapas y semántica de fallo (ADR-027)
+## ADR-027 — Instalación por etapas y semántica de fallo
 
-**Estado:** Aceptada e implementada. Sustituye la secuencia de
-activación/rollback de ADR-026 y retira `keepBoth` como mecanismo de
-recuperación automática. El código ya aplica las tres etapas: caché
-content-addressed, commit con journal durable y activación separada.
+**Estado:** Aceptada e implementada. Sustituye la secuencia de activación/rollback de ADR-026 y
+retira `keepBoth` como mecanismo de recuperación automática.
 
-**Contexto.** El flujo anterior mezclaba red, commit de archivos y arranque:
-descargaba e instalaba paquete por paquete y activaba cada módulo dentro del
-callback del manager. Un fallo de arranque podía disparar compensación de
-archivos y reactivación de versiones anteriores. Eso hace que el resultado
-dependa de cuántos paquetes ya se habían instalado y de si el rollback del
-runtime era verificable. El usuario fija un pipeline determinista: primero se
-completa la adquisición, después el commit de archivos y solo entonces se
-arranca en orden jerárquico. La única reversión automática es la del commit de
-archivos; un fallo de arranque no deshace una instalación ya desplegada.
-
-**Decisión.**
+**Contexto.** El flujo anterior mezclaba red, commit de archivos y arranque. Un fallo de arranque
+podía disparar compensación de archivos y reactivación de versiones anteriores. El usuario fija un
+pipeline determinista: primero se completa la adquisición, después el commit de archivos y solo
+entonces se arranca en orden jerárquico. La única reversión automática es la del commit de archivos;
+un fallo de arranque no deshace una instalación ya desplegada.
 
 ### 1. Etapa 1 — Adquisición independiente
 
-Antes de modificar cualquier ruta de instalación, el manager construye un plan
-completo e inmutable con:
+Antes de modificar cualquier ruta de instalación, el manager construye un plan completo e inmutable
+con paquetes principales y dependencias transitivas, versiones resueltas y conflictos
+`Exclude`/`Provide`, plataforma/arquitectura/capacidades, hashes SHA-256, tamaños y metadatos, y
+orden jerárquico de instalación y activación.
 
-- paquetes principales y dependencias transitivas;
-- versiones resueltas y conflictos `Exclude`/`Provide`;
-- plataforma, arquitectura y capacidades;
-- hashes SHA-256, tamaños y metadatos de cada artefacto;
-- orden jerárquico de instalación y activación.
-
-Para instalar o actualizar, todos los ZIP y dependencias se descargan y
-verifican en caché antes de tocar `library/packages`, `library/dependencies` o
-`library/status`. La caché es contenido-direccionada:
+Todos los ZIP y dependencias se descargan y verifican en caché antes de tocar `library/packages`,
+`library/dependencies` o `library/status`. La caché es contenido-direccionada:
 
 ```text
 library/cache/downloads/<sha256>/<archivo>.zip
@@ -1187,110 +734,86 @@ library/cache/downloads/<sha256>/<archivo>.zip.part
 library/cache/operations/<operationId>.json
 ```
 
-Cada artefacto tiene un estado explícito `PENDING` o `COMPLETE`. Solo es
-`COMPLETE` cuando el archivo final existe, su tamaño coincide y su SHA-256 se
-verificó. Un `.part` nunca se reutiliza como artefacto válido. Reanudar significa
-reutilizar los `COMPLETE` y descargar únicamente los `PENDING`; no repetir todo
-el proceso. El comando `/<root> cache clean` borra descargas, parciales y
-manifiestos de operaciones, pero no toca paquetes instalados,
-`library/status`, el journal ni `library/trash`. La raíz `<root>` es la
-configurada en `commands.yml`.
+Cada artefacto tiene un estado explícito `PENDING` o `COMPLETE`. Solo es `COMPLETE` cuando el
+archivo final existe, su tamaño coincide y su SHA-256 se verificó. Un `.part` nunca se reutiliza
+como artefacto válido. Reanudar significa reutilizar los `COMPLETE` y descargar únicamente los
+`PENDING`. `/<root> cache clean` borra descargas, parciales y manifiestos de operaciones, pero no
+toca paquetes instalados, `library/status`, el journal ni `library/trash`.
 
-La desinstalación no descarga nada. Su etapa 1 resuelve el cierre de
-dependencias inverso y valida que ningún módulo restante dependa de lo retirado.
-Si falla la etapa 1, la instalación no cambia y la caché permite reanudar o
-limpiar.
+La desinstalación no descarga nada. Su etapa 1 resuelve el cierre de dependencias inverso y valida
+que ningún módulo restante dependa de lo retirado.
 
 ### 2. Etapa 2 — Commit de archivos con journal duradero
 
-La etapa 2 aplica **todos** los cambios del plan en una sola transacción, no
-paquete por paquete. Antes de la primera mutación escribe un journal durable en
-`library/journal/<operationId>.log` con:
+La etapa 2 aplica **todos** los cambios del plan en una sola transacción. Antes de la primera
+mutación escribe un journal durable en `library/journal/<operationId>.log` con la instantánea del
+`library/status` anterior, archivos preparados/creados/reemplazados/retirados, versiones y
+directorios anteriores, operaciones completadas y pendientes de revertir, y acciones de rollback
+por operación.
 
-- instantánea del `library/status` anterior;
-- archivos preparados, creados, reemplazados y retirados;
-- versiones y directorios anteriores;
-- operaciones completadas y pendientes de revertir;
-- acciones de rollback por operación.
+El journal se escribe en modo append-only, se sincroniza a disco (`fsync`) y se trata como la fuente
+de recuperación ante excepciones, `kill -9`, corte de energía o reinicio abrupto. Los archivos se
+mueven con rename atómico dentro del mismo sistema de archivos y se sincroniza el directorio padre.
+El nuevo `library/status` se escribe en un temporal, se sincroniza y se publica con rename atómico;
+**ese rename es el punto de commit**. Antes del punto de commit, la recuperación revierte todas las
+operaciones registradas y restaura el estado anterior. Después del punto de commit, la recuperación
+completa la limpieza y nunca revierte la instalación. El runtime no arranca hasta que el journal se
+ha recuperado y la etapa 2 está confirmada.
 
-El journal se escribe en modo append-only, se sincroniza a disco (`fsync`) y se
-trata como la fuente de recuperación ante excepciones, `kill -9`, corte de
-energía o reinicio abrupto del equipo. Los archivos se mueven con rename atómico
-dentro del mismo sistema de archivos y se sincroniza el directorio padre. El
-nuevo `library/status` se escribe en un temporal, se sincroniza y se publica con
-rename atómico; **ese rename es el punto de commit**. Antes del punto de commit,
-la recuperación revierte todas las operaciones registradas y restaura el estado
-anterior. Después del punto de commit, la recuperación completa la limpieza y
-nunca revierte la instalación. El runtime no arranca hasta que el journal se ha
-recuperado y la etapa 2 está confirmada.
+Los archivos de paquetes viven en directorios versionados; la versión nueva no sobrescribe los
+archivos de la versión activa. Instalar la misma versión ya presente se rechaza: para repararla hay
+que retirarla primero. `library/status` guarda la referencia persistente a la versión instalada y
+es el único puntero autoritativo. Los archivos no versionados (por ejemplo, configuración
+reemplazada) se respaldan en `library/backup/<operationId>/` antes de sustituirlos. Si falla
+cualquier paso, se restaura el journal completo: archivos anteriores, archivos nuevos retirados,
+`library/status` anterior y directorios de versión. La caché de descargas no se borra.
 
-Los archivos de paquetes viven en directorios versionados; la versión nueva no
-sobrescribe los archivos de la versión activa. Instalar la misma versión ya
-presente se rechaza: para repararla hay que retirarla primero. Así nunca se
-sobrescribe un JAR que un `ClassLoader` activo todavía referencia.
-`library/status` guarda la referencia persistente a la versión instalada y es el
-único puntero autoritativo.
-Los archivos no versionados (por ejemplo, configuración reemplazada) se respaldan
-en `library/backup/<operationId>/` antes de sustituirlos. Si falla cualquier
-paso, se restaura el journal completo: archivos anteriores, archivos nuevos
-retirados, `library/status` anterior y directorios de versión. La caché de
-descargas no se borra.
+En una desinstalación, la etapa 2 empieza con una **barrera de runtime**: desactiva los módulos
+afectados en orden inverso antes de mover sus archivos. Si la desactivación falla o deja fugas, se
+aborta antes de tocar archivos y se marca `RESTART_REQUIRED`; no se borra nada. Si la desactivación
+es limpia, mueve los archivos propios a `library/trash/<operationId>/`, actualiza `library/status`
+y confirma el journal. Si el commit de archivos falla después de desactivar, restaura los archivos
+y reactiva las versiones anteriores; si esa reactivación no puede verificarse, conserva los
+archivos restaurados y marca `RESTART_REQUIRED`. Un reemplazo por `Exclude` usa la misma barrera: la
+etapa 2 desactiva los paquetes que el plan retira antes de mover sus archivos y la etapa 3 solo
+activa los paquetes nuevos. Las sobrecargas sin barrera de runtime fallan explícitamente cuando el
+plan requiere reemplazos.
 
-En una desinstalación, la etapa 2 empieza con una **barrera de runtime**:
-desactiva los módulos afectados en orden inverso antes de mover sus archivos. Si
-la desactivación falla o deja fugas, se aborta antes de tocar archivos y se
-marca `RESTART_REQUIRED`; no se borra nada. Si la desactivación es limpia, mueve
-los archivos propios a `library/trash/<operationId>/`, actualiza
-`library/status` y confirma el journal. Si el commit de archivos falla después
-de desactivar, restaura los archivos y reactiva las versiones anteriores; si esa
-reactivación no puede verificarse, conserva los archivos restaurados y marca
-`RESTART_REQUIRED`. Un reemplazo por `Exclude` usa la misma barrera: la etapa 2
-desactiva los paquetes que el plan retira antes de mover sus archivos y la
-etapa 3 solo activa los paquetes nuevos. Las sobrecargas sin barrera de runtime
-fallan explícitamente cuando el plan requiere reemplazos; no existe una ruta
-que mueva JARs de paquetes activos.
-
-La etapa 2 es el **único rollback automático** del manager. Un fallo en esta
-etapa restaura íntegramente la instalación anterior, incluido el inventario
-persistente.
+La etapa 2 es el **único rollback automático** del manager. Un fallo en esta etapa restaura
+íntegramente la instalación anterior, incluido el inventario persistente.
 
 ### 3. Etapa 3 — Activación y recuperación, sin rollback de instalación
 
 Solo después del commit de archivos, el runtime aplica el ciclo de vida:
 
-- instalar/actualizar: detener las versiones anteriores en orden inverso y
-  arrancar los módulos nuevos en orden jerárquico;
-- desinstalar: limpiar el estado runtime del paquete. La desactivación efectiva
-  y la liberación de classloaders, registros y recursos ya ocurrieron en la
-  barrera de la etapa 2; la etapa 3 no muta archivos ni retira dependencias
-  huérfanas.
+- instalar/actualizar: detener las versiones anteriores en orden inverso y arrancar los módulos
+  nuevos en orden jerárquico;
+- desinstalar: limpiar el estado runtime del paquete. La desactivación efectiva y la liberación de
+  classloaders, registros y recursos ya ocurrieron en la barrera de la etapa 2; la etapa 3 no muta
+  archivos ni retira dependencias huérfanas.
 
-Antes del primer `start()` se persiste el estado `ACTIVATION_PENDING` en
-`runtime/modules.status`. Si el proceso cae durante la activación, el arranque
-siguiente vuelve a activar los paquetes instalados desde `library/status`; no
-asume que los módulos están activos ni revierte los archivos.
+Antes del primer `start()` se persiste `ACTIVATION_PENDING` en `runtime/modules.status`. Si el
+proceso cae durante la activación, el arranque siguiente vuelve a activar los paquetes instalados
+desde `library/status`; no asume que los módulos están activos ni revierte los archivos.
 
-El orden es el orden topológico de dependencias declarado por los paquetes y,
-dentro de un paquete, el orden de capacidades `requires`/`provides` de sus
-módulos. Las dependencias se arrancan antes que sus consumidores. Los empates se
-resuelven por nombre para que el orden sea estable. La desinstalación recorre el
-orden inverso.
+El orden es el orden topológico de dependencias declarado por los paquetes y, dentro de un paquete,
+el orden de capacidades `requires`/`provides` de sus módulos. Las dependencias se arrancan antes que
+sus consumidores. Los empates se resuelven por nombre para que el orden sea estable. La
+desinstalación recorre el orden inverso.
 
 Si falla el arranque de un módulo:
 
-1. Se detienen, en orden inverso, los módulos que ya se habían arrancado en este
-   intento de activación. Esto es limpieza del runtime, no rollback de la
-   instalación.
-2. No se restauran archivos, `library/status` ni la versión anterior. Los
-   archivos nuevos permanecen instalados.
-3. El paquete queda `ACTIVATION_FAILED`; el módulo culpable queda `FAILED` y los
-   módulos detenidos vuelven a `INSTALLED`. Si la detención de limpieza deja
-   hilos, recursos o registros vivos, se marca `RESTART_REQUIRED`.
-4. Si la versión anterior ya está en `RESTART_REQUIRED`, no se arranca la nueva
-   versión: el paquete permanece en `RESTART_REQUIRED` y la instalación
-   confirmada no se revierte.
-5. El resultado incluye la etapa fallida (`RUNTIME`), el `moduleId` y la causa.
-   La activación puede reintentarse sin reinstalar.
+1. Se detienen, en orden inverso, los módulos que ya se habían arrancado en este intento. Esto es
+   limpieza del runtime, no rollback de la instalación.
+2. No se restauran archivos, `library/status` ni la versión anterior. Los archivos nuevos permanecen
+   instalados.
+3. El paquete queda `ACTIVATION_FAILED`; el módulo culpable queda `FAILED` y los módulos detenidos
+   vuelven a `INSTALLED`. Si la detención de limpieza deja hilos, recursos o registros vivos, se
+   marca `RESTART_REQUIRED`.
+4. Si la versión anterior ya está en `RESTART_REQUIRED`, no se arranca la nueva versión: el paquete
+   permanece en `RESTART_REQUIRED` y la instalación confirmada no se revierte.
+5. El resultado incluye la etapa fallida (`RUNTIME`), el `moduleId` y la causa. La activación puede
+   reintentarse sin reinstalar.
 
 Estados persistentes de instalación/activación:
 
@@ -1302,24 +825,21 @@ Estados persistentes de instalación/activación:
 | `ACTIVATION_FAILED` | La instalación está confirmada, pero al menos un módulo no arrancó; se permite reintentar. |
 | `RESTART_REQUIRED` | La limpieza del runtime no pudo verificarse; hace falta reiniciar. |
 
-Un módulo puede quedar `FAILED`; al retirar un paquete se elimina su entrada
-`package:<nombre>` en vez de persistir `REMOVED`.
+Un módulo puede quedar `FAILED`; al retirar un paquete se elimina su entrada `package:<nombre>` en
+vez de persistir `REMOVED`.
 
-**Invariante:** una instalación puede estar correctamente instalada sin estar
-correctamente activada. `library/status` registra la instalación; el estado de
-runtime registra la activación. El manager no convierte un fallo de activación
-en un fallo de instalación ni oculta la diferencia con un rollback destructivo.
-La etapa 3 solo actualiza estado de runtime; no modifica `library/status` ni el
-sistema de archivos.
+**Invariante:** una instalación puede estar correctamente instalada sin estar correctamente
+activada. `library/status` registra la instalación; el estado de runtime registra la activación. El
+manager no convierte un fallo de activación en un fallo de instalación ni oculta la diferencia con
+un rollback destructivo. La etapa 3 solo actualiza estado de runtime; no modifica `library/status`
+ni el sistema de archivos.
 
 ### 4. Desinstalación: coordinación explícita con el runtime
 
-La desinstalación sigue las mismas tres etapas, con una adaptación obligatoria:
-no se puede retirar un JAR que un classloader activo todavía tiene abierto. Por
-eso la desactivación efectiva se ejecuta como barrera al **inicio de la etapa
-2**, antes de mover archivos, y la etapa 3 solo finaliza y verifica esa
-desactivación. No se invierte el orden en silencio ni se borran archivos con
-módulos activos.
+La desinstalación sigue las mismas tres etapas, con una adaptación obligatoria: no se puede retirar
+un JAR que un classloader activo todavía tiene abierto. Por eso la desactivación efectiva se ejecuta
+como barrera al **inicio de la etapa 2**, antes de mover archivos, y la etapa 3 solo finaliza y
+verifica esa desactivación.
 
 | Operación | Etapa 1 | Etapa 2 | Etapa 3 |
 |---|---|---|---|
@@ -1327,17 +847,13 @@ módulos activos.
 | `upgrade` | resolver, descargar y verificar | commit de la versión nueva y puntero | detener anterior y arrancar nueva |
 | `uninstall` | validar plan de retirada | detener módulos y retirar archivos/`status` | finalizar estado runtime (sin mutar archivos) |
 
-Si falla la etapa 3 de una desinstalación, los archivos ya retirados y el
-inventario ya actualizado no se revierten; se marca `RESTART_REQUIRED` si quedan
-referencias vivas. La etapa 3 no retira dependencias huérfanas: cuando
-`autoRemove` está activo, la etapa 2 las incluye en la misma transacción.
-`library/trash` conserva los archivos retirados para el rollback del journal
-antes del commit; después del commit solo sirve para recuperación manual, nunca
-para rollback automático.
+Si falla la etapa 3 de una desinstalación, los archivos ya retirados y el inventario ya actualizado
+no se revierten; se marca `RESTART_REQUIRED` si quedan referencias vivas. La etapa 3 no retira
+dependencias huérfanas: cuando `autoRemove` está activo, la etapa 2 las incluye en la misma
+transacción. `library/trash` conserva los archivos retirados para el rollback del journal antes del
+commit; después del commit solo sirve para recuperación manual, nunca para rollback automático.
 
 ### 5. Layout versionado por paquete
-
-El layout objetivo es:
 
 ```text
 manager/library/
@@ -1360,153 +876,83 @@ manager/library/
 └── tmp/<operationId>/
 ```
 
-`library/status` relaciona cada paquete con su versión instalada y con los
-archivos y hashes de esa versión. No se usan enlaces simbólicos como puntero
-autoritativo. Una versión anterior permanece en disco mientras exista una
-referencia de runtime; no se borra durante el commit de la instalación. Un fallo
-de activación no autoriza a borrar la versión anterior, pero tampoco la reactiva
+`library/status` relaciona cada paquete con su versión instalada y con los archivos y hashes de esa
+versión. No se usan enlaces simbólicos como puntero autoritativo. Una versión anterior permanece en
+disco mientras exista una referencia de runtime; no se borra durante el commit de la instalación. Un
+fallo de activación no autoriza a borrar la versión anterior, pero tampoco la reactiva
 automáticamente.
 
 ### 6. Contrato manager-runtime y resultados
 
-La etapa 3 se invoca mediante un contrato post-commit que recibe el plan ya
-instalado y devuelve un resultado por módulo. No puede vetar la etapa 2, ordenar
-el borrado de archivos ni restaurar versiones anteriores.
-`PackageUpgradeListener` con `allow()`, `rollback(...)` y `keepBoth(...)` se
+La etapa 3 se invoca mediante un contrato post-commit que recibe el plan ya instalado y devuelve un
+resultado por módulo. No puede vetar la etapa 2, ordenar el borrado de archivos ni restaurar
+versiones anteriores. `PackageUpgradeListener` con `allow()`, `rollback(...)` y `keepBoth(...)` se
 retira; `keepBoth` deja de existir como estado de recuperación automática.
 
 `InstallResult` debe distinguir:
 
 - `installed`: el commit de archivos y `library/status` se completaron;
-- `activation`: `ACTIVE`, `ACTIVATION_FAILED`, `ACTIVATION_PENDING` o
-  `RESTART_REQUIRED`;
+- `activation`: `ACTIVE`, `ACTIVATION_FAILED`, `ACTIVATION_PENDING` o `RESTART_REQUIRED`;
 - `failedStage`: `PREPARE`, `COMMIT` o `RUNTIME`;
 - `moduleId` y causa cuando el fallo es de runtime.
 
-Un fallo de runtime no puede reportarse como “no instalado”. Un fallo de
-instalación no puede reportarse como “módulo fallido”.
+Un fallo de runtime no puede reportarse como “no instalado”. Un fallo de instalación no puede
+reportarse como “módulo fallido”.
 
 ### 7. Validaciones de la etapa 1
 
-Un ciclo de dependencias, un proveedor faltante, un checksum inválido, un
-conflicto de plataforma, un artefacto fuera de la caché o una dependencia
-compartida en uso se detectan en la etapa 1. Si no se puede determinar un orden
-de arranque estable, la operación falla antes de mutar archivos. La caché se
-verifica por SHA-256 antes de reutilizar cualquier artefacto; la limpieza no
-sigue enlaces simbólicos y nunca acepta rutas fuera de `library/cache`,
-`library/tmp`, `library/backup` o `library/trash`.
+Un ciclo de dependencias, un proveedor faltante, un checksum inválido, un conflicto de plataforma,
+un artefacto fuera de la caché o una dependencia compartida en uso se detectan en la etapa 1. Si no
+se puede determinar un orden de arranque estable, la operación falla antes de mutar archivos. La
+caché se verifica por SHA-256 antes de reutilizar cualquier artefacto; la limpieza no sigue enlaces
+simbólicos y nunca acepta rutas fuera de `library/cache`, `library/tmp`, `library/backup` o
+`library/trash`.
 
-**Consecuencias.**
-
-- La etapa 2 es el único rollback automático. Un fallo de etapa 3 deja una
-  instalación nueva committed, con arranque detenido o parcial; no se deshace.
-  Esto es deliberado: deshacer una instalación que ya sobrescribió el sistema es
-  más peligroso que dejar un estado explícito y recuperable.
-- Los estados `INSTALLED`, `ACTIVATION_PENDING`, `ACTIVE`,
-  `ACTIVATION_FAILED` y `RESTART_REQUIRED` son persistentes y no se infieren del
-  código de retorno de un comando.
-- La atomicidad del lote no depende del número de paquetes. Todos los paquetes
-  y dependencias se adquieren antes de la primera escritura final, y todos los
-  archivos se confirman antes del primer `start()`.
-- Los tests deben cubrir: fallo de etapa 1 sin mutación y reanudación/limpieza
-  de caché; fallo de etapa 2 con restauración exacta de archivos, directorios y
-  `library/status`; caída abrupta antes y después del punto de commit; fallo de
-  etapa 3 sin rollback, con parada inversa de los módulos ya arrancados y
-  `ACTIVATION_FAILED` persistido; reintento de activación sin reinstalar; orden
-  topológico y orden inverso de desinstalación; barrera de desactivación antes
-  de retirar archivos; y rechazo de ciclos, checksums y dependencias compartidas
-  en uso.
-- La regla C13 sigue aplicando: ninguna etapa puede asumirse correcta sin
-  verificarla. Un rollback de etapa 2 se prueba; un fallo de etapa 3 se reporta
-  con evidencia y no se disfraza de rollback.
+**Consecuencias.** La etapa 2 es el único rollback automático. Un fallo de etapa 3 deja una
+instalación nueva committed, con arranque detenido o parcial; no se deshace. Los estados
+`INSTALLED`, `ACTIVATION_PENDING`, `ACTIVE`, `ACTIVATION_FAILED` y `RESTART_REQUIRED` son
+persistentes y no se infieren del código de retorno de un comando. La atomicidad del lote no depende
+del número de paquetes. La regla C13 sigue aplicando: ninguna etapa puede asumirse correcta sin
+verificarla.
 
 ---
 
-## Decisión 2026-10-31 — etiqueta `<regex>` en plantillas de TextFormatter (ADR-028)
+## ADR-028 — Etiqueta `<regex>` en plantillas de TextFormatter
 
-**Estado:** Aceptada e implementada. No modifica ADR-027 y enmienda la decisión de
-2026-10-20 en lo relativo a las construcciones permitidas en las plantillas de `textformatter`:
-además de placeholders, MiniMessage y `<tr>`, se admite la etiqueta `<regex>`.
-
-**Contexto.** La VM de iFlow puede aplicar expresiones regulares en el espacio de usuario de sus
-políticas. Esa es la vía principal para decidir routing, permisos o mutaciones. TextFormatter no
-evalúa políticas, pero un template puede necesitar una comprobación regex local para decidir si
-muestra un fragmento. Duplicar esa comprobación en el template evita obligar a que la política
-preprocese el texto, sin convertir al formateador en un segundo motor de políticas. La etiqueta es
-redundante: no reemplaza al regex de iFlow y no altera el mensaje original.
+**Estado:** Aceptada e implementada.
 
 **Decisión.**
 
-1. La sintaxis es `<regex match="PATRÓN">CONTENIDO</regex>`. No se introduce `%regex%`, `${regex}`
-   ni otra variable escalar para esta función.
-2. `match` es un patrón Java (`java.util.regex.Pattern`). Es obligatorio y no vacío. El patrón no
-   se interpreta como MiniMessage; las comillas dobles y los caracteres XML se escapan en el
-   atributo.
+1. La sintaxis es `<regex match="PATRÓN">CONTENIDO</regex>`. No se introduce `%regex%`,
+   `${regex}` ni otra variable escalar.
+2. `match` es un patrón Java (`java.util.regex.Pattern`), obligatorio y no vacío. El patrón no se
+   interpreta como MiniMessage; las comillas dobles y los caracteres XML se escapan.
 3. `CONTENIDO` es el texto candidato y, a la vez, la plantilla MiniMessage que se renderiza. Puede
-   contener los placeholders existentes (`%content%`, `%player_name%`, etc.) y las etiquetas
-   MiniMessage habituales.
+   contener placeholders y las etiquetas MiniMessage habituales.
 4. La etiqueta se evalúa en `TemplateRenderer` antes del `deserialize` final de MiniMessage. Si el
    patrón coincide con el contenido ya resuelto, el span se sustituye por `CONTENIDO` interpretado
-   como MiniMessage. Si no coincide, el span no emite texto. La etiqueta es, por tanto, una
-   condición de renderizado local, no un motor de reemplazo global.
-5. El formato MiniMessage se aplica al texto que satisface el patrón. El patrón en sí no se colorea
-   ni se transforma; los grupos de captura no se interpolan automáticamente.
-6. No se anidan etiquetas `<regex>` dentro de otra `<regex>`. `<tr>` conserva su tratamiento
-   independiente y no cambia su contrato.
-7. El patrón se compila una vez por plantilla y se reutiliza. Un patrón inválido, vacío o que exceda
-   el límite configurado es un error explícito de configuración; no se ignora, no se convierte en
-   texto plano y no se degrada a coincidencia vacía.
-8. Se imponen límites duros y documentados al tamaño del patrón y al del contenido evaluado para
-   acotar el coste de backtracking. El patrón procede de la plantilla, nunca del mensaje recibido.
+   como MiniMessage. Si no coincide, el span no emite texto.
+5. El formato MiniMessage se aplica al texto que satisface el patrón. El patrón no se colorea ni se
+   transforma; los grupos de captura no se interpolan automáticamente.
+6. No se anidan etiquetas `<regex>`. `<tr>` conserva su tratamiento independiente.
+7. El patrón se compila una vez por plantilla y se reutiliza. Un patrón inválido, vacío o fuera de
+   límite es error explícito de configuración; no se ignora ni se degrada.
+8. Se imponen límites duros y documentados al patrón y al contenido evaluado para acotar el coste de
+   backtracking. Límites vigentes: patrón ≤ 512 unidades UTF-16, contenido evaluado ≤ 8192 unidades
+   UTF-16 y ≤ 32 spans por plantilla. El límite de contenido se revalida tras resolver placeholders.
 9. La etiqueta no ejecuta código, no evalúa SpEL, no consulta la VM, no decide routing, permisos ni
-   entrega y no muta el `Message`. No sustituye al regex que iFlow ejecuta en su espacio de usuario.
+   entrega y no muta el `Message`.
 
-**Alternativas consideradas.**
-
-1. **Variable escalar `%regex%`.** Ventajas: encaja con el mecanismo actual de placeholders.
-   Limitaciones: el usuario fija la sintaxis MiniMessage y una variable escalar no expresa contenido
-   ni condición; además colisiona con el espacio de nombres de placeholders. Evaluación:
-   **descartada**.
-2. **Motor de reemplazo regex global.** Ventajas: permitiría transformar el mensaje completo.
-   Limitaciones: duplica la superficie de mutación de iFlow, introduce orden de aplicación y hace
-   que el formateador compita con la política. Evaluación: **descartada**.
-3. **Solo regex en iFlow.** Ventajas: una única superficie de decisión. Limitaciones: obliga a que
-   cada template que necesite una comprobación local dependa de que la política haya preprocesado
-   el texto. Evaluación: **descartada** para este caso; se conserva como vía principal.
-4. **Etiqueta MiniMessage condicional `<regex>`.** Ventajas: sintaxis elegida por el usuario,
-   redundancia local sin segundo motor de políticas, formato MiniMessage en el contenido.
-   Limitaciones: añade un span al parser y requiere límites de coste. Evaluación: **aceptada**.
-
-**Consecuencias.**
-
-- `textformatter` gana una construcción de plantilla, no un lenguaje de políticas. La VM sigue
-  siendo la única superficie para decisiones ejecutables.
-- El regex de iFlow y la etiqueta `<regex>` pueden coexistir; si ambos evalúan el mismo texto deben
-  producir el mismo resultado, pero la etiqueta solo controla la renderización del span.
-- Los templates con patrones inválidos fallan al cargarse y no llegan a producción.
-- El parser debe probar coincidencia, ausencia de coincidencia, formato MiniMessage, límites,
-  patrones inválidos, entidades XML válidas y mal formadas, y ausencia de anidamiento.
-- Implementado en `Template` (parseo y compilación única) y `TemplateRenderer` (condición de
-  renderizado), con tests de coincidencia, ausencia, flags/grupos, entidades XML válidas y mal
-  formadas, límites, anidamiento, `<tr>`/placeholders y no mutación. `src/textformatter/README.md`
-  documenta sintaxis, semántica (`find`) y límites.
-- Límites vigentes: patrón ≤ 512 unidades UTF-16, contenido evaluado ≤ 8192 unidades UTF-16 y
-  ≤ 32 spans por plantilla. El límite de contenido se comprueba de nuevo tras resolver
-  placeholders.
+**Consecuencias.** `textformatter` gana una construcción de plantilla, no un lenguaje de políticas.
+La VM sigue siendo la única superficie para decisiones ejecutables. Un template inválido falla al
+cargarse y no llega a producción.
 
 ---
 
-## Decisión 2026-11-02 — distribución reproducible y frontera de dependencias de terceros (ADR-029)
+## ADR-029 — Distribución reproducible y frontera de dependencias de terceros
 
 **Estado:** Aceptada e implementada. Complementa ADR-026 y ADR-027; no cambia las tres etapas de
 instalación ni la semántica de `ACTIVATION_FAILED`.
-
-**Contexto.** F8 debía dejar un modelo reproducible y verificable: ZIPs de módulo, separación
-host/módulos, SHA-256, límites de confianza y un tratamiento explícito de las librerías de
-terceros. El host ya no puede contener features, pero varias features necesitan librerías que no
-cruzan la API neutral. Adventure es el caso límite: `core-render` expone `Component`/`Audience` en
-su contrato, así que cargar una segunda copia en un classloader de módulo rompería la identidad de
-tipos entre el módulo y el host.
 
 **Decisión.**
 
@@ -1515,82 +961,35 @@ tipos entre el módulo y el host.
    `-PbuildTimestamp`. Los ZIP de módulo usan `preserveFileTimestamps = false` y
    `reproducibleFileOrder = true`.
 2. `moduleChecksum` publica un sidecar `.sha256` junto a cada ZIP. `moduleRepository` exige
-   `-PrepositoryBaseUrl`, recopila todos los ZIP de módulo y de terceros, y escribe
-   `packages.list` y `SHA256SUMS`. Un artefacto publicado es inmutable: un cambio de contenido
-   exige una versión o un directorio nuevos.
+   `-PrepositoryBaseUrl`, recopila todos los ZIP de módulo y de terceros, y escribe `packages.list`
+   y `SHA256SUMS`. Un artefacto publicado es inmutable: un cambio de contenido exige una versión o
+   un directorio nuevos.
 3. Las librerías de terceros que no cruzan una API neutral se empaquetan como `DEPENDENCY` con sus
    transitivas resueltas. El módulo consumidor las declara en `moduleDependencies`; el manager las
    instala antes y `ModuleClassLoader` las expone desde `library/dependencies`.
-4. La versión de un paquete debe ser SemVer, aunque el artefacto Maven no lo sea. `json` usa la
-   versión de paquete `2024.3.3` sobre el artefacto Maven `org.json:json:20240303`.
+4. La versión de un paquete debe ser SemVer, aunque el artefacto Maven no lo sea.
 5. Adventure, MiniMessage y el serializador plano permanecen en el host. Un módulo no declara un
    paquete `DEPENDENCY` de Adventure mientras `core-render` exponga esos tipos. Cambiar esta regla
    requiere rediseñar el contrato de renderizado.
 6. Los shadow JAR de Spigot y Fabric contienen solo el runtime del host.
    `verifyShadowJarHasNoFeatures` falla `check` si una feature se cuela en el bootstrap. Los
    listeners de plataforma y `sync-bukkit`/`sync-fabric` son paquetes descargables.
-7. TLS + SHA-256 detecta corrupción y manipulación de transporte, no prueba autoría. No hay firma
-   de paquetes, pinning ni certificados en esta fase; el propietario del repositorio es una
-   autoridad de confianza. El aislamiento por classloader/capabilities no es un sandbox contra
-   código JVM hostil.
+7. TLS + SHA-256 detecta corrupción y manipulación de transporte, no prueba autoría. No hay firma de
+   paquetes, pinning ni certificados en esta fase; el propietario del repositorio es una autoridad
+   de confianza. El aislamiento por classloader/capabilities no es un sandbox contra código JVM
+   hostil.
 
-**Alternativas consideradas.**
-
-1. **Mantener todas las librerías de terceros en el host.** Ventajas: build más simple y sin
-   paquetes extra. Limitaciones: el host vuelve a mezclar features y dependencias, no permite
-   upgrades por módulo y contradice la separación host/módulos. Evaluación: **descartada**.
-2. **Shading de todas las dependencias dentro del JAR del módulo.** Ventajas: un solo artefacto.
-   Limitaciones: duplica clases entre módulos, impide compartir upgrades y agranda cada paquete.
-   Evaluación: **descartada** para dependencias compartidas; se conserva para casos puntuales.
-3. **Aislar también Adventure como `DEPENDENCY`.** Ventajas: consistencia teórica. Limitaciones:
-   `core-render` y la API neutral exponen `Component`/`Audience`; dos classloaders partirían la
-   identidad de tipos y romperían módulos y hosts. Evaluación: **descartada**.
-4. **Firmar paquetes en F8.** Ventajas: autenticidad además de integridad. Limitaciones: requiere
-   gestión, rotación y revocación de claves, y una política de confianza que no existe todavía.
-   Evaluación: **diferida** a una fase con ADR propio.
-5. **Reproducibilidad con timestamps del build.** Ventajas: trazabilidad de la fecha. Limitaciones:
-   rompe la igualdad byte a byte. Evaluación: **descartada**; la fecha va en metadatos de release,
-   no en el artefacto.
-
-**Consecuencias.**
-
-- Los paquetes de terceros son más grandes y pueden contener transitivas duplicadas; los módulos
-  deben declarar lo que usan y el manager no infiere imports.
-- `thirdPartyPackages` y `moduleRepository` requieren red para resolver Maven Central; un build
-  offline solo funciona con caché poblada.
-- `moduleRepository` no acepta una URL base vacía ni una ruta local como sustituto.
-- La reproducibilidad se verifica con dos builds y comparación de hashes; `SHA256SUMS` se verifica
-  con `sha256sum -c`.
-- El betatesting/E2E en Spigot/Paper/Fabric/Velocity reales se ejecuta después de la base 1.0.0
-  (ADR-034). Los gates automatizados siguen usando ZIP/JAR reales, directorios temporales y tests
-  de recuperación/activación; una plataforma no probada se declara desconocida.
-- Una futura firma de paquetes, un repositorio no confiable o un rediseño de `core-render` para
-  aislar Adventure requieren una ADR nueva.
-
-**Evidencia.**
-
-- `./gradlew build checkArchitecture` verde.
-- `./gradlew moduleRepository -PrepositoryBaseUrl=https://repo.example.com/suite` genera 35
-  paquetes y `sha256sum -c SHA256SUMS` pasa.
-- Dos ejecuciones de `thirdPartyPackages --rerun-tasks` producen los mismos hashes.
-- `verifyShadowJarHasNoFeatures` verde en Spigot y Fabric.
-- Tests de `PackageRuntimeTest`/`PackageJournalTest` cubren recuperación de etapa 2 y activación
-  fallida; `PackageRuntimeTest` instala los paquetes de terceros reales antes de los módulos que los
-  declaran.
+**Consecuencias.** Los paquetes de terceros son más grandes y pueden contener transitivas
+duplicadas; los módulos deben declarar lo que usan y el manager no infiere imports.
+`thirdPartyPackages` y `moduleRepository` requieren red para resolver Maven Central; un build
+offline solo funciona con caché poblada. La reproducibilidad se verifica con dos builds y
+comparación de hashes; `SHA256SUMS` se verifica con `sha256sum -c`.
 
 ---
 
-## Decisión 2026-11-03 — presets por comando y recarga de módulos activos (ADR-030)
+## ADR-030 — Presets por comando y recarga de módulos activos
 
-**Estado:** Aceptada. La corrección de layout del 2026-11-04 queda pendiente de implementación en
-código. No cambia las tres etapas de instalación de ADR-027 ni el modelo de paquetes de ADR-029.
-
-**Contexto.** `PresetService` ya existía como puerto neutral y `DefaultPresetService` aplicaba el
-catálogo con `FilePresetTarget`, pero no había comando para seleccionar un preset. El callback de
-recarga era una promesa del contrato sin una operación runtime que lo cumpliera: `SuiteRuntime`
-solo recargaba `commands.yml`. Además, el host lee su configuración de `config/suite/`, mientras
-que `ModuleHost` entrega a cada módulo `config/<module>/`; un único directorio base no
-podía escribir ambas ubicaciones.
+**Estado:** Aceptada e implementada.
 
 **Decisión.**
 
@@ -1607,62 +1006,24 @@ podía escribir ambas ubicaciones.
    éxito.
 5. Un preset desconocido devuelve `false` sin escribir ni recargar. Los errores de escritura o de
    recarga se reportan al ejecutor del comando.
+6. La ruta canónica de módulos es `config/<module>/`, por ejemplo `config/chattranslator/config.yml`.
+   Las rutas `config/manager/<module>/` y `manager/config/<module>/` son incorrectas: no son layouts
+   legacy, no son versiones superiores y no se aceptan como fallback. Cualquier archivo en esas
+   rutas se ignora: no se migra ni se elimina automáticamente. Nunca se sobrescribe una
+   configuración existente.
 
-**Alternativas consideradas.**
-
-1. **Exigir reinicio del servidor tras aplicar un preset.** Ventajas: implementación mínima.
-   Limitaciones: no cumple el callback de recarga del contrato y obliga a reiniciar para cambios
-   que el runtime puede aplicar. Evaluación: **descartada**.
-2. **Registrar el comando dentro del paquete `presets`.** Ventajas: encapsula el catálogo.
-   Limitaciones: el paquete tendría que conocer la raíz de comandos, el data folder y el ciclo de
-   vida del runtime; además desaparecería durante la propia recarga. Evaluación: **descartada**.
-3. **Recargar solo los módulos afectados por el preset.** Ventajas: menos interrupción.
-   Limitaciones: exige un grafo de dependencias y un mapeo preset→módulos que hoy no existe;
-   desactivar solo una parte puede dejar servicios de dependencias en estado inconsistente.
-   Evaluación: **diferida** a una fase con ADR propio.
-4. **Escribir todo bajo un único directorio base.** Ventajas: una sola ruta. Limitaciones: el host
-   y los módulos ya tienen raíces distintas; elegir una rompe la otra. Evaluación: **descartada**.
-
-**Consecuencias.**
-
-- Aplicar un preset es una operación de ciclo de vida completo: puede ser más lenta que una
-  escritura de archivos, pero deja archivos y servicios coherentes.
-- Los bootstraps de Spigot y Fabric usan `DefaultConfigInstaller` para copiar los defaults del
-  host a `config/suite/` y los de cada módulo a `config/<module>/`. Las rutas
-  `config/manager/<module>/` y `manager/config/<module>/` son incorrectas: no se aceptan como
-  fallback ni como versiones alternativas. No hay paquete oficial ni de terceros que deba
-  contenerlas, así que el runtime y el instalador las ignoran: no se leen, no se migran y no se
-  eliminan automáticamente. Nunca se sobrescribe una configuración existente.
-- La recarga depende de que los módulos liberen recursos. Un módulo que no lo hace exige reinicio;
-  el comando lo dice en lugar de ocultarlo.
-- `FilePresetTarget` conoce el layout canónico del runtime (`config/suite/` y
-  `config/<module>/`). Un cambio de layout requiere actualizar el target y sus tests.
-- **Corrección (2026-11-04):** la ruta canónica de módulos es `config/<module>/`, por ejemplo
-  `config/chattranslator/config.yml`. Las rutas `config/manager/<module>/` y
-  `manager/config/<module>/` son incorrectas: no son layouts legacy, no son versiones superiores
-  y no se aceptan como fallback. El código debe leer y escribir solo `config/<module>/`; cualquier
-  archivo en esas rutas se ignora: no se migra ni se elimina automáticamente.
-- Los tests cubren el orden de parada/reinicio, la conservación de servicios, la lista, la
-  aplicación, el preset desconocido y el paquete inactivo.
-
-**Evidencia.**
-
-- `./gradlew build checkArchitecture` verde.
-- `./gradlew :src:presets:test :src:suite-runtime:test` verde.
-- `./gradlew checkLocks` verde.
+**Consecuencias.** Aplicar un preset es una operación de ciclo de vida completo: puede ser más
+lenta que una escritura de archivos, pero deja archivos y servicios coherentes. La recarga depende
+de que los módulos liberen recursos; un módulo que no lo hace exige reinicio. `FilePresetTarget`
+conoce el layout canónico del runtime; un cambio de layout requiere actualizar el target y sus
+tests.
 
 ---
 
-## Decisión 2026-11-03 — contrato de política iFlow v3 para la paridad VM/Wasm (ADR-031)
+## ADR-031 — Contrato de política iFlow v3 para la paridad VM/Wasm
 
-**Estado:** Aceptada. W1/W2/W3 implementados en `iflow-wasm`; W3.5 pendiente.
-
-**Contexto.** La paridad W3.5 entre `iflow-vm` (spec v3) e `iflow-wasm` estaba bloqueada por
-decisiones de contrato que afectaban a la semántica observable: entrega, mutación de canal,
-cancelación, journal, idioma, propiedades, formato y ABI. El código de `src/iflow-vm` implementa
-la v2 de 16 bits y conserva estados ambiguos (`processed`, `REDIRECT`, `DROP`/`LOG`, lectura del
-mensaje original tras escribir). La spec v3 proponía D01–D05 y dejaba abiertas Q26, Q35–Q38 y
-`IFLOW-MAN-31/42…45`. Sin cerrarlas no se podían congelar imports, validadores ni tests de paridad.
+**Estado:** Aceptada. El estado de implementación y la paridad pendiente entre motores se rastrean
+en `PLAN.md`.
 
 **Decisión.** Se ratifican las siguientes reglas para el contrato de política v3:
 
@@ -1685,81 +1046,19 @@ mensaje original tras escribir). La spec v3 proponía D01–D05 y dejaba abierta
 D41 y D43 siguen vigentes: la decisión es explícita y tipada, y el journal cubre solo el write set
 del mensaje, no el estado de la máquina, el tiempo, la cola ni la entrega.
 
-**Consecuencias.**
-
-### Positivas
-
-- La entrega deja de depender de un silencio implícito: una política incompleta no entrega por
-  accidente.
-- `SET_CHANNEL` centraliza la mutación de canal y elimina la reentrega recursiva de `REDIRECT`.
-- `PolicyTarget` y el validador pierden estados muertos (`DROP`, `LOG`, `processed`), lo que reduce
-  ambigüedad entre motores.
-- Read-your-writes permite escribir y volver a leer en la misma ejecución sin introducir un segundo
-  modelo de estado; el journal mantiene la atomicidad del mensaje.
-- La precedencia de idioma deja de ser implícita y se puede probar en ambos motores.
-- TLV evita truncamientos UTF-8 y distingue ausencia de cadena vacía.
-- N entregas separadas respetan el contrato ya documentado por `Formats` y permiten formato,
-  permisos y rate limit por mensaje.
-
-### Negativas
-
-- Rompe políticas v2 que dependían de entrega implícita, `REDIRECT`, `processed` o `LOG`.
-- N entregas separadas multiplican las comprobaciones de permisos y el consumo de rate limit; el
-  dispatcher debe contar cada entrega, no el evento de origen.
-- Read-your-writes exige un overlay de lectura sobre el journal; no basta con leer el `Message`
-  original.
-- Renderizar con el recipient original hace que la consola o un actor destino vean el idioma y los
-  placeholders del recipient original. Es una decisión deliberada de compatibilidad; cambiarla
-  exigirá otro ADR.
-- Retirar `PROP_SOUNDS` y `PROP_ACTOR_WORLD` deja esas capacidades fuera de v3. Recuperarlas exige
-  un esquema de sonidos y una API neutral de mundo, respectivamente.
-- Una sola decisión por ejecución obliga a las políticas a no emitir decisiones alternativas; el
-  error debe ser visible y no silencioso.
-
-**Alternativas consideradas.**
-
-1. **Mantener la semántica v2 (allow por defecto, `REDIRECT`, `processed`, `DROP`/`LOG`).**
-   Ventajas: no rompe políticas existentes. Limitaciones: conserva entrega implícita, reentrega
-   recursiva y estados ambiguos. Evaluación: **descartada**; impide una paridad verificable.
-2. **Default configurable por política.**
-   Ventajas: migración gradual. Limitaciones: dos semánticas de entrega y tests de paridad
-   duplicados. Evaluación: **descartada**; el contrato debe ser único.
-3. **N formatos como un componente multilínea.**
-   Ventajas: una sola entrega y un solo rate limit. Limitaciones: no representa N mensajes
-   independientes y complica placeholders por línea. Evaluación: **descartada**; se eligieron N
-   entregas separadas.
-4. **Renderizar con el contexto del destino final.**
-   Ventajas: consola/actor destino ve su idioma y placeholders. Limitaciones: exige renderizar
-   después de resolver el destino y puede duplicar trabajo. Evaluación: **descartada**; se eligió
-   conservar el recipient original.
-5. **ABI longitud+escape o null-terminated.**
-   Ventajas: implementación más simple. Limitaciones: menos extensible o incapaz de distinguir
-   ausencia de vacío. Evaluación: **descartada**; se eligió TLV.
-6. **Última decisión gana.**
-   Ventajas: tolerante con políticas que emiten varias decisiones. Limitaciones: contradice D41 y
-   hace impredecible el resultado. Evaluación: **descartada**; se eligió error y abortar.
-
-**Evidencia.**
-
-- Spec v3: `docs/prompts/diseno/iflow-cpu-implement.md` §5.4 y cierre de §8.8.
-- Estado y criterios de W3.5: `docs/workdir/PLAN.md`.
-- Ratificación del usuario: 2026-11-03.
-- Implementación: W1/W2/W3 en `src/iflow-wasm` (contrato `PolicyAbiV3`, `TlvCodec`, `PolicySession`,
-  `PolicyHost`, `WasmPolicyEngine` aislado y `WasmPolicyRouter` con SHA-256/hot-reload, con tests);
-  W3.5 pendiente.
+**Consecuencias.** La entrega deja de depender de un silencio implícito. `SET_CHANNEL` centraliza la
+mutación de canal y elimina la reentrega recursiva de `REDIRECT`. `PolicyTarget` y el validador
+pierden estados muertos. Read-your-writes permite escribir y volver a leer en la misma ejecución sin
+introducir un segundo modelo de estado. La precedencia de idioma deja de ser implícita. TLV evita
+truncamientos UTF-8 y distingue ausencia de cadena vacía. N entregas separadas respetan el contrato
+de `Formats` y permiten formato, permisos y rate limit por mensaje. Rompe políticas v2 que dependían
+de entrega implícita, `REDIRECT`, `processed` o `LOG`.
 
 ---
 
-## Decisión 2026-11-04 — hub `iflow` para seleccionar backend (ADR-032)
+## ADR-032 — Hub `iflow` para seleccionar backend
 
-**Estado:** Aceptada e implementada. Hub y los tres backends (`iflow-firewall`, `iflow-vm` e
-`iflow-wasm`) están conectados; la integridad y el hot-reload de Wasm se detallan en ADR-033.
-
-**Contexto.** Los motores iFlow se trataban como paquetes mutuamente excluyentes y el host elegía
-entre ellos con `iflow.engine.kind`. Esa selección no cubre la convivencia de `iflow-vm`,
-`iflow-wasm` e `iflow-firewall`, no tiene un punto único de fallback y obliga al host a conocer
-detalles de cada motor. El patrón de `chattranslator` ya resuelve un problema equivalente: un hub
-publica la fachada estable y descubre proveedores por servicio.
+**Estado:** Aceptada e implementada.
 
 **Decisión.**
 
@@ -1768,10 +1067,10 @@ publica la fachada estable y descubre proveedores por servicio.
 2. Los motores publican `IflowBackend` (`name()`, `router()`, `isAvailable()`). No publican la
    selección ni conocen al hub.
 3. La configuración canónica del hub es `config/iflow/config.yml`:
-   `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
-   Solo se aceptan los nombres canónicos; no hay alias cortos ni `default-backend` en este archivo.
-   Las rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml` son incorrectas
-   y no se aceptan como fallback.
+   `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`. Solo se
+   aceptan los nombres canónicos; no hay alias cortos ni `default-backend` en este archivo. Las
+   rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml` son incorrectas y no
+   se aceptan como fallback.
 4. El valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y
    `fallback-on-unavailable` es `true`, el hub usa el primer backend disponible según la prioridad
    explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`, independiente del orden de activación de
@@ -1785,61 +1084,31 @@ publica la fachada estable y descubre proveedores por servicio.
 7. `HostConfig.Engine` e `iflow.engine.kind` fueron eliminados por ADR-034. El hub lee únicamente
    su propio `config/iflow/config.yml`.
 
-**Alternativas consideradas.**
-
-1. **Mantener `iflow.engine.kind` en `config/suite/config.yml` como selector único.**
-   Ventajas: sin paquete nuevo. Limitaciones: el host tendría que conocer los motores y no habría
-   descubrimiento ni fallback por disponibilidad. Evaluación: **descartada**.
-2. **Un hub dentro de `iflow-firewall` o de `iflow-vm`.** Ventajas: un paquete menos. Limitaciones:
-   acopla la selección a un motor y rompe la independencia de las líneas. Evaluación: **descartada**.
-3. **Selección por `ServiceLoader` únicamente.** Ventajas: sin registro runtime. Limitaciones: no
-   soporta hot unload/upgrade ni disponibilidad dinámica. Evaluación: **descartada**; se usa el
-   `ServiceRegistry` y se refresca con eventos de ciclo de vida.
-4. **Fallback silencioso al primer motor disponible siempre.** Ventajas: el pipeline nunca queda
-   vacío. Limitaciones: oculta una configuración incorrecta. Evaluación: **descartada**; el
-   fallback es explícito y configurable.
-
-**Consecuencias.**
-
-- El host deja de importar motores concretos y solo consume `Router`/`IflowHub`.
-- Instalar varios motores ya no es un error de classpath; el hub elige uno y los demás quedan
-  inactivos para el routing.
-- Un backend puede existir pero no estar disponible (por ejemplo, `iflow-wasm` sin artefacto o con
-  hash incorrecto); el hub puede aplicar fallback.
-- El hub no crea ni cierra motores: cada motor conserva la propiedad de sus recursos.
-- Cambiar la selección en caliente requiere que el hub refresque; los eventos
-  `ModuleActivatedEvent`/`ModuleDeactivatedEvent` ya lo hacen.
-
-**Evidencia.**
-
-- `./gradlew :src:iflow:test :src:host:test :src:suite-runtime:test :src:presets:test` verde.
-- `src/iflow/README.md`.
-- `IflowConfigTest` e `IflowHubTest`.
+**Consecuencias.** El host deja de importar motores concretos y solo consume `Router`/`IflowHub`.
+Instalar varios motores ya no es un error de classpath; el hub elige uno y los demás quedan
+inactivos para el routing. Un backend puede existir pero no estar disponible; el hub puede aplicar
+fallback. El hub no crea ni cierra motores: cada motor conserva la propiedad de sus recursos.
+Cambiar la selección en caliente requiere que el hub refresque; los eventos
+`ModuleActivatedEvent`/`ModuleDeactivatedEvent` ya lo hacen.
 
 ---
 
-## Decisión 2026-11-04 — router Wasm, SHA-256 del artefacto y hot-reload (ADR-033)
+## ADR-033 — Router Wasm, SHA-256 del artefacto y hot-reload
 
 **Estado:** Aceptada e implementada.
-
-**Contexto.** W3 exige que una política `.wasm` atraviese el pipeline real. El contrato v3 ya
-valida el módulo, pero faltaban tres piezas: el adaptador a `Router`, la integridad del artefacto
-que el usuario deja en `config/iflow-wasm/` y la recarga cuando ese archivo cambia. El manager ya
-verifica el SHA-256 del ZIP y de los archivos del paquete; eso no cubre una política editada o
-sustituida después de la instalación.
 
 **Decisión.**
 
 1. `WasmPolicyRouter` implementa `Router` y es el backend que publica `iflow-wasm`. Traduce
-   `PolicyOutcome` a `RouteOutcome`: `DELIVER → LOG`, `CANCEL_EVENT → DROP`, `ERROR → REJECT`.
-   El mensaje transformado del journal se devuelve en el outcome.
+   `PolicyOutcome` a `RouteOutcome`: `DELIVER → LOG`, `CANCEL_EVENT → DROP`, `ERROR → REJECT`. El
+   mensaje transformado del journal se devuelve en el outcome.
 2. La política se lee de `<data>/config/iflow-wasm/policy.wasm`. El SHA-256 es **obligatorio** y se
    toma de `policy.sha256` o `policy.wasm.sha256`; si falta o no coincide, el backend queda no
    disponible y falla cerrado. No se evalúa un artefacto sin hash.
 3. El hash del `.wasm` es adicional al hash del paquete. El manager sigue verificando el ZIP/JAR
    contra el manifiesto y `SHA256SUMS`; el sidecar de la política cubre el archivo mutable de
-   configuración. No se duplica el hash del paquete en el sidecar ni se introduce una firma de
-   autor que el modelo de confianza actual no exige.
+   configuración. No se duplica el hash del paquete en el sidecar ni se introduce una firma de autor
+   que el modelo de confianza actual no exige.
 4. `WasmPolicyRouter` observa el directorio con `WatchService` y recarga con debounce de 100 ms al
    cambiar `policy.wasm` o cualquiera de los sidecars. La recarga también es invocable con
    `reload()`.
@@ -1847,101 +1116,67 @@ sustituida después de la instalación.
    silenciosamente la política anterior: la recarga es fail-closed.
 6. `iflow-wasm` publica `IflowBackend` con nombre `iflow-wasm`; `isAvailable()` refleja si hay una
    política verificada y validada. El hub `iflow` puede aplicar `fallback-on-unavailable`.
-7. El router aplica las políticas de envío/recepción del canal y el rate limit de emisión, igual
-   que `iflow-vm` y `iflow-firewall`.
+7. El router aplica las políticas de envío/recepción del canal y el rate limit de emisión, igual que
+   `iflow-vm` e `iflow-firewall`.
 
-**Alternativas consideradas.**
-
-1. **Exigir el hash solo en el manifiesto del paquete.** Ventajas: un único lugar. Limitaciones: la
-   política vive en configuración mutable y el manifiesto no se actualiza cuando el operador la
-   cambia. Evaluación: **descartada**; se mantiene el hash del paquete y se añade el del artefacto.
-2. **No exigir hash.** Ventajas: instalación más simple. Limitaciones: sustitución silenciosa del
-   `.wasm`. Evaluación: **descartada**.
-3. **Conservar la política anterior si la nueva es inválida.** Ventajas: continuidad. Limitaciones:
-   oculta un despliegue roto y mantiene código que el operador creía reemplazado. Evaluación:
-   **descartada**; fail-closed.
-4. **Polling periódico en lugar de `WatchService`.** Ventajas: portable. Limitaciones: latencia y
-   coste constante. Evaluación: **descartada**; el watcher es suficiente y se apoya en el
-   filesystem local.
-
-**Consecuencias.**
-
-- Un `.wasm` sin sidecar no se ejecuta; el hub puede seguir con otro backend.
-- El operador debe actualizar el sidecar al cambiar la política. Es una acción explícita y
-  auditable.
-- El watcher es un hilo daemon por router y se cierra con el módulo.
-- La integridad del paquete y la del artefacto de política son responsabilidades separadas y
-  documentadas.
-
-**Evidencia.**
-
-- `./gradlew :src:iflow-wasm:test` verde, incluidos `WasmPolicyRouterTest` e
-  `IflowWasmActivatorTest`.
-- `src/iflow-wasm/README.md`.
+**Consecuencias.** Un `.wasm` sin sidecar no se ejecuta; el hub puede seguir con otro backend. El
+operador debe actualizar el sidecar al cambiar la política. El watcher es un hilo daemon por router y
+se cierra con el módulo. La integridad del paquete y la del artefacto de política son
+responsabilidades separadas y documentadas.
 
 ---
 
-## Decisión 2026-11-04 — régimen pre-1.0: versión base 1.0, rolling release y purga de compatibilidad (ADR-034)
+## ADR-034 — Régimen pre-1.0: versión base 1.0, rolling release y purga de compatibilidad
 
 **Estado:** Aceptada. La implementación de la purga y el reseteo de versiones se rastrea en
 `PLAN.md`, sección «Purga pre-1.0». Esta ADR sustituye cualquier política anterior de
 retrocompatibilidad, versiones ficticias o validación exclusivamente automatizada.
 
-**Contexto.** TextFormatter Suite sigue en fase de diseño fundacional: el ensamblador x86_64, la
-VM de iFlow, los contratos SPI, el runtime modular y las capas de red y adaptadores todavía se
-están consolidando. No existe una versión estable, no hay producción y no hay una promesa de
-compatibilidad que sostener. Aun así, el repositorio arrastra números `2.x`/`3.x`, aliases legacy,
-lectores de rutas antiguas, módulos *deprecated* y textos que presentan como “production-ready”
-algo que aún no ha cerrado su integración. Esa ficción de estabilidad fija decisiones antes de que
-la arquitectura esté terminada, añade carga mental y convierte cada refactor en una negociación con
-código que solo existe para no romper instalaciones que nunca fueron oficiales.
+**Contexto.** TextFormatter Suite sigue en fase de diseño fundacional. No existe una versión
+estable, no hay producción y no hay una promesa de compatibilidad que sostener. El repositorio
+arrastraba números `2.x`/`3.x`, aliases legacy, lectores de rutas antiguas, módulos *deprecated* y
+textos que presentaban como “production-ready” algo que aún no había cerrado su integración. Esa
+ficción de estabilidad fija decisiones antes de que la arquitectura esté terminada y añade carga
+mental a cada refactor.
 
-La versión `1.0.0` debe ser un hito real, no un número de build. Hasta alcanzarlo, el proyecto
-opera en régimen de *rolling release*: los *breaking changes* están permitidos y son deseables para
-limpiar la deuda técnica. Una vez alcanzada la base `1.0.0`, comienza el betatesting/E2E en
-servidores reales, porque los tests aislados no demuestran la integración con Spigot/Paper, Fabric
-y Velocity. La estabilidad y la producción no se declaran hasta cerrar ese ciclo posterior.
+La versión `1.0.0` debe ser un hito real, no un número de build. Hasta alcanzarlo, el proyecto opera
+en régimen de *rolling release*: los *breaking changes* están permitidos y son deseables para limpiar
+la deuda técnica.
 
 **Decisión.**
 
-1. **Una sola base de versión.** Todos los módulos, componentes, contratos, artefactos y esquemas
-   de configuración se alinean a `1.0`:
-   - artefactos Maven/Gradle: `1.0.0`;
-   - contratos `*-api` y capabilities: `1.0.0`;
-   - configuración YAML: `config-version: 1.0`.
-   Un sufijo de build (`-SNAPSHOT`, hash de commit) no cambia la base funcional `1.0.0`, pero su
-   publicación y resolución se rigen por la política de artefactos; no se usa como promesa de
-   compatibilidad. No se usan `2.x`, `3.x` ni superiores como promesa de compatibilidad. Las
-   etiquetas históricas quedan como referencia de iteración, no como versiones publicadas.
+1. **Una sola base de versión.** Todos los módulos, componentes, contratos, artefactos y esquemas de
+   configuración se alinean a `1.0`: artefactos Maven/Gradle `1.0.0`; contratos `*-api` y
+   capabilities `1.0.0`; configuración YAML `config-version: 1.0`. Un sufijo de build no cambia la
+   base funcional. No se usan `2.x`, `3.x` ni superiores como promesa de compatibilidad.
 2. **Sin retrocompatibilidad pre-1.0.** Se eliminan los adaptadores, aliases, shims, dobles
    lectores, rutas legacy y ramas de compatibilidad que existan solo para no romper instalaciones
-   anteriores. Los módulos legacy independientes (`iflow-firewall`, `CoreTranslator`) no son
-   shims: se mantienen como implementaciones alternativas bajo C6. Un cambio incompatible se aplica
-   en el mismo cambio que actualiza a todos sus consumidores; no hay ciclo de deprecación ni
-   periodo de convivencia.
-3. **Contrato base `1.0.0`.** La resolución de dependencias acepta contratos en el intervalo
-   cerrado `[1.0.0, host]`: el mínimo es `1.0.0` y el máximo es la versión de contrato que expone
-   el host. Rechaza cualquier contrato inferior a `1.0.0` y cualquiera superior al host. Las
-   versiones son SemVer completas (`mayor.menor.parche`); no se aceptan formas abreviadas como
-   `1.5` o `2.5`. Un módulo `1.0.0` funciona sobre un host `2.1.0`; un módulo `2.1.1` se rechaza
-   hasta que el host suba su contrato. No se declaran rangos que prometan compatibilidad con
-   versiones ficticias ni se degrada un mismatch mediante un adaptador. La aceptación y el rechazo
-   se cubren en `ModuleGraphTest`.
-4. **Configuración sin migración silenciosa.** Todos los `.yml` declaran `config-version: 1.0` en
-   la raíz, preferentemente al final. Aplica a defaults, configuración instalada y configuración
+   anteriores. Los módulos legacy independientes (`iflow-firewall`, `CoreTranslator`) no son shims:
+   se mantienen como implementaciones alternativas bajo C6. Un cambio incompatible se aplica en el
+   mismo cambio que actualiza a todos sus consumidores; no hay ciclo de deprecación ni periodo de
+   convivencia.
+3. **Contrato base `1.0.0`.** La resolución de dependencias acepta contratos en el intervalo cerrado
+   `[1.0.0, host]`: el mínimo es `1.0.0` y el máximo es la versión de contrato que expone el host.
+   Rechaza cualquier contrato inferior a `1.0.0` y cualquiera superior al host. Las versiones son
+   SemVer completas (`mayor.menor.parche`); no se aceptan formas abreviadas como `1.5` o `2.5`. Un
+   módulo `1.0.0` funciona sobre un host `2.1.0`; un módulo `2.1.1` se rechaza hasta que el host
+   suba su contrato. No se declaran rangos que prometan compatibilidad con versiones ficticias ni se
+   degrada un mismatch mediante un adaptador.
+4. **Configuración sin migración silenciosa.** Todos los `.yml` declaran `config-version: 1.0` en la
+   raíz, preferentemente al final. Aplica a defaults, configuración instalada y configuración
    generada; no aplica a `plugin.yml`, que es formato propio de Bukkit. Si falta o no coincide, el
-   parser falla con un error explícito (`version de configuracion no identificada (archivo editado
-   o corrupto?)`). Si el esquema cambia, se reescribe la configuración en el mismo cambio; no se
-   añaden lectores que acepten el esquema viejo como fallback. Una ruta o un formato no canónico se
-   ignora o se rechaza con un mensaje explícito, nunca se convierte en runtime.
+   parser falla con un error explícito. Si el esquema cambia, se reescribe la configuración en el
+   mismo cambio; no se añaden lectores que acepten el esquema viejo como fallback. Una ruta o un
+   formato no canónico se ignora o se rechaza con un mensaje explícito, nunca se convierte en
+   runtime.
 5. **Purga inmediata.** La primera tarea del PLAN es inventariar y eliminar el código de
-   compatibilidad: `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata
-   como retirado), rutas planas de la raíz de `config/` (`config/config.yml`, `config/channels/`,
-   `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`), dobles
-   lectores, aliases de motores y cualquier capa de compatibilidad dentro de features o contratos.
-   Los `config/<module>/config.yml` canónicos se conservan. El inventario de versiones `2.x`/`3.x`
-   se corrige a `1.0.0` o se elimina si ya no representa una capacidad vigente. `CoreTranslator` no
-   se elimina: se restaura como módulo legacy independiente (ADR-035).
+   compatibilidad: `iflow.engine.kind`, `base-name` (si queda alguno), rutas planas de la raíz de
+   `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`,
+   `config/rules.yml`, `config/inworld.yml`), dobles lectores, aliases de motores y cualquier capa
+   de compatibilidad dentro de features o contratos. Los `config/<module>/config.yml` canónicos se
+   conservan. El inventario de versiones `2.x`/`3.x` se corrige a `1.0.0` o se elimina si ya no
+   representa una capacidad vigente. `CoreTranslator` no se elimina: se restaura como módulo legacy
+   independiente (ADR-035).
 6. **E2E real después de `1.0.0`.** `1.0.0` es la etiqueta de release de la base integrada. Una vez
    publicada, comienza el betatesting/E2E en servidores reales Spigot/Paper, Fabric y proxies
    Velocity. Los tests automatizados siguen siendo obligatorios y no se sustituyen por una prueba
@@ -1957,79 +1192,31 @@ y Velocity. La estabilidad y la producción no se declaran hasta cerrar ese cicl
    oficial y seguir en beta.
 8. **`AUDITORIA.md` efímera.** El archivo contiene solo la auditoría vigente. Cuando todos sus bugs
    estén corregidos con tests de validación, se reemplaza por completo para el siguiente ciclo. El
-   historial de auditorías vive exclusivamente en Git. El archivo no se modifica para dejar notas
-   de metodología: su ciclo se declara aquí y se menciona desde `PLAN.md`. El estado operativo de la
-   auditoría (abierta/cerrada, hallazgos y mapeo P0/P1/P2 ↔ Alta/Media/Baja) se mantiene en el
-   PLAN.
+   historial de auditorías vive exclusivamente en Git. El archivo no se modifica para dejar notas de
+   metodología: su ciclo se declara aquí y se menciona desde `PLAN.md`. El estado operativo de la
+   auditoría se mantiene en el PLAN.
 
-**Alternativas consideradas.**
-
-1. **Mantener `2.1.0-SNAPSHOT` y una política SemVer de compatibilidad.** Ventajas: continuidad
-   aparente y menos cambios mecánicos. Limitaciones: presenta como estable una arquitectura que
-   aún se está diseñando, obliga a conservar shims y convierte cada refactor en deuda de
-   compatibilidad. Evaluación: **descartada**.
-2. **Conservar los adaptadores legacy “hasta la 1.0”.** Ventajas: menos fricción para instalaciones
-   antiguas. Limitaciones: contamina la base de código (*bloatware*), duplica caminos y fija
-   decisiones antes de que el diseño esté cerrado. Evaluación: **descartada**; no hay instalaciones
-   oficiales que proteger.
-3. **Declarar la 1.0.0 estable y de producción sin betatesting/E2E posterior.** Ventajas: menos
-   coste inmediato. Limitaciones: se declararía estabilidad sin haber validado la integración real;
-   los fallos de plataforma aparecerían después. Evaluación: **descartada**; la 1.0.0 es la base
-   integrada, pero la estabilidad se declara solo tras el betatesting/E2E posterior.
-4. **Acumular el historial de auditorías en `AUDITORIA.md`.** Ventajas: todo en un archivo.
-   Limitaciones: el documento activo deja de ser operativo y se vuelve difícil distinguir lo
-   vigente de lo cerrado. Evaluación: **descartada**; Git conserva el historial.
-5. **Resetear solo la documentación y dejar el código en `2.x`.** Ventajas: cambio mínimo.
-   Limitaciones: crea una contradicción entre lo declarado y lo implementado, justo lo que C13
-   prohíbe. Evaluación: **descartada**; el reseteo es una tarea de código y documentación.
-
-**Consecuencias.**
-
-- Los cambios incompatibles dejan de ser excepcionales: son el modo normal de trabajo hasta la
-  1.0 estable. Cada cambio debe actualizar módulos, contratos, configuración, tests y documentación
-  en la misma unidad de trabajo.
-- El repositorio puede contener referencias históricas a `2.x`/`3.x`; se consideran deuda a
-  inventariar y corregir, no versiones válidas. El PLAN fija el orden de purga.
-- Las instalaciones que conserven rutas o formatos antiguos no se migran en runtime. El operador
-  debe aceptar el layout canónico o la carga se rechaza/ignora explícitamente.
-- El E2E real añade tiempo y requiere entornos de prueba; a cambio, la estabilidad y la producción
-  no se declaran sobre una integración no verificada. La 1.0.0 es la base de release que se somete
-  a ese betatesting; la 1.0 es la declaración final de estabilidad.
-- La purga puede romper tests existentes que afirmaban compatibilidad. Esos tests se eliminan o se
-  reescriben para el camino vigente; no se mantienen para “no romper” una garantía que ya no
-  existe.
-- La documentación debe hablar de una sola base `1.0`, una base mínima de contrato `1.0.0` y un
-  solo camino vigente por contrato; los módulos legacy independientes se declaran como tales. Las
-  menciones a versiones ficticias se marcan como históricas o se eliminan.
-
-**Evidencia y referencias.**
-
-- `docs/prompts/diseno/philosophy.md` §0 («Régimen pre-1.0»), C7 («Sin retrocompatibilidad
-  prematura») y C8 («Betatesting/E2E real después de 1.0.0»).
-- `docs/workdir/PLAN.md`, sección «Purga pre-1.0 — hoja de ruta inmediata».
-- ADR-035 para la restauración de `CoreTranslator` como módulo legacy independiente.
-- Inventario pendiente de ejecución: `build.gradle` declara `2.1.0-SNAPSHOT` y varios módulos,
-  manifiestos y configuraciones conservan versiones o aliases anteriores. La corrección se rastrea
-  en el PLAN; esta ADR no declara el reseteo como implementado.
+**Consecuencias.** Los cambios incompatibles dejan de ser excepcionales: son el modo normal de
+trabajo hasta la 1.0 estable. Cada cambio debe actualizar módulos, contratos, configuración, tests y
+documentación en la misma unidad de trabajo. Las instalaciones que conserven rutas o formatos
+antiguos no se migran en runtime. El E2E real añade tiempo y requiere entornos de prueba; a cambio,
+la estabilidad y la producción no se declaran sobre una integración no verificada. La documentación
+debe hablar de una sola base `1.0`, una base mínima de contrato `1.0.0` y un solo camino vigente por
+contrato; los módulos legacy independientes se declaran como tales.
 
 ---
 
-## Decisión 2026-11-04 — CoreTranslator como módulo legacy independiente (ADR-035)
+## ADR-035 — CoreTranslator como módulo legacy independiente
 
-**Estado:** Aceptada. Implementada en `src/coretranslator` (2026-11-04).
+**Estado:** Aceptada e implementada en `src/coretranslator` (2026-11-04).
 
 **Contexto.** `CoreTranslator` proviene del proyecto anterior ChatTranslator y se conserva por su
 utilidad como feature. No es una capa de compatibilidad dentro de otro módulo ni un shim: es una
 implementación legacy independiente. La regla de no retrocompatibilidad se refiere a features y
-contratos, no a la pluralidad de módulos; para módulos rige C6 («implementar ambas»).
-
-La investigación del historial mostró una discrepancia importante: el módulo llamado
-`src/coretranslator` en `7dd164a4^` no era el CoreTranslator funcional de ChatTranslator. Era un
-`LegacyBridge` que convertía `me.majhrs16.suite.common.legacy.ChatMessage` al `Message` actual, y su
-dependencia `suite-common-legacy` solo contenía los DTO deprecados `ChatMessage` y
-`ChatMessageType`. Restaurar ese código habría reintroducido exactamente el shim que C7 prohíbe. El
-CoreTranslator real es la expansión PlaceholderAPI `me.majhrs16.cot.CoreTranslator` del proyecto
-ChatTranslator, que expone los placeholders `%cot_*`.
+contratos, no a la pluralidad de módulos; para módulos rige C6. El módulo llamado `src/coretranslator`
+en `7dd164a4^` no era el CoreTranslator funcional: era un `LegacyBridge` que convertía
+`common.legacy.ChatMessage` al `Message` actual. El CoreTranslator real es la expansión
+PlaceholderAPI `me.majhrs16.cot.CoreTranslator`, que expone los placeholders `%cot_*`.
 
 **Decisión.**
 
@@ -2052,43 +1239,10 @@ ChatTranslator, que expone los placeholders `%cot_*`.
 7. Añadir tests neutrales de gramática, contrato de módulo y adaptador PAPI. La prueba real en
    servidor Bukkit/Paper con PlaceholderAPI pertenece al E2E posterior a `1.0.0`.
 
-**Consecuencias.**
-
-- `suite-common-legacy` y el `LegacyBridge` siguen eliminados; no hay doble lector ni adaptador
-  interno.
-- `CoreTranslator` es una expansión PAPI, no un motor de traducción ni un puente de mensajes. Si
-  PlaceholderAPI no está instalado, el módulo lo registra en el log y no expone placeholders.
-- `%cot_translate%` resuelve de forma síncrona porque PAPI exige un valor inmediato; se apoya en la
-  caché de `TranslationService`. Es una limitación legacy documentada, no el camino recomendado
-  para cargas altas.
-- `send`/`broadcast`/`clone` operan sobre mensajes creados por `cot_new`/`cot_clone`; no capturan el
-  historial del chat vivo. La captura de eventos pertenece a `sync-bukkit` y al pipeline neutral.
-- `CoreTranslator` no se elimina en la purga P0.4; se mantiene como feature legacy.
-- La documentación debe dejar de decir que `CoreTranslator` fue retirado.
-
-**Alternativas consideradas.**
-
-1. **Restaurar el `LegacyBridge` de `7dd164a4^`.** Ventajas: recuperación literal del historial.
-   Limitaciones: es un shim, depende de DTO sin feature y contradice C7. Evaluación: **descartada**.
-2. **Recuperar `suite-common-legacy`.** Ventajas: compila el puente sin cambios. Limitaciones: solo
-   contenía DTO deprecados; mantiene un camino de compatibilidad que la purga debe eliminar.
-   Evaluación: **descartada**.
-3. **Reconstruir la expansión PAPI desde cero.** Ventajas: código más limpio. Limitaciones: la
-   feature real existe en el proyecto ChatTranslator y se puede adaptar; reconstruirla oculta el
-   origen histórico. Evaluación: **descartada**.
-4. **Eliminar CoreTranslator.** Ventajas: menos código legacy. Limitaciones: se pierde un feature
-   útil de ChatTranslator. Evaluación: **descartada**.
-5. **Mantenerlo como shim dentro de otro módulo.** Ventajas: un paquete menos. Limitaciones:
-   contradice C6 y la independencia de módulos. Evaluación: **descartada**.
-
-**Evidencia y referencias.**
-
-- `/home/majhrs16/Documentos/chattranslator/src/main/java/me/majhrs16/cot/CoreTranslator.java` y
-  `CommandsPAPI.java`: expansión `cot` original.
-- `git show 7dd164a4^:src/coretranslator/src/main/java/me/majhrs16/suite/coretranslator/LegacyBridge.java`:
-  puente eliminado, no la feature.
-- `git show b0de8fe64077a2971ae85a29b443990918034cf5:suite/common-legacy/...`: solo
-  `ChatMessage`/`ChatMessageType`.
-- `src/common-legacy` eliminado en `9e5f6d09`.
-- `src/coretranslator`: módulo restaurado, tests y README.
-- `docs/prompts/diseno/philosophy.md` C6 y C7.
+**Consecuencias.** `suite-common-legacy` y el `LegacyBridge` siguen eliminados; no hay doble lector
+ni adaptador interno. `CoreTranslator` es una expansión PAPI, no un motor de traducción ni un puente
+de mensajes. Si PlaceholderAPI no está instalado, el módulo lo registra en el log y no expone
+placeholders. `%cot_translate%` resuelve de forma síncrona porque PAPI exige un valor inmediato; se
+apoya en la caché de `TranslationService`. `send`/`broadcast`/`clone` operan sobre mensajes creados
+por `cot_new`/`cot_clone`; no capturan el historial del chat vivo. `CoreTranslator` no se elimina en
+la purga P0.4; se mantiene como feature legacy.

@@ -29,7 +29,7 @@ La parte equivalente a APT debe encargarse de:
 
 - Leer la configuración de repositorios.
 - Consultar los índices remotos.
-- Actualizar los índices locales mediante `/suite repo update`.
+- Actualizar los índices locales mediante `<root> repo update`, donde `<root>` es la raíz configurable declarada en `config/suite/commands.yml`.
 - Encontrar candidatos compatibles para los paquetes solicitados.
 - Resolver dependencias y restricciones de versiones.
 - Determinar el conjunto completo de paquetes y versiones que deben instalarse, actualizarse o conservarse.
@@ -457,7 +457,7 @@ Una solicitud explícita de versión debe respetarse. No sustituyas silenciosame
 
 ### 9.3. `repo update`: actualizar índices
 
-`/suite repo update` actualiza los índices de los repositorios configurados.
+`<root> repo update` actualiza los índices de los repositorios configurados.
 
 Esta operación:
 
@@ -471,7 +471,7 @@ No significa que los paquetes instalados se actualicen. Tampoco debe modificar `
 
 ### 9.4. `repo upgrade`: actualización global equivalente a APT
 
-`/suite repo upgrade` debe mantener la paridad funcional esencial con `apt upgrade`: actualizar el conjunto de paquetes instalados a las versiones compatibles disponibles y resolver sus dependencias de manera global.
+`<root> repo upgrade` debe mantener la paridad funcional esencial con `apt upgrade`: actualizar el conjunto de paquetes instalados a las versiones compatibles disponibles y resolver sus dependencias de manera global.
 
 No es una sucesión de instalaciones independientes.
 
@@ -500,7 +500,7 @@ No prometas que todos los paquetes pueden actualizarse sin reinicio. La activaci
 
 ### 9.5. `repo fix-broken`
 
-Implementa `/suite repo fix-broken`, inspirado en `apt --fix-broken install`.
+Implementa `<root> repo fix-broken`, inspirado en `apt --fix-broken install`.
 
 Debe inspeccionar el estado local y el grafo de dependencias para identificar paquetes con dependencias incumplidas, relaciones inconsistentes o instalaciones pendientes de recuperación.
 
@@ -535,7 +535,7 @@ Si una operación no puede realizarse con seguridad, falla con un diagnóstico c
 
 Las operaciones que afecten a varios paquetes deben validarse como un conjunto.
 
-Por ejemplo, `/suite package install iflow textformatter` debe resolver primero todas las dependencias y conflictos. No debe instalar arbitrariamente la mitad del conjunto y dejar el sistema en un estado inconsistente cuando la otra mitad falla.
+Por ejemplo, `<root> package install iflow textformatter` debe resolver primero todas las dependencias y conflictos. No debe instalar arbitrariamente la mitad del conjunto y dejar el sistema en un estado inconsistente cuando la otra mitad falla.
 
 Las actualizaciones globales, las instalaciones de metapaquetes y las reparaciones deben usar el mismo principio de coherencia.
 
@@ -582,7 +582,7 @@ Una actualización de archivos correctamente instalada no debe registrarse como 
 
 ## 11. Interfaz de comandos
 
-Implementa los comandos siguiendo las convenciones reales del proyecto, con permisos, validación de argumentos, autocompletado cuando corresponda y mensajes de error útiles.
+Implementa los comandos siguiendo las convenciones reales del proyecto, con permisos, validación de argumentos, autocompletado cuando corresponda y mensajes de error útiles. En los ejemplos, `<root>` representa la raíz configurable (`CommandRoot`) declarada en `config/suite/commands.yml`; no es un literal fijo y los módulos nunca la hardcodean (ADR-022).
 
 La interfaz debe organizarse en dos familias: `repo`, para las operaciones equivalentes a APT, y `package`, para las operaciones locales equivalentes a dpkg.
 
@@ -590,12 +590,12 @@ La interfaz debe organizarse en dos familias: `repo`, para las operaciones equiv
 
 | Comando | Responsabilidad |
 |---|---|
-| `/suite repo update` | Actualizar los índices de los repositorios configurados. |
-| `/suite repo install iflow` | Resolver, descargar e instalar un paquete y sus dependencias. |
-| `/suite repo install iflow textformatter` | Resolver e instalar varios paquetes en una operación coherente. |
-| `/suite repo remove iflow` | Resolver y eliminar un paquete respetando dependencias y propiedad de archivos. |
-| `/suite repo upgrade` | Actualizar globalmente los paquetes instalados y resolver el grafo de dependencias resultante. |
-| `/suite repo fix-broken` | Diagnosticar y reparar dependencias o instalaciones inconsistentes cuando exista una solución segura. |
+| `<root> repo update` | Actualizar los índices de los repositorios configurados. |
+| `<root> repo install iflow` | Resolver, descargar e instalar un paquete y sus dependencias. |
+| `<root> repo install iflow textformatter` | Resolver e instalar varios paquetes en una operación coherente. |
+| `<root> repo remove iflow` | Resolver y eliminar un paquete respetando dependencias y propiedad de archivos. |
+| `<root> repo upgrade` | Actualizar globalmente los paquetes instalados y resolver el grafo de dependencias resultante. |
+| `<root> repo fix-broken` | Diagnosticar y reparar dependencias o instalaciones inconsistentes cuando exista una solución segura. |
 
 `repo install` debe actualizar un paquete cuando ya esté instalado y exista una actualización aplicable. Si no hay cambios necesarios, debe informarlo explícitamente.
 
@@ -607,12 +607,12 @@ La interfaz debe organizarse en dos familias: `repo`, para las operaciones equiv
 
 | Comando | Responsabilidad |
 |---|---|
-| `/suite package install /ruta/iflow.zip` | Instalar un ZIP local validando todos sus metadatos, dependencias e inventario. |
-| `/suite package install iflow` | Si se admite el nombre como argumento, operar sobre el paquete local correspondiente conforme al contrato documentado, sin fingir que se ha consultado un repositorio. |
-| `/suite package list` | Enumerar los paquetes instalados desde `library/status`. |
-| `/suite package remove iflow` | Eliminar un paquete instalado mediante el gestor local, respetando dependencias inversas y propiedad de archivos. |
-| `/suite package files iflow` | Enumerar los archivos registrados como propiedad del paquete. |
-| `/suite package verify iflow` | Verificar la integridad de los archivos instalados frente al inventario y los SHA-256 registrados. |
+| `<root> package install /ruta/iflow.zip` | Instalar un ZIP local validando todos sus metadatos, dependencias e inventario. |
+| `<root> package install iflow` | Si se admite el nombre como argumento, operar sobre el paquete local correspondiente conforme al contrato documentado, sin fingir que se ha consultado un repositorio. |
+| `<root> package list` | Enumerar los paquetes instalados desde `library/status`. |
+| `<root> package remove iflow` | Eliminar un paquete instalado mediante el gestor local, respetando dependencias inversas y propiedad de archivos. |
+| `<root> package files iflow` | Enumerar los archivos registrados como propiedad del paquete. |
+| `<root> package verify iflow` | Verificar la integridad de los archivos instalados frente al inventario y los SHA-256 registrados. |
 
 La forma principal de `package install` debe permitir instalar directamente un archivo ZIP local, sin necesitar que el artefacto esté publicado en un repositorio.
 

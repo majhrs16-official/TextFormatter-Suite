@@ -919,19 +919,20 @@ El nuevo diseño no debe duplicar accidentalmente las comprobaciones por cada de
 
 Determina qué lógica pertenece a la VM y qué lógica debe seguir perteneciendo al host.
 
-## 18.2. Compatibilidad de políticas
+## 18.2. Autoría y validación de políticas
 
-Diseña una estrategia de migración desde reglas YAML y expresiones SpEL hacia programas de la VM.
+El régimen pre-1.0 no conserva migración en runtime ni adaptadores temporales (ADR-034). Las
+políticas se escriben directamente para el motor vigente; una política en un formato no canónico se
+rechaza o se ignora, nunca se convierte en silencio.
 
-Evalúa si conviene:
+Define:
 
-- Traducir automáticamente un subconjunto de reglas.
-- Mantener un adaptador temporal.
-- Permitir ambos motores.
-- Versionar los formatos de programa.
-- Ofrecer validación y diagnóstico antes de activar una política.
+- El formato de origen admitido por el motor y su validación antes de activar una política.
+- El diagnóstico de errores: ubicación, causa y corrección esperada.
+- El versionado del formato del programa, independiente de la versión de la suite.
+- La política de rechazo explícito para reglas YAML o expresiones SpEL que ya no sean canónicas.
 
-No prometas una traducción automática completa si las semánticas no son equivalentes.
+No prometas traducción automática ni convivencia de formatos si las semánticas no son equivalentes.
 
 ---
 

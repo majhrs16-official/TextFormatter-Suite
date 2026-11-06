@@ -93,7 +93,7 @@ configSchema:
 
 | Capability | Descripción | Versión |
 |------------|-------------|---------|
-| custom-command | Comando personalizado /suite | 1.0.0 |
+| custom-command | Comando personalizado bajo la raíz configurable (`root` de `commands.yml`) | 1.0.0 |
 | custom-channel | Canal personalizado | 1.0.0 |
 | translation-provider | Proveedor de traducción | 1.0.0 |
 | sync-sink | Sink de sincronización | 1.0.0 |

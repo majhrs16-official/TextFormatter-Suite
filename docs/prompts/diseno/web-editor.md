@@ -1,4 +1,4 @@
-# Web Editor — Diseño (F6, revisión 2: GIMP/Grafana + canvas de nodos)
+# Web Editor — Diseño (revisión 2: GIMP/Grafana + canvas de nodos)
 
 > **Estado: diseño cerrado.** Traslación directa al implementar: sin build,
 > sin framework, HTML+CSS+JS vanilla, artefacto único para GitHub Pages.
@@ -78,7 +78,7 @@ STATUS: 12 celdas · 9 aristas · 3 reglas default · config 2.4 KB  [✓ ok · 
 **Velocity** (nuevo): módulo de proxy (tipo Velocity/BungeeCord) para
 **interconectar chats entre varios servidores**. Submenu: toggle activación,
 secret/token, listado de servidores, mapeo servidor→canal local, hub. El
-runtime del plugin es scope de motor (F7+); el editor solo configura el YAML.
+runtime del plugin pertenece al motor; el editor solo configura el YAML.
 
 ## 4. Celdas (TextFormatter = canales)
 
@@ -102,8 +102,8 @@ runtime del plugin es scope de motor (F7+); el editor solo configura el YAML.
 salida, `log/test`, `sleep/delay`, y **`transform`** (modifica el
 evento/mensaje: cambia el texto traducible, lo reformatea, agrega o quita
 varios sonidos — listbox con check). El `transform` es la feature original
-(reformateo de grupos de formato = canales); requiere motor F7+ y se marca en
-el `manifest.json` si el engine no lo soporta aún (export forward-compat).
+(reformateo de grupos de formato = canales); lo aplica el motor al procesar el
+mensaje y su soporte se declara en el `manifest.json`.
 
 ### 5.2 Semántica de conexión
 - **Entradas múltiples = merge implícito (mux)**: cada mensaje que llega por
@@ -182,7 +182,7 @@ el `manifest.json` si el engine no lo soporta aún (export forward-compat).
   dedup fan-out; orphan permitido; prioridad BFS; zoom 25–400% (`ctrl+rueda`),
   pan espacio+arrastre, snap 20px, minimapa, ajustar a vista.
 - `transform` (texto/reformatear/sonidos multi con check) en iFlow y en celda
-  TxF; motor F7+, export forward-compat + flag en manifest.
+  TxF; lo aplica el motor y su soporte se declara en el manifest.
 - Permisos = tabla rol↔permiso en submenú propio.
 - Previsualizar azul / Descargar verde claro arriba a la derecha (altura del
   toolbar). Preview = motor JS + fixtures dorados.
@@ -192,8 +192,8 @@ el `manifest.json` si el engine no lo soporta aún (export forward-compat).
 - Borde **Velocity** (interconexión de chats entre servidores) añadido a Sync.
 - Autosave localStorage del proyecto; layout/tema/idioma persistidos.
 
-## 11. Fuera de alcance de F6 (posible F6.x / F7+)
+## 11. Fuera de alcance del editor
 
-Implementación del `transform` en el motor (F7+), plugin Velocity real (F7+),
+Implementación del `transform` en el motor, plugin Velocity real,
 reescritura en framework, deploy a servidores, simulación JMH en navegador,
 editor tipo "zona de prueba" multiusuario.

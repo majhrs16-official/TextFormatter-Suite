@@ -318,7 +318,7 @@ la instalación (ADR-027).
 
 ### 7.2 Recarga
 
-`/suite reload` cierra el runtime, vuelve a resolver el grafo y reconstruye el estado desde disco.
+El comando `reload` bajo la raíz configurable (`<root> reload`) cierra el runtime, vuelve a resolver el grafo y reconstruye el estado desde disco.
 Los archivos son la fuente de verdad; no hay estado de configuración paralelo en memoria.
 
 ### 7.3 Presets
