@@ -82,7 +82,6 @@
 | Adaptadores, shims y fachadas de compatibilidad | 0; `LegacyBridge`/`suite-common-legacy` no existen |
 | Módulos *deprecated* | Solo `CoreTranslator` (`@Deprecated`); `iflow-firewall` es motor legacy permitido, no shim |
 | Deuda de metadatos | Ninguna: las entradas propias `2.1.0-SNAPSHOT` se retiraron de `verification-metadata.xml` |
-| Deuda documental | `docs/workdir/REPORT.md` es histórico; la guía manual de migración no implica soporte runtime |
 
 **Versiones `2.x` / `3.x`**
 
