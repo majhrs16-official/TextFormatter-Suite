@@ -1,7 +1,6 @@
 package me.majhrs16.suite.host;
 
 import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
 import me.majhrs16.suite.api.spi.ActorDirectory;
@@ -41,8 +40,8 @@ public final class MessageDispatcher {
 
     private final SuiteHost host;
     private final ActorDirectory actors;
+    private final RecipientResolver recipients;
     private final ChatDelivery delivery;
-    private final PermissionChecker permissions;
     private final PluginLogger logger;
     private final ExecutorService executor;
     private final ScheduledExecutorService sleepScheduler;
@@ -64,8 +63,8 @@ public final class MessageDispatcher {
                                boolean engineParallel) {
         this.host = Objects.requireNonNull(host, "host");
         this.actors = Objects.requireNonNull(actors, "actors");
+        this.recipients = new RecipientResolver(actors, permissions, logger);
         this.delivery = Objects.requireNonNull(delivery, "delivery");
-        this.permissions = Objects.requireNonNull(permissions, "permissions");
         this.logger = Objects.requireNonNull(logger, "logger");
         this.engineParallel = engineParallel;
         // Bounded executor for parallel recipient processing (DOS-2)
@@ -113,7 +112,7 @@ public final class MessageDispatcher {
             return new DispatchReport(0, 0, 0, 0, 0, "rate limit exceeded: " + waitMillis + "ms");
         }
 
-        List<Actor> recipients = expand(messageWithResolvedSource);
+        List<Actor> recipients = this.recipients.resolve(messageWithResolvedSource);
         if (recipients.isEmpty()) {
             return new DispatchReport(0, 0, 0, 0, 0, null);
         }
@@ -225,80 +224,6 @@ public final class MessageDispatcher {
     }
 
     private record RecipientResult(Actor recipient, RoutingResult result) {}
-
-    /**
-     * Materializes the direction into a de-duplicated recipient list.
-     *
-     * <p>Fail-closed policy: a {@code PERMISSION} or {@code WORLD} direction
-     * without a qualifier resolves to nobody and logs a warning. An omitted
-     * field must never widen a restricted message into a broadcast.</p>
-     */
-    private List<Actor> expand(Message message) {
-        Direction direction = message.direction();
-
-        List<Actor> resolved = switch (direction.kind()) {
-            case INITIATOR -> List.of(message.sender());
-            case OTHERS -> withoutSelf(actors.onlinePlayers(), message.sender());
-            case ALL -> actors.onlinePlayers();
-            case CONSOLE -> List.of(actors.console());
-            case SPECIFIC -> List.of(direction.recipients());
-            case PERMISSION -> withPermission(actors.onlinePlayers(), direction.qualifier());
-            case WORLD -> playersInWorld(direction.qualifier());
-            case RADIUS -> playersNear(message.sender(), direction.qualifier());
-        };
-        return resolved.stream().distinct().toList();
-    }
-
-    private List<Actor> withoutSelf(List<Actor> candidates, Actor self) {
-        List<Actor> others = new ArrayList<>(candidates.size());
-        for (Actor candidate : candidates) {
-            if (!candidate.equals(self)) {
-                others.add(candidate);
-            }
-        }
-        return others;
-    }
-
-    private List<Actor> withPermission(List<Actor> candidates, String permission) {
-        if (permission == null || permission.isEmpty()) {
-            logger.warn("PERMISSION direction without qualifier; delivering to nobody");
-            return List.of();
-        }
-        List<Actor> allowed = new ArrayList<>(candidates.size());
-        for (Actor candidate : candidates) {
-            if (permissions.has(candidate, permission)) {
-                allowed.add(candidate);
-            }
-        }
-        return allowed;
-    }
-
-    private List<Actor> playersInWorld(String world) {
-        if (world == null || world.isEmpty()) {
-            logger.warn("WORLD direction without qualifier; delivering to nobody");
-            return List.of();
-        }
-        List<Actor> located = actors.playersInWorld(world);
-        if (located.isEmpty()) {
-            logger.debug("no world resolution for '" + world + "'; delivering to nobody");
-        }
-        return located;
-    }
-
-    private List<Actor> playersNear(Actor center, String qualifier) {
-        if (qualifier == null) {
-            logger.warn("missing radius qualifier; delivering to nobody");
-            return List.of();
-        }
-        double radius;
-        try {
-            radius = Double.parseDouble(qualifier);
-        } catch (NumberFormatException exception) {
-            logger.warn("invalid radius qualifier '" + qualifier + "'; delivering to nobody");
-            return List.of();
-        }
-        return actors.playersNear(center, radius);
-    }
 
     private void playChannelSounds(Message message, Actor recipient) {
         if (!host.config().soundEnabled()) {

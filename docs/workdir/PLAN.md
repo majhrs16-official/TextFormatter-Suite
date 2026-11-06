@@ -418,9 +418,10 @@ servicios son obligatorios y cómo se compone el procesamiento.
   implementación cambia sus rutas o su esquema; la ruta de canales no cambia.
 - Implementación en curso: los contratos neutrales (`PipelineStage`, `PipelineContext`,
   `PipelineMessage`, `StageResult`, `PipelinePlan`, `StageTrace`, `OutputPlan`) ya existen en
-  `core-api`; faltan `PipelineEngine`, `RecipientResolver`, `DeliveryExecutor`, la construcción del
-  plan en `suite-runtime`, las etapas `route`/`translate`/`format`/`sync`, la migración de
-  descriptores y el guard de independencia de `checkArchitecture`.
+  `core-api`, y `RecipientResolver` ya está extraído de `MessageDispatcher` con la política
+  fail-closed intacta. Faltan `PipelineEngine`, `DeliveryExecutor`, la construcción del plan en
+  `suite-runtime`, las etapas `route`/`translate`/`format`/`sync`, la migración de descriptores y el
+  guard de independencia de `checkArchitecture`.
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
