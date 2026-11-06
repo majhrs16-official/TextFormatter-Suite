@@ -1249,12 +1249,14 @@ la purga P0.4; se mantiene como feature legacy.
 
 ---
 
-## ADR-036 — Pipeline secuencial configurable, features opcionales y superficie de acciones sync
+## ADR-036 — Pipeline secuencial configurable, features opcionales, acciones sync y multiplexación de salidas
 
 **Estado:** Propuesta (2026-11-06). Pendiente de aceptación explícita del usuario. No se implementa
 mientras el estado sea «Propuesta». Enmienda ADR-019, ADR-024, ADR-025, ADR-032, ADR-008 y ADR-003
 en los puntos que se indican; adopta ADR-031 en la semántica de routing (§16 regula la exposición de
-`SET_CHANNEL` como acción agnóstica sin alterar D01–D05).
+`SET_CHANNEL` como acción agnóstica sin alterar D01–D05). §17 añade la selección de backend por
+mensaje y enmienda ADR-032/ADR-035 solo en esa selección: el default y el fallback del hub y de la
+fachada de traducción se conservan.
 
 **Contexto.** El diseño declara que todo feature es un paquete opcional, pero el composition root
 decide lo contrario en tiempo de ejecución. `SuiteRuntime.rebuildPipeline()` exige ocho servicios
@@ -1285,7 +1287,8 @@ ADR-031 se adopta íntegra en la semántica de routing: `PolicyTarget` se reduce
 `CANCEL_EVENT` y `ERROR`; `SET_CHANNEL` es la única mutación de canal; `REDIRECT` y
 `CHANNEL_REDIRECT` desaparecen. §16 no cambia esas reglas: convierte `SET_CHANNEL` en una acción
 agnóstica disponible para terceros y retira su import dedicado, sin reintroducir los targets
-retirados.
+retirados. §17 añade un override de multiplexor/backend por mensaje; no cambia el orden del pipeline
+ni el default ni el fallback de ADR-032/ADR-035.
 
 ### 2. Regla de independencia
 
@@ -1389,6 +1392,7 @@ public interface PipelineContext {
     PermissionChecker permissions();
     PipelineSettings settings();
     PipelineServices services();      // find/findAll de puertos neutrales
+    OutputPlan outputs();             // plan efectivo resuelto (§17)
     PluginLogger logger();
     PipelineTrace trace();
     long planVersion();
@@ -1396,11 +1400,11 @@ public interface PipelineContext {
 ```
 
 `PipelineSettings` es un subconjunto neutral de `HostConfig` (`defaultLanguage`, `engineParallel`,
-`soundEnabled`). `HostConfig` se conserva como configuración del host, pero no cruza la frontera del
-pipeline. Las etapas reciben sus dependencias concretas por constructor desde su propio módulo: la
-etapa `format` ya tiene su `TextFormatter`, la etapa `translate` su `TranslationService`, la etapa
-`route` su `Router` y la etapa `sync` su `SyncBus`. El contexto solo expone servicios transversales
-neutrales.
+`soundEnabled`). `OutputPlan` se define en §17.3. `HostConfig` se conserva como configuración del
+host, pero no cruza la frontera del pipeline. Las etapas reciben sus dependencias concretas por
+constructor desde su propio módulo: la etapa `format` ya tiene su `TextFormatter`, la etapa
+`translate` su `TranslationService`, la etapa `route` su `Router` y la etapa `sync` su `SyncBus`. El
+contexto solo expone servicios transversales neutrales.
 
 **Fases.** El motor recorre la misma lista ordenada en tres fases:
 
@@ -1599,16 +1603,20 @@ iFlow de terceros pueden descubrir y ejecutar cualquier acción nativa que el ba
 que el programa la declare y el operador la conceda. Sin concesión no hay acceso: la superficie es
 amplia, la autoridad no es ambiente.
 
+El multiplexor `sync` es `sync-bus`; no se añade un módulo nuevo. Su registro de sinks, colas,
+reintentos y métricas se reutilizan; la selección por mensaje se define en §17.
+
 #### 16.2 Tres niveles
 
 | Nivel | Quién lo usa | Acciones |
 |---|---|---|
 | Agnóstico oficial (LCM) | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send` |
-| Agnóstico extendido | programas de terceros | `channel.set` (host) y las acciones agnósticas que se acuerden |
-| Nativo | programas de terceros | `<backend>.<dominio>.<verbo>`: `discord.channel.create`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.create`, etc. |
+| Agnóstico extendido | programas de terceros | `textformatter.channel.set` y las acciones agnósticas que se acuerden |
+| Nativo | programas de terceros | `<backend>.<segmento>[...].<verbo>`: `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, etc. |
 
-`Principal.Official` solo puede invocar el LCM; `Principal.Program` solo puede invocar lo que tenga
-concedido. El bus lo verifica; no es una convención.
+La profundidad no está limitada a tres segmentos: el primer segmento es el backend (namespace) y el
+resto es el id local de la acción. `Principal.Official` solo puede invocar el LCM; `Principal.Program`
+solo puede invocar lo que tenga concedido. El bus lo verifica; no es una convención.
 
 #### 16.3 Contratos
 
@@ -1621,13 +1629,14 @@ public interface SyncSink {                 // evoluciona; no se envuelve
 }
 
 public record SyncSurface(
-        String backend,                     // "discord", "telegram", "http"...
+        String backend,                     // namespace: "discord", "telegram", "textformatter"
         SemVer contractVersion,
         Set<SyncActionSpec> actions
 ) {}
 
 public record SyncActionSpec(
-        String id,                          // "message.send", "channel.create"...
+        String id,                          // id local: "message.send", "channel.create",
+                                            // "channel.permission.overwrite"
         ActionKind kind,                    // READ, WRITE, DESTRUCTIVE, MODERATION
         List<SyncParamSpec> params,
         SyncParamSpec result,               // null si no devuelve valor
@@ -1655,8 +1664,8 @@ public sealed interface Principal {
 }
 
 public record SyncCall(
-        String backend,                     // "*" para acciones del host
-        String action,
+        String backend,                     // "discord", "telegram", "textformatter"
+        String action,                      // id local; canónico = backend + "." + action
         Map<String, Object> args,           // tipos de SyncParamSpec, sin tipos de SDK
         Principal principal,                // Official(moduleId) | Program(sha256)
         String idempotencyKey,
@@ -1678,15 +1687,19 @@ public sealed interface SyncResult {
 public interface SyncBus {
     Set<SyncSurface> surfaces();
     SyncResult invoke(SyncCall call);
-    List<SyncResult> broadcast(SyncCall call);   // fan-out del LCM
-    List<SyncResult> send(Message message);      // comodidad tipada sobre message.send
+    List<SyncResult> broadcast(SyncCall call);              // fan-out del LCM
+    List<SyncResult> send(Message message);                 // comodidad sobre message.send
+    List<SyncResult> sendTo(String backend, Message message); // dirigido; misma ruta
 }
 ```
 
 `SyncParamSpec` tipa los argumentos como datos neutrales (`STRING`, `INTEGER`, `BOOLEAN`, `DURATION`,
 `ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `OBJECT`). `OBJECT` es un mapa anidado
 validado por el backend; el núcleo no interpreta su contenido. Ningún tipo de JDA, Telegram, Bukkit
-o Fabric cruza esta frontera. `backend = "*"` identifica acciones del host, no de un sink.
+o Fabric cruza esta frontera. `backend` es el namespace; las acciones del host usan `textformatter`,
+no `"*"`. El nombre canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria.
+`SyncSurface` solo lo publican los sinks; las acciones del host no tienen superficie y el bus las
+resuelve en su handler interno.
 
 #### 16.4 Mínimo común múltiplo
 
@@ -1694,28 +1707,34 @@ o Fabric cruza esta frontera. `backend = "*"` identifica acciones del host, no d
 - `message.send`: `WRITE`, idempotente por `idempotencyKey`; argumentos `message` (`MESSAGE_REF`) y
   `destination` (`CHANNEL_REF`, opcional).
 - `SyncBus.send(Message)` es una comodidad tipada sobre `message.send`; no es un segundo camino.
+- `SyncBus.sendTo(backend, Message)` es la forma dirigida de `message.send`; usa la misma ruta y
+  devuelve un resultado por backend, no un booleano de aceptación.
 - Un backend que no pueda implementar el LCM no se publica: no existe un `send` que finja éxito.
 
-#### 16.5 `channel.set`
+#### 16.5 `textformatter.channel.set`
 
-- Acción agnóstica del host (`backend = "*"`), `WRITE`; argumento `channel` (`CHANNEL_REF`).
+- Acción agnóstica del host (`backend = "textformatter"`), `WRITE`; argumento `channel`
+  (`CHANNEL_REF`).
 - Equivale a `SET_CHANNEL` de ADR-031 sobre `Message.channel`: cambia el canal de routing y dispara la
   segunda fase de §7. Una sola mutación por unidad; la segunda produce `DECISION_CONFLICT`.
 - iFlow oficial no la invoca: no pertenece al LCM y `Principal.Official` no puede invocarla. Un
-  programa de terceros puede hacerlo con la capacidad `sync.host.channel.set`.
-- El cambio de destino nativo de un backend no se hace con `channel.set`: se hace con una acción
-  nativa o con el argumento `destination` de `message.send`. `channel.set` nunca significa
+  programa de terceros puede hacerlo con la capacidad `sync.textformatter.channel.set`.
+- El cambio de destino nativo de un backend no se hace con `textformatter.channel.set`: se hace con
+  una acción nativa o con el argumento `destination` de `message.send`. La acción nunca significa
   implícitamente «canal de Discord/Telegram».
 - El import dedicado `set_channel` de la ABI v3 se retira; se sustituye por
-  `sync_invoke("*", "channel.set", ...)`. No hay alias ni doble lector (ADR-034).
+  `sync_invoke("textformatter", "channel.set", ...)`. No hay alias ni doble lector (ADR-034).
+- `textformatter` es el namespace del host/suite; no crea una dependencia del módulo `textformatter`
+  ni lo convierte en multiplexor.
 
 #### 16.6 Autoridad, concesiones y auditoría
 
 1. **Declaración.** El programa declara las capacidades que usa en su imagen
    (`ProgramImage.capabilities`), con el formato `sync.<backend>.<accion>` (por ejemplo
-   `sync.discord.channel.create`; `accion` es el id local de la superficie) o `sync.host.<accion>`
-   para acciones del host (`sync.host.channel.set`).
-2. **Concesión.** El operador las autoriza en `config/suite/iflow/grants.yml`, indexadas por el
+   `sync.discord.channel.create` o `sync.discord.channel.permission.overwrite`; `accion` es el id
+   local de la superficie) o `sync.textformatter.<accion>` para acciones del host
+   (`sync.textformatter.channel.set`).
+2. **Concesión.** El operador las autoriza en `config/iflow/grants.yml`, indexadas por el
    SHA-256 de la imagen del programa, no por su nombre. La concesión puede usar comodines
    (`sync.discord.*`); el programa debe declarar la acción exacta; la autoridad efectiva es la
    intersección.
@@ -1757,17 +1776,158 @@ o Fabric cruza esta frontera. `backend = "*"` identifica acciones del host, no d
 - **ADR-003.** Se añaden invariantes: concesión por hash, marca destructiva, auditoría, fail-closed y
   cuotas. Las firmas siguen siendo opcionales; la concesión es del operador, no una prueba de
   autoría.
-- **ADR-031.** D01–D05 no cambian. `channel.set` reutiliza la segunda fase de D02 y retira el import
-  dedicado, sin reintroducir `REDIRECT` ni `CHANNEL_REDIRECT`.
+- **ADR-031.** D01–D05 no cambian. `textformatter.channel.set` reutiliza la segunda fase de D02 y
+  retira el import dedicado, sin reintroducir `REDIRECT` ni `CHANNEL_REDIRECT`.
 - **ADR-019.** Los `sync-*` dejan de requerir `sync-bus` (§15); publican `SyncSink` y el bus los
   descubre.
 - **`storage.md` §2.** La regla «un submódulo declara `require(...)` del padre» contradice §15 y esta
   sección; actualizarla requiere autorización explícita.
+- **Rutas.** Las concesiones viven en `config/iflow/grants.yml` (layout `config/<módulo>/`), no en
+  `config/suite/iflow/`: `config/suite/` es solo para la configuración global.
 - **Especificación iFlow.** El baseline v3 limita al guest a contenido/metadatos; esta sección amplía
   su autoridad a efectos de host. Requiere autorización para modificar
   `docs/prompts/diseno/iflow-cpu-design.md`, `iflow-cpu-implement.md` y la especificación de la ISA.
 - **No promete** rollback, transacciones entre backends, reintentos automáticos ni autoridad
   ambiente. La superficie es amplia por diseño; la concesión es el límite.
+
+### 17. Multiplexación y salidas por mensaje
+
+#### 17.1 Problema
+
+Hoy cada multiplexor tiene un solo backend global: `IflowConfig.engine` elige un motor iFlow,
+`ChatTranslatorConfig.default-backend` elige un traductor y `SyncBus.broadcast` envía a todos los
+sinks. No se puede decir «este mensaje va a Discord y a TCP, en este orden» ni «este mensaje
+usa `gtranslate` e `iflow-wasm`». El `Message` no tiene un campo para expresarlo y la configuración
+es global.
+
+#### 17.2 `sync-bus` no es un multiplexor, pero pasa a serlo
+
+`ChatTranslator` y `IflowHub` **seleccionan** un backend: prioridad, default y fallback. `sync-bus`
+es un **bus de fan-out**: registra sinks, los arranca, reparte el mensaje a todos y ofrece
+`sendTo(nombre, mensaje)`; no selecciona por mensaje ni aplica fallback. Por eso no es equivalente a
+los otros dos.
+
+No se añade un módulo `sync-mux`: duplicaría el registro de sinks, las colas y el ciclo de vida, y
+crearía una dependencia feature→feature que §2 prohíbe. `sync-bus` se convierte en el multiplexor
+`sync` y conserva su implementación de bus. Si más adelante hace falta una política de selección
+(fallback, salud, carga), se añade como estrategia interna del bus, no como módulo nuevo.
+
+La entrega local (jugadores de Bukkit/Paper/Fabric) no es un target de `sync`: la ejecuta el motor
+tras `format` con los destinatarios expandidos. `sync-bukkit` y `sync-fabric` son captura de eventos
+entrantes, no sinks de salida. Si en el futuro se quiere que la entrega local sea seleccionable, se
+añade un multiplexor `local` con su propio contrato; no se mete dentro de `sync`. `outputs=[]` no
+cancela la entrega local: solo deja sin targets a los multiplexores. Para no entregar nada, la
+política debe devolver `DROP`/`REJECT`.
+
+#### 17.3 Contrato
+
+```java
+public record OutputTarget(String multiplexer, String backend) {}
+
+public enum ParallelMode { INHERIT, PARALLEL, SEQUENTIAL }
+
+public record OutputPlan(
+        boolean declared,                   // false: consultar la configuración
+        List<OutputTarget> targets,          // vacía y declared=true: sin salidas
+        ParallelMode parallel                // INHERIT por defecto
+) {
+    public static OutputPlan inherit() {
+        return new OutputPlan(false, List.of(), ParallelMode.INHERIT);
+    }
+}
+```
+
+`Message` gana `outputPlan()`. El plan es inmutable y viaja con el mensaje; no se guarda en un
+`ThreadLocal`. Un `OutputPlan` ausente (`declared=false`) no es lo mismo que uno vacío
+(`declared=true, targets=[]`): el primero hereda, el segundo declara «sin salidas». `declared=false`
+exige `targets=[]`; cualquier otra combinación es `InvalidArgument`.
+
+El motor resuelve el plan efectivo una vez por emisión y lo expone en `PipelineContext.outputs()`.
+La traza registra de dónde salió (`message`, `suite` o `module-default`). Las etapas no mutan el plan.
+
+#### 17.4 Configuración y precedencia
+
+```yaml
+# config/suite/config.yml
+outputs:
+  - multiplexer: chattranslator
+    backend: gtranslate
+  - multiplexer: sync
+    backend: discord
+  - multiplexer: sync
+    backend: tcp
+  - multiplexer: sync
+    backend: udp
+outputs-parallel: true   # default; false = finalización secuencial
+config-version: 1.0
+```
+
+Precedencia:
+
+1. `Message.outputPlan()` con `declared=true`.
+2. `config/suite/config.yml` → `outputs` (y `outputs-parallel`).
+3. Default del módulo multiplexor: `iflow` usa su `engine`/fallback; `chattranslator` usa
+   `default-backend`; `sync` conserva el fan-out a todos los sinks.
+
+Una lista vacía en el mensaje o en la configuración significa «sin salidas» y no se interpreta como
+«todas». Un `multiplexer` o `backend` desconocido es un error explícito (`Unsupported`/`Invalid`),
+nunca un skip silencioso. Las claves canónicas son `outputs`, `multiplexer`, `backend` y
+`outputs-parallel`; `multiplexador` es la traducción al español, no un alias (ADR-034).
+
+#### 17.5 Multiplexores y backends
+
+| Multiplexer | Módulo | Backends | Tipo |
+|---|---|---|---|
+| `iflow` | `iflow` (hub) | `iflow-vm`, `iflow-wasm`, `iflow-firewall` | transformación |
+| `chattranslator` | `chattranslator` | `gtranslate`, `ltranslate` | transformación |
+| `sync` | `sync-bus` | `discord`, `telegram`, `http`, `websocket`, `tcp`, `udp`, `velocity` | entrega |
+
+Los multiplexores de transformación admiten **como máximo un target** por mensaje; un segundo
+target del mismo multiplexor es `Conflict`. `sync` admite varios, en orden. Un multiplexor nuevo
+declara su tipo (`TRANSFORM` o `DELIVER`) y su capacidad `multiplexer:<id>`, que es declarativa y no
+puede ser un `Requirement` (misma regla que `stage:*`).
+
+`textformatter` no es un multiplexor: es la etapa `format` y el namespace de las acciones del host.
+No aparece en `outputs`.
+
+#### 17.6 Orden y paralelismo
+
+- El array es ordenado. El motor **inicia** los targets en ese orden y la traza y el resultado
+  conservan ese orden.
+- No se paraleliza entre etapas: `route` → `translate` → `format` → `sync` tienen dependencia de
+  datos. Se paraleliza dentro del mismo multiplexor de entrega (`sync`), que es donde hay varios
+  targets independientes.
+- Por defecto se ejecutan en paralelo, con un pool acotado por etapa; un backend lento no bloquea a
+  los demás. La finalización no está ordenada.
+- `outputs-parallel: false` (o `ParallelMode.SEQUENTIAL` en el `OutputPlan`) ejecuta un target cada
+  vez y espera su finalización antes de iniciar el siguiente. Es la opción para dependencias
+  estrictas.
+- Los targets son independientes por contrato: no hay transacción, rollback ni compensación entre
+  ellos (§16.6.8). Si un target falla, los demás pueden completarse; `DispatchOutcome` marca el fallo
+  parcial y nunca declara éxito total.
+- El orden del array no reordena las etapas: `pipeline` sigue mandando. El orden se respeta dentro
+  de cada multiplexor (por ejemplo, dos targets `sync`) y en la traza de salidas.
+
+#### 17.7 Efecto en las etapas
+
+- `route` usa el target `iflow` si existe; si no, el hub aplica su default y fallback de ADR-032.
+- `translate` usa el target `chattranslator` si existe; si no, la fachada aplica su
+  `default-backend` y su fallback de ADR-035.
+- `sync` recorre todos los targets `sync` en orden y llama al sink correspondiente; si no hay
+  targets, aplica el fan-out completo actual.
+- `format` no es un multiplexor y no se selecciona por `outputs`.
+
+#### 17.8 Enmiendas y límites
+
+- **ADR-032.** El hub conserva su `engine`, su prioridad y su `fallback-on-unavailable`; `outputs`
+  añade un override por mensaje. No se convierte al hub en un enrutador de motores sin default.
+- **ADR-035.** `ChatTranslator` conserva su `default-backend` y su override de contexto; el
+  `outputs` del pipeline sustituye el uso de `ThreadLocal` para la selección por mensaje, no la
+  fachada.
+- **`config-schema-v2.2.md`.** `outputs` y `outputs-parallel` son claves nuevas; requieren
+  autorización para actualizar el esquema.
+- **No promete** orden de finalización en modo paralelo, transacciones entre backends ni selección
+  automática por salud. El modo secuencial es explícito.
 
 ### Respuestas a las preguntas abiertas de `PLAN.md`
 
@@ -1785,6 +1945,8 @@ o Fabric cruza esta frontera. `backend = "*"` identifica acciones del host, no d
 | 10 | Traza para `tester` | `PipelineTrace`/`StageTrace` con estado, fase, destinatario y duración; búfer de 256 y acceso por `TestProbe`. |
 | 11 | ¿Todo mensaje o solo chat? | Todo `Message`; la captura y `CANCEL_EVENT` son del adaptador. |
 | 12 | ¿Backend sin fachada? | Sí, instalable e inerte; la fachada es el único punto de uso y descubre proveedores. |
+| 13 | ¿Cómo se elige el backend de cada multiplexor por mensaje? | `outputs` en el `Message`; si falta, `config/suite/config.yml`; si tampoco, el default del módulo. §17. |
+| 14 | ¿`sync-bus` es el multiplexor de sync? | Sí: es el hub de fan-out y pasa a seleccionar por mensaje; no se añade un módulo nuevo. §17. |
 
 ### Criterios de aceptación y tests
 
@@ -1805,9 +1967,14 @@ o Fabric cruza esta frontera. `backend = "*"` identifica acciones del host, no d
 9. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`; si se toca el editor,
    `npm run check`.
 10. **Superficie sync:** el LCM oficial (`backend.info`, `message.send`) funciona sin acciones
-    nativas; `channel.set` solo lo invoca un tercero con concesión; una acción nativa sin concesión
-    devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen `allow-destructive`; el puente
-    VM y el de Wasm devuelven los mismos estados para la misma llamada.
+    nativas; `textformatter.channel.set` solo lo invoca un tercero con concesión; una acción nativa
+    sin concesión devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen
+    `allow-destructive`; el puente VM y el de Wasm devuelven los mismos estados para la misma
+    llamada.
+11. **Multiplexación:** un mensaje con `sync/discord` y `sync/tcp` entrega a ambos en el orden
+    declarado; sin `outputs` se usa el default de `config/suite/config.yml`; un backend desconocido
+    falla de forma explícita y no se convierte en éxito parcial silencioso; `outputs-parallel: false`
+    serializa la finalización.
 
 Tests adicionales obligatorios: ausencia de `iflow` con el resto instalado (debe entregar, no
 bloquear); `iflow` instalado sin backend (etapa `SKIPPED`); duplicado de etapa (`INVALID`); dos
@@ -1829,6 +1996,9 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
   tener la carrera de `TF-010` en el rebuild.
 - Cada backend sync publica su superficie nativa como datos; la suite oficial sigue usando solo el
   LCM y los terceros pueden construir bots completos de Discord/Telegram con concesiones explícitas.
+- El mensaje deja de tener un único backend global por multiplexor: `outputs` selecciona `iflow`,
+  `chattranslator` y `sync` por unidad, con default de suite y default de módulo.
+- El fan-out de `sync` puede ser selectivo y paralelo sin perder el orden de dispatch ni la traza.
 - El cambio es incompatible: descriptores, configuración, esquema, presets, instalador, tests y
   documentación se actualizan en la misma unidad de trabajo. No hay periodo de convivencia.
 

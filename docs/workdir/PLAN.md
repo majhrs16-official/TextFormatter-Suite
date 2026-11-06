@@ -248,7 +248,7 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 > features y al orden del pipeline; adopta ADR-031 en la semántica de routing (§16 regula la
 > exposición de `SET_CHANNEL` sin alterar D01–D05). **No se inicia** hasta que el usuario acepte
 > ADR-036 y se cierre la purga P0 (ADR-034). Cualquier cambio en `docs/prompts/` requiere
-> autorización explícita.
+> autorización explícita. La multiplexación de salidas de §17 se planifica en PL-3.
 
 #### Hallazgo estructural
 
@@ -417,16 +417,16 @@ Cada backend sync (`sync-discord`, `sync-telegram`, `sync-http`, `sync-websocket
 datos. La suite oficial consume solo el mínimo común múltiplo (LCM). Los programas de iFlow de
 terceros pueden invocar cualquier acción nativa que declaren y que el operador les conceda, lo que
 permite construir un bot completo de Discord o Telegram sin que el núcleo conozca esos SDK.
-`SET_CHANNEL` deja de ser una operación oficial y pasa a ser la acción agnóstica `channel.set`,
-disponible para terceros.
+`SET_CHANNEL` deja de ser una operación oficial y pasa a ser la acción agnóstica
+`textformatter.channel.set`, disponible para terceros.
 
 #### Modelo
 
 | Nivel | Consumidor | Contenido |
 |---|---|---|
 | LCM oficial | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send` |
-| Agnóstico extendido | programas de terceros | `channel.set` (host) y acciones agnósticas acordadas |
-| Nativo | programas de terceros | `discord.channel.create`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.create`, etc. |
+| Agnóstico extendido | programas de terceros | `textformatter.channel.set` y acciones agnósticas acordadas |
+| Nativo | programas de terceros | `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, etc. |
 
 `Principal.Official` solo puede invocar el LCM; `Principal.Program` solo lo concedido. Sin concesión
 no hay efecto.
@@ -442,18 +442,22 @@ no hay efecto.
 | Los sinks requieren `sync-bus` | descriptores `sync-*`; `storage.md` §2 | Feature→feature; contradice ADR-036 §2. |
 | No hay concesiones ni auditoría de acciones | — | Un tercero no puede recibir autoridad acotada. |
 
+> **Nomenclatura:** `sync-tcpudp` está deprecado; el módulo vigente es `sync-socket`
+> (`src/sync-tcpudp` está vacío y fuera de `settings.gradle`). Quedan referencias obsoletas en
+> `build.gradle` y en el editor web; se registran como deuda de limpieza y no forman parte de PL-2.
+
 #### Impacto previsto
 
 | Área | Cambio |
 |---|---|
 | `core-api` | `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
-| `sync-bus` | Registro de superficies, `invoke`, fan-out del LCM, timeout/cuotas, auditoría, `channel.set` del host. |
+| `sync-bus` | Registro de superficies, `invoke`, fan-out del LCM, timeout/cuotas, auditoría, `textformatter.channel.set` del host. |
 | `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. |
 | `iflow-vm` | Servicios `SYNC_SURFACE`/`SYNC_INVOKE`, TLV/DMA/fuel; retirar `set_channel` dedicado. |
 | `iflow-wasm` | Imports `sync_surface`/`sync_invoke`, TLV y estados equivalentes; retirar `set_channel`. |
 | `suite-runtime` | Concesiones por SHA-256, auditoría, cuotas y puente entre iFlow y `SyncBus`. |
-| Configuración | `config/suite/iflow/grants.yml`; ruta de auditoría en `storage.md`. |
-| Tests | Conformidad VM/Wasm, autorización, destructivos, cuotas, `channel.set` y regresión del LCM. |
+| Configuración | `config/iflow/grants.yml`; ruta de auditoría en `storage.md`. |
+| Tests | Conformidad VM/Wasm, autorización, destructivos, cuotas, `textformatter.channel.set` y regresión del LCM. |
 
 #### Pasos de implementación
 
@@ -470,13 +474,13 @@ no hay efecto.
    roles, mensajes, miembros, moderación); después `sync-http`, `sync-websocket`, `sync-socket` y
    `sync-velocity-core` (LCM y nativas que apliquen). Una acción no soportada devuelve `Unsupported`,
    nunca un no-op.
-5. **`channel.set`.** Implementar el handler de host en el motor del pipeline, reutilizando la
-   segunda fase de §7 y la regla de una sola mutación. `Principal.Official` recibe `Denied`; un
-   tercero con `sync.host.channel.set` puede invocarlo.
+5. **`textformatter.channel.set`.** Implementar el handler de host en el motor del pipeline,
+   reutilizando la segunda fase de §7 y la regla de una sola mutación. `Principal.Official` recibe
+   `Denied`; un tercero con `sync.textformatter.channel.set` puede invocarlo.
 6. **Puente iFlow.** Añadir `SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en
    Wasm, con el mismo `TlvCodec` y los mismos estados; retirar `set_channel` y actualizar fixtures y
    programas de ejemplo. Suite de conformidad compartida.
-7. **Concesiones y auditoría.** `config/suite/iflow/grants.yml` indexado por SHA-256, comodines en la
+7. **Concesiones y auditoría.** `config/iflow/grants.yml` indexado por SHA-256, comodines en la
    concesión, `allow-destructive`, cuotas por programa y registro append-only con hash de argumentos.
    Un permiso ausente o ambiguo deniega.
 8. **Guardas.** `checkArchitecture`: ninguna feature requiere otra; ningún backend importa el núcleo
@@ -490,15 +494,15 @@ no hay efecto.
 
 1. **LCM:** con cualquier subconjunto de backends, `backend.info` y `message.send` funcionan sin
    acciones nativas.
-2. **Oficial acotado:** `Principal.Official` no puede invocar `channel.set` ni una acción nativa;
-   recibe `Denied` sin efecto.
+2. **Oficial acotado:** `Principal.Official` no puede invocar `textformatter.channel.set` ni una
+   acción nativa; recibe `Denied` sin efecto.
 3. **Tercero con concesión:** un programa de prueba con `sync.discord.channel.create` crea un canal
    en un backend falso y deja una entrada de auditoría con hash, sin valores sensibles.
 4. **Sin concesión:** la misma llamada devuelve `Denied` y el backend no recibe la acción.
 5. **Destructivo:** `discord.member.ban` sin `allow-destructive` devuelve `Denied`; con la marca,
    ejecuta y audita.
 6. **Cuotas:** timeout y límite por minuto devuelven `Timeout`/`RateLimited`; no hay éxito parcial.
-7. **`channel.set`:** dispara la segunda fase de routing; la segunda mutación devuelve
+7. **`textformatter.channel.set`:** dispara la segunda fase de routing; la segunda mutación devuelve
    `DECISION_CONFLICT`; el import dedicado ya no existe.
 8. **Acción desconocida:** `Unsupported` explícito; el bus no finge éxito.
 9. **Paridad:** la misma llamada produce el mismo `SyncResult` en VM y Wasm.
@@ -517,7 +521,7 @@ no hay efecto.
 | Documento | Contradicción | Resolución |
 |---|---|---|
 | ADR-003 | La autoridad del guest se limita a contenido/metadatos. | ADR-036 §16 añade concesiones por hash, marca destructiva, auditoría y fail-closed; las firmas siguen siendo opcionales. |
-| ADR-031 | `SET_CHANNEL` es la única mutación de canal y no se expone a terceros. | No cambia D01–D05; `channel.set` reutiliza D02 y retira el import dedicado. La exposición cambia, la semántica no. |
+| ADR-031 | `SET_CHANNEL` es la única mutación de canal y no se expone a terceros. | No cambia D01–D05; `textformatter.channel.set` reutiliza D02 y retira el import dedicado. La exposición cambia, la semántica no. |
 | ADR-019 | Permite `feature → feature` con dependencia declarada. | ADR-036 §2 elimina la excepción; §15 migra los descriptores. |
 | `storage.md` §2 | Un submódulo declara `require(...)` del padre (`sync-*` → `sync-bus`). | Contradice §15 y §16; actualizar el documento requiere autorización. |
 | Especificación iFlow v3 | El guest solo transforma contenido/metadatos; no hay efectos de host. | §16 amplía la autoridad a acciones de backend con concesión; requiere autorización para la spec. |
@@ -531,6 +535,103 @@ no hay efecto.
 - TF-005 y TF-006 abiertos.
 - Autorización para `storage.md`, el esquema de configuración y la especificación iFlow.
 - Paridad W3.5 para el puente Wasm; el puente VM puede adelantarse con conformidad propia.
+
+---
+
+### Feature propuesta — multiplexación de salidas por mensaje (PL-3, 2026-11-06)
+
+> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §17** (pendiente de
+> aceptación). No se inicia hasta que ADR-036 esté aceptado.
+
+#### Objetivo
+
+Permitir que un mensaje declare, en orden, qué multiplexor y qué backend usa cada salida: `iflow`,
+`chattranslator` y `sync`. Sin `outputs`, se aplica `config/suite/config.yml`; sin esa clave, el
+default del módulo. `sync-bus` deja de ser solo un fan-out y pasa a ser el multiplexor `sync`, sin un
+módulo nuevo.
+
+#### Estado actual y evidencia
+
+| Hecho | Evidencia | Efecto |
+|---|---|---|
+| `IflowConfig` elige un motor global | `IflowConfig.java` (`engine`, `fallback-on-unavailable`) | No hay selección por mensaje. |
+| `ChatTranslator` elige un backend global + contexto | `ChatTranslator.java` (`defaultBackend`, `contextOverrideEnabled`) | El contexto es una clave/`ThreadLocal`, no un campo del mensaje. |
+| `SyncBus.broadcast` envía a todos los sinks | `DefaultSyncBus.broadcast` | No hay selección por mensaje ni orden. |
+| `SyncBus.sendTo` existe pero no se usa en el flujo principal | `SyncBus.java`; `CoreTranslatorPlaceholders` | La selección es ad hoc y no cubre el pipeline. |
+| `Message` no tiene `outputs` | `Message.java` | No se puede expresar multi-salida. |
+| Bukkit/Paper/Fabric no son sinks de `sync` | `sync-bukkit`, `sync-fabric` capturan eventos; la entrega local la hace el motor | `outputs` no sustituye la entrega local. |
+
+#### Impacto previsto
+
+| Área | Cambio |
+|---|---|
+| `core-api` | `OutputTarget`, `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`. Sin tipos de plataforma. |
+| `suite-runtime` | Resolución de `outputs` (mensaje → suite → módulo), validación y traza. |
+| `iflow` | `route` usa el target `iflow`; conserva default/fallback de ADR-032. |
+| `chattranslator` | `translate` usa el target `chattranslator`; conserva default/fallback de ADR-035. |
+| `sync-bus` | `sync` usa los targets `sync`; `sendTo`/`invoke` por backend; fan-out completo si no hay targets. |
+| Configuración | `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
+| Tests | Orden, paralelo, vacío vs ausente, target desconocido, default de suite y de módulo. |
+
+#### Pasos de implementación
+
+1. **Contrato neutral.** Añadir `OutputTarget`/`OutputPlan`/`ParallelMode` a `core-api` y
+   `Message.outputPlan()`. Inmutable, sin `ThreadLocal`; `declared=false` ≠ `targets=[]`.
+2. **Resolución.** Implementar la precedencia mensaje → `config/suite/config.yml` → módulo, con
+   validación de `multiplexer`/`backend` y error explícito.
+3. **Etapas.** `route`, `translate` y `sync` leen su target; sin target aplican su default actual.
+   `format` no participa.
+4. **`sync` selectivo.** `sync-bus` expone `sendTo` por `SyncSurface.backend`; conserva el fan-out
+   completo cuando no hay targets. No se crea `sync-mux`.
+5. **Orden y paralelismo.** Dispatch en orden; ejecución paralela por defecto solo dentro del mismo
+   multiplexor de entrega, con pool acotado; `outputs-parallel: false` para secuencial. La traza
+   conserva el orden del array.
+6. **Resultado agregado.** `DispatchOutcome` marca el fallo parcial por target; sin éxito fingido ni
+   rollback.
+7. **Guardas.** `checkArchitecture`: `core-api` sin SDK; `multiplexer:*` declarativo, nunca
+   `Requirement`; `textformatter` no es multiplexor; la entrega local no se mete en `sync`.
+8. **Documentación y esquema.** `config-schema-v2.2.md` y la wiki; `docs/prompts/` requiere
+   autorización.
+
+#### Criterios de cierre y tests
+
+1. **Multi-salida:** `sync/discord` + `sync/tcp` entrega a ambos; la traza respeta el orden.
+2. **Precedencia:** mensaje > suite > módulo; sin `outputs` en ningún nivel, fan-out completo.
+3. **Vacío vs ausente:** `targets=[]` no entrega a multiplexores y mantiene la entrega local;
+   `declared=false` hereda.
+4. **Transformación única:** dos targets `chattranslator` o `iflow` → `Conflict`.
+5. **Desconocido:** multiplexor/backend inexistente → error explícito, sin skip.
+6. **Paralelo:** un backend lento no bloquea a los demás; `outputs-parallel: false` serializa.
+7. **Fallo parcial:** un target falla, los demás completan; el resultado agregado lo declara.
+8. **Sin regresión:** sin `outputs`, el comportamiento actual se conserva.
+9. **Local:** la entrega a jugadores de Bukkit/Paper/Fabric no depende de `sync` ni se puede anular
+   con un target ausente.
+10. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`.
+
+#### Dependencias y orden
+
+- **ADR-036 aceptado**, §17 en particular.
+- **PL-1** para el `PipelineContext`, la traza y las etapas.
+- **PL-2** para `SyncSurface`/`invoke` y la selección por backend.
+- **TF-005/TF-006** para el resultado fiable del fan-out.
+- **ADR-032/ADR-035** se conservan como default y fallback.
+
+#### Contradicciones detectadas
+
+| Documento | Contradicción | Resolución |
+|---|---|---|
+| ADR-032 | El hub elige un motor global (`IflowConfig.engine`). | §17 añade un override por mensaje; el default y el fallback se conservan. |
+| ADR-035 | `ChatTranslator` elige un backend global + contexto. | §17 usa un campo del mensaje; la fachada y su default se conservan. |
+| ADR-036 §3 | La configuración global solo define `pipeline`. | Se añaden `outputs` y `outputs-parallel`; `config-version: 1.0`. |
+| ADR-019 | Prohíbe `feature → feature`. | `sync` es `sync-bus`; no se crea `sync-mux` ni se requiere otra feature. |
+| ADR-034 | Prohíbe aliases. | Las claves canónicas son `multiplexer`/`backend`; `multiplexador` no es alias. |
+| `config-schema-v2.2.md` | No tiene `outputs`. | Requiere autorización para actualizarlo. |
+
+#### Bloqueos
+
+- ADR-036 §17 pendiente de aceptación explícita.
+- Autorización para `config-schema-v2.2.md` y la wiki.
+- PL-1/PL-2 y TF-005/TF-006 para el flujo completo.
 
 ---
 
@@ -876,9 +977,9 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 > `"null"`.
 
 > **ADR-036 §16 (propuesta, pendiente de aceptación):** sustituye el import dedicado `SET_CHANNEL`
-> por la acción agnóstica `channel.set` invocada con `sync_invoke("*", ...)`, y añade
-> `sync_surface`/`sync_invoke` para las acciones nativas de los backends sync. Si se acepta, las
-> filas «Canal» y «Routing» y los criterios 2 y 6 de W3.5 se actualizan; D01–D05 no cambian.
+> por la acción agnóstica `textformatter.channel.set` invocada con `sync_invoke("textformatter", ...)`,
+> y añade `sync_surface`/`sync_invoke` para las acciones nativas de los backends sync. Si se acepta,
+> las filas «Canal» y «Routing» y los criterios 2 y 6 de W3.5 se actualizan; D01–D05 no cambian.
 
 **Criterios de cierre:**
 
