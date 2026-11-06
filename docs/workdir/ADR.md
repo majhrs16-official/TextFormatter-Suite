@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-05
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-06
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -1253,12 +1253,11 @@ la purga P0.4; se mantiene como feature legacy.
 
 ## ADR-036 — Pipeline secuencial configurable, features opcionales, acciones sync y multiplexación de salidas
 
-**Estado:** Propuesta (2026-11-06). Pendiente de aceptación explícita del usuario. No se implementa
-mientras el estado sea «Propuesta». Enmienda ADR-019, ADR-024, ADR-025, ADR-032, ADR-008 y ADR-003
+**Estado:** Aceptada (2026-11-06). Enmienda ADR-019, ADR-024, ADR-025, ADR-032, ADR-008 y ADR-003
 en los puntos que se indican; adopta ADR-031 en la semántica de routing (§16 regula la exposición de
 `SET_CHANNEL` como acción agnóstica sin alterar D01–D05). §17 añade la selección de backend por
 mensaje y enmienda ADR-032/ADR-035 solo en esa selección: el default y el fallback del hub y de la
-fachada de traducción se conservan.
+fachada de traducción se conservan. La implementación se rastrea en `PLAN.md` (PL-1, PL-2 y PL-3).
 
 **Contexto.** El diseño declara que todo feature es un paquete opcional, pero el composition root
 decide lo contrario en tiempo de ejecución. `SuiteRuntime.rebuildPipeline()` exige ocho servicios
@@ -1294,15 +1293,17 @@ ni el default ni el fallback de ADR-032/ADR-035.
 
 ### 2. Regla de independencia
 
-1. **El núcleo arranca sin features.** Comandos, ciclo de vida, configuración, eventos, captura de
-   plataforma y catálogo de canales no exigen ningún paquete de feature.
-2. **Ninguna feature requiere otra feature.** Un descriptor solo puede requerir capacidades
-   publicadas por el entorno del runtime o por módulos técnicos neutrales (`api`, `jvm`,
-   `channel-catalog`, `kernel`, `manager-spi`, `platform`); nunca una capacidad publicada por una
-   feature (`channel-api`, `formatter`, `router`, `chattranslator`, `sync-bus`, `stage:*`).
-   Las capacidades `stage:*` son declarativas y nunca pueden ser objeto de un `Requirement`.
+1. **El núcleo arranca sin features.** Comandos, ciclo de vida, configuración, eventos y captura de
+   plataforma no exigen ningún paquete de feature.
+2. **Ninguna feature exige otra feature para arrancar.** Un descriptor no declara un `Requirement`
+   sobre una capacidad publicada por una feature (`channel-api`, `formatter`, `router`,
+   `chattranslator`, `sync-bus`, `stage:*`); solo puede requerir capacidades del entorno o de
+   módulos técnicos neutrales (`api`, `jvm`, `kernel`, `manager-spi`, `platform`). El uso de un
+   servicio de otra feature es **opcional en runtime**: si el proveedor no está instalado, solo falla
+   la operación que lo necesita, de forma explícita, y el resto del pipeline sigue. Las capacidades
+   `stage:*` son declarativas y nunca pueden ser objeto de un `Requirement`.
 3. **Todo feature es opcional.** Instalar una feature no es requisito para arrancar; desinstalarla no
-   invalida el pipeline, solo elimina su etapa.
+   invalida el pipeline, solo elimina su etapa o su servicio opcional.
 4. **La ausencia de etapa es explícita.** Se registra como `SKIPPED` con su motivo y el mensaje
    continúa. No se convierte en error de configuración, en éxito falso ni en bloqueo.
 5. **Un solo camino.** La lista `pipeline` es la única fuente de orden. No se conserva el pipeline
@@ -1389,7 +1390,7 @@ public record PipelineMessage(
 public interface PipelineContext {
     String messageId();
     PipelineScope scope();
-    ChannelRegistry channels();
+    Optional<ChannelRegistry> channels();   // catálogo de textformatter; vacío si no está activo
     ActorDirectory actors();
     PermissionChecker permissions();
     PipelineSettings settings();
@@ -1406,7 +1407,10 @@ public interface PipelineContext {
 host, pero no cruza la frontera del pipeline. Las etapas reciben sus dependencias concretas por
 constructor desde su propio módulo: la etapa `format` ya tiene su `TextFormatter`, la etapa
 `translate` su `TranslationService`, la etapa `route` su `Router` y la etapa `sync` su `SyncBus`. El
-contexto solo expone servicios transversales neutrales.
+contexto solo expone servicios transversales neutrales. `channels()` es opcional: refleja el
+catálogo de `textformatter` cuando está activo y queda vacío cuando no lo está. Una etapa que lo
+necesite debe comprobarlo y fallar solo su operación, con un error explícito; la ausencia nunca
+invalida el plan ni el resto del pipeline.
 
 **Fases.** El motor recorre la misma lista ordenada en tres fases:
 
@@ -1487,8 +1491,8 @@ destinatarios afectados**, con `phase=secondary`:
 
 ### 8. Recarga en caliente
 
-`reloadPipeline()` relee `config/suite/config.yml` y el catálogo de canales, construye un
-`PipelinePlan` inmutable y lo publica con un swap atómico. Estados:
+`reloadPipeline()` relee `config/suite/config.yml` y, si `textformatter` está activo, su catálogo de
+canales; construye un `PipelinePlan` inmutable y lo publica con un swap atómico. Estados:
 
 - `APPLIED`: el plan nuevo es válido y se publicó. Los despachos en vuelo conservan el plan anterior.
 - `FAILED`: el archivo es inválido o una etapa lanzó al construirse. Se conserva el plan anterior y
@@ -1516,26 +1520,26 @@ El pipeline configurable **sustituye** el cableado actual; no lo envuelve ni con
 
 No queda un segundo camino de composición en `host`, en los adapters ni en los tests de producción.
 
-### 10. Catálogo de canales neutral
+### 10. Catálogo de canales
 
 - Los contratos `Channel` y `ChannelRegistry` ya viven en `core-api`; se conservan.
-- La carga se mueve de `textformatter` a `suite-runtime` mediante un componente **interno
-  propuesto** (`ChannelCatalogLoader`), que publica una única instancia en el `ServiceRegistry`
-  antes de activar features. No es una clase existente hoy ni un contrato público: es el nombre de
-  trabajo del cargador que el runtime necesita para construir el catálogo sin depender de una
-  feature. El traslado se conserva: sin él, un pipeline sin `textformatter` no tiene catálogo y el
-  criterio «solo iFlow» de §Criterios no se cumple. El cargador pertenece al runtime, no a una
-  feature, y lee la ruta canónica vigente; no se crea un módulo `channel-catalog` ni se mueve la
-  ruta.
-- Ruta canónica: `config/textformatter/channels/`, que se conserva. No se mueve a `config/suite/`;
-  `config/suite/channels/` no es una ruta válida y no se introduce. `config/channels/` (ruta plana)
-  sigue prohibida por ADR-034. Este concepto no cambia `storage.md` ni `config-schema-v2.2.md`.
-- `textformatter` consume el catálogo y deja de publicarlo. `iflow-*`, `inworld`, `sync-bukkit`,
-  `sync-fabric` y `tester` consumen el mismo servicio neutral. El descriptor que necesite declarar la
-  dependencia usa `channel-catalog`, capacidad del entorno del runtime, nunca `channel-api` de otra
-  feature.
-- `suite-runtime` publica `channel-catalog@1.0.0` como capacidad de entorno en `kernel.Environment`,
-  junto a `api` y `jvm`.
+- El catálogo **sigue perteneciendo a `textformatter`**. `TextFormatterActivator` lo carga desde
+  `config/textformatter/channels/*.yml` y publica `ChannelRegistry` y `channel-api`. No se traslada
+  a `suite-runtime`, no se crea `ChannelCatalogLoader` ni un módulo `channel-catalog`, y la ruta no
+  se mueve.
+- El routing de canal —resolución, permisos, políticas y `SET_CHANNEL`— es una función intrínseca
+  de `textformatter`; no tiene sentido como servicio neutral del runtime.
+- `iflow-*`, `inworld`, `sync-bukkit`, `sync-fabric` y `tester` consumen el catálogo de forma
+  **opcional** desde el `ServiceRegistry`; no declaran `Requirement` sobre `channel-api`. Si
+  `textformatter` no está instalado, el pipeline arranca y esas features funcionan sin catálogo;
+  solo falla la operación concreta que lo necesite, con un error explícito.
+- `SET_CHANNEL` deja de ser un import dedicado y pasa a `textformatter.channel.set` por la interfaz
+  sync (§16.5). Si `textformatter` no está, la acción devuelve `NotFound`/`Unsupported` cuando se
+  invoca; no bloquea iFlow ni el resto de la suite. Es el mismo patrón que un sink no instalado.
+- Ruta canónica: `config/textformatter/channels/`, que se conserva. `config/suite/channels/` no es
+  una ruta válida y no se introduce; `config/channels/` (ruta plana) sigue prohibida por ADR-034.
+  Este concepto no cambia `storage.md` ni `config-schema-v2.2.md`.
+- `textformatter` mantiene `provide("channel-api")` y añade `provide("stage:format")`.
 
 ### 11. Traducción
 
@@ -1573,10 +1577,11 @@ un tipo devuelve `NOT_APPLICABLE` y la traza lo registra.
 `checkArchitecture` gana una regla: ningún descriptor de `src/*` puede declarar un `Requirement`
 sobre una capacidad publicada por una feature. La regla se implementa en la tarea Gradle contra una
 lista de capacidades neutrales publicadas por el entorno y por los módulos técnicos (`api`, `jvm`,
-`channel-catalog`, `kernel`, `manager-spi`, `platform`), y se refuerza con un test que construye el
-grafo y comprueba que una feature no puede satisfacer el requisito de otra. Las capacidades `stage:*`
-se validan como `provide` y se rechazan como `require`. El guard falla el build; no se degrada a
-advertencia.
+`kernel`, `manager-spi`, `platform`), y se refuerza con un test que construye el grafo y comprueba
+que una feature no puede satisfacer el requisito de otra. Las capacidades `stage:*` se validan como
+`provide` y se rechazan como `require`. El consumo opcional en runtime no se declara como
+`Requirement`; el guard no impide buscar un servicio ausente y degradar solo la operación que lo
+necesita. El guard falla el build; no se degrada a advertencia.
 
 ### 15. Migración de descriptores
 
@@ -1584,11 +1589,11 @@ El cambio de modelo obliga a corregir los descriptores en la misma unidad de tra
 
 | Módulos | Antes | Después |
 |---|---|---|
-| `iflow-*`, `inworld`, `sync-bukkit`, `sync-fabric`, `tester` | `require("channel-api")` | `require("channel-catalog")` (entorno) |
+| `iflow-*`, `inworld`, `sync-bukkit`, `sync-fabric`, `tester` | `require("channel-api")` | sin requisito; consumen `ChannelRegistry` de forma opcional en runtime |
 | `gtranslate`, `ltranslate`, `coretranslator` | `require("chattranslator")` | sin requisito; publican `TranslatorProvider` |
 | sinks `sync-*` | `require("sync-bus")` | sin requisito; publican `SyncSink` y el bus los descubre |
 | `tester` | `require("formatter")`, `require("router")` | sin requisito; sondas opcionales con `SKIPPED` |
-| `textformatter` | `provide("channel-api")` | `provide("stage:format")`; consume el catálogo |
+| `textformatter` | `provide("channel-api")` | conserva `provide("channel-api")` y añade `provide("stage:format")`; sigue siendo dueño del catálogo |
 | `iflow` | — | `provide("stage:route")` |
 | `chattranslator` | — | `provide("stage:translate")` |
 | `sync-bus` | — | `provide("stage:sync")`; descubre `SyncSink` |
@@ -1961,7 +1966,7 @@ No aparece en `outputs`.
 | # | Pregunta | Decisión |
 |---|---|---|
 | 1 | ¿`pipeline` o `workflow`? | `pipeline`. `workflow` no es alias. |
-| 2 | ¿Dónde vive el catálogo de canales? | Contratos en `core-api`; carga y propiedad en `suite-runtime`; el `PipelineContext` lo expone en solo lectura. |
+| 2 | ¿Dónde vive el catálogo de canales? | Contratos en `core-api`; carga y propiedad en `textformatter`; el `PipelineContext` lo expone de forma opcional en solo lectura. |
 | 3 | ¿`moduleId` o `stageId`? ¿Varias etapas por módulo? | `stageId`. Un módulo puede publicar varias; dos no pueden publicar el mismo id. |
 | 4 | ¿Traducción como etapa? | Sí: `translate`, fase `RECIPIENT`, tras `route` y antes de `format`. |
 | 5 | ¿Etapa ausente: error o `SKIPPED`? ¿Lista por defecto? | `SKIPPED` y continúa. La lista base la instala `DefaultConfigInstaller`; falta de clave en un archivo existente es `INVALID`. Lista vacía es `NO_PIPELINE`. |
@@ -1980,8 +1985,9 @@ No aparece en `outputs`.
 1. **Arranque sin features:** el núcleo arranca, registra comandos y gestiona el ciclo de vida; un
    despacho sin etapas devuelve `NO_PIPELINE`, no un éxito falso.
 2. **Solo `textformatter`:** formatea y entrega sin iFlow, sin traducción y sin syncs.
-3. **Solo iFlow:** enruta con el catálogo neutral, sin `textformatter` ni `chattranslator`; sin
-   `format` se entrega texto plano y la traza lo declara.
+3. **Solo iFlow:** arranca y enruta sin `textformatter` ni `chattranslator`; sin `format` se entrega
+   texto plano y la traza lo declara. Las operaciones que necesiten el catálogo de canales fallan de
+   forma explícita (`NotFound`/`Unsupported`) sin bloquear el pipeline.
 4. **Solo `chattranslator`:** traduce con render pass-through, sin `textformatter` ni iFlow.
 5. **Orden configurable:** el mismo conjunto en dos órdenes produce resultados distintos y trazables;
    el orden no depende del grafo ni del orden de registro.
@@ -2020,8 +2026,9 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
   etapas.
 - `SuiteRuntime` deja de conocer `SuiteHost`, `MessageDispatcher`, `IflowHub` y los tipos concretos
   del render; solo conoce contratos neutrales y el plan.
-- El catálogo de canales y la traducción dejan de pertenecer a features; `textformatter` y
-  `chattranslator` se convierten en consumidores/publicadores de etapas.
+- El catálogo de canales sigue perteneciendo a `textformatter` y la fachada de traducción a
+  `chattranslator`; lo que cambia es que su consumo deja de ser un requisito de activación.
+  `textformatter` y `chattranslator` se convierten además en publicadores de etapas.
 - La recarga en caliente gana un estado verificable (`APPLIED`/`FAILED`/`RESTART_REQUIRED`) y deja de
   tener la carrera de `TF-010` en el rebuild.
 - Cada backend sync publica su superficie nativa como datos; la suite oficial sigue usando solo el

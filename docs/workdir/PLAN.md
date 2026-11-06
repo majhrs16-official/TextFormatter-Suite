@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registra `PL-1` —pipeline secuencial configurable— como feature propuesta, bloqueada por ADR y por el cierre de la purga P0; no hay código ni contrato nuevo. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-06 (**P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -45,11 +45,10 @@
 > código, tests, documentación y gate verde; no se aceptan cambios a medias ni “arreglos” que
 > conserven el camino viejo.
 >
-> **Excepción registrada (2026-11-05):** `PL-1` (pipeline secuencial configurable) queda
-> **propuesta y documentada**, pero **no se inicia** hasta que un ADR aceptado sustituya o enmiende
-> ADR-019, ADR-024/025 y ADR-032 en lo relativo al composition root, las dependencias entre
-> features y el orden del pipeline, y hasta que cierre la purga P0 (ADR-034). La nota de esta
-> sección no autoriza implementación ni cambios en `docs/prompts/`.
+> **Excepción registrada (2026-11-05, actualizada el 2026-11-06):** `PL-1` (pipeline secuencial
+> configurable) queda **propuesta y documentada**, pero **no se ha iniciado**. ADR-036 fue aceptado
+> el 2026-11-06 y la purga P0 está cerrada; ya no hay bloqueo documental para empezar. La nota de
+> esta sección no autoriza implementación ni cambios en `docs/prompts/`.
 
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
@@ -241,14 +240,15 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 ### Feature propuesta — pipeline secuencial configurable (PL-1, 2026-11-05)
 
-> **Estado:** propuesta, no implementada y no contractual. **ADR-036 redactado (2026-11-06),
-> pendiente de aceptación explícita.** Sustituye o enmienda ADR-019 (composition root y
+> **Estado:** propuesta de implementación, no implementada y no contractual. **ADR-036 aceptado
+> (2026-11-06).** Sustituye o enmienda ADR-019 (composition root y
 > dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow), ADR-008
 > (backend→fachada) y ADR-003 (§16, autoridad del guest) en lo relativo a los requisitos entre
 > features y al orden del pipeline; adopta ADR-031 en la semántica de routing (§16 regula la
-> exposición de `SET_CHANNEL` sin alterar D01–D05). **No se inicia** hasta que el usuario acepte
-> ADR-036 y se cierre la purga P0 (ADR-034). Cualquier cambio en `docs/prompts/` requiere
-> autorización explícita. La multiplexación de salidas de §17 se planifica en PL-3.
+> exposición de `SET_CHANNEL` sin alterar D01–D05). La purga P0 está cerrada (P0.6, 2026-11-06),
+> así que no queda bloqueo documental; la implementación aún no se ha iniciado. Cualquier cambio en
+> `docs/prompts/` requiere autorización explícita. La multiplexación de salidas de §17 se planifica
+> en PL-3.
 
 #### Hallazgo estructural
 
@@ -258,13 +258,13 @@ verificada el 2026-11-05 sobre `2f5d3b27`:
 
 | Hecho verificado | Evidencia | Efecto |
 |---|---|---|
-| `textformatter` es el único proveedor de `channel-api` | `TextFormatterModule.java:24`; `TextFormatterActivator.java:32` | El catálogo de canales y su capability pertenecen a un módulo opcional. |
-| Los tres motores iFlow requieren `channel-api` | `IflowFirewallModule.java:27`; `IflowVmActivator.java:35`; `IfowWasmModule.java:23`; `IflowWasmActivator.java:34` | Instalar solo iFlow deja los tres motores inactivos o sin backend activo. |
+| `textformatter` es el único proveedor de `channel-api` | `TextFormatterModule.java:24`; `TextFormatterActivator.java:32` | El catálogo y su capability pertenecen a `textformatter`; es correcto por diseño. El problema es que otras features lo exigen como requisito. |
+| Los tres motores iFlow requieren `channel-api` | `IflowFirewallModule.java:27`; `IflowVmActivator.java:35`; `IfowWasmModule.java:23`; `IflowWasmActivator.java:34` | El requisito duro deja los motores inactivos si falta `textformatter`; debe ser un consumo opcional. |
 | `inworld`, `sync-bukkit`, `sync-fabric` y `tester` también requieren `channel-api` | `InWorldModule.java:27`; `SyncBukkitActivator.java:45`; `SyncFabricActivator.java:46`; `TesterModule.java:25` | Cuatro features más dependen de que `textformatter` esté instalado. |
 | `SuiteRuntime` exige servicios concretos para construir el pipeline | `SuiteRuntime.java:203-211`; `resolveRouter()` en `245-253` | Sin `ChannelRegistry`, `TranslationService`, `IflowHub`, `MessageRenderer`, `ChatDelivery`, `ActorDirectory` o `PermissionChecker` no hay pipeline utilizable. El fallo se registra como «pipeline unavailable» (`SuiteRuntime.java:225-232`), no como arranque funcional. |
 | El orden del pipeline está hardcodeado | `SuiteHost` (`SuiteHost.java:150-162`) y `MessageDispatcher` (`MessageDispatcher.java:40`) | No existe una lista ordenada configurable; el orden lo imponen el cableado y el grafo. |
-| El catálogo de canales vive en `textformatter` | `ChannelConfig.java:22,73`; `TextFormatterActivator.java:34-39` | Un dominio neutral (canales, permisos y políticas de canal) pertenece a una feature. |
-| La ruta `config/textformatter/channels/` está fijada fuera del módulo | `FilePresetTarget.java:96`; `DefaultConfigInstaller.java:54-57`; `config-schema-v2.2.md`; `storage.md` | Se conserva como ruta canónica; el catálogo neutral se carga desde ahí sin moverla. |
+| El catálogo de canales vive en `textformatter` | `ChannelConfig.java:22,73`; `TextFormatterActivator.java:34-39` | Decisión de diseño: el catálogo y el routing de canal son intrínsecos de `textformatter`; no se mueven al runtime. |
+| La ruta `config/textformatter/channels/` está fijada fuera del módulo | `FilePresetTarget.java:96`; `DefaultConfigInstaller.java:54-57`; `config-schema-v2.2.md`; `storage.md` | Se conserva como ruta canónica; el catálogo de `textformatter` se carga desde ahí sin moverla. |
 | Los backends de traducción requieren `chattranslator` | `GTranslateModule.java:23`; `LTranslateModule.java:23`; `CoreTranslatorModule.java:32`; ADR-008 | La relación backend→fachada es hoy un requisito de activación entre features; PL-1 debe decidir si un backend es instalable solo o si la fachada es su único punto de entrada. |
 | El dispatcher conserva semántica de routing retirada | `MessageDispatcher.java` procesa `PolicyTarget.CHANNEL_REDIRECT` y reentrega; `PolicyTarget.java:23` conserva el valor | ADR-031 retira `REDIRECT`/`CHANNEL_REDIRECT`; el rediseño del pipeline debe alinear el código con ese contrato. |
 
@@ -275,14 +275,15 @@ en el grafo de requisitos y en el composition root: el runtime no tolera la ause
 `ChannelRegistry`, de `TranslationService` ni del hub iFlow para construir el pipeline.
 
 `config/channels/` (ruta plana) está prohibida por P0.3/ADR-034 y no puede reutilizarse como ruta
-canónica del catálogo neutral.
+canónica del catálogo de canales.
 
 #### Principio propuesto
 
 1. **La suite arranca y opera sin features.** El núcleo (comandos, ciclo de vida, registro de
    servicios, configuración y captura de plataforma) no exige ningún módulo de feature.
 2. **Ninguna feature requiere otra feature.** Un módulo solo puede requerir contratos neutrales del
-   núcleo o del runtime; nunca la capability de otro módulo opcional.
+   núcleo o del runtime; nunca la capability de otro módulo opcional. El uso de un servicio de otra
+   feature es opcional en runtime: si falta el proveedor, solo falla la operación que lo necesita.
 3. **La ausencia de una etapa es un paso explícito, no un fallo ni un no-op silencioso.** El mensaje
    continúa sin esa transformación y la traza registra la etapa como ausente/saltada.
 4. **El pipeline es secuencial e inyectivo.** Cada etapa recibe el mensaje, lo transforma y lo
@@ -290,8 +291,9 @@ canónica del catálogo neutral.
    dependencias ni del orden de activación.
 5. **El grafo de módulos se conserva para el ciclo de vida y los servicios neutrales**, pero no
    impone el orden del pipeline ni convierte una feature en requisito de otra.
-6. **El catálogo de canales es neutral.** Vive en el núcleo/runtime o viaja en el contexto del
-   pipeline; no pertenece a `textformatter` ni a ningún módulo opcional.
+6. **El catálogo de canales pertenece a `textformatter`.** No se mueve al núcleo ni al runtime: el
+   routing de canal es una función intrínseca de esa feature. Lo que cambia es su consumo: las
+   demás features lo buscan de forma opcional y solo fallan si intentan usarlo sin él.
 7. **Sin doble camino.** La lista configurada es la única fuente de orden; no se conserva el
    pipeline cableado como fallback.
 
@@ -340,23 +342,23 @@ interface PipelineStage {
 
 | Área | Cambio necesario |
 |---|---|
-| `core-api` | Contratos neutrales de catálogo de canales, etapa, contexto, resultado y traza. |
+| `core-api` | Contratos de etapa, contexto, resultado, traza y `Optional<ChannelRegistry>`; `Channel`/`ChannelRegistry` se conservan. |
 | `suite-runtime` | Construir el pipeline desde `pipeline` + `ServiceRegistry`; dejar de exigir servicios concretos y de fijar el orden en código. |
-| `textformatter` | Dejar de proveer `channel-api`; consumir el catálogo neutral y publicar una etapa de formato. |
-| `iflow` y motores | Requerir el servicio neutral de canales, no la capability de `textformatter`; publicar una etapa de routing. |
+| `textformatter` | Conservar `channel-api` y el catálogo de canales; añadir `provide("stage:format")` y publicar la etapa de formato. |
+| `iflow` y motores | Consumir `ChannelRegistry` de forma opcional, no como requisito; publicar una etapa de routing. |
 | `chattranslator` y backends | Publicar una etapa de traducción; revisar el requisito backend→fachada de ADR-008. |
-| `sync-*`, `inworld`, `tester` | Consumir el mensaje final o una etapa; no requerir `channel-api` de un feature. |
-| `presets` | Escribir el catálogo en la ruta canónica vigente, `config/textformatter/channels/`; la ruta no se mueve. |
-| `DefaultConfigInstaller` y hosts | Instalar el catálogo neutral y un `pipeline` por defecto coherente con lo instalado. |
-| `checkArchitecture` | Guard nuevo: ninguna feature declara `Requirement` sobre otra feature; el orden del pipeline no se deriva del grafo. |
+| `sync-*`, `inworld`, `tester` | Consumir el mensaje final o una etapa; no declarar `channel-api` como requisito. |
+| `presets` | Escribir el catálogo de `textformatter` en la ruta canónica vigente, `config/textformatter/channels/`; la ruta no se mueve. |
+| `DefaultConfigInstaller` y hosts | Instalar el catálogo de `textformatter` y un `pipeline` por defecto coherente con lo instalado. |
+| `checkArchitecture` | Guard nuevo: ninguna feature declara `Requirement` sobre otra feature; el orden del pipeline no se deriva del grafo. El consumo opcional no es un `Requirement`. |
 | Configuración y documentación | `config/suite/config.yml`, `storage.md`, `config-schema-v2.2.md`, wiki y READMEs. Los documentos de `docs/prompts/` requieren autorización. |
 
 **Nota de alcance:** PL-1 no es solo añadir una lista. Potencialmente exige **rediseñar el pipeline
-actual** (`SuiteHost`/`MessageDispatcher`), el modelo de requisitos del grafo y el lugar del catálogo
-de canales. La lista de módulos es la superficie visible; el cambio de fondo es quién posee los
-servicios neutrales y cómo se compone el procesamiento.
+actual** (`SuiteHost`/`MessageDispatcher`), el modelo de requisitos del grafo y el consumo opcional
+del catálogo de canales. La lista de módulos es la superficie visible; el cambio de fondo es qué
+servicios son obligatorios y cómo se compone el procesamiento.
 
-#### Preguntas abiertas (resueltas por ADR-036, pendiente de aceptación)
+#### Preguntas abiertas (resueltas por ADR-036, aceptado el 2026-11-06)
 
 1. ¿`pipeline` o `workflow` como nombre canónico? Se recomienda `pipeline`; el otro no será alias.
 2. ¿El catálogo de canales vive en `core-api`, en `suite-runtime` o en el `PipelineContext`?
@@ -381,14 +383,16 @@ servicios neutrales y cómo se compone el procesamiento.
 1. **Arranque sin features:** el núcleo arranca, registra comandos y gestiona el ciclo de vida; un
    despacho sin etapas devuelve un estado explícito de «sin pipeline», no un éxito falso.
 2. **Solo `textformatter`:** formatea y entrega sin iFlow, sin traducción y sin syncs.
-3. **Solo iFlow:** enruta con el catálogo neutral, sin `textformatter` ni `chattranslator`.
+3. **Solo iFlow:** arranca y enruta sin `textformatter` ni `chattranslator`; sin `format` se entrega
+   texto plano. Las operaciones que necesiten el catálogo de canales fallan de forma explícita, sin
+   bloquear el pipeline.
 4. **Solo `chattranslator`:** traduce con un render/pass-through neutral, sin `textformatter` ni
    iFlow.
 5. **Orden configurable:** el mismo conjunto en dos órdenes produce resultados distintos y
    trazables; el orden no depende del grafo ni del orden de registro.
 6. **Etapa ausente o no listada:** comportamiento explícito y probado, sin éxito fingido.
 7. **Guard de independencia:** un descriptor de feature no declara `Requirement` sobre otra feature;
-   solo sobre contratos neutrales.
+   solo sobre contratos neutrales. El consumo opcional en runtime no se declara como requisito.
 8. **Regresión:** la configuración base reproduce el comportamiento actual cuando declara el orden
    vigente.
 9. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`; si se toca el editor,
@@ -396,19 +400,20 @@ servicios neutrales y cómo se compone el procesamiento.
 
 #### Bloqueos
 
-- **ADR-036 pendiente de aceptación explícita** (redactado el 2026-11-06). Resuelve las doce
-  preguntas abiertas y enmienda ADR-019, ADR-024/025, ADR-032, ADR-008 y ADR-003; adopta ADR-031 en
-  la semántica de routing. §16 añade la superficie de acciones de los backends sync.
-- Cierre de la purga P0 (ADR-034); P0.6 cerrado (2026-11-06).
+- **ADR-036 aceptado (2026-11-06).** Resolvió las doce preguntas abiertas y enmendó ADR-019,
+  ADR-024/025, ADR-032, ADR-008 y ADR-003; adoptó ADR-031 en la semántica de routing. §16 añade la
+  superficie de acciones de los backends sync.
+- Purga P0 cerrada (P0.6, 2026-11-06).
 - Autorización explícita para modificar `docs/prompts/diseno/storage.md`,
   `docs/prompts/especificaciones/config-schema-v2.2.md`, `docs/prompts/diseno/iflow-cpu-design.md`,
-  `docs/prompts/diseno/iflow-cpu-implement.md` y el resto de documentos de diseño.
-- No se implementa código mientras el ADR-036 no esté aceptado.
+  `docs/prompts/diseno/iflow-cpu-implement.md` y el resto de documentos de diseño **solo si** la
+  implementación cambia sus rutas o su esquema; la ruta de canales no cambia.
+- La implementación de PL-1 no se ha iniciado; no hay código nuevo asociado a este plan.
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
-> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §16** (pendiente de
-> aceptación) y de cerrar **TF-005** y **TF-006**. No se inicia hasta que ADR-036 esté aceptado.
+> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §16** (aceptado el
+> 2026-11-06) y de cerrar **TF-005** y **TF-006**.
 
 #### Objetivo
 
@@ -536,17 +541,26 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 
 #### Bloqueos
 
-- ADR-036 §16 pendiente de aceptación explícita.
 - TF-005 y TF-006 abiertos.
-- Autorización para `storage.md`, el esquema de configuración y la especificación iFlow.
+- Autorización para `storage.md`, el esquema de configuración y la especificación iFlow, solo si sus
+  rutas o contratos cambian; el namespace `textformatter` y la ruta de canales no cambian.
 - Paridad W3.5 para el puente Wasm; el puente VM puede adelantarse con conformidad propia.
+
+#### Deuda de nomenclatura (baja prioridad)
+
+`SyncSink` es el SPI del endpoint; `SyncBus` es el contrato del multiplexor; `sync-bus` es el módulo
+que lo implementa; `sync` es el id del multiplexor y `sync.discord` un target. La interfaz del
+endpoint podría llamarse `SyncBackend` o `SyncEndpoint` para alinear el vocabulario con ADR-036 §16
+(«backend»), pero el cambio no aporta comportamiento y exige tocar código, tests y documentación.
+No se renombra ahora: primero hay que investigar el propósito histórico y vigente de cada nombre y
+planificar el cambio. Se registra como deuda de baja prioridad, no como requisito de PL-2.
 
 ---
 
 ### Feature propuesta — multiplexación de salidas por mensaje (PL-3, 2026-11-06)
 
-> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §17** (pendiente de
-> aceptación). No se inicia hasta que ADR-036 esté aceptado.
+> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §17** (aceptado el
+> 2026-11-06).
 
 #### Objetivo
 
@@ -645,8 +659,8 @@ pipeline.
 
 #### Bloqueos
 
-- ADR-036 §17 pendiente de aceptación explícita.
-- Autorización para `config-schema-v2.2.md` y la wiki.
+- Autorización para `config-schema-v2.2.md` solo si se añaden `outputs`/`outputs-parallel` al
+  esquema; la wiki es documentación de usuario y no requiere esa autorización.
 - PL-1/PL-2 y TF-005/TF-006 para el flujo completo.
 
 ---
@@ -696,28 +710,33 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
 - **Archivos desconocidos o binarios:** se preservan byte a byte y se reexportan en su ruta.
 - **Basura de sistema:** se ignoran `__MACOSX/`, `.DS_Store` y `Thumbs.db` al importar; no se
   inventan archivos al exportar.
-- **Tamaño:** límites explícitos y configurables solo en código: número de entradas (archivos y
-  directorios), bytes descomprimidos totales, bytes por archivo y ratio de compresión
-  (descomprimido/comprimido) como defensa anti-bomba. El ratio **no** es el nivel de compresión:
-  la exportación usa el nivel máximo de DEFLATE.
+- **Tamaño:** límites anti-bomba generosos y configurables solo en código: número de entradas
+  (archivos y directorios), bytes descomprimidos totales, bytes por archivo y ratio de compresión
+  (descomprimido/comprimido). Deben permitir muchas configuraciones, ROM y paquetes, y solo frenar
+  archivos maliciosos; no son un límite de producto. El ratio **no** es el nivel de compresión: la
+  exportación usa el nivel máximo de DEFLATE. Los valores provisionales se detallan en «Formato y
+  normalización».
 
 #### Gestión y desensamblado de ROM
 
 - La ROM se puede borrar, añadir, editar y clonar desde el editor.
-- El desensamblado se limita a la sección del programa de usuario. Quedan fuera firmware, BIOS,
-  bootloader, kernel y stdlib.
+- El desensamblado se limita al programa de usuario. La exclusión completa de firmware, BIOS,
+  bootloader, kernel y stdlib es un requisito de **v3**, no de v2.
 - **Estado real:** no existe desensamblador en `tools/iflow-compiler` (solo assembler). El formato
   `.flow` v2 tiene firmware de 4 KiB en `0x0000–0x0FFF` y código de usuario desde `0x1000`; la
   sección `debug` opcional incluye dirección, fuente y símbolos. El desensamblador debe construirse
   a partir de `Opcode`/`INSTRUCTION_SIZES`.
 - **Límite del formato actual:** en v2 no hay secciones separadas de BIOS, bootloader, kernel ni
-  stdlib; esa separación pertenece al ISA v3 (V1–V5). Hasta entonces, «excluir» significa limitarse
-  al rango de usuario (`>= 0x1000`) y no interpretar el firmware como programa.
-- **Grafos:** el desensamblado produce un CFG (flujo de control), no el grafo de reglas del editor.
-  Reconstruir automáticamente nodos `cond`/`transform`/`action` desde instrucciones no es
-  determinista. Decisión pendiente: (a) mostrar el CFG y dejar que el usuario lo traduzca a reglas,
-  o (b) definir metadatos en la ROM que declaren el grafo. No se promete reconstrucción semántica
-  automática.
+  stdlib; esa separación pertenece al ISA v3 (V1–V5). En v2 el desensamblado es una aproximación
+  limitada: solo decodifica el rango de usuario (`>= 0x1000`) y no interpreta el firmware como
+  programa. No se le atribuye la semántica de exclusión de v3.
+- **Grafos:** la página construye su configuración como grafo, la compila a assembler y de ahí a la
+  ROM. El proceso inverso usa **desensamblado**, no metadatos de grafo almacenados en la ROM: así se
+  acepta cualquier ROM, incluso editada externamente. El desensamblado produce un CFG (flujo de
+  control), no el grafo de reglas del editor; reconstruir automáticamente nodos
+  `cond`/`transform`/`action` no es determinista, así que el CFG se muestra y el usuario lo traduce
+  (con ayuda de la herramienta), sin prometer reconstrucción semántica automática. La ROM no declara
+  el grafo.
 
 #### Formato y normalización
 
@@ -737,9 +756,11 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
   comentarios y formato mediante un CST (árbol de sintaxis concreta); si una edición no puede
   preservarlos, se bloquea con error explícito en lugar de perderlos en silencio. El parser actual
   (`yaml.js`) descarta comentarios y no sirve para este requisito.
-- Límites anti-bomba: número máximo de entradas, bytes descomprimidos totales, bytes por archivo y
-  ratio descomprimido/comprimido. Se fijan en código, no en YAML; los valores concretos se
-  confirman antes de implementar.
+- Límites anti-bomba **provisionales y generosos**, revisables tras medir carpetas reales:
+  100.000 entradas (archivos y directorios), 1 GiB descomprimido total, 256 MiB por archivo y ratio
+  500:1. El ratio se evalúa solo en archivos de más de 1 MiB descomprimidos, para no rechazar YAML
+  pequeños muy comprimibles. Se aplican al importar y al exportar; viven en código, no en YAML. Un
+  archivo que supere un límite se rechaza con error explícito, sin truncar el ZIP.
 
 #### Correspondencia con el modelo
 
@@ -794,9 +815,11 @@ legacy ni lectores alternativos (ADR-034).
    editar un `.wasm` se exige recalcular el hash. Validar cabecera, versión, longitudes y hash antes
    de aceptar el archivo.
 8. **Desensamblador.** Crear una herramienta en `tools/iflow-compiler` que decodifique el rango de
-   usuario (`>= 0x1000`) del `.flow` v2 a instrucciones y produzca un CFG. No interpreta el firmware
-   como programa ni promete reconstruir el grafo de reglas. La salida es texto/JSON inspeccionable y
-   se integra en el editor como vista de solo lectura hasta que se decida el mapeo a reglas.
+   usuario (`>= 0x1000`) del `.flow` v2 a instrucciones y produzca un CFG. La exclusión completa de
+   firmware, BIOS, bootloader, kernel y stdlib es de v3; en v2 solo se aplica el corte de usuario. El
+   proceso inverso del editor (grafo → assembler → ROM) usa desensamblado, no metadatos de grafo en
+   la ROM, para aceptar cualquier ROM, incluso editada externamente. La salida es texto/JSON
+   inspeccionable y se integra en el editor como vista de solo lectura.
 9. **Validación.** Parsear YAML, comprobar `config-version: "1.0"` en cada `.yml` de `config/` y
    bloquear la exportación con errores. Un módulo desconocido es aviso, no error. La ROM y la base de
    paquetes se validan con sus propios formatos, no con el validador YAML.
@@ -823,26 +846,28 @@ legacy ni lectores alternativos (ADR-034).
 7. **Compresión:** STORE y DEFLATE funcionan; la exportación usa DEFLATE en nivel máximo; cifrado,
    ZIP64 no soportado y CRC inválido fallan.
 8. **Anti-bomba:** se rechazan entradas, bytes totales, bytes por archivo o ratios por encima del
-   límite; el ratio no se confunde con el nivel de compresión.
+   límite generoso; el ratio solo se evalúa por encima de 1 MiB y no se confunde con el nivel de
+   compresión.
 9. **Comentarios:** editar un YAML conserva sus comentarios y su formato; una edición no
    representable falla sin escribir el archivo.
 10. **Base de paquetes:** se lista y edita `manager/library/status`; un archivo corrupto se rechaza
     y la advertencia de consistencia está visible.
 11. **ROM:** se pueden listar, añadir, borrar, editar y clonar ROM; un `.wasm` editado sin hash
-    actualizado se rechaza; el desensamblado se limita al rango de usuario y produce un CFG.
+    actualizado se rechaza; el desensamblado se limita al rango de usuario (`>= 0x1000`) y produce un
+    CFG; la exclusión de firmware/BIOS/bootloader/kernel/stdlib es requisito de v3.
 12. **Sin regresión:** el modo proyecto actual sigue funcionando.
 13. **Gate:** `cd src/web-editor && npm run check`.
 
 #### Decisiones abiertas
 
-- **Grafos desde ROM:** el desensamblado produce un CFG, no el grafo de reglas. Elegir (a) mostrar el
-  CFG y dejar la traducción manual al usuario, o (b) definir metadatos en la ROM que declaren el
-  grafo. No se implementa reconstrucción semántica automática sin una de las dos.
-- **Límites anti-bomba:** fijar los valores concretos de entradas, bytes totales, bytes por archivo y
-  ratio antes de implementar; viven en código, no en YAML.
-- **Secciones de exclusión:** en `.flow` v2 no existen secciones separadas de BIOS, bootloader,
-  kernel y stdlib; la exclusión se limita a `>= 0x1000`. La separación real depende del ISA v3
-  (V1–V5) y se revisa entonces.
+- **Límites anti-bomba:** el baseline provisional es 100.000 entradas, 1 GiB total, 256 MiB por
+  archivo y ratio 500:1 (solo por encima de 1 MiB); se recalibra con carpetas reales antes de
+  congelarlo. Viven en código, no en YAML.
+- **Secciones de exclusión:** la exclusión completa de firmware, BIOS, bootloader, kernel y stdlib
+  pertenece a v3; en `.flow` v2 solo existe el corte de usuario (`>= 0x1000`). La separación real
+  depende del ISA v3 (V1–V5) y se revisa entonces.
+- **Grafos desde ROM:** resuelto; el proceso inverso usa desensamblado y CFG, no metadatos de grafo
+  en la ROM. No queda una decisión pendiente sobre declarar el grafo dentro del artefacto.
 
 #### Bloqueos
 
@@ -1173,8 +1198,8 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 | Contexto de solo lectura | Tipo, dirección, emisor, destinatario, canal e identidad del mensaje, leídos como parámetros del IRQ. | Imports de lectura; sin mutación. |
 | Contenido | `TRANSFORM_APPLY` solo contenido/metadatos: texto, placeholders y formato. | Host functions de lectura/escritura con buffer TLV/longitud; UTF-8 sin truncar. |
 | Metadatos | Idioma origen/destino, color, flags y `PROP_TRANSLATE` booleano. Precedencia de idioma ratificada (`Q35` / `IFLOW-MAN-42`). Sonidos, `PROP_PROCESSED` y `PROP_ACTOR_WORLD` quedan fuera del baseline v3 (`IFLOW-MAN-31`). | Implementar `PROP_TRANSLATE` con validación `true`/`false`; **no copiar** los `PROP_*` v2 retirados. |
-| Canal | `SET_CHANNEL` validado como única mutación de canal; si cambia permisos/destinatarios, segunda fase de routing, no reentrega recursiva. | Import de `SET_CHANNEL` + validación de existencia y permisos. |
-| Routing | Decisión explícita y tipada; el guest decide y el host registra. Default deny + `DELIVER` explícito, `SET_CHANNEL` validado, sin `REDIRECT`/`CHANNEL_REDIRECT`, `PolicyTarget` reducido y `CANCEL_EVENT` separado (D01–D05 ratificadas en ADR-031). | Import de decisión con target/destino/razón; sin `route:*` ni `SET_PROCESSED`; una sola decisión por ejecución. |
+| Canal | `textformatter.channel.set` validado como única mutación de canal; si cambia permisos/destinatarios, segunda fase de routing, no reentrega recursiva. | `sync_invoke("textformatter", "channel.set", ...)` + validación de existencia y permisos. |
+| Routing | Decisión explícita y tipada; el guest decide y el host registra. Default deny + `DELIVER` explícito, `textformatter.channel.set` validado, sin `REDIRECT`/`CHANNEL_REDIRECT`, `PolicyTarget` reducido y `CANCEL_EVENT` separado (D01–D05 ratificadas en ADR-031). | Import de decisión con target/destino/razón; sin `route:*` ni `SET_PROCESSED`; una sola decisión por ejecución. |
 | Journal | Solo write set del mensaje: todo o nada para sus mutaciones; no cubre máquina, tiempo, rate limit, cola ni entrega (`D43`). | Transacción de mensaje en el host con la misma semántica. |
 | Rate limit y tiempo | Política en userspace: token bucket, backoff y sleep usan RTC/ciclos/`HALT`; el host no calcula backoff y solo puede imponer un cap duro (`D40`, `D42`). | Exponer reloj/ciclos y `HALT`/sleep; **no** importar `RATE_LIMIT` ni `sleepMillis` como propiedad. |
 | Input ABI | TLV; UTF-8 sin cortar; ausencia distinta de `"null"`; `read-your-writes` ratificado (Q26). | Implementar TLV de entrada/salida y overlay de lectura del journal. |
@@ -1194,17 +1219,17 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 > propiedad del mensaje, `PROP_*` declaradas sin implementar ni la lectura que convierte `null` en
 > `"null"`.
 
-> **ADR-036 §16 (propuesta, pendiente de aceptación):** sustituye el import dedicado `SET_CHANNEL`
+> **ADR-036 §16 (aceptado el 2026-11-06):** sustituye el import dedicado `SET_CHANNEL`
 > por la acción agnóstica `textformatter.channel.set` invocada con `sync_invoke("textformatter", ...)`,
-> y añade `sync_surface`/`sync_invoke` para las acciones nativas de los backends sync. Si se acepta,
-> las filas «Canal» y «Routing» y los criterios 2 y 6 de W3.5 se actualizan; D01–D05 no cambian.
+> y añade `sync_surface`/`sync_invoke` para las acciones nativas de los backends sync. Las filas
+> «Canal» y «Routing» y los criterios 2 y 6 de W3.5 quedan actualizados; D01–D05 no cambian.
 
 **Criterios de cierre:**
 
 1. Un corpus de políticas `.flow` v3 (ROM) y `.wasm` produce la misma decisión explícita
    (target/destino/razón) y el mismo mensaje transformado para las mismas entradas.
-2. `SET_CHANNEL` valida existencia y permisos igual en ambos motores; un cambio que altere
-   destinatarios se resuelve como segunda fase de routing, no como reentrega recursiva.
+2. `textformatter.channel.set` valida existencia y permisos igual en ambos motores; un cambio que
+   altere destinatarios se resuelve como segunda fase de routing, no como reentrega recursiva.
 3. El journal es atómico y cubre solo el write set del mensaje; no filtra estado de máquina, tiempo,
    rate limit, cola ni entrega.
 4. La política de rate limit y de tiempo vive en el guest; el host solo aplica un cap duro separado
