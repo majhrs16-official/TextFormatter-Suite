@@ -1249,11 +1249,12 @@ la purga P0.4; se mantiene como feature legacy.
 
 ---
 
-## ADR-036 — Pipeline secuencial configurable y features opcionales
+## ADR-036 — Pipeline secuencial configurable, features opcionales y superficie de acciones sync
 
 **Estado:** Propuesta (2026-11-06). Pendiente de aceptación explícita del usuario. No se implementa
-mientras el estado sea «Propuesta». Enmienda ADR-019, ADR-024, ADR-025, ADR-032 y ADR-008 en los
-puntos que se indican; adopta ADR-031 sin cambios.
+mientras el estado sea «Propuesta». Enmienda ADR-019, ADR-024, ADR-025, ADR-032, ADR-008 y ADR-003
+en los puntos que se indican; adopta ADR-031 en la semántica de routing (§16 regula la exposición de
+`SET_CHANNEL` como acción agnóstica sin alterar D01–D05).
 
 **Contexto.** El diseño declara que todo feature es un paquete opcional, pero el composition root
 decide lo contrario en tiempo de ejecución. `SuiteRuntime.rebuildPipeline()` exige ocho servicios
@@ -1278,10 +1279,13 @@ trazable, no un fallo del pipeline.
 | ADR-025 | El adapter construye y posee el pipeline. | Adapters delgados, `PlatformPorts`, captura de eventos en `sync-*`. |
 | ADR-032 | `SuiteRuntime` exige `IflowHub` y un `Router` no nulo para construir el pipeline. | Selección de backend por el hub, prioridad de fallback, configuración `config/iflow/config.yml`. |
 | ADR-008 | El backend de traducción requiere `chattranslator` para activarse. | La fachada `ChatTranslator` y `TranslationService` como punto de uso de la traducción. |
+| ADR-003 | La autoridad de un programa iFlow se limita a contenido y metadatos del mensaje. | Sandbox por módulo, SHA-256, allowlists, responsabilidad del repositorio. |
 
-ADR-031 se adopta íntegra: `PolicyTarget` se reduce a `DELIVER`, `CANCEL_EVENT` y `ERROR`; `SET_CHANNEL`
-es la única mutación de canal; `REDIRECT` y `CHANNEL_REDIRECT` desaparecen. Este ADR no los
-reintroduce con otro nombre.
+ADR-031 se adopta íntegra en la semántica de routing: `PolicyTarget` se reduce a `DELIVER`,
+`CANCEL_EVENT` y `ERROR`; `SET_CHANNEL` es la única mutación de canal; `REDIRECT` y
+`CHANNEL_REDIRECT` desaparecen. §16 no cambia esas reglas: convierte `SET_CHANNEL` en una acción
+agnóstica disponible para terceros y retira su import dedicado, sin reintroducir los targets
+retirados.
 
 ### 2. Regla de independencia
 
@@ -1542,6 +1546,9 @@ todos los sinks registrados. Los sinks no son etapas: publican `SyncSink` y el b
 imponen orden. `sync` se ejecuta una vez por emisión, después de las entregas, y no altera el
 mensaje. Si el bus no está instalado, la etapa se salta y el resto del pipeline no cambia.
 
+El fan-out oficial usa solo el mínimo común múltiplo (`backend.info`, `message.send`). La superficie
+nativa de cada backend y las acciones agnósticas para terceros se definen en §16.
+
 ### 13. Qué mensajes recorren el pipeline
 
 Todos los `Message` inyectados por `MessageDispatch` recorren el mismo pipeline, con independencia de
@@ -1578,6 +1585,190 @@ El cambio de modelo obliga a corregir los descriptores en la misma unidad de tra
 publicados y se suscribe a `ModuleActivatedEvent`/`ModuleDeactivatedEvent`, igual que hace el hub de
 iFlow con sus backends.
 
+### 16. Superficie de acciones de los backends sync
+
+#### 16.1 Principio
+
+El backend conoce su plataforma; el núcleo no. `sync-discord` conoce canales, roles, mensajes,
+miembros, bans y auditoría de Discord; `sync-telegram` conoce chats, mensajes, miembros y permisos de
+Telegram; `sync-http` conoce su endpoint y sus cabeceras. Ese conocimiento no se compila en
+`core-api`: se publica como un esquema de datos y se ejecuta en el backend.
+
+La suite oficial usa solo el mínimo común múltiplo (LCM) de todos los backends. Los programas de
+iFlow de terceros pueden descubrir y ejecutar cualquier acción nativa que el backend declare, siempre
+que el programa la declare y el operador la conceda. Sin concesión no hay acceso: la superficie es
+amplia, la autoridad no es ambiente.
+
+#### 16.2 Tres niveles
+
+| Nivel | Quién lo usa | Acciones |
+|---|---|---|
+| Agnóstico oficial (LCM) | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send` |
+| Agnóstico extendido | programas de terceros | `channel.set` (host) y las acciones agnósticas que se acuerden |
+| Nativo | programas de terceros | `<backend>.<dominio>.<verbo>`: `discord.channel.create`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.create`, etc. |
+
+`Principal.Official` solo puede invocar el LCM; `Principal.Program` solo puede invocar lo que tenga
+concedido. El bus lo verifica; no es una convención.
+
+#### 16.3 Contratos
+
+```java
+public interface SyncSink {                 // evoluciona; no se envuelve
+    String name();
+    SyncSurface surface();
+    SyncResult invoke(SyncCall call);
+    // start/stop/setListener se conservan; send(Message) se sustituye por message.send
+}
+
+public record SyncSurface(
+        String backend,                     // "discord", "telegram", "http"...
+        SemVer contractVersion,
+        Set<SyncActionSpec> actions
+) {}
+
+public record SyncActionSpec(
+        String id,                          // "message.send", "channel.create"...
+        ActionKind kind,                    // READ, WRITE, DESTRUCTIVE, MODERATION
+        List<SyncParamSpec> params,
+        SyncParamSpec result,               // null si no devuelve valor
+        boolean idempotent,
+        long timeoutMillis
+) {}
+
+public enum ActionKind { READ, WRITE, DESTRUCTIVE, MODERATION }
+
+public enum SyncValueType {
+    STRING, INTEGER, BOOLEAN, DURATION,
+    ACTOR_REF, CHANNEL_REF, MESSAGE_REF, ROLE_REF, OBJECT
+}
+
+public record SyncParamSpec(
+        String name,
+        SyncValueType type,
+        boolean required,
+        SyncParamSpec item                // solo para listas; null en el resto
+) {}
+
+public sealed interface Principal {
+    record Official(String moduleId) implements Principal {}
+    record Program(String sha256) implements Principal {}
+}
+
+public record SyncCall(
+        String backend,                     // "*" para acciones del host
+        String action,
+        Map<String, Object> args,           // tipos de SyncParamSpec, sin tipos de SDK
+        Principal principal,                // Official(moduleId) | Program(sha256)
+        String idempotencyKey,
+        String reason
+) {}
+
+public sealed interface SyncResult {
+    record Ok(Object value) implements SyncResult {}
+    record Denied(String reason) implements SyncResult {}
+    record Unsupported(String reason) implements SyncResult {}
+    record InvalidArgument(String reason) implements SyncResult {}
+    record NotFound(String reason) implements SyncResult {}
+    record Conflict(String reason) implements SyncResult {}
+    record RateLimited(long retryAfterMillis) implements SyncResult {}
+    record Timeout(String reason) implements SyncResult {}
+    record HostFailure(String reason) implements SyncResult {}
+}
+
+public interface SyncBus {
+    Set<SyncSurface> surfaces();
+    SyncResult invoke(SyncCall call);
+    List<SyncResult> broadcast(SyncCall call);   // fan-out del LCM
+    List<SyncResult> send(Message message);      // comodidad tipada sobre message.send
+}
+```
+
+`SyncParamSpec` tipa los argumentos como datos neutrales (`STRING`, `INTEGER`, `BOOLEAN`, `DURATION`,
+`ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `OBJECT`). `OBJECT` es un mapa anidado
+validado por el backend; el núcleo no interpreta su contenido. Ningún tipo de JDA, Telegram, Bukkit
+o Fabric cruza esta frontera. `backend = "*"` identifica acciones del host, no de un sink.
+
+#### 16.4 Mínimo común múltiplo
+
+- `backend.info`: `READ`, idempotente; devuelve nombre, versión y versión de superficie.
+- `message.send`: `WRITE`, idempotente por `idempotencyKey`; argumentos `message` (`MESSAGE_REF`) y
+  `destination` (`CHANNEL_REF`, opcional).
+- `SyncBus.send(Message)` es una comodidad tipada sobre `message.send`; no es un segundo camino.
+- Un backend que no pueda implementar el LCM no se publica: no existe un `send` que finja éxito.
+
+#### 16.5 `channel.set`
+
+- Acción agnóstica del host (`backend = "*"`), `WRITE`; argumento `channel` (`CHANNEL_REF`).
+- Equivale a `SET_CHANNEL` de ADR-031 sobre `Message.channel`: cambia el canal de routing y dispara la
+  segunda fase de §7. Una sola mutación por unidad; la segunda produce `DECISION_CONFLICT`.
+- iFlow oficial no la invoca: no pertenece al LCM y `Principal.Official` no puede invocarla. Un
+  programa de terceros puede hacerlo con la capacidad `sync.host.channel.set`.
+- El cambio de destino nativo de un backend no se hace con `channel.set`: se hace con una acción
+  nativa o con el argumento `destination` de `message.send`. `channel.set` nunca significa
+  implícitamente «canal de Discord/Telegram».
+- El import dedicado `set_channel` de la ABI v3 se retira; se sustituye por
+  `sync_invoke("*", "channel.set", ...)`. No hay alias ni doble lector (ADR-034).
+
+#### 16.6 Autoridad, concesiones y auditoría
+
+1. **Declaración.** El programa declara las capacidades que usa en su imagen
+   (`ProgramImage.capabilities`), con el formato `sync.<backend>.<accion>` (por ejemplo
+   `sync.discord.channel.create`; `accion` es el id local de la superficie) o `sync.host.<accion>`
+   para acciones del host (`sync.host.channel.set`).
+2. **Concesión.** El operador las autoriza en `config/suite/iflow/grants.yml`, indexadas por el
+   SHA-256 de la imagen del programa, no por su nombre. La concesión puede usar comodines
+   (`sync.discord.*`); el programa debe declarar la acción exacta; la autoridad efectiva es la
+   intersección.
+3. **Destructivo.** `DESTRUCTIVE` y `MODERATION` exigen `allow-destructive: true` en la concesión.
+   Sin esa marca, la acción devuelve `Denied` y no produce efecto.
+4. **Fail-closed.** Permiso ausente, ambiguo o no verificable → `Denied`. No se hereda el fail-open
+   de `PERMISSION`/`WORLD` (TF-002).
+5. **Cuotas.** Timeout por acción (`timeoutMillis`), llamadas por minuto por programa, coste de fuel
+   por llamada de host y tamaño máximo de payload. El agotamiento devuelve `RateLimited` o `Timeout`,
+   no un éxito parcial.
+6. **Auditoría.** Registro append-only con hash del programa, backend, acción, actor, hash de
+   argumentos (nunca valores), resultado y duración. Los argumentos marcados como secreto se
+   redactan. La ruta la fija `storage.md`; cambiarla requiere autorización.
+7. **Idempotencia.** Solo se reintenta una acción marcada `idempotent`; la clave es
+   `message.id() + action + target`. Las acciones no idempotentes no se reintentan.
+8. **Sin transacción.** Un efecto nativo (ban, creación de canal, edición) no se revierte si el
+   mensaje falla después. No hay rollback entre backends ni compensación automática. El operador
+   concede acciones destructivas con esa consecuencia explícita.
+9. **Punto de ejecución.** Las acciones se ejecutan en la etapa `route` (iFlow), antes de `translate`,
+   `format` y `sync`. El puente devuelve un estado; la política decide si entrega. `Denied` nunca
+   tiene efecto. Una acción no es una decisión de routing: no consume la única decisión de ADR-031.
+10. **Aislamiento.** Un fallo del backend se devuelve como `HostFailure` y no tumba el bus ni el
+    pipeline; un fallo del programa se rige por §5.
+
+#### 16.7 Puente iFlow
+
+- VM: dos servicios `HOST` genéricos, `SYNC_SURFACE` (`0x0800`) y `SYNC_INVOKE` (`0x0801`), con
+  payload TLV y transferencia por DMA; el coste se carga al *fuel budget* existente.
+- Wasm v3: dos imports `sync_surface` y `sync_invoke` con el mismo TLV y los mismos estados.
+- No se añade una instrucción ni un import por acción. Es la aplicación directa del principio de
+  `iflow-cpu-design.md` §10: el CPU no conoce `SET_CHANNEL`; el runtime ofrece una operación
+  autorizada y genérica.
+- Ambos motores comparten la misma suite de conformidad; la paridad VM/Wasm es parte de W3.5.
+- Las políticas oficiales que se distribuyen con la suite no declaran `sync.invoke`; un test lo
+  verifica. Solo los programas de terceros lo declaran.
+
+#### 16.8 Enmiendas y límites
+
+- **ADR-003.** Se añaden invariantes: concesión por hash, marca destructiva, auditoría, fail-closed y
+  cuotas. Las firmas siguen siendo opcionales; la concesión es del operador, no una prueba de
+  autoría.
+- **ADR-031.** D01–D05 no cambian. `channel.set` reutiliza la segunda fase de D02 y retira el import
+  dedicado, sin reintroducir `REDIRECT` ni `CHANNEL_REDIRECT`.
+- **ADR-019.** Los `sync-*` dejan de requerir `sync-bus` (§15); publican `SyncSink` y el bus los
+  descubre.
+- **`storage.md` §2.** La regla «un submódulo declara `require(...)` del padre» contradice §15 y esta
+  sección; actualizarla requiere autorización explícita.
+- **Especificación iFlow.** El baseline v3 limita al guest a contenido/metadatos; esta sección amplía
+  su autoridad a efectos de host. Requiere autorización para modificar
+  `docs/prompts/diseno/iflow-cpu-design.md`, `iflow-cpu-implement.md` y la especificación de la ISA.
+- **No promete** rollback, transacciones entre backends, reintentos automáticos ni autoridad
+  ambiente. La superficie es amplia por diseño; la concesión es el límite.
+
 ### Respuestas a las preguntas abiertas de `PLAN.md`
 
 | # | Pregunta | Decisión |
@@ -1587,7 +1778,7 @@ iFlow con sus backends.
 | 3 | ¿`moduleId` o `stageId`? ¿Varias etapas por módulo? | `stageId`. Un módulo puede publicar varias; dos no pueden publicar el mismo id. |
 | 4 | ¿Traducción como etapa? | Sí: `translate`, fase `RECIPIENT`, tras `route` y antes de `format`. |
 | 5 | ¿Etapa ausente: error o `SKIPPED`? ¿Lista por defecto? | `SKIPPED` y continúa. La lista base la instala `DefaultConfigInstaller`; falta de clave en un archivo existente es `INVALID`. Lista vacía es `NO_PIPELINE`. |
-| 6 | ¿Syncs como etapa? | Una etapa terminal `sync` (`MESSAGE_POST`); los sinks no son etapas. |
+| 6 | ¿Syncs como etapa? | Una etapa terminal `sync` (`MESSAGE_POST`); los sinks no son etapas. La superficie de acciones se define en §16. |
 | 7 | ¿Sustituye o envuelve a `SuiteHost`/`MessageDispatcher`? | Sustituye. `PipelineEngine` + `RecipientResolver` + `DeliveryExecutor`. |
 | 8 | `SET_CHANNEL` y segunda fase | Segunda pasada de routing solo para afectados, sin reentrega recursiva; segunda mutación → `DECISION_CONFLICT`. |
 | 9 | Cambio en caliente | `APPLIED` con swap atómico, `FAILED` conservando el plan anterior, `RESTART_REQUIRED` si no se puede drenar. |
@@ -1613,6 +1804,10 @@ iFlow con sus backends.
    aserciones.
 9. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`; si se toca el editor,
    `npm run check`.
+10. **Superficie sync:** el LCM oficial (`backend.info`, `message.send`) funciona sin acciones
+    nativas; `channel.set` solo lo invoca un tercero con concesión; una acción nativa sin concesión
+    devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen `allow-destructive`; el puente
+    VM y el de Wasm devuelven los mismos estados para la misma llamada.
 
 Tests adicionales obligatorios: ausencia de `iflow` con el resto instalado (debe entregar, no
 bloquear); `iflow` instalado sin backend (etapa `SKIPPED`); duplicado de etapa (`INVALID`); dos
@@ -1632,6 +1827,8 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
   `chattranslator` se convierten en consumidores/publicadores de etapas.
 - La recarga en caliente gana un estado verificable (`APPLIED`/`FAILED`/`RESTART_REQUIRED`) y deja de
   tener la carrera de `TF-010` en el rebuild.
+- Cada backend sync publica su superficie nativa como datos; la suite oficial sigue usando solo el
+  LCM y los terceros pueden construir bots completos de Discord/Telegram con concesiones explícitas.
 - El cambio es incompatible: descriptores, configuración, esquema, presets, instalador, tests y
   documentación se actualizan en la misma unidad de trabajo. No hay periodo de convivencia.
 

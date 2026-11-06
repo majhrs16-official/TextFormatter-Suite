@@ -243,10 +243,12 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 > **Estado:** propuesta, no implementada y no contractual. **ADR-036 redactado (2026-11-06),
 > pendiente de aceptación explícita.** Sustituye o enmienda ADR-019 (composition root y
-> dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow) y ADR-008
-> (backend→fachada) en lo relativo a los requisitos entre features y al orden del pipeline; adopta
-> ADR-031 sin cambios. **No se inicia** hasta que el usuario acepte ADR-036 y se cierre la purga P0
-> (ADR-034). Cualquier cambio en `docs/prompts/` requiere autorización explícita.
+> dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow), ADR-008
+> (backend→fachada) y ADR-003 (§16, autoridad del guest) en lo relativo a los requisitos entre
+> features y al orden del pipeline; adopta ADR-031 en la semántica de routing (§16 regula la
+> exposición de `SET_CHANNEL` sin alterar D01–D05). **No se inicia** hasta que el usuario acepte
+> ADR-036 y se cierre la purga P0 (ADR-034). Cualquier cambio en `docs/prompts/` requiere
+> autorización explícita.
 
 #### Hallazgo estructural
 
@@ -395,11 +397,140 @@ servicios neutrales y cómo se compone el procesamiento.
 #### Bloqueos
 
 - **ADR-036 pendiente de aceptación explícita** (redactado el 2026-11-06). Resuelve las doce
-  preguntas abiertas y enmienda ADR-019, ADR-024/025, ADR-032 y ADR-008; adopta ADR-031.
+  preguntas abiertas y enmienda ADR-019, ADR-024/025, ADR-032, ADR-008 y ADR-003; adopta ADR-031 en
+  la semántica de routing. §16 añade la superficie de acciones de los backends sync.
 - Cierre de la purga P0 (ADR-034); P0.6 cerrado (2026-11-06).
 - Autorización explícita para modificar `docs/prompts/diseno/storage.md`,
-  `docs/prompts/especificaciones/config-schema-v2.2.md` y el resto de documentos de diseño.
+  `docs/prompts/especificaciones/config-schema-v2.2.md`, `docs/prompts/diseno/iflow-cpu-design.md`,
+  `docs/prompts/diseno/iflow-cpu-implement.md` y el resto de documentos de diseño.
 - No se implementa código mientras el ADR-036 no esté aceptado.
+
+### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
+
+> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §16** (pendiente de
+> aceptación) y de cerrar **TF-005** y **TF-006**. No se inicia hasta que ADR-036 esté aceptado.
+
+#### Objetivo
+
+Cada backend sync (`sync-discord`, `sync-telegram`, `sync-http`, `sync-websocket`, `sync-socket` y
+`sync-velocity-core`) conoce su plataforma y publica todas sus operaciones nativas como un esquema de
+datos. La suite oficial consume solo el mínimo común múltiplo (LCM). Los programas de iFlow de
+terceros pueden invocar cualquier acción nativa que declaren y que el operador les conceda, lo que
+permite construir un bot completo de Discord o Telegram sin que el núcleo conozca esos SDK.
+`SET_CHANNEL` deja de ser una operación oficial y pasa a ser la acción agnóstica `channel.set`,
+disponible para terceros.
+
+#### Modelo
+
+| Nivel | Consumidor | Contenido |
+|---|---|---|
+| LCM oficial | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send` |
+| Agnóstico extendido | programas de terceros | `channel.set` (host) y acciones agnósticas acordadas |
+| Nativo | programas de terceros | `discord.channel.create`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.create`, etc. |
+
+`Principal.Official` solo puede invocar el LCM; `Principal.Program` solo lo concedido. Sin concesión
+no hay efecto.
+
+#### Estado actual y evidencia
+
+| Hecho | Evidencia | Efecto |
+|---|---|---|
+| `SyncSink` solo envía mensajes | `SyncSink.java` (`send`, `start`, `stop`, `setListener`) | No hay superficie de acciones ni descubrimiento. |
+| `broadcast` devuelve el número de sinks, no de éxitos | `DefaultSyncBus.broadcast`; TF-005 | Un `invoke` construido encima mentiría sobre el resultado. |
+| `broadcastAsync` sondea la cola sin timeout ni identidad | `DefaultSyncBus.broadcastAsync`; TF-006 | No sirve como base de acciones con timeout. |
+| `set_channel` es un import dedicado de v3 | `PolicyAbiV3.SET_CHANNEL`; `PolicyHost.setChannel` | No es genérico ni está sujeto a concesiones por acción. |
+| Los sinks requieren `sync-bus` | descriptores `sync-*`; `storage.md` §2 | Feature→feature; contradice ADR-036 §2. |
+| No hay concesiones ni auditoría de acciones | — | Un tercero no puede recibir autoridad acotada. |
+
+#### Impacto previsto
+
+| Área | Cambio |
+|---|---|
+| `core-api` | `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
+| `sync-bus` | Registro de superficies, `invoke`, fan-out del LCM, timeout/cuotas, auditoría, `channel.set` del host. |
+| `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. |
+| `iflow-vm` | Servicios `SYNC_SURFACE`/`SYNC_INVOKE`, TLV/DMA/fuel; retirar `set_channel` dedicado. |
+| `iflow-wasm` | Imports `sync_surface`/`sync_invoke`, TLV y estados equivalentes; retirar `set_channel`. |
+| `suite-runtime` | Concesiones por SHA-256, auditoría, cuotas y puente entre iFlow y `SyncBus`. |
+| Configuración | `config/suite/iflow/grants.yml`; ruta de auditoría en `storage.md`. |
+| Tests | Conformidad VM/Wasm, autorización, destructivos, cuotas, `channel.set` y regresión del LCM. |
+
+#### Pasos de implementación
+
+1. **Prerrequisito TF-005/TF-006.** Corregir `SyncBus.broadcast` para contar éxitos reales y
+   `broadcastAsync` para completar con timeout e identidad de mensaje. Tests de regresión que fallen
+   sin el arreglo.
+2. **Contratos neutrales.** Añadir los tipos de §16.3 a `core-api` y ampliar `SyncSink`/`SyncBus`.
+   `checkArchitecture` prohíbe JDA, Telegram, Bukkit, Fabric y cualquier SDK en `core-api` y
+   `sync-bus`. Test de que una superficie se serializa sin tipos de plataforma.
+3. **Bus de acciones.** Indexar `SyncSurface` por backend, validar duplicados, enrutar `invoke`,
+   aplicar timeout/cuotas, emitir auditoría y mapear cada estado a `SyncResult`. `send(Message)` pasa
+   a ser una comodidad sobre `message.send`.
+4. **Backends.** Migrar `sync-discord` y `sync-telegram` primero (superficie completa: canales,
+   roles, mensajes, miembros, moderación); después `sync-http`, `sync-websocket`, `sync-socket` y
+   `sync-velocity-core` (LCM y nativas que apliquen). Una acción no soportada devuelve `Unsupported`,
+   nunca un no-op.
+5. **`channel.set`.** Implementar el handler de host en el motor del pipeline, reutilizando la
+   segunda fase de §7 y la regla de una sola mutación. `Principal.Official` recibe `Denied`; un
+   tercero con `sync.host.channel.set` puede invocarlo.
+6. **Puente iFlow.** Añadir `SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en
+   Wasm, con el mismo `TlvCodec` y los mismos estados; retirar `set_channel` y actualizar fixtures y
+   programas de ejemplo. Suite de conformidad compartida.
+7. **Concesiones y auditoría.** `config/suite/iflow/grants.yml` indexado por SHA-256, comodines en la
+   concesión, `allow-destructive`, cuotas por programa y registro append-only con hash de argumentos.
+   Un permiso ausente o ambiguo deniega.
+8. **Guardas.** `checkArchitecture`: ninguna feature requiere otra; ningún backend importa el núcleo
+   del bus; las políticas oficiales no declaran `sync.invoke`. Test de que el LCM no invoca acciones
+   nativas.
+9. **Documentación y esquema.** Actualizar `storage.md` (submódulo, ruta de auditoría),
+   `config-schema-v2.2.md`, la especificación iFlow y la wiki. `docs/prompts/` requiere autorización
+   explícita.
+
+#### Criterios de cierre y tests
+
+1. **LCM:** con cualquier subconjunto de backends, `backend.info` y `message.send` funcionan sin
+   acciones nativas.
+2. **Oficial acotado:** `Principal.Official` no puede invocar `channel.set` ni una acción nativa;
+   recibe `Denied` sin efecto.
+3. **Tercero con concesión:** un programa de prueba con `sync.discord.channel.create` crea un canal
+   en un backend falso y deja una entrada de auditoría con hash, sin valores sensibles.
+4. **Sin concesión:** la misma llamada devuelve `Denied` y el backend no recibe la acción.
+5. **Destructivo:** `discord.member.ban` sin `allow-destructive` devuelve `Denied`; con la marca,
+   ejecuta y audita.
+6. **Cuotas:** timeout y límite por minuto devuelven `Timeout`/`RateLimited`; no hay éxito parcial.
+7. **`channel.set`:** dispara la segunda fase de routing; la segunda mutación devuelve
+   `DECISION_CONFLICT`; el import dedicado ya no existe.
+8. **Acción desconocida:** `Unsupported` explícito; el bus no finge éxito.
+9. **Paridad:** la misma llamada produce el mismo `SyncResult` en VM y Wasm.
+10. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`.
+
+#### Dependencias y orden
+
+- **ADR-036 aceptado** y, en particular, §16.
+- **TF-005/TF-006 cerrados** antes de exponer `invoke`.
+- **PL-1** para la etapa `sync`, el contexto del pipeline y la segunda fase de routing.
+- **W3.5** para el puente Wasm; la VM y Wasm comparten conformidad.
+- Los backends pueden avanzar en paralelo después de los contratos y el bus.
+
+#### Contradicciones detectadas
+
+| Documento | Contradicción | Resolución |
+|---|---|---|
+| ADR-003 | La autoridad del guest se limita a contenido/metadatos. | ADR-036 §16 añade concesiones por hash, marca destructiva, auditoría y fail-closed; las firmas siguen siendo opcionales. |
+| ADR-031 | `SET_CHANNEL` es la única mutación de canal y no se expone a terceros. | No cambia D01–D05; `channel.set` reutiliza D02 y retira el import dedicado. La exposición cambia, la semántica no. |
+| ADR-019 | Permite `feature → feature` con dependencia declarada. | ADR-036 §2 elimina la excepción; §15 migra los descriptores. |
+| `storage.md` §2 | Un submódulo declara `require(...)` del padre (`sync-*` → `sync-bus`). | Contradice §15 y §16; actualizar el documento requiere autorización. |
+| Especificación iFlow v3 | El guest solo transforma contenido/metadatos; no hay efectos de host. | §16 amplía la autoridad a acciones de backend con concesión; requiere autorización para la spec. |
+| Auditoría TF-005/TF-006 | `broadcast` y `broadcastAsync` no son fiables. | No es contradicción: es prerrequisito. No se expone `invoke` hasta corregirlos. |
+| ADR-035 | `CoreTranslator.sendDiscord` usa el bus actual. | Pasa al LCM `message.send`; no usa acciones nativas. Sin contradicción. |
+| ADR-034 | Prohíbe aliases y compatibilidad. | El cambio es incompatible y se aplica en una sola unidad; `set_channel` se retira, no se conserva como alias. |
+
+#### Bloqueos
+
+- ADR-036 §16 pendiente de aceptación explícita.
+- TF-005 y TF-006 abiertos.
+- Autorización para `storage.md`, el esquema de configuración y la especificación iFlow.
+- Paridad W3.5 para el puente Wasm; el puente VM puede adelantarse con conformidad propia.
 
 ---
 
@@ -743,6 +874,11 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 > `REDIRECT`/`CHANNEL_REDIRECT`, `RATE_LIMIT` con backoff calculado por el host, `sleepMillis` como
 > propiedad del mensaje, `PROP_*` declaradas sin implementar ni la lectura que convierte `null` en
 > `"null"`.
+
+> **ADR-036 §16 (propuesta, pendiente de aceptación):** sustituye el import dedicado `SET_CHANNEL`
+> por la acción agnóstica `channel.set` invocada con `sync_invoke("*", ...)`, y añade
+> `sync_surface`/`sync_invoke` para las acciones nativas de los backends sync. Si se acepta, las
+> filas «Canal» y «Routing» y los criterios 2 y 6 de W3.5 se actualizan; D01–D05 no cambian.
 
 **Criterios de cierre:**
 
