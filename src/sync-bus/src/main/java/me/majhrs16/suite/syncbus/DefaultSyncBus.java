@@ -129,7 +129,18 @@ public final class DefaultSyncBus implements SyncBus {
     }
 
     private void processMessage(Message message) {
-        // Deduplication check
+        deliver(message);
+    }
+
+    /**
+     * Fans the message out to every registered sink and returns how many
+     * sinks actually accepted it.
+     *
+     * <p>The dedup mark is reserved before the fan-out but released when no
+     * sink accepted the message, so a caller can retry a message that was
+     * dropped by full queues instead of getting a false success.</p>
+     */
+    private int deliver(Message message) {
         String msgId = message.id().toString();
         long now = System.currentTimeMillis();
 
@@ -137,19 +148,31 @@ public final class DefaultSyncBus implements SyncBus {
         if (previousTime != null && (now - previousTime) < DEDUP_WINDOW_MS) {
             totalDeduped.incrementAndGet();
             logger.debug("SyncBus: deduplicated message " + msgId);
-            return;
+            return 0;
+        }
+        if (previousTime != null) {
+            // Expired dedup entry: refresh the window for this emission.
+            sentMessageIds.put(msgId, now);
         }
 
         totalBroadcast.incrementAndGet();
 
-        // Fan out to all sinks with per-sink isolation
+        // Fan out to all sinks with per-sink isolation.
+        int accepted = 0;
         for (SinkContext ctx : sinks.values()) {
-            ctx.enqueue(message);
+            if (ctx.enqueue(message)) {
+                accepted++;
+            }
         }
-    }
 
-    private void submitToGlobalQueue(Message message) {
-        globalExecutor.execute(() -> processMessage(message));
+        if (accepted == 0) {
+            // Never report success for a message no sink accepted; release the
+            // dedup mark so the emission can be retried once queues drain.
+            // SinkContext.enqueue() already counted each dropped delivery.
+            sentMessageIds.remove(msgId, now);
+            logger.warn("SyncBus: broadcast accepted by no sink; message " + msgId + " was not delivered");
+        }
+        return accepted;
     }
 
     @Override
@@ -242,20 +265,10 @@ public final class DefaultSyncBus implements SyncBus {
             return 0;
         }
 
-        try {
-            // Single path: offer to global queue, which fans out via processMessage()
-            boolean offered = globalQueue.offer(() -> processMessage(message), 100, TimeUnit.MILLISECONDS);
-            if (!offered) {
-                // Queue full - apply backpressure by running in caller thread (CallerRunsPolicy)
-                submitToGlobalQueue(message);
-            }
-            // Return number of registered sinks (fan-out happens in processMessage)
-            return sinks.size();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            totalDropped.incrementAndGet();
-            return 0;
-        }
+        // Fan out in the caller thread so the return value reflects what the
+        // sinks actually accepted. Going through the global queue would make
+        // the count a guess, because enqueue() can fail later.
+        return deliver(message);
     }
 
     @Override

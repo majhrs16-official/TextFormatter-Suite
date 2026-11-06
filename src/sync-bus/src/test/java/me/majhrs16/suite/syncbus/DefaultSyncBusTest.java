@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -119,6 +120,47 @@ class DefaultSyncBusTest {
         }
     }
 
+    @Test
+    void broadcastReportsZeroWhenNoSinkAcceptsAndAllowsRetry() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        BlockingSink sink = new BlockingSink("blocked");
+        bus.register(sink);
+        bus.start();
+        try {
+            // First message occupies the single worker thread, so every later
+            // message can only wait in the 5.000-slot queue.
+            assertEquals(1, bus.broadcast(Message.builder().text("blocker").build()));
+            assertTrue(sink.firstSendEntered.await(5, TimeUnit.SECONDS),
+                    "the sink worker must be blocked in send() before filling the queue");
+
+            int accepted = 1;
+            Message dropped = null;
+            for (int i = 0; i < 6000 && dropped == null; i++) {
+                Message candidate = Message.builder().text("fill " + i).build();
+                if (bus.broadcast(candidate) == 0) {
+                    dropped = candidate;
+                } else {
+                    accepted++;
+                }
+            }
+            assertNotNull(dropped, "a full sink queue must make broadcast report zero accepted sinks");
+            assertTrue(bus.getTotalDropped() > 0, "dropped deliveries must be counted");
+            assertTrue(accepted > 0, "the accepted counter must track real enqueues");
+
+            sink.release.countDown();
+            assertTrue(sink.awaitSent(accepted, 10, TimeUnit.SECONDS),
+                    "all accepted messages must be delivered after the queue drains");
+
+            // The rejected message was not marked as sent: retrying it must work.
+            assertEquals(1, bus.broadcast(dropped),
+                    "a broadcast rejected by every sink must be retryable");
+            assertTrue(sink.awaitSent(accepted + 1, 5, TimeUnit.SECONDS));
+        } finally {
+            sink.release.countDown();
+            bus.stop();
+        }
+    }
+
     private static final class NoopLogger implements PluginLogger {
         @Override public void info(String message, Object... args) {}
         @Override public void warn(String message, Object... args) {}
@@ -148,6 +190,51 @@ class DefaultSyncBusTest {
             delivered.countDown();
         }
         @Override public void setListener(SyncListener listener) { assertNotNull(listener); }
+    }
+
+    private static final class BlockingSink implements SyncSink {
+        private final String name;
+        private final CountDownLatch firstSendEntered = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+        private final AtomicInteger sent = new AtomicInteger();
+
+        BlockingSink(String name) {
+            this.name = name;
+        }
+
+        @Override public String name() { return name; }
+        @Override public DeliverySemantics deliverySemantics() { return DeliverySemantics.AT_LEAST_ONCE; }
+        @Override public Ordering ordering() { return Ordering.PER_CHANNEL; }
+        @Override public void start() { }
+        @Override public void stop() { }
+        @Override public void setListener(SyncListener listener) { }
+
+        @Override
+        public void send(Message message) {
+            if (sent.get() == 0) {
+                firstSendEntered.countDown();
+                try {
+                    if (!release.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("sink was not released");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("sink interrupted while blocked", e);
+                }
+            }
+            sent.incrementAndGet();
+        }
+
+        boolean awaitSent(int expected, long timeout, TimeUnit unit) throws InterruptedException {
+            long deadline = System.nanoTime() + unit.toNanos(timeout);
+            while (sent.get() < expected) {
+                if (System.nanoTime() > deadline) {
+                    return false;
+                }
+                Thread.sleep(10);
+            }
+            return true;
+        }
     }
 
     private static final class FailingStartSink implements SyncSink {
