@@ -264,7 +264,7 @@ verificada el 2026-11-05 sobre `2f5d3b27`:
 | `SuiteRuntime` exige servicios concretos para construir el pipeline | `SuiteRuntime.java:203-211`; `resolveRouter()` en `245-253` | Sin `ChannelRegistry`, `TranslationService`, `IflowHub`, `MessageRenderer`, `ChatDelivery`, `ActorDirectory` o `PermissionChecker` no hay pipeline utilizable. El fallo se registra como «pipeline unavailable» (`SuiteRuntime.java:225-232`), no como arranque funcional. |
 | El orden del pipeline está hardcodeado | `SuiteHost` (`SuiteHost.java:150-162`) y `MessageDispatcher` (`MessageDispatcher.java:40`) | No existe una lista ordenada configurable; el orden lo imponen el cableado y el grafo. |
 | El catálogo de canales vive en `textformatter` | `ChannelConfig.java:22,73`; `TextFormatterActivator.java:34-39` | Un dominio neutral (canales, permisos y políticas de canal) pertenece a una feature. |
-| La ruta `config/textformatter/channels/` está fijada fuera del módulo | `FilePresetTarget.java:96`; `DefaultConfigInstaller.java:54-57`; `config-schema-v2.2.md`; `storage.md` | Mover el catálogo obliga a tocar presets, instalador, esquema y documentación. |
+| La ruta `config/textformatter/channels/` está fijada fuera del módulo | `FilePresetTarget.java:96`; `DefaultConfigInstaller.java:54-57`; `config-schema-v2.2.md`; `storage.md` | Se conserva como ruta canónica; el catálogo neutral se carga desde ahí sin moverla. |
 | Los backends de traducción requieren `chattranslator` | `GTranslateModule.java:23`; `LTranslateModule.java:23`; `CoreTranslatorModule.java:32`; ADR-008 | La relación backend→fachada es hoy un requisito de activación entre features; PL-1 debe decidir si un backend es instalable solo o si la fachada es su único punto de entrada. |
 | El dispatcher conserva semántica de routing retirada | `MessageDispatcher.java` procesa `PolicyTarget.CHANNEL_REDIRECT` y reentrega; `PolicyTarget.java:23` conserva el valor | ADR-031 retira `REDIRECT`/`CHANNEL_REDIRECT`; el rediseño del pipeline debe alinear el código con ese contrato. |
 
@@ -346,7 +346,7 @@ interface PipelineStage {
 | `iflow` y motores | Requerir el servicio neutral de canales, no la capability de `textformatter`; publicar una etapa de routing. |
 | `chattranslator` y backends | Publicar una etapa de traducción; revisar el requisito backend→fachada de ADR-008. |
 | `sync-*`, `inworld`, `tester` | Consumir el mensaje final o una etapa; no requerir `channel-api` de un feature. |
-| `presets` | Dejar de hardcodear `textformatter/channels`; escribir el catálogo neutral en su ruta canónica. |
+| `presets` | Escribir el catálogo en la ruta canónica vigente, `config/textformatter/channels/`; la ruta no se mueve. |
 | `DefaultConfigInstaller` y hosts | Instalar el catálogo neutral y un `pipeline` por defecto coherente con lo instalado. |
 | `checkArchitecture` | Guard nuevo: ninguna feature declara `Requirement` sobre otra feature; el orden del pipeline no se deriva del grafo. |
 | Configuración y documentación | `config/suite/config.yml`, `storage.md`, `config-schema-v2.2.md`, wiki y READMEs. Los documentos de `docs/prompts/` requieren autorización. |
@@ -429,8 +429,9 @@ permite construir un bot completo de Discord o Telegram sin que el núcleo conoz
 | Nativo | programas de terceros | `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, etc. |
 
 `Principal.Official` solo puede invocar el LCM; `Principal.Program` solo lo concedido. Sin concesión
-no hay efecto. El nombre de la capacidad es el nombre canónico de la acción
-(`discord.channel.create`, `textformatter.channel.set`), sin prefijo `sync.`.
+no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para sinks
+(`sync.discord.channel.create`) y `module.<moduleId>.<accion>` para módulos/host
+(`module.textformatter.channel.set`).
 
 #### Estado actual y evidencia
 
@@ -477,7 +478,7 @@ no hay efecto. El nombre de la capacidad es el nombre canónico de la acción
    Una acción no soportada devuelve `Unsupported`, nunca un no-op.
 5. **`textformatter.channel.set`.** Implementar el handler de host en el motor del pipeline,
    reutilizando la segunda fase de §7 y la regla de una sola mutación. `Principal.Official` recibe
-   `Denied`; un tercero con `textformatter.channel.set` puede invocarlo.
+   `Denied`; un tercero con `module.textformatter.channel.set` puede invocarlo.
 6. **Puente iFlow.** Añadir `SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en
    Wasm, con el mismo `TlvCodec` y los mismos estados; retirar `set_channel` y actualizar fixtures y
    programas de ejemplo. Suite de conformidad compartida.
@@ -497,14 +498,15 @@ no hay efecto. El nombre de la capacidad es el nombre canónico de la acción
    acciones nativas.
 2. **Oficial acotado:** `Principal.Official` no puede invocar `textformatter.channel.set` ni una
    acción nativa; recibe `Denied` sin efecto.
-3. **Tercero con concesión:** un programa de prueba con `discord.channel.create` crea un canal
+3. **Tercero con concesión:** un programa de prueba con `sync.discord.channel.create` crea un canal
    en un backend falso y deja una entrada de auditoría con hash, sin valores sensibles.
 4. **Sin concesión:** la misma llamada devuelve `Denied` y el backend no recibe la acción.
 5. **Destructivo:** `discord.member.ban` sin `allow-destructive` devuelve `Denied`; con la marca,
    ejecuta y audita.
 6. **Cuotas:** timeout y límite por minuto devuelven `Timeout`/`RateLimited`; no hay éxito parcial.
 7. **`textformatter.channel.set`:** dispara la segunda fase de routing; la segunda mutación devuelve
-   `DECISION_CONFLICT`; el import dedicado ya no existe.
+   `DECISION_CONFLICT`; el import dedicado ya no existe; la capacidad es
+   `module.textformatter.channel.set`.
 8. **Acción desconocida:** `Unsupported` explícito; el bus no finge éxito.
 9. **Paridad:** la misma llamada produce el mismo `SyncResult` en VM y Wasm.
 10. **Sink local:** `sync-bukkit` y `sync-fabric` publican superficie y entregan a jugadores/consola;
@@ -549,10 +551,11 @@ no hay efecto. El nombre de la capacidad es el nombre canónico de la acción
 #### Objetivo
 
 Permitir que un mensaje declare, en orden, qué multiplexor y qué backend usa cada salida: `iflow`,
-`chattranslator` y `sync`. Sin `outputs`, se aplica `config/suite/config.yml`; sin esa clave, el
-default del módulo. `sync-bus` deja de ser solo un fan-out y pasa a ser el multiplexor `sync`, sin un
-módulo nuevo. La entrega local (`bukkit`, `fabric`) es una salida más de `sync`, no un camino
-paralelo al pipeline.
+`chattranslator` y `sync`. Cada target es una cadena `<multiplexer>.<backend>`, por ejemplo
+`sync.discord`. Sin `outputs`, se aplica `config/suite/config.yml`; sin esa clave, el default del
+módulo. `sync-bus` deja de ser solo un fan-out y pasa a ser el multiplexor `sync`, sin un módulo
+nuevo. La entrega local (`bukkit`, `fabric`) es una salida más de `sync`, no un camino paralelo al
+pipeline.
 
 #### Estado actual y evidencia
 
@@ -570,7 +573,7 @@ paralelo al pipeline.
 
 | Área | Cambio |
 |---|---|
-| `core-api` | `OutputTarget`, `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`. Sin tipos de plataforma. |
+| `core-api` | `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`; los targets son `List<String>` con formato `multiplexer.backend`. Sin tipos de plataforma. |
 | `suite-runtime` | Resolución de `outputs` (mensaje → suite → módulo), validación y traza. |
 | `iflow` | `route` usa el target `iflow`; conserva default/fallback de ADR-032. |
 | `chattranslator` | `translate` usa el target `chattranslator`; conserva default/fallback de ADR-035. |
@@ -581,10 +584,11 @@ paralelo al pipeline.
 
 #### Pasos de implementación
 
-1. **Contrato neutral.** Añadir `OutputTarget`/`OutputPlan`/`ParallelMode` a `core-api` y
-   `Message.outputPlan()`. Inmutable, sin `ThreadLocal`; `declared=false` ≠ `targets=[]`.
+1. **Contrato neutral.** Añadir `OutputPlan`/`ParallelMode` a `core-api` y
+   `Message.outputPlan()` con `List<String>` de targets `multiplexer.backend`. Inmutable, sin
+   `ThreadLocal`; `declared=false` ≠ `targets=[]`.
 2. **Resolución.** Implementar la precedencia mensaje → `config/suite/config.yml` → módulo, con
-   validación de `multiplexer`/`backend` y error explícito.
+   parseo por el primer punto (`multiplexer` / `backend`), validación y error explícito.
 3. **Etapas.** `route`, `translate` y `sync` leen su target; sin target aplican su default actual.
    `format` no participa.
 4. **`sync` selectivo.** `sync-bus` expone `sendTo` por `SyncSurface.backend`; conserva el fan-out
@@ -592,7 +596,7 @@ paralelo al pipeline.
    detrás del sink. No se crea `sync-mux`.
 5. **Orden y paralelismo.** Dispatch en orden; ejecución paralela por defecto solo dentro del mismo
    multiplexor de entrega, con pool acotado; `outputs-parallel: false` para secuencial. La traza
-   conserva el orden del array.
+   conserva el orden de la lista.
 6. **Resultado agregado.** `DispatchOutcome` marca el fallo parcial por target; sin éxito fingido ni
    rollback.
 7. **Guardas.** `checkArchitecture`: `core-api` sin SDK; `multiplexer:*` declarativo, nunca
@@ -603,17 +607,18 @@ paralelo al pipeline.
 
 #### Criterios de cierre y tests
 
-1. **Multi-salida:** `sync/discord` + `sync/tcp` + `sync/bukkit` entrega a los tres; la traza
+1. **Multi-salida:** `sync.discord` + `sync.tcp` + `sync.bukkit` entrega a los tres; la traza
    respeta el orden.
 2. **Precedencia:** mensaje > suite > módulo; sin `outputs` en ningún nivel, fan-out completo.
 3. **Vacío vs ausente:** `targets=[]` no entrega a ningún multiplexor, incluida la entrega local;
    `declared=false` hereda.
-4. **Transformación única:** dos targets `chattranslator` o `iflow` → `Conflict`.
-5. **Desconocido:** multiplexor/backend inexistente → error explícito, sin skip.
+4. **Transformación única:** dos targets `chattranslator.*` o `iflow.*` → `Conflict`.
+5. **Desconocido:** target con multiplexor/backend inexistente o sin punto → error explícito, sin
+   skip.
 6. **Paralelo:** un backend lento no bloquea a los demás; `outputs-parallel: false` serializa.
 7. **Fallo parcial:** un target falla, los demás completan; el resultado agregado lo declara.
 8. **Sin regresión:** sin `outputs`, el comportamiento actual se conserva.
-9. **Local:** `sync/bukkit` y `sync/fabric` son targets de pleno derecho; incluirlos entrega a
+9. **Local:** `sync.bukkit` y `sync.fabric` son targets de pleno derecho; incluirlos entrega a
    jugadores/consola, omitirlos no; `outputs=[]` tampoco entrega local. El evento solo se cancela con
    `DROP`/`REJECT`, no con la lista de salidas.
 10. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`.
@@ -632,10 +637,10 @@ paralelo al pipeline.
 |---|---|---|
 | ADR-032 | El hub elige un motor global (`IflowConfig.engine`). | §17 añade un override por mensaje; el default y el fallback se conservan. |
 | ADR-035 | `ChatTranslator` elige un backend global + contexto. | §17 usa un campo del mensaje; la fachada y su default se conservan. |
-| ADR-036 §17.2 (borrador previo) | Decía que la entrega local no era target de `sync`. | Corregido: `sync-bukkit`/`sync-fabric` son sinks; la entrega local es `sync/bukkit`/`sync/fabric`. |
-| ADR-036 §3 | La configuración global solo define `pipeline`. | Se añaden `outputs` y `outputs-parallel`; `config-version: 1.0`. |
+| ADR-036 §17.2 (borrador previo) | Decía que la entrega local no era target de `sync`. | Corregido: `sync-bukkit`/`sync-fabric` son sinks; la entrega local es `sync.bukkit`/`sync.fabric`. |
+| ADR-036 §3 | La configuración global solo define `pipeline`. | Se añaden `outputs` (lista de `multiplexer.backend`) y `outputs-parallel`; `config-version: 1.0`. |
 | ADR-019 | Prohíbe `feature → feature`. | `sync` es `sync-bus`; no se crea `sync-mux` ni se requiere otra feature. |
-| ADR-034 | Prohíbe aliases. | Las claves canónicas son `multiplexer`/`backend`; `multiplexador` no es alias. |
+| ADR-034 | Prohíbe aliases. | `outputs` es una lista de cadenas; no hay claves `multiplexer`/`backend` ni alias en español. |
 | `config-schema-v2.2.md` | No tiene `outputs`. | Requiere autorización para actualizarlo. |
 
 #### Bloqueos
@@ -643,6 +648,208 @@ paralelo al pipeline.
 - ADR-036 §17 pendiente de aceptación explícita.
 - Autorización para `config-schema-v2.2.md` y la wiki.
 - PL-1/PL-2 y TF-005/TF-006 para el flujo completo.
+
+---
+
+### Feature propuesta — importar/exportar la suite completa desde el editor web (PL-4, 2026-11-06)
+
+> **Estado:** propuesta, no implementada y no contractual. El ZIP completo no depende de ADR-036;
+> el mapeo de canales usa `config/textformatter/channels/`, que es la ruta vigente y no se mueve.
+> Cualquier cambio en `docs/prompts/` requiere autorización explícita.
+
+#### Objetivo
+
+Permitir que el editor web importe y exporte un **conjunto seleccionado de artefactos** de la suite,
+no el data folder completo. La exportación siempre lleva `TextFormatter-Suite/` como directorio raíz.
+La importación acepta ese directorio o los archivos en la raíz del ZIP, sin exigir una forma
+concreta. El editor edita la configuración, la base de datos de paquetes y las ROM de iFlow; conserva
+los archivos no editados y no transporta JARs, dependencias, caché, journal, backups ni temporales.
+
+#### Estado actual y evidencia
+
+| Hecho | Evidencia | Efecto |
+|---|---|---|
+| El export actual es un proyecto plano, no la suite | `model.js` (`exportFiles`): `config.yml`, `channels/`, `rules.yml`, `sync/`, `translators/` | No reproduce `config/suite/`, `config/iflow/`, `config/sync-*/`... |
+| El import actual solo lee rutas planas | `model.js` (`importFromFiles`) | Ignora la estructura real de la suite. |
+| No hay lector ZIP | `zip.js` solo exporta `build`; `importExport.js` usa `Suite.zip.Reader` | La importación ZIP falla en runtime. |
+| El escritor ZIP solo usa STORE | `zip.js` | Un ZIP comprimido con DEFLATE no se puede leer. |
+| El editor no conoce el layout de `storage.md` | `model.js` usa rutas planas y `paths.json` no tiene un mapa de archivos | No hay correspondencia con `config/<módulo>/`. |
+| El parser YAML descarta comentarios | `yaml.js:144` ignora `#` al tokenizar | Un archivo editado pierde sus comentarios al serializarse. |
+| No hay desensamblador | `tools/iflow-compiler/src` solo contiene `assembler.ts`, `cli.ts`, `types.ts`, `index.ts` | La gestión de ROM no puede ofrecer desensamblado sin una herramienta nueva. |
+| La base de datos de paquetes no es YAML | `LocalPackageDatabase` lee `manager/library/status` con `ManifestParser` | El editor necesita un parser/serializador propio y una advertencia de riesgo. |
+| Las ROM tienen rutas canónicas concretas | `VmConfigLoader` usa `config/iflow-vm/policy.flow`; `WasmPolicyRouter` usa `config/iflow-wasm/policy.wasm` + sidecar SHA-256 | El modo suite debe incluir esos archivos, no todo `config/iflow*`. |
+
+#### Alcance
+
+- **Modo suite (nuevo):** importa y exporta un conjunto seleccionado de artefactos:
+  - `config/**` completo (`suite`, `textformatter`, `chattranslator`, `iflow`, `iflow-firewall`,
+    `sync-*`, `inworld`, etc.).
+  - `manager/library/status` (base de datos de paquetes) solo para listado y edición, con una
+    advertencia visible de consistencia/estabilidad. No se importan los JARs ni las dependencias.
+  - ROM de iFlow: `config/iflow-vm/policy.flow` y `config/iflow-wasm/policy.wasm` con su sidecar
+    SHA-256.
+- **Modo proyecto (actual):** se conserva para el modelo visual plano; no se elimina ni se
+  sustituye por el modo suite.
+- **Excluido del modo suite:** `manager/library/packages/`, `manager/library/dependencies/`,
+  `manager/library/cache/`, `journal/`, `backup/`, `trash/`, `tmp/`, `manager/runtime/`, logs,
+  temporales y cualquier `*.jar`. No se importa «todo el data folder».
+- **Archivos desconocidos o binarios:** se preservan byte a byte y se reexportan en su ruta.
+- **Basura de sistema:** se ignoran `__MACOSX/`, `.DS_Store` y `Thumbs.db` al importar; no se
+  inventan archivos al exportar.
+- **Tamaño:** límites explícitos y configurables solo en código: número de entradas (archivos y
+  directorios), bytes descomprimidos totales, bytes por archivo y ratio de compresión
+  (descomprimido/comprimido) como defensa anti-bomba. El ratio **no** es el nivel de compresión:
+  la exportación usa el nivel máximo de DEFLATE.
+
+#### Gestión y desensamblado de ROM
+
+- La ROM se puede borrar, añadir, editar y clonar desde el editor.
+- El desensamblado se limita a la sección del programa de usuario. Quedan fuera firmware, BIOS,
+  bootloader, kernel y stdlib.
+- **Estado real:** no existe desensamblador en `tools/iflow-compiler` (solo assembler). El formato
+  `.flow` v2 tiene firmware de 4 KiB en `0x0000–0x0FFF` y código de usuario desde `0x1000`; la
+  sección `debug` opcional incluye dirección, fuente y símbolos. El desensamblador debe construirse
+  a partir de `Opcode`/`INSTRUCTION_SIZES`.
+- **Límite del formato actual:** en v2 no hay secciones separadas de BIOS, bootloader, kernel ni
+  stdlib; esa separación pertenece al ISA v3 (V1–V5). Hasta entonces, «excluir» significa limitarse
+  al rango de usuario (`>= 0x1000`) y no interpretar el firmware como programa.
+- **Grafos:** el desensamblado produce un CFG (flujo de control), no el grafo de reglas del editor.
+  Reconstruir automáticamente nodos `cond`/`transform`/`action` desde instrucciones no es
+  determinista. Decisión pendiente: (a) mostrar el CFG y dejar que el usuario lo traduzca a reglas,
+  o (b) definir metadatos en la ROM que declaren el grafo. No se promete reconstrucción semántica
+  automática.
+
+#### Formato y normalización
+
+- ZIP con métodos STORE (0) y DEFLATE (8); se rechazan cifrado, ZIP64 no soportado, métodos
+  desconocidos y CRC inválido.
+- La exportación usa DEFLATE con el **nivel máximo** de compresión. El ratio de compresión se mide
+  para el límite anti-bomba; no se confunde con el nivel.
+- Raíz de importación:
+  - `TextFormatter-Suite/config/...` → se elimina el prefijo.
+  - `config/...` → se usa tal cual.
+  - Raíz mixta, `TextFormatter-Suite/TextFormatter-Suite/...` o cualquier otra raíz única → error
+    explícito; no se adivina.
+- Normalizar `\` a `/`, quitar `./`, rechazar `..`, rutas absolutas, unidad de disco, NUL, enlaces
+  simbólicos y duplicados normalizados.
+- Exportar siempre `TextFormatter-Suite/<ruta>`, con orden determinista y fecha fija.
+- Un archivo no editado se reexporta con sus bytes originales. Un archivo editado conserva sus
+  comentarios y formato mediante un CST (árbol de sintaxis concreta); si una edición no puede
+  preservarlos, se bloquea con error explícito en lugar de perderlos en silencio. El parser actual
+  (`yaml.js`) descarta comentarios y no sirve para este requisito.
+- Límites anti-bomba: número máximo de entradas, bytes descomprimidos totales, bytes por archivo y
+  ratio descomprimido/comprimido. Se fijan en código, no en YAML; los valores concretos se
+  confirman antes de implementar.
+
+#### Correspondencia con el modelo
+
+| Editor | Suite |
+|---|---|
+| `config` | `config/suite/config.yml` |
+| `channels/*` | `config/textformatter/channels/*` |
+| `graph` | `config/iflow-firewall/rules.yml` |
+| `translators/<id>` | `config/chattranslator/translators/<id>.yml` |
+| `sync.discord` | `config/sync-discord/config.yml` |
+| `sync.telegram` | `config/sync-telegram/config.yml` |
+| `sync.http` | `config/sync-http/config.yml` |
+| `sync.websocket` | `config/sync-websocket/config.yml` |
+| `sync.tcp` | `config/sync-socket/tcp.yml` |
+| `sync.udp` | `config/sync-socket/udp.yml` |
+| `sync.velocity` | `config/sync-velocity-core/config.yml` |
+| `sync.bukkit` | `config/sync-bukkit/config.yml` |
+| `sync.fabric` | `config/sync-fabric/config.yml` |
+| `packages` | `manager/library/status` (listado/edición con advertencia) |
+| `rom.iflow-vm` | `config/iflow-vm/policy.flow` |
+| `rom.iflow-wasm` | `config/iflow-wasm/policy.wasm` + `policy.sha256` |
+
+`state.extra` conserva `config/suite/messages.yml`, `config/suite/commands.yml`, el
+`config/chattranslator/config.yml` completo y cualquier módulo no mapeado. El mapeo no crea rutas
+legacy ni lectores alternativos (ADR-034).
+
+> **Deuda del editor:** `paths.json` y `config.js` todavía usan la clave de UI `sync.tcp-udp` y
+> `sync/tcp.yml`; el runtime vigente es `sync-socket` con `config/sync-socket/tcp.yml` y
+> `udp.yml`. El modo suite mapea `sync.tcp`/`sync.udp` a esas rutas y retira la clave vieja del
+> editor; no se añade un alias de runtime (ADR-034).
+
+#### Pasos de implementación
+
+1. **Lector ZIP.** Implementar `Suite.zip.Reader` con directorio central, STORE/DEFLATE, CRC,
+   descriptor de datos, límites y errores explícitos. Tests de regresión que fallen sin él.
+2. **Archivo de suite.** Añadir `suiteArchive.js`: normalización, detección de raíz, mapa
+   `ruta → {bytes, texto?}`, exclusión de basura y exportación con prefijo fijo.
+3. **Mapeo.** Hidratar el modelo visual desde las rutas conocidas y volcar los cambios al mapa;
+   conservar el resto como opacos. Un archivo no tocado no se re-serializa.
+4. **Interfaz.** Separar “Importar/Exportar proyecto” de “Importar/Exportar suite”; mostrar resumen
+   (archivos, módulos, avisos) y confirmar el reemplazo del estado.
+5. **CST de YAML.** Introducir un parser/serializador con árbol de sintaxis concreta que conserve
+   comentarios, orden de claves, comillas y saltos de línea. El actual `yaml.js` descarta los
+   comentarios; no se reutiliza para archivos editados. Si una edición no se puede representar sin
+   perder formato, la operación falla con un error explícito.
+6. **Base de datos de paquetes.** Añadir un lector/escritor de `manager/library/status` separado del
+   parser YAML, con listado y edición. La interfaz muestra una advertencia prominente de que el
+   archivo es la fuente de verdad de instalación y que editarlo a mano puede dejar el manager
+   inconsistente. No se importan JARs, dependencias, caché ni journal.
+7. **ROM de iFlow.** Añadir gestión de `config/iflow-vm/policy.flow` y `config/iflow-wasm/policy.wasm`
+   con su sidecar SHA-256: listar, añadir, borrar, editar y clonar. El clon copia bytes y sidecar; al
+   editar un `.wasm` se exige recalcular el hash. Validar cabecera, versión, longitudes y hash antes
+   de aceptar el archivo.
+8. **Desensamblador.** Crear una herramienta en `tools/iflow-compiler` que decodifique el rango de
+   usuario (`>= 0x1000`) del `.flow` v2 a instrucciones y produzca un CFG. No interpreta el firmware
+   como programa ni promete reconstruir el grafo de reglas. La salida es texto/JSON inspeccionable y
+   se integra en el editor como vista de solo lectura hasta que se decida el mapeo a reglas.
+9. **Validación.** Parsear YAML, comprobar `config-version: "1.0"` en cada `.yml` de `config/` y
+   bloquear la exportación con errores. Un módulo desconocido es aviso, no error. La ROM y la base de
+   paquetes se validan con sus propios formatos, no con el validador YAML.
+10. **Exportación.** ZIP con raíz `TextFormatter-Suite/`, rutas ordenadas, binarios intactos,
+    DEFLATE en nivel máximo y sin añadir el `manifest.json` del editor en modo suite. Los límites
+    anti-bomba se aplican al importar y al exportar.
+11. **Tests.** Raíz presente/ausente, ZIP mixto, zip-slip, duplicados, STORE/DEFLATE, binarios,
+    round-trip byte a byte, comentarios preservados, ROM válida/inválida, base de paquetes
+    corrupta, YAML inválido, `config-version` ausente y límites de tamaño.
+12. **Documentación y gate.** README del editor y wiki; `cd src/web-editor && npm run check`.
+
+#### Criterios de cierre y tests
+
+1. **Dos formas de raíz:** un ZIP con `TextFormatter-Suite/` y otro sin ella producen el mismo
+   archivo normalizado.
+2. **Exportación:** todo entry empieza por `TextFormatter-Suite/`; el ZIP se puede descomprimir en
+   el directorio padre del plugin/mod y reconstruye el conjunto seleccionado de artefactos, no el
+   data folder completo.
+3. **Round-trip:** importar → exportar sin editar produce los mismos archivos; los no editados
+   conservan sus bytes.
+4. **Desconocidos:** un `config/<módulo>/config.yml` no mapeado se conserva y se reexporta.
+5. **Binarios:** un archivo no UTF-8 se conserva sin corrupción.
+6. **Seguridad:** `../`, rutas absolutas, enlaces simbólicos y duplicados se rechazan con error.
+7. **Compresión:** STORE y DEFLATE funcionan; la exportación usa DEFLATE en nivel máximo; cifrado,
+   ZIP64 no soportado y CRC inválido fallan.
+8. **Anti-bomba:** se rechazan entradas, bytes totales, bytes por archivo o ratios por encima del
+   límite; el ratio no se confunde con el nivel de compresión.
+9. **Comentarios:** editar un YAML conserva sus comentarios y su formato; una edición no
+   representable falla sin escribir el archivo.
+10. **Base de paquetes:** se lista y edita `manager/library/status`; un archivo corrupto se rechaza
+    y la advertencia de consistencia está visible.
+11. **ROM:** se pueden listar, añadir, borrar, editar y clonar ROM; un `.wasm` editado sin hash
+    actualizado se rechaza; el desensamblado se limita al rango de usuario y produce un CFG.
+12. **Sin regresión:** el modo proyecto actual sigue funcionando.
+13. **Gate:** `cd src/web-editor && npm run check`.
+
+#### Decisiones abiertas
+
+- **Grafos desde ROM:** el desensamblado produce un CFG, no el grafo de reglas. Elegir (a) mostrar el
+  CFG y dejar la traducción manual al usuario, o (b) definir metadatos en la ROM que declaren el
+  grafo. No se implementa reconstrucción semántica automática sin una de las dos.
+- **Límites anti-bomba:** fijar los valores concretos de entradas, bytes totales, bytes por archivo y
+  ratio antes de implementar; viven en código, no en YAML.
+- **Secciones de exclusión:** en `.flow` v2 no existen secciones separadas de BIOS, bootloader,
+  kernel y stdlib; la exclusión se limita a `>= 0x1000`. La separación real depende del ISA v3
+  (V1–V5) y se revisa entonces.
+
+#### Bloqueos
+
+- El lector ZIP es un bug actual del editor; se corrige antes de declarar el modo suite.
+- El CST de YAML y el desensamblador no existen hoy; son trabajo nuevo, no ajustes.
+- Autorización para `storage.md` y `config-schema-v2.2.md` solo si el mapeo cambia alguna ruta; la
+  ruta de canales se conserva en `config/textformatter/channels/`.
 
 ---
 

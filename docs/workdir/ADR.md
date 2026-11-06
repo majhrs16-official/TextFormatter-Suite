@@ -1519,11 +1519,17 @@ No queda un segundo camino de composición en `host`, en los adapters ni en los 
 ### 10. Catálogo de canales neutral
 
 - Los contratos `Channel` y `ChannelRegistry` ya viven en `core-api`; se conservan.
-- La carga se mueve de `textformatter` a `suite-runtime` (`ChannelCatalogLoader`), que publica una
-  única instancia en el `ServiceRegistry` antes de activar features.
-- Ruta canónica: `config/suite/channels/`. No se usa `config/channels/` (prohibida por ADR-034) ni
-  `config/textformatter/channels/` (pertenece a una feature). El cambio de `storage.md` y de
-  `config-schema-v2.2.md` requiere autorización explícita y se hace en la misma unidad de trabajo.
+- La carga se mueve de `textformatter` a `suite-runtime` mediante un componente **interno
+  propuesto** (`ChannelCatalogLoader`), que publica una única instancia en el `ServiceRegistry`
+  antes de activar features. No es una clase existente hoy ni un contrato público: es el nombre de
+  trabajo del cargador que el runtime necesita para construir el catálogo sin depender de una
+  feature. El traslado se conserva: sin él, un pipeline sin `textformatter` no tiene catálogo y el
+  criterio «solo iFlow» de §Criterios no se cumple. El cargador pertenece al runtime, no a una
+  feature, y lee la ruta canónica vigente; no se crea un módulo `channel-catalog` ni se mueve la
+  ruta.
+- Ruta canónica: `config/textformatter/channels/`, que se conserva. No se mueve a `config/suite/`;
+  `config/suite/channels/` no es una ruta válida y no se introduce. `config/channels/` (ruta plana)
+  sigue prohibida por ADR-034. Este concepto no cambia `storage.md` ni `config-schema-v2.2.md`.
 - `textformatter` consume el catálogo y deja de publicarlo. `iflow-*`, `inworld`, `sync-bukkit`,
   `sync-fabric` y `tester` consumen el mismo servicio neutral. El descriptor que necesite declarar la
   dependencia usa `channel-catalog`, capacidad del entorno del runtime, nunca `channel-api` de otra
@@ -1700,9 +1706,10 @@ public interface SyncBus {
 `ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `OBJECT`). `OBJECT` es un mapa anidado
 validado por el backend; el núcleo no interpreta su contenido. Ningún tipo de JDA, Telegram, Bukkit
 o Fabric cruza esta frontera. `backend` es el namespace; las acciones del host usan `textformatter`,
-no `"*"`. El nombre canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria;
-la capacidad que se declara y se concede es ese mismo nombre. `SyncSurface` solo lo publican los
-sinks; las acciones del host no tienen superficie y el bus las resuelve en su handler interno.
+no `"*"`. El nombre canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria.
+La capacidad se deriva del origen: `sync.<action>` para acciones de sink y
+`module.<moduleId>.<action>` para acciones de módulo/host. `SyncSurface` solo lo publican los sinks;
+las acciones del host no tienen superficie y el bus las resuelve en su handler interno.
 
 #### 16.4 Mínimo común múltiplo
 
@@ -1721,28 +1728,28 @@ sinks; las acciones del host no tienen superficie y el bus las resuelve en su ha
 - Equivale a `SET_CHANNEL` de ADR-031 sobre `Message.channel`: cambia el canal de routing y dispara la
   segunda fase de §7. Una sola mutación por unidad; la segunda produce `DECISION_CONFLICT`.
 - iFlow oficial no la invoca: no pertenece al LCM y `Principal.Official` no puede invocarla. Un
-  programa de terceros puede hacerlo con la capacidad `textformatter.channel.set`.
+  programa de terceros puede hacerlo con la capacidad `module.textformatter.channel.set`.
 - El cambio de destino nativo de un backend no se hace con `textformatter.channel.set`: se hace con
   una acción nativa o con el argumento `destination` de `message.send`. La acción nunca significa
   implícitamente «canal de Discord/Telegram».
 - El import dedicado `set_channel` de la ABI v3 se retira; se sustituye por
   `sync_invoke("textformatter", "channel.set", ...)`. No hay alias ni doble lector (ADR-034).
 - `textformatter` es el namespace del host/suite; no crea una dependencia del módulo `textformatter`
-  ni lo convierte en multiplexor. La capacidad se llama igual que la acción
-  (`textformatter.channel.set`), sin prefijo `sync.`: `textformatter` no es un backend sync.
+  ni lo convierte en multiplexor. La capacidad es `module.textformatter.channel.set`: `textformatter`
+  es una excepción de namespace de módulo, no un backend sync.
 
 #### 16.6 Autoridad, concesiones y auditoría
 
 1. **Declaración.** El programa declara las capacidades que usa en su imagen
-   (`ProgramImage.capabilities`) con el nombre canónico de la acción: `<backend>.<accion>` (por
-   ejemplo `discord.channel.create` o `discord.channel.permission.overwrite`; `accion` es el id
-   local de la superficie) o `textformatter.<accion>` para acciones del host
-   (`textformatter.channel.set`). El nombre de la capacidad es el nombre de la acción; no se añade
-   un prefijo `sync.` porque `textformatter` no es un backend sync y `discord` ya es el namespace.
+   (`ProgramImage.capabilities`) con el formato correspondiente al origen de la acción:
+   `sync.<backend>.<accion>` para acciones de sink (por ejemplo `sync.discord.channel.create` o
+   `sync.discord.channel.permission.overwrite`) y `module.<moduleId>.<accion>` para acciones de
+   módulo/host (por ejemplo `module.textformatter.channel.set`). El id de la acción sigue siendo
+   `<backend>.<accion>`; la capacidad añade el prefijo `sync.` o `module.`.
 2. **Concesión.** El operador las autoriza en `config/iflow/grants.yml`, indexadas por el
    SHA-256 de la imagen del programa, no por su nombre. La concesión puede usar comodines
-   (`discord.*`, `textformatter.*`); el programa debe declarar la acción exacta; la autoridad
-   efectiva es la intersección.
+   (`sync.discord.*`, `module.textformatter.*`); el programa debe declarar la acción exacta; la
+   autoridad efectiva es la intersección.
 3. **Destructivo.** `DESTRUCTIVE` y `MODERATION` exigen `allow-destructive: true` en la concesión.
    Sin esa marca, la acción devuelve `Denied` y no produce efecto.
 4. **Fail-closed.** Permiso ausente, ambiguo o no verificable → `Denied`. No se hereda el fail-open
@@ -1774,9 +1781,9 @@ sinks; las acciones del host no tienen superficie y el bus las resuelve en su ha
   autorizada y genérica.
 - Ambos motores comparten la misma suite de conformidad; la paridad VM/Wasm es parte de W3.5.
 - `sync.invoke` es la capacidad del servicio genérico, distinta de las capacidades de acción
-  (`discord.*`, `textformatter.*`): un programa declara ambas. Las políticas oficiales que se
-  distribuyen con la suite no declaran `sync.invoke`; un test lo verifica. Solo los programas de
-  terceros lo declaran.
+  (`sync.discord.*`, `module.textformatter.*`): un programa declara ambas. Las políticas oficiales
+  que se distribuyen con la suite no declaran `sync.invoke`; un test lo verifica. Solo los programas
+  de terceros lo declaran.
 
 #### 16.8 Enmiendas y límites
 
@@ -1823,27 +1830,30 @@ La entrega local también es un target de `sync`: `sync-bukkit` y `sync-fabric` 
 listeners. Por ellos entra y sale texto de la plataforma. La captura de eventos la hace el paquete de
 plataforma y los entrega a la suite; el sink, por definición, expone en su superficie todo lo
 manipulable de su entorno —jugadores, consola, canales, scoreboard y eventos—, de modo que
-`sync/bukkit` y `sync/fabric` son backends de pleno derecho y pueden aparecer en `outputs`.
+`sync.bukkit` y `sync.fabric` son backends de pleno derecho y pueden aparecer en `outputs`.
 `outputs=[]` deja sin salidas, incluida la local; para cancelar el evento de origen sigue siendo
 `DROP`/`REJECT` de la política, no una lista vacía.
 
 #### 17.3 Contrato
 
 ```java
-public record OutputTarget(String multiplexer, String backend) {}
-
 public enum ParallelMode { INHERIT, PARALLEL, SEQUENTIAL }
 
 public record OutputPlan(
         boolean declared,                   // false: consultar la configuración
-        List<OutputTarget> targets,          // vacía y declared=true: sin salidas
-        ParallelMode parallel                // INHERIT por defecto
+        List<String> targets,               // "multiplexer.backend"; vacía y declared=true: sin salidas
+        ParallelMode parallel               // INHERIT por defecto
 ) {
     public static OutputPlan inherit() {
         return new OutputPlan(false, List.of(), ParallelMode.INHERIT);
     }
 }
 ```
+
+Cada target es una cadena `<multiplexer>.<backend>`. El resolutor parte por el **primer punto**: el
+primer segmento es el multiplexor y el resto es el backend, que puede contener puntos. No se admiten
+segmentos vacíos ni targets sin punto. No hay `OutputTarget` en el contrato público; el par
+`(multiplexer, backend)` es una representación interna del resolutor.
 
 `Message` gana `outputPlan()`. El plan es inmutable y viaja con el mensaje; no se guarda en un
 `ThreadLocal`. Un `OutputPlan` ausente (`declared=false`) no es lo mismo que uno vacío
@@ -1858,14 +1868,10 @@ La traza registra de dónde salió (`message`, `suite` o `module-default`). Las 
 ```yaml
 # config/suite/config.yml
 outputs:
-  - multiplexer: chattranslator
-    backend: gtranslate
-  - multiplexer: sync
-    backend: discord
-  - multiplexer: sync
-    backend: tcp
-  - multiplexer: sync
-    backend: udp
+  - chattranslator.gtranslate
+  - sync.discord
+  - sync.tcp
+  - sync.udp
 outputs-parallel: true   # default; false = finalización secuencial
 config-version: 1.0
 ```
@@ -1878,9 +1884,10 @@ Precedencia:
    `default-backend`; `sync` conserva el fan-out a todos los sinks, incluidos `bukkit` y `fabric`.
 
 Una lista vacía en el mensaje o en la configuración significa «sin salidas» y no se interpreta como
-«todas». Un `multiplexer` o `backend` desconocido es un error explícito (`Unsupported`/`Invalid`),
-nunca un skip silencioso. Las claves canónicas son `outputs`, `multiplexer`, `backend` y
-`outputs-parallel`; `multiplexador` es la traducción al español, no un alias (ADR-034).
+«todas». Un target cuyo multiplexor o backend sea desconocido es un error explícito
+(`Unsupported`/`Invalid`), nunca un skip silencioso. Las claves canónicas son `outputs` y
+`outputs-parallel`; cada elemento de `outputs` es una cadena `<multiplexer>.<backend>`. No hay claves
+`multiplexer` ni `backend`, ni aliases en español (ADR-034).
 
 #### 17.5 Multiplexores y backends
 
@@ -1889,6 +1896,9 @@ nunca un skip silencioso. Las claves canónicas son `outputs`, `multiplexer`, `b
 | `iflow` | `iflow` (hub) | `iflow-vm`, `iflow-wasm`, `iflow-firewall` | transformación |
 | `chattranslator` | `chattranslator` | `gtranslate`, `ltranslate` | transformación |
 | `sync` | `sync-bus` | `discord`, `telegram`, `http`, `websocket`, `tcp`, `udp`, `velocity`, `bukkit`, `fabric` | entrega |
+
+Un target se escribe `<multiplexer>.<backend>`: `iflow.iflow-wasm`, `chattranslator.gtranslate`,
+`sync.discord`, `sync.bukkit`.
 
 Los backends `bukkit` y `fabric` son sinks locales: su superficie incluye las operaciones del entorno
 (jugadores, consola, canales, scoreboard) y la manipulación de eventos. Una acción de evento actúa
@@ -1906,7 +1916,7 @@ No aparece en `outputs`.
 
 #### 17.6 Orden y paralelismo
 
-- El array es ordenado. El motor **inicia** los targets en ese orden y la traza y el resultado
+- La lista es ordenada. El motor **inicia** los targets en ese orden y la traza y el resultado
   conservan ese orden.
 - No se paraleliza entre etapas: `route` → `translate` → `format` → `sync` tienen dependencia de
   datos. Se paraleliza dentro del mismo multiplexor de entrega (`sync`), que es donde hay varios
@@ -1919,8 +1929,8 @@ No aparece en `outputs`.
 - Los targets son independientes por contrato: no hay transacción, rollback ni compensación entre
   ellos (§16.6.8). Si un target falla, los demás pueden completarse; `DispatchOutcome` marca el fallo
   parcial y nunca declara éxito total.
-- El orden del array no reordena las etapas: `pipeline` sigue mandando. El orden se respeta dentro
-  de cada multiplexor (por ejemplo, dos targets `sync`) y en la traza de salidas.
+- El orden de la lista no reordena las etapas: `pipeline` sigue mandando. El orden se respeta dentro
+  de cada multiplexor (por ejemplo, dos targets `sync.*`) y en la traza de salidas.
 
 #### 17.7 Efecto en las etapas
 
@@ -1941,8 +1951,8 @@ No aparece en `outputs`.
 - **ADR-019 / ADR-025.** `sync-bukkit`/`sync-fabric` siguen capturando eventos; §17 añade que
   también son sinks locales (`bukkit`/`fabric`) y que su superficie incluye las operaciones sobre el
   evento actual. La captura no es la razón de ser del sink, pero el sink expone el entorno completo.
-- **`config-schema-v2.2.md`.** `outputs` y `outputs-parallel` son claves nuevas; requieren
-  autorización para actualizar el esquema.
+- **`config-schema-v2.2.md`.** `outputs` es una lista de cadenas `<multiplexer>.<backend>` y
+  `outputs-parallel` un booleano; requieren autorización para actualizar el esquema.
 - **No promete** orden de finalización en modo paralelo, transacciones entre backends ni selección
   automática por salud. El modo secuencial es explícito.
 
@@ -1988,8 +1998,8 @@ No aparece en `outputs`.
     sin concesión devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen
     `allow-destructive`; el puente VM y el de Wasm devuelven los mismos estados para la misma
     llamada.
-11. **Multiplexación:** un mensaje con `sync/discord`, `sync/tcp` y `sync/bukkit` entrega a los tres
-    en el orden declarado; sin `outputs` se usa el default de `config/suite/config.yml`; un backend
+11. **Multiplexación:** un mensaje con `sync.discord`, `sync.tcp` y `sync.bukkit` entrega a los tres
+    en el orden declarado; sin `outputs` se usa el default de `config/suite/config.yml`; un target
     desconocido falla de forma explícita y no se convierte en éxito parcial silencioso;
     `outputs-parallel: false` serializa la finalización.
 12. **Sink local:** `sync-bukkit` y `sync-fabric` publican una superficie que incluye las operaciones
