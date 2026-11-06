@@ -94,8 +94,13 @@ public final class ConfigLoader {
             boolean logChatToConsole = bool(nested(map, ConfigPath.CHAT, ConfigPath.CHAT_LOG_TO_CONSOLE), true);
             List<HostConfig.Repository> repositories = parseRepositories(map, logger);
             List<String> moduleAllowlist = parseModuleAllowlist(map);
+            List<String> pipeline = parsePipeline(map, errors);
 
-            return LoadResult.success(new HostConfig(quickLook, defaultLang, parallel, sound, claimMode, logChatToConsole, repositories, moduleAllowlist));
+            HostConfig config = new HostConfig(quickLook, defaultLang, parallel, sound,
+                    claimMode, logChatToConsole, repositories, moduleAllowlist, pipeline);
+            return errors.isEmpty()
+                    ? LoadResult.success(config)
+                    : LoadResult.degraded(config, errors);
         } catch (ConfigVersionException e) {
             String msg = e.getMessage();
             if (logger != null) logger.error(msg);
@@ -160,6 +165,7 @@ public final class ConfigLoader {
         REPOSITORY_URL("url"),
         REPOSITORY_TYPE("type"),
         REPOSITORY_ENABLED("enabled"),
+        PIPELINE("pipeline"),
         CHANNEL_NAME("name"),
         CHANNEL_PERMISSION("permission"),
         CHANNEL_SEND_PERMISSION("send-permission"),
@@ -185,6 +191,27 @@ public final class ConfigLoader {
         public String key() {
             return key;
         }
+    }
+
+    private static List<String> parsePipeline(Map<String, Object> map, List<String> errors) {
+        Object raw = map.get(ConfigPath.PIPELINE.key());
+        if (raw == null) {
+            errors.add("config.yml is missing the 'pipeline' list");
+            return HostConfig.BASE_PIPELINE;
+        }
+        if (!(raw instanceof List)) {
+            errors.add("'pipeline' must be a list of stage ids");
+            return HostConfig.BASE_PIPELINE;
+        }
+        List<String> stageIds = new ArrayList<>();
+        for (Object item : (List<?>) raw) {
+            if (!(item instanceof String id) || id.isBlank()) {
+                errors.add("'pipeline' contains a non-string or blank stage id");
+                return HostConfig.BASE_PIPELINE;
+            }
+            stageIds.add(id);
+        }
+        return List.copyOf(stageIds);
     }
 
     private static List<HostConfig.Repository> parseRepositories(Map<String, Object> map, PluginLogger logger) {

@@ -15,6 +15,7 @@ import java.util.List;
  * @param claimMode         how the platform host takes over vanilla chat.
  * @param logChatToConsole  whether to also send player chat to server console.
  * @param repositories      list of module repositories (GitHub, local, HTTP)
+ * @param pipeline          ordered stage ids from {@code pipeline}
  */
 public record HostConfig(
         boolean quickLook,
@@ -24,8 +25,13 @@ public record HostConfig(
         ClaimMode claimMode,
         boolean logChatToConsole,
         List<Repository> repositories,
-        List<String> moduleAllowlist
+        List<String> moduleAllowlist,
+        List<String> pipeline
 ) {
+
+    /** Base stage order written by the installer on first boot. */
+    public static final List<String> BASE_PIPELINE =
+            List.of("route", "translate", "format", "sync");
 
     /** How the adapter claims a vanilla chat event. */
     public enum ClaimMode {
@@ -47,6 +53,7 @@ public record HostConfig(
     ) {}
 
     public static HostConfig defaults() {
-        return new HostConfig(true, Language.EN, false, true, ClaimMode.CANCEL_EVENT, true, List.of(), List.of());
+        return new HostConfig(true, Language.EN, false, true, ClaimMode.CANCEL_EVENT, true,
+                List.of(), List.of(), BASE_PIPELINE);
     }
 }

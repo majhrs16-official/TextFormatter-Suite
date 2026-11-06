@@ -29,6 +29,7 @@ import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.PresetService;
@@ -451,8 +452,11 @@ class SuiteRuntimeTest {
     }
 
     @Test
-    void dispatchWithoutActivePackagesFailsExplicitly() throws Exception {
+    void dispatchWithoutActivePackagesReturnsNoPipelineInsteadOfThrowing() throws Exception {
         try (SuiteRuntime runtime = new SuiteRuntime(tempDir.resolve("data"), ports, logger)) {
+            runtime.registerPlatformService(ChatDelivery.class, new FakeDelivery());
+            runtime.registerPlatformService(ActorDirectory.class, new FakeActors());
+            runtime.registerPlatformService(PermissionChecker.class, PermissionChecker.ALLOW_ALL);
             runtime.start();
             MessageDispatch dispatch = runtime.services()
                 .find(MessageDispatch.class)
@@ -463,9 +467,11 @@ class SuiteRuntimeTest {
                 .channel("chat")
                 .build();
 
-            assertFalse(runtime.pipelineAvailable());
-            assertTrue(runtime.pipelineError().contains("missing service"));
-            assertThrows(IllegalStateException.class, () -> dispatch.dispatch(message));
+            assertTrue(runtime.pipelineAvailable(), runtime::pipelineError);
+            assertNull(runtime.pipelineError());
+            DispatchOutcome outcome = dispatch.dispatchAndReport(message);
+            assertEquals(0, outcome.delivered());
+            assertEquals(0, outcome.silenced());
         }
     }
 

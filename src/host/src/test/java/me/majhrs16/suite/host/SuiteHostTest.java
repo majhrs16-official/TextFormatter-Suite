@@ -72,6 +72,11 @@ class SuiteHostTest {
         Files.writeString(dir.resolve("config/suite/config.yml"), """
             general:
               language: en
+            pipeline:
+              - route
+              - translate
+              - format
+              - sync
             config-version: 1.0
             """);
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """

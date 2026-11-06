@@ -130,6 +130,11 @@ class E2EPipelineTest {
                 parallel: false
             sonido:
               enabled: true
+            pipeline:
+              - route
+              - translate
+              - format
+              - sync
             config-version: 1.0
             """);
     }
@@ -414,6 +419,11 @@ class E2EPipelineTest {
               language: en
             sonido:
               enabled: false
+            pipeline:
+              - route
+              - translate
+              - format
+              - sync
             config-version: 1.0
             """);
         writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,6 +50,7 @@ class ConfigLoaderTest {
         assertEquals(Language.EN, config.defaultLanguage());
         assertFalse(config.engineParallel());
         assertTrue(config.soundEnabled());
+        assertEquals(HostConfig.BASE_PIPELINE, config.pipeline());
         assertFalse(result.isValid()); // missing file = degraded
     }
 
@@ -65,6 +67,9 @@ class ConfigLoaderTest {
               enabled: false
             chat:
               claim-mode: clear-recipients
+            pipeline:
+              - route
+              - format
             config-version: 1.0
             """);
 
@@ -76,7 +81,23 @@ class ConfigLoaderTest {
         assertTrue(config.engineParallel());
         assertFalse(config.soundEnabled());
         assertEquals(HostConfig.ClaimMode.CLEAR_RECIPIENTS, config.claimMode());
+        assertEquals(List.of("route", "format"), config.pipeline());
         assertTrue(result.isValid());
+    }
+
+    @Test
+    void existingConfigWithoutPipelineIsInvalid() throws Exception {
+        Files.writeString(suiteConfig(), """
+            quick-look: true
+            config-version: 1.0
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream()
+                .anyMatch(error -> error.contains("'pipeline'")));
+        assertEquals(HostConfig.BASE_PIPELINE, result.config().pipeline());
     }
 
     @Test
@@ -84,6 +105,8 @@ class ConfigLoaderTest {
         Files.writeString(suiteConfig(), """
             chat:
               claim-mode: no-existe
+            pipeline:
+              - format
             config-version: 1.0
             """);
 
@@ -99,6 +122,8 @@ class ConfigLoaderTest {
               engine:
                 kind: firewall
                 parallel: true
+            pipeline:
+              - route
             config-version: 1.0
             """);
 

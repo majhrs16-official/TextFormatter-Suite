@@ -1,13 +1,19 @@
 package me.majhrs16.suite.runtime;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
+import me.majhrs16.suite.api.Capability;
+import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.command.CommandRoot;
@@ -15,6 +21,11 @@ import me.majhrs16.suite.api.config.ConfigRegistry;
 import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.Router;
+import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.PipelinePlan;
+import me.majhrs16.suite.api.pipeline.PipelineServices;
+import me.majhrs16.suite.api.pipeline.PipelineSettings;
+import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
@@ -25,8 +36,13 @@ import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.host.DispatchReport;
-import me.majhrs16.suite.host.MessageDispatcher;
+import me.majhrs16.suite.host.DeliveryExecutor;
+import me.majhrs16.suite.host.PipelineEngine;
+import me.majhrs16.suite.host.PipelineEnvironment;
+import me.majhrs16.suite.host.PipelineOutcome;
+import me.majhrs16.suite.host.RecipientResolver;
+import me.majhrs16.suite.host.ResolvedStage;
+import me.majhrs16.suite.host.SkippedStage;
 import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
@@ -77,7 +93,9 @@ public final class SuiteRuntime implements AutoCloseable {
         new ArrayList<>();
     private final RuntimeMessageDispatch messageDispatch = new RuntimeMessageDispatch();
     private SuiteHost host;
-    private MessageDispatcher dispatcher;
+    private PipelineEngine pipeline;
+    private HostConfig config;
+    private long pipelinePlanVersion;
     private String pipelineError = "pipeline has not been built";
     private boolean started;
 
@@ -191,44 +209,155 @@ public final class SuiteRuntime implements AutoCloseable {
      */
     private synchronized void rebuildPipeline() {
         closePipeline();
-        try {
-            ConfigLoader.LoadResult<HostConfig> configResult =
-                    ConfigLoader.loadConfig(dataDir, logger);
-            if (!configResult.isValid()) {
-                for (String error : configResult.errors()) {
-                    logger.error("Config error: " + error);
-                }
+        long planVersion = ++pipelinePlanVersion;
+        ConfigLoader.LoadResult<HostConfig> configResult =
+                ConfigLoader.loadConfig(dataDir, logger);
+        if (!configResult.isValid()) {
+            for (String error : configResult.errors()) {
+                logger.error("Config error: " + error);
             }
-            HostConfig config = configResult.config();
-            ChannelRegistry channels = requireService(ChannelRegistry.class);
-            TranslationService translation = requireService(TranslationService.class);
+            // A missing file is the documented first-install case and uses the
+            // installer defaults. An existing invalid file must not be papered
+            // over with a fallback pipeline.
+            if (Files.exists(HostPaths.suiteConfig(dataDir))) {
+                failPipeline("invalid config: " + String.join("; ", configResult.errors()));
+                return;
+            }
+        }
+        HostConfig loaded = configResult.config();
+        config = loaded;
+
+        try {
+            ActorDirectory actors = requireService(ActorDirectory.class);
+            PermissionChecker permissions = requireService(PermissionChecker.class);
+            ChatDelivery delivery = requireService(ChatDelivery.class);
+            Optional<ChannelRegistry> channels = moduleHost.services().find(ChannelRegistry.class);
+            Optional<TranslationService> translation =
+                    moduleHost.services().find(TranslationService.class);
+
+            PipelinePlan plan = PipelinePlan.of(loaded.pipeline(), planVersion);
+            ResolvedStages stages = resolveStages(plan);
+
+            PipelineEnvironment environment = new PipelineEnvironment(
+                    actors,
+                    permissions,
+                    channels,
+                    translation,
+                    new PipelineSettings(loaded.defaultLanguage(),
+                            loaded.engineParallel(), loaded.soundEnabled()),
+                    new RegistryServices(moduleHost.services()),
+                    OutputPlan.inherit(),
+                    logger,
+                    loaded.engineParallel());
+            RecipientResolver recipients = new RecipientResolver(actors, permissions, logger);
+            DeliveryExecutor executor = new DeliveryExecutor(
+                    delivery, channels.orElse(null), loaded.soundEnabled(), logger);
+            PipelineEngine built = new PipelineEngine(
+                    plan, stages.resolved(), stages.skipped(), recipients, executor,
+                    environment, planVersion);
+
+            pipeline = built;
+            messageDispatch.bind(built);
+            host = legacyHost(loaded, channels, translation, delivery);
+            pipelineError = null;
+            logger.info("Message pipeline ready (v" + planVersion + "): "
+                    + stages.resolved().size() + " stage(s), "
+                    + stages.skipped().size() + " skipped");
+        } catch (RuntimeException failure) {
+            failPipeline(failure.getMessage() == null
+                    ? failure.getClass().getSimpleName()
+                    : failure.getMessage());
+        }
+    }
+
+    private void failPipeline(String reason) {
+        pipelineError = reason;
+        messageDispatch.fail(reason);
+        logger.warn("Message pipeline unavailable: " + reason);
+    }
+
+    /**
+     * Builds the legacy {@link SuiteHost} facade when every service it needs is
+     * active. Dispatch no longer goes through it; {@code host()} remains only
+     * for adapters and diagnostics that still read the resolved host view.
+     */
+    private SuiteHost legacyHost(HostConfig loaded,
+                                 Optional<ChannelRegistry> channels,
+                                 Optional<TranslationService> translation,
+                                 ChatDelivery delivery) {
+        if (channels.isEmpty() || translation.isEmpty()) {
+            return null;
+        }
+        try {
             Router router = resolveRouter();
             MessageComponentRenderer componentRenderer =
                     requireService(MessageComponentRenderer.class);
             MessageRenderer renderer = requireService(MessageRenderer.class);
-            ChatDelivery delivery = requireService(ChatDelivery.class);
-            ActorDirectory actors = requireService(ActorDirectory.class);
-            PermissionChecker permissions = requireService(PermissionChecker.class);
-
-            SuiteHost builtHost = new SuiteHost(
-                    config, channels, translation, router,
+            return new SuiteHost(
+                    loaded, channels.get(), translation.get(), router,
                     componentRenderer, renderer, logger, delivery);
-            MessageDispatcher builtDispatcher = new MessageDispatcher(
-                    builtHost, actors, delivery, permissions, logger);
+        } catch (RuntimeException unavailable) {
+            logger.debug("Legacy host facade unavailable: " + unavailable.getMessage());
+            return null;
+        }
+    }
 
-            host = builtHost;
-            dispatcher = builtDispatcher;
-            messageDispatch.bind(builtDispatcher);
-            pipelineError = null;
-            logger.info("Message pipeline ready: "
-                    + channels.paths().size() + " channel(s), router "
-                    + router.getClass().getSimpleName());
-        } catch (RuntimeException failure) {
-            pipelineError = failure.getMessage() == null
-                    ? failure.getClass().getSimpleName()
-                    : failure.getMessage();
-            messageDispatch.fail(pipelineError);
-            logger.warn("Message pipeline unavailable: " + pipelineError);
+    /**
+     * Maps the plan's stage ids to the services published by active modules.
+     *
+     * <p>Base ids are always known contracts: a plan that lists them is valid
+     * even when no feature is installed, and missing ones become {@code SKIPPED}.
+     * A non-base id that no installed descriptor declares is an invalid plan.</p>
+     */
+    private ResolvedStages resolveStages(PipelinePlan plan) {
+        Map<String, PipelineStage> published = new LinkedHashMap<>();
+        for (PipelineStage stage : moduleHost.services().findAll(PipelineStage.class)) {
+            if (published.putIfAbsent(stage.id(), stage) != null) {
+                throw new IllegalArgumentException("duplicate stage id: " + stage.id());
+            }
+        }
+
+        Set<String> known = new LinkedHashSet<>(HostConfig.BASE_PIPELINE);
+        for (ModuleDescriptor descriptor : moduleHost.knownDescriptors().values()) {
+            for (Capability capability : descriptor.provides()) {
+                String name = capability.name();
+                if (name.startsWith("stage:")) {
+                    known.add(name.substring("stage:".length()));
+                }
+            }
+        }
+
+        List<ResolvedStage> resolved = new ArrayList<>();
+        List<SkippedStage> skipped = new ArrayList<>();
+        for (String stageId : plan.stageIds()) {
+            PipelineStage stage = published.get(stageId);
+            if (stage != null) {
+                String owner = moduleHost.services()
+                        .ownerOf(PipelineStage.class, stage)
+                        .orElse("unknown");
+                resolved.add(new ResolvedStage(stageId, owner, stage));
+            } else if (known.contains(stageId)) {
+                skipped.add(new SkippedStage(stageId, "module-inactive"));
+            } else {
+                throw new IllegalArgumentException(
+                        "stage '" + stageId + "' is not declared by any installed module");
+            }
+        }
+        return new ResolvedStages(resolved, skipped);
+    }
+
+    private record ResolvedStages(List<ResolvedStage> resolved, List<SkippedStage> skipped) {
+    }
+
+    private record RegistryServices(ServiceRegistry registry) implements PipelineServices {
+        @Override
+        public <T> Optional<T> find(Class<T> type) {
+            return registry.find(type);
+        }
+
+        @Override
+        public <T> List<T> findAll(Class<T> type) {
+            return registry.findAll(type);
         }
     }
 
@@ -257,9 +386,9 @@ public final class SuiteRuntime implements AutoCloseable {
 
     private synchronized void closePipeline() {
         messageDispatch.unbind();
-        if (dispatcher != null) {
-            dispatcher.close();
-            dispatcher = null;
+        if (pipeline != null) {
+            pipeline.close();
+            pipeline = null;
         }
         host = null;
     }
@@ -594,13 +723,16 @@ public final class SuiteRuntime implements AutoCloseable {
 
     /** @return the default language configured for the runtime. */
     public me.majhrs16.suite.api.message.Language defaultLanguage() {
-        return host().config().defaultLanguage();
+        ensureStarted();
+        return config != null
+                ? config.defaultLanguage()
+                : HostConfig.defaults().defaultLanguage();
     }
 
-    /** @return {@code true} when every required pipeline service is active. */
+    /** @return {@code true} when the runtime built a pipeline engine. */
     public boolean pipelineAvailable() {
         ensureStarted();
-        return host != null;
+        return pipeline != null;
     }
 
     /** @return why the pipeline is unavailable, or {@code null} when ready. */
@@ -674,26 +806,26 @@ public final class SuiteRuntime implements AutoCloseable {
      */
     private static final class RuntimeMessageDispatch implements MessageDispatch {
 
-        private volatile MessageDispatcher dispatcher;
+        private volatile PipelineEngine engine;
         private volatile String error = "pipeline has not been built";
 
-        private void bind(MessageDispatcher next) {
-            dispatcher = next;
+        private void bind(PipelineEngine next) {
+            engine = next;
             error = null;
         }
 
         private void unbind() {
-            dispatcher = null;
+            engine = null;
             error = "pipeline is being rebuilt";
         }
 
         private void fail(String reason) {
-            dispatcher = null;
+            engine = null;
             error = reason;
         }
 
-        private MessageDispatcher require() {
-            MessageDispatcher current = dispatcher;
+        private PipelineEngine require() {
+            PipelineEngine current = engine;
             if (current == null) {
                 throw new IllegalStateException("Message pipeline unavailable: " + error);
             }
@@ -707,9 +839,9 @@ public final class SuiteRuntime implements AutoCloseable {
 
         @Override
         public DispatchOutcome dispatchAndReport(me.majhrs16.suite.api.message.Message message) {
-            DispatchReport report = require().dispatch(message);
+            PipelineOutcome outcome = require().dispatch(message);
             return new DispatchOutcome(
-                    report.delivered(), report.silenced(), report.redirected());
+                    outcome.delivered(), outcome.silenced(), outcome.redirected());
         }
     }
 }

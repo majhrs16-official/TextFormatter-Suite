@@ -168,6 +168,11 @@ class EndToEndIntegrationTest {
               enabled: true
             chat:
               claim-mode: cancel-event
+            pipeline:
+              - route
+              - translate
+              - format
+              - sync
             config-version: 1.0
             """;
         Files.writeString(dir.resolve("config/suite/config.yml"), configYaml);

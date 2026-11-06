@@ -31,7 +31,6 @@ import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleDeactivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
-import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
@@ -72,6 +71,7 @@ public final class ModuleHost implements AutoCloseable {
     private final RuntimeConfigRegistry configs;
     private final RuntimeStateStore stateStore;
     private final Map<String, LoadedModule> active = new LinkedHashMap<>();
+    private final Map<String, ModuleDescriptor> knownDescriptors = new LinkedHashMap<>();
     private volatile boolean closing;
     private final Map<String, ModuleState> states = new LinkedHashMap<>();
     private final Map<String, ModuleState> packageStates = new LinkedHashMap<>();
@@ -131,7 +131,7 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /** @return the runtime-wide service registry, used by the suite runtime. */
-    public ServiceRegistry services() {
+    public RuntimeServiceRegistry services() {
         return services;
     }
 
@@ -201,6 +201,10 @@ public final class ModuleHost implements AutoCloseable {
         }
 
         List<PreparedModule> selected = selectHighestVersions(prepared);
+        knownDescriptors.clear();
+        for (PreparedModule module : selected) {
+            knownDescriptors.put(module.id, module.descriptor);
+        }
         List<Module> candidates = new ArrayList<>(selected);
         ResolutionResult resolution = new ModuleGraph(environment).resolve(candidates);
         Map<Module, PreparedModule> byModule = new IdentityHashMap<>();
@@ -449,6 +453,14 @@ public final class ModuleHost implements AutoCloseable {
     }
 
     /**
+     * @return descriptors of every installed module seen by this host, active
+     *         or not; used to tell an unknown stage from an inactive one
+     */
+    public synchronized Map<String, ModuleDescriptor> knownDescriptors() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(knownDescriptors));
+    }
+
+    /**
      * Persists that activation of a module has started but is not confirmed.
      * A process crash at this point must resume activation instead of assuming
      * the module is active.
@@ -556,6 +568,7 @@ public final class ModuleHost implements AutoCloseable {
             ModuleDescriptor descriptor = descriptorOf(activator, jar);
 
             String moduleId = descriptor.name();
+            knownDescriptors.put(moduleId, descriptor);
             Path configDir = configRoot.resolve(moduleId);
             Files.createDirectories(configDir);
             PluginLogger moduleLogger = new PrefixedLogger(logger, moduleId);

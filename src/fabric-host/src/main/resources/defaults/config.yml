@@ -12,4 +12,10 @@ iflow:
 chat:
   global-prefix: ""
 
+pipeline:
+  - route
+  - translate
+  - format
+  - sync
+
 config-version: 1.0

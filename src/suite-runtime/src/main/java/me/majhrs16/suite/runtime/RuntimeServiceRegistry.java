@@ -81,6 +81,24 @@ public final class RuntimeServiceRegistry implements ServiceRegistry {
     }
 
     /**
+     * @param type    contract type
+     * @param service registered instance
+     * @return the module id that registered {@code service}, if still present
+     */
+    public <T> Optional<String> ownerOf(Class<T> type, T service) {
+        List<Entry> entries = services.get(type);
+        if (entries == null) {
+            return Optional.empty();
+        }
+        for (Entry entry : entries) {
+            if (entry.service == service) {
+                return Optional.of(entry.owner);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * @param owner module id
      * @return {@code true} when the owner still has live registrations
      */
