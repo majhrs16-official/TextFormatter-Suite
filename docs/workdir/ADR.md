@@ -236,7 +236,8 @@ agnóstica.
    `observability`, etc.
 2. **Los adapters solo conocen la plataforma y la API.** `spigot-host` y `fabric-host` son
    bootstrap y dependen de `core-api` + `suite-runtime` + SDK de plataforma. La captura de eventos
-   vive en `sync-bukkit`/`sync-fabric`.
+   vive en `sync-bukkit`/`sync-fabric`, que además publican el sink local `bukkit`/`fabric`
+   (ADR-036 §17).
 3. **El Manager es el orquestador.** Instalar, activar, desactivar, actualizar y reparar pasan por
    el Manager.
 4. **Instalar no es activar.** El estado instalado y el estado activo se registran por separado;
@@ -267,7 +268,8 @@ agnóstica.
 - **Versiones concurrentes al estilo Debian.** La versión nueva reemplaza a la anterior resolviendo
   el grafo; durante un upgrade pueden solaparse v1 y v2 solo hasta confirmar el swap.
 - **La captura de eventos de plataforma es un sincronizador descargable.** `sync-bukkit` y
-  `sync-fabric` registran listeners, traducen a `Message` y despachan; el host no los embebe.
+  `sync-fabric` registran listeners, traducen a `Message`, despachan y publican el sink local
+  `bukkit`/`fabric`; el host no los embebe (ADR-036 §17).
 
 ### Contrato de módulo
 
@@ -373,7 +375,7 @@ actualizar; cero JARs o ids duplicados son un error explícito.
 |---|---|---|
 | Núcleo técnico | `core-api`, `kernel`, `manager-spi`, `manager-core`, `manager-apt`, `suite-runtime` | Compilado en el host; sin features |
 | Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma; bootstrap sin listeners de eventos |
-| Sincronizadores de plataforma | `sync-bukkit`, `sync-fabric` | Paquetes de plataforma descargables; capturan eventos, traducen a `Message` y despachan |
+| Sincronizadores de plataforma | `sync-bukkit`, `sync-fabric` | Paquetes de plataforma descargables; capturan eventos, traducen a `Message`, despachan y publican el sink local `bukkit`/`fabric` |
 | Paquetes de dependencia | `logger`, `transport`, SnakeYAML, JDA, Adventure y demás librerías compartidas | Paquetes `DEPENDENCY`; el manager los descarga, verifica, relocaliza y carga por módulo |
 | Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow`, `iflow-vm`, `iflow-firewall`, `iflow-wasm` | Paquetes instalados por defecto; los motores iFlow no se excluyen |
 | Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `inworld`, `extension-api` | Paquetes neutrales; dependencias declaradas en `METADATA/package.list` |
@@ -663,7 +665,7 @@ desde `ServiceRegistry` es responsabilidad de `suite-runtime`.
 4. `YamlUserLanguageStore` vive en `suite-runtime`; `SuiteRuntime` expone `defaultLanguage()` sin
    publicar `HostConfig` a los adapters.
 5. La captura de eventos de chat/join/quit/death no pertenece al host: se implementó en
-   `sync-bukkit`/`sync-fabric`.
+   `sync-bukkit`/`sync-fabric`, que además publican el sink local `bukkit`/`fabric` (ADR-036 §17).
 6. No se conserva un segundo pipeline en los adapters. `SuiteHost.bootstrap`, `SuiteBootstrap`,
    `RouterFactory`, `IflowEngineSelector` y `ConfigValidator` se retiraron del módulo `host`. Los
    tests y benchmarks cablean las implementaciones reales con fixtures locales, fuera del classpath
@@ -1278,7 +1280,7 @@ trazable, no un fallo del pipeline.
 |---|---|---|
 | ADR-019 | El composition root puede exigir servicios de una feature; el grafo impone el orden. | Ciclo de vida, `ModuleHost`, classloaders, paquetes, guard de imports, «no doble camino». |
 | ADR-024 | `SuiteHost` como ensamblador del render y el pipeline cableado. | `core-render` como módulo neutral de contratos con Adventure; `MessageComponentRenderer` como puerto. |
-| ADR-025 | El adapter construye y posee el pipeline. | Adapters delgados, `PlatformPorts`, captura de eventos en `sync-*`. |
+| ADR-025 | El adapter construye y posee el pipeline. | Adapters delgados, `PlatformPorts`, captura de eventos en `sync-*`; sinks `bukkit`/`fabric`. |
 | ADR-032 | `SuiteRuntime` exige `IflowHub` y un `Router` no nulo para construir el pipeline. | Selección de backend por el hub, prioridad de fallback, configuración `config/iflow/config.yml`. |
 | ADR-008 | El backend de traducción requiere `chattranslator` para activarse. | La fachada `ChatTranslator` y `TranslationService` como punto de uso de la traducción. |
 | ADR-003 | La autoridad de un programa iFlow se limita a contenido y metadatos del mensaje. | Sandbox por módulo, SHA-256, allowlists, responsabilidad del repositorio. |
@@ -1595,8 +1597,9 @@ iFlow con sus backends.
 
 El backend conoce su plataforma; el núcleo no. `sync-discord` conoce canales, roles, mensajes,
 miembros, bans y auditoría de Discord; `sync-telegram` conoce chats, mensajes, miembros y permisos de
-Telegram; `sync-http` conoce su endpoint y sus cabeceras. Ese conocimiento no se compila en
-`core-api`: se publica como un esquema de datos y se ejecuta en el backend.
+Telegram; `sync-http` conoce su endpoint y sus cabeceras; `sync-bukkit` conoce jugadores, consola,
+canales y eventos de Bukkit; `sync-fabric` conoce los equivalentes de Fabric. Ese conocimiento no se
+compila en `core-api`: se publica como un esquema de datos y se ejecuta en el backend.
 
 La suite oficial usa solo el mínimo común múltiplo (LCM) de todos los backends. Los programas de
 iFlow de terceros pueden descubrir y ejecutar cualquier acción nativa que el backend declare, siempre
@@ -1612,7 +1615,7 @@ reintentos y métricas se reutilizan; la selección por mensaje se define en §1
 |---|---|---|
 | Agnóstico oficial (LCM) | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send` |
 | Agnóstico extendido | programas de terceros | `textformatter.channel.set` y las acciones agnósticas que se acuerden |
-| Nativo | programas de terceros | `<backend>.<segmento>[...].<verbo>`: `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, etc. |
+| Nativo | programas de terceros | `<backend>.<segmento>[...].<verbo>`: `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, `bukkit.event.cancel`, etc. |
 
 La profundidad no está limitada a tres segmentos: el primer segmento es el backend (namespace) y el
 resto es el id local de la acción. `Principal.Official` solo puede invocar el LCM; `Principal.Program`
@@ -1697,9 +1700,9 @@ public interface SyncBus {
 `ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `OBJECT`). `OBJECT` es un mapa anidado
 validado por el backend; el núcleo no interpreta su contenido. Ningún tipo de JDA, Telegram, Bukkit
 o Fabric cruza esta frontera. `backend` es el namespace; las acciones del host usan `textformatter`,
-no `"*"`. El nombre canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria.
-`SyncSurface` solo lo publican los sinks; las acciones del host no tienen superficie y el bus las
-resuelve en su handler interno.
+no `"*"`. El nombre canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria;
+la capacidad que se declara y se concede es ese mismo nombre. `SyncSurface` solo lo publican los
+sinks; las acciones del host no tienen superficie y el bus las resuelve en su handler interno.
 
 #### 16.4 Mínimo común múltiplo
 
@@ -1718,26 +1721,28 @@ resuelve en su handler interno.
 - Equivale a `SET_CHANNEL` de ADR-031 sobre `Message.channel`: cambia el canal de routing y dispara la
   segunda fase de §7. Una sola mutación por unidad; la segunda produce `DECISION_CONFLICT`.
 - iFlow oficial no la invoca: no pertenece al LCM y `Principal.Official` no puede invocarla. Un
-  programa de terceros puede hacerlo con la capacidad `sync.textformatter.channel.set`.
+  programa de terceros puede hacerlo con la capacidad `textformatter.channel.set`.
 - El cambio de destino nativo de un backend no se hace con `textformatter.channel.set`: se hace con
   una acción nativa o con el argumento `destination` de `message.send`. La acción nunca significa
   implícitamente «canal de Discord/Telegram».
 - El import dedicado `set_channel` de la ABI v3 se retira; se sustituye por
   `sync_invoke("textformatter", "channel.set", ...)`. No hay alias ni doble lector (ADR-034).
 - `textformatter` es el namespace del host/suite; no crea una dependencia del módulo `textformatter`
-  ni lo convierte en multiplexor.
+  ni lo convierte en multiplexor. La capacidad se llama igual que la acción
+  (`textformatter.channel.set`), sin prefijo `sync.`: `textformatter` no es un backend sync.
 
 #### 16.6 Autoridad, concesiones y auditoría
 
 1. **Declaración.** El programa declara las capacidades que usa en su imagen
-   (`ProgramImage.capabilities`), con el formato `sync.<backend>.<accion>` (por ejemplo
-   `sync.discord.channel.create` o `sync.discord.channel.permission.overwrite`; `accion` es el id
-   local de la superficie) o `sync.textformatter.<accion>` para acciones del host
-   (`sync.textformatter.channel.set`).
+   (`ProgramImage.capabilities`) con el nombre canónico de la acción: `<backend>.<accion>` (por
+   ejemplo `discord.channel.create` o `discord.channel.permission.overwrite`; `accion` es el id
+   local de la superficie) o `textformatter.<accion>` para acciones del host
+   (`textformatter.channel.set`). El nombre de la capacidad es el nombre de la acción; no se añade
+   un prefijo `sync.` porque `textformatter` no es un backend sync y `discord` ya es el namespace.
 2. **Concesión.** El operador las autoriza en `config/iflow/grants.yml`, indexadas por el
    SHA-256 de la imagen del programa, no por su nombre. La concesión puede usar comodines
-   (`sync.discord.*`); el programa debe declarar la acción exacta; la autoridad efectiva es la
-   intersección.
+   (`discord.*`, `textformatter.*`); el programa debe declarar la acción exacta; la autoridad
+   efectiva es la intersección.
 3. **Destructivo.** `DESTRUCTIVE` y `MODERATION` exigen `allow-destructive: true` en la concesión.
    Sin esa marca, la acción devuelve `Denied` y no produce efecto.
 4. **Fail-closed.** Permiso ausente, ambiguo o no verificable → `Denied`. No se hereda el fail-open
@@ -1768,8 +1773,10 @@ resuelve en su handler interno.
   `iflow-cpu-design.md` §10: el CPU no conoce `SET_CHANNEL`; el runtime ofrece una operación
   autorizada y genérica.
 - Ambos motores comparten la misma suite de conformidad; la paridad VM/Wasm es parte de W3.5.
-- Las políticas oficiales que se distribuyen con la suite no declaran `sync.invoke`; un test lo
-  verifica. Solo los programas de terceros lo declaran.
+- `sync.invoke` es la capacidad del servicio genérico, distinta de las capacidades de acción
+  (`discord.*`, `textformatter.*`): un programa declara ambas. Las políticas oficiales que se
+  distribuyen con la suite no declaran `sync.invoke`; un test lo verifica. Solo los programas de
+  terceros lo declaran.
 
 #### 16.8 Enmiendas y límites
 
@@ -1812,12 +1819,13 @@ crearía una dependencia feature→feature que §2 prohíbe. `sync-bus` se convi
 `sync` y conserva su implementación de bus. Si más adelante hace falta una política de selección
 (fallback, salud, carga), se añade como estrategia interna del bus, no como módulo nuevo.
 
-La entrega local (jugadores de Bukkit/Paper/Fabric) no es un target de `sync`: la ejecuta el motor
-tras `format` con los destinatarios expandidos. `sync-bukkit` y `sync-fabric` son captura de eventos
-entrantes, no sinks de salida. Si en el futuro se quiere que la entrega local sea seleccionable, se
-añade un multiplexor `local` con su propio contrato; no se mete dentro de `sync`. `outputs=[]` no
-cancela la entrega local: solo deja sin targets a los multiplexores. Para no entregar nada, la
-política debe devolver `DROP`/`REJECT`.
+La entrega local también es un target de `sync`: `sync-bukkit` y `sync-fabric` son sinks, no solo
+listeners. Por ellos entra y sale texto de la plataforma. La captura de eventos la hace el paquete de
+plataforma y los entrega a la suite; el sink, por definición, expone en su superficie todo lo
+manipulable de su entorno —jugadores, consola, canales, scoreboard y eventos—, de modo que
+`sync/bukkit` y `sync/fabric` son backends de pleno derecho y pueden aparecer en `outputs`.
+`outputs=[]` deja sin salidas, incluida la local; para cancelar el evento de origen sigue siendo
+`DROP`/`REJECT` de la política, no una lista vacía.
 
 #### 17.3 Contrato
 
@@ -1867,7 +1875,7 @@ Precedencia:
 1. `Message.outputPlan()` con `declared=true`.
 2. `config/suite/config.yml` → `outputs` (y `outputs-parallel`).
 3. Default del módulo multiplexor: `iflow` usa su `engine`/fallback; `chattranslator` usa
-   `default-backend`; `sync` conserva el fan-out a todos los sinks.
+   `default-backend`; `sync` conserva el fan-out a todos los sinks, incluidos `bukkit` y `fabric`.
 
 Una lista vacía en el mensaje o en la configuración significa «sin salidas» y no se interpreta como
 «todas». Un `multiplexer` o `backend` desconocido es un error explícito (`Unsupported`/`Invalid`),
@@ -1880,7 +1888,13 @@ nunca un skip silencioso. Las claves canónicas son `outputs`, `multiplexer`, `b
 |---|---|---|---|
 | `iflow` | `iflow` (hub) | `iflow-vm`, `iflow-wasm`, `iflow-firewall` | transformación |
 | `chattranslator` | `chattranslator` | `gtranslate`, `ltranslate` | transformación |
-| `sync` | `sync-bus` | `discord`, `telegram`, `http`, `websocket`, `tcp`, `udp`, `velocity` | entrega |
+| `sync` | `sync-bus` | `discord`, `telegram`, `http`, `websocket`, `tcp`, `udp`, `velocity`, `bukkit`, `fabric` | entrega |
+
+Los backends `bukkit` y `fabric` son sinks locales: su superficie incluye las operaciones del entorno
+(jugadores, consola, canales, scoreboard) y la manipulación de eventos. Una acción de evento actúa
+sobre el evento ligado al mensaje actual, no sobre un objeto de evento arbitrario, y no sustituye a
+`CANCEL_EVENT` de ADR-031: ese sigue siendo el target oficial de cancelación; la acción nativa es
+para programas de terceros.
 
 Los multiplexores de transformación admiten **como máximo un target** por mensaje; un segundo
 target del mismo multiplexor es `Conflict`. `sync` admite varios, en orden. Un multiplexor nuevo
@@ -1914,7 +1928,7 @@ No aparece en `outputs`.
 - `translate` usa el target `chattranslator` si existe; si no, la fachada aplica su
   `default-backend` y su fallback de ADR-035.
 - `sync` recorre todos los targets `sync` en orden y llama al sink correspondiente; si no hay
-  targets, aplica el fan-out completo actual.
+  targets, aplica el fan-out completo actual, incluida la entrega local por `bukkit`/`fabric`.
 - `format` no es un multiplexor y no se selecciona por `outputs`.
 
 #### 17.8 Enmiendas y límites
@@ -1924,6 +1938,9 @@ No aparece en `outputs`.
 - **ADR-035.** `ChatTranslator` conserva su `default-backend` y su override de contexto; el
   `outputs` del pipeline sustituye el uso de `ThreadLocal` para la selección por mensaje, no la
   fachada.
+- **ADR-019 / ADR-025.** `sync-bukkit`/`sync-fabric` siguen capturando eventos; §17 añade que
+  también son sinks locales (`bukkit`/`fabric`) y que su superficie incluye las operaciones sobre el
+  evento actual. La captura no es la razón de ser del sink, pero el sink expone el entorno completo.
 - **`config-schema-v2.2.md`.** `outputs` y `outputs-parallel` son claves nuevas; requieren
   autorización para actualizar el esquema.
 - **No promete** orden de finalización en modo paralelo, transacciones entre backends ni selección
@@ -1971,10 +1988,13 @@ No aparece en `outputs`.
     sin concesión devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen
     `allow-destructive`; el puente VM y el de Wasm devuelven los mismos estados para la misma
     llamada.
-11. **Multiplexación:** un mensaje con `sync/discord` y `sync/tcp` entrega a ambos en el orden
-    declarado; sin `outputs` se usa el default de `config/suite/config.yml`; un backend desconocido
-    falla de forma explícita y no se convierte en éxito parcial silencioso; `outputs-parallel: false`
-    serializa la finalización.
+11. **Multiplexación:** un mensaje con `sync/discord`, `sync/tcp` y `sync/bukkit` entrega a los tres
+    en el orden declarado; sin `outputs` se usa el default de `config/suite/config.yml`; un backend
+    desconocido falla de forma explícita y no se convierte en éxito parcial silencioso;
+    `outputs-parallel: false` serializa la finalización.
+12. **Sink local:** `sync-bukkit` y `sync-fabric` publican una superficie que incluye las operaciones
+    del entorno y de eventos, y entregan a jugadores/consola; `bukkit.event.cancel` no sustituye a
+    `CANCEL_EVENT` como target de política.
 
 Tests adicionales obligatorios: ausencia de `iflow` con el resto instalado (debe entregar, no
 bloquear); `iflow` instalado sin backend (etapa `SKIPPED`); duplicado de etapa (`INVALID`); dos

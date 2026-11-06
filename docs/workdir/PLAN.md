@@ -429,7 +429,8 @@ permite construir un bot completo de Discord o Telegram sin que el núcleo conoz
 | Nativo | programas de terceros | `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, etc. |
 
 `Principal.Official` solo puede invocar el LCM; `Principal.Program` solo lo concedido. Sin concesión
-no hay efecto.
+no hay efecto. El nombre de la capacidad es el nombre canónico de la acción
+(`discord.channel.create`, `textformatter.channel.set`), sin prefijo `sync.`.
 
 #### Estado actual y evidencia
 
@@ -452,7 +453,7 @@ no hay efecto.
 |---|---|
 | `core-api` | `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
 | `sync-bus` | Registro de superficies, `invoke`, fan-out del LCM, timeout/cuotas, auditoría, `textformatter.channel.set` del host. |
-| `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. |
+| `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. `sync-bukkit`/`sync-fabric` publican además el sink local y las acciones del entorno, eventos incluidos. |
 | `iflow-vm` | Servicios `SYNC_SURFACE`/`SYNC_INVOKE`, TLV/DMA/fuel; retirar `set_channel` dedicado. |
 | `iflow-wasm` | Imports `sync_surface`/`sync_invoke`, TLV y estados equivalentes; retirar `set_channel`. |
 | `suite-runtime` | Concesiones por SHA-256, auditoría, cuotas y puente entre iFlow y `SyncBus`. |
@@ -471,12 +472,12 @@ no hay efecto.
    aplicar timeout/cuotas, emitir auditoría y mapear cada estado a `SyncResult`. `send(Message)` pasa
    a ser una comodidad sobre `message.send`.
 4. **Backends.** Migrar `sync-discord` y `sync-telegram` primero (superficie completa: canales,
-   roles, mensajes, miembros, moderación); después `sync-http`, `sync-websocket`, `sync-socket` y
-   `sync-velocity-core` (LCM y nativas que apliquen). Una acción no soportada devuelve `Unsupported`,
-   nunca un no-op.
+   roles, mensajes, miembros, moderación); después `sync-http`, `sync-websocket`, `sync-socket`,
+   `sync-velocity-core`, `sync-bukkit` y `sync-fabric` (LCM, entrega local y nativas que apliquen).
+   Una acción no soportada devuelve `Unsupported`, nunca un no-op.
 5. **`textformatter.channel.set`.** Implementar el handler de host en el motor del pipeline,
    reutilizando la segunda fase de §7 y la regla de una sola mutación. `Principal.Official` recibe
-   `Denied`; un tercero con `sync.textformatter.channel.set` puede invocarlo.
+   `Denied`; un tercero con `textformatter.channel.set` puede invocarlo.
 6. **Puente iFlow.** Añadir `SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en
    Wasm, con el mismo `TlvCodec` y los mismos estados; retirar `set_channel` y actualizar fixtures y
    programas de ejemplo. Suite de conformidad compartida.
@@ -496,7 +497,7 @@ no hay efecto.
    acciones nativas.
 2. **Oficial acotado:** `Principal.Official` no puede invocar `textformatter.channel.set` ni una
    acción nativa; recibe `Denied` sin efecto.
-3. **Tercero con concesión:** un programa de prueba con `sync.discord.channel.create` crea un canal
+3. **Tercero con concesión:** un programa de prueba con `discord.channel.create` crea un canal
    en un backend falso y deja una entrada de auditoría con hash, sin valores sensibles.
 4. **Sin concesión:** la misma llamada devuelve `Denied` y el backend no recibe la acción.
 5. **Destructivo:** `discord.member.ban` sin `allow-destructive` devuelve `Denied`; con la marca,
@@ -506,7 +507,9 @@ no hay efecto.
    `DECISION_CONFLICT`; el import dedicado ya no existe.
 8. **Acción desconocida:** `Unsupported` explícito; el bus no finge éxito.
 9. **Paridad:** la misma llamada produce el mismo `SyncResult` en VM y Wasm.
-10. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`.
+10. **Sink local:** `sync-bukkit` y `sync-fabric` publican superficie y entregan a jugadores/consola;
+    su acción de evento actúa sobre el evento actual y no sustituye a `CANCEL_EVENT`.
+11. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`.
 
 #### Dependencias y orden
 
@@ -548,7 +551,8 @@ no hay efecto.
 Permitir que un mensaje declare, en orden, qué multiplexor y qué backend usa cada salida: `iflow`,
 `chattranslator` y `sync`. Sin `outputs`, se aplica `config/suite/config.yml`; sin esa clave, el
 default del módulo. `sync-bus` deja de ser solo un fan-out y pasa a ser el multiplexor `sync`, sin un
-módulo nuevo.
+módulo nuevo. La entrega local (`bukkit`, `fabric`) es una salida más de `sync`, no un camino
+paralelo al pipeline.
 
 #### Estado actual y evidencia
 
@@ -559,7 +563,8 @@ módulo nuevo.
 | `SyncBus.broadcast` envía a todos los sinks | `DefaultSyncBus.broadcast` | No hay selección por mensaje ni orden. |
 | `SyncBus.sendTo` existe pero no se usa en el flujo principal | `SyncBus.java`; `CoreTranslatorPlaceholders` | La selección es ad hoc y no cubre el pipeline. |
 | `Message` no tiene `outputs` | `Message.java` | No se puede expresar multi-salida. |
-| Bukkit/Paper/Fabric no son sinks de `sync` | `sync-bukkit`, `sync-fabric` capturan eventos; la entrega local la hace el motor | `outputs` no sustituye la entrega local. |
+| `sync-bukkit`/`sync-fabric` aún no implementan `SyncSink` | `SyncBukkitActivator.start` solo registra `BukkitChatListener`; no hay `implements SyncSink` en esos módulos | Son sinks por diseño; falta publicar `bukkit`/`fabric` como backends de `sync`. |
+| La entrega local vive en el host | `SpigotChatDelivery.deliver` | Debe quedar detrás del sink `bukkit` para ser seleccionable por `outputs`. |
 
 #### Impacto previsto
 
@@ -570,6 +575,7 @@ módulo nuevo.
 | `iflow` | `route` usa el target `iflow`; conserva default/fallback de ADR-032. |
 | `chattranslator` | `translate` usa el target `chattranslator`; conserva default/fallback de ADR-035. |
 | `sync-bus` | `sync` usa los targets `sync`; `sendTo`/`invoke` por backend; fan-out completo si no hay targets. |
+| `sync-bukkit` / `sync-fabric` | Publican el sink local `bukkit`/`fabric` y su superficie (jugadores, consola, canales, eventos); la entrega local pasa por ellos. |
 | Configuración | `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
 | Tests | Orden, paralelo, vacío vs ausente, target desconocido, default de suite y de módulo. |
 
@@ -582,30 +588,34 @@ módulo nuevo.
 3. **Etapas.** `route`, `translate` y `sync` leen su target; sin target aplican su default actual.
    `format` no participa.
 4. **`sync` selectivo.** `sync-bus` expone `sendTo` por `SyncSurface.backend`; conserva el fan-out
-   completo cuando no hay targets. No se crea `sync-mux`.
+   completo cuando no hay targets. `bukkit` y `fabric` son backends más; la entrega del host queda
+   detrás del sink. No se crea `sync-mux`.
 5. **Orden y paralelismo.** Dispatch en orden; ejecución paralela por defecto solo dentro del mismo
    multiplexor de entrega, con pool acotado; `outputs-parallel: false` para secuencial. La traza
    conserva el orden del array.
 6. **Resultado agregado.** `DispatchOutcome` marca el fallo parcial por target; sin éxito fingido ni
    rollback.
 7. **Guardas.** `checkArchitecture`: `core-api` sin SDK; `multiplexer:*` declarativo, nunca
-   `Requirement`; `textformatter` no es multiplexor; la entrega local no se mete en `sync`.
+   `Requirement`; `textformatter` no es multiplexor; la entrega local es el sink `bukkit`/`fabric`,
+   no un camino paralelo al pipeline.
 8. **Documentación y esquema.** `config-schema-v2.2.md` y la wiki; `docs/prompts/` requiere
    autorización.
 
 #### Criterios de cierre y tests
 
-1. **Multi-salida:** `sync/discord` + `sync/tcp` entrega a ambos; la traza respeta el orden.
+1. **Multi-salida:** `sync/discord` + `sync/tcp` + `sync/bukkit` entrega a los tres; la traza
+   respeta el orden.
 2. **Precedencia:** mensaje > suite > módulo; sin `outputs` en ningún nivel, fan-out completo.
-3. **Vacío vs ausente:** `targets=[]` no entrega a multiplexores y mantiene la entrega local;
+3. **Vacío vs ausente:** `targets=[]` no entrega a ningún multiplexor, incluida la entrega local;
    `declared=false` hereda.
 4. **Transformación única:** dos targets `chattranslator` o `iflow` → `Conflict`.
 5. **Desconocido:** multiplexor/backend inexistente → error explícito, sin skip.
 6. **Paralelo:** un backend lento no bloquea a los demás; `outputs-parallel: false` serializa.
 7. **Fallo parcial:** un target falla, los demás completan; el resultado agregado lo declara.
 8. **Sin regresión:** sin `outputs`, el comportamiento actual se conserva.
-9. **Local:** la entrega a jugadores de Bukkit/Paper/Fabric no depende de `sync` ni se puede anular
-   con un target ausente.
+9. **Local:** `sync/bukkit` y `sync/fabric` son targets de pleno derecho; incluirlos entrega a
+   jugadores/consola, omitirlos no; `outputs=[]` tampoco entrega local. El evento solo se cancela con
+   `DROP`/`REJECT`, no con la lista de salidas.
 10. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`.
 
 #### Dependencias y orden
@@ -622,6 +632,7 @@ módulo nuevo.
 |---|---|---|
 | ADR-032 | El hub elige un motor global (`IflowConfig.engine`). | §17 añade un override por mensaje; el default y el fallback se conservan. |
 | ADR-035 | `ChatTranslator` elige un backend global + contexto. | §17 usa un campo del mensaje; la fachada y su default se conservan. |
+| ADR-036 §17.2 (borrador previo) | Decía que la entrega local no era target de `sync`. | Corregido: `sync-bukkit`/`sync-fabric` son sinks; la entrega local es `sync/bukkit`/`sync/fabric`. |
 | ADR-036 §3 | La configuración global solo define `pipeline`. | Se añaden `outputs` y `outputs-parallel`; `config-version: 1.0`. |
 | ADR-019 | Prohíbe `feature → feature`. | `sync` es `sync-bus`; no se crea `sync-mux` ni se requiere otra feature. |
 | ADR-034 | Prohíbe aliases. | Las claves canónicas son `multiplexer`/`backend`; `multiplexador` no es alias. |
@@ -1301,7 +1312,7 @@ Esta sección recopila los principios técnicos de diseño, costumbres del proye
 
 ### P1. El Manager es el origen de la composición
 
-El Manager de paquetes es quien actualiza índices, descarga artefactos, resuelve dependencias, instala, **inicializa en memoria** y gestiona el ciclo de vida completo de los módulos. Los adaptadores de plataforma (Spigot/Fabric) no son composition roots ni conocen la existencia de los módulos de feature. Solo implementan puertos de plataforma; la captura y traducción de eventos vive en los paquetes `sync-bukkit`/`sync-fabric`.
+El Manager de paquetes es quien actualiza índices, descarga artefactos, resuelve dependencias, instala, **inicializa en memoria** y gestiona el ciclo de vida completo de los módulos. Los adaptadores de plataforma (Spigot/Fabric) no son composition roots ni conocen la existencia de los módulos de feature. Solo implementan puertos de plataforma; la captura y traducción de eventos vive en los paquetes `sync-bukkit`/`sync-fabric`, que además publican los sinks `bukkit`/`fabric`.
 
 **Consecuencia:** `spigot-host` y `fabric-host` dependen solo de la API del núcleo + runtime de módulos + SDK de plataforma. Ninguna dependencia a `sync-*`, `textformatter`, `iflow-*`, `chattranslator`, `gtranslate`, `ltranslate`, `observability`, `manager-*` ni `presets`.
 
@@ -1313,9 +1324,9 @@ La base de datos local (`library/status`) es un catálogo de programas instalado
 
 ### P3. Los adaptadores de plataforma son delgados
 
-Spigot y Fabric no deben conocer la existencia de ningún módulo de feature. Su propósito es simplemente implementar una API común entre plataformas y arrancar el runtime. La captura de eventos de Minecraft y su traducción a una representación interna agnóstica vive en paquetes de plataforma (`sync-bukkit`/`sync-fabric`), no en el adapter. El cableado de sinks y servicios de plataforma vive en el runtime de módulos (`suite-runtime`).
+Spigot y Fabric no deben conocer la existencia de ningún módulo de feature. Su propósito es simplemente implementar una API común entre plataformas y arrancar el runtime. La captura de eventos de Minecraft y su traducción a una representación interna agnóstica vive en paquetes de plataforma (`sync-bukkit`/`sync-fabric`), no en el adapter; esos paquetes también publican los sinks `bukkit`/`fabric` (entrada y salida) y su superficie. El cableado de sinks y servicios de plataforma vive en el runtime de módulos (`suite-runtime`).
 
-**Consecuencia:** El adapter se reduce a crear `PlatformPorts`, arrancar `SuiteRuntime` y delegar; los listeners y la traducción de eventos se cargan como paquetes `sync-bukkit`/`sync-fabric`.
+**Consecuencia:** El adapter se reduce a crear `PlatformPorts`, arrancar `SuiteRuntime` y delegar; los listeners, la traducción de eventos y los sinks locales se cargan como paquetes `sync-bukkit`/`sync-fabric`.
 
 ### P4. Código arbitrario: seguridad compartida (sandbox + dueño del repo)
 
@@ -1395,11 +1406,11 @@ El directorio `src/` se organiza por capa técnica: `api`, `kernel`, `runtime`, 
 
 **Consecuencia:** `spigot-host` y `fabric-host` viven en `platform/`. Los módulos de feature viven en `packages/`. Los contratos del núcleo viven en `api/` y `kernel/`. `sync-bukkit` y `sync-fabric` son paquetes de plataforma: viven bajo `platform/` y se distribuyen como ZIP descargable, no dentro del JAR del host.
 
-### P17. Los eventos de plataforma se capturan en `sync-<plataforma>`
+### P17. Los eventos de plataforma se capturan en `sync-<plataforma>`, que también es sink
 
-La sección del host que intercepta eventos de Minecraft y los entrega al núcleo agnóstico es, por definición, un sincronizador de plataforma. Se implementa como paquete descargable: `sync-bukkit` para Spigot/Paper y `sync-fabric` para Fabric. Cada host instala solo el paquete compatible con su entorno; ninguno se embebe en el JAR del host.
+La sección del host que intercepta eventos de Minecraft y los entrega al núcleo agnóstico es, por definición, un sincronizador de plataforma. Se implementa como paquete descargable: `sync-bukkit` para Spigot/Paper y `sync-fabric` para Fabric. Cada host instala solo el paquete compatible con su entorno; ninguno se embebe en el JAR del host. Ese mismo paquete publica el sink local `bukkit`/`fabric` (entrada y salida) y su superficie, que incluye las operaciones sobre el evento actual (ADR-036 §17).
 
-**Consecuencia:** `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; solo aportan `PlatformPorts` y el bootstrap. Los paquetes `sync-bukkit`/`sync-fabric` registran listeners, traducen a `Message`, despachan por `MessageDispatch` y se desregistran en `stop()`; si la plataforma no permite desregistrar, se marca `RESTART_REQUIRED`.
+**Consecuencia:** `spigot-host`/`fabric-host` no contienen `@EventHandler` ni `ServerMessageEvents.CHAT_MESSAGE`; solo aportan `PlatformPorts` y el bootstrap. Los paquetes `sync-bukkit`/`sync-fabric` registran listeners, traducen a `Message`, despachan por `MessageDispatch`, publican el sink local y se desregistran en `stop()`; si la plataforma no permite desregistrar, se marca `RESTART_REQUIRED`.
 
 ### P18. Los comandos son un contrato neutral y registrable
 
