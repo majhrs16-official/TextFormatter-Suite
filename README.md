@@ -8,7 +8,7 @@
 
 ## Qué es TextFormatter Suite
 
-TextFormatter Suite es una **plataforma modular de formateo, traducción y routing de chat para servidores Minecraft**, construida sobre una arquitectura hexagonal (ports & adapters) real. Reemplaza al proyecto monolítico anterior **ChatTranslator** reorganizando sus capacidades en 31 módulos Gradle que se comunican a través de contratos SPI (ServiceLoader) definidos en `core-api`.
+TextFormatter Suite es una **plataforma modular de formateo, traducción y routing de chat para servidores Minecraft**, construida sobre una arquitectura hexagonal (ports & adapters) real. Reemplaza al proyecto monolítico anterior **ChatTranslator** reorganizando sus capacidades en 43 módulos Gradle que se comunican a través de contratos SPI (ServiceLoader) definidos en `core-api`.
 
 **Problema que resuelve:** Los plugins de chat tradicionales mezclan formateo, traducción, permisos, sincronización cross-server y lógica de negocio en una única base de código acoplada a la plataforma (Bukkit/Fabric). TextFormatter Suite separa estas responsabilidades en módulos reemplazables, testeables en aislamiento y desplegables selectivamente.
 
@@ -27,28 +27,28 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | Funcionalidad | Estado | Evidencia |
 |---------------|--------|-----------|
 | **Arquitectura hexagonal (core-api + SPI)** | ✅ Implementada y probada | `core-api` compila sin dependencias; los puntos de extensión usan ServiceLoader; tests de kernel/module loading pasan |
-| **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 32 tests |
-| **Motor de reglas iFlow (VM)** | ✅ Implementada y probada | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K; 397 tests (VmInterpreter, HostServiceRegistry, VmPolicyEngine, FirmwareIntegrationTest) |
-| **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 17+19 tests extendidos |
-| **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 17+15 tests extendidos |
-| **Sync Discord** | ✅ Implementada y probada | Gateway v10 (WebSocket JDK + REST), intents, embeds; tokens `char[]`; 8 tests |
-| **Sync Telegram** | ✅ Implementada y probada | Bot long-poll con watermark offset; tokens `char[]`; 7 tests |
-| **Sync HTTP (webhook + REST)** | ✅ Implementada y probada | `HttpServer` JDK, inbound/outbound; 7 tests |
-| **Sync TCP/UDP** | ✅ Implementada y probada | Raw sockets, JSON línea/datagrama, `MessageCodec`; 7 tests |
-| **Sync WebSocket** | ✅ Implementada y probada | SO_REUSEADDR, auth token, subscripciones, log streaming; 1 test de contrato del módulo |
-| **Sync Velocity (proxy)** | ✅ Implementada y probada | **Production-ready**: async queue, retry/backoff exponencial, métricas, health, dynamic discovery, mapping avanzado (regex, per-type); compila, tests pasan |
-| **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; 4 tests de ciclo y entrega |
+| **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 47 tests |
+| **Motor de reglas iFlow (VM)** | ✅ Implementada y probada | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K; 399 tests (VmInterpreter, HostServiceRegistry, VmPolicyEngine, FirmwareIntegrationTest) |
+| **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 32 tests |
+| **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 38 tests |
+| **Sync Discord** | ✅ Implementada y probada | Gateway v10 neutral + adaptadores JDK/JDA, intents, embeds; tokens `char[]`; 17 + 6 + 4 tests |
+| **Sync Telegram** | ✅ Implementada y probada | Bot long-poll con watermark offset; tokens `char[]`; 14 tests |
+| **Sync HTTP (webhook + REST)** | ✅ Implementada y probada | `HttpServer` JDK, inbound/outbound; 24 tests |
+| **Sync TCP/UDP** | ✅ Implementada y probada | Raw sockets, JSON línea/datagrama, `MessageCodec`; 14 tests |
+| **Sync WebSocket** | ✅ Implementada y probada | SO_REUSEADDR, auth token, subscripciones, log streaming; 7 tests |
+| **Sync Velocity (proxy)** | ✅ Implementada y probada | Async queue, retry/backoff exponencial, métricas, health, dynamic discovery, mapping avanzado (regex, per-type); tests pasan. El E2E real en proxy Velocity es posterior a `1.0.0` |
+| **Sync Bus (pipeline unificado)** | ✅ Implementada y probada | `DefaultSyncBus`: deduplicación global, aislamiento por sink, retry/backoff, métricas; 18 tests de ciclo y entrega |
 | **Spigot/Paper adapter (`spigot-host`)** | ✅ Implementada y probada | Plugin `TextFormatterSuite`: bootstrap neutral, comandos con raíz configurable, fat-jar shadow; **compila con Paper API 1.21.4** |
 | **Fabric adapter (`fabric-host`)** | ⚠️ Compila (no probado en servidor real) | **COMPILA**: Fabric 1.21 + Fabric API 0.100.5, Brigadier, `ServerMessageEvents`, `ServerPlayConnectionEvents`, `ServerTickEvents`, death detection tick-based, claim mode configurable; **no probado en servidor real** |
 | **Module Manager (runtime)** | ✅ Núcleo y hot upgrade probados | Repositorios HTTP/file, resolver SemVer y dependencias, SHA-256 obligatorio, JARs versionados, classloader aislado, activación/desactivación real, hot upgrade con journal y detección de hilos/recursos/registros filtrados; un fallo de activación deja `ACTIVATION_FAILED` sin rollback de archivos; paquetes `DEPENDENCY` de terceros; `packages.list` es la metadata autoritativa; **no hay GitHub Releases públicos** (ver `PLAN.md`) |
-| **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 6 tests |
+| **Observabilidad** | ✅ Implementada y probada | `/metrics` (Prometheus), `/debug/*` (auth token, 127.0.0.1), Health checks (JVM, threads, sinks); 30 tests |
 | **Presets** | ✅ Catálogo y aplicación probados | Standard/RPG/Staff/Minimal, import/export YAML, aplicación real a `config/suite/` y `config/<module>/`, recarga de módulos activos mediante `/suite presets apply`; sin motor de ejecución |
-| **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 1 test de descriptor, no probado en servidor |
-| **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 9 tests |
-| **Web Editor** | ⚠️ Funcional con deuda visual/funcional | 108 tests unitarios + harnesses integración (StateStore, model, validate, canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
+| **In-world (signs, chests, books)** | ✅ Compila y con test de contrato | WORLD/RADIUS, botones click/hover, caché + glosario; **compila con Paper API 1.21.4**, 14 tests, no probado en servidor |
+| **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 21 tests |
+| **Web Editor** | ⚠️ Funcional con deuda visual/funcional | Tests unitarios (StateStore, model, validate, version labels) + harnesses integración (canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
 | **Config schema v2.2 (single-source)** | ✅ Sincronizado | `ConfigPath` enum → `paths.json`/`js/paths.js`/`js/model.js` via `ConfigSchemaGenerator`; `verifySchema` en CI (56 paths) |
-| **Dependency Verification** | ✅ Activa con excepción documentada | 32 lockfiles (root + 31 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante; los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
-| **Security Sprint 3** | ⚠️ P0 corregidos, P1 pendiente | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos; SpEL aislado en `iflow-firewall` con sandbox (ADR-001) |
+| **Dependency Verification** | ✅ Activa con excepción documentada | 44 lockfiles (root + 43 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante; los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
+| **Security Sprint 3** | ✅ Controles implementados | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos; SpEL aislado en `iflow-firewall` con sandbox (ADR-001); sin hallazgos P0/P1 abiertos en la auditoría vigente |
 | **Tests E2E pipeline completo** | ❌ Pendiente | Chat → iFlow → format → delivery en servidor real; 12 tests E2E unitarios existen pero requieren servidor real para validación completa |
 | **GitHub Releases / publicación** | ❌ Denegado por decisión | No se publicarán releases ni tags mientras el proyecto siga en desarrollo; distribución vía source/build local. Ver [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) |
 | **gradle.lockfile portable** | ⚠️ Parcial | Lockfiles existen pero reproducibilidad cross-platform no verificada exhaustivamente |
@@ -135,7 +135,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | **Separación real de responsabilidades** | Cada capacidad (formateo, routing, traducción, sync, observabilidad) es un módulo independiente con contrato SPI propio |
 | **Independencia de plataforma** | `core-api` y módulos funcionales son JDK-puro; solo `spigot-host`/`fabric-host` dependen de APIs de Minecraft |
 | **Extensibilidad sin fork** | Nuevos proveedores de traducción, sinks de sync, formateadores, reglas = implementar SPI + registrar en META-INF/services |
-| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 766 tests JVM en 28 módulos y 108 tests JS (verificación local 2026-10-20) |
+| **Testabilidad** | Núcleo testeable sin servidor Minecraft; tests de integración con mocks; 1441 tests JVM en 42 módulos y suite JS unitaria (verificación local 2026-11-05) |
 | **Seguridad por defecto** | Tokens en `char[]`, MiniEscape completo, sin motor de expresiones inline, SSRF protection, SafeConstructor YAML |
 | **Reproducibilidad** | Gradle lockfiles + verification metadata para supply chain integrity |
 
@@ -148,65 +148,74 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 
 ---
 
-## Catálogo de módulos (31 módulos Gradle)
+## Catálogo de módulos (43 módulos Gradle)
 
 ### Núcleo y contratos
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `core-api` | Contratos SPI + modelo de dominio (`Module`, `Message`, `TranslationService`, `SyncSink`, `ActorDirectory`, `TranslatorProvider`, semver, capabilities) | ✅ Probado |
-| `kernel` | Module loading, dependency graph (Tarjan), SPI resolution, `Environment` | ✅ Probado (13 tests) |
+| `core-render` | Puertos neutrales de renderizado y entrega con Adventure (`MessageComponentRenderer`, `ChatDelivery`); mantiene `core-api` sin dependencias | ✅ Compila (sin tests propios) |
+| `kernel` | Module loading, dependency graph (Tarjan), SPI resolution, `Environment` | ✅ Probado (17 tests) |
 | `logger` | Logger centralizado (niveles, flags DEBUG, integración con `PluginLogger`) | ✅ Probado (20 tests) |
 | `host` | Composition root: `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`), `ConfigValidator` | ✅ Probado |
+| `suite-runtime` | Runtime neutral: resuelve el grafo, carga/activa/desactiva módulos, compone el pipeline, registra comandos y configuración | ✅ Probado (103 tests) |
 | `messages` | i18n centralizado EN/ES, `MessagesCatalog` singleton | ✅ Probado (5 tests) |
 
 ### Formateo y routing
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (32 tests) |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (397 tests) |
-| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-vm` e `iflow-wasm` | ✅ Probado (44 tests) |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W0–W3 cerrados (loader, ABI `iflow.*`, `PolicySession`, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload); W3.5 paridad v3 pendiente | ✅ W0–W3 |
-| `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML, aplicación a la configuración canónica y recarga de módulos activos; sin motor de ejecución | ✅ Catálogo y aplicación probados |
+| `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (47 tests) |
+| `iflow` | Hub de selección: publica `IflowHub`/`Router` y elige un backend entre `iflow-firewall`, `iflow-vm` e `iflow-wasm` con fallback priorizado | ✅ Probado (13 tests) |
+| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (399 tests) |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-vm` e `iflow-wasm` | ✅ Probado (47 tests) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W0–W3 cerrados (loader, ABI `iflow.*`, `PolicySession`, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload); W3.5 paridad v3 pendiente | ✅ W0–W3 (60 tests) |
+| `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML, aplicación a la configuración canónica y recarga de módulos activos; sin motor de ejecución | ✅ Catálogo y aplicación probados (23 tests) |
 
 ### Traducción
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
+| `chattranslator` | Fachada de traducción: `ChatTranslator`, `TranslatorManager` y prioridad contexto > config > auto; los proveedores requieren la fachada | ✅ Probado (30 tests) |
 | `coretranslator` | Expansión PlaceholderAPI legacy `%cot_*` (`translate`, `lang`, `set/get`, `new/send/broadcast/clone`, `sendDiscord`); Bukkit-only, *deprecated*, sin shim ni `suite-common-legacy` | ✅ Probado (13 tests) |
-| `gtranslate` | Google Translate provider (web scraping, UA rotation, rate limit, concatena segmentos) | ✅ Probado (17+19 tests) |
-| `ltranslate` | LibreTranslate provider (self-hosted/público, long-poll, tokens `char[]`) | ✅ Probado (17+15 tests) |
+| `gtranslate` | Google Translate provider (web scraping, UA rotation, rate limit, concatena segmentos) | ✅ Probado (32 tests) |
+| `ltranslate` | LibreTranslate provider (self-hosted/público, long-poll, tokens `char[]`) | ✅ Probado (38 tests) |
 
 ### Transporte y sincronización
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `transport` | `Transport` abstraction, `HttpTransport` (`HttpURLConnection`), `MessageCodec`, SSRF protection (`getAllByName`, RFC 1918/3927/6598) | ✅ Probado |
-| `sync-bus` | **Nuevo**: Pipeline unificado — deduplicación global, aislamiento por sink, retry/backoff, métricas, health | ✅ Probado (4 tests) |
-| `sync-discord` | Discord Gateway v10 (WebSocket JDK + REST), intents, embeds, tokens `char[]` | ✅ Probado (8 tests) |
-| `sync-telegram` | Telegram Bot long-poll, watermark offset, tokens `char[]` | ✅ Probado (7 tests) |
-| `sync-http` | Webhook + REST (`HttpServer` JDK), inbound/outbound | ✅ Probado (7 tests) |
-| `sync-socket` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (7 tests) |
-| `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ✅ Probado (1 test de contrato) |
-| `sync-velocity-core` | Neutral Velocity sink — async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado |
-| `sync-velocity` | Velocity plugin real — registro de canal, `PluginMessageEvent` y `sendPluginMessage` | ✅ Probado |
+| `sync-common` | Utilidades neutrales de sync: lectura YAML, rutas canónicas y construcción/despacho de `Message` | ✅ Probado (15 tests) |
+| `sync-bus` | **Nuevo**: Pipeline unificado — deduplicación global, aislamiento por sink, retry/backoff, métricas, health | ✅ Probado (18 tests) |
+| `sync-discord` | Discord Gateway v10 neutral (loader, contrato de conexión, intents, embeds), tokens `char[]` | ✅ Probado (17 tests) |
+| `sync-discord-jdk` | Adaptador Discord sin JDA: Gateway v10 con el cliente WebSocket del JDK y `Transport` | ✅ Probado (6 tests) |
+| `sync-discord-jda` | Adaptador Discord con JDA; único paquete Discord que importa JDA | ✅ Probado (4 tests) |
+| `sync-telegram` | Telegram Bot long-poll, watermark offset, tokens `char[]` | ✅ Probado (14 tests) |
+| `sync-http` | Webhook + REST (`HttpServer` JDK), inbound/outbound | ✅ Probado (24 tests) |
+| `sync-socket` | TCP/UDP raw sinks, JSON línea/datagrama | ✅ Probado (14 tests) |
+| `sync-websocket` | WebSocket sync (SO_REUSEADDR, auth token, subs, log streaming) | ✅ Probado (7 tests) |
+| `sync-velocity-core` | Neutral Velocity sink — async queue, retry/backoff, métricas, health, dynamic discovery, mapping regex/per-type | ✅ Probado (11 tests) |
+| `sync-velocity` | Velocity plugin real — registro de canal, `PluginMessageEvent` y `sendPluginMessage` | ✅ Probado (8 tests) |
 
 ### Operación y extensibilidad
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `manager-spi` | Metadata de paquetes, manifiestos, versiones, configuración de repositorios y compatibilidad de plataforma | ✅ Probado |
-| `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado (25 tests) |
-| `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo probado (14 tests) |
-| `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado (6 tests) |
+| `manager-core` | Instalador de paquetes ZIP, base de datos local y transaction log | ✅ Probado (43 tests) |
+| `manager-apt` | Repositorios, resolución de dependencias y fachada APT/dpkg | ⚠️ Núcleo probado (21 tests) |
+| `extension-api` | Extension SPI: `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system | ✅ Probado (18 tests) |
 | `example-extension` | Demo de extensión funcional | ✅ Probado (3 tests) |
-| `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ✅ Probado (6 tests) |
-| `inworld` | Signs, chests, books (WORLD/RADIUS), click/hover, caché + glosario | ✅ Probado (1 test de contrato) |
+| `observability` | `/metrics` (Prometheus), `/debug/*` (auth, 127.0.0.1), Health checks (JVM, threads, sinks) | ✅ Probado (30 tests) |
+| `inworld` | Signs, chests, books (WORLD/RADIUS), click/hover, caché + glosario | ✅ Probado (14 tests) |
 | `performance` | `PerformanceProfiler`, `HotspotDetector`, `CacheOptimizer`, `MemoryOptimizer` | ✅ Probado (7 tests) |
-| `loadtest` | JMH benchmarks + Gatling | ✅ Compila |
+| `loadtest` | JMH benchmarks + Gatling | ✅ Compila (35 tests) |
 | `tester` | 25 tests runtime automatizados (`/suite test full|stress|concurrency`), `PerformanceProfiler` | ✅ Probado |
 
 ### Adaptadores de plataforma
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap neutral, raíz de comandos configurable, fat-jar shadow | ✅ Compilación y tests automatizados |
-| `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ⚠️ Compila (sin tests Java; verificación Loom local; no probado en servidor real) |
+| `spigot-host` | Plugin Bukkit/Paper (`TextFormatterSuitePlugin`): `SpigotActorDirectory`, `SpigotChatDelivery`, bootstrap neutral, raíz de comandos configurable, fat-jar shadow | ✅ Compilación y tests automatizados (21 tests) |
+| `fabric-host` | Mod Fabric (`TextFormatterSuiteMod`): `FabricActorDirectory`, `FabricChatDelivery`, Brigadier, Fabric events, death detection tick-based | ⚠️ Compila (10 tests Java; verificación Loom local; no probado en servidor real) |
+| `sync-bukkit` | Captura descargable de chat/join/quit/death en Spigot/Paper; listeners y despacho, sin vivir dentro de `spigot-host` | ✅ Probado (9 tests) |
+| `sync-fabric` | Captura descargable de chat/join/quit/death en Fabric; callbacks y tracker de muerte, sin vivir dentro de `fabric-host` | ✅ Probado (4 tests) |
 
 > **Documentación por módulo:** Cada módulo en `src/*/README.md` detalla responsabilidades, dependencias, data flow y entry points. Ver [`src/README.md`](src/README.md) para mapa completo y discrepancias conocidas.
 
@@ -251,7 +260,7 @@ export JAVA_HOME=/opt/javac/x64/21
 # Web Editor (validación + tests)
 cd src/web-editor
 npm ci
-npm run check          # format:check + lint + test (108 unit)
+npm run check          # format:check + lint + tests unitarios
 npm run test:integration
 ```
 
@@ -298,7 +307,7 @@ cp src/fabric-host/build/libs/textformatter-suite-fabric-*.jar /ruta/servidor/mo
 2. **Import as Gradle Project** → usar wrapper (`./gradlew`)
 3. **JDK**: seleccionar JDK 21 para el proyecto (toolchain resuelve 17 para bytecode)
 4. **Gradle Sync** → espera resolución de dependencias (primera vez descarga ~200MB)
-5. **Módulos**: 31 subproyectos bajo `:src` aparecen en panel Gradle
+5. **Módulos**: 43 subproyectos bajo `:src` aparecen en panel Gradle
 6. **Tasks útiles**:
    - `:src:core-api:test` — tests núcleo
    - `:src:spigot-host:build` — fat-jar plugin
@@ -345,7 +354,7 @@ cd src/web-editor && npm run check
 | Objetivo | Comando | Notas |
 |----------|---------|-------|
 | Build completo + tests | `./gradlew buildAll --no-daemon` | Incluye tests de todos los subproyectos |
-| Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 766 tests JVM en 28 módulos y 108 tests JS (verificación local 2026-10-20) |
+| Solo tests de un módulo | `./gradlew :src:<modulo>:test --no-daemon` | 1441 tests JVM en 42 módulos y suite JS unitaria (verificación local 2026-11-05) |
 | Solo build (sin tests) | `./gradlew build -x test --no-daemon` | Solo el proyecto raíz |
 | Plugin Spigot (fat-jar) | `./gradlew :src:spigot-host:build --no-daemon` | En `src/spigot-host/build/libs/` |
 | Paquete de un módulo | `./gradlew :src:<modulo>:modulePackage --no-daemon` | ZIP reproducible + `.sha256` en `src/<modulo>/build/distributions/` |
@@ -354,7 +363,7 @@ cd src/web-editor && npm run check
 | Paquetes iFlow (3 motores) | `./gradlew publishIflowEngines --no-daemon` | Publica `suite-iflow-vm`, `suite-iflow-firewall` y `suite-iflow-wasm` por separado en `build/repo/` |
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
 | Javadoc | `./gradlew javadocAll --no-daemon` | En `**/build/docs/javadoc/` |
-| Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 32 lockfiles, 0 missing; falla si falta alguno |
+| Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 44 lockfiles, 0 missing; falla si falta alguno |
 | Verificación dependencias | `gradle/verification-metadata.xml` + `--dependency-verification=strict` en CI | Activa; 626 componentes; excepción documentada solo para los classpaths de `fabric-host` (artefactos remapeados por Loom) |
 | Web editor check | `cd src/web-editor && npm run check` | Format + lint + tests unitarios |
 | Web editor tests integración | `cd src/web-editor && npm run test:integration` | Harnesses func/interact/click/chain/undo/diffing/bind |
@@ -428,7 +437,7 @@ El historial de cambios vive en Git (`git log`). No se mantiene un `CHANGELOG.md
 - [x] Advertencia "Actualmente en desarrollo intenso — No apto para producción" visible al inicio
 - [x] Funcionalidades clasificadas con estados honestos y evidencia (tests, build, probado en servidor)
 - [x] Propósito, enfoque, objetivos y límites explicados sin promesas futuras
-- [x] Catálogo de 31 módulos reales agrupados por responsabilidad con estado
+- [x] Catálogo de 43 módulos reales agrupados por responsabilidad con estado
 - [x] Instalación distingue: uso plugin (requiere build previo) vs desarrollo vs tests
 - [x] IDE (IntelliJ, VS Code) y terminal documentados con comandos verificables
 - [x] Comandos build/test/verificación contrastados contra `settings.gradle`/`build.gradle` y tareas reales
@@ -437,7 +446,7 @@ El historial de cambios vive en Git (`git log`). No se mantiene un `CHANGELOG.md
 - [x] Documentación técnica extensa en archivos especializados (wiki, ADR, module READMEs)
 - [x] Enlaces internos válidos y rutas relativas correctas desde GitHub
 - [x] No se han inventado capacidades, releases, comandos ni requisitos
-- [x] Verificación local: `buildAll` completo, `javadocAll`, `checkLocks` (32/32), `:src:host:verifySchema`, 766 tests JVM en 28 módulos (0 fallos, 11 skipped) y 108 tests JS; el run #65 detectó metadata de verificación incompleta en un checkout limpio, se corrigió y el run #66 sobre `acd7b25` completó los cuatro jobs en verde
+- [x] Verificación local: `build` + `checkArchitecture` + `checkLocks` (44/44), 1441 tests JVM en 42 módulos (0 fallos, 10 skipped) y suite JS unitaria (2026-11-05); el run #65 detectó metadata de verificación incompleta en un checkout limpio, se corrigió y el run #66 sobre `acd7b25` completó los cuatro jobs en verde
 
 ---
 
