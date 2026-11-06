@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-05 (**P0.1, P0.4 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registra `PL-1` —pipeline secuencial configurable— como feature propuesta, bloqueada por ADR y por el cierre de la purga P0; no hay código ni contrato nuevo.**)
+> Última actualización: 2026-11-06 (**P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registra `PL-1` —pipeline secuencial configurable— como feature propuesta, bloqueada por ADR y por el cierre de la purga P0; no hay código ni contrato nuevo. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -58,7 +58,7 @@
 | **P0.3** | Purga de configuración legacy | Eliminar `iflow.engine.kind`, `base-name` (si queda alguno; el código actual ya lo trata como retirado), lectores de la raíz plana de `config/` (`config/config.yml`, `config/channels/`, `config/translators/`, `config/sync/`, `config/rules.yml`, `config/inworld.yml`) y cualquier fallback que acepte el esquema viejo. Los `config/<module>/config.yml` canónicos se conservan. Las rutas incorrectas se ignoran o se rechazan explícitamente. | Completado (2026-11-04) |
 | **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no como shim ni recuperando `suite-common-legacy`. El `LegacyBridge` de `7dd164a4^` no se restaura. Actualizar todos los consumidores en el mismo cambio. | Completado (2026-11-05) |
 | **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Completado (2026-11-04) |
-| **P0.6** | Auditoría vigente | `AUDITORIA.md` refleja la auditoría documental de 2026-11-04 (D-001…D-010) con evidencia y estado; este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Corregir P0/P1 con test de regresión antes de avanzar. Al cerrar el ciclo, reemplazar el archivo por completo. | Parcial (auditoría documental 2026-11-04) |
+| **P0.6** | Auditoría vigente | `AUDITORIA.md` contiene la auditoría integral de 2026-11-06 (TF-001…TF-012), con cobertura, evidencia, matriz y roadmap; el ciclo documental anterior (D-001…D-010) queda cerrado. Este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Los hallazgos P0/P1 se corrigen con test de regresión antes de avanzar. | Completado (2026-11-06; informe reemplazado por completo) |
 | **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
 | **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Completado (2026-11-05) |
 | **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Completado (2026-11-04) |
@@ -198,20 +198,20 @@ No hay otros `@Deprecated` en `src/*/src/main`.
 2. **W3.5:** la mención a ISA v2 en `src/iflow-wasm/README.md` es histórica y debe resolverse con
    la matriz de paridad `.flow` v3/VM.
 
-**Estado de la auditoría vigente (2026-11-04):** auditoría documental abierta, HEAD `c5992230`.
-`AUDITORIA.md` contiene el informe vigente (D-001…D-010) y se reemplaza al cerrar el ciclo. El
-snapshot de código `3aaba49` (2026-10-24) queda en Git como histórico y no es estado vigente.
-Mapeo de severidades: P0 = Alta, P1 = Media, P2 = Baja. El cierre se rastrea en P0.6.
+**Estado de la auditoría vigente (2026-11-06):** auditoría integral cerrada, HEAD `1cc3a77f`.
+`AUDITORIA.md` contiene el informe vigente (TF-001…TF-012), con cobertura, matriz, roadmap y
+evidencia ejecutada. El ciclo documental anterior (D-001…D-010, HEAD `c5992230`) quedó cerrado y su
+informe fue reemplazado por completo (C14/ADR-034). Mapeo de severidades: P0 = Alta, P1 = Media,
+P2 = Baja. El cierre se rastrea en P0.6.
 
-**Nota sobre la cita a `P0.1-inventory.md`:** `AUDITORIA.md` remite a
+**Nota sobre la cita a `P0.1-inventory.md`:** el informe anterior remitía a
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
-PLAN. La cita es histórica del ciclo de auditoría y desaparecerá cuando `AUDITORIA.md` se reemplace
-por completo al cerrar P0.6 (C14/ADR-034). No se crea un archivo auxiliar.
+PLAN. El informe de 2026-11-06 ya no contiene esa cita. No se crea un archivo auxiliar.
 
 **Orden de trabajo:** purga P0 → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
 
-**Cerrado en esta ronda:** D-009. `IflowBackendManager` aplica la prioridad explícita
-`iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
+**Cierre del ciclo anterior:** D-009 quedó resuelto. `IflowBackendManager` aplica la prioridad
+explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
 
 **Deuda conocida tras P0.2/P0.3/P0.4 (2026-11-05):**
 
@@ -225,7 +225,7 @@ por completo al cerrar P0.6 (C14/ADR-034). No se crea un archivo auxiliar.
 - P0.1 cerró el inventario y lo integró en este PLAN; P0.4 eliminó los aliases de iFlow, el
   `transform` legacy, los constructores de compatibilidad sin uso, `%s`, `reset`, W2, las
   etiquetas `F7+` de la UI, las versiones `2.1`/`3.0` y los metadatos propios
-  `2.1.0-SNAPSHOT`. P0.8 cerrado; queda P0.6.
+  `2.1.0-SNAPSHOT`. P0.8 y P0.6 cerrados.
 - W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
 
 ### Después de 1.0.0 — betatesting/E2E real
@@ -395,7 +395,7 @@ servicios neutrales y cómo se compone el procesamiento.
 
 - ADR de pipeline (siguiente número libre) que sustituya o enmiende ADR-019, ADR-024/025 y
   ADR-032 en composition root, requisitos entre features y orden del pipeline.
-- Cierre de la purga P0 (ADR-034); P0.6 sigue pendiente.
+- Cierre de la purga P0 (ADR-034); P0.6 cerrado (2026-11-06).
 - Autorización explícita para modificar `docs/prompts/diseno/storage.md`,
   `docs/prompts/especificaciones/config-schema-v2.2.md` y el resto de documentos de diseño.
 - No se implementa código mientras el ADR no esté aceptado.
