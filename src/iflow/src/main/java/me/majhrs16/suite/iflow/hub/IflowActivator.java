@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.Router;
+import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.runtime.EventBus;
 import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
@@ -28,6 +29,7 @@ public final class IflowActivator implements ModuleActivator {
             .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("iflow", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("stage:route", SemVer.of(1, 0, 0)))
             .build();
     }
 
@@ -48,6 +50,7 @@ public final class IflowActivator implements ModuleActivator {
 
             context.services().register(IflowHub.class, hub);
             context.services().register(Router.class, hub);
+            context.services().register(PipelineStage.class, new RouteStage(hub));
             context.resources().track(onActivated);
             context.resources().track(onDeactivated);
 

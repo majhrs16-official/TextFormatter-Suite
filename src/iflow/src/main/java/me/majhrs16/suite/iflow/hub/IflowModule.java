@@ -17,6 +17,7 @@ public final class IflowModule implements Module {
             .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("iflow", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("stage:route", SemVer.of(1, 0, 0)))
             .build();
     }
 }

@@ -23,6 +23,7 @@ public final class TextFormatterModule implements Module {
                 .jvmRange(17, 0)
                 .provide(Capability.of("channel-api", SemVer.of(1, 0, 0)))
                 .provide(Capability.of("formatter", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("stage:format", SemVer.of(1, 0, 0)))
                 .build();
     }
 }

@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído y motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, todavía sin cableado a `suite-runtime`. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, y etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, todavía sin cableado a `suite-runtime`. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -208,8 +208,9 @@ cero y registran un aviso, en lugar de ensanchar el mensaje a todos los jugadore
 `DefaultSyncBus.broadcast` ejecute el fan-out en el hilo llamante, devuelva cuántos sinks aceptaron
 realmente y libere la marca de dedup cuando ninguno acepta, de modo que el reintento es posible tras
 drenar las colas. PL-1 avanza por slices con gate verde: contratos neutrales en `core-api`,
-`RecipientResolver` extraído y motor de ejecución (`PipelineEngine`, `DeliveryExecutor`,
-`BoundedPipelineTrace`) con 10 tests. Siguiente P0 de la auditoría: TF-001 (PL-1).
+`RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`,
+`BoundedPipelineTrace`) con 10 tests y etapas `route`/`format`/`sync` con 12 tests. Siguiente P0 de
+la auditoría: TF-001 (PL-1).
 
 **Nota sobre la cita a `P0.1-inventory.md`:** el informe anterior remitía a
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
@@ -424,8 +425,11 @@ servicios son obligatorios y cómo se compone el procesamiento.
   fail-closed intacta. El motor (`PipelineEngine`), la entrega (`DeliveryExecutor`) y la traza
   acotada (`BoundedPipelineTrace`) existen y están cubiertos por `PipelineEngineTest`, pero todavía
   no se cablean en `suite-runtime`; `SuiteHost`/`MessageDispatcher` siguen siendo el camino de
-  producción. Faltan la construcción del plan, las etapas `route`/`translate`/`format`/`sync`, la
-  migración de descriptores y el guard de independencia de `checkArchitecture`.
+  producción. Las etapas `route` (`iflow`), `format` (`textformatter`) y `sync` (`sync-bus`) ya se
+  publican como `PipelineStage` y declaran `stage:route`, `stage:format` y `stage:sync`; la etapa
+  `translate` sigue pendiente del traslado de la traducción fuera de `TemplateRenderer`. Faltan la
+  construcción del plan en `suite-runtime`, el cableado del motor, la migración de descriptores y el
+  guard de independencia de `checkArchitecture`.
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 

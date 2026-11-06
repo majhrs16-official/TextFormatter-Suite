@@ -21,6 +21,7 @@ public final class SyncBusModule implements Module {
             .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("sync-bus", SemVer.of(1, 0, 0)))
+            .provide(Capability.of("stage:sync", SemVer.of(1, 0, 0)))
             .build();
     }
 }

@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.spi.SyncBus;
 
 /**
@@ -26,6 +27,7 @@ public final class SyncBusActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("sync-bus", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("stage:sync", SemVer.of(1, 0, 0)))
                 .build();
     }
 
@@ -33,6 +35,7 @@ public final class SyncBusActivator implements ModuleActivator {
     public void start(ModuleContext context) throws Exception {
         DefaultSyncBus created = new DefaultSyncBus(context.logger());
         context.services().register(SyncBus.class, created);
+        context.services().register(PipelineStage.class, new SyncStage(created));
         context.resources().track(created::stop);
         created.start();
         this.bus = created;

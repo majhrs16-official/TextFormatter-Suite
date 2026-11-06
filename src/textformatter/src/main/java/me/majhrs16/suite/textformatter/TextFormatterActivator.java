@@ -8,6 +8,7 @@ import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
@@ -31,6 +32,7 @@ public final class TextFormatterActivator implements ModuleActivator {
                 .jvmRange(17, 0)
                 .provide(Capability.of("channel-api", SemVer.of(1, 0, 0)))
                 .provide(Capability.of("formatter", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("stage:format", SemVer.of(1, 0, 0)))
                 .build();
     }
 
@@ -53,6 +55,7 @@ public final class TextFormatterActivator implements ModuleActivator {
         TextFormatter formatter = TextFormatters.create(
                 loaded.config(), translation, placeholders, context.logger());
         context.services().register(TextFormatter.class, formatter);
+        context.services().register(PipelineStage.class, new FormatStage(formatter));
         TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
         context.services().register(MessageRenderer.class, renderer);
         context.services().register(MessageComponentRenderer.class, renderer);
