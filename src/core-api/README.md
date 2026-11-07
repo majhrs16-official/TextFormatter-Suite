@@ -135,7 +135,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`) |
 | `PlaceholderResolver` | Implement in platform adapter (see `SpigotPlaceholderResolver`, `FabricPlaceholderResolver`) |
 | `MessageRenderer` | Implement in the formatter package (`TextFormatterMessageRenderer`); adapters consume plain text without importing textformatter |
-| `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters without importing `MessageDispatcher`/`DispatchReport` |
+| `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters without importing the pipeline engine or the removed dispatcher types |
 | `PresetService` | Neutral preset application port; `presets` implements it and the host resolves it from the runtime without importing the package |
 | `TestProbe` | Neutral live-runtime probe; `tester` owns the scenarios and `spigot-host` implements the adapter without importing `tester` |
 | `TestRunner` / `TestRunnerFactory` | Neutral test execution contract and factory; `tester` implements them so platform commands never import the package |

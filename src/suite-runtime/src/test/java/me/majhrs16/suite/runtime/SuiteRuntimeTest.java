@@ -25,6 +25,7 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.SoundSpec;
+import me.majhrs16.suite.api.pipeline.PipelineStatus;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
@@ -470,9 +471,24 @@ class SuiteRuntimeTest {
             assertTrue(runtime.pipelineAvailable(), runtime::pipelineError);
             assertNull(runtime.pipelineError());
             DispatchOutcome outcome = dispatch.dispatchAndReport(message);
+            assertEquals(PipelineStatus.NO_PIPELINE, outcome.status());
+            assertEquals(0, outcome.considered());
             assertEquals(0, outcome.delivered());
             assertEquals(0, outcome.silenced());
+            assertNotNull(runtime.pipelineTraces().lastTrace(message.id().toString()),
+                "a dispatch must record its trace even when there is no pipeline");
         }
+    }
+
+    @Test
+    void retiresTheLegacyHostAndDispatcherFacade() {
+        assertThrows(ClassNotFoundException.class,
+            () -> Class.forName("me.majhrs16.suite.host.SuiteHost"));
+        assertThrows(ClassNotFoundException.class,
+            () -> Class.forName("me.majhrs16.suite.host.MessageDispatcher"));
+        assertFalse(java.util.Arrays.stream(SuiteRuntime.class.getMethods())
+            .anyMatch(method -> method.getName().equals("host")),
+            "SuiteRuntime must not expose the retired host facade");
     }
 
     @Test
@@ -512,6 +528,8 @@ class SuiteRuntimeTest {
 
             assertEquals(1, delivery.delivered.size());
             assertEquals("Steve", delivery.delivered.get(0).message().sender().name());
+            assertNotNull(runtime.pipelineTraces().lastTrace(message.id().toString()));
+            assertEquals(1, runtime.pipelineTraces().recentTraces().size());
         }
     }
 

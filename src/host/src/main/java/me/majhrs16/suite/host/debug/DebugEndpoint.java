@@ -4,20 +4,21 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
+import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
+import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
-import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
+import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,22 +29,19 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Debug endpoints for the suite (binds to localhost only, requires auth token):
- * - /debug/dump - dumps current state (channels, rules, sinks, etc.)
+ * - /debug/dump - dumps current state (channels and pipeline availability)
  * - /debug/state - current internal state snapshot
  * - /debug/channels - channel information
- * - /debug/rules - iFlow rules (stub)
- * - /debug/sinks - sync sinks (stub)
  * - /debug/simulate - simulates a message through the full pipeline (requires auth)
  *
  * <p>Security: binds to 127.0.0.1 only, requires X-Debug-Token header matching
  * the configured token. The /debug/simulate endpoint processes messages through
- * the actual dispatcher pipeline for load testing.</p>
+ * the real {@link MessageDispatch} pipeline for load testing.</p>
  */
 public final class DebugEndpoint {
 
     private final HttpServer server;
-    private final SuiteHost host;
-    private final MessageDispatcher dispatcher;
+    private final MessageDispatch dispatch;
     private final ChannelRegistry channels;
     private final PluginLogger logger;
     private final String authToken;
@@ -54,23 +52,22 @@ public final class DebugEndpoint {
     private final Map<String, Object> lastSimulationResult = new ConcurrentHashMap<>();
     private final ExecutorService executor;
 
-    public DebugEndpoint(SuiteHost host, MessageDispatcher dispatcher,
-                         ChannelRegistry channels, PluginLogger logger, String authToken) throws IOException {
-        this(host, dispatcher, channels, logger, authToken, 9091);
+    public DebugEndpoint(MessageDispatch dispatch, ChannelRegistry channels,
+                         PluginLogger logger, String authToken) throws IOException {
+        this(dispatch, channels, logger, authToken, 9091);
     }
 
-    public DebugEndpoint(SuiteHost host, MessageDispatcher dispatcher,
-                         ChannelRegistry channels, PluginLogger logger, String authToken, int port) throws IOException {
-        this.host = host;
-        this.dispatcher = dispatcher;
+    public DebugEndpoint(MessageDispatch dispatch, ChannelRegistry channels,
+                         PluginLogger logger, String authToken, int port) throws IOException {
+        this.dispatch = dispatch;
         this.channels = channels;
         this.logger = logger;
         this.port = port;
         // Require auth token - generate one if not provided
-        this.authToken = authToken != null && !authToken.isBlank() 
-            ? authToken 
+        this.authToken = authToken != null && !authToken.isBlank()
+            ? authToken
             : java.util.UUID.randomUUID().toString();
-        
+
         this.executor = Executors.newFixedThreadPool(4);
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         this.server.setExecutor(executor);
@@ -79,10 +76,8 @@ public final class DebugEndpoint {
         server.createContext("/debug/dump", new DumpHandler());
         server.createContext("/debug/state", new StateHandler());
         server.createContext("/debug/channels", new ChannelsHandler());
-        server.createContext("/debug/rules", new RulesHandler());
-        server.createContext("/debug/sinks", new SinksHandler());
-        
-        // Simulation endpoint - processes message through full pipeline
+
+        // Simulation endpoint - processes message through the real pipeline
         server.createContext("/debug/simulate", new SimulateHandler());
     }
 
@@ -147,9 +142,8 @@ public final class DebugEndpoint {
 
             Map<String, Object> dump = Map.of(
                 "host", Map.of(
-                    "config", host.config(),
-                    "translation", host.translation().activeName(),
-                    "channelsCount", channels.paths().size()
+                    "name", "TextFormatter Suite",
+                    "version", "1.0.0"
                 ),
                 "channels", channels.paths(),
                 "timestamp", java.time.Instant.now().toString()
@@ -194,7 +188,7 @@ public final class DebugEndpoint {
             List<Map<String, Object>> channelList = channels.paths().stream()
                 .map(path -> {
                     var channel = channels.resolve(path);
-                    Map<String, Object> m = new java.util.HashMap<>();
+                    Map<String, Object> m = new LinkedHashMap<>();
                     m.put("name", channel.name());
                     m.put("permission", channel.permission());
                     m.put("sendPermission", channel.sendPermission());
@@ -216,42 +210,9 @@ public final class DebugEndpoint {
         }
     }
 
-    private final class RulesHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!checkAuth(exchange)) return;
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                sendResponse(exchange, 405, "Method not allowed", "text/plain");
-                return;
-            }
-
-            // Access rules via reflection or expose via host
-            String response = toJson(Map.of(
-                "note", "Rules dump not yet implemented - requires access to iFlow router"
-            ));
-            sendResponse(exchange, 200, response, "application/json");
-        }
-    }
-
-    private final class SinksHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!checkAuth(exchange)) return;
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                sendResponse(exchange, 405, "Method not allowed", "text/plain");
-                return;
-            }
-
-            String response = toJson(Map.of(
-                "note", "Sinks dump not yet implemented - requires access to host sinks"
-            ));
-            sendResponse(exchange, 200, response, "application/json");
-        }
-    }
-
     /**
-     * Handler for /debug/simulate - processes a message through the full
-     * dispatcher pipeline (routing, formatting, translation, delivery).
+     * Handler for /debug/simulate - processes a message through the real
+     * dispatch pipeline (routing, formatting, translation, delivery).
      * Used for load testing the complete message path.
      */
     private final class SimulateHandler implements HttpHandler {
@@ -283,13 +244,12 @@ public final class DebugEndpoint {
             String senderName = params.getOrDefault("sender", "LoadTestPlayer");
             String content = params.getOrDefault("content", "Load test message");
             String sourceLangStr = params.getOrDefault("sourceLang", "auto");
-            String targetLangStr = params.getOrDefault("targetLang", "en");
             String directionStr = params.getOrDefault("direction", "OTHERS");
 
             try {
                 // Resolve channel
-                var channel = channels.resolve(channelName);
-                
+                channels.resolve(channelName);
+
                 // Create sender actor
                 Actor sender = new Actor(
                     UUID.randomUUID(),
@@ -319,18 +279,18 @@ public final class DebugEndpoint {
                     .channel(channelName)
                     .build();
 
-                // Dispatch through full pipeline
-                var report = dispatcher.dispatch(message);
+                // Dispatch through the real pipeline
+                DispatchOutcome outcome = dispatch.dispatchAndReport(message);
 
                 // Capture result
-                Map<String, Object> result = Map.of(
-                    "considered", report.considered(),
-                    "delivered", report.delivered(),
-                    "silenced", report.silenced(),
-                    "redirected", report.redirected(),
-                    "channelRedirected", getChannelRedirected(report),
-                    "message", content
-                );
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("status", outcome.status().name());
+                result.put("considered", outcome.considered());
+                result.put("delivered", outcome.delivered());
+                result.put("silenced", outcome.silenced());
+                result.put("redirected", outcome.redirected());
+                result.put("failed", outcome.failed());
+                result.put("message", content);
                 lastSimulationResult.putAll(result);
 
                 String response = toJson(result);
@@ -350,12 +310,12 @@ public final class DebugEndpoint {
     private Map<String, String> parseJsonBody(String body) {
         Map<String, String> result = new java.util.HashMap<>();
         if (body == null || body.isBlank()) return result;
-        
+
         // Simple JSON parsing without Jackson
         String cleaned = body.trim();
         if (!cleaned.startsWith("{") || !cleaned.endsWith("}")) return result;
         cleaned = cleaned.substring(1, cleaned.length() - 1);
-        
+
         for (String pair : cleaned.split(",")) {
             int colonIdx = pair.indexOf(':');
             if (colonIdx > 0) {
@@ -365,33 +325,6 @@ public final class DebugEndpoint {
             }
         }
         return result;
-    }
-
-    private Map<String, String> parseParams(HttpExchange exchange) throws IOException {
-        Map<String, String> params = new java.util.HashMap<>();
-
-        // Parse query string
-        String query = exchange.getRequestURI().getQuery();
-        if (query != null) {
-            for (String pair : query.split("&")) {
-                String[] kv = pair.split("=", 2);
-                if (kv.length == 2) {
-                    params.put(kv[0], java.net.URLDecoder.decode(kv[1], StandardCharsets.UTF_8));
-                }
-            }
-        }
-
-        return params;
-    }
-
-    private int getChannelRedirected(me.majhrs16.suite.host.DispatchReport report) {
-        try {
-            var field = me.majhrs16.suite.host.DispatchReport.class.getDeclaredField("channelRedirected");
-            field.setAccessible(true);
-            return (int) field.get(report);
-        } catch (Exception e) {
-            return 0;
-        }
     }
 
     private void sendResponse(HttpExchange exchange, int code, String body, String contentType) throws IOException {

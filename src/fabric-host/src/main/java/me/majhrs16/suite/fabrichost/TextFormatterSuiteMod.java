@@ -74,12 +74,25 @@ public final class TextFormatterSuiteMod implements ModInitializer {
         FabricPlatformPorts createdPorts = new FabricPlatformPorts(
                 startedServer,
                 directory,
-                message -> {
-                    SuiteRuntime current = runtimeRef.get();
-                    if (current == null) {
-                        throw new IllegalStateException("SuiteRuntime is not available yet");
+                new me.majhrs16.suite.api.spi.MessageDispatch() {
+                    @Override
+                    public void dispatch(me.majhrs16.suite.api.message.Message message) {
+                        SuiteRuntime current = runtimeRef.get();
+                        if (current == null) {
+                            throw new IllegalStateException("SuiteRuntime is not available yet");
+                        }
+                        current.messageDispatch().dispatch(message);
                     }
-                    current.messageDispatch().dispatch(message);
+
+                    @Override
+                    public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(
+                            me.majhrs16.suite.api.message.Message message) {
+                        SuiteRuntime current = runtimeRef.get();
+                        if (current == null) {
+                            throw new IllegalStateException("SuiteRuntime is not available yet");
+                        }
+                        return current.messageDispatch().dispatchAndReport(message);
+                    }
                 },
                 startedServer.getVersion());
 

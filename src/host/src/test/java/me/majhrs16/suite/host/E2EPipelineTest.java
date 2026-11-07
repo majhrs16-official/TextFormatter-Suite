@@ -1,19 +1,18 @@
 package me.majhrs16.suite.host;
 
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.SoundSpec;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.render.ChatDelivery;
-import me.majhrs16.suite.api.iflow.PermissionChecker;
-import me.majhrs16.suite.api.iflow.RouteDecision;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import net.kyori.adventure.text.Component;
@@ -25,15 +24,14 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.HashSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -154,7 +152,9 @@ class E2EPipelineTest {
         Files.writeString(dir.resolve("config/textformatter/channels/" + name + ".yml"), content);
     }
 
-    private MessageDispatcher createDispatcher(RecordingDelivery delivery, List<Actor> online, PermissionChecker permissions) throws Exception {
+    private HostFixture.Pipeline createPipeline(RecordingDelivery delivery,
+                                                 List<Actor> online,
+                                                 PermissionChecker permissions) throws Exception {
         writeConfig();
         // chat channel requires 'vip' receive permission (only ALEX has it via vipOnly checker)
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
@@ -170,8 +170,8 @@ class E2EPipelineTest {
             """);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
-        SuiteHost host = HostFixture.bootstrap(dir, permissions, null, quietLogger());
-        return new MessageDispatcher(host, new TestDirectory(online, CONSOLE), delivery, permissions, quietLogger());
+        return HostFixture.bootstrap(dir, permissions, null, quietLogger(),
+            delivery, new TestDirectory(online, CONSOLE));
     }
 
     private Message chatMessage(Actor sender, Direction direction, String text) {
@@ -199,15 +199,16 @@ class E2EPipelineTest {
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
 
         // Send a chat message from Steve to others (Alex)
         Message message = chatMessage(STEVE, Direction.others(), "hola");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
         // Verify the full pipeline executed
-        assertEquals(1, report.considered()); // Only Alex (Steve excluded by Direction.others())
-        assertEquals(1, report.delivered()); // Only Alex
+        assertEquals(1, outcome.considered()); // Only Alex (Steve excluded by Direction.others())
+        assertEquals(1, outcome.delivered()); // Only Alex
         assertEquals(1, delivery.playerTargets.size());
         assertEquals(ALEX, delivery.playerTargets.get(0));
 
@@ -222,14 +223,15 @@ class E2EPipelineTest {
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
 
         // Send a chat message with translation enabled
         Message message = chatMessage(STEVE, Direction.all(), "hello world");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
-        assertEquals(2, report.considered());
-        assertEquals(2, report.delivered());
+        assertEquals(2, outcome.considered());
+        assertEquals(2, outcome.delivered());
         assertEquals(2, delivery.playerTargets.size());
 
         // Verify both recipients got the message (formatted)
@@ -239,30 +241,29 @@ class E2EPipelineTest {
         }
     }
 
-@Test
+    @Test
     void fullPipelineWithIflowRule() throws Exception {
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");
 
         // Create host with a REDIRECT rule
         writeConfig();
-        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
+        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>",
+            "entity.experience_orb.pickup");
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
+        HostFixture.Pipeline pipeline = HostFixture.bootstrap(dir,
+            PermissionChecker.ALLOW_ALL, null, quietLogger(), delivery,
+            new TestDirectory(List.of(STEVE, ALEX), CONSOLE));
         // Route staff messages to the console via a VM policy program
-        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
-
-        MessageDispatcher dispatcher = new MessageDispatcher(
-            host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        PolicyPrograms.setDecision(pipeline.router(), HostServiceRegistry.DECISION_REDIRECT);
 
         // Steve sends a message - should be redirected to console
         Message message = chatMessage(STEVE, Direction.others(), "test");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
         // Steve's message should be redirected to console
-        assertEquals(1, report.redirected());
+        assertEquals(1, outcome.redirected());
         assertEquals(1, delivery.toConsole.size());
     }
 
@@ -274,13 +275,13 @@ class E2EPipelineTest {
         // Only Alex has the permission
         PermissionChecker vipOnly = (actor, permission) -> actor.equals(ALEX);
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, List.of(STEVE, ALEX), vipOnly);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, List.of(STEVE, ALEX), vipOnly);
 
         Message message = chatMessage(STEVE, Direction.others(), "vip message");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
         // Only Alex should receive it (has permission)
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
         assertEquals(ALEX, delivery.playerTargets.get(0));
     }
 
@@ -291,17 +292,16 @@ class E2EPipelineTest {
         writeConfig();
         writeChannel("join", "<green>✦ %player_name% joined</green>", null);
 
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
-        MessageDispatcher dispatcher = new MessageDispatcher(
-            host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        HostFixture.Pipeline pipeline = HostFixture.bootstrap(dir,
+            PermissionChecker.ALLOW_ALL, null, quietLogger(), delivery,
+            new TestDirectory(List.of(STEVE, ALEX), CONSOLE));
 
         // Send a JOIN event
         Message message = joinEvent(STEVE);
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
         // JOIN events go to others (Alex)
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
         assertEquals(ALEX, delivery.playerTargets.get(0));
 
         String rendered = delivery.toPlayers.get(0);
@@ -328,40 +328,40 @@ class E2EPipelineTest {
             config-version: 1.0
             """);
 
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
-        MessageDispatcher dispatcher = new MessageDispatcher(
-            host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        HostFixture.Pipeline pipeline = HostFixture.bootstrap(dir,
+            PermissionChecker.ALLOW_ALL, null, quietLogger(), delivery,
+            new TestDirectory(List.of(STEVE, ALEX), CONSOLE));
 
         // First message should go through (rate limit checked at emission level, 1 token consumed)
         Message message1 = chatMessage(STEVE, Direction.others(), "first");
-        DispatchReport report1 = dispatcher.dispatch(message1);
-        assertEquals(1, report1.delivered());
+        PipelineOutcome outcome1 = pipeline.dispatch(message1);
+        assertEquals(1, outcome1.delivered());
 
         // Second message from same sender within same second should be rate limited at emission level
         // (entire message rejected, no recipients considered)
         Message message2 = chatMessage(STEVE, Direction.others(), "second");
-        DispatchReport report2 = dispatcher.dispatch(message2);
-        assertEquals(0, report2.considered());
-        assertEquals(0, report2.delivered());
-        assertEquals(0, report2.silenced());
-        assertNotNull(report2.skipReason());
-        assertTrue(report2.skipReason().contains("rate limit"));
+        PipelineOutcome outcome2 = pipeline.dispatch(message2);
+        assertEquals(0, outcome2.considered());
+        assertEquals(0, outcome2.delivered());
+        assertEquals(1, outcome2.silenced());
+        assertNotNull(outcome2.skipReason());
+        assertTrue(outcome2.skipReason().contains("rate limit"));
     }
 
     @Test
     void fullPipelineWithCancelledMessage() throws Exception {
         RecordingDelivery delivery = new RecordingDelivery();
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
 
         // Send a cancelled message
         Message message = chatMessage(STEVE, Direction.others(), "cancelled")
             .toBuilder().cancelled(true).build();
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
-        assertEquals(0, report.considered());
-        assertEquals("cancelled", report.skipReason());
+        assertEquals(0, outcome.considered());
+        assertEquals("cancelled", outcome.skipReason());
         assertTrue(delivery.toPlayers.isEmpty());
     }
 
@@ -379,14 +379,15 @@ class E2EPipelineTest {
                 Actor.ActorKind.PLAYER, Language.EN, null));
         }
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, recipients, PermissionChecker.ALLOW_ALL);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, recipients,
+            PermissionChecker.ALLOW_ALL);
 
         Message message = chatMessage(STEVE, Direction.all(), "broadcast");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
         // All 12 recipients should receive (including Steve as initiator)
-        assertEquals(12, report.considered());
-        assertEquals(12, report.delivered());
+        assertEquals(12, outcome.considered());
+        assertEquals(12, outcome.delivered());
         assertEquals(12, delivery.playerTargets.size());
     }
 
@@ -395,15 +396,17 @@ class E2EPipelineTest {
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
 
         Message message = chatMessage(STEVE, Direction.all(), "with sound");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
-        assertEquals(2, report.delivered());
+        assertEquals(2, outcome.delivered());
         // Sound should play for both recipients
         assertEquals(2, delivery.played.size());
-        assertTrue(delivery.played.stream().anyMatch(s -> s.contains("entity.experience_orb.pickup")));
+        assertTrue(delivery.played.stream()
+            .anyMatch(s -> s.contains("entity.experience_orb.pickup")));
     }
 
     @Test
@@ -424,17 +427,17 @@ class E2EPipelineTest {
               - sync
             config-version: 1.0
             """);
-        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
+        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>",
+            "entity.experience_orb.pickup");
 
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
-        MessageDispatcher dispatcher = new MessageDispatcher(
-            host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        HostFixture.Pipeline pipeline = HostFixture.bootstrap(dir,
+            PermissionChecker.ALLOW_ALL, null, quietLogger(), delivery,
+            new TestDirectory(List.of(STEVE, ALEX), CONSOLE));
 
         Message message = chatMessage(STEVE, Direction.all(), "no sound");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
-        assertEquals(2, report.delivered());
+        assertEquals(2, outcome.delivered());
         // Sounds should be skipped even if channel has them
         assertTrue(delivery.played.isEmpty(), "sonido.enabled=false should gate all sounds");
     }
@@ -443,7 +446,8 @@ class E2EPipelineTest {
     void fullPipelineAutoLanguageDetection() throws Exception {
         RecordingDelivery delivery = new RecordingDelivery();
 
-        MessageDispatcher dispatcher = createDispatcher(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL);
+        HostFixture.Pipeline pipeline = createPipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
 
         // Message with no explicit source language - should auto-detect
         Message message = Message.builder()
@@ -455,33 +459,39 @@ class E2EPipelineTest {
             .langSource(Language.AUTO)
             .build();
 
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
         // Should have resolved source language to EN (fake translator detects EN)
-        assertNotNull(report);
+        assertNotNull(outcome);
     }
 
     @Test
-    void fullPipelineWithRedirectRule() throws Exception {
+    void fullPipelineRejectsAnUnconditionalChannelRedirect() throws Exception {
         RecordingDelivery delivery = new RecordingDelivery();
 
         writeConfig();
         writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", null);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", null);
 
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
-        // Redirect chat to the "staff" channel via a VM policy program
-        PolicyPrograms.setChannelRedirect(host, "staff");
-
-        MessageDispatcher dispatcher = new MessageDispatcher(
-            host, new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        HostFixture.Pipeline pipeline = HostFixture.bootstrap(dir,
+            PermissionChecker.ALLOW_ALL, null, quietLogger(), delivery,
+            new TestDirectory(List.of(STEVE, ALEX), CONSOLE));
+        // An unconditional redirect asks for a second channel mutation on the
+        // secondary pass; ADR-031/ADR-036 reject that as DECISION_CONFLICT.
+        PolicyPrograms.setChannelRedirect(pipeline.router(), "staff");
 
         Message message = chatMessage(STEVE, Direction.others(), "redirect me");
-        DispatchReport report = dispatcher.dispatch(message);
+        PipelineOutcome outcome = pipeline.dispatch(message);
 
-        // Should redirect to staff channel
-        assertTrue(report.channelRedirected() > 0, "Expected channelRedirected > 0 but was " + report.channelRedirected());
+        assertEquals(0, outcome.delivered());
+        assertEquals(1, outcome.silenced());
+        assertTrue(delivery.toPlayers.isEmpty(),
+            "a rejected channel redirect must not be delivered: " + delivery.toPlayers);
+        assertTrue(outcome.trace().entries().stream()
+                .anyMatch(entry -> "route".equals(entry.stageId())
+                    && entry.status() == me.majhrs16.suite.api.pipeline.StageStatus.REJECT
+                    && "DECISION_CONFLICT".equals(entry.detail())),
+            "expected a DECISION_CONFLICT route trace, got: " + outcome.trace().entries());
     }
 }

@@ -24,7 +24,7 @@ A named message route with formatting, permissions, rate limit and language
 settings. Channels live in `config/textformatter/channels/<id>.yml`.
 
 **ChannelRegistry**
-Registry of loaded channels. Accessible through `SuiteHost.channels()`.
+Registry of loaded channels. Accessible through `PipelineContext.channels()` and `ExtensionContext.channels()` when `textformatter` is active.
 
 **Claim mode**
 How the platform adapter claims vanilla chat: `cancel-event`,
@@ -49,11 +49,11 @@ Message audience: `INITIATOR`, `OTHERS`, `ALL`, `CONSOLE`, `WORLD`, `RADIUS`,
 `PERMISSION`, `SPECIFIC`.
 
 **Dispatcher**
-See `MessageDispatcher`.
+See `PipelineEngine`.
 
-**DispatchReport**
-Result of a dispatch: considered, delivered, silenced, redirected and
-channel-redirected counts.
+**DispatchOutcome**
+Result of a dispatch: pipeline status plus considered, delivered, silenced,
+redirected and failed counts.
 
 ## E
 
@@ -78,8 +78,8 @@ A pair of template arrays: messages and tooltips.
 ## H
 
 **Host**
-The platform-neutral composition root. `SuiteHost` assembles channels,
-dispatch, translation and the iFlow hub.
+The platform-neutral composition root. `SuiteRuntime` assembles the pipeline
+engine, channels, dispatch, translation and the iFlow hub.
 
 **HostConfig**
 Immutable view of `config/suite/config.yml`.
@@ -132,8 +132,9 @@ Self-hosted or public translation provider (`ltranslate`).
 **Message**
 Immutable message object flowing through the pipeline.
 
-**MessageDispatcher**
-Routes and delivers messages through the pipeline.
+**PipelineEngine**
+Runs the ordered stages, resolves recipients, delivers messages and records the
+trace.
 
 **Module**
 A JAR implementing the module SPI and discovered through
@@ -194,8 +195,8 @@ Java SPI mechanism used for module and provider discovery.
 **SPI**
 Service Provider Interface; the extension points in `core-api`.
 
-**SuiteHost**
-Composition root for channels, dispatch, translation and routing.
+**PipelineOutcome**
+Status, counters and trace produced by one `PipelineEngine.dispatch(...)`.
 
 **SuiteRuntime**
 Runtime that owns the module host, package runtime, commands and the message

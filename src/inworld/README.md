@@ -64,7 +64,7 @@ SpigotInWorldListener extracts actor, world, coordinates and content
          ↓
 InWorldHandler builds Message + resolves channel
          ↓
-MessageDispatcher → textformatter/iflow-vm → sinks
+PipelineEngine → textformatter/iflow-vm → sinks
          ↓
 SpigotInWorldListener formats the sign line through InWorldPlatform.format(...)
 ```

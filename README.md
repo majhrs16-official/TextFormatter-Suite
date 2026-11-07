@@ -157,7 +157,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | `core-render` | Puertos neutrales de renderizado y entrega con Adventure (`MessageComponentRenderer`, `ChatDelivery`); mantiene `core-api` sin dependencias | ✅ Compila (sin tests propios) |
 | `kernel` | Module loading, dependency graph (Tarjan), SPI resolution, `Environment` | ✅ Probado (17 tests) |
 | `logger` | Logger centralizado (niveles, flags DEBUG, integración con `PluginLogger`) | ✅ Probado (20 tests) |
-| `host` | Composition root: `SuiteBootstrap`, `SuiteHost`, `MessageDispatcher`, `ConfigLoader` (enum `ConfigPath`), `ConfigValidator` | ✅ Probado |
+| `host` | Composition root: `PipelineEngine`, `RecipientResolver`, `DeliveryExecutor`, `ConfigLoader` (enum `ConfigPath`), `ConfigValidator` | ✅ Probado |
 | `suite-runtime` | Runtime neutral: resuelve el grafo, carga/activa/desactiva módulos, compone el pipeline, registra comandos y configuración | ✅ Probado (103 tests) |
 | `messages` | i18n centralizado EN/ES, `MessagesCatalog` singleton | ✅ Probado (5 tests) |
 

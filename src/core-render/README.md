@@ -35,7 +35,7 @@ local del build.
 
 | Consumer | Usage |
 |----------|-------|
-| `host` | `SuiteHost` y `MessageDispatcher` reciben ambos puertos |
+| `host` | La etapa `format` y `DeliveryExecutor` reciben ambos puertos |
 | `textformatter` | Implementa `MessageComponentRenderer` |
 | `spigot-host` / `fabric-host` | Implementan `ChatDelivery` |
 | `suite-runtime` | Cablea las implementaciones activas |

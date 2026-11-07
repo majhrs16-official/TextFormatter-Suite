@@ -82,6 +82,32 @@ class RouteStageTest {
     }
 
     @Test
+    void dropDecisionTerminatesTheUnitAndIsTracedAsDrop() {
+        FakeRouter router = new FakeRouter();
+        router.first = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.DROP, "blocked", 0, STEVE, null), message());
+
+        StageResult result = new RouteStage(router).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE), context());
+
+        assertEquals(StageResult.Kind.DROP, result.kind());
+        assertEquals("DROP (blocked)", result.detail());
+    }
+
+    @Test
+    void rejectDecisionTerminatesTheUnitAndIsTracedAsReject() {
+        FakeRouter router = new FakeRouter();
+        router.first = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.REJECT, "denied", 0, STEVE, null), message());
+
+        StageResult result = new RouteStage(router).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE), context());
+
+        assertEquals(StageResult.Kind.REJECT, result.kind());
+        assertEquals("REJECT (denied)", result.detail());
+    }
+
+    @Test
     void secondChannelMutationIsADecisionConflict() {
         FakeRouter router = new FakeRouter();
         router.first = RouteOutcome.of(

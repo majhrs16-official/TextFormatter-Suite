@@ -38,7 +38,7 @@ class SpigotPlatformPortsTest {
         Actor alice = actor("Alice", true);
         FakeDirectory directory = new FakeDirectory(alice);
         AtomicReference<Message> delivered = new AtomicReference<>();
-        SpigotPlatformPorts ports = ports(directory, delivered::set, new FakeCommandMap());
+        SpigotPlatformPorts ports = ports(directory, dispatch(delivered::set), new FakeCommandMap());
 
         assertEquals("spigot", ports.info().name());
         assertEquals("test", ports.info().version());
@@ -54,7 +54,7 @@ class SpigotPlatformPortsTest {
     void checksRealBukkitPermissionsAndConsoleBypass() {
         Actor alice = actor("Alice", true);
         FakeDirectory directory = new FakeDirectory(alice);
-        SpigotPlatformPorts ports = ports(directory, message -> { }, new FakeCommandMap());
+        SpigotPlatformPorts ports = ports(directory, dispatch(message -> { }), new FakeCommandMap());
 
         assertTrue(ports.hasPermission(Actor.console("CONSOLE", null), "suite.admin"));
         assertTrue(ports.hasPermission(alice, "suite.allowed"));
@@ -67,7 +67,7 @@ class SpigotPlatformPortsTest {
     void registersExecutesCompletesAndUnregistersRootCommand() {
         FakeCommandMap commandMap = new FakeCommandMap();
         SpigotPlatformPorts ports = ports(new FakeDirectory(actor("Alice", true)),
-                message -> { }, commandMap);
+                dispatch(message -> { }), commandMap);
         List<String> executed = new ArrayList<>();
         PlatformPorts.Command command = new PlatformPorts.Command() {
             @Override
@@ -115,6 +115,22 @@ class SpigotPlatformPortsTest {
                                              CommandMap commandMap) {
         return new SpigotPlatformPorts(proxy(Plugin.class), proxy(BukkitAudiences.class),
                 directory, dispatch, commandMap, "test", "suite");
+    }
+
+    private static me.majhrs16.suite.api.spi.MessageDispatch dispatch(
+            java.util.function.Consumer<Message> consumer) {
+        return new me.majhrs16.suite.api.spi.MessageDispatch() {
+            @Override
+            public void dispatch(Message message) {
+                consumer.accept(message);
+            }
+
+            @Override
+            public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(Message message) {
+                consumer.accept(message);
+                return me.majhrs16.suite.api.spi.DispatchOutcome.none();
+            }
+        };
     }
 
     private static Actor actor(String name, boolean allowed) {

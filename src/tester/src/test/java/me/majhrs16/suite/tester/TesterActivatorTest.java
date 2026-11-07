@@ -97,6 +97,12 @@ class TesterActivatorTest {
         }
         @Override public void format(me.majhrs16.suite.api.message.Message message) { }
         @Override public String detectLanguage(String text) { return "en"; }
+        @Override public me.majhrs16.suite.api.pipeline.PipelineTrace lastTrace(String messageId) {
+            return null;
+        }
+        @Override public java.util.List<me.majhrs16.suite.api.pipeline.PipelineTrace> recentTraces() {
+            return java.util.List.of();
+        }
     }
 
     private static final class FakeActors implements me.majhrs16.suite.api.spi.ActorDirectory {

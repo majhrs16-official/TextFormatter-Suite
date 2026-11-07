@@ -16,7 +16,7 @@ import java.util.Objects;
  * {@link PolicyAction#ERROR}; el host no recibe excepciones de un artefacto no
  * confiable.</p>
  *
- * <p>La integración con {@code Router}/{@code MessageDispatcher} pertenece a
+ * <p>La integración con {@code Router} y la etapa {@code route} pertenece a
  * W3; este engine ya permite probar el contrato v3 de forma aislada.</p>
  */
 public final class WasmPolicyEngine {

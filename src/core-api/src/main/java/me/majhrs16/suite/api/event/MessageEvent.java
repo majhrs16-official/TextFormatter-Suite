@@ -9,7 +9,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * Event fired by the MessageDispatcher before rules and rendering.
+ * Event fired by the pipeline engine before rules and rendering.
  * <p>
  * Third-party plugins can register listeners to intercept, modify, or cancel
  * messages before they are processed by iFlow and the formatter.

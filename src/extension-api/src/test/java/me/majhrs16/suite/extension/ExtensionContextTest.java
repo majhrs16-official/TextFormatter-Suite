@@ -46,7 +46,7 @@ class ExtensionContextTest {
     @Test
     void dispatchesMessagesThroughTheNeutralPort() {
         List<Message> dispatched = new ArrayList<>();
-        ExtensionContext context = context(message -> dispatched.add(message));
+        ExtensionContext context = context(dispatch(dispatched::add));
         Message message = chat("hello");
 
         context.dispatchMessage(message);
@@ -58,7 +58,7 @@ class ExtensionContextTest {
     void checksPermissionsThroughTheNeutralPort() {
         PermissionChecker permissions = (actor, permission) ->
             "staff.chat".equals(permission) && "Alice".equals(actor.name());
-        ExtensionContext context = context(message -> { }, permissions);
+        ExtensionContext context = context(dispatch(message -> { }), permissions);
 
         Actor alice = actor("Alice");
         Actor bob = actor("Bob");
@@ -71,7 +71,7 @@ class ExtensionContextTest {
     void findsPlayersByUuidAndName() {
         Actor alice = actor("Alice");
         ActorDirectory actors = new FakeActors(alice);
-        ExtensionContext context = context(message -> { }, PermissionChecker.ALLOW_ALL, actors);
+        ExtensionContext context = context(dispatch(message -> { }), PermissionChecker.ALLOW_ALL, actors);
 
         assertEquals(Optional.of(alice), context.findPlayer(alice.uuid().toString()));
         assertEquals(Optional.of(alice), context.findPlayer("Alice"));
@@ -80,7 +80,7 @@ class ExtensionContextTest {
 
     @Test
     void createsAnIsolatedDataDirectory() throws Exception {
-        ExtensionContext context = context(message -> { });
+        ExtensionContext context = context(dispatch(message -> { }));
 
         Path directory = context.dataDirectory();
 
@@ -91,6 +91,21 @@ class ExtensionContextTest {
 
     private ExtensionContext context(MessageDispatch dispatch) {
         return context(dispatch, PermissionChecker.ALLOW_ALL);
+    }
+
+    private static MessageDispatch dispatch(java.util.function.Consumer<Message> consumer) {
+        return new MessageDispatch() {
+            @Override
+            public void dispatch(Message message) {
+                consumer.accept(message);
+            }
+
+            @Override
+            public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(Message message) {
+                consumer.accept(message);
+                return me.majhrs16.suite.api.spi.DispatchOutcome.none();
+            }
+        };
     }
 
     private ExtensionContext context(MessageDispatch dispatch, PermissionChecker permissions) {

@@ -7,8 +7,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.RoutingResult;
+import me.majhrs16.suite.host.PipelineOutcome;
 import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.textformatter.ChannelConfig;
 import me.majhrs16.suite.api.channel.Channel;
@@ -30,7 +29,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Disabled;;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.ArgumentsSource;
@@ -58,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class EndToEndIntegrationTest {
 
-    private static SuiteHost host;
+    private static HostFixture.Pipeline host;
     private static ChannelRegistry channels;
     private static PluginLogger logger;
     private static Path tempDir;
@@ -101,6 +100,9 @@ class EndToEndIntegrationTest {
 
     @AfterAll
     static void teardown() {
+        if (host != null) {
+            host.close();
+        }
         host = null;
     }
 
@@ -233,12 +235,12 @@ class EndToEndIntegrationTest {
         
         Message msg = Message.builder()
             .sender(sender)
-            .direction(Direction.others())
+            .direction(Direction.specific(me.majhrs16.suite.api.message.Channel.CHAT, recipient))
             .text(message)
             .channel("chat.global")
             .build();
         
-        RoutingResult result = host.deliver(msg, recipient);
+        PipelineOutcome result = host.dispatch(msg);
         assertNotNull(result);
     }
 
@@ -250,12 +252,12 @@ class EndToEndIntegrationTest {
         
         Message msg = Message.builder()
             .sender(sender)
-            .direction(Direction.others())
+            .direction(Direction.specific(me.majhrs16.suite.api.message.Channel.CHAT, recipient))
             .text("test")
             .channel(channel)
             .build();
         
-        RoutingResult result = host.deliver(msg, recipient);
+        PipelineOutcome result = host.dispatch(msg);
         assertNotNull(result);
     }
 
@@ -267,14 +269,14 @@ class EndToEndIntegrationTest {
         
         Message msg = Message.builder()
             .sender(sender)
-            .direction(Direction.others())
+            .direction(Direction.specific(me.majhrs16.suite.api.message.Channel.CHAT, recipient))
             .text("Hello world")
             .channel("chat.global")
             .langSource(Language.fromCode(fromLang).orElse(Language.EN))
             .langTarget(Language.fromCode(toLang).orElse(Language.ES))
             .build();
         
-        RoutingResult result = host.deliver(msg, recipient);
+        PipelineOutcome result = host.dispatch(msg);
         assertNotNull(result);
     }
 
@@ -303,7 +305,7 @@ class EndToEndIntegrationTest {
             @Override public boolean available() { return false; }
         };
         
-        SuiteHost testHost = HostFixture.bootstrap(
+        HostFixture.Pipeline testHost = HostFixture.bootstrap(
             tempDir,
             (actor, perm) -> true,
             noopResolver,
@@ -329,12 +331,13 @@ class EndToEndIntegrationTest {
                                 
                                 Message msg = Message.builder()
                                     .sender(sender)
-                                    .direction(Direction.others())
+                                    .direction(Direction.specific(
+                                        me.majhrs16.suite.api.message.Channel.CHAT, recipient))
                                     .text("Concurrent message " + threadIdx + "-" + j)
                                     .channel("chat.global")
                                     .build();
                                 
-                                testHost.deliver(msg, recipient);
+                                testHost.dispatch(msg);
                             }
                         } catch (Exception e) {
                             errorCount.incrementAndGet();
@@ -351,7 +354,7 @@ class EndToEndIntegrationTest {
             assertEquals(0, errorCount.get());
             assertEquals(threadCount * messagesPerThread, delivery.getDeliverCount());
         } finally {
-            // SuiteHost doesn't have close(), just dereference
+            testHost.close();
         }
     }
 
@@ -375,7 +378,7 @@ class EndToEndIntegrationTest {
             @Override public boolean available() { return false; }
         };
         
-        SuiteHost testHost = HostFixture.bootstrap(
+        HostFixture.Pipeline testHost = HostFixture.bootstrap(
             tempDir,
             (actor, perm) -> true,
             noopResolver,
@@ -392,11 +395,12 @@ class EndToEndIntegrationTest {
             for (int i = 0; i < messageCount; i++) {
                 Message msg = Message.builder()
                     .sender(sender)
-                    .direction(Direction.others())
+                    .direction(Direction.specific(
+                        me.majhrs16.suite.api.message.Channel.CHAT, recipient))
                     .text("Throughput test " + i)
                     .channel("chat.global")
                     .build();
-                testHost.deliver(msg, recipient);
+                testHost.dispatch(msg);
             }
             
             long endTime = System.nanoTime();
@@ -406,7 +410,7 @@ class EndToEndIntegrationTest {
             
             assertTrue(throughput > 10000);
         } finally {
-            // SuiteHost doesn't have close(), just dereference
+            testHost.close();
         }
     }
 

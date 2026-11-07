@@ -239,6 +239,12 @@ class CoreTranslatorPlaceholdersTest {
         public void dispatch(Message message) {
             messages.add(message);
         }
+
+        @Override
+        public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(Message message) {
+            messages.add(message);
+            return me.majhrs16.suite.api.spi.DispatchOutcome.none();
+        }
     }
 
     private static final class FakeSyncBus implements SyncBus {

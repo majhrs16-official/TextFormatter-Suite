@@ -27,7 +27,7 @@
 - No es un `SyncSink`: no hace fan-out; eso pertenece a `sync-bus`.
 - No cancela el chat vanilla: Fabric API no expone un evento cancelable en el
   baseline usado por este paquete.
-- No crea `SuiteHost` ni conoce el pipeline.
+- No crea el pipeline ni conoce sus etapas.
 - No bloquea `start()` esperando red.
 
 ## 3. Dependencies

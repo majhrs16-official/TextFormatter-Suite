@@ -48,7 +48,7 @@ ExtensionManager.loadExtension(jar)
          ↓
 ExampleExtension.onEnable(context)
          ↓
-Access SuiteHost via context
+Access the neutral extension context
          ↓
 Register listeners, commands, etc.
 ```
@@ -76,5 +76,5 @@ Register listeners, commands, etc.
 ## 9. Related Modules
 
 - [extension-api](../extension-api/README.md) — API being implemented
-- [host](../host/README.md) — `SuiteHost` via context
+- [host](../host/README.md) — neutral pipeline via context
 - [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Extension hosts

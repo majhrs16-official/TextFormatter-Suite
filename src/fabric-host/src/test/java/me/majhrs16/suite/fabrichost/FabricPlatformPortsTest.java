@@ -35,7 +35,7 @@ class FabricPlatformPortsTest {
         FakeDirectory directory = new FakeDirectory(alice);
         AtomicReference<Message> delivered = new AtomicReference<>();
         FabricPlatformPorts ports = new FabricPlatformPorts(
-                mock(MinecraftServer.class), directory, delivered::set, "test");
+                mock(MinecraftServer.class), directory, dispatch(delivered::set), "test");
 
         assertEquals("fabric", ports.info().name());
         assertEquals("test", ports.info().version());
@@ -53,7 +53,7 @@ class FabricPlatformPortsTest {
         Actor unknownPlayer = new Actor(UUID.randomUUID(), "Alice",
                 Actor.ActorKind.PLAYER, Language.AUTO, null);
         FabricPlatformPorts ports = new FabricPlatformPorts(
-                mock(MinecraftServer.class), new FakeDirectory(console), message -> { }, "test");
+                mock(MinecraftServer.class), new FakeDirectory(console), dispatch(message -> { }), "test");
 
         assertTrue(ports.hasPermission(console, "suite.admin"));
         assertTrue(ports.hasPermission(null, null));
@@ -66,7 +66,7 @@ class FabricPlatformPortsTest {
         CommandDispatcher<ServerCommandSource> dispatcher = new CommandDispatcher<>();
         FabricPlatformPorts ports = new FabricPlatformPorts(
                 mock(MinecraftServer.class), new FakeDirectory(actor("Alice")),
-                message -> { }, "test");
+                dispatch(message -> { }), "test");
         List<String> executed = new ArrayList<>();
         PlatformPorts.Command command = new PlatformPorts.Command() {
             @Override
@@ -115,6 +115,22 @@ class FabricPlatformPortsTest {
 
     private static Actor actor(String name) {
         return Actor.console(name, null);
+    }
+
+    private static me.majhrs16.suite.api.spi.MessageDispatch dispatch(
+            java.util.function.Consumer<Message> consumer) {
+        return new me.majhrs16.suite.api.spi.MessageDispatch() {
+            @Override
+            public void dispatch(Message message) {
+                consumer.accept(message);
+            }
+
+            @Override
+            public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(Message message) {
+                consumer.accept(message);
+                return me.majhrs16.suite.api.spi.DispatchOutcome.none();
+            }
+        };
     }
 
     private static final class FakeDirectory implements ActorDirectory {

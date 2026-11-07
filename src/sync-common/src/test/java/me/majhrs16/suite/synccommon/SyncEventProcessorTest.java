@@ -93,7 +93,18 @@ class SyncEventProcessorTest {
     private static SyncEventProcessor processor(List<Message> messages,
                                                 ChannelRegistry registry,
                                                 UserLanguageStore languages) {
-        MessageDispatch dispatch = messages::add;
+        MessageDispatch dispatch = new MessageDispatch() {
+            @Override
+            public void dispatch(Message message) {
+                messages.add(message);
+            }
+
+            @Override
+            public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(Message message) {
+                messages.add(message);
+                return me.majhrs16.suite.api.spi.DispatchOutcome.none();
+            }
+        };
         return new SyncEventProcessor(dispatch, registry, languages,
                 (actor, permission) -> true, noopLogger());
     }

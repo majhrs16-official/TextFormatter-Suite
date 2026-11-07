@@ -79,9 +79,6 @@ class CrossLanguageGoldenTest {
                     @Override public boolean isAvailable() { return true; }
                 }));
 
-        me.majhrs16.suite.host.SuiteHost host = HostFixture.bootstrap(dir,
-            me.majhrs16.suite.api.iflow.PermissionChecker.ALLOW_ALL, null, quietLogger());
-
         String[] formats = {
             "<gray>%player_name%: %content%</gray>",
             "<green>✓</green> <gold>%player_name%</gold> <dark_gray>»</dark_gray> %content%",

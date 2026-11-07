@@ -51,7 +51,13 @@ class SyncBukkitActivatorTest {
 
         FakeRegistry registry = new FakeRegistry();
         registry.register(PlatformHandle.class, (PlatformHandle) () -> plugin);
-        registry.register(MessageDispatch.class, (MessageDispatch) message -> { });
+        registry.register(MessageDispatch.class, new MessageDispatch() {
+            @Override public void dispatch(me.majhrs16.suite.api.message.Message message) { }
+            @Override public me.majhrs16.suite.api.spi.DispatchOutcome dispatchAndReport(
+                    me.majhrs16.suite.api.message.Message message) {
+                return me.majhrs16.suite.api.spi.DispatchOutcome.none();
+            }
+        });
         registry.register(ChannelRegistry.class, ChannelRegistry.builder()
                 .register(Channel.builder("chat").build()).build());
         registry.register(UserLanguageStore.class, new UserLanguageStore() {

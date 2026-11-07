@@ -20,6 +20,7 @@ dependencies {
     implementation project(':src:core-api')
     implementation project(':src:core-render')
     implementation project(':src:textformatter')
+    implementation project(':src:iflow')
     implementation project(':src:iflow-vm')
     implementation project(':src:iflow-firewall')
     implementation project(':src:chattranslator')

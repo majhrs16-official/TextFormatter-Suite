@@ -33,6 +33,7 @@ dependencies {
     // The removed host bootstrap lives only in the test fixture now.
     testImplementation project(':src:textformatter')
     testImplementation project(':src:chattranslator')
+    testImplementation project(':src:iflow')
     testImplementation project(':src:iflow-vm')
     testImplementation project(':src:iflow-firewall')
     testImplementation project(':src:transport')

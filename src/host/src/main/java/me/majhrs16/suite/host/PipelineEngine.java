@@ -33,11 +33,10 @@ import java.util.concurrent.TimeoutException;
  * Executes the ordered pipeline: phases, per-recipient stages, delivery and
  * trace.
  *
- * <p>It replaces the orchestration that used to live in
- * {@code MessageDispatcher}; recipient expansion is delegated to
- * {@link RecipientResolver} and platform output to {@link DeliveryExecutor}.
- * Stages are the only source of transformation, so the order is exactly the
- * plan order and never the module graph order.</p>
+ * <p>Recipient expansion is delegated to {@link RecipientResolver} and platform
+ * output to {@link DeliveryExecutor}. Stages are the only source of
+ * transformation, so the order is exactly the plan order and never the module
+ * graph order.</p>
  *
  * <p>The engine is rebuilt when the plan changes; in-flight dispatches keep
  * the engine (and plan version) they started with.</p>

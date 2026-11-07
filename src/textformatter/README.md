@@ -127,7 +127,7 @@ Templates intentionally have no `<expr>` or `${...}` scripting step. Policy deci
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
 | `TextFormatterModule` | `TextFormatterModule.java` | `ModuleLoader` (legacy descriptor); runtime activates `TextFormatterActivator` |
-| `DefaultTextFormatter` | `DefaultTextFormatter.java` | `MessageDispatcher` (host) / `SuiteHost` rendering |
+| `DefaultTextFormatter` | `DefaultTextFormatter.java` | Etapa `format` del pipeline (`FormatStage`) |
 
 ---
 

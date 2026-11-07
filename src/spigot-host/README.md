@@ -34,7 +34,7 @@
 - **No features** — no importa `textformatter`, `chattranslator`, `iflow-*`,
   `messages`, `presets`, `tester`, `inworld` ni sinks.
 - **No eventos de chat/join/quit/death** — pertenecen a `sync-bukkit` (F4c).
-- **No bootstrap heredado** — `SuiteHost.bootstrap`/`SuiteBootstrap` fueron
+- **No bootstrap heredado** — los helpers de arranque legacy fueron
   retirados.
 - **No árbol de comandos duplicado** — F4d lo eliminó.
 
@@ -76,7 +76,7 @@ new SuiteRuntime(folder, ports, logger)
   ↓
 registerPlatformService(...)
   ↓
-runtime.start() → activa paquetes y construye SuiteHost
+runtime.start() → activa paquetes y construye el pipeline
   ↓
 runtime.registerCommands() → CommandMap
   ↓

@@ -25,9 +25,8 @@ import java.util.concurrent.TimeUnit;
  * Pushes a rendered unit into the platform without deciding the pipeline
  * order.
  *
- * <p>It is the delivery half of the old {@code MessageDispatcher}: redirects,
- * sleeps, sounds and the concrete {@link ChatDelivery} calls live here, while
- * {@link PipelineEngine} owns stages, recipients and traces.</p>
+ * <p>Redirects, sleeps, sounds and the concrete {@link ChatDelivery} calls live
+ * here, while {@link PipelineEngine} owns stages, recipients and traces.</p>
  */
 public final class DeliveryExecutor implements AutoCloseable {
 

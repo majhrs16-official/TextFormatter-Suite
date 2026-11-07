@@ -1,18 +1,14 @@
 package me.majhrs16.suite.host;
 
+import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
+import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.Translator;
-import me.majhrs16.suite.api.spi.TranslatorManager;
-import me.majhrs16.suite.api.spi.TranslationService;
-import me.majhrs16.suite.api.render.ChatDelivery;
-import me.majhrs16.suite.api.iflow.PermissionChecker;
-import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 
 import net.kyori.adventure.text.Component;
@@ -34,10 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Dispatcher behavior over a real {@link SuiteHost}: direction expansion,
- * routing outcomes pushed into a recording {@link ChatDelivery}.
+ * Pipeline behavior over the real stages: direction expansion, routing
+ * outcomes pushed into a recording {@link ChatDelivery}.
  */
-class MessageDispatcherTest {
+class PipelineIntegrationTest {
 
     @TempDir
     Path dir;
@@ -94,19 +90,6 @@ class MessageDispatcherTest {
         @Override public Actor console() { return console; }
     }
 
-    private TranslationService fakeTranslation() {
-        TranslatorManager manager = new TranslatorManager();
-        manager.add(new Translator() {
-            @Override public String name() { return "fake"; }
-            @Override public String translate(String text, String from, String to) {
-                return "[" + to + "]" + text;
-            }
-            @Override public String detect(String text) { return "en"; }
-            @Override public boolean isAvailable() { return true; }
-        });
-        return new TranslationService(manager);
-    }
-
     private PluginLogger quietLogger() {
         return new PluginLogger() {
             @Override public void info(String m, Object... a) { }
@@ -140,13 +123,11 @@ class MessageDispatcherTest {
             """);
     }
 
-    private MessageDispatcher dispatcher(RecordingDelivery delivery,
-                                         List<Actor> online,
-                                         PermissionChecker permissions) {
-        SuiteHost host = HostFixture.bootstrap(dir, permissions,
-            null, quietLogger());
-        return new MessageDispatcher(host, new TestDirectory(online, CONSOLE),
-            delivery, permissions, quietLogger());
+    private HostFixture.Pipeline pipeline(RecordingDelivery delivery,
+                                          List<Actor> online,
+                                          PermissionChecker permissions) {
+        return HostFixture.bootstrap(dir, permissions, null, quietLogger(),
+            delivery, new TestDirectory(online, CONSOLE));
     }
 
     private Message chatFrom(Actor sender, Direction direction) {
@@ -162,12 +143,12 @@ class MessageDispatcherTest {
     void initiatorGoesOnlyToSender() throws Exception {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.initiator()));
 
-        assertEquals(1, report.considered());
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.considered());
+        assertEquals(1, outcome.delivered());
         assertEquals(List.of(STEVE), delivery.playerTargets);
         assertEquals(1, delivery.toPlayers.size());
         assertTrue(delivery.toConsole.isEmpty());
@@ -177,12 +158,12 @@ class MessageDispatcherTest {
     void othersExcludesSender() throws Exception {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.others()));
 
         assertEquals(List.of(ALEX), delivery.playerTargets);
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
     }
 
     @Test
@@ -190,11 +171,11 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
         // Directory lists STEVE twice on purpose: expansion must deduplicate.
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX, STEVE),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX, STEVE),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.all()));
 
-        assertEquals(2, report.considered());
+        assertEquals(2, outcome.considered());
         assertEquals(2, delivery.playerTargets.size());
         assertTrue(delivery.playerTargets.contains(STEVE));
         assertTrue(delivery.playerTargets.contains(ALEX));
@@ -204,29 +185,26 @@ class MessageDispatcherTest {
     void consoleDirectionUsesConsoleRecipient() throws Exception {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
-        DispatchReport report = dispatcher(delivery, List.of(STEVE),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.console()));
 
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
         assertEquals(List.of(CONSOLE), delivery.playerTargets);
     }
 
     @Test
     void redirectRuleSendsToConsoleInsteadOfPlayers() throws Exception {
         writeLayout(false);
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            null, quietLogger());
-        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_REDIRECT);
         RecordingDelivery delivery = new RecordingDelivery();
-        MessageDispatcher subject = new MessageDispatcher(host,
-            new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        HostFixture.Pipeline pipeline = pipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
+        PolicyPrograms.setDecision(pipeline.router(), HostServiceRegistry.DECISION_REDIRECT);
 
-        DispatchReport report = subject.dispatch(chatFrom(STEVE, Direction.others()));
+        PipelineOutcome outcome = pipeline.dispatch(chatFrom(STEVE, Direction.others()));
 
-        assertEquals(1, report.redirected());
-        assertEquals(0, report.delivered());
+        assertEquals(1, outcome.redirected());
+        assertEquals(0, outcome.delivered());
         assertEquals(1, delivery.toConsole.size());
         assertTrue(delivery.toPlayers.isEmpty());
     }
@@ -234,18 +212,15 @@ class MessageDispatcherTest {
     @Test
     void dropRuleSilencesEverything() throws Exception {
         writeLayout(false);
-        SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL,
-            null, quietLogger());
-        PolicyPrograms.setDecision(host, HostServiceRegistry.DECISION_DROP);
         RecordingDelivery delivery = new RecordingDelivery();
-        MessageDispatcher subject = new MessageDispatcher(host,
-            new TestDirectory(List.of(STEVE, ALEX), CONSOLE),
-            delivery, PermissionChecker.ALLOW_ALL, quietLogger());
+        HostFixture.Pipeline pipeline = pipeline(delivery, List.of(STEVE, ALEX),
+            PermissionChecker.ALLOW_ALL);
+        PolicyPrograms.setDecision(pipeline.router(), HostServiceRegistry.DECISION_DROP);
 
-        DispatchReport report = subject.dispatch(chatFrom(STEVE, Direction.all()));
+        PipelineOutcome outcome = pipeline.dispatch(chatFrom(STEVE, Direction.all()));
 
-        assertEquals(2, report.silenced());
-        assertEquals(0, report.delivered());
+        assertEquals(2, outcome.silenced());
+        assertEquals(0, outcome.delivered());
         assertTrue(delivery.toPlayers.isEmpty());
     }
 
@@ -256,11 +231,11 @@ class MessageDispatcherTest {
             actor.equals(ALEX) && permission.equals("suite.vip");
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX), vipOnlyAlex)
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX), vipOnlyAlex)
             .dispatch(chatFrom(STEVE, Direction.permission("suite.vip")));
 
         assertEquals(List.of(ALEX), delivery.playerTargets);
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
     }
 
     @Test
@@ -268,11 +243,11 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.permission(null)));
 
-        assertEquals(0, report.delivered());
+        assertEquals(0, outcome.delivered());
         assertTrue(delivery.toPlayers.isEmpty(),
             "a missing permission qualifier must never broadcast to every player");
     }
@@ -282,11 +257,11 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.permission("")));
 
-        assertEquals(0, report.delivered());
+        assertEquals(0, outcome.delivered());
         assertTrue(delivery.toPlayers.isEmpty(),
             "a blank permission qualifier must never broadcast to every player");
     }
@@ -296,8 +271,7 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
-            PermissionChecker.ALLOW_ALL)
+        pipeline(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.specific(
                 me.majhrs16.suite.api.message.Channel.CHAT, ALEX)));
 
@@ -309,11 +283,11 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.radius(32.5)));
 
-        assertEquals(0, report.delivered());
+        assertEquals(0, outcome.delivered());
         assertTrue(delivery.toPlayers.isEmpty());
     }
 
@@ -325,11 +299,11 @@ class MessageDispatcherTest {
             .cancelled(true)
             .build();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL).dispatch(cancelled);
 
-        assertEquals(0, report.considered());
-        assertEquals("cancelled", report.skipReason());
+        assertEquals(0, outcome.considered());
+        assertEquals("cancelled", outcome.skipReason());
         assertTrue(delivery.toPlayers.isEmpty());
     }
 
@@ -339,7 +313,7 @@ class MessageDispatcherTest {
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");
 
-        dispatcher(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL)
+        pipeline(delivery, List.of(STEVE, ALEX), PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.all()));
 
         Set<String> expected = Set.of(
@@ -354,11 +328,11 @@ class MessageDispatcherTest {
         RecordingDelivery delivery = new RecordingDelivery();
         // knownSounds intentionally empty -> hasSound(name) == false
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.all()));
 
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
         assertTrue(delivery.played.isEmpty());
     }
 
@@ -386,11 +360,11 @@ class MessageDispatcherTest {
         RecordingDelivery delivery = new RecordingDelivery();
         delivery.knownSounds.add("entity.experience_orb.pickup");
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.all()));
 
-        assertEquals(1, report.delivered());
+        assertEquals(1, outcome.delivered());
         assertTrue(delivery.played.isEmpty(), "sonido.enabled=false must gate sounds");
     }
 
@@ -399,11 +373,11 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.world("world_nether")));
 
-        assertEquals(0, report.delivered());
+        assertEquals(0, outcome.delivered());
         assertTrue(delivery.toPlayers.isEmpty());
     }
 
@@ -412,11 +386,11 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        DispatchReport report = dispatcher(delivery, List.of(STEVE, ALEX),
+        PipelineOutcome outcome = pipeline(delivery, List.of(STEVE, ALEX),
             PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.world(null)));
 
-        assertEquals(0, report.delivered());
+        assertEquals(0, outcome.delivered());
         assertTrue(delivery.toPlayers.isEmpty(),
             "a missing world qualifier must never broadcast to every player");
     }
@@ -426,7 +400,7 @@ class MessageDispatcherTest {
         writeLayout(false);
         RecordingDelivery delivery = new RecordingDelivery();
 
-        dispatcher(delivery, List.of(STEVE), PermissionChecker.ALLOW_ALL)
+        pipeline(delivery, List.of(STEVE), PermissionChecker.ALLOW_ALL)
             .dispatch(chatFrom(STEVE, Direction.console()));
 
         assertTrue(delivery.toConsole.isEmpty(),

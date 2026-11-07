@@ -5,24 +5,20 @@ import me.majhrs16.suite.api.message.Message;
 /**
  * Neutral entry point for injecting a message into the suite pipeline.
  *
- * <p>The host adapter binds this port to its dispatcher. Extensions and
- * packages use it instead of depending on the host's concrete
- * {@code MessageDispatcher}.</p>
+ * <p>The runtime publishes this port and binds it to its pipeline engine.
+ * Extensions and packages use it instead of depending on a host type.</p>
  */
-@FunctionalInterface
 public interface MessageDispatch {
 
     /** Routes and delivers {@code message}; the implementation decides threading. */
     void dispatch(Message message);
 
     /**
-     * Routes and delivers {@code message}, returning the observed counters.
+     * Routes and delivers {@code message}, returning the observed status and
+     * counters.
      *
-     * <p>The default keeps the port functional for simple adapters; hosts that
-     * can report delivery override it.</p>
+     * <p>Implementations that cannot report must say so explicitly instead of
+     * returning a fabricated success.</p>
      */
-    default DispatchOutcome dispatchAndReport(Message message) {
-        dispatch(message);
-        return DispatchOutcome.none();
-    }
+    DispatchOutcome dispatchAndReport(Message message);
 }

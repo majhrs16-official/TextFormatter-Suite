@@ -6,9 +6,10 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.Formats;
+import me.majhrs16.suite.api.spi.DispatchOutcome;
+import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.host.MessageDispatcher;
-import me.majhrs16.suite.host.SuiteHost;
+import me.majhrs16.suite.api.pipeline.PipelineStatus;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 
@@ -39,8 +40,7 @@ import static org.mockito.Mockito.*;
 class DebugEndpointIntegrationTest {
 
     private DebugEndpoint debugEndpoint;
-    private SuiteHost host;
-    private MessageDispatcher dispatcher;
+    private MessageDispatch dispatcher;
     private ChannelRegistry channels;
     private PluginLogger logger;
     private HttpClient httpClient;
@@ -48,16 +48,10 @@ class DebugEndpointIntegrationTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        host = mock(SuiteHost.class);
-        dispatcher = mock(MessageDispatcher.class);
+        dispatcher = mock(MessageDispatch.class);
         channels = mock(ChannelRegistry.class);
         logger = mock(PluginLogger.class);
         authToken = "test-auth-token-12345";
-
-        when(host.config()).thenReturn(mock(me.majhrs16.suite.host.config.HostConfig.class));
-        when(host.config().defaultLanguage()).thenReturn(Language.EN);
-        when(host.translation()).thenReturn(mock(me.majhrs16.suite.api.spi.TranslationService.class));
-        when(host.translation().activeName()).thenReturn("google");
 
         Channel channel = mock(Channel.class);
         when(channel.name()).thenReturn("chat.global");
@@ -76,20 +70,10 @@ class DebugEndpointIntegrationTest {
         when(channels.paths()).thenReturn(List.of("chat.global"));
         when(channels.resolve("chat.global")).thenReturn(channel);
 
-        me.majhrs16.suite.host.DispatchReport report = mock(me.majhrs16.suite.host.DispatchReport.class);
-        when(report.considered()).thenReturn(1);
-        when(report.delivered()).thenReturn(1);
-        when(report.silenced()).thenReturn(0);
-        when(report.redirected()).thenReturn(0);
-        try {
-            var field = me.majhrs16.suite.host.DispatchReport.class.getDeclaredField("channelRedirected");
-            field.setAccessible(true);
-            field.set(report, 0);
-        } catch (Exception ignored) {}
+        when(dispatcher.dispatchAndReport(any(Message.class)))
+            .thenReturn(new DispatchOutcome(PipelineStatus.READY, 1, 1, 0, 0, 0));
 
-        when(dispatcher.dispatch(any(Message.class))).thenReturn(report);
-
-        debugEndpoint = new DebugEndpoint(host, dispatcher, channels, logger, authToken, 0);
+        debugEndpoint = new DebugEndpoint(dispatcher, channels, logger, authToken, 0);
         debugEndpoint.start();
 
         httpClient = HttpClient.newBuilder()
@@ -186,38 +170,6 @@ class DebugEndpointIntegrationTest {
     }
 
     @Test
-    @DisplayName("endpoint /debug/rules devuelve nota de no implementado")
-    void debugRulesReturnsNotImplemented() throws Exception {
-        int port = debugEndpoint.getPort();
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("http://127.0.0.1:" + port + "/debug/rules"))
-            .header("X-Debug-Token", authToken)
-            .GET()
-            .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("not yet implemented");
-    }
-
-    @Test
-    @DisplayName("endpoint /debug/sinks devuelve nota de no implementado")
-    void debugSinksReturnsNotImplemented() throws Exception {
-        int port = debugEndpoint.getPort();
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("http://127.0.0.1:" + port + "/debug/sinks"))
-            .header("X-Debug-Token", authToken)
-            .GET()
-            .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("not yet implemented");
-    }
-
-    @Test
     @DisplayName("rechaza métodos no GET en endpoints de solo lectura")
     void rejectsNonGetOnReadOnlyEndpoints() throws Exception {
         int port = debugEndpoint.getPort();
@@ -260,7 +212,7 @@ class DebugEndpointIntegrationTest {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("considered");
         assertThat(response.body()).contains("delivered");
-        verify(dispatcher).dispatch(any(Message.class));
+        verify(dispatcher).dispatchAndReport(any(Message.class));
     }
 
     @Test
@@ -324,7 +276,7 @@ class DebugEndpointIntegrationTest {
     @Test
     @DisplayName("genera token automáticamente si no se proporciona")
     void generatesTokenAutomaticallyIfNotProvided() throws IOException {
-        DebugEndpoint noTokenEndpoint = new DebugEndpoint(host, dispatcher, channels, logger, null, 0);
+        DebugEndpoint noTokenEndpoint = new DebugEndpoint(dispatcher, channels, logger, null, 0);
         noTokenEndpoint.start();
 
         assertThat(noTokenEndpoint.isRunning()).isTrue();

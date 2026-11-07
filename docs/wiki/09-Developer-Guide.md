@@ -316,8 +316,8 @@ public class MyExtension implements Extension {
 ```java
 public interface ExtensionContext {
     // Core access
-    SuiteHost host();
-    MessageDispatcher dispatcher();
+    PermissionChecker permissions();
+    ActorDirectory actors();
     PluginLogger logger();
     TranslationService translation();
     UserLanguageStore languages();

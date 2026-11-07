@@ -23,7 +23,7 @@
 
 - No importa features, `host`, `kernel`, `manager` ni otro sincronizador.
 - No es un `SyncSink`: no hace fan-out; eso pertenece a `sync-bus`.
-- No crea `SuiteHost` ni conoce el pipeline.
+- No crea el pipeline ni conoce sus etapas.
 - No bloquea `start()` esperando red.
 
 ## 3. Dependencies

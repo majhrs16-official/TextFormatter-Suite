@@ -3,7 +3,10 @@ package me.majhrs16.suite.runtime;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,22 +21,21 @@ import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.command.CommandRoot;
 import me.majhrs16.suite.api.config.ConfigRegistry;
-import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
-import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelinePlan;
 import me.majhrs16.suite.api.pipeline.PipelineServices;
 import me.majhrs16.suite.api.pipeline.PipelineSettings;
 import me.majhrs16.suite.api.pipeline.PipelineStage;
-import me.majhrs16.suite.api.render.MessageComponentRenderer;
+import me.majhrs16.suite.api.pipeline.PipelineStatus;
+import me.majhrs16.suite.api.pipeline.PipelineTrace;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.MessageDispatch;
-import me.majhrs16.suite.api.spi.MessageRenderer;
+import me.majhrs16.suite.api.spi.PipelineTraceSource;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.host.DeliveryExecutor;
@@ -43,7 +45,6 @@ import me.majhrs16.suite.host.PipelineOutcome;
 import me.majhrs16.suite.host.RecipientResolver;
 import me.majhrs16.suite.host.ResolvedStage;
 import me.majhrs16.suite.host.SkippedStage;
-import me.majhrs16.suite.host.SuiteHost;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.config.HostPaths;
@@ -92,7 +93,6 @@ public final class SuiteRuntime implements AutoCloseable {
     private final List<ServiceRegistry.Registration> platformRegistrations =
         new ArrayList<>();
     private final RuntimeMessageDispatch messageDispatch = new RuntimeMessageDispatch();
-    private SuiteHost host;
     private PipelineEngine pipeline;
     private HostConfig config;
     private long pipelinePlanVersion;
@@ -203,9 +203,9 @@ public final class SuiteRuntime implements AutoCloseable {
      * packages and the ports supplied by the adapter.
      *
      * <p>If a required package is not active the pipeline is left explicitly
-     * unavailable; {@link #messageDispatch()} and {@link #host()} fail with the
-     * missing service list instead of silently dropping messages. Installing or
-     * removing packages rebuilds the pipeline.</p>
+     * unavailable; {@link #messageDispatch()} fails with the missing service
+     * list instead of silently dropping messages. Installing or removing
+     * packages rebuilds the pipeline.</p>
      */
     private synchronized void rebuildPipeline() {
         closePipeline();
@@ -258,7 +258,6 @@ public final class SuiteRuntime implements AutoCloseable {
 
             pipeline = built;
             messageDispatch.bind(built);
-            host = legacyHost(loaded, channels, translation, delivery);
             pipelineError = null;
             logger.info("Message pipeline ready (v" + planVersion + "): "
                     + stages.resolved().size() + " stage(s), "
@@ -274,32 +273,6 @@ public final class SuiteRuntime implements AutoCloseable {
         pipelineError = reason;
         messageDispatch.fail(reason);
         logger.warn("Message pipeline unavailable: " + reason);
-    }
-
-    /**
-     * Builds the legacy {@link SuiteHost} facade when every service it needs is
-     * active. Dispatch no longer goes through it; {@code host()} remains only
-     * for adapters and diagnostics that still read the resolved host view.
-     */
-    private SuiteHost legacyHost(HostConfig loaded,
-                                 Optional<ChannelRegistry> channels,
-                                 Optional<TranslationService> translation,
-                                 ChatDelivery delivery) {
-        if (channels.isEmpty() || translation.isEmpty()) {
-            return null;
-        }
-        try {
-            Router router = resolveRouter();
-            MessageComponentRenderer componentRenderer =
-                    requireService(MessageComponentRenderer.class);
-            MessageRenderer renderer = requireService(MessageRenderer.class);
-            return new SuiteHost(
-                    loaded, channels.get(), translation.get(), router,
-                    componentRenderer, renderer, logger, delivery);
-        } catch (RuntimeException unavailable) {
-            logger.debug("Legacy host facade unavailable: " + unavailable.getMessage());
-            return null;
-        }
     }
 
     /**
@@ -366,31 +339,12 @@ public final class SuiteRuntime implements AutoCloseable {
                 new IllegalStateException("missing service " + type.getName()));
     }
 
-    /**
-     * El hub iFlow es el único punto que elige entre {@code iflow-firewall},
-     * {@code iflow-vm} e {@code iflow-wasm}. Un motor no puede publicar un
-     * {@link Router} que sustituya al hub.
-     */
-    private Router resolveRouter() {
-        IflowHub hub = moduleHost.services().find(IflowHub.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "iFlow hub is not installed; install the iflow package"));
-        Router router = hub.router();
-        if (router == null) {
-            throw new IllegalStateException(
-                    "iFlow hub has no active backend: " + hub.availableBackends());
-        }
-        logger.info("iFlow backend: " + hub.activeBackend());
-        return router;
-    }
-
     private synchronized void closePipeline() {
         messageDispatch.unbind();
         if (pipeline != null) {
             pipeline.close();
             pipeline = null;
         }
-        host = null;
     }
 
     /**
@@ -699,26 +653,18 @@ public final class SuiteRuntime implements AutoCloseable {
     }
 
     /**
-     * @return the message pipeline assembled from the active packages and the
-     *         adapter ports
-     * @throws IllegalStateException if the pipeline is unavailable
-     */
-    public SuiteHost host() {
-        ensureStarted();
-        SuiteHost current = host;
-        if (current == null) {
-            throw new IllegalStateException("Message pipeline unavailable: " + pipelineError);
-        }
-        return current;
-    }
-
-    /**
      * @return the neutral dispatch entry point; calls fail explicitly while the
      *         pipeline is unavailable
      */
     public MessageDispatch messageDispatch() {
         ensureStarted();
         return messageDispatch;
+    }
+
+    /** @return the bounded trace buffer fed by every dispatch. */
+    public PipelineTraceSource pipelineTraces() {
+        ensureStarted();
+        return messageDispatch.traces;
     }
 
     /** @return the default language configured for the runtime. */
@@ -806,6 +752,7 @@ public final class SuiteRuntime implements AutoCloseable {
      */
     private static final class RuntimeMessageDispatch implements MessageDispatch {
 
+        private final RuntimeTraceBuffer traces = new RuntimeTraceBuffer();
         private volatile PipelineEngine engine;
         private volatile String error = "pipeline has not been built";
 
@@ -832,16 +779,62 @@ public final class SuiteRuntime implements AutoCloseable {
             return current;
         }
 
+        private PipelineOutcome run(me.majhrs16.suite.api.message.Message message) {
+            PipelineOutcome outcome = require().dispatch(message);
+            traces.record(message.id().toString(), outcome.trace());
+            return outcome;
+        }
+
         @Override
         public void dispatch(me.majhrs16.suite.api.message.Message message) {
-            require().dispatch(message);
+            run(message);
         }
 
         @Override
         public DispatchOutcome dispatchAndReport(me.majhrs16.suite.api.message.Message message) {
-            PipelineOutcome outcome = require().dispatch(message);
+            PipelineOutcome outcome = run(message);
             return new DispatchOutcome(
-                    outcome.delivered(), outcome.silenced(), outcome.redirected());
+                    outcome.status(), outcome.considered(), outcome.delivered(),
+                    outcome.silenced(), outcome.redirected(), outcome.failed());
         }
+    }
+
+    /**
+     * Bounded ring of dispatch traces keyed by message id.
+     *
+     * <p>The id map keeps the most recent trace per message; evicting an older
+     * entry never removes a newer trace for the same id.</p>
+     */
+    private static final class RuntimeTraceBuffer implements PipelineTraceSource {
+
+        private static final int CAPACITY = 256;
+
+        private final Deque<Entry> entries = new ArrayDeque<>(CAPACITY);
+        private final Map<String, PipelineTrace> byMessageId = new HashMap<>();
+
+        private synchronized void record(String messageId, PipelineTrace trace) {
+            Entry entry = new Entry(messageId, trace);
+            entries.addLast(entry);
+            byMessageId.put(messageId, trace);
+            while (entries.size() > CAPACITY) {
+                Entry evicted = entries.removeFirst();
+                if (byMessageId.get(evicted.messageId()) == evicted.trace()) {
+                    byMessageId.remove(evicted.messageId());
+                }
+            }
+        }
+
+        @Override
+        public synchronized PipelineTrace lastTrace(String messageId) {
+            return byMessageId.get(messageId);
+        }
+
+        @Override
+        public synchronized List<PipelineTrace> recentTraces() {
+            return entries.stream().map(Entry::trace).toList();
+        }
+    }
+
+    private record Entry(String messageId, PipelineTrace trace) {
     }
 }

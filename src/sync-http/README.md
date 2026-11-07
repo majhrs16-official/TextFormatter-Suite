@@ -111,7 +111,7 @@
 ## 6. Data Flow (All Sync Modules)
 
 ```text
-MessageDispatcher.dispatch()
+PipelineEngine.dispatch()
          ↓ (after formatting & translation)
 For each registered SyncSink:
          ↓

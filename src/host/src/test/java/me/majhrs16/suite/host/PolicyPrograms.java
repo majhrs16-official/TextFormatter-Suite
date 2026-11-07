@@ -1,5 +1,6 @@
 package me.majhrs16.suite.host;
 
+import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -25,14 +26,14 @@ final class PolicyPrograms {
 
     private PolicyPrograms() {}
 
-    /** Installs a program on the host's router that unconditionally emits {@code decision}. */
-    static void setDecision(SuiteHost host, int decision) {
-        ((VmPolicyEngine) host.router()).setProgram(decision(decision));
+    /** Installs a program on the router that unconditionally emits {@code decision}. */
+    static void setDecision(Router router, int decision) {
+        ((VmPolicyEngine) router).setProgram(decision(decision));
     }
 
-    /** Installs a program on the host's router that unconditionally redirects to {@code channel}. */
-    static void setChannelRedirect(SuiteHost host, String channel) {
-        ((VmPolicyEngine) host.router()).setProgram(channelRedirect(channel));
+    /** Installs a program on the router that unconditionally redirects to {@code channel}. */
+    static void setChannelRedirect(Router router, String channel) {
+        ((VmPolicyEngine) router).setProgram(channelRedirect(channel));
     }
 
     /**

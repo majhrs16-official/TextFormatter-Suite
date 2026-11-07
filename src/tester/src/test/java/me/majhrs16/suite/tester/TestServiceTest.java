@@ -10,6 +10,8 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.PipelineStatus;
+import me.majhrs16.suite.api.pipeline.PipelineTrace;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
 import me.majhrs16.suite.api.spi.PluginLogger;
@@ -66,11 +68,13 @@ class TestServiceTest {
         public DispatchOutcome dispatch(Message message) {
             dispatches.incrementAndGet();
             int delivered = message.direction().kind() == Direction.Kind.SPECIFIC ? 1 : 2;
-            return new DispatchOutcome(delivered, 0, 0);
+            return new DispatchOutcome(PipelineStatus.READY, delivered, delivered, 0, 0, 0);
         }
 
         @Override public void format(Message message) { }
         @Override public String detectLanguage(String text) { return "en"; }
+        @Override public PipelineTrace lastTrace(String messageId) { return null; }
+        @Override public java.util.List<PipelineTrace> recentTraces() { return java.util.List.of(); }
     }
 
     private static final class FakeRouter implements Router {

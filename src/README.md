@@ -81,7 +81,7 @@ TextFormatter Suite
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; contrato v3, `WasmPolicyRouter`, SHA-256 obligatorio y hot-reload; publica `IflowBackend` | `core-api`, `com.dylibso.chicory:runtime` | `iflow` (backend), `host` legacy |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `iflow` (backend), `host` legacy, web editor |
 | `coretranslator` | Expansión PlaceholderAPI legacy `%cot_*`; Bukkit-only, *deprecated*, mantenida | `core-api`, Paper API, PlaceholderAPI | `spigot-host` (instalado por el Manager) |
-| `host` | Neutral message dispatch, config loading and `SuiteHost` assembly; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
+| `host` | Neutral pipeline engine (`PipelineEngine`, `RecipientResolver`, `DeliveryExecutor`) and config loading; feature-free | `core-api`, `core-render`, `snakeyaml`, `gson` | `suite-runtime` |
 | `messages` | Message catalog (serialized message formats) | — | `host`, `spigot-host`, `fabric-host` |
 | `transport` | Transport abstraction (Transport, HttpTransport, MessageCodec) | `core-api` | `sync-http`, `sync-socket`, `sync-discord`, `gtranslate`, `ltranslate` |
 | `gtranslate` | Google Translate API provider | `core-api`, `transport` | `host`, `spigot-host`, `fabric-host` |
@@ -125,7 +125,7 @@ TextFormatter Suite
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowVmActivator` | [iflow-vm/README.md](iflow-vm/README.md) |
 | `iflow-wasm` | Motor WebAssembly con Chicory (W3) | `WasmModuleLoader`, `WasmContract`, `WasmPolicyRouter`, `IflowBackend` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
-| `host` | Neutral pipeline | Dispatch, config, message catalog | `SuiteHost`, `MessageDispatcher`, `ConfigLoader`, `HostPaths` | `SuiteRuntime` builds `SuiteHost` | [host/README.md](host/README.md) |
+| `host` | Neutral pipeline | Dispatch, config, message catalog | `PipelineEngine`, `RecipientResolver`, `DeliveryExecutor`, `ConfigLoader`, `HostPaths` | `SuiteRuntime` builds the pipeline | [host/README.md](host/README.md) |
 | `chattranslator` | Translation facade | Builds the translator manager from provider services and refreshes it on module lifecycle events | `ChatTranslator`, `ChatTranslatorActivator`, `BackendConfig`, `TranslatorManager` | `ChatTranslatorActivator` | [chattranslator/README.md](chattranslator/README.md) |
 | `coretranslator` | Legacy PAPI expansion (`%cot_*`); Bukkit-only, deprecated, maintained | Placeholder grammar over `TranslationService`/`MessageDispatch`; PAPI adapter isolated behind a Bukkit hook | `CoreTranslatorModule`, `CoreTranslatorActivator`, `CoreTranslatorPlaceholders`, `CoreTranslatorPapiExpansion` | `CoreTranslatorActivator` | [coretranslator/README.md](coretranslator/README.md) |
 | `gtranslate` | Google Translate | Translate via Google API | `GTranslate`, `GTranslateProvider` | `GTranslateActivator` | [gtranslate/README.md](gtranslate/README.md) |
@@ -153,7 +153,7 @@ TextFormatter Suite
   → SuiteRuntime.java (suite-runtime)
   → TextFormatterSuitePlugin.java (spigot-host)
   → TextFormatterSuiteMod.java (fabric-host)
-  → SuiteHost.java (host)
+  → PipelineEngine.java (host)
 ```
 
 ### Understand Message Formatting Pipeline
@@ -177,7 +177,7 @@ TextFormatter Suite
 → src/iflow-wasm/README.md
   → WasmModuleLoader.java (Chicory parse/instantiate)
   → W1: ADR de imports/exports y capabilities
-  → W3: WasmPolicyEngine + Router/MessageDispatcher
+  → W3: WasmPolicyEngine + Router/route stage
 ```
 
 ### Understand Translation
@@ -242,9 +242,9 @@ TextFormatter Suite
 ### Bootstrap & Initialization
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
-| `SuiteRuntime` | `suite-runtime` | Composition root: installs packages, builds `SuiteHost`, loads the configured `CommandRoot`, publishes commands and `MessageDispatch` |
+| `SuiteRuntime` | `suite-runtime` | Composition root: installs packages, builds the `PipelineEngine`, loads the configured `CommandRoot`, publishes commands and `MessageDispatch` |
 | `DefaultConfigInstaller` | `suite-runtime` | First-boot defaults: host files in `config/suite/`, module files in `config/<module>/`, legacy migration |
-| `SuiteHost` | `host` | Neutral pipeline: holds services and dispatches messages |
+| `PipelineEngine` | `host` | Runs the ordered pipeline, resolves recipients and delivers messages |
 | `ModuleLoader` | `kernel` | Discovers and loads `Module` implementations via SPI |
 | `ModuleGraph` | `kernel` | Resolves module dependency graph |
 
@@ -256,7 +256,7 @@ TextFormatter Suite
 | `ModuleActivatedEvent` / `ModuleDeactivatedEvent` | `ModuleHost` publishes them; modules subscribe through their scoped `EventBus` |
 | `SyncSink` | Each sync package registers its `SyncSink` implementation |
 | `Router` | The active iFlow engine package registers it |
-| `MessageDispatcher` | `SuiteRuntime` builds it from the active pipeline |
+| `RecipientResolver` / `DeliveryExecutor` | `SuiteRuntime` builds them from the active pipeline |
 | `ConfigValidator` | Removed; each package validates its own configuration |
 
 ### Command Registration
@@ -287,7 +287,7 @@ TextFormatter Suite
 | Sync modules → `core-api` + `transport` | Sync modules implement `SyncSink` SPI | `core-api` must not depend on sync modules | Transport abstraction |
 | `manager-apt`/`manager-core` → `manager-spi` | Implementations depend on the SPI | SPI must not depend on implementations | Standard API/impl separation |
 
-> ℹ️ **Current boundary**: `host` no longer depends on `kernel` or feature modules. `suite-runtime` owns package discovery and `SuiteHost` assembly.
+> ℹ️ **Current boundary**: `host` no longer depends on `kernel` or feature modules. `suite-runtime` owns package discovery and pipeline assembly.
 
 ---
 
@@ -305,7 +305,7 @@ PackageRuntime installs/activates packages and hot-upgrades active ones
          ↓
 ServiceRegistry: ChannelRegistry, TranslationService, Router, renderers, ChatDelivery
          ↓
-SuiteRuntime builds SuiteHost and publishes MessageDispatch
+SuiteRuntime builds the pipeline engine and publishes MessageDispatch
          ↓
 runtime.registerCommands() → platform root command
          ↓
@@ -318,7 +318,7 @@ Minecraft Chat Event (PlayerChatEvent / Fabric equivalent)
          ↓
 Platform Adapter (SpigotChatDelivery / FabricChatDelivery)
          ↓
-MessageDispatcher.dispatch() / PipelineEngine.dispatch()
+MessageDispatch → PipelineEngine.dispatch()
          ↓
 route stage [iflow] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
          ↓
@@ -337,7 +337,7 @@ ConfigLoader.load() → HostConfig
          ↓
 Packages load their own canonical config (config/<package>/...)
          ↓
-SuiteRuntime builds SuiteHost with the active services
+SuiteRuntime builds the pipeline engine with the active stages
          ↓
 ConfigSchemaGenerator (host) → generates web-editor schema
 ```
@@ -397,7 +397,7 @@ Module.initialize() called in order
 | Understand module loading | `kernel/src/main/java/me/majhrs16/suite/kernel/ModuleLoader.java` | `ModuleGraph.java` |
 | Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `core-api/src/main/java/me/majhrs16/suite/api/channel/ChannelRegistry.java` |
 | Understand routing (VM) | `iflow-vm/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java` |
-| Understand bootstrap | `suite-runtime/src/main/java/me/majhrs16/suite/runtime/SuiteRuntime.java` | `SuiteHost.java`, `MessageDispatcher.java` |
+| Understand bootstrap | `suite-runtime/src/main/java/me/majhrs16/suite/runtime/SuiteRuntime.java` | `PipelineEngine.java`, `RecipientResolver.java`, `DeliveryExecutor.java` |
 | Understand Spigot integration | `spigot-host/src/main/java/me/majhrs16/suite/spigothost/TextFormatterSuitePlugin.java` | `SpigotActorDirectory.java`, `SpigotChatDelivery.java` |
 | Understand Fabric integration | `fabric-host/src/main/java/me/majhrs16/suite/fabrichost/TextFormatterSuiteMod.java` | `FabricActorDirectory.java`, `FabricChatDelivery.java` |
 | Understand translation | `gtranslate/src/main/java/me/majhrs16/suite/gtranslate/GTranslateProvider.java` | `core-api/src/main/java/me/majhrs16/suite/api/spi/TranslationService.java` |

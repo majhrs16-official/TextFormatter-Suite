@@ -1516,11 +1516,13 @@ El pipeline configurable **sustituye** el cableado actual; no lo envuelve ni con
 - `MessageDispatcher` se divide en tres piezas neutrales:
   `PipelineEngine` (orden, fases, traza, resultado), `RecipientResolver` (expansión de `Direction` con
   `ActorDirectory`) y `DeliveryExecutor` (pool acotado, timeout, `sleepMillis` y cierre determinista).
-- `RoutingResult` y `DispatchReport` se retiran. `DispatchOutcome` gana `PipelineStatus status` y
-  `int failed`; todos sus consumidores se actualizan en el mismo cambio.
-- `MessageDispatch` conserva su firma. `dispatchAndReport` devuelve el estado del pipeline; `dispatch`
-  es la variante sin informe.
-- `TestProbe` gana `lastTrace`/`recentTraces` y pierde los métodos que expongan `SuiteHost`.
+- `RoutingResult` y `DispatchReport` se retiran. `DispatchOutcome` gana `PipelineStatus status`,
+  `int considered` e `int failed`; todos sus consumidores se actualizan en el mismo cambio.
+- `MessageDispatch` conserva su firma. `dispatchAndReport` es obligatorio y devuelve el estado real
+  del pipeline; una implementación que no pueda informar debe declararlo, nunca fabricar un éxito.
+  `dispatch` es la variante sin informe.
+- `TestProbe` gana `lastTrace`/`recentTraces` mediante el puerto neutral `PipelineTraceSource` y
+  pierde los métodos que expongan `SuiteHost`.
 
 No queda un segundo camino de composición en `host`, en los adapters ni en los tests de producción.
 

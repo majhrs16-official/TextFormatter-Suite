@@ -8,11 +8,12 @@
 
 ## 1. Responsibilities
 
-- **Pipeline** — `SuiteHost` combina `ChannelRegistry`, `TranslationService`,
-  `Router`, `MessageRenderer`, `MessageComponentRenderer`, `PluginLogger` y
+- **Pipeline** — `PipelineEngine` ejecuta la lista ordenada de `PipelineStage`
+  en tres fases (`MESSAGE_PRE`, `RECIPIENT`, `MESSAGE_POST`) y produce un
+  `PipelineOutcome` con estado, contadores y traza.
+- **Message dispatch** — `RecipientResolver` expande `Direction` con
+  `ActorDirectory`; `DeliveryExecutor` aplica `sleepMillis`, sonidos y
   `ChatDelivery`.
-- **Message dispatch** — `MessageDispatcher` enruta, renderiza, traduce,
-  entrega al destinatario y publica copias de auditoría.
 - **Configuration loading** — `ConfigLoader` lee `config/suite/config.yml` y
   produce `HostConfig`; `HostPaths` resuelve el layout canónico del host
   (`config/suite/`) y el de los módulos (`config/<module>/`).
@@ -46,18 +47,18 @@
 
 | Consumer | Usage |
 |----------|-------|
-| `suite-runtime` | Construye `SuiteHost` desde los servicios activos |
+| `suite-runtime` | Construye `PipelineEngine` y sus colaboradores desde las etapas activas |
 | `observability` | Consulta métricas del pipeline |
-| `host` tests / `loadtest` | Usan `HostFixture` para cablear features reales en pruebas |
+| `host` tests / `loadtest` | Usan `HostFixture` para cablear etapas reales en pruebas |
 
 ## 5. Main Components
 
 | Component | Role |
 |-----------|------|
-| `SuiteHost` | Facade del pipeline; constructor neutral y `deliver(...)` |
-| `MessageDispatcher` | Route → format → translate → sync → deliver |
-| `RoutingResult` | Resultado de una entrega (entregado, silenciado, redirigido) |
-| `DispatchReport` | Contadores de una operación de despacho |
+| `PipelineEngine` | Orden, fases, expansión por destinatario, entrega y traza |
+| `RecipientResolver` | Expande `Direction` con `ActorDirectory` y políticas fail-closed |
+| `DeliveryExecutor` | `sleepMillis`, sonidos y llamadas a `ChatDelivery` |
+| `PipelineOutcome` | Estado, contadores y traza de un despacho |
 | `ConfigLoader` | Carga `HostConfig` desde YAML |
 | `HostPaths` | `config/suite/` para el host y `config/<module>/` para módulos; sin fallback a la raíz plana |
 | `MessagesConfig` | Catálogo de mensajes con defaults empaquetados |
@@ -69,31 +70,28 @@
 ```text
 SuiteRuntime
   ├─ ServiceRegistry: ChannelRegistry, TranslationService, Router,
-  │                   MessageRenderer, MessageComponentRenderer,
   │                   ChatDelivery, ActorDirectory, PermissionChecker
   ↓
-new SuiteHost(config, channels, translation, router, renderers, logger, delivery)
+PipelinePlan + etapas publicadas (route, format, sync)
   ↓
-host.deliver(Message, recipient)
+PipelineEngine.dispatch(Message)
   ↓
-Router.route(...) → MessageDispatcher
+MESSAGE_PRE → RecipientResolver → RECIPIENT (route → format) → DeliveryExecutor → MESSAGE_POST (sync)
   ↓
-MessageRenderer / MessageComponentRenderer
-  ↓
-ChatDelivery.deliver(...) / deliverConsole(...)
+PipelineOutcome (status, considered, delivered, silenced, redirected, failed, trace)
 ```
 
 ## 7. Entry points
 
-- `SuiteRuntime` construye el host tras activar los paquetes.
-- `MessageDispatcher` es el punto de entrada de mensajes ya normalizados.
+- `SuiteRuntime` construye el motor tras activar los paquetes.
+- `PipelineEngine.dispatch(...)` es el punto de entrada de mensajes ya normalizados.
 - `DebugEndpoint` es el punto de entrada HTTP de diagnóstico.
 
 ## 8. Exploration path
 
-1. `SuiteHost.java`
-2. `MessageDispatcher.java`
-3. `RoutingResult.java` y `DispatchReport.java`
+1. `PipelineEngine.java`
+2. `RecipientResolver.java` y `DeliveryExecutor.java`
+3. `PipelineOutcome.java` y `BoundedPipelineTrace.java`
 4. `config/ConfigLoader.java` y `config/HostPaths.java`
 5. `config/MessagesConfig.java`
 6. `debug/DebugEndpoint.java`

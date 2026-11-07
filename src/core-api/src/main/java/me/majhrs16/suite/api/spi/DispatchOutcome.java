@@ -1,20 +1,43 @@
 package me.majhrs16.suite.api.spi;
 
+import me.majhrs16.suite.api.pipeline.PipelineStatus;
+
+import java.util.Objects;
+
 /**
- * Neutral counters for one dispatch pass.
+ * Neutral counters and status for one dispatch pass.
  *
  * <p>Platform adapters use this record instead of the host's concrete
- * {@code DispatchReport}, so diagnostic and test code can observe delivery
- * without importing host types.</p>
+ * dispatch report, so diagnostic and test code can observe delivery without
+ * importing host types.</p>
  *
- * @param delivered recipients that received the rendered message
- * @param silenced  recipients dropped/rejected/rate-limited by routing
- * @param redirected copies sent to the console instead of a recipient
+ * @param status      resolved pipeline status for this dispatch
+ * @param considered  recipients the direction expanded to
+ * @param delivered   recipients that received the rendered message
+ * @param silenced    recipients dropped/rejected/rate-limited by a stage
+ * @param redirected  copies sent to the console instead of a recipient
+ * @param failed      recipients whose stage or delivery failed
  */
-public record DispatchOutcome(int delivered, int silenced, int redirected) {
+public record DispatchOutcome(
+        PipelineStatus status,
+        int considered,
+        int delivered,
+        int silenced,
+        int redirected,
+        int failed
+) {
 
-    /** Outcome for a pass that never ran or has no report. */
+    public DispatchOutcome {
+        Objects.requireNonNull(status, "status");
+    }
+
+    /** Outcome for a pass that never entered a pipeline or has no report. */
     public static DispatchOutcome none() {
-        return new DispatchOutcome(0, 0, 0);
+        return new DispatchOutcome(PipelineStatus.NO_PIPELINE, 0, 0, 0, 0, 0);
+    }
+
+    /** @return whether anything reached a destination */
+    public boolean anythingSent() {
+        return delivered > 0 || redirected > 0;
     }
 }

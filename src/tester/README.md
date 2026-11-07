@@ -18,7 +18,7 @@
 ## 2. Non-Responsibilities
 
 - **No platform API** — no Paper, Bukkit, Fabric or Adventure imports in `src/main`
-- **No host internals** — no `SuiteHost`, `MessageDispatcher`, `ChatDelivery` or `DispatchReport`
+- **No host internals** — no `PipelineEngine`, `DeliveryExecutor`, `ChatDelivery` or `PipelineOutcome`
 - **No harness-only tooling** — C7: `tester` is a production package, not a test-only artifact
 - **No command tree** — the host adapter owns `/suite test ...` and supplies the probe
 

@@ -89,7 +89,7 @@ public final class DefaultRouter implements Router, AutoCloseable {
             return apply(rule, channel, message, recipient, emitter);
         }
 
-        // Rate limit is now checked at emission level in MessageDispatcher
+        // Rate limit is checked at emission level by the route stage
         // Per-recipient rate limiting removed (was causing budget to be consumed by fan-out)
         return RouteOutcome.of(new RouteDecision(PolicyTarget.LOG, "default-accept on " + path,
             0, recipient, emitter), message);

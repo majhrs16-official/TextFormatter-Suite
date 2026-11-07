@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La configuración de `outputs` sigue pendiente. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-07 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` sigue pendiente. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -217,8 +217,8 @@ La independencia de descriptores de ADR-036 §14/§15 también está aplicada: s
 publicados y se refresca con `ModuleActivatedEvent`/`ModuleDeactivatedEvent`. Los sinks estáticos
 publican el servicio y detienen sus propios recursos en `stop()`, de modo que la liberación del
 módulo no depende de que el bus exista.
-Siguiente P0 de la auditoría: TF-001 (PL-1), concretamente la configuración de `outputs` y la
-retirada final de `SuiteHost`/`MessageDispatcher`.
+Siguiente P0 de la auditoría: TF-001 (PL-1), concretamente la configuración de `outputs`.
+La retirada final de `SuiteHost`/`MessageDispatcher` quedó cerrada.
 
 **Nota sobre la cita a `P0.1-inventory.md`:** el informe anterior remitía a
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
@@ -270,8 +270,10 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 > en `core-api`, `ComponentRenderedOutput` en `core-render`, motor de ejecución, etapas
 > `route`/`format`/`sync`, cableado del motor en `suite-runtime`, independencia de descriptores
 > (§14/§15), consumo opcional del catálogo de canales y descubrimiento de sinks por servicio.
-> Pendiente: la configuración de `outputs` (§17) y la retirada final de
-> `SuiteHost`/`MessageDispatcher` como fachada legacy. La traducción de `<tr>` se mantiene dentro del
+> La retirada de `SuiteHost`/`MessageDispatcher` como fachada legacy está cerrada: el motor,
+> `RecipientResolver` y `DeliveryExecutor` son el único camino de despacho, y la traza se
+> publica en `SuiteRuntime.pipelineTraces()`. Pendiente: la configuración de `outputs` (§17).
+> La traducción de `<tr>` se mantiene dentro del
 > render de `textformatter`; no se traslada a una etapa `translate`. Cualquier cambio en
 > `docs/prompts/` requiere autorización explícita. La multiplexación de salidas de §17 se planifica
 > en PL-3.
@@ -384,8 +386,8 @@ interface PipelineStage {
 catálogo de canales. La lista de módulos es la superficie visible; el cambio de fondo es qué
 servicios son obligatorios y cómo se compone el procesamiento. El motor ya sustituye a
 `MessageDispatcher` como camino de despacho; la independencia de descriptores y el descubrimiento
-de sinks ya están aplicados. Quedan la configuración de `outputs` y la retirada de la fachada
-legacy; la traducción de `<tr>` permanece dentro de `format`.
+de sinks ya están aplicados. La fachada legacy está retirada y solo queda la configuración de
+`outputs`; la traducción de `<tr>` permanece dentro de `format`.
 
 #### Preguntas abiertas (resueltas por ADR-036, aceptado el 2026-11-06)
 
@@ -446,11 +448,13 @@ legacy; la traducción de `<tr>` permanece dentro de `format`.
   `pipeline` de `config/suite/config.yml` y `MessageDispatch` entrega a través de él. `HostConfig`
   añade `pipeline`; un archivo existente sin esa clave es inválido (solo la ausencia del archivo usa
   los defaults del instalador), los ids base siempre se conocen y una etapa base inactiva queda
-  `SKIPPED`, mientras que un id no base desconocido invalida el plan. `SuiteHost` se conserva como
-  fachada legacy opcional para adaptadores y diagnóstico, ya sin despachar. La traducción de `<tr>`
-  permanece en `TemplateRenderer` dentro de la etapa `format`; no se traslada a una etapa
-  `translate`. También faltan la configuración de `outputs`, la migración de descriptores y el guard
-  de independencia de `checkArchitecture`.
+  `SKIPPED`, mientras que un id no base desconocido invalida el plan. `SuiteHost` y
+  `MessageDispatcher` fueron retirados: `PipelineEngine`, `RecipientResolver` y
+  `DeliveryExecutor` son el único camino, con `DispatchOutcome` de seis campos y traza expuesta
+  por `SuiteRuntime.pipelineTraces()`. La traducción de `<tr>` permanece en `TemplateRenderer`
+  dentro de la etapa `format`; no se traslada a una etapa `translate`. Falta la configuración de
+  `outputs` (§17); la migración de descriptores y el guard de independencia de
+  `checkArchitecture` están aplicados.
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 

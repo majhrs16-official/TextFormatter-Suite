@@ -8,11 +8,14 @@ import me.majhrs16.suite.api.message.Message;
  * Neutral port between the runtime test service and the platform host.
  *
  * <p>The tester package owns the scenarios; the host adapter owns the live
- * components. This keeps the package free of {@code SuiteHost},
- * {@code MessageDispatcher} and platform APIs while still exercising the real
- * routing, formatting, translation and delivery pipeline.</p>
+ * components. This keeps the package free of host internals and platform APIs
+ * while still exercising the real routing, formatting, translation and
+ * delivery pipeline.</p>
+ *
+ * <p>Trace access is part of this port so a failing scenario can point at the
+ * exact stage entry instead of guessing from delivery counters.</p>
  */
-public interface TestProbe {
+public interface TestProbe extends PipelineTraceSource {
 
     /** @return whether the host has a complete, usable runtime. */
     boolean ready();

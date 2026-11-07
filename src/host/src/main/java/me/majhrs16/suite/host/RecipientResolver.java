@@ -15,9 +15,8 @@ import java.util.Objects;
  * Materializes a {@link Direction} into the concrete, de-duplicated recipient
  * list.
  *
- * <p>This is the neutral half of the old {@code MessageDispatcher}: it only
- * expands recipients and does not render or deliver. The pipeline engine can
- * reuse it without depending on the delivery implementation.</p>
+ * <p>It only expands recipients and does not render or deliver, so the pipeline
+ * engine can reuse it without depending on the delivery implementation.</p>
  *
  * <p>Fail-closed policy: a {@code PERMISSION} or {@code WORLD} direction
  * without a qualifier resolves to nobody and logs a warning. An omitted field

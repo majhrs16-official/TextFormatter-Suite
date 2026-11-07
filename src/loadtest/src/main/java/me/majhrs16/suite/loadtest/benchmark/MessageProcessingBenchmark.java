@@ -16,8 +16,6 @@ import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
-import me.majhrs16.suite.host.SuiteHost;
-import me.majhrs16.suite.host.MessageDispatcher;
 import me.majhrs16.suite.host.config.HostConfig;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.api.render.ChatDelivery;
@@ -57,8 +55,7 @@ import java.util.function.Function;
 @Fork(value = 2, warmups = 1)
 public class MessageProcessingBenchmark {
 
-    private SuiteHost host;
-    private MessageDispatcher dispatcher;
+    private HostFixture.Pipeline pipeline;
     private ChannelRegistry channels;
     private TemplateRenderer renderer;
     private Actor testSender;
@@ -150,7 +147,7 @@ public class MessageProcessingBenchmark {
         // Initialize router (VM policy engine; pass-through program by default)
         router = new VmPolicyEngine(channels, permissions, rateLimiter);
 
-        // Create a minimal SuiteHost for dispatcher using bootstrap
+        // Create a minimal pipeline for the dispatcher benchmarks
         Path tempDir = Files.createTempDirectory("benchmark-config");
         Files.createDirectories(tempDir.resolve("config/suite"));
         Files.writeString(tempDir.resolve("config/suite/config.yml"),
@@ -174,8 +171,6 @@ public class MessageProcessingBenchmark {
                 return true;
             }
         };
-
-        host = HostFixture.bootstrap(tempDir, permissions, mockPlaceholders, mockLogger, mockDelivery);
 
         // Create mock ActorDirectory
         ActorDirectory mockActorDirectory = new ActorDirectory() {
@@ -205,20 +200,15 @@ public class MessageProcessingBenchmark {
             }
         };
 
-        // Initialize dispatcher with test config
-        dispatcher = new MessageDispatcher(
-            host,
-            mockActorDirectory,
-            mockDelivery,
-            permissions,
-            mockLogger
-        );
+        // Initialize the pipeline with the test actor directory
+        pipeline = HostFixture.bootstrap(tempDir, permissions, mockPlaceholders, mockLogger,
+            mockDelivery, mockActorDirectory);
     }
 
     @TearDown(Level.Trial)
     public void teardown() {
-        if (dispatcher != null) {
-            dispatcher.close();
+        if (pipeline != null) {
+            pipeline.close();
         }
         if (rateLimiter != null) {
             rateLimiter.close();
@@ -416,7 +406,7 @@ public class MessageProcessingBenchmark {
             .text("Test message")
             .build();
 
-        var report = dispatcher.dispatch(message);
+        var report = pipeline.dispatch(message);
         bh.consume(report);
     }
 
@@ -441,7 +431,7 @@ public class MessageProcessingBenchmark {
             .text("Broadcast message")
             .build();
 
-        var report = dispatcher.dispatch(message);
+        var report = pipeline.dispatch(message);
         bh.consume(report);
     }
 
@@ -517,7 +507,7 @@ public class MessageProcessingBenchmark {
             .text("Concurrent test")
             .build();
 
-        var report = dispatcher.dispatch(message);
+        var report = pipeline.dispatch(message);
         bh.consume(report);
     }
 

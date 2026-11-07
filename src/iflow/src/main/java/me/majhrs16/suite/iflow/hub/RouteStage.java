@@ -90,6 +90,11 @@ public final class RouteStage implements PipelineStage {
             message = second.message();
         }
 
-        return StageResult.continueWith(unit.withMessage(message).withDecision(decision));
+        PipelineMessage resolved = unit.withMessage(message).withDecision(decision);
+        return switch (decision.target()) {
+            case DROP -> StageResult.drop(resolved, decision.describe());
+            case REJECT -> StageResult.reject(resolved, decision.describe());
+            default -> StageResult.continueWith(resolved);
+        };
     }
 }

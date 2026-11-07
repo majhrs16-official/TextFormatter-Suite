@@ -286,17 +286,22 @@ interface HostConfig {
 }
 ```
 
-#### SuiteHost
+#### MessageDispatch / DispatchOutcome
 
 ```java
-interface SuiteHost {
-    HostConfig config();
-    ChannelRegistry channels();
-    TranslationService translation();
-    ModuleManager modules();
-    Path dataDirectory();
-    void close();
+interface MessageDispatch {
+    void dispatch(Message message);
+    DispatchOutcome dispatchAndReport(Message message);
 }
+
+record DispatchOutcome(
+    PipelineStatus status,
+    int considered,
+    int delivered,
+    int silenced,
+    int redirected,
+    int failed
+) {}
 ```
 
 #### ModuleManager
@@ -563,8 +568,8 @@ interface Extension {
 
 ```java
 interface ExtensionContext {
-    SuiteHost host();
-    MessageDispatcher dispatcher();
+    PermissionChecker permissions();
+    ActorDirectory actors();
     PluginLogger logger();
     TranslationService translation();
     UserLanguageStore languages();
