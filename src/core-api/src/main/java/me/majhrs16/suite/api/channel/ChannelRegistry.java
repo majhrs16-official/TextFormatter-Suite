@@ -25,6 +25,8 @@ import java.util.Optional;
  */
 public final class ChannelRegistry {
 
+    private static final ChannelRegistry EMPTY = new ChannelRegistry(Map.of());
+
     private final Map<String, Channel> channels;
 
     private ChannelRegistry(Map<String, Channel> channels) {
@@ -35,6 +37,21 @@ public final class ChannelRegistry {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Neutral registry for consumers that activate without the
+     * {@code textformatter} feature.
+     *
+     * <p>It contains no channels, so {@link #all()} and {@link #paths()} are
+     * empty, but {@link #resolve(String)} still synthesises the bare
+     * {@code chat} channel with its default ACCEPT policy. Channel-dependent
+     * operations that need a configured catalog must detect the empty state
+     * through {@link #all()} and fail explicitly instead of pretending the
+     * catalog exists.</p>
+     */
+    public static ChannelRegistry empty() {
+        return EMPTY;
     }
 
     /** @return whether a channel exists on the exact dotted path. */

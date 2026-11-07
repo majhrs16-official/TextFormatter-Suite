@@ -2,7 +2,6 @@ package me.majhrs16.suite.iflow.wasm;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.IflowBackend;
@@ -31,15 +30,16 @@ public final class IflowWasmActivator implements ModuleActivator {
                 .jvmRange(17, 0)
                 .provide(Capability.of("iflow-wasm", SemVer.of(1, 0, 0)))
                 .provide(Capability.of("router", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
                 .build();
     }
 
     @Override
     public void start(ModuleContext context) {
         ChannelRegistry channels = context.services().find(ChannelRegistry.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "iflow-wasm requires the channel-api capability"));
+                .orElseGet(() -> {
+                    context.logger().warn("iflow-wasm: no channel catalog; using the neutral empty registry");
+                    return ChannelRegistry.empty();
+                });
         PermissionChecker permissions = context.services().find(PermissionChecker.class)
                 .orElse(PermissionChecker.ALLOW_ALL);
         PlaceholderResolver placeholders = context.services()

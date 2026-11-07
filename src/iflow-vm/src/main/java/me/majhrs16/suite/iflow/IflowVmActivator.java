@@ -2,7 +2,6 @@ package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.IflowBackend;
@@ -17,10 +16,12 @@ import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 /**
  * Runtime activator of the {@code iflow-vm} package.
  *
- * <p>Builds the VM policy engine from the shared {@code channel-api} service,
- * loads {@code policy.flow} from the package configuration directory and
- * publishes the engine as a {@link Router} service. The engine owns an
- * execution pool and a rate limiter, so it is tracked as a module resource.</p>
+ * <p>Builds the VM policy engine from the optional {@code ChannelRegistry}
+ * service, loads {@code policy.flow} from the package configuration directory
+ * and publishes the engine as a {@link Router} service. Without
+ * {@code textformatter} the engine uses the neutral empty registry. The engine
+ * owns an execution pool and a rate limiter, so it is tracked as a module
+ * resource.</p>
  */
 public final class IflowVmActivator implements ModuleActivator {
 
@@ -32,15 +33,16 @@ public final class IflowVmActivator implements ModuleActivator {
                 .jvmRange(17, 0)
                 .provide(Capability.of("iflow-vm", SemVer.of(1, 0, 0)))
                 .provide(Capability.of("router", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
                 .build();
     }
 
     @Override
     public void start(ModuleContext context) {
         ChannelRegistry channels = context.services().find(ChannelRegistry.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "iflow-vm requires the channel-api capability"));
+                .orElseGet(() -> {
+                    context.logger().warn("iflow-vm: no channel catalog; using the neutral empty registry");
+                    return ChannelRegistry.empty();
+                });
         PermissionChecker permissions = context.services().find(PermissionChecker.class)
                 .orElse(PermissionChecker.ALLOW_ALL);
 

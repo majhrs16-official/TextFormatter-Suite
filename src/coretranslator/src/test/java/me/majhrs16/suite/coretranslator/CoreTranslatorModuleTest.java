@@ -4,9 +4,7 @@ import java.util.List;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
-import me.majhrs16.suite.chattranslator.ChatTranslatorModule;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
@@ -35,34 +33,17 @@ class CoreTranslatorModuleTest {
         assertThat(descriptor.provides())
             .extracting(Capability::name)
             .containsExactly("coretranslator");
-        assertThat(descriptor.requires())
-            .extracting(Requirement::name)
-            .containsExactly("chattranslator");
+        assertThat(descriptor.requires()).isEmpty();
     }
 
     @Test
-    @DisplayName("el requisito >=1.0.0 acepta la versión actual de chattranslator")
-    void acceptsCurrentChatTranslatorCapability() {
-        ModuleDescriptor descriptor = new CoreTranslatorModule().descriptor();
-        Requirement requirement = descriptor.requires().iterator().next();
-
-        assertThat(requirement.satisfiedBy(SemVer.of(1, 0, 0))).isTrue();
-        assertThat(requirement.satisfiedBy(SemVer.of(1, 0, 0))).isTrue();
-        assertThat(requirement.satisfiedBy(SemVer.of(0, 9, 0))).isFalse();
-    }
-
-    @Test
-    @DisplayName("resuelve junto a chattranslator y falla si la façade no está")
-    void resolvesWithChatTranslatorAndFailsAlone() {
-        ModuleGraph graph = new ModuleGraph(ENV);
+    @DisplayName("se activa sin la façade chattranslator")
+    void resolvesWithoutChatTranslator() {
         CoreTranslatorModule coreTranslator = new CoreTranslatorModule();
 
-        ResolutionResult withFacade = graph.resolve(List.of(
-            coreTranslator, new ChatTranslatorModule()));
-        ResolutionResult alone = graph.resolve(List.of(coreTranslator));
+        ResolutionResult alone = new ModuleGraph(ENV).resolve(List.of(coreTranslator));
 
-        assertThat(withFacade.allResolved()).isTrue();
-        assertThat(withFacade.of(coreTranslator)).isEqualTo(ResolutionStatus.RESOLVED);
-        assertThat(alone.of(coreTranslator)).isEqualTo(ResolutionStatus.UNSATISFIED_REQUIREMENT);
+        assertThat(alone.allResolved()).isTrue();
+        assertThat(alone.of(coreTranslator)).isEqualTo(ResolutionStatus.RESOLVED);
     }
 }

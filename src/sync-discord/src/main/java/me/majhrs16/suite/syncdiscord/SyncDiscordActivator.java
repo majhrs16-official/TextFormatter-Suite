@@ -2,7 +2,6 @@ package me.majhrs16.suite.syncdiscord;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.discord.DiscordConnectionFactory;
 import me.majhrs16.suite.api.discord.DiscordSettings;
@@ -23,9 +22,12 @@ import java.util.List;
  *
  * <p>The package activates even when no transport adapter is installed yet:
  * it subscribes to module lifecycle events and attaches the sink as soon as a
- * {@link DiscordConnectionFactory} appears. When the selected adapter is
- * deactivated, the sink is unregistered so no classloader from the unloaded
- * adapter stays reachable.</p>
+ * {@link DiscordConnectionFactory} appears. The attached sink is published as
+ * a {@link SyncSink} service so the {@code sync-bus} can discover it; when a
+ * bus is already present the activator also registers it directly, because the
+ * bus may have processed the adapter's activation event before this listener
+ * ran. When the selected adapter is deactivated, the sink is unregistered so
+ * no classloader from the unloaded adapter stays reachable.</p>
  *
  * <p>Activation never waits for the remote Discord gateway; that is the
  * adapter's non-blocking responsibility.</p>
@@ -39,6 +41,7 @@ public final class SyncDiscordActivator implements ModuleActivator {
     private DiscordConfig config;
     private DiscordConnectionFactory factory;
     private SyncSink sink;
+    private ServiceRegistry.Registration sinkRegistration;
     private EventBus.Subscription activatedSubscription;
     private EventBus.Subscription deactivatedSubscription;
 
@@ -49,15 +52,12 @@ public final class SyncDiscordActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("sync-sink", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("sync-bus", SemVer.of(1, 0, 0)))
                 .build();
     }
 
     @Override
     public void start(ModuleContext context) {
-        this.bus = context.services().find(SyncBus.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "sync-discord requires the sync-bus service"));
+        this.bus = context.services().find(SyncBus.class).orElse(null);
         this.services = context.services();
         this.events = context.events();
         this.logger = context.logger();
@@ -94,7 +94,7 @@ public final class SyncDiscordActivator implements ModuleActivator {
     }
 
     private synchronized void tryAttach() {
-        if (sink != null || bus == null || services == null) {
+        if (sink != null || services == null) {
             return;
         }
         List<DiscordConnectionFactory> factories =
@@ -114,15 +114,33 @@ public final class SyncDiscordActivator implements ModuleActivator {
                 selected,
                 new DiscordSettings(config.token(), config.channelId()),
                 logger);
+        ServiceRegistry.Registration registration = services.register(SyncSink.class, created);
         try {
-            bus.register(created);
+            registerWithBus(created);
         } catch (RuntimeException failure) {
+            registration.close();
             logger.warn("Discord sink could not be registered: " + failure.getMessage());
             return;
         }
         this.factory = selected;
         this.sink = created;
+        this.sinkRegistration = registration;
         logger.info("Discord sync sink registered with adapter " + selected.name());
+    }
+
+    private void registerWithBus(SyncSink created) {
+        if (bus == null || bus.sinkNames().contains(created.name())) {
+            return;
+        }
+        try {
+            bus.register(created);
+        } catch (IllegalStateException duplicate) {
+            // The bus may have discovered the service between the check and
+            // the call; that is success, not a duplicate failure.
+            if (!bus.sinkNames().contains(created.name())) {
+                throw duplicate;
+            }
+        }
     }
 
     private synchronized void detachIfAdapterGone() {
@@ -139,6 +157,10 @@ public final class SyncDiscordActivator implements ModuleActivator {
     }
 
     private void detach() {
+        if (sinkRegistration != null) {
+            sinkRegistration.close();
+            sinkRegistration = null;
+        }
         if (bus != null && sink != null) {
             bus.unregister(sink.name());
         }

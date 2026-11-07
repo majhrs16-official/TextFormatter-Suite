@@ -8,7 +8,6 @@ import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.kernel.ResolutionStatus;
-import me.majhrs16.suite.textformatter.TextFormatterModule;
 
 import org.junit.jupiter.api.Test;
 
@@ -18,9 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the cross-module dependency: iFlow requires {@code channel-api},
- * which the TextFormatter module provides. The kernel graph must resolve both
- * when they are present together and must flag iFlow as unmet on its own.
+ * The iFlow firewall consumes {@code ChannelRegistry} optionally from the
+ * service registry; it no longer declares {@code channel-api} as a
+ * requirement. This keeps the engine usable without {@code textformatter}.
  */
 class IflowFirewallModuleTest {
 
@@ -37,32 +36,21 @@ class IflowFirewallModuleTest {
     }
 
     @Test
-    void declaresRouterCapabilityAndChannelApiRequirement() {
+    void declaresRouterCapabilityWithoutRequiringChannelApi() {
         ModuleDescriptor descriptor = new IflowFirewallModule().descriptor();
 
         assertEquals("1.0.0", descriptor.contractVersion().toString());
         assertTrue(descriptor.provides().contains(
             Capability.of("router", SemVer.of(1, 0, 0))));
-        assertTrue(descriptor.requires().contains(
-            me.majhrs16.suite.api.Requirement.atLeast("channel-api", SemVer.of(1, 0, 0))));
+        assertTrue(descriptor.requires().isEmpty());
     }
 
     @Test
-    void resolvesAlongsideTextFormatterInRealGraph() {
-        ModuleGraph graph = new ModuleGraph(Environment.current());
-        ResolutionResult result = graph.resolve(java.util.List.of(
-            new IflowFirewallModule(),
-            new TextFormatterModule()));
+    void resolvesWithoutTextFormatter() {
+        Module iflow = new IflowFirewallModule();
+        ResolutionResult result = new ModuleGraph(Environment.current())
+            .resolve(java.util.List.of(iflow));
 
-        assertTrue(result.allResolved(), "both modules must resolve together");
-    }
-
-    @Test
-    void aloneIsUnsatisfiedWithoutChannelApi() {
-        me.majhrs16.suite.api.Module iflow = new IflowFirewallModule();
-        ModuleGraph graph = new ModuleGraph(Environment.current());
-        ResolutionResult result = graph.resolve(java.util.List.of(iflow));
-
-        assertEquals(ResolutionStatus.UNSATISFIED_REQUIREMENT, result.of(iflow));
+        assertEquals(ResolutionStatus.RESOLVED, result.of(iflow));
     }
 }

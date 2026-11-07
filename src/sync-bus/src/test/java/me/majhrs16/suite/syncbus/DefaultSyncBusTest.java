@@ -1,11 +1,17 @@
 package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -158,6 +164,68 @@ class DefaultSyncBusTest {
         } finally {
             sink.release.countDown();
             bus.stop();
+        }
+    }
+
+    @Test
+    void discoversPublishedSinkServicesAndDropsThemWhenTheyDisappear() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        FakeRegistry registry = new FakeRegistry();
+        RecordingSink sink = new RecordingSink("discovered");
+        registry.add(SyncSink.class, sink);
+
+        bus.discoverSinks(registry);
+        bus.start();
+        try {
+            assertEquals(List.of("discovered"), List.copyOf(bus.sinkNames()));
+            assertTrue(sink.started, "a discovered sink must be started with the bus");
+
+            bus.discoverSinks(registry);
+            assertEquals(1, bus.sinkNames().size(), "discovery must be idempotent by sink name");
+
+            registry.remove(SyncSink.class, sink);
+            bus.discoverSinks(registry);
+
+            assertTrue(bus.sinkNames().isEmpty(),
+                    "a sink whose service disappeared must be unregistered");
+            assertTrue(sink.stopped, "an unregistered discovered sink must be stopped");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    private static final class FakeRegistry implements ServiceRegistry {
+
+        private final Map<Class<?>, List<Object>> services = new HashMap<>();
+
+        <T> void add(Class<T> type, T service) {
+            services.computeIfAbsent(type, ignored -> new ArrayList<>()).add(service);
+        }
+
+        <T> void remove(Class<T> type, T service) {
+            List<Object> registered = services.get(type);
+            if (registered != null) {
+                registered.remove(service);
+            }
+        }
+
+        @Override
+        public <T> Registration register(Class<T> type, T service) {
+            add(type, service);
+            return () -> remove(type, service);
+        }
+
+        @Override
+        public <T> Optional<T> find(Class<T> type) {
+            return findAll(type).stream().findFirst();
+        }
+
+        @Override
+        public <T> List<T> findAll(Class<T> type) {
+            List<Object> registered = services.get(type);
+            return registered == null
+                    ? List.of()
+                    : registered.stream().map(type::cast).toList();
         }
     }
 

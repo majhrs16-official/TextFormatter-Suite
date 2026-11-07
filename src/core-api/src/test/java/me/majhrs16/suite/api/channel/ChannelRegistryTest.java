@@ -58,6 +58,17 @@ class ChannelRegistryTest {
     }
 
     @Test
+    void emptyRegistryHasNoConfiguredChannelsButResolvesSyntheticChat() {
+        ChannelRegistry registry = ChannelRegistry.empty();
+
+        assertTrue(registry.all().isEmpty());
+        assertTrue(registry.paths().isEmpty());
+        assertFalse(registry.has("chat"));
+        assertEquals("chat", registry.resolve("any.path").name());
+        assertSame(ChannelRegistry.empty(), registry);
+    }
+
+    @Test
     void preservesInsertionOrder() {
         ChannelRegistry registry = ChannelRegistry.builder()
             .register(channel("b"))

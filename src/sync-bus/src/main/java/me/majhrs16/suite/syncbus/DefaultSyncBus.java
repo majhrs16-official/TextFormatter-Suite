@@ -1,6 +1,7 @@
 package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
@@ -239,6 +240,46 @@ public final class DefaultSyncBus implements SyncBus {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Indexes every {@link SyncSink} published by an active module.
+     *
+     * <p>Discovery is idempotent by sink name: a sink that is already
+     * registered is left untouched, and a sink whose service disappeared is
+     * unregistered and stopped. The runtime calls this at bus start and after
+     * every module activation or deactivation, so a sink package no longer has
+     * to look up the bus when it activates.</p>
+     *
+     * @param services registry whose {@code SyncSink} services must be indexed
+     */
+    public void discoverSinks(ServiceRegistry services) {
+        Objects.requireNonNull(services, "services");
+        Set<String> live = new HashSet<>();
+        for (SyncSink sink : services.findAll(SyncSink.class)) {
+            String name = sink.name();
+            live.add(name);
+            if (sinks.containsKey(name)) {
+                continue;
+            }
+            try {
+                register(sink);
+            } catch (IllegalStateException duplicate) {
+                // A concurrent registration won the race; keep the live sink.
+                if (!sinks.containsKey(name)) {
+                    logger.warn("SyncBus: cannot register discovered sink '" + name
+                            + "': " + duplicate.getMessage());
+                }
+            } catch (RuntimeException failure) {
+                logger.warn("SyncBus: cannot register discovered sink '" + name
+                        + "': " + failure.getMessage());
+            }
+        }
+        for (String registered : new HashSet<>(sinkNamesSnapshot)) {
+            if (!live.contains(registered)) {
+                unregister(registered);
+            }
+        }
     }
 
     @Override

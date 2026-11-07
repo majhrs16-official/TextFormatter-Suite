@@ -28,6 +28,11 @@ class TesterActivatorTest {
     Path tempDir;
 
     @Test
+    void descriptorDoesNotRequireOtherFeatures() {
+        assertThat(new TesterActivator().descriptor().requires()).isEmpty();
+    }
+
+    @Test
     void publishesTheTestRunnerFactoryWithoutStartingPlatformWork() {
         FakeRegistry registry = new FakeRegistry();
 

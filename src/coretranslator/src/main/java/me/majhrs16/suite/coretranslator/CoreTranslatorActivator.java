@@ -33,9 +33,13 @@ public final class CoreTranslatorActivator implements ModuleActivator {
 
     @Override
     public void start(ModuleContext context) {
-        TranslationService translations = context.services().find(TranslationService.class)
-            .orElseThrow(() -> new IllegalStateException(
-                "coretranslator requires the chattranslator package (TranslationService)"));
+        TranslationService translations = context.services().find(TranslationService.class).orElse(null);
+        if (translations == null) {
+            context.logger().warn("CoreTranslator: no TranslationService; the legacy "
+                + "%cot_* placeholders stay inert until this package is reactivated "
+                + "after the chattranslator facade is installed");
+            return;
+        }
         UserLanguageStore languages = context.services().find(UserLanguageStore.class).orElse(null);
         ActorDirectory actors = context.services().find(ActorDirectory.class).orElse(null);
         MessageDispatch dispatch = context.services().find(MessageDispatch.class).orElse(null);

@@ -3,7 +3,6 @@ package me.majhrs16.suite.ltranslate;
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 
 /**
@@ -20,7 +19,6 @@ public final class LTranslateModule implements Module {
             .contractVersion(SemVer.of(1, 0, 0))
             .jvmRange(17, 0)
             .provide(Capability.of("translator", SemVer.of(1, 0, 0)))
-            .require(Requirement.atLeast("chattranslator", SemVer.of(1, 0, 0)))
             .build();
     }
 }

@@ -26,10 +26,12 @@ import me.majhrs16.suite.api.spi.TranslationService;
  * and its translation service in the module scope. The service owns a thread
  * pool, so it is tracked as a module resource and closed on deactivation.</p>
  *
- * <p>Provider packages activate after {@code chattranslator} because they
- * require it. The activator subscribes to module lifecycle events and rebuilds
- * the manager when a provider appears or disappears, which keeps the facade
- * usable across hot installs and unloads.</p>
+ * <p>Provider packages are independent: they publish their
+ * {@link TranslatorProvider} without requiring this facade. The activator
+ * subscribes to module lifecycle events and rebuilds the manager when a
+ * provider appears or disappears, which keeps the facade usable across hot
+ * installs and unloads. Provider packages may activate before or after this
+ * one.</p>
  */
 public final class ChatTranslatorActivator implements ModuleActivator {
 
@@ -40,6 +42,7 @@ public final class ChatTranslatorActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("chattranslator", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("stage:translate", SemVer.of(1, 0, 0)))
                 .build();
     }
 

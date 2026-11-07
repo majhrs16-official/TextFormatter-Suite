@@ -828,7 +828,7 @@ class PackageRuntimeTest {
             Path sinkJar = FixtureModules.buildSinkJar(
                     tempDir, "sink-fixture", "1.0.0", "fixture-sink");
             Path sinkZip = FixtureModules.buildPackageZip(
-                    tempDir, "sink-fixture", "1.0.0", "stable", sinkJar, "sync-bus@>=1.0.0");
+                    tempDir, "sink-fixture", "1.0.0", "stable", sinkJar, null);
 
             List<PackageChange> sinkActivation = fixture.runtime.installLocal(sinkZip, false);
             assertTrue(sinkActivation.get(0).isSuccess(),

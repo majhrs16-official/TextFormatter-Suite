@@ -2,7 +2,6 @@ package me.majhrs16.suite.syncvelocity;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.EventBus;
 import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
@@ -23,8 +22,10 @@ import java.util.List;
  *
  * <p>The package activates without a Velocity adapter. It subscribes to module
  * lifecycle events and attaches the sink when a matching
- * {@link VelocityConnectionFactory} appears. If that adapter is unloaded, the
- * sink is removed before the adapter classloader can leak.</p>
+ * {@link VelocityConnectionFactory} appears. The attached sink is published as
+ * a {@link SyncSink} service so the {@code sync-bus} can discover it, with a
+ * direct registration when a bus is already present. If that adapter is
+ * unloaded, the sink is removed before the adapter classloader can leak.</p>
  */
 public final class SyncVelocityActivator implements ModuleActivator {
 
@@ -35,6 +36,7 @@ public final class SyncVelocityActivator implements ModuleActivator {
     private VelocityConfig config;
     private VelocityConnectionFactory factory;
     private VelocitySink sink;
+    private ServiceRegistry.Registration sinkRegistration;
     private EventBus.Subscription activatedSubscription;
     private EventBus.Subscription deactivatedSubscription;
 
@@ -45,15 +47,12 @@ public final class SyncVelocityActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("sync-sink", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("sync-bus", SemVer.of(1, 0, 0)))
                 .build();
     }
 
     @Override
     public void start(ModuleContext context) {
-        this.bus = context.services().find(SyncBus.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "sync-velocity requires the sync-bus service"));
+        this.bus = context.services().find(SyncBus.class).orElse(null);
         this.services = context.services();
         this.events = context.events();
         this.logger = context.logger();
@@ -89,7 +88,7 @@ public final class SyncVelocityActivator implements ModuleActivator {
     }
 
     private synchronized void tryAttach() {
-        if (sink != null || bus == null || services == null) {
+        if (sink != null || services == null) {
             return;
         }
         List<VelocityConnectionFactory> factories =
@@ -114,16 +113,34 @@ public final class SyncVelocityActivator implements ModuleActivator {
             logger.warn("Velocity sink could not be created: " + failure.getMessage());
             return;
         }
+        ServiceRegistry.Registration registration = services.register(SyncSink.class, created);
         try {
-            bus.register(created);
+            registerWithBus(created);
         } catch (RuntimeException failure) {
+            registration.close();
             created.stop();
             logger.warn("Velocity sink could not be registered: " + failure.getMessage());
             return;
         }
         this.factory = selected;
         this.sink = created;
+        this.sinkRegistration = registration;
         logger.info("Velocity sync sink registered with adapter " + selected.name());
+    }
+
+    private void registerWithBus(SyncSink created) {
+        if (bus == null || bus.sinkNames().contains(created.name())) {
+            return;
+        }
+        try {
+            bus.register(created);
+        } catch (IllegalStateException duplicate) {
+            // The bus may have discovered the service between the check and
+            // the call; that is success, not a duplicate failure.
+            if (!bus.sinkNames().contains(created.name())) {
+                throw duplicate;
+            }
+        }
     }
 
     private synchronized void detachIfAdapterGone() {
@@ -140,6 +157,10 @@ public final class SyncVelocityActivator implements ModuleActivator {
     }
 
     private void detach() {
+        if (sinkRegistration != null) {
+            sinkRegistration.close();
+            sinkRegistration = null;
+        }
         if (bus != null && sink != null) {
             bus.unregister(sink.name());
         }

@@ -2,7 +2,6 @@ package me.majhrs16.suite.inworld;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.inworld.InWorldService;
@@ -32,15 +31,16 @@ public final class InWorldActivator implements ModuleActivator {
             .provide(Capability.of("channel-world", SemVer.of(1, 0, 0)))
             .provide(Capability.of("channel-radius", SemVer.of(1, 0, 0)))
             .provide(Capability.of("click-hover", SemVer.of(1, 0, 0)))
-            .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
             .build();
     }
 
     @Override
     public void start(ModuleContext context) {
         ChannelRegistry channels = context.services().find(ChannelRegistry.class)
-            .orElseThrow(() -> new IllegalStateException(
-                "inworld requires the channel-api capability"));
+            .orElseGet(() -> {
+                context.logger().warn("inworld: no channel catalog; using the neutral empty registry");
+                return ChannelRegistry.empty();
+            });
         handler = new InWorldHandler(channels, context.logger());
         context.services().register(InWorldHandler.class, handler);
         context.services().register(InWorldService.class, handler);

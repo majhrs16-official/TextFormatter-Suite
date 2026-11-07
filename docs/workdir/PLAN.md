@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La etapa `translate` y la configuración de `outputs` siguen pendientes. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La etapa `translate` y la configuración de `outputs` siguen pendientes. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -46,9 +46,9 @@
 > conserven el camino viejo.
 >
 > **Excepción registrada (2026-11-05, actualizada el 2026-11-06):** `PL-1` (pipeline secuencial
-> configurable) queda **propuesta y documentada**, pero **no se ha iniciado**. ADR-036 fue aceptado
-> el 2026-11-06 y la purga P0 está cerrada; ya no hay bloqueo documental para empezar. La nota de
-> esta sección no autoriza implementación ni cambios en `docs/prompts/`.
+> configurable) dejó de ser una propuesta: su implementación avanza por slices con gate verde.
+> ADR-036 fue aceptado el 2026-11-06 y la purga P0 está cerrada. La nota de esta sección no autoriza
+> cambios en `docs/prompts/`.
 
 | # | Tarea | Criterio de cierre | Estado |
 |---|---|---|---|
@@ -211,7 +211,14 @@ drenar las colas. PL-1 avanza por slices con gate verde: contratos neutrales en 
 `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`,
 `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` con 12 tests y motor ya
 cableado como camino de producción, alimentado por `pipeline` en `config/suite/config.yml`.
-Siguiente P0 de la auditoría: TF-001 (PL-1).
+La independencia de descriptores de ADR-036 §14/§15 también está aplicada: se retiraron los
+`Requirement` entre features, `checkArchitecture` rechaza cualquier requisito que no sea
+`api`/`jvm`/`kernel`/`manager-spi`/`platform`, y `DefaultSyncBus` descubre los `SyncSink`
+publicados y se refresca con `ModuleActivatedEvent`/`ModuleDeactivatedEvent`. Los sinks estáticos
+publican el servicio y detienen sus propios recursos en `stop()`, de modo que la liberación del
+módulo no depende de que el bus exista.
+Siguiente P0 de la auditoría: TF-001 (PL-1), concretamente la etapa `translate` y la configuración
+de `outputs`.
 
 **Nota sobre la cita a `P0.1-inventory.md`:** el informe anterior remitía a
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
@@ -236,6 +243,9 @@ explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptaci
   etiquetas `F7+` de la UI, las versiones `2.1`/`3.0` y los metadatos propios
   `2.1.0-SNAPSHOT`. P0.8 y P0.6 cerrados.
 - W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
+- Con la independencia de descriptores (ADR-036 §15), el orden de activación deja de estar impuesto
+  por el grafo. `coretranslator` se activa inerte si `chattranslator` no está presente; para usar sus
+  placeholders hay que reactivarlo después de instalar la fachada. El aviso de activación lo indica.
 
 ### Después de 1.0.0 — betatesting/E2E real
 
@@ -250,17 +260,19 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 ### Feature propuesta — pipeline secuencial configurable (PL-1, 2026-11-05)
 
-> **Estado:** propuesta de implementación en curso. **ADR-036 aceptado
+> **Estado:** implementación en curso por slices. **ADR-036 aceptado
 > (2026-11-06).** Sustituye o enmienda ADR-019 (composition root y
 > dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow), ADR-008
 > (backend→fachada) y ADR-003 (§16, autoridad del guest) en lo relativo a los requisitos entre
 > features y al orden del pipeline; adopta ADR-031 en la semántica de routing (§16 regula la
 > exposición de `SET_CHANNEL` sin alterar D01–D05). La purga P0 está cerrada (P0.6, 2026-11-06),
-> así que no queda bloqueo documental. La implementación arrancó el 2026-11-06 con los contratos
-> neutrales del pipeline en `core-api` y `ComponentRenderedOutput` en `core-render`; el motor, el
-> plan del runtime y la migración de descriptores siguen pendientes. Cualquier cambio en
-> `docs/prompts/` requiere autorización explícita. La multiplexación de salidas de §17 se planifica
-> en PL-3.
+> así que no queda bloqueo documental. Implementado hasta ahora: contratos neutrales del pipeline
+> en `core-api`, `ComponentRenderedOutput` en `core-render`, motor de ejecución, etapas
+> `route`/`format`/`sync`, cableado del motor en `suite-runtime`, independencia de descriptores
+> (§14/§15), consumo opcional del catálogo de canales y descubrimiento de sinks por servicio.
+> Pendiente: la etapa `translate`, la configuración de `outputs` (§17) y la retirada final de
+> `SuiteHost`/`MessageDispatcher` como fachada legacy. Cualquier cambio en `docs/prompts/` requiere
+> autorización explícita. La multiplexación de salidas de §17 se planifica en PL-3.
 
 #### Hallazgo estructural
 
@@ -362,15 +374,16 @@ interface PipelineStage {
 | `sync-*`, `inworld`, `tester` | Consumir el mensaje final o una etapa; no declarar `channel-api` como requisito. |
 | `presets` | Escribir el catálogo de `textformatter` en la ruta canónica vigente, `config/textformatter/channels/`; la ruta no se mueve. |
 | `DefaultConfigInstaller` y hosts | Instalar el catálogo de `textformatter` y un `pipeline` por defecto coherente con lo instalado. |
-| `checkArchitecture` | Guard nuevo: ninguna feature declara `Requirement` sobre otra feature; el orden del pipeline no se deriva del grafo. El consumo opcional no es un `Requirement`. |
+| `checkArchitecture` | Guard aplicado en `build.gradle`: ninguna feature declara `Requirement` sobre otra feature; solo `api`/`jvm`/`kernel`/`manager-spi`/`platform` son exigibles. El orden del pipeline no se deriva del grafo y el consumo opcional no es un `Requirement`. |
 | Configuración y documentación | `config/suite/config.yml`, `storage.md`, `config-schema-v2.2.md`, wiki y READMEs. Los documentos de `docs/prompts/` requieren autorización. |
 
 **Nota de alcance:** PL-1 no es solo añadir una lista. Exige **rediseñar el pipeline actual**
 (`SuiteHost`/`MessageDispatcher`), el modelo de requisitos del grafo y el consumo opcional del
 catálogo de canales. La lista de módulos es la superficie visible; el cambio de fondo es qué
 servicios son obligatorios y cómo se compone el procesamiento. El motor ya sustituye a
-`MessageDispatcher` como camino de despacho; quedan la etapa `translate`, la configuración de
-`outputs`, la migración de descriptores y el guard de independencia.
+`MessageDispatcher` como camino de despacho; la independencia de descriptores y el descubrimiento
+de sinks ya están aplicados. Quedan la etapa `translate`, la configuración de `outputs` y la
+retirada de la fachada legacy.
 
 #### Preguntas abiertas (resueltas por ADR-036, aceptado el 2026-11-06)
 

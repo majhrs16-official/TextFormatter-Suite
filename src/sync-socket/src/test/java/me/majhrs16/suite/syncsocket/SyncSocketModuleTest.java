@@ -3,13 +3,11 @@ package me.majhrs16.suite.syncsocket;
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.kernel.ResolutionStatus;
-import me.majhrs16.suite.syncbus.SyncBusModule;
 
 import org.junit.jupiter.api.Test;
 
@@ -34,29 +32,19 @@ class SyncSocketModuleTest {
     }
 
     @Test
-    void providesSyncSinkCapability() {
+    void providesSyncSinkWithoutRequiringTheBus() {
         ModuleDescriptor descriptor = new SyncSocketModule().descriptor();
         assertTrue(descriptor.provides().contains(
             Capability.of("sync-sink", SemVer.of(1, 0, 0))));
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("sync-bus")));
+        assertTrue(descriptor.requires().isEmpty());
     }
 
     @Test
-    void requiresSyncBusCapability() {
-        ModuleDescriptor descriptor = new SyncSocketModule().descriptor();
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("sync-bus")));
-    }
-
-    @Test
-    void resolvesInRealKernelGraph() {
+    void resolvesWithoutTheSyncBus() {
         me.majhrs16.suite.api.Module syncSocketModule = new SyncSocketModule();
-        me.majhrs16.suite.api.Module syncBusModule = new SyncBusModule();
         ResolutionResult result = new ModuleGraph(Environment.current())
-            .resolve(List.of(syncSocketModule, syncBusModule));
+            .resolve(List.of(syncSocketModule));
 
         assertEquals(ResolutionStatus.RESOLVED, result.of(syncSocketModule));
-        assertEquals(ResolutionStatus.RESOLVED, result.of(syncBusModule));
     }
 }

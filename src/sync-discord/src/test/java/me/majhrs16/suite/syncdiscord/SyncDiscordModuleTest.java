@@ -8,7 +8,6 @@ import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.kernel.ResolutionStatus;
-import me.majhrs16.suite.syncbus.SyncBusModule;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,29 +32,19 @@ class SyncDiscordModuleTest {
     }
 
     @Test
-    void providesSyncSinkCapability() {
+    void providesSyncSinkWithoutRequiringTheBus() {
         ModuleDescriptor descriptor = new SyncDiscordModule().descriptor();
         assertTrue(descriptor.provides().contains(
             Capability.of("sync-sink", SemVer.of(1, 0, 0))));
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("sync-bus")));
+        assertTrue(descriptor.requires().isEmpty());
     }
 
     @Test
-    void requiresSyncBusCapability() {
-        ModuleDescriptor descriptor = new SyncDiscordModule().descriptor();
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("sync-bus")));
-    }
-
-    @Test
-    void resolvesInRealKernelGraph() {
+    void resolvesWithoutTheSyncBus() {
         Module syncDiscordModule = new SyncDiscordModule();
-        Module syncBusModule = new SyncBusModule();
         ResolutionResult result = new ModuleGraph(Environment.current())
-            .resolve(List.of(syncDiscordModule, syncBusModule));
+            .resolve(List.of(syncDiscordModule));
 
         assertEquals(ResolutionStatus.RESOLVED, result.of(syncDiscordModule));
-        assertEquals(ResolutionStatus.RESOLVED, result.of(syncBusModule));
     }
 }

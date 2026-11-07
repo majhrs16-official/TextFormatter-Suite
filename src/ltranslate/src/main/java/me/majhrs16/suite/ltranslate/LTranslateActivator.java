@@ -2,7 +2,6 @@ package me.majhrs16.suite.ltranslate;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
@@ -23,7 +22,6 @@ public final class LTranslateActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("translator", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("chattranslator", SemVer.of(1, 0, 0)))
                 .build();
     }
 

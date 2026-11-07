@@ -8,7 +8,6 @@ import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
 import me.majhrs16.suite.kernel.ResolutionStatus;
-import me.majhrs16.suite.syncbus.SyncBusModule;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,29 +32,19 @@ class SyncTelegramModuleTest {
     }
 
     @Test
-    void providesSyncSinkCapability() {
+    void providesSyncSinkWithoutRequiringTheBus() {
         ModuleDescriptor descriptor = new SyncTelegramModule().descriptor();
         assertTrue(descriptor.provides().contains(
             Capability.of("sync-sink", SemVer.of(1, 0, 0))));
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("sync-bus")));
+        assertTrue(descriptor.requires().isEmpty());
     }
 
     @Test
-    void requiresSyncBusCapability() {
-        ModuleDescriptor descriptor = new SyncTelegramModule().descriptor();
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("sync-bus")));
-    }
-
-    @Test
-    void resolvesInRealKernelGraph() {
-        Module syncTelegramModule = new SyncTelegramModule();
-        Module syncBusModule = new SyncBusModule();
+    void resolvesWithoutTheSyncBus() {
+        me.majhrs16.suite.api.Module syncTelegramModule = new SyncTelegramModule();
         ResolutionResult result = new ModuleGraph(Environment.current())
-            .resolve(List.of(syncTelegramModule, syncBusModule));
+            .resolve(List.of(syncTelegramModule));
 
         assertEquals(ResolutionStatus.RESOLVED, result.of(syncTelegramModule));
-        assertEquals(ResolutionStatus.RESOLVED, result.of(syncBusModule));
     }
 }

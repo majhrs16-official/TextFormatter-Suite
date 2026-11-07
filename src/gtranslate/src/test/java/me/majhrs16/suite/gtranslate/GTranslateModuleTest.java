@@ -4,7 +4,6 @@ import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
-import me.majhrs16.suite.chattranslator.ChatTranslatorModule;
 import me.majhrs16.suite.kernel.Environment;
 import me.majhrs16.suite.kernel.ModuleGraph;
 import me.majhrs16.suite.kernel.ResolutionResult;
@@ -40,20 +39,17 @@ class GTranslateModuleTest {
     }
 
     @Test
-    void requiresChatTranslatorCapability() {
+    void doesNotRequireTheChatTranslatorFacade() {
         ModuleDescriptor descriptor = new GTranslateModule().descriptor();
-        assertTrue(descriptor.requires().stream()
-            .anyMatch(r -> r.name().equals("chattranslator")));
+        assertTrue(descriptor.requires().isEmpty());
     }
 
     @Test
-    void resolvesInRealKernelGraph() {
+    void resolvesWithoutTheChatTranslatorFacade() {
         me.majhrs16.suite.api.Module gtranslateModule = new GTranslateModule();
-        me.majhrs16.suite.api.Module chatTranslatorModule = new ChatTranslatorModule();
         ResolutionResult result = new ModuleGraph(Environment.current())
-            .resolve(List.of(gtranslateModule, chatTranslatorModule));
+            .resolve(List.of(gtranslateModule));
 
         assertEquals(ResolutionStatus.RESOLVED, result.of(gtranslateModule));
-        assertEquals(ResolutionStatus.RESOLVED, result.of(chatTranslatorModule));
     }
 }

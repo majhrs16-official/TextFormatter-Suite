@@ -8,7 +8,6 @@ import java.nio.file.Path;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
@@ -43,7 +42,6 @@ public final class SyncFabricActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(21, 0)
                 .provide(Capability.of("sync-fabric", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
                 .build();
     }
 
@@ -64,7 +62,7 @@ public final class SyncFabricActivator implements ModuleActivator {
 
         SyncEventProcessor processor = new SyncEventProcessor(
                 required(context, MessageDispatch.class),
-                required(context, ChannelRegistry.class),
+                optionalChannels(context),
                 required(context, UserLanguageStore.class),
                 required(context, PermissionChecker.class),
                 context.logger());
@@ -101,6 +99,14 @@ public final class SyncFabricActivator implements ModuleActivator {
         return context.services().find(type)
                 .orElseThrow(() -> new IllegalStateException(
                         "sync-fabric requires " + type.getSimpleName()));
+    }
+
+    private static ChannelRegistry optionalChannels(ModuleContext context) {
+        return context.services().find(ChannelRegistry.class)
+                .orElseGet(() -> {
+                    context.logger().warn("sync-fabric: no channel catalog; using the neutral empty registry");
+                    return ChannelRegistry.empty();
+                });
     }
 
     private static void copyDefaultConfig(Path configDir) throws IOException {

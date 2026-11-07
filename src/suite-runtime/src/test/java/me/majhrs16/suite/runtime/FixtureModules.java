@@ -436,19 +436,14 @@ final class FixtureModules {
                 package fixture;
 
                 import me.majhrs16.suite.api.ModuleDescriptor;
-                import me.majhrs16.suite.api.Requirement;
                 import me.majhrs16.suite.api.SemVer;
                 import me.majhrs16.suite.api.message.Message;
                 import me.majhrs16.suite.api.runtime.ModuleActivator;
                 import me.majhrs16.suite.api.runtime.ModuleContext;
-                import me.majhrs16.suite.api.spi.SyncBus;
                 import me.majhrs16.suite.api.spi.SyncListener;
                 import me.majhrs16.suite.api.spi.SyncSink;
 
                 public final class Activator implements ModuleActivator {
-
-                    private SyncBus bus;
-                    private String sinkName;
 
                     @Override
                     public ModuleDescriptor descriptor() {
@@ -456,26 +451,16 @@ final class FixtureModules {
                                 .version(SemVer.parse("MODULE_VERSION"))
                                 .contractVersion(SemVer.of(1, 0, 0))
                                 .jvmRange(17, 0)
-                                .require(Requirement.atLeast("sync-bus", SemVer.of(1, 0, 0)))
                                 .build();
                     }
 
                     @Override
                     public void start(ModuleContext context) {
-                        SyncBus resolved = context.services().find(SyncBus.class)
-                                .orElseThrow(() -> new IllegalStateException("sync-bus service missing"));
-                        FixtureSink sink = new FixtureSink("SINK_NAME");
-                        resolved.register(sink);
-                        this.bus = resolved;
-                        this.sinkName = sink.name();
+                        context.services().register(SyncSink.class, new FixtureSink("SINK_NAME"));
                     }
 
                     @Override
                     public void stop() {
-                        if (bus != null) {
-                            bus.unregister(sinkName);
-                            bus = null;
-                        }
                     }
 
                     static final class FixtureSink implements SyncSink {

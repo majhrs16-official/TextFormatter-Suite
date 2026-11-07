@@ -171,12 +171,43 @@ tasks.register('checkArchitecture') {
             }
         }
 
+        // ADR-036 §14: no feature descriptor may require another feature.
+        // Only capabilities published by the environment or by neutral
+        // technical modules are requirable. `stage:*` and `multiplexer:*` are
+        // declarative capabilities and can never be the object of a
+        // Requirement.
+        def neutralCapabilities = ['api', 'jvm', 'kernel', 'manager-spi', 'platform'] as Set
+        def requirementPattern = java.util.regex.Pattern.compile(
+            '\\.require\\s*\\(\\s*Requirement\\.[A-Za-z]+\\s*\\(\\s*"([^"]+)"')
+        rootProject.file('src').eachDir { moduleDir ->
+            def sourceDir = new File(moduleDir, 'src/main/java')
+            if (!sourceDir.isDirectory()) return
+            sourceDir.eachFileRecurse { file ->
+                if (!file.name.endsWith('.java')) return
+                def text = file.getText('UTF-8')
+                def matcher = requirementPattern.matcher(text)
+                while (matcher.find()) {
+                    def capability = matcher.group(1)
+                    if (!neutralCapabilities.contains(capability)) {
+                        def line = text.substring(0, matcher.start()).count('\n') + 1
+                        def relative = rootProject.projectDir.toPath()
+                            .relativize(file.toPath()).toString()
+                        violations << "${relative}:${line}: descriptor requires non-neutral " +
+                            "capability '${capability}'; only " +
+                            "${neutralCapabilities.toList().sort()} are requirable " +
+                            "(stage:* and multiplexer:* are never requirements)"
+                    }
+                }
+            }
+        }
+
         if (!violations.isEmpty()) {
             throw new GradleException(
-                "Architecture violations (neutral module importing platform/host or legacy host command tree):\n" +
-                violations.sort().join('\n'))
+                "Architecture violations (platform/host imports, legacy host command tree, " +
+                "or feature-to-feature requirement):\n" + violations.sort().join('\n'))
         }
-        println "Architecture check passed: ${rules.size()} neutral/adapter modules scanned"
+        println "Architecture check passed: ${rules.size()} neutral/adapter modules scanned; " +
+            "descriptor independence enforced"
     }
 }
 

@@ -47,8 +47,10 @@ class TextFormatterModuleTest {
 
         Capability channelApi = Capability.of("channel-api", me.majhrs16.suite.api.SemVer.of(1, 0, 0));
         Capability formatter = Capability.of("formatter", me.majhrs16.suite.api.SemVer.of(1, 0, 0));
+        Capability formatStage = Capability.of("stage:format", me.majhrs16.suite.api.SemVer.of(1, 0, 0));
         assertTrue(descriptor.provides().contains(channelApi));
         assertTrue(descriptor.provides().contains(formatter));
+        assertTrue(descriptor.provides().contains(formatStage));
     }
 
     @Test

@@ -17,11 +17,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Contrato de capabilities de ChatTranslator (ADR-008).
+ * Contrato de capabilities de ChatTranslator (ADR-008, ADR-036 §11/§15).
  *
  * <p>La façade {@code chattranslator} debe activarse sin backends y los
- * proveedores {@code translator} deben requerirla explícitamente. Esto fija
- * la dirección del grafo y la opcionalidad de la traducción.</p>
+ * proveedores {@code translator} son independientes: se activan sin la façade
+ * y quedan inertes hasta que esta aparezca.</p>
  */
 @DisplayName("ChatTranslatorModule — capabilities (ADR-008)")
 class ChatTranslatorModuleTest {
@@ -30,13 +30,13 @@ class ChatTranslatorModuleTest {
         new Environment(SemVer.of(1, 0, 0), SemVer.of(21, 0, 0));
 
     @Test
-    @DisplayName("la façade provee 'chattranslator' y no exige backends")
+    @DisplayName("la façade provee 'chattranslator' y 'stage:translate' sin exigir backends")
     void facadeProvidesChattranslatorWithoutRequiringBackends() {
         ModuleDescriptor descriptor = new ChatTranslatorModule().descriptor();
 
         assertThat(descriptor.provides())
             .extracting(capability -> capability.name())
-            .containsExactly("chattranslator");
+            .containsExactlyInAnyOrder("chattranslator", "stage:translate");
         assertThat(descriptor.requires()).isEmpty();
     }
 
@@ -53,15 +53,15 @@ class ChatTranslatorModuleTest {
     }
 
     @Test
-    @DisplayName("un backend 'translator' sin façade queda inactivo")
-    void backendWithoutFacadeIsRejected() {
+    @DisplayName("un backend 'translator' activa sin la façade")
+    void backendWithoutFacadeActivates() {
         Module backend = new GTranslateModule();
 
         ResolutionResult result = new ModuleGraph(ENV).resolve(List.of(backend));
 
-        assertThat(result.of(backend)).isEqualTo(ResolutionStatus.UNSATISFIED_REQUIREMENT);
-        assertThat(result.reasonOf(backend)).contains("chattranslator");
-        assertThat(result.resolved()).isEmpty();
+        assertThat(result.allResolved()).isTrue();
+        assertThat(result.of(backend)).isEqualTo(ResolutionStatus.RESOLVED);
+        assertThat(result.resolved()).containsExactly(backend);
     }
 
     @Test

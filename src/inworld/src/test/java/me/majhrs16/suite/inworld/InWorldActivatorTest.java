@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class InWorldActivatorTest {
 
@@ -42,13 +41,13 @@ class InWorldActivatorTest {
     }
 
     @Test
-    void failsExplicitlyWithoutChannelApi() {
+    void activatesWithTheNeutralEmptyCatalogWhenTextFormatterIsAbsent() {
         FakeRegistry registry = new FakeRegistry();
+        FakeContext context = new FakeContext(tempDir, registry);
 
-        assertThatThrownBy(() -> new InWorldActivator().start(
-            new FakeContext(tempDir, registry)))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("channel-api");
+        new InWorldActivator().start(context);
+
+        assertThat(registry.find(InWorldHandler.class)).isPresent();
     }
 
     private static final class FakeRegistry implements ServiceRegistry {

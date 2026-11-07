@@ -2,7 +2,6 @@ package me.majhrs16.suite.iflow;
 
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import me.majhrs16.suite.api.iflow.IflowBackend;
@@ -16,10 +15,11 @@ import me.majhrs16.suite.api.spi.TranslationService;
 /**
  * Runtime activator of the legacy {@code iflow-firewall} package.
  *
- * <p>Builds the SpEL firewall from the shared {@code channel-api} service,
- * loads {@code rules.yml} from the package configuration directory and
- * publishes the router. The router owns a rate limiter, so it is tracked as a
- * module resource.</p>
+ * <p>Builds the SpEL firewall from the optional {@code ChannelRegistry}
+ * service, loads {@code rules.yml} from the package configuration directory
+ * and publishes the router. When {@code textformatter} is absent the engine
+ * uses the neutral empty registry instead of blocking activation. The router
+ * owns a rate limiter, so it is tracked as a module resource.</p>
  */
 public final class IflowFirewallActivator implements ModuleActivator {
 
@@ -30,15 +30,16 @@ public final class IflowFirewallActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("router", SemVer.of(1, 0, 0)))
-                .require(Requirement.atLeast("channel-api", SemVer.of(1, 0, 0)))
                 .build();
     }
 
     @Override
     public void start(ModuleContext context) {
         ChannelRegistry channels = context.services().find(ChannelRegistry.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "iflow-firewall requires the channel-api capability"));
+                .orElseGet(() -> {
+                    context.logger().warn("iflow-firewall: no channel catalog; using the neutral empty registry");
+                    return ChannelRegistry.empty();
+                });
         PermissionChecker permissions = context.services().find(PermissionChecker.class)
                 .orElse(PermissionChecker.ALLOW_ALL);
         PlaceholderResolver placeholders = context.services()

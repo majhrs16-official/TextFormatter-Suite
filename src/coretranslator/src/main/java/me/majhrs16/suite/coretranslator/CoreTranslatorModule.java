@@ -3,7 +3,6 @@ package me.majhrs16.suite.coretranslator;
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.Module;
 import me.majhrs16.suite.api.ModuleDescriptor;
-import me.majhrs16.suite.api.Requirement;
 import me.majhrs16.suite.api.SemVer;
 
 /**
@@ -29,7 +28,6 @@ public final class CoreTranslatorModule implements Module {
             .contractVersion(VERSION)
             .jvmRange(21, 0)
             .provide(Capability.of("coretranslator", VERSION))
-            .require(Requirement.atLeast("chattranslator", VERSION))
             .build();
     }
 
