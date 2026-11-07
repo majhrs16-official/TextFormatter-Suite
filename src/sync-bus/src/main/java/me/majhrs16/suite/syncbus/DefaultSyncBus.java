@@ -22,9 +22,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
@@ -41,7 +41,7 @@ import java.util.function.Supplier;
  * <p>
  * Features:
  * <ul>
- *   <li>Global bounded queue with backpressure (caller runs when full)</li>
+ *   <li>Global bounded queue retained for the {@code getGlobalQueue*} metrics and orderly shutdown</li>
  *   <li>Message deduplication via ID tracking</li>
  *   <li>Per-sink isolation: each sink has its own queue + worker thread</li>
  *   <li>Bulkhead pattern: sink failures don't cascade</li>
@@ -59,6 +59,7 @@ public final class DefaultSyncBus implements SyncBus {
     private static final long MAX_RETRY_DELAY_MS = 30_000;
     private static final long DEDUP_WINDOW_MS = 60_000;
     private static final int DEDUP_MAX_ENTRIES = 50000;
+    private static final long DEFAULT_ASYNC_TIMEOUT_MS = 30_000;
 
     // Lifecycle states
     private enum LifecycleState { NEW, RUNNING, STOPPING, STOPPED }
@@ -67,8 +68,9 @@ public final class DefaultSyncBus implements SyncBus {
     private final Set<String> sinkNamesSnapshot = new CopyOnWriteArraySet<>();
     private volatile SyncListener inboundListener;
     private final PluginLogger logger;
+    private final long asyncTimeoutMillis;
 
-    // Global queue with backpressure - using Runnable wrapper
+    // Global bounded queue used by the metrics contract and by the shutdown sentinel.
     private final ThreadPoolExecutor globalExecutor;
     private final BlockingQueue<Runnable> globalQueue;
     private final ScheduledExecutorService scheduler;
@@ -87,7 +89,21 @@ public final class DefaultSyncBus implements SyncBus {
     private final AtomicLong totalDeduped = new AtomicLong(0);
 
     public DefaultSyncBus(PluginLogger logger) {
-        this.logger = logger;
+        this(logger, DEFAULT_ASYNC_TIMEOUT_MS);
+    }
+
+    /**
+     * Builds a bus with an explicit async completion timeout.
+     *
+     * <p>Package-private so tests can exercise the timeout without waiting the
+     * production bound.</p>
+     */
+    DefaultSyncBus(PluginLogger logger, long asyncTimeoutMillis) {
+        this.logger = Objects.requireNonNull(logger, "logger");
+        if (asyncTimeoutMillis <= 0) {
+            throw new IllegalArgumentException("asyncTimeoutMillis must be positive");
+        }
+        this.asyncTimeoutMillis = asyncTimeoutMillis;
 
         // Global executor with CallerRunsPolicy for backpressure
         this.globalExecutor = new ThreadPoolExecutor(
@@ -129,8 +145,34 @@ public final class DefaultSyncBus implements SyncBus {
         });
     }
 
-    private void processMessage(Message message) {
-        deliver(message);
+    /**
+     * Reserves the dedup slot for one emission.
+     *
+     * @return the timestamp stored for this emission, or {@code null} when the
+     *         message is a duplicate inside the active window
+     */
+    private Long reserveEmission(Message message) {
+        String msgId = message.id().toString();
+        long now = System.currentTimeMillis();
+
+        Long previousTime = sentMessageIds.putIfAbsent(msgId, now);
+        if (previousTime != null && (now - previousTime) < DEDUP_WINDOW_MS) {
+            totalDeduped.incrementAndGet();
+            logger.debug("SyncBus: deduplicated message " + msgId);
+            return null;
+        }
+        if (previousTime != null) {
+            // Expired dedup entry: refresh the window for this emission.
+            sentMessageIds.put(msgId, now);
+        }
+        return now;
+    }
+
+    /** Releases a reservation no sink accepted, so the emission can be retried. */
+    private void releaseEmission(Message message, long stamp) {
+        sentMessageIds.remove(message.id().toString(), stamp);
+        logger.warn("SyncBus: broadcast accepted by no sink; message "
+                + message.id() + " was not delivered");
     }
 
     /**
@@ -142,18 +184,9 @@ public final class DefaultSyncBus implements SyncBus {
      * dropped by full queues instead of getting a false success.</p>
      */
     private int deliver(Message message) {
-        String msgId = message.id().toString();
-        long now = System.currentTimeMillis();
-
-        Long previousTime = sentMessageIds.putIfAbsent(msgId, now);
-        if (previousTime != null && (now - previousTime) < DEDUP_WINDOW_MS) {
-            totalDeduped.incrementAndGet();
-            logger.debug("SyncBus: deduplicated message " + msgId);
+        Long stamp = reserveEmission(message);
+        if (stamp == null) {
             return 0;
-        }
-        if (previousTime != null) {
-            // Expired dedup entry: refresh the window for this emission.
-            sentMessageIds.put(msgId, now);
         }
 
         totalBroadcast.incrementAndGet();
@@ -170,8 +203,7 @@ public final class DefaultSyncBus implements SyncBus {
             // Never report success for a message no sink accepted; release the
             // dedup mark so the emission can be retried once queues drain.
             // SinkContext.enqueue() already counted each dropped delivery.
-            sentMessageIds.remove(msgId, now);
-            logger.warn("SyncBus: broadcast accepted by no sink; message " + msgId + " was not delivered");
+            releaseEmission(message, stamp);
         }
         return accepted;
     }
@@ -315,63 +347,65 @@ public final class DefaultSyncBus implements SyncBus {
     @Override
     public java.util.Map<String, CompletableFuture<Void>> broadcastAsync(Message message) {
         java.util.Map<String, CompletableFuture<Void>> futures = new ConcurrentHashMap<>();
-        
+
         if (state.get() != LifecycleState.RUNNING || sinks.isEmpty()) {
             return futures;
         }
 
-        // Submit to global queue to process message
-        CompletableFuture<Void> globalFuture = new CompletableFuture<>();
-        boolean offered = false;
-        try {
-            offered = globalQueue.offer(() -> {
-                try {
-                    processMessage(message);
-                    globalFuture.complete(null);
-                } catch (Exception e) {
-                    globalFuture.completeExceptionally(e);
-                }
-            }, 100, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            globalFuture.completeExceptionally(e);
+        Long stamp = reserveEmission(message);
+        if (stamp == null) {
+            // The message was already delivered inside the dedup window. No
+            // per-sink future is created so a suppressed duplicate cannot be
+            // read as a fresh delivery.
+            return futures;
         }
 
-        // If offer failed, complete global future exceptionally to unblock sink futures
-        if (!offered) {
-            globalFuture.completeExceptionally(new IllegalStateException("Global queue full, broadcast rejected"));
-        }
+        totalBroadcast.incrementAndGet();
 
-        // Create futures for each sink
+        int accepted = 0;
         for (SinkContext ctx : sinks.values()) {
-            CompletableFuture<Void> sinkFuture = new CompletableFuture<>();
             String sinkName = ctx.sink.name();
+            CompletableFuture<Void> sinkFuture = new CompletableFuture<>();
             futures.put(sinkName, sinkFuture);
 
-            // Chain sink completion to global future
-            globalFuture.whenComplete((v, ex) -> {
-                if (ex != null) {
-                    sinkFuture.completeExceptionally(ex);
-                } else {
-                    // Wait for sink to process - we'll poll the queue
-                    waitForSinkProcessing(ctx, sinkFuture);
-                }
-            });
+            if (!ctx.enqueue(message, sinkFuture)) {
+                sinkFuture.completeExceptionally(new IllegalStateException(
+                        "sink '" + sinkName + "' rejected the message (not running or queue full)"));
+                continue;
+            }
+            accepted++;
+            scheduleAsyncTimeout(sinkName, sinkFuture);
         }
 
+        if (accepted == 0) {
+            releaseEmission(message, stamp);
+        }
         return futures;
     }
 
-    private void waitForSinkProcessing(SinkContext ctx, CompletableFuture<Void> future) {
-        // Schedule a check to see if the sink has processed the message
-        scheduler.schedule(() -> {
-            if (!ctx.running.get() || ctx.queue.isEmpty()) {
-                future.complete(null);
-            } else {
-                // Re-check after a short delay
-                waitForSinkProcessing(ctx, future);
-            }
-        }, 100, TimeUnit.MILLISECONDS);
+    /**
+     * Bounds every async future so a stopped or wedged sink cannot retain the
+     * caller forever. The timeout is cancelled as soon as the queued task
+     * completes, either successfully or with the real delivery failure.
+     */
+    private void scheduleAsyncTimeout(String sinkName, CompletableFuture<Void> future) {
+        ScheduledFuture<?> timeout;
+        try {
+            timeout = scheduler.schedule(() -> {
+                if (future.completeExceptionally(new TimeoutException(
+                        "sink '" + sinkName + "' did not process the message within "
+                                + asyncTimeoutMillis + "ms"))) {
+                    logger.warn("SyncBus: sink '" + sinkName
+                            + "' did not process an async message within "
+                            + asyncTimeoutMillis + "ms");
+                }
+            }, asyncTimeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException stopped) {
+            future.completeExceptionally(new IllegalStateException(
+                    "SyncBus scheduler is not running", stopped));
+            return;
+        }
+        future.whenComplete((ignored, error) -> timeout.cancel(false));
     }
 
     @Override
@@ -551,6 +585,7 @@ public final class DefaultSyncBus implements SyncBus {
         final BlockingQueue<Runnable> queue;
         final ThreadPoolExecutor executor;
         final AtomicBoolean running = new AtomicBoolean(false);
+        final Set<CompletableFuture<Void>> pending = ConcurrentHashMap.newKeySet();
 
         SinkContext(SyncSink sink) {
             this.sink = sink;
@@ -565,12 +600,24 @@ public final class DefaultSyncBus implements SyncBus {
         }
 
         boolean enqueue(Message message) {
+            return enqueue(message, null);
+        }
+
+        boolean enqueue(Message message, CompletableFuture<Void> completion) {
             if (!running.get() || state.get() != LifecycleState.RUNNING) {
                 return false;
             }
-            Runnable task = () -> deliverWithRetry(message, 0);
+            if (completion != null) {
+                // Register before offering so a worker that picks the task up
+                // immediately cannot leave a completed future in the set.
+                pending.add(completion);
+            }
+            Runnable task = () -> deliverWithRetry(message, 0, completion);
             boolean offered = queue.offer(task);
             if (!offered) {
+                if (completion != null) {
+                    pending.remove(completion);
+                }
                 // Sink queue full - drop with metric
                 totalDropped.incrementAndGet();
                 logger.warn("SyncBus: sink '" + sink.name() + "' queue full, dropping message");
@@ -594,6 +641,12 @@ public final class DefaultSyncBus implements SyncBus {
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
+            IllegalStateException stopped = new IllegalStateException(
+                    "sink '" + sink.name() + "' stopped before processing the message");
+            for (CompletableFuture<Void> completion : pending) {
+                completion.completeExceptionally(stopped);
+            }
+            pending.clear();
         }
 
         private void processQueue() {
@@ -612,9 +665,25 @@ public final class DefaultSyncBus implements SyncBus {
             }
         }
 
-        private void deliverWithRetry(Message message, int attempt) {
+        private void completeTask(CompletableFuture<Void> completion) {
+            if (completion != null) {
+                pending.remove(completion);
+                completion.complete(null);
+            }
+        }
+
+        private void failTask(CompletableFuture<Void> completion, Throwable failure) {
+            if (completion != null) {
+                pending.remove(completion);
+                completion.completeExceptionally(failure);
+            }
+        }
+
+        private void deliverWithRetry(Message message, int attempt,
+                                      CompletableFuture<Void> completion) {
             try {
                 sink.send(message);
+                completeTask(completion);
             } catch (Exception e) {
                 if (attempt < MAX_RETRIES) {
                     totalRetries.incrementAndGet();
@@ -626,14 +695,29 @@ public final class DefaultSyncBus implements SyncBus {
                         (attempt + 1) + "/" + MAX_RETRIES + "), retrying in " + delay + "ms: " + e.getMessage());
 
                     int nextAttempt = attempt + 1;
-                    scheduler.schedule(() -> {
-                        if (running.get() && state.get() == LifecycleState.RUNNING) {
-                            queue.offer(() -> deliverWithRetry(message, nextAttempt));
-                        }
-                    }, delay, TimeUnit.MILLISECONDS);
+                    try {
+                        scheduler.schedule(() -> {
+                            if (!running.get() || state.get() != LifecycleState.RUNNING) {
+                                failTask(completion, new IllegalStateException(
+                                        "sink '" + sink.name() + "' stopped before the retry", e));
+                                return;
+                            }
+                            boolean queued = queue.offer(
+                                    () -> deliverWithRetry(message, nextAttempt, completion));
+                            if (!queued) {
+                                totalDropped.incrementAndGet();
+                                failTask(completion, new IllegalStateException(
+                                        "sink '" + sink.name() + "' queue full during retry", e));
+                            }
+                        }, delay, TimeUnit.MILLISECONDS);
+                    } catch (RejectedExecutionException stopped) {
+                        failTask(completion, new IllegalStateException(
+                                "SyncBus scheduler stopped before the retry", stopped));
+                    }
                 } else {
                     totalDropped.incrementAndGet();
                     logger.error("SyncBus: sink '" + sink.name() + "' failed after " + MAX_RETRIES + " retries: " + e.getMessage(), e);
+                    failTask(completion, e);
                 }
             }
         }

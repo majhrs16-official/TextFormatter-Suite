@@ -12,8 +12,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -163,6 +166,105 @@ class DefaultSyncBusTest {
             assertTrue(sink.awaitSent(accepted + 1, 5, TimeUnit.SECONDS));
         } finally {
             sink.release.countDown();
+            bus.stop();
+        }
+    }
+
+    @Test
+    void asyncFutureWaitsForThisMessageNotForAnEmptyQueue() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger, 10_000);
+        GatedSink sink = new GatedSink("gated");
+        bus.register(sink);
+        bus.start();
+        try {
+            Message first = Message.builder().text("first").build();
+            CompletableFuture<Void> firstFuture = bus.broadcastAsync(first).get("gated");
+            assertNotNull(firstFuture);
+            assertTrue(sink.firstEntered.await(5, TimeUnit.SECONDS),
+                    "the first send must be in progress before queueing the second");
+
+            Message second = Message.builder().text("second").build();
+            CompletableFuture<Void> secondFuture = bus.broadcastAsync(second).get("gated");
+            assertNotNull(secondFuture);
+
+            sink.releaseFirst.countDown();
+            firstFuture.get(5, TimeUnit.SECONDS);
+            assertTrue(sink.secondEntered.await(5, TimeUnit.SECONDS),
+                    "the worker must pick up the second message");
+
+            assertFalse(secondFuture.isDone(),
+                    "the future must complete after send() returns, not when the queue looks empty");
+
+            sink.releaseSecond.countDown();
+            secondFuture.get(5, TimeUnit.SECONDS);
+            assertEquals(List.of(first.id().toString(), second.id().toString()), sink.received);
+        } finally {
+            sink.releaseFirst.countDown();
+            sink.releaseSecond.countDown();
+            bus.stop();
+        }
+    }
+
+    @Test
+    void asyncFutureTimesOutWhenTheSinkNeverReturns() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger, 200);
+        BlockingSink sink = new BlockingSink("blocked");
+        bus.register(sink);
+        bus.start();
+        try {
+            CompletableFuture<Void> future = bus.broadcastAsync(
+                    Message.builder().text("stuck").build()).get("blocked");
+            assertNotNull(future);
+
+            ExecutionException failure = assertThrows(ExecutionException.class,
+                    () -> future.get(2, TimeUnit.SECONDS));
+            assertTrue(failure.getCause() instanceof TimeoutException,
+                    "a wedged sink must fail the future with an explicit timeout, got: " + failure.getCause());
+        } finally {
+            sink.release.countDown();
+            bus.stop();
+        }
+    }
+
+    @Test
+    void asyncFutureFailsAfterRetriesAreExhausted() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger, 10_000);
+        FailingSink sink = new FailingSink("broken");
+        bus.register(sink);
+        bus.start();
+        try {
+            CompletableFuture<Void> future = bus.broadcastAsync(
+                    Message.builder().text("fail").build()).get("broken");
+            assertNotNull(future);
+
+            ExecutionException failure = assertThrows(ExecutionException.class,
+                    () -> future.get(5, TimeUnit.SECONDS));
+            assertTrue(failure.getCause() instanceof IllegalStateException);
+            assertEquals(3, bus.getTotalRetries());
+            assertEquals(1L, bus.getTotalDropped());
+            assertEquals(4, sink.attempts.get());
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void asyncDuplicateReturnsNoFuturesAndDoesNotDeliverAgain() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger, 10_000);
+        RecordingSink sink = new RecordingSink("one");
+        bus.register(sink);
+        bus.start();
+        try {
+            Message message = Message.builder().text("only once").build();
+            CompletableFuture<Void> first = bus.broadcastAsync(message).get("one");
+            assertNotNull(first);
+            first.get(5, TimeUnit.SECONDS);
+
+            assertTrue(bus.broadcastAsync(message).isEmpty(),
+                    "a duplicate inside the dedup window must not fabricate a fresh delivery");
+            assertEquals(1L, bus.getTotalDeduped());
+            assertEquals(1L, bus.getTotalBroadcast());
+        } finally {
             bus.stop();
         }
     }
@@ -319,5 +421,65 @@ class DefaultSyncBusTest {
         @Override public void stop() {}
         @Override public void send(Message message) {}
         @Override public void setListener(SyncListener listener) { }
+    }
+
+    private static final class GatedSink implements SyncSink {
+        private final String name;
+        private final List<String> received = java.util.Collections.synchronizedList(new ArrayList<>());
+        private final CountDownLatch firstEntered = new CountDownLatch(1);
+        private final CountDownLatch secondEntered = new CountDownLatch(1);
+        private final CountDownLatch releaseFirst = new CountDownLatch(1);
+        private final CountDownLatch releaseSecond = new CountDownLatch(1);
+
+        GatedSink(String name) {
+            this.name = name;
+        }
+
+        @Override public String name() { return name; }
+        @Override public DeliverySemantics deliverySemantics() { return DeliverySemantics.AT_LEAST_ONCE; }
+        @Override public Ordering ordering() { return Ordering.PER_CHANNEL; }
+        @Override public void start() {}
+        @Override public void stop() {}
+        @Override public void setListener(SyncListener listener) {}
+
+        @Override
+        public void send(Message message) {
+            int index = received.size();
+            received.add(message.id().toString());
+            try {
+                if (index == 0) {
+                    firstEntered.countDown();
+                    releaseFirst.await(10, TimeUnit.SECONDS);
+                } else if (index == 1) {
+                    secondEntered.countDown();
+                    releaseSecond.await(10, TimeUnit.SECONDS);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("gated sink interrupted", e);
+            }
+        }
+    }
+
+    private static final class FailingSink implements SyncSink {
+        private final String name;
+        private final AtomicInteger attempts = new AtomicInteger();
+
+        FailingSink(String name) {
+            this.name = name;
+        }
+
+        @Override public String name() { return name; }
+        @Override public DeliverySemantics deliverySemantics() { return DeliverySemantics.AT_LEAST_ONCE; }
+        @Override public Ordering ordering() { return Ordering.PER_CHANNEL; }
+        @Override public void start() {}
+        @Override public void stop() {}
+        @Override public void setListener(SyncListener listener) {}
+
+        @Override
+        public void send(Message message) {
+            attempts.incrementAndGet();
+            throw new IllegalStateException("send failed");
+        }
     }
 }

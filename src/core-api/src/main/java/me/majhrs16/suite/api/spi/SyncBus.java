@@ -72,13 +72,23 @@ public interface SyncBus extends AutoCloseable {
      * actual delivery completion per sink.
      * <p>
      * Unlike {@link #broadcast(Message)}, this method returns a map of sink names
-     * to {@link CompletableFuture} that complete when the sink has processed the
-     * message (successfully or with failure). This allows callers to await actual
-     * delivery rather than just queue acceptance.
+     * to {@link CompletableFuture} that complete when that sink has processed
+     * this specific message. Each future is tied to the queued message, not to
+     * the sink queue becoming empty.
+     * </p>
+     * <p>
+     * A future completes exceptionally when the sink rejects the message (queue
+     * full or stopped), exhausts its retries, the bus stops before processing
+     * it, or the bounded async timeout expires. The timeout is explicit so a
+     * wedged sink can never retain the future forever. A duplicate suppressed
+     * by the deduplication window returns an empty map, because no new delivery
+     * was attempted.
      * </p>
      *
      * @param message the message to broadcast, must not be null
-     * @return map of sink name to future completing when that sink finishes processing
+     * @return map of sink name to future completing when that sink finishes
+     *         processing the message, or an empty map when the bus is not
+     *         running, has no sinks, or suppressed a duplicate
      */
     Map<String, CompletableFuture<Void>> broadcastAsync(Message message);
 

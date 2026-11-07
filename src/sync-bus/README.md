@@ -115,7 +115,9 @@ becomes live without restarting the host. `stop()` stops sink workers, calls
 
 - Implement `SyncSink` and register it with the bus.
 - Use `broadcastAsync(Message)` when the caller needs per-sink completion
-  futures instead of queue acceptance only.
+  futures tied to that specific message. Each future completes when the sink
+  calls back from `send`; it fails on rejection, retry exhaustion, shutdown or
+  the bounded async timeout (30 s by default).
 - Use `sendTo(name, message)` for directed delivery.
 - Add a new sink module; do not modify the bus for platform-specific behavior.
 
@@ -127,7 +129,10 @@ becomes live without restarting the host. `stop()` stops sink workers, calls
 start/after unregister, real delivery through a sink, sink shutdown and a
 non-blocking `stop()`. It also covers the hot-load contract: a sink registered
 after `start()` is started immediately, and a sink that fails to start is rolled
-back. `PackageRuntimeTest.installsSyncBusPackageAndHotRegistersSinkModule`
+back. The async contract is covered too: a future waits for its own message
+instead of an empty queue, a wedged sink fails by timeout, retry exhaustion
+propagates the failure, and a deduplicated emission returns no futures.
+`PackageRuntimeTest.installsSyncBusPackageAndHotRegistersSinkModule`
 installs the real `sync-bus` ZIP and a sink package, then unloads the sink and
 checks that the running bus unregisters it.
 

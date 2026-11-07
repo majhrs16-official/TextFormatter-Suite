@@ -191,6 +191,9 @@ void stop();
 Delivery semantics belong to each sink: `BEST_EFFORT` (UDP), `AT_LEAST_ONCE`
 (TCP, WebSocket, HTTP) and `EXACTLY_ONCE` (Velocity with acknowledgements).
 `broadcast` is best-effort per sink; one failure does not stop the others.
+`broadcastAsync` returns one future per sink tied to that specific message: it
+completes only when `send` returns, and fails explicitly on queue rejection,
+retry exhaustion, bus shutdown or the bounded async timeout.
 
 ## Inbound messages
 
