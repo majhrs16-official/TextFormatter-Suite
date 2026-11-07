@@ -45,6 +45,7 @@ diseno/web-editor.md                     diseño del Web Editor (F6)
 especificaciones/commands-v2.md          contrato de commands.yml (base 1.0; v2 = revisión del esquema)
 especificaciones/extension-v1.md         contrato de extension.yml (base 1.0)
 especificaciones/config-schema-v2.2.md   contrato de import/export del Web Editor (base 1.0)
+especificaciones/testing.md              prompt maestro de caos, seguridad y casos límite
 ```
 
 ### Criterio de carpetas
