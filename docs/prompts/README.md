@@ -27,13 +27,13 @@ especificación es el prompt.
 
 | Directorio | Contenido |
 |---|---|
-| `contexto/` | Contexto del proyecto para arrancar una sesión. |
+| `contexto/` | Contexto del proyecto y principios de ingeniería para arrancar una sesión. |
 | `diseno/` | Especificaciones de diseño y reingeniería de componentes. |
 | `especificaciones/` | Contratos de formato (`yml`, JSON) que valida el código. |
 
 ```text
 contexto/proyecto.md                     objetivos, reglas y módulos del proyecto
-diseno/philosophy.md                     filosofía y principios de ingeniería
+contexto/philosophy.md                   filosofía y principios de ingeniería
 diseno/storage.md                        layout canónico de configuración en disco
 diseno/iflow-cpu-design.md               documento histórico de diseño del CPU virtual de iFlow
 diseno/iflow-cpu-implement.md            especificación técnica de referencia v3 de iflow-vm (32 bits)

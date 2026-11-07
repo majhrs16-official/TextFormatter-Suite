@@ -37,7 +37,8 @@ Documentación:
 - `/docs/README.md`
 - `/docs/prompts/README.md` (índice de prompts y skills)
 - `/docs/prompts/contexto/proyecto.md` (este archivo)
-- `/docs/prompts/diseno/` (filosofía, iFlow, storage, manager, web editor, logger, chattranslator, metrics)
+- `/docs/prompts/contexto/` (filosofía, objetivos, reglas y módulos)
+- `/docs/prompts/diseno/` (iFlow, storage, manager, web editor, logger, chattranslator, metrics)
 - `/docs/prompts/especificaciones/` (contratos de `commands.yml`, `extension.yml` y config schema)
 - `/docs/workdir/PLAN.md` (estado y hoja de ruta)
 - `/docs/workdir/ADR.md` (decisiones de arquitectura)
@@ -75,6 +76,6 @@ Manejo de Configuración y E/S (Disk/Cache Policy):
 - Todo `.yml` declara `config-version: 1.0` en la raíz, preferentemente al final. Si falta o no coincide, el parser falla con un error explícito; no se migra en runtime.
 
 Protocolo de trabajo:
-- Antes de tocar código o documentación, leer `docs/prompts/diseno/philosophy.md`, `docs/workdir/PLAN.md` y el ADR aplicable.
+- Antes de tocar código o documentación, leer `docs/prompts/contexto/philosophy.md`, `docs/workdir/PLAN.md` y el ADR aplicable.
 - No crear planes ni fases dentro de ADR; el estado y la hoja de ruta viven en `PLAN.md`.
 - No modificar `AUDITORIA.md` para dejar notas de metodología: contiene la auditoría vigente y se reemplaza por completo al cerrar el ciclo.

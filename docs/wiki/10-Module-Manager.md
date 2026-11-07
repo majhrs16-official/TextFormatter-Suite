@@ -436,4 +436,4 @@ No E2E test runs against real Spigot/Paper/Fabric/Velocity servers.
 - [Developer Guide](09-Developer-Guide.md)
 - [ADR-026 / ADR-027 / ADR-029](../workdir/ADR.md)
 - [PLAN](../workdir/PLAN.md)
-- [Philosophy, C13](../prompts/diseno/philosophy.md) — hypotheses need evidence; invariant or full support
+- [Philosophy, C13](../prompts/contexto/philosophy.md) — hypotheses need evidence; invariant or full support

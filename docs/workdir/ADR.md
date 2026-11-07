@@ -14,7 +14,7 @@ Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Úl
 > legacy independientes se declaran explícitamente. `1.0.0` es la etiqueta de release de la base
 > integrada; el betatesting/E2E real se ejecuta **después** y sus fallos se corrigen en la línea
 > beta. `1.0` es la versión estable, declarada solo cuando el proyecto completo está consolidado y
-> sin errores críticos de diseño. Ver `docs/prompts/diseno/philosophy.md` §0 y `PLAN.md` «Purga
+> sin errores críticos de diseño. Ver `docs/prompts/contexto/philosophy.md` §0 y `PLAN.md` «Purga
 > pre-1.0».
 
 ## Contexto

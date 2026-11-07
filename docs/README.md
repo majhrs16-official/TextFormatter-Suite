@@ -21,8 +21,8 @@ La wiki cubre introducción, configuración, canales, traducción, iFlow (VM act
 
 | Directorio | Propósito |
 |------------|-----------|
-| `prompts/contexto/` | Contexto del proyecto: objetivos, reglas, módulos. |
-| `prompts/diseno/` | Especificaciones de diseño y reingeniería de componentes (philosophy, storage, iflow, logger, Manager v2, chattranslator, metrics, Web Editor). |
+| `prompts/contexto/` | Contexto del proyecto: objetivos, reglas, módulos y principios de ingeniería (philosophy). |
+| `prompts/diseno/` | Especificaciones de diseño y reingeniería de componentes (storage, iflow, logger, Manager v2, chattranslator, metrics, Web Editor). |
 | `prompts/especificaciones/` | Contratos de formato que valida el código: `commands.yml` v2, `extension.yml` v1.0, config schema v2.2. |
 
 El criterio completo —qué es un prompt frente a una skill, cómo se nombran las carpetas y cuándo se elimina un documento— está en [`prompts/README.md`](prompts/README.md).

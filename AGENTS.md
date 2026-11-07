@@ -6,7 +6,7 @@
 
 Antes de trabajar, lee como mínimo:
 
-- `docs/prompts/diseno/philosophy.md`
+- `docs/prompts/contexto/philosophy.md`
 - `docs/workdir/PLAN.md`
 - `docs/workdir/ADR.md`
 - `docs/workdir/AUDITORIA.md`
@@ -15,7 +15,7 @@ Siempre que se limpie el contexto de trabajo por compactación, la primera acci�
 
 La primera respuesta tras una compactación debe incluir literalmente esta frase:
 
-> Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. (véase docs/prompts/diseno/philosophy.md - C15)
+> Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. (véase docs/prompts/contexto/philosophy.md - C15)
 
 Un resumen, un checkpoint o un reinicio de sesión que conserven el contexto no exigen esta relectura.
 
