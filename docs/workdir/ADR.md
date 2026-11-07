@@ -2044,7 +2044,8 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
   del render; solo conoce contratos neutrales y el plan.
 - El catálogo de canales sigue perteneciendo a `textformatter` y la fachada de traducción a
   `chattranslator`; lo que cambia es que su consumo deja de ser un requisito de activación.
-  `textformatter` y `chattranslator` se convierten además en publicadores de etapas.
+  `textformatter` se convierte además en publicador de la etapa `format`; `chattranslator` permanece
+  como servicio opcional y no publica etapa, porque `<tr>` se resuelve dentro de `format`.
 - La recarga en caliente gana un estado verificable (`APPLIED`/`FAILED`/`RESTART_REQUIRED`) y deja de
   tener la carrera de `TF-010` en el rebuild.
 - Cada backend sync publica su superficie nativa como datos; la suite oficial sigue usando solo el
