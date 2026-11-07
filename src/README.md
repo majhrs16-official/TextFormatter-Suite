@@ -318,15 +318,15 @@ Minecraft Chat Event (PlayerChatEvent / Fabric equivalent)
          ↓
 Platform Adapter (SpigotChatDelivery / FabricChatDelivery)
          ↓
-MessageDispatcher.dispatch() / PipelineEngine.dispatch()
+MessageDispatcher.dispatch()
          ↓
-route stage [iflow] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
+Router.route() [iflow-vm] → VM executes `.flow` bytecode, applies rules/transforms/rate limits via HOST services
          ↓
-translate stage [chattranslator] → TranslationService.translate() per recipient → gtranslate/ltranslate
+TextFormatter.format() → MiniMessage + placeholder substitution
          ↓
-format stage [textformatter] → MiniMessage + placeholder substitution
+TranslationService.translate() [if needed] → gtranslate/ltranslate
          ↓
-sync stage [sync-bus] → SyncSink.send() [for each registered sink] → HTTP, Discord, TCP, etc.
+SyncSink.send() [for each registered sink] → HTTP, Discord, TCP, etc.
          ↓
 Platform-specific delivery → ChatDelivery.deliver()
 ```

@@ -41,7 +41,7 @@ class CrossLanguageGoldenTest {
         if (i == 1) return "<green>✓</green> <gold>%player_name%</gold> <dark_gray>»</dark_gray> %content%";
         if (i == 2) return "<gray>%content%</gray>";
         if (i == 3) return "%unknown_token% %content%";
-        return "<white>%content%</white>";
+        return "<white><tr>%content%</tr></white>";
     }
 
     private String getContent(int i) {
@@ -69,6 +69,16 @@ class CrossLanguageGoldenTest {
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"),
             "name: chat\nmessages:\n  - '<gray>%player_name%: %content%</gray>'\nconfig-version: 1.0\n");
 
+        // Pre-create the translator service outside the test to avoid nested anonymous classes in loop
+        me.majhrs16.suite.api.spi.TranslationService TRANS_SERVICE =
+            new me.majhrs16.suite.api.spi.TranslationService(
+                new me.majhrs16.suite.api.spi.TranslatorManager().add(new me.majhrs16.suite.api.spi.Translator() {
+                    @Override public String name() { return "fake"; }
+                    @Override public String translate(String text, String from, String to) { return "[" + to + "]" + text; }
+                    @Override public String detect(String text) { return "en"; }
+                    @Override public boolean isAvailable() { return true; }
+                }));
+
         me.majhrs16.suite.host.SuiteHost host = HostFixture.bootstrap(dir,
             me.majhrs16.suite.api.iflow.PermissionChecker.ALLOW_ALL, null, quietLogger());
 
@@ -77,7 +87,7 @@ class CrossLanguageGoldenTest {
             "<green>✓</green> <gold>%player_name%</gold> <dark_gray>»</dark_gray> %content%",
             "<gray>%content%</gray>",
             "%unknown_token% %content%",
-            "<white>%content%</white>"
+            "<white><tr>%content%</tr></white>"
         };
         String[] contents = {"hola", "ñandú ✦", "<bold>x</bold>", "y", "eco"};
         String[] expects = {
@@ -100,7 +110,7 @@ class CrossLanguageGoldenTest {
             me.majhrs16.suite.textformatter.template.TemplateContext ctx = me.majhrs16.suite.textformatter.template.TemplateContext.builder(
                     me.majhrs16.suite.api.message.Actor.unknown("Steve").withLanguage(Language.EN),
                     Language.EN, Language.ES)
-                .content(getContent(i)).build();
+                .content(getContent(i)).translate(false).build();
 
             // Create formatter using ChannelRegistry.builder() (public static method)
             me.majhrs16.suite.api.channel.ChannelRegistry registry =
@@ -108,7 +118,7 @@ class CrossLanguageGoldenTest {
 
             // TextFormatters.create returns TextFormatter
             me.majhrs16.suite.textformatter.TextFormatter formatter =
-                me.majhrs16.suite.textformatter.TextFormatters.create(registry, null, quietLogger());
+                me.majhrs16.suite.textformatter.TextFormatters.create(registry, TRANS_SERVICE, null, quietLogger());
 
             // Use render(template, ctx)
             var formatted = formatter.render(template, ctx);

@@ -10,6 +10,7 @@
 - **Channel registry** — manage named channels with per-channel format configuration
 - **Formatting pipeline** — `TextFormatter` interface orchestrating template + channel lookup
 - **Neutral plain-text port** — `MessageRenderer` lets platform adapters render lines without importing textformatter types
+- **Translation spans** — translate `<tr>...</tr>` content through `TranslationService`
 - **Local regex condition** — `<regex match="PATRÓN">CONTENIDO</regex>` renders its content only when the pre-compiled pattern finds a match (ADR-028)
 - **Module registration** — `TextFormatterModule` registers the module descriptor for the kernel
 
@@ -29,7 +30,7 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `Channel`, `Message`, pipeline contracts and SPI types |
+| `core-api` | Compile | `Channel`, `Message`, `TranslationService`, SPI types |
 | `net.kyori:adventure-text-minimessage` | Compile | MiniMessage parsing/rendering |
 | `net.kyori:adventure-text-serializer-plain` | Compile | Plain text serialization |
 | `kernel` | Test | Test fixtures |
@@ -77,11 +78,13 @@ DefaultTextFormatter.format()
          ↓
 TemplateRenderer.render(Template, TemplateContext)
          ↓
-MiniMessage template with %placeholders% and <regex> spans
+MiniMessage template with %placeholders%, <regex> and <tr> spans
          ↓
 PlaceholderResolver.resolve() for external tokens
          ↓
 <regex> condition: emit CONTENIDO only on a match
+         ↓
+TranslationService.translate() for <tr> spans (when enabled)
          ↓
 Formatted message (Adventure Component)
 ```
@@ -163,8 +166,7 @@ Templates intentionally have no `<expr>` or `${...}` scripting step. Policy deci
 
 | Fix | Issue | Location |
 |-----|-------|----------|
+| **B-04** | İ (U+0130) corruption in `<tr>` span search | `TemplateRenderer.findSpans()` — uses `Pattern.CASE_INSENSITIVE` instead of `toLowerCase()` |
+| **B-05** | Translation output not re-escaped | `TemplateRenderer.translateSpan()` — applies `MiniEscape.escape()` to translated text |
 | **SEC** | `MiniEscape` complete (10 chars: `< > \ { } [ ] ( ) # @`) | `MiniEscape.escape()` — prevents MiniMessage injection |
 | **SEC** | No inline expression evaluator | Removed legacy SpEL path; the only executable policy surface is the iFlow VM |
-
-Translation no longer runs inside the formatter. The `translate` stage owns it
-and must not escape its output; the renderer escapes `%content%` once.

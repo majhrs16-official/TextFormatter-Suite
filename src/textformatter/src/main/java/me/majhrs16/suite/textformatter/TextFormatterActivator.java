@@ -12,15 +12,15 @@ import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 
 /**
  * Runtime activator of the {@code textformatter} package.
  *
  * <p>Loads its channel catalog from its own configuration directory, composes
- * a {@link TextFormatter} with the placeholder service provided by another
- * package, and registers the result in the module scope. Translation is a
- * separate {@code translate} stage owned by {@code chattranslator}.</p>
+ * a {@link TextFormatter} with the translation and placeholder services
+ * provided by other packages, and registers the result in the module scope.</p>
  */
 public final class TextFormatterActivator implements ModuleActivator {
 
@@ -46,12 +46,14 @@ public final class TextFormatterActivator implements ModuleActivator {
             context.logger().warn(error);
         }
 
+        TranslationService translation = context.services().find(TranslationService.class)
+                .orElseGet(TextFormatters::emptyTranslation);
         PlaceholderResolver placeholders = context.services()
                 .find(PlaceholderResolver.class)
                 .orElse(null);
 
         TextFormatter formatter = TextFormatters.create(
-                loaded.config(), placeholders, context.logger());
+                loaded.config(), translation, placeholders, context.logger());
         context.services().register(TextFormatter.class, formatter);
         context.services().register(PipelineStage.class, new FormatStage(formatter));
         TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);

@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/diseno/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`translate`/`format`/`sync` publicadas por `iflow`/`chattranslator`/`textformatter`/`sync-bus` con tests por etapa, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La etapa `translate` traduce `Message.texts()` por destinatario antes de `format`; la etiqueta `<tr>` se retiró del formato y el renderizador ya no traduce. Quedan la configuración de `outputs` (§17) y la retirada final de `SuiteHost`/`MessageDispatcher`. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable— en implementación por slices, y `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-06 (**TF-002 y TF-005 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La etapa `translate` y la configuración de `outputs` siguen pendientes. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -211,18 +211,14 @@ drenar las colas. PL-1 avanza por slices con gate verde: contratos neutrales en 
 `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`,
 `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` con 12 tests y motor ya
 cableado como camino de producción, alimentado por `pipeline` en `config/suite/config.yml`.
-La etapa `translate` ya está publicada por `chattranslator` con tests de regresión (traducción por
-destinatario, formatos preservados y `NOT_APPLICABLE` cuando no aplica); la traducción dejó de ser
-una construcción de plantilla y la etiqueta `<tr>` se retiró. Quedan la configuración de `outputs`
-(§17) y la retirada final de la fachada legacy `SuiteHost`/`MessageDispatcher`.
 La independencia de descriptores de ADR-036 §14/§15 también está aplicada: se retiraron los
 `Requirement` entre features, `checkArchitecture` rechaza cualquier requisito que no sea
 `api`/`jvm`/`kernel`/`manager-spi`/`platform`, y `DefaultSyncBus` descubre los `SyncSink`
 publicados y se refresca con `ModuleActivatedEvent`/`ModuleDeactivatedEvent`. Los sinks estáticos
 publican el servicio y detienen sus propios recursos en `stop()`, de modo que la liberación del
 módulo no depende de que el bus exista.
-Siguiente P0 de la auditoría: TF-001 (PL-1), concretamente la configuración de `outputs` (§17)
-y la retirada final de `SuiteHost`/`MessageDispatcher`.
+Siguiente P0 de la auditoría: TF-001 (PL-1), concretamente la etapa `translate` y la configuración
+de `outputs`.
 
 **Nota sobre la cita a `P0.1-inventory.md`:** el informe anterior remitía a
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
@@ -272,11 +268,9 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 > exposición de `SET_CHANNEL` sin alterar D01–D05). La purga P0 está cerrada (P0.6, 2026-11-06),
 > así que no queda bloqueo documental. Implementado hasta ahora: contratos neutrales del pipeline
 > en `core-api`, `ComponentRenderedOutput` en `core-render`, motor de ejecución, etapas
-> `route`/`translate`/`format`/`sync`, cableado del motor en `suite-runtime`, independencia de
-> descriptores (§14/§15), consumo opcional del catálogo de canales y descubrimiento de sinks por
-> servicio. `translate` traduce `Message.texts()` por destinatario antes de `format` y la antigua
-> etiqueta `<tr>` se retiró del renderizador.
-> Pendiente: la configuración de `outputs` (§17) y la retirada final de
+> `route`/`format`/`sync`, cableado del motor en `suite-runtime`, independencia de descriptores
+> (§14/§15), consumo opcional del catálogo de canales y descubrimiento de sinks por servicio.
+> Pendiente: la etapa `translate`, la configuración de `outputs` (§17) y la retirada final de
 > `SuiteHost`/`MessageDispatcher` como fachada legacy. Cualquier cambio en `docs/prompts/` requiere
 > autorización explícita. La multiplexación de salidas de §17 se planifica en PL-3.
 
@@ -298,11 +292,11 @@ verificada el 2026-11-05 sobre `2f5d3b27`:
 | Los backends de traducción requieren `chattranslator` | `GTranslateModule.java:23`; `LTranslateModule.java:23`; `CoreTranslatorModule.java:32`; ADR-008 | La relación backend→fachada es hoy un requisito de activación entre features; PL-1 debe decidir si un backend es instalable solo o si la fachada es su único punto de entrada. |
 | El dispatcher conserva semántica de routing retirada | `MessageDispatcher.java` procesa `PolicyTarget.CHANNEL_REDIRECT` y reentrega; `PolicyTarget.java:23` conserva el valor | ADR-031 retira `REDIRECT`/`CHANNEL_REDIRECT`; el rediseño del pipeline debe alinear el código con ese contrato. |
 
-Matiz importante: `textformatter` ya no depende de `TranslationService`; la traducción vive en la
-etapa `translate` de `chattranslator`, de modo que la ausencia de esa fachada no afecta al
-formateador. El acoplamiento real estaba en el grafo de requisitos y en el composition root: el
-runtime no toleraba la ausencia de `ChannelRegistry`, de `TranslationService` ni del hub iFlow para
-construir el pipeline.
+Matiz importante: `textformatter` sí tolera la ausencia de `ChatTranslator`
+(`TextFormatterActivator.java:48` usa `TextFormatters.emptyTranslation()`), de modo que el
+acoplamiento no es de compilación de TextFormatter hacia ChatTranslator. El acoplamiento real está
+en el grafo de requisitos y en el composition root: el runtime no tolera la ausencia de
+`ChannelRegistry`, de `TranslationService` ni del hub iFlow para construir el pipeline.
 
 `config/channels/` (ruta plana) está prohibida por P0.3/ADR-034 y no puede reutilizarse como ruta
 canónica del catálogo de canales.
@@ -387,8 +381,8 @@ interface PipelineStage {
 (`SuiteHost`/`MessageDispatcher`), el modelo de requisitos del grafo y el consumo opcional del
 catálogo de canales. La lista de módulos es la superficie visible; el cambio de fondo es qué
 servicios son obligatorios y cómo se compone el procesamiento. El motor ya sustituye a
-`MessageDispatcher` como camino de despacho; la independencia de descriptores, el descubrimiento
-de sinks y la etapa `translate` ya están aplicados. Quedan la configuración de `outputs` y la
+`MessageDispatcher` como camino de despacho; la independencia de descriptores y el descubrimiento
+de sinks ya están aplicados. Quedan la etapa `translate`, la configuración de `outputs` y la
 retirada de la fachada legacy.
 
 #### Preguntas abiertas (resueltas por ADR-036, aceptado el 2026-11-06)

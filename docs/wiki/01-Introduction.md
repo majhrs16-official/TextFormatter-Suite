@@ -16,9 +16,9 @@ are no runtime migrations from older layouts.
 - **Host pipeline** — neutral dispatch, channel selection, formatting,
   translation and recipient routing.
 - **TextFormatter** — MiniMessage and legacy templates, channel permissions,
-  rate limits and sounds; translation is a separate pipeline stage.
+  rate limits, sounds and `<tr>` translation spans.
 - **Translation** — `chattranslator` facade with Google (`gtranslate`) and
-  LibreTranslate (`ltranslate`) providers, exposed as the `translate` stage.
+  LibreTranslate (`ltranslate`) providers.
 - **iFlow** — the `iflow` hub selects one of three coexisting backends:
   `iflow-firewall` (SpEL rules), `iflow-vm` (binary `.flow`) or `iflow-wasm`
   (WebAssembly).

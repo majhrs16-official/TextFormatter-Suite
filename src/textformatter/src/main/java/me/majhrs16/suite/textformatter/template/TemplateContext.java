@@ -16,10 +16,12 @@ import java.util.Objects;
  *   <li>{@code sender} — who produced the message; feeds {@code %player_name%}
  *       and external placeholder resolution.</li>
  *   <li>{@code content} — the raw message text, available as {@code %content%}
- *       (already translated by the {@code translate} pipeline stage when that
- *       stage applies).</li>
- *   <li>{@code sourceLanguage}/{@code targetLanguage} — language pair exposed
- *       as {@code %lang_source%} / {@code %lang_target%}.</li>
+ *       and normally wrapped in a {@code <tr>} span so it gets translated.</li>
+ *   <li>{@code sourceLanguage}/{@code targetLanguage} — pair used for
+ *       {@code <tr>} translation and exposed as {@code %lang_source%} /
+ *       {@code %lang_target%}.</li>
+ *   <li>{@code translate} — when false, {@code <tr>} spans are left untouched
+ *       (e.g. the sender seeing their own native message).</li>
  * </ul>
  */
 public final class TemplateContext {
@@ -28,6 +30,7 @@ public final class TemplateContext {
     private final String content;
     private final Language sourceLanguage;
     private final Language targetLanguage;
+    private final boolean translate;
     private final Map<String, String> variables;
 
     private TemplateContext(Builder builder) {
@@ -35,6 +38,7 @@ public final class TemplateContext {
         this.content = builder.content == null ? "" : builder.content;
         this.sourceLanguage = Objects.requireNonNull(builder.sourceLanguage, "sourceLanguage");
         this.targetLanguage = Objects.requireNonNull(builder.targetLanguage, "targetLanguage");
+        this.translate = builder.translate;
         this.variables = Collections.unmodifiableMap(new LinkedHashMap<>(builder.variables));
     }
 
@@ -52,6 +56,10 @@ public final class TemplateContext {
 
     public Language targetLanguage() {
         return targetLanguage;
+    }
+
+    public boolean translate() {
+        return translate;
     }
 
     public String variable(String key) {
@@ -72,6 +80,7 @@ public final class TemplateContext {
         private final Language sourceLanguage;
         private final Language targetLanguage;
         private String content;
+        private boolean translate = true;
         private final Map<String, String> variables = new LinkedHashMap<>();
 
         private Builder(Actor sender, Language source, Language target) {
@@ -82,6 +91,11 @@ public final class TemplateContext {
 
         public Builder content(String content) {
             this.content = content;
+            return this;
+        }
+
+        public Builder translate(boolean translate) {
+            this.translate = translate;
             return this;
         }
 

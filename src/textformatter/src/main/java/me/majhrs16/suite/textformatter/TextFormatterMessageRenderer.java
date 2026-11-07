@@ -63,6 +63,7 @@ public final class TextFormatterMessageRenderer
 
         TemplateContext context = TemplateContext.builder(sender, source, target)
             .content(content == null ? "" : content)
+            .translate(message.shouldTranslate())
             .build();
         return formatter.format(message, context);
     }

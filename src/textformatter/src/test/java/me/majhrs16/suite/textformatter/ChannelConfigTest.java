@@ -31,7 +31,7 @@ class ChannelConfigTest {
         Files.writeString(channels.resolve("chat.yml"), """
             name: chat
             messages:
-              - '<gray>%player_name%: %content%</gray>'
+              - '<gray>%player_name%: <tr>%content%</tr></gray>'
             config-version: 1.0
             """);
 
@@ -42,7 +42,7 @@ class ChannelConfigTest {
         // formatter cae en el placeholder y entrega el contenido crudo.
         assertEquals(1, chat.messages().formats().length);
         assertEquals(0, chat.messages().texts().length);
-        assertEquals("<gray>%player_name%: %content%</gray>",
+        assertEquals("<gray>%player_name%: <tr>%content%</tr></gray>",
             chat.messages().format(0));
     }
 

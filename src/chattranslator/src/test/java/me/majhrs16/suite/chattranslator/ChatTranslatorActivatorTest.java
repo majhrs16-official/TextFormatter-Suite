@@ -18,7 +18,6 @@ import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.ResourceTracker;
 import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
-import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.Translator;
 import me.majhrs16.suite.api.spi.TranslatorManager;
@@ -47,8 +46,6 @@ class ChatTranslatorActivatorTest {
 
         assertTrue(registry.find(ChatTranslator.class).isPresent());
         assertTrue(registry.find(TranslationService.class).isPresent());
-        PipelineStage stage = registry.find(PipelineStage.class).orElseThrow();
-        assertEquals(TranslateStage.ID, stage.id());
         assertEquals(3, resources.tracked.size());
 
         resources.releaseAll();

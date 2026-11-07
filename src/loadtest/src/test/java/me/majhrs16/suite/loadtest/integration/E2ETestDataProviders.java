@@ -45,7 +45,7 @@ class E2ETestDataProviders {
             Arguments.of("Hello world!", "Simple message"),
             Arguments.of("Hello %player_name%!", "Message with placeholder"),
             Arguments.of("<red>Red text</red>", "MiniMessage formatting"),
-            Arguments.of("Translate this", "Plain text message"),
+            Arguments.of("<tr>Translate this</tr>", "Translation tag"),
             Arguments.of("%player_name% says: %content%", "Multiple placeholders"),
             Arguments.of("Special chars: <>&\"'`", "Special characters"),
             Arguments.of("🎉 Emoji test 🎉", "Unicode emoji"),

@@ -64,7 +64,7 @@ public final class HostFixture {
         TranslationService translation = new TranslationService(translators);
         Router router = router(configDir, channels, permissions, placeholders, translation, logger);
 
-        TextFormatter formatter = TextFormatters.create(channels, placeholders, logger);
+        TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
         TextFormatterMessageRenderer renderer = new TextFormatterMessageRenderer(formatter);
         return new SuiteHost(config, channels, translation, router,
                 renderer, renderer, logger, delivery);

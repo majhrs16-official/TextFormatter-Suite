@@ -11,12 +11,13 @@ import static java.util.regex.Pattern.CASE_INSENSITIVE;
 
 /**
  * An immutable, authored chat template written with the MiniMessage syntax
- * plus the engine's own {@code <regex>...</regex>} spans.
+ * plus the engine's own {@code <tr>...</tr>} and {@code <regex>...</regex>}
+ * spans.
  *
  * <p>Example:</p>
  * <pre>{@code
  *   <gray><bold>%player_name%</bold></gray>
- *   <white>%content%</white>
+ *   <white><tr><%content%></tr></white>
  * }</pre>
  *
  * <p>A {@code <regex>} span is parsed and its pattern is compiled once, when

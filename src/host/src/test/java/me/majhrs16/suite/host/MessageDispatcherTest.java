@@ -134,7 +134,7 @@ class MessageDispatcherTest {
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
-              - '<gray>%player_name%: %content%</gray>'
+              - '<gray>%player_name%: <tr>%content%</tr></gray>'
             """ + soundBlock + """
             config-version: 1.0
             """);
@@ -376,7 +376,7 @@ class MessageDispatcherTest {
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
-              - '<gray>%player_name%: %content%</gray>'
+              - '<gray>%player_name%: <tr>%content%</tr></gray>'
             sounds:
               - name: entity.experience_orb.pickup
                 volume: 1.0

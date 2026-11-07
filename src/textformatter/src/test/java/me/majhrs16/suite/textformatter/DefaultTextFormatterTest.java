@@ -43,6 +43,7 @@ class DefaultTextFormatterTest {
             .build();
 
         TemplateContext context = TemplateContext.builder(message.sender(), Language.EN, Language.ES)
+            .translate(false)
             .content(message.text())
             .build();
 
@@ -66,6 +67,7 @@ class DefaultTextFormatterTest {
             .build();
 
         TemplateContext context = TemplateContext.builder(message.sender(), Language.EN, Language.ES)
+            .translate(false)
             .content(message.text())
             .build();
 
@@ -88,6 +90,7 @@ class DefaultTextFormatterTest {
             .build();
 
         TemplateContext context = TemplateContext.builder(message.sender(), Language.EN, Language.ES)
+            .translate(false)
             .content(message.text())
             .build();
 
@@ -111,6 +114,7 @@ class DefaultTextFormatterTest {
             .build();
 
         TemplateContext context = TemplateContext.builder(message.sender(), Language.EN, Language.ES)
+            .translate(false)
             .content(message.text())
             .build();
 
@@ -131,6 +135,7 @@ class DefaultTextFormatterTest {
             .build();
 
         TemplateContext context = TemplateContext.builder(message.sender(), Language.EN, Language.ES)
+            .translate(false)
             .content(message.text())
             .build();
 
