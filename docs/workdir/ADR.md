@@ -1320,7 +1320,6 @@ ni como clave alternativa (ADR-034 prohíbe aliases).
 # Orden base instalado por defecto. No es un orden obligatorio.
 pipeline:
   - route
-  - translate
   - format
   - sync
 config-version: 1.0
@@ -1352,9 +1351,11 @@ registrado en el `ServiceRegistry` del módulo.
 
 - Un módulo puede publicar varias etapas distintas.
 - Dos módulos no pueden publicar el mismo `stageId`; la ambigüedad produce `INVALID`.
-- `stageId` canónico: `^[a-z][a-z0-9-]*$`. Los ids base son `route` (`iflow`), `translate`
-  (`chattranslator`), `format` (`textformatter`) y `sync` (`sync-bus`). Son ids de contrato, no una
-  lista cerrada: una feature nueva puede declarar `stage:normalize` sin tocar el núcleo.
+- `stageId` canónico: `^[a-z][a-z0-9-]*$`. Los ids base son `route` (`iflow`),
+  `format` (`textformatter`) y `sync` (`sync-bus`). La traducción de plantillas no es una etapa:
+  vive dentro de `format` mediante los spans `<tr>` y el puerto `TranslationService` (§11). Son ids
+  de contrato, no una lista cerrada: una feature nueva puede declarar `stage:normalize` sin tocar el
+  núcleo.
 
 Los contratos viven en `core-api` bajo `me.majhrs16.suite.api.pipeline`. `core-api` sigue sin
 depender de Adventure: el resultado renderizado se expresa con el marcador neutral `RenderedOutput`;
@@ -1405,18 +1406,18 @@ public interface PipelineContext {
 `PipelineSettings` es un subconjunto neutral de `HostConfig` (`defaultLanguage`, `engineParallel`,
 `soundEnabled`). `OutputPlan` se define en §17.3. `HostConfig` se conserva como configuración del
 host, pero no cruza la frontera del pipeline. Las etapas reciben sus dependencias concretas por
-constructor desde su propio módulo: la etapa `format` ya tiene su `TextFormatter`, la etapa
-`translate` su `TranslationService`, la etapa `route` su `Router` y la etapa `sync` su `SyncBus`. El
-contexto solo expone servicios transversales neutrales. `channels()` es opcional: refleja el
-catálogo de `textformatter` cuando está activo y queda vacío cuando no lo está. Una etapa que lo
-necesite debe comprobarlo y fallar solo su operación, con un error explícito; la ausencia nunca
-invalida el plan ni el resto del pipeline.
+constructor desde su propio módulo: la etapa `format` ya tiene su `TextFormatter`, la etapa `route`
+su `Router` y la etapa `sync` su `SyncBus`. El contexto solo expone servicios transversales
+neutrales. `channels()` es opcional: refleja el catálogo de `textformatter` cuando está activo y
+queda vacío cuando no lo está. Una etapa que lo necesite debe comprobarlo y fallar solo su
+operación, con un error explícito; la ausencia nunca invalida el plan ni el resto del pipeline.
 
 **Fases.** El motor recorre la misma lista ordenada en tres fases:
 
 1. `MESSAGE_PRE`: una vez por emisión, antes de expandir destinatarios. Sirve para rate limit de
    emisión y normalizaciones globales. La etapa `route` puede declarar esta fase.
-2. `RECIPIENT`: una vez por destinatario. Aquí viven `route`, `translate` y `format`.
+2. `RECIPIENT`: una vez por destinatario. Aquí viven `route` y `format`; la traducción de `<tr>` se
+   resuelve dentro de `format`.
 3. `MESSAGE_POST`: una vez por emisión, después de las entregas. Aquí vive `sync`.
 
 Entre `MESSAGE_PRE` y `RECIPIENT` el motor materializa los destinatarios con `ActorDirectory`. Esa
@@ -1444,9 +1445,12 @@ válido. En particular:
 | Etapa ausente | Comportamiento por defecto | Traza |
 |---|---|---|
 | `route` | Se entrega a los destinatarios expandidos. El default deny de ADR-031 pertenece a la política del motor iFlow instalado, no a la ausencia de motor. | `SKIPPED` + `DEFAULT_ALLOW` |
-| `translate` | El mensaje no se traduce. | `SKIPPED` |
 | `format` | Se entrega texto plano neutral (`Component.text`). | `SKIPPED` + `PASS_THROUGH` |
 | `sync` | No hay fan-out a sinks. | `SKIPPED` |
+
+La traducción no aparece en esta tabla porque no es una etapa. Si `chattranslator` no está
+instalado, `format` sigue funcionando con el servicio vacío y los spans `<tr>` conservan su
+contenido sin traducir; no se registra una etapa `translate` ausente.
 
 Si la lista no tiene ninguna etapa efectiva, el estado es `NO_PIPELINE`: no se entrega nada y el
 resultado del despacho lo declara. `MessageDispatch.dispatch()` no lanza excepción en ese caso
@@ -1482,7 +1486,7 @@ contenido del mensaje ni datos personales, y no sustituye a las métricas.
 puede cambiar permisos o destinatarios, el motor ejecuta una **segunda pasada de routing solo para los
 destinatarios afectados**, con `phase=secondary`:
 
-- No hay reentrega recursiva ni reentrada en `translate`, `format` o `sync`.
+- No hay reentrega recursiva ni reentrada en `format` o `sync`.
 - Una segunda mutación de canal en la misma unidad produce `DECISION_CONFLICT` y la unidad se
   rechaza, conforme a ADR-031.
 - Si el cambio de canal añade destinatarios, se añaden a la lista de entrega y se les aplica la
@@ -1543,16 +1547,26 @@ No queda un segundo camino de composición en `host`, en los adapters ni en los 
 
 ### 11. Traducción
 
-`translate` es una etapa propia de `chattranslator`, con fase `RECIPIENT`, ejecutada después de
-`route` y antes de `format` en el orden base. Consecuencias:
+La traducción de plantillas no es una etapa del pipeline. Vive en `textformatter`, dentro del render
+de la etapa `format`, y se aplica exclusivamente a los spans `<tr>...</tr>` de la plantilla.
+Consecuencias:
 
-- `textformatter` deja de traducir dentro del render; renderiza el mensaje ya traducido. La
-  regresión contra el comportamiento base se cubre con el criterio 8 de cierre.
+- `TemplateRenderer` resuelve placeholders y `%content%`, traduce cada span `<tr>` con el puerto
+  neutral `TranslationService` y solo entonces parsea MiniMessage. El resultado traducido se escapa
+  para que no se interprete como markup.
+- `<tr>` conserva su semántica de span: se traduce únicamente el contenido marcado, no el mensaje
+  entero. Esto evita que la traducción se independice del contrato de plantilla y rompa `<tr>`.
+- `chattranslator` conserva la fachada, `TranslationService` y los proveedores; **no publica una
+  etapa `translate`**. `textformatter` lo consume de forma opcional: si no está instalado, `<tr>`
+  deja el contenido intacto y el resto del pipeline sigue.
+- El orden base es `route` → `format` → `sync`. `translate` no figura en `pipeline` ni en
+  `DefaultConfigInstaller`; una configuración que lo declare es inválida por etapa no declarada, no
+  un skip silencioso.
 - `TranslationService` conserva su contrato en `core-api`; no cambia su firma.
 - Los backends `gtranslate`, `ltranslate` y `coretranslator` dejan de requerir `chattranslator` para
-  activarse. Publican `TranslatorProvider` y quedan inertes si la fachada no está instalada; el
-  `translate` se registra como `SKIPPED`. La fachada sigue siendo el único punto de uso de la
-  traducción y descubre proveedores por `findAll` y `ServiceLoader`, como ya hace.
+  activarse. Publican `TranslatorProvider` y quedan inertes si la fachada no está instalada. La
+  fachada sigue siendo el único punto de uso de la traducción y descubre proveedores por `findAll` y
+  `ServiceLoader`, como ya hace.
 - Un backend sin fachada no traduce nada, pero no bloquea el arranque ni el resto del pipeline.
 
 ### 12. Sincronización
@@ -1595,7 +1609,7 @@ El cambio de modelo obliga a corregir los descriptores en la misma unidad de tra
 | `tester` | `require("formatter")`, `require("router")` | sin requisito; sondas opcionales con `SKIPPED` |
 | `textformatter` | `provide("channel-api")` | conserva `provide("channel-api")` y añade `provide("stage:format")`; sigue siendo dueño del catálogo |
 | `iflow` | — | `provide("stage:route")` |
-| `chattranslator` | — | `provide("stage:translate")` |
+| `chattranslator` | — | publica `TranslationService` y proveedores; no publica etapa `translate`, porque `<tr>` se resuelve dentro de `format` |
 | `sync-bus` | — | `provide("stage:sync")`; descubre `SyncSink` |
 
 `DefaultSyncBus` deja de depender de que cada sink lo busque al activarse: indexa los `SyncSink`
@@ -1770,9 +1784,9 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
 8. **Sin transacción.** Un efecto nativo (ban, creación de canal, edición) no se revierte si el
    mensaje falla después. No hay rollback entre backends ni compensación automática. El operador
    concede acciones destructivas con esa consecuencia explícita.
-9. **Punto de ejecución.** Las acciones se ejecutan en la etapa `route` (iFlow), antes de `translate`,
-   `format` y `sync`. El puente devuelve un estado; la política decide si entrega. `Denied` nunca
-   tiene efecto. Una acción no es una decisión de routing: no consume la única decisión de ADR-031.
+9. **Punto de ejecución.** Las acciones se ejecutan en la etapa `route` (iFlow), antes de `format`
+   y `sync`. El puente devuelve un estado; la política decide si entrega. `Denied` nunca tiene
+   efecto. Una acción no es una decisión de routing: no consume la única decisión de ADR-031.
 10. **Aislamiento.** Un fallo del backend se devuelve como `HostFailure` y no tumba el bus ni el
     pipeline; un fallo del programa se rige por §5.
 
@@ -1923,9 +1937,10 @@ No aparece en `outputs`.
 
 - La lista es ordenada. El motor **inicia** los targets en ese orden y la traza y el resultado
   conservan ese orden.
-- No se paraleliza entre etapas: `route` → `translate` → `format` → `sync` tienen dependencia de
-  datos. Se paraleliza dentro del mismo multiplexor de entrega (`sync`), que es donde hay varios
-  targets independientes.
+- No se paraleliza entre etapas: `route` → `format` → `sync` tienen dependencia de datos. La
+  traducción de `<tr>` ocurre dentro de `format` y usa el target `chattranslator` cuando `outputs`
+  lo selecciona. Se paraleliza dentro del mismo multiplexor de entrega (`sync`), que es donde hay
+  varios targets independientes.
 - Por defecto se ejecutan en paralelo, con un pool acotado por etapa; un backend lento no bloquea a
   los demás. La finalización no está ordenada.
 - `outputs-parallel: false` (o `ParallelMode.SEQUENTIAL` en el `OutputPlan`) ejecuta un target cada
@@ -1940,11 +1955,12 @@ No aparece en `outputs`.
 #### 17.7 Efecto en las etapas
 
 - `route` usa el target `iflow` si existe; si no, el hub aplica su default y fallback de ADR-032.
-- `translate` usa el target `chattranslator` si existe; si no, la fachada aplica su
-  `default-backend` y su fallback de ADR-035.
+- La traducción de `<tr>` dentro de `format` usa el target `chattranslator` si existe; si no, la
+  fachada aplica su `default-backend` y su fallback de ADR-035. No hay etapa `translate`.
 - `sync` recorre todos los targets `sync` en orden y llama al sink correspondiente; si no hay
   targets, aplica el fan-out completo actual, incluida la entrega local por `bukkit`/`fabric`.
-- `format` no es un multiplexor y no se selecciona por `outputs`.
+- `format` no es un multiplexor y no se selecciona por `outputs`; solo consume el target
+  `chattranslator` para resolver `<tr>`.
 
 #### 17.8 Enmiendas y límites
 
@@ -1968,7 +1984,7 @@ No aparece en `outputs`.
 | 1 | ¿`pipeline` o `workflow`? | `pipeline`. `workflow` no es alias. |
 | 2 | ¿Dónde vive el catálogo de canales? | Contratos en `core-api`; carga y propiedad en `textformatter`; el `PipelineContext` lo expone de forma opcional en solo lectura. |
 | 3 | ¿`moduleId` o `stageId`? ¿Varias etapas por módulo? | `stageId`. Un módulo puede publicar varias; dos no pueden publicar el mismo id. |
-| 4 | ¿Traducción como etapa? | Sí: `translate`, fase `RECIPIENT`, tras `route` y antes de `format`. |
+| 4 | ¿Traducción como etapa? | No: la traducción de plantillas vive en `format` mediante `<tr>` y `TranslationService`; no hay etapa `translate` ni entrada en `pipeline`. |
 | 5 | ¿Etapa ausente: error o `SKIPPED`? ¿Lista por defecto? | `SKIPPED` y continúa. La lista base la instala `DefaultConfigInstaller`; falta de clave en un archivo existente es `INVALID`. Lista vacía es `NO_PIPELINE`. |
 | 6 | ¿Syncs como etapa? | Una etapa terminal `sync` (`MESSAGE_POST`); los sinks no son etapas. La superficie de acciones se define en §16. |
 | 7 | ¿Sustituye o envuelve a `SuiteHost`/`MessageDispatcher`? | Sustituye. `PipelineEngine` + `RecipientResolver` + `DeliveryExecutor`. |

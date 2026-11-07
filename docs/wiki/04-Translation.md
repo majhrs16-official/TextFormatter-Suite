@@ -103,13 +103,14 @@ config-version: 1.0
 | `lang-target: auto` | Translate to the recipient's language |
 | `lang-target: es` | Force Spanish as the target |
 
-There is no per-channel `translate` boolean. Translation is applied by the
-pipeline when the recipient language differs from the source; an unavailable
-provider returns the original text.
+There is no per-channel `translate` boolean and no `translate` pipeline stage.
+Translation is applied inside `textformatter` when it resolves a `<tr>` span and
+the recipient language differs from the source; an unavailable provider returns
+the original text.
 
-## Translation tags
+## Translation spans (`<tr>`)
 
-Templates can mark translatable spans with `<tr>`:
+Templates mark translatable spans with `<tr>`:
 
 ```yaml
 messages:
@@ -117,8 +118,10 @@ messages:
   - "Server: <tr>Welcome to our server!</tr>"
 ```
 
-`<tr>` spans are excluded from MiniMessage formatting and sent to the
-translation service; placeholders inside the span are resolved first.
+`TemplateRenderer` resolves placeholders inside the span, translates the span
+through `TranslationService` (`chattranslator`), escapes the result and only
+then parses MiniMessage. The rest of the template is not translated. If
+`chattranslator` is not installed, the span content is rendered unchanged.
 
 ## Cache and deduplication
 

@@ -31,7 +31,7 @@ public record HostConfig(
 
     /** Base stage order written by the installer on first boot. */
     public static final List<String> BASE_PIPELINE =
-            List.of("route", "translate", "format", "sync");
+            List.of("route", "format", "sync");
 
     /** How the adapter claims a vanilla chat event. */
     public enum ClaimMode {

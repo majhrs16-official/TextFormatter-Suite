@@ -116,15 +116,15 @@ class PipelineEngineTest {
         PipelineStage stage = recipientStage("format", StageResult::continueWith);
 
         PipelineOutcome outcome = engine(
-                PipelinePlan.of(List.of("translate", "format"), 3L),
+                PipelinePlan.of(List.of("normalize", "format"), 3L),
                 List.of(new ResolvedStage("format", "textformatter", stage)),
-                List.of(new SkippedStage("translate", "module-inactive"))).dispatch(message());
+                List.of(new SkippedStage("normalize", "module-inactive"))).dispatch(message());
 
         StageTrace skipped = outcome.trace().entries().stream()
                 .filter(entry -> entry.status() == StageStatus.SKIPPED)
                 .findFirst()
                 .orElseThrow();
-        assertEquals("translate", skipped.stageId());
+        assertEquals("normalize", skipped.stageId());
         assertEquals("module-inactive", skipped.detail());
         assertEquals(1, outcome.delivered());
     }
@@ -201,9 +201,9 @@ class PipelineEngineTest {
     @Test
     void listedButUnresolvedPlanIsNoPipeline() {
         PipelineOutcome outcome = engine(
-                PipelinePlan.of(List.of("translate"), 4L),
+                PipelinePlan.of(List.of("normalize"), 4L),
                 List.of(),
-                List.of(new SkippedStage("translate", "module-inactive"))).dispatch(message());
+                List.of(new SkippedStage("normalize", "module-inactive"))).dispatch(message());
 
         assertEquals(PipelineStatus.NO_PIPELINE, outcome.status());
         assertEquals("no pipeline", outcome.skipReason());

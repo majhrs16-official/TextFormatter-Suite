@@ -30,13 +30,13 @@ class ChatTranslatorModuleTest {
         new Environment(SemVer.of(1, 0, 0), SemVer.of(21, 0, 0));
 
     @Test
-    @DisplayName("la façade provee 'chattranslator' y 'stage:translate' sin exigir backends")
+    @DisplayName("la façade provee 'chattranslator' sin publicar una etapa translate")
     void facadeProvidesChattranslatorWithoutRequiringBackends() {
         ModuleDescriptor descriptor = new ChatTranslatorModule().descriptor();
 
         assertThat(descriptor.provides())
             .extracting(capability -> capability.name())
-            .containsExactlyInAnyOrder("chattranslator", "stage:translate");
+            .containsExactly("chattranslator");
         assertThat(descriptor.requires()).isEmpty();
     }
 

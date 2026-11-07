@@ -89,6 +89,10 @@ TranslationService.translate() for <tr> spans (when enabled)
 Formatted message (Adventure Component)
 ```
 
+Translation is not a separate pipeline stage: `<tr>` spans are resolved inside
+`TemplateRenderer` during the `format` stage. `chattranslator` supplies the
+`TranslationService`; if it is absent, the span content is rendered unchanged.
+
 Templates intentionally have no `<expr>` or `${...}` scripting step. Policy decisions are executed by the iFlow VM; the formatter only substitutes values.
 
 ### `<regex>` template condition (ADR-028)

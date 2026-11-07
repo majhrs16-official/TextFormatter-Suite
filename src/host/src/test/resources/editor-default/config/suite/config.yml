@@ -15,7 +15,6 @@ chat:
 
 pipeline:
   - route
-  - translate
   - format
   - sync
 

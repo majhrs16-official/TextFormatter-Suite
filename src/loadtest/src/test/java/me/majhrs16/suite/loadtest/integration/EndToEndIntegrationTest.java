@@ -170,7 +170,6 @@ class EndToEndIntegrationTest {
               claim-mode: cancel-event
             pipeline:
               - route
-              - translate
               - format
               - sync
             config-version: 1.0

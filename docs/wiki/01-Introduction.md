@@ -13,12 +13,14 @@ are no runtime migrations from older layouts.
 
 ## What works today
 
-- **Host pipeline** — neutral dispatch, channel selection, formatting,
-  translation and recipient routing.
+- **Host pipeline** — neutral dispatch, channel selection, formatting with
+  `<tr>` translation and recipient routing.
 - **TextFormatter** — MiniMessage and legacy templates, channel permissions,
-  rate limits, sounds and `<tr>` translation spans.
+  rate limits and sounds; `<tr>` spans are translated by `textformatter` through
+  `TranslationService` before MiniMessage parsing.
 - **Translation** — `chattranslator` facade with Google (`gtranslate`) and
-  LibreTranslate (`ltranslate`) providers.
+  LibreTranslate (`ltranslate`) providers. It does not publish a pipeline stage;
+  `textformatter` consumes it for `<tr>` spans.
 - **iFlow** — the `iflow` hub selects one of three coexisting backends:
   `iflow-firewall` (SpEL rules), `iflow-vm` (binary `.flow`) or `iflow-wasm`
   (WebAssembly).

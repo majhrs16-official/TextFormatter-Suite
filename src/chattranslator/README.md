@@ -5,7 +5,9 @@
 `chattranslator` owns the translation facade. It builds a `TranslatorManager`
 from the `TranslatorProvider` services published by provider packages, registers
 `ChatTranslator` and `TranslationService` in the module scope, and keeps the
-manager in sync with the module lifecycle.
+manager in sync with the module lifecycle. It does not publish a `translate`
+pipeline stage: `textformatter` consumes `TranslationService` to resolve `<tr>`
+spans inside the `format` stage.
 
 ## Runtime activation
 

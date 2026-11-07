@@ -55,6 +55,11 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void basePipelineKeepsTranslationInsideFormat() {
+        assertEquals(List.of("route", "format", "sync"), HostConfig.BASE_PIPELINE);
+    }
+
+    @Test
     void readsConfigValuesFromYaml() throws Exception {
         Files.writeString(suiteConfig(), """
             quick-look: false

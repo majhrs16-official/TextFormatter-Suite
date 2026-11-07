@@ -42,7 +42,6 @@ public final class ChatTranslatorActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(17, 0)
                 .provide(Capability.of("chattranslator", SemVer.of(1, 0, 0)))
-                .provide(Capability.of("stage:translate", SemVer.of(1, 0, 0)))
                 .build();
     }
 

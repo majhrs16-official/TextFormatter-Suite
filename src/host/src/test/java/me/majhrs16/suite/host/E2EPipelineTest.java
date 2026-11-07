@@ -132,7 +132,6 @@ class E2EPipelineTest {
               enabled: true
             pipeline:
               - route
-              - translate
               - format
               - sync
             config-version: 1.0
@@ -421,7 +420,6 @@ class E2EPipelineTest {
               enabled: false
             pipeline:
               - route
-              - translate
               - format
               - sync
             config-version: 1.0

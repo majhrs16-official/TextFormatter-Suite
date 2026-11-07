@@ -24,7 +24,6 @@ repositories:
 
 pipeline:
   - route
-  - translate
   - format
   - sync
 

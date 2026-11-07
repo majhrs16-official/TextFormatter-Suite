@@ -174,7 +174,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Traducción
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `chattranslator` | Fachada de traducción: `ChatTranslator`, `TranslatorManager` y prioridad contexto > config > auto; los proveedores requieren la fachada | ✅ Probado (30 tests) |
+| `chattranslator` | Fachada de traducción: `ChatTranslator`, `TranslatorManager` y prioridad contexto > config > auto; `textformatter` la consume para resolver `<tr>`; no publica etapa de pipeline | ✅ Probado (30 tests) |
 | `coretranslator` | Expansión PlaceholderAPI legacy `%cot_*` (`translate`, `lang`, `set/get`, `new/send/broadcast/clone`, `sendDiscord`); Bukkit-only, *deprecated*, sin shim ni `suite-common-legacy` | ✅ Probado (13 tests) |
 | `gtranslate` | Google Translate provider (web scraping, UA rotation, rate limit, concatena segmentos) | ✅ Probado (32 tests) |
 | `ltranslate` | LibreTranslate provider (self-hosted/público, long-poll, tokens `char[]`) | ✅ Probado (38 tests) |

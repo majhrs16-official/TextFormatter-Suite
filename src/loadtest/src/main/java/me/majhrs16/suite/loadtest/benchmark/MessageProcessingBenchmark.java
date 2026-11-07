@@ -154,7 +154,7 @@ public class MessageProcessingBenchmark {
         Path tempDir = Files.createTempDirectory("benchmark-config");
         Files.createDirectories(tempDir.resolve("config/suite"));
         Files.writeString(tempDir.resolve("config/suite/config.yml"),
-            "general:\n  language: en\npipeline:\n  - route\n  - translate\n  - format\n  - sync\nconfig-version: 1.0\n");
+            "general:\n  language: en\npipeline:\n  - route\n  - format\n  - sync\nconfig-version: 1.0\n");
         ConfigLoader.LoadResult<HostConfig> configResult = ConfigLoader.loadConfig(tempDir, mockLogger);
         ChannelConfig.LoadResult<ChannelRegistry> channelsResult = ChannelConfig.load(tempDir);
 
@@ -464,7 +464,6 @@ public class MessageProcessingBenchmark {
               enabled: true
             pipeline:
               - route
-              - translate
               - format
               - sync
             config-version: 1.0

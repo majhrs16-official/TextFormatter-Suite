@@ -74,7 +74,6 @@ class SuiteHostTest {
               language: en
             pipeline:
               - route
-              - translate
               - format
               - sync
             config-version: 1.0

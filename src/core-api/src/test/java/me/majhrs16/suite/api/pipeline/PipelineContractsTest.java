@@ -113,9 +113,9 @@ class PipelineContractsTest {
     @Test
     void planKeepsTheDeclaredOrder() {
         PipelinePlan plan = PipelinePlan.of(
-                List.of("route", "translate", "format", "sync"), 7L);
+                List.of("route", "normalize", "format", "sync"), 7L);
 
-        assertEquals(List.of("route", "translate", "format", "sync"), plan.stageIds());
+        assertEquals(List.of("route", "normalize", "format", "sync"), plan.stageIds());
         assertEquals(7L, plan.version());
         assertEquals(PipelineStatus.READY, plan.status());
         assertFalse(plan.isEmpty());
