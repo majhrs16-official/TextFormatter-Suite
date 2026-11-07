@@ -3,9 +3,10 @@
 ## Overview
 
 The sync layer bridges Minecraft chat and typed server events to external
-platforms. A `sync-bus` implementation fans outgoing messages to every
-registered `SyncSink`; each sink can also push inbound messages back through the
-neutral pipeline.
+platforms. A `sync-bus` implementation publishes each sink's action surface,
+delivers `message.send` to every registered backend and executes native actions
+per backend; each sink can also push inbound messages back through the neutral
+pipeline.
 
 ```
 Minecraft event
@@ -17,7 +18,7 @@ SyncEventProcessor  (channel selection, translation gating)
 MessageDispatch ──► host pipeline (format, translate, iFlow)
       │
       ▼
-SyncBus.broadcast()
+SyncBus.send()  ──► message.send (LCM)
       ├─► DiscordSink
       ├─► TelegramSink
       ├─► HttpSink
@@ -160,13 +161,15 @@ core.
 
 ## Neutral contracts
 
-`SyncSink` declares the transport and lifecycle:
+`SyncSink` declares the transport, lifecycle and published action surface:
 
 ```java
 public interface SyncSink {
     String name();
     DeliverySemantics deliverySemantics();
     Ordering ordering();
+    default SyncSurface surface();           // LCM: backend.info + message.send
+    default SyncResult invoke(SyncCall call); // explicit outcome
     void start() throws Exception;
     void stop();
     void send(Message message) throws Exception;
@@ -174,26 +177,45 @@ public interface SyncSink {
 }
 ```
 
-`SyncBus` aggregates sinks:
+`SyncBus` aggregates sinks and executes actions:
 
 ```java
 void register(SyncSink sink);
 boolean unregister(String name);
 Collection<SyncSink> sinks();
-int broadcast(Message message);
-Map<String, CompletableFuture<Void>> broadcastAsync(Message message);
-boolean sendTo(String sinkName, Message message);
+Set<SyncSurface> surfaces();
+SyncResult invoke(SyncCall call);
+List<SyncResult> broadcast(SyncCall call);
+List<SyncResult> send(Message message);
+List<SyncResult> sendTo(String backend, Message message);
 void setInboundListener(SyncListener listener);
 void start() throws Exception;
 void stop();
 ```
 
+Every surface must contain the least common multiple: `backend.info` (`READ`,
+5 s) and `message.send` (`WRITE`, 15 s). The backend namespace must equal the
+sink name. `SyncCall` carries backend, local action, neutral arguments
+(`SyncValueType`), `Principal`, idempotency key and audit reason; the canonical
+name is `backend.action`. `SyncResult` is explicit (`Ok`, `Denied`,
+`Unsupported`, `InvalidArgument`, `NotFound`, `Conflict`, `RateLimited`,
+`Timeout`, `HostFailure`): an unsupported action is never a silent no-op.
+
+`send` and `sendTo` are typed conveniences over `message.send`, not a second
+delivery route. `broadcast(SyncCall)` is exclusive to the LCM: it replaces the
+call backend with each registered surface and returns `Unsupported` per backend
+for a native action, so it can never become a destructive mass operation.
+
 Delivery semantics belong to each sink: `BEST_EFFORT` (UDP), `AT_LEAST_ONCE`
 (TCP, WebSocket, HTTP) and `EXACTLY_ONCE` (Velocity with acknowledgements).
-`broadcast` is best-effort per sink; one failure does not stop the others.
-`broadcastAsync` returns one future per sink tied to that specific message: it
-completes only when `send` returns, and fails explicitly on queue rejection,
-retry exhaustion, bus shutdown or the bounded async timeout.
+Idempotent deliveries retry with capped exponential backoff. Every action is
+bounded by its declared timeout and the bus ceiling (30 s); a timeout, full
+queue or crash is reported as `Timeout`/`HostFailure`, not as success.
+
+Authority is fail-closed in this slice: `Principal.Official` may only invoke the
+LCM, and `Principal.Program` is denied until the operator grant store
+(`config/iflow/grants.yml`) exists. Native backend actions are not executable by
+third parties yet.
 
 ## Inbound messages
 

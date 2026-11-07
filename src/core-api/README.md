@@ -9,6 +9,7 @@
 - Define the **Module** contract and lifecycle (`Module`, `ModuleDescriptor`, `Capability`, `Requirement`, `SemVer`)
 - Define the **runtime lifecycle API** (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `PlatformHandle`, `ModuleState`, `ModuleActivatedEvent`, `ModuleDeactivatedEvent`)
 - Define **shared cross-package contracts** (`api.channel.Channel`/`ChannelRegistry`, `api.iflow.Router` and routing value types)
+- Define **sync action contracts** (`api.sync.ActionKind`, `Principal`, `SyncActionSpec`, `SyncCall`, `SyncParamSpec`, `SyncResult`, `SyncSurface`, `SyncValueType`)
 - Define **message domain types** (`Message`, `ChatMessage`, `Actor`, `Channel`, `MessageType`, `Direction`, `Language`, `ColorMode`, `Formats`, `SoundSpec`)
 - Define **SPI interfaces** for platform/implementation plugins:
   - `ActorDirectory` — resolve actors (players, consoles, etc.) by name/UUID
@@ -81,8 +82,11 @@
 | `Translator` | SPI: single translation provider; `translate(text, source, target)` |
 | `TranslatorProvider` | SPI: provides `Translator` instances; registered via modules |
 | `TranslatorManager` | SPI: manages multiple providers, fallback chains |
-| `SyncSink` | SPI: send messages to remote servers (HTTP, Discord, TCP, etc.) |
+| `SyncSink` | SPI: send messages to remote servers and publish a sync action surface (HTTP, Discord, TCP, etc.) |
 | `SyncListener` | SPI: receive messages from remote servers |
+| `SyncSurface` / `SyncActionSpec` / `SyncParamSpec` | Declarative actions published by each sync backend; every surface includes the least common multiple (`backend.info`, `message.send`) |
+| `SyncCall` / `SyncResult` | One action invocation and its explicit outcome (`Ok`, `Denied`, `Unsupported`, `InvalidArgument`, `NotFound`, `Conflict`, `RateLimited`, `Timeout`, `HostFailure`) |
+| `Principal` / `ActionKind` / `SyncValueType` | Caller origin, authorization nature and neutral argument vocabulary; no SDK type crosses the boundary |
 | `PlaceholderResolver` | SPI: resolve `{placeholder}` in messages |
 | `PluginLogger` | SPI: abstract logging for platform adapters |
 | `UserLanguageStore` | SPI: persist/load user language preferences |
@@ -90,6 +94,24 @@
 | `Actor` | Message sender/recipient (player, console, webhook, etc.) |
 | `Channel` | Logical chat channel (global, local, team, etc.) |
 | `MessageEvent` | Event fired when message is processed |
+
+### Sync action surface
+
+`SyncSink.surface()` publishes the actions a backend accepts. Every surface must
+contain the least common multiple: `backend.info` (`READ`, 5 s) and
+`message.send` (`WRITE`, 15 s). The backend namespace must equal
+`SyncSink.name()`; the bus rejects a backend that does not publish the LCM.
+
+`SyncCall` is the invocation envelope: backend, local action, neutral arguments,
+`Principal`, idempotency key and audit reason. The canonical name is
+`backend.action`. Arguments use `SyncValueType` (`STRING`, `INTEGER`, `BOOLEAN`,
+`DURATION`, `ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `OBJECT`) and
+never carry SDK objects.
+
+`SyncResult` is a sealed, explicit outcome; there is no silent skip and no
+fabricated success. Authority is fail-closed in this slice:
+`Principal.Official` may only invoke the LCM and `Principal.Program` is denied
+until the operator grant store exists.
 
 ---
 
@@ -132,7 +154,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `PlatformHandle` | Opaque native handle registered by the host; only platform packages resolve it |
 | `ActorDirectory` | Implement in platform adapter (see `SpigotActorDirectory`, `FabricActorDirectory`) |
 | `TranslationService` / `TranslatorProvider` | Implement in translation module (see `GTranslateProvider`, `LTranslateProvider`) |
-| `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`) |
+| `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`); override `surface()`/`invoke()` for native actions. Declaring an action without executing it is a contract violation |
 | `PlaceholderResolver` | Implement in platform adapter (see `SpigotPlaceholderResolver`, `FabricPlaceholderResolver`) |
 | `MessageRenderer` | Implement in the formatter package (`TextFormatterMessageRenderer`); adapters consume plain text without importing textformatter |
 | `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters without importing the pipeline engine or the removed dispatcher types |
@@ -151,14 +173,17 @@ None — this is a contract library. Entry points are in modules that **implemen
 3. api/runtime/ModuleActivator.java → Runtime package entry point
 4. api/runtime/ModuleContext.java → Module-scoped services, events, scheduler and resources
 5. api/runtime/PlatformHandle.java → Opaque bridge to the host plugin/server object
-5. api/runtime/ServiceRegistry.java → Live service registry
-6. api/runtime/EventBus.java      → Lifecycle and feature events
-7. api/message/*.java             → Domain types (Message, Actor, Channel, etc.)
-8. api/spi/TranslatorProvider.java → Translation provider SPI
-9. api/spi/PresetService.java → Neutral preset application port
-10. api/spi/TestProbe.java → Neutral live-runtime test probe
-11. api/spi/TestRunner.java → Neutral test execution contract
-9. api/iflow/Router.java          → Shared iFlow routing contract
+6. api/runtime/ServiceRegistry.java → Live service registry
+7. api/runtime/EventBus.java      → Lifecycle and feature events
+8. api/message/*.java             → Domain types (Message, Actor, Channel, etc.)
+9. api/spi/TranslatorProvider.java → Translation provider SPI
+10. api/spi/PresetService.java → Neutral preset application port
+11. api/spi/TestProbe.java → Neutral live-runtime test probe
+12. api/spi/TestRunner.java → Neutral test execution contract
+13. api/iflow/Router.java          → Shared iFlow routing contract
+14. api/sync/SyncSurface.java      → Actions published by a sync backend
+15. api/sync/SyncCall.java         → Action invocation envelope
+16. api/sync/SyncResult.java       → Explicit action outcome
 ```
 
 ---

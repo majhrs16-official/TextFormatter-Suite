@@ -2,6 +2,11 @@
 
 ## A
 
+**ActionKind**
+Authorization nature of a sync action: `READ`, `WRITE`, `DESTRUCTIVE` or
+`MODERATION`. Destructive and moderation actions require an explicit
+destructive grant.
+
 **Actor**
 An entity that can send or receive messages: player, console or system.
 
@@ -170,6 +175,12 @@ Disposition applied to a message: `LOG`, `DROP`, `REJECT`, `REDIRECT`,
 A versioned configuration snapshot. `presets apply` writes the files and
 reloads active modules in dependency order.
 
+**Principal**
+Origin of a sync action invocation: `Official(moduleId)` for official suite code
+and `Program(sha256)` for a third-party iFlow program. `Official` may only
+invoke the least common multiple; `Program` is denied until the operator grant
+store exists.
+
 ## R
 
 **RateLimiter**
@@ -204,11 +215,33 @@ pipeline.
 
 **SyncBus**
 Unified outbound/inbound pipeline with deduplication, per-sink isolation and
-retry/backoff.
+retry/backoff. It validates action surfaces, executes `invoke(SyncCall)`, fans
+out only the LCM and returns explicit `SyncResult` values.
+
+**SyncCall**
+One sync action invocation: backend, local action, neutral arguments,
+`Principal`, idempotency key and audit reason. The canonical name is
+`backend.action`.
+
+**SyncResult**
+Sealed outcome of a sync action: `Ok`, `Denied`, `Unsupported`,
+`InvalidArgument`, `NotFound`, `Conflict`, `RateLimited`, `Timeout` or
+`HostFailure`. No failure is a silent no-op.
 
 **SyncSink**
 SPI for external sinks such as Discord, Telegram, HTTP, TCP/UDP, WebSocket and
-Velocity.
+Velocity. It publishes a `SyncSurface` and executes its actions through
+`invoke`.
+
+**SyncSurface**
+Actions published by one sync backend, with their parameter specs, result spec,
+idempotency and timeout. Every surface must include the least common multiple
+(`backend.info` and `message.send`).
+
+**SyncValueType**
+Neutral argument vocabulary for sync actions: `STRING`, `INTEGER`, `BOOLEAN`,
+`DURATION`, `ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF` and `OBJECT`.
+No SDK type crosses the boundary.
 
 ## T
 

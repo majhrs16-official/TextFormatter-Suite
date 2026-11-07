@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 import me.majhrs16.suite.api.message.Actor;
@@ -23,6 +22,9 @@ import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -272,20 +274,30 @@ class CoreTranslatorPlaceholdersTest {
         }
 
         @Override
-        public int broadcast(Message message) {
-            return 0;
+        public Set<SyncSurface> surfaces() {
+            return Set.of();
         }
 
         @Override
-        public Map<String, CompletableFuture<Void>> broadcastAsync(Message message) {
-            return Map.of();
+        public SyncResult invoke(SyncCall call) {
+            return new SyncResult.Unsupported("not used by this test");
         }
 
         @Override
-        public boolean sendTo(String sinkName, Message message) {
+        public List<SyncResult> broadcast(SyncCall call) {
+            return List.of();
+        }
+
+        @Override
+        public List<SyncResult> send(Message message) {
+            return List.of();
+        }
+
+        @Override
+        public List<SyncResult> sendTo(String sinkName, Message message) {
             this.sink = sinkName;
             this.message = message;
-            return true;
+            return List.of(new SyncResult.Ok(null));
         }
 
         @Override

@@ -7,6 +7,7 @@ import me.majhrs16.suite.api.pipeline.PipelineScope;
 import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.pipeline.StageResult;
 import me.majhrs16.suite.api.spi.SyncBus;
+import me.majhrs16.suite.api.sync.SyncResult;
 
 import java.util.List;
 import java.util.Objects;
@@ -51,9 +52,9 @@ public final class SyncStage implements PipelineStage {
     public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
         OutputPlan outputs = context.outputs();
         if (!outputs.declared()) {
-            int accepted = bus.broadcast(message.message());
-            if (accepted == 0) {
-                context.logger().debug("sync stage: no sink accepted the message");
+            List<SyncResult> results = bus.send(message.message());
+            if (results.stream().noneMatch(SyncResult::isOk)) {
+                context.logger().debug("sync stage: no backend delivered the message");
             }
             return StageResult.continueWith(message);
         }
@@ -64,10 +65,12 @@ public final class SyncStage implements PipelineStage {
         }
         boolean any = false;
         for (String backend : backends) {
-            if (bus.sendTo(backend, message.message())) {
+            List<SyncResult> results = bus.sendTo(backend, message.message());
+            if (results.stream().anyMatch(SyncResult::isOk)) {
                 any = true;
             } else {
-                context.logger().debug("sync backend '" + backend + "' is not available");
+                context.logger().debug("sync backend '" + backend + "' did not deliver the message: "
+                        + results);
             }
         }
         return any ? StageResult.continueWith(message) : StageResult.notApplicable(message);

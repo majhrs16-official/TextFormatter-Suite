@@ -17,6 +17,7 @@ import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.api.sync.SyncResult;
 
 /**
  * Platform-neutral engine behind the {@code %cot_*} PlaceholderAPI expansion.
@@ -244,7 +245,8 @@ public final class CoreTranslatorPlaceholders {
             logger.debug("CoreTranslator: explicit Discord channel list is ignored; "
                 + "SyncBus uses its configured sink");
         }
-        return syncBus.sendTo("discord", message) ? "ok" : "";
+        return syncBus.sendTo("discord", message).stream().anyMatch(SyncResult::isOk)
+                ? "ok" : "";
     }
 
     private UUID parseUuid(String raw) {

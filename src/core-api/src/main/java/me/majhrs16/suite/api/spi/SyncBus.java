@@ -1,11 +1,13 @@
 package me.majhrs16.suite.api.spi;
 
 import java.util.Collection;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 
 /**
  * Central hub for cross-platform message synchronization.
@@ -56,50 +58,65 @@ public interface SyncBus extends AutoCloseable {
     Set<String> sinkNames();
 
     /**
-     * Sends a message to all registered sinks (fan-out).
-     * <p>
-     * Delivery is best-effort per sink; failures are logged but don't stop
-     * delivery to other sinks.
-     * </p>
-     *
-     * @param message the message to broadcast, must not be null
-     * @return the number of sinks that successfully enqueued the message for delivery
+     * @return every surface published by the registered backends, in
+     *         registration order
      */
-    int broadcast(Message message);
+    Set<SyncSurface> surfaces();
 
     /**
-     * Sends a message to all registered sinks and returns futures for tracking
-     * actual delivery completion per sink.
-     * <p>
-     * Unlike {@link #broadcast(Message)}, this method returns a map of sink names
-     * to {@link CompletableFuture} that complete when that sink has processed
-     * this specific message. Each future is tied to the queued message, not to
-     * the sink queue becoming empty.
-     * </p>
-     * <p>
-     * A future completes exceptionally when the sink rejects the message (queue
-     * full or stopped), exhausts its retries, the bus stops before processing
-     * it, or the bounded async timeout expires. The timeout is explicit so a
-     * wedged sink can never retain the future forever. A duplicate suppressed
-     * by the deduplication window returns an empty map, because no new delivery
-     * was attempted.
-     * </p>
+     * Executes one action against its backend.
      *
-     * @param message the message to broadcast, must not be null
-     * @return map of sink name to future completing when that sink finishes
-     *         processing the message, or an empty map when the bus is not
-     *         running, has no sinks, or suppressed a duplicate
+     * <p>The bus validates that the backend is registered, that its surface
+     * publishes the action, that the arguments match the parameter specs and
+     * that the caller is authorized. The action is bounded by its declared
+     * {@code timeoutMillis}; a crash is returned as
+     * {@link SyncResult.HostFailure} and never escapes.</p>
+     *
+     * <p>Authority is fail-closed: {@link me.majhrs16.suite.api.sync.Principal.Official}
+     * may invoke only the least common multiple, and
+     * {@link me.majhrs16.suite.api.sync.Principal.Program} is denied until the
+     * operator grant store exists.</p>
+     *
+     * @param call invocation, must not be null
+     * @return the explicit outcome, never {@code null}
      */
-    Map<String, CompletableFuture<Void>> broadcastAsync(Message message);
+    SyncResult invoke(SyncCall call);
 
     /**
-     * Sends a message to a specific sink by name.
+     * Fans out a least-common-multiple action to every registered backend.
      *
-     * @param sinkName the target sink name
-     * @param message the message to send
-     * @return true if the sink exists and accepted the message
+     * <p>Only {@code backend.info} and {@code message.send} are accepted. The
+     * {@code backend} field of {@code call} does not select a destination: it
+     * is replaced by each surface's backend. Any other action returns one
+     * {@link SyncResult.Unsupported} per backend, because a generic broadcast
+     * must never turn a native action into a destructive mass operation.</p>
+     *
+     * @param call action template, must not be null
+     * @return one result per registered backend, in {@link #surfaces()} order
      */
-    boolean sendTo(String sinkName, Message message);
+    List<SyncResult> broadcast(SyncCall call);
+
+    /**
+     * Comfort overload of {@code message.send} for every registered backend.
+     *
+     * <p>This is the same delivery path as {@link #invoke(SyncCall)}; it is not
+     * a second route. A duplicate suppressed by the deduplication window
+     * returns an empty list, because no delivery was attempted.</p>
+     *
+     * @param message the message to send, must not be null
+     * @return one result per targeted backend
+     */
+    List<SyncResult> send(Message message);
+
+    /**
+     * Directed form of {@code message.send}.
+     *
+     * @param backend backend namespace, not a sink display name
+     * @param message the message to send, must not be null
+     * @return one result for the targeted backend, or one
+     *         {@link SyncResult.Unsupported} when it is not registered
+     */
+    List<SyncResult> sendTo(String backend, Message message);
 
     /**
      * Sets the inbound listener that receives messages from all sinks.

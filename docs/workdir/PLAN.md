@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-07 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` completa por mensaje con timeout explícito). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` sigue pendiente. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-07 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` sigue pendiente. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -209,7 +209,8 @@ cero y registran un aviso, en lugar de ensanchar el mensaje a todos los jugadore
 realmente y libere la marca de dedup cuando ninguno acepta, de modo que el reintento es posible tras
 drenar las colas. TF-006 ata cada futuro de `broadcastAsync` a la tarea concreta de su mensaje: se
 completa cuando `send` retorna, falla de forma explícita por rechazo, reintentos agotados, parada o
-timeout acotado, y nunca deduce éxito de una cola vacía. PL-1 avanza por slices con gate verde: contratos neutrales en `core-api`,
+timeout acotado, y nunca deduce éxito de una cola vacía. `broadcastAsync` se retiró al abrir PL-2;
+su garantía (timeout explícito e identidad por acción) se conserva en `invoke`/`send`. PL-1 avanza por slices con gate verde: contratos neutrales en `core-api`,
 `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`,
 `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` con 12 tests y motor ya
 cableado como camino de producción, alimentado por `pipeline` en `config/suite/config.yml`.
@@ -460,8 +461,9 @@ de sinks ya están aplicados. La fachada legacy está retirada y solo queda la c
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
-> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §16** (aceptado el
-> 2026-11-06); **TF-006 quedó cerrado el 2026-11-07** y TF-005 el 2026-11-06.
+> **Estado:** contratos y bus implementados (2026-11-07); backends, concesiones y puente iFlow
+> pendientes. Depende de **ADR-036 §16** (aceptado el 2026-11-06); **TF-006 quedó cerrado el
+> 2026-11-07** y TF-005 el 2026-11-06.
 
 #### Objetivo
 
@@ -490,12 +492,12 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 
 | Hecho | Evidencia | Efecto |
 |---|---|---|
-| `SyncSink` solo envía mensajes | `SyncSink.java` (`send`, `start`, `stop`, `setListener`) | No hay superficie de acciones ni descubrimiento. |
-| `broadcast` devuelve los sinks que aceptaron | `DefaultSyncBus.broadcast`; TF-005 cerrado | La base de `invoke` ya no confunde fan-out intentado con aceptado. |
-| `broadcastAsync` completa por mensaje con timeout | `DefaultSyncBus.broadcastAsync`; TF-006 cerrado | Base fiable para acciones con timeout e identidad. |
+| `SyncSink` publica superficie e invoca acciones | `SyncSink.surface()`/`invoke()`; `DefaultSyncBus.register` valida LCM y namespace | LCM y ejecución disponibles; los backends aún no declaran nativas. |
+| `broadcast` cuenta los sinks que aceptaron | `DefaultSyncBus.send`/`broadcast`; TF-005 cerrado | El fan-out no confunde intento con aceptación. |
+| Timeout e identidad por acción | `DefaultSyncBus.effectiveTimeout`/`dispatchCall`; `DefaultSyncBusTest` | `broadcastAsync` se retiró; cada acción conserva timeout explícito y resultado propio. |
 | `set_channel` es un import dedicado de v3 | `PolicyAbiV3.SET_CHANNEL`; `PolicyHost.setChannel` | No es genérico ni está sujeto a concesiones por acción. |
-| Los sinks requieren `sync-bus` | descriptores `sync-*`; `storage.md` §2 | Feature→feature; contradice ADR-036 §2. |
-| No hay concesiones ni auditoría de acciones | — | Un tercero no puede recibir autoridad acotada. |
+| Los sinks se descubren por servicio | `DefaultSyncBus.discoverSinks`; eventos de ciclo de vida | Sin `feature → feature`; el paquete no depende del bus. |
+| No hay concesiones ni auditoría de acciones | — | Un tercero no puede recibir autoridad acotada; `Principal.Program` se deniega. |
 
 > **Nomenclatura:** `sync-tcpudp` está deprecado; el módulo vigente es `sync-socket`
 > (`src/sync-tcpudp` está vacío y fuera de `settings.gradle`). Quedan referencias obsoletas en
@@ -505,8 +507,8 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 
 | Área | Cambio |
 |---|---|
-| `core-api` | `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
-| `sync-bus` | Registro de superficies, `invoke`, fan-out del LCM, timeout/cuotas, auditoría, `textformatter.channel.set` del host. |
+| `core-api` | **Implementado (2026-11-07):** `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`, `SyncValueType`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
+| `sync-bus` | **Implementado (2026-11-07):** registro y validación de superficies, `invoke`, fan-out exclusivo del LCM, `send`/`sendTo`, timeout por acción y autoridad fail-closed. Pendientes: auditoría, cuotas y `textformatter.channel.set`. |
 | `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. `sync-bukkit`/`sync-fabric` publican además el sink local y las acciones del entorno, eventos incluidos. |
 | `iflow-vm` | Servicios `SYNC_SURFACE`/`SYNC_INVOKE`, TLV/DMA/fuel; retirar `set_channel` dedicado. |
 | `iflow-wasm` | Imports `sync_surface`/`sync_invoke`, TLV y estados equivalentes; retirar `set_channel`. |
@@ -516,13 +518,14 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 
 #### Pasos de implementación
 
-1. **Prerrequisito TF-006 (cerrado).** `broadcast` cuenta éxitos reales y libera el dedup (TF-005,
-   cerrado el 2026-11-06). `broadcastAsync` completa por identidad de mensaje con timeout explícito
-   (TF-006, cerrado el 2026-11-07); los tests de regresión viven en `DefaultSyncBusTest`.
-2. **Contratos neutrales.** Añadir los tipos de §16.3 a `core-api` y ampliar `SyncSink`/`SyncBus`.
+1. **Prerrequisito TF-006 (cerrado). ✅** `broadcast` cuenta éxitos reales y libera el dedup (TF-005,
+   cerrado el 2026-11-06). TF-006 ató cada futuro a su mensaje con timeout explícito (2026-11-07);
+   al abrir PL-2 se retiró `broadcastAsync` y la misma garantía vive en `invoke`/`send`. Los tests de
+   regresión viven en `DefaultSyncBusTest`.
+2. **Contratos neutrales. ✅** Añadir los tipos de §16.3 a `core-api` y ampliar `SyncSink`/`SyncBus`.
    `checkArchitecture` prohíbe JDA, Telegram, Bukkit, Fabric y cualquier SDK en `core-api` y
    `sync-bus`. Test de que una superficie se serializa sin tipos de plataforma.
-3. **Bus de acciones.** Indexar `SyncSurface` por backend, validar duplicados, enrutar `invoke`,
+3. **Bus de acciones. ✅ (salvo auditoría, cuotas y `textformatter.channel.set`)** Indexar `SyncSurface` por backend, validar duplicados, enrutar `invoke`,
    aplicar timeout/cuotas, emitir auditoría y mapear cada estado a `SyncResult`. `send(Message)` pasa
    a ser una comodidad sobre `message.send`.
 4. **Backends.** Migrar `sync-discord` y `sync-telegram` primero (superficie completa: canales,
@@ -544,6 +547,34 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 9. **Documentación y esquema.** Actualizar `storage.md` (submódulo, ruta de auditoría),
    `config-schema-v2.2.md`, la especificación iFlow y la wiki. `docs/prompts/` requiere autorización
    explícita.
+
+#### Estado de implementación (2026-11-07)
+
+Completado en esta unidad:
+
+- Contratos de ADR-036 §16.3 en `core-api`: `ActionKind`, `Principal`,
+  `SyncActionSpec`, `SyncCall`, `SyncParamSpec`, `SyncResult`, `SyncSurface` y
+  `SyncValueType`; `SyncSink` gana `surface()`/`invoke()` con LCM por defecto.
+- `SyncBus` gana `surfaces()`, `invoke(SyncCall)`, `broadcast(SyncCall)`,
+  `send(Message)` y `sendTo(String, Message)`; se retiran
+  `broadcastAsync(Message)` y `broadcast(Message): int`.
+- `DefaultSyncBus` valida el LCM y el namespace, aplica autoridad fail-closed,
+  valida argumentos, encola `message.send` por backend, acota cada acción con su
+  timeout (máximo 30 s), reintenta solo acciones idempotentes y mapea todo fallo
+  a `SyncResult`.
+- `SyncStage` y `CoreTranslatorPlaceholders` usan `send`/`sendTo`.
+- Tests de regresión en `DefaultSyncBusTest`, `DefaultSyncBusIntegrationTest`,
+  `SyncStageTest`, `CoreTranslatorPlaceholdersTest` y `SyncContractTest`.
+
+Pendiente y fuera de esta unidad:
+
+- `config/iflow/grants.yml`, autenticación de `Principal.Program`, cuotas por
+  programa y auditoría append-only.
+- Migración de cada backend para publicar acciones nativas; hoy todos usan el
+  LCM por defecto.
+- `textformatter.channel.set`, el puente VM/Wasm y la paridad de `SyncResult`.
+- La retirada del fuel queda para la migración v3 (véase «Trayectoria v2 → v3 y
+  fuel»).
 
 #### Criterios de cierre y tests
 
@@ -583,7 +614,7 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | ADR-019 | Permite `feature → feature` con dependencia declarada. | ADR-036 §2 elimina la excepción; §15 migra los descriptores. |
 | `storage.md` §2 | Un submódulo declara `require(...)` del padre (`sync-*` → `sync-bus`). | Contradice §15 y §16; actualizar el documento requiere autorización. |
 | Especificación iFlow v3 | El guest solo transforma contenido/metadatos; no hay efectos de host. | §16 amplía la autoridad a acciones de backend con concesión; requiere autorización para la spec. |
-| Auditoría TF-006 | `broadcastAsync` no era fiable. | Resuelto el 2026-11-07: cada futuro se ata a su mensaje y tiene timeout explícito. `invoke` puede exponerse sobre esa base. |
+| Auditoría TF-006 | `broadcastAsync` no era fiable. | Resuelto el 2026-11-07: cada futuro se ata a su mensaje y tiene timeout explícito. `broadcastAsync` se retiró al abrir PL-2; `invoke`/`send` conservan ambas garantías. |
 | ADR-035 | `CoreTranslator.sendDiscord` usa el bus actual. | Pasa al LCM `message.send`; no usa acciones nativas. Sin contradicción. |
 | ADR-034 | Prohíbe aliases y compatibilidad. | El cambio es incompatible y se aplica en una sola unidad; `set_channel` se retira, no se conserva como alias. |
 
@@ -1016,6 +1047,20 @@ Reglas de diseño:
    `HOST` v2 de iFlow.
 6. **Autoría multi-lenguaje.** El panel web puede editar WAT/AssemblyScript o subir un `.wasm`
    compilado; el servidor no ejecuta toolchains nativas arbitrarias.
+
+### Trayectoria v2 → v3 y fuel (2026-11-07)
+
+La línea vigente sigue siendo la **v2 de 16 bits**. Se prioriza hacerla estable y cerrar
+PL-1/PL-2/PL-3 sobre sus contratos actuales; la migración a v3 (ISA/ABI de 32 bits, scheduler,
+persistencia, quantum) es posterior y no se mezcla con esos slices. Por eso el fuel sigue siendo
+el límite de ejecución vigente en v2 y las referencias de ADR-036 §16.6/§16.7 al coste de fuel
+describen esa línea, no el objetivo v3.
+
+`IFLOW-MAN-D36R` (retirar el fuel como límite) sigue siendo el objetivo de v3, pero su reemplazo
+—quantum de scheduler, timer IRQ, watchdog de host, cuotas por actor o una combinación— no está
+decidido ni implementado (preguntas 18-21 de `iflow-cpu-implement.md` §8.8). Cuando se aborde V3
+se actualizará el ADR y el puente `SYNC_INVOKE` dejará de cobrar fuel. No se introduce un doble
+camino v2/v3: la migración sustituye la línea vigente.
 
 ### Fases de `iflow-vm` (32 bits)
 

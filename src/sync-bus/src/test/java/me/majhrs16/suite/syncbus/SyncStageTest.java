@@ -19,17 +19,18 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -98,24 +99,26 @@ class SyncStageTest {
         private final List<String> targeted = new ArrayList<>();
 
         @Override
-        public int broadcast(Message message) {
+        public List<SyncResult> send(Message message) {
             broadcastCalled = true;
-            return 1;
+            return List.of(new SyncResult.Ok(null));
         }
 
         @Override
-        public boolean sendTo(String sinkName, Message message) {
-            targeted.add(sinkName);
-            return true;
+        public List<SyncResult> sendTo(String backend, Message message) {
+            targeted.add(backend);
+            return List.of(new SyncResult.Ok(null));
         }
 
+        @Override public Set<SyncSurface> surfaces() { return Set.of(); }
+        @Override public SyncResult invoke(SyncCall call) {
+            return new SyncResult.Unsupported("not used by this test");
+        }
+        @Override public List<SyncResult> broadcast(SyncCall call) { return List.of(); }
         @Override public void register(SyncSink sink) { }
         @Override public boolean unregister(String name) { return false; }
         @Override public Collection<SyncSink> sinks() { return List.of(); }
         @Override public Set<String> sinkNames() { return Set.of(); }
-        @Override public Map<String, CompletableFuture<Void>> broadcastAsync(Message message) {
-            return Map.of();
-        }
         @Override public void setInboundListener(SyncListener listener) { }
         @Override public void start() { }
         @Override public void stop() { }

@@ -6,12 +6,22 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncActionSpec;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncParamSpec;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
+import me.majhrs16.suite.api.sync.SyncValueType;
 
+import java.math.BigInteger;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,6 +32,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -34,7 +46,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 
 /**
  * Default implementation of {@link SyncBus} with full synchronization hub capabilities.
@@ -53,7 +64,7 @@ public final class DefaultSyncBus implements SyncBus {
 
     // Configuration constants
     private static final int GLOBAL_QUEUE_CAPACITY = 10000;
-    private static final int PER_SINK_QUEUE_CAPACITY = 5000;
+    private static final int DEFAULT_PER_SINK_QUEUE_CAPACITY = 5000;
     private static final int MAX_RETRIES = 3;
     private static final long INITIAL_RETRY_DELAY_MS = 100;
     private static final long MAX_RETRY_DELAY_MS = 30_000;
@@ -69,11 +80,13 @@ public final class DefaultSyncBus implements SyncBus {
     private volatile SyncListener inboundListener;
     private final PluginLogger logger;
     private final long asyncTimeoutMillis;
+    private final int perSinkQueueCapacity;
 
     // Global bounded queue used by the metrics contract and by the shutdown sentinel.
     private final ThreadPoolExecutor globalExecutor;
     private final BlockingQueue<Runnable> globalQueue;
     private final ScheduledExecutorService scheduler;
+    private final ExecutorService invocationExecutor;
 
     // Deduplication
     private final ConcurrentMap<String, Long> sentMessageIds = new ConcurrentHashMap<>();
@@ -89,21 +102,35 @@ public final class DefaultSyncBus implements SyncBus {
     private final AtomicLong totalDeduped = new AtomicLong(0);
 
     public DefaultSyncBus(PluginLogger logger) {
-        this(logger, DEFAULT_ASYNC_TIMEOUT_MS);
+        this(logger, DEFAULT_ASYNC_TIMEOUT_MS, DEFAULT_PER_SINK_QUEUE_CAPACITY);
     }
 
     /**
-     * Builds a bus with an explicit async completion timeout.
+     * Builds a bus with an explicit action completion bound.
      *
-     * <p>Package-private so tests can exercise the timeout without waiting the
-     * production bound.</p>
+     * <p>The effective timeout of a message delivery is the smaller of the
+     * action's declared {@code timeoutMillis} and this bound. Package-private
+     * so tests can exercise the timeout without waiting the production
+     * bound.</p>
      */
     DefaultSyncBus(PluginLogger logger, long asyncTimeoutMillis) {
+        this(logger, asyncTimeoutMillis, DEFAULT_PER_SINK_QUEUE_CAPACITY);
+    }
+
+    /**
+     * Builds a bus with explicit bounds. Package-private for tests that need
+     * to fill a sink queue without allocating the production capacity.
+     */
+    DefaultSyncBus(PluginLogger logger, long asyncTimeoutMillis, int perSinkQueueCapacity) {
         this.logger = Objects.requireNonNull(logger, "logger");
         if (asyncTimeoutMillis <= 0) {
             throw new IllegalArgumentException("asyncTimeoutMillis must be positive");
         }
+        if (perSinkQueueCapacity <= 0) {
+            throw new IllegalArgumentException("perSinkQueueCapacity must be positive");
+        }
         this.asyncTimeoutMillis = asyncTimeoutMillis;
+        this.perSinkQueueCapacity = perSinkQueueCapacity;
 
         // Global executor with CallerRunsPolicy for backpressure
         this.globalExecutor = new ThreadPoolExecutor(
@@ -116,9 +143,15 @@ public final class DefaultSyncBus implements SyncBus {
 
         this.globalQueue = globalExecutor.getQueue();
 
-        // Scheduler for retries and dedup cleanup (created but not started until start())
+        // Scheduler for retries, action timeouts and dedup cleanup (created but
+        // not started until start()).
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
             createThreadFactory("syncbus-scheduler"));
+
+        // Native actions run off the caller thread so the bus can bound them
+        // with the action timeout and map a crash to HostFailure.
+        this.invocationExecutor = Executors.newCachedThreadPool(
+            createThreadFactory("syncbus-invoke"));
     }
 
     private static ThreadFactory createThreadFactory(String prefix) {
@@ -175,44 +208,26 @@ public final class DefaultSyncBus implements SyncBus {
                 + message.id() + " was not delivered");
     }
 
-    /**
-     * Fans the message out to every registered sink and returns how many
-     * sinks actually accepted it.
-     *
-     * <p>The dedup mark is reserved before the fan-out but released when no
-     * sink accepted the message, so a caller can retry a message that was
-     * dropped by full queues instead of getting a false success.</p>
-     */
-    private int deliver(Message message) {
-        Long stamp = reserveEmission(message);
-        if (stamp == null) {
-            return 0;
-        }
-
-        totalBroadcast.incrementAndGet();
-
-        // Fan out to all sinks with per-sink isolation.
-        int accepted = 0;
-        for (SinkContext ctx : sinks.values()) {
-            if (ctx.enqueue(message)) {
-                accepted++;
-            }
-        }
-
-        if (accepted == 0) {
-            // Never report success for a message no sink accepted; release the
-            // dedup mark so the emission can be retried once queues drain.
-            // SinkContext.enqueue() already counted each dropped delivery.
-            releaseEmission(message, stamp);
-        }
-        return accepted;
-    }
-
     @Override
     public void register(SyncSink sink) {
         Objects.requireNonNull(sink, "sink");
         String name = sink.name();
-        SinkContext created = new SinkContext(sink);
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("sink name must not be blank");
+        }
+
+        SyncSurface surface = Objects.requireNonNull(sink.surface(), "surface");
+        if (!name.equals(surface.backend())) {
+            throw new IllegalArgumentException(
+                    "sink '" + name + "' publishes backend '" + surface.backend()
+                            + "'; the backend namespace must match the sink name");
+        }
+        if (!surface.hasLeastCommonMultiple()) {
+            throw new IllegalArgumentException(
+                    "sink '" + name + "' does not publish the least common multiple");
+        }
+
+        SinkContext created = new SinkContext(sink, surface);
         SinkContext existing = sinks.putIfAbsent(name, created);
         if (existing != null) {
             throw new IllegalStateException("Sink with name '" + name + "' already registered: " + existing.sink.getClass().getName());
@@ -326,96 +341,370 @@ public final class DefaultSyncBus implements SyncBus {
     }
 
     @Override
-    public int broadcast(Message message) {
-        LifecycleState currentState = state.get();
-        if (currentState != LifecycleState.RUNNING) {
-            logger.debug("SyncBus: broadcast called during shutdown or before start");
-            return 0;
+    public Set<SyncSurface> surfaces() {
+        Set<SyncSurface> published = new LinkedHashSet<>();
+        for (SinkContext ctx : orderedContexts()) {
+            published.add(ctx.surface);
         }
-
-        if (sinks.isEmpty()) {
-            logger.debug("SyncBus: broadcast called but no sinks registered");
-            return 0;
-        }
-
-        // Fan out in the caller thread so the return value reflects what the
-        // sinks actually accepted. Going through the global queue would make
-        // the count a guess, because enqueue() can fail later.
-        return deliver(message);
+        return Collections.unmodifiableSet(published);
     }
 
     @Override
-    public java.util.Map<String, CompletableFuture<Void>> broadcastAsync(Message message) {
-        java.util.Map<String, CompletableFuture<Void>> futures = new ConcurrentHashMap<>();
+    public SyncResult invoke(SyncCall call) {
+        Objects.requireNonNull(call, "call");
+        if (state.get() != LifecycleState.RUNNING) {
+            return new SyncResult.HostFailure("sync bus is not running");
+        }
 
-        if (state.get() != LifecycleState.RUNNING || sinks.isEmpty()) {
-            return futures;
+        SinkContext ctx = sinks.get(call.backend());
+        if (ctx == null) {
+            return new SyncResult.Unsupported(
+                    "backend '" + call.backend() + "' is not registered");
+        }
+
+        SyncActionSpec spec = ctx.surface.action(call.action()).orElse(null);
+        if (spec == null) {
+            return new SyncResult.Unsupported(
+                    "action '" + call.canonicalName() + "' is not published");
+        }
+
+        SyncResult denied = authorize(call, spec);
+        if (denied != null) {
+            return denied;
+        }
+
+        SyncResult invalid = validateArguments(call, spec);
+        if (invalid != null) {
+            return invalid;
+        }
+
+        if (SyncSurface.MESSAGE_SEND.equals(call.action())) {
+            // The message path stays in the per-sink queue so directed delivery
+            // keeps the same isolation and retry policy as a fan-out.
+            return await(dispatchCall(ctx, call, spec));
+        }
+        return executeBounded(ctx.sink, call, effectiveTimeout(spec));
+    }
+
+    @Override
+    public List<SyncResult> broadcast(SyncCall call) {
+        Objects.requireNonNull(call, "call");
+        List<SinkContext> targets = orderedContexts();
+        if (targets.isEmpty()) {
+            return List.of();
+        }
+
+        if (!isLcmAction(call.action())) {
+            List<SyncResult> results = new ArrayList<>(targets.size());
+            for (SinkContext ctx : targets) {
+                results.add(new SyncResult.Unsupported(
+                        "broadcast only fans out the LCM; '" + call.canonicalName()
+                                + "' is not LCM"));
+            }
+            return List.copyOf(results);
+        }
+
+        List<SyncResult> results = new ArrayList<>(targets.size());
+        for (SinkContext ctx : targets) {
+            results.add(invoke(copyForBackend(call, ctx.surface.backend())));
+        }
+        return List.copyOf(results);
+    }
+
+    @Override
+    public List<SyncResult> send(Message message) {
+        Objects.requireNonNull(message, "message");
+        List<SinkContext> targets = orderedContexts();
+        if (targets.isEmpty()) {
+            return List.of();
+        }
+        if (state.get() != LifecycleState.RUNNING) {
+            List<SyncResult> stopped = new ArrayList<>(targets.size());
+            for (SinkContext ctx : targets) {
+                stopped.add(new SyncResult.HostFailure(
+                        "sync bus is not running; backend '" + ctx.surface.backend()
+                                + "' did not receive the message"));
+            }
+            return List.copyOf(stopped);
         }
 
         Long stamp = reserveEmission(message);
         if (stamp == null) {
-            // The message was already delivered inside the dedup window. No
-            // per-sink future is created so a suppressed duplicate cannot be
-            // read as a fresh delivery.
-            return futures;
+            // No delivery was attempted for this duplicate, so there is no
+            // per-backend result to report.
+            return List.of();
         }
-
         totalBroadcast.incrementAndGet();
 
-        int accepted = 0;
-        for (SinkContext ctx : sinks.values()) {
-            String sinkName = ctx.sink.name();
-            CompletableFuture<Void> sinkFuture = new CompletableFuture<>();
-            futures.put(sinkName, sinkFuture);
-
-            if (!ctx.enqueue(message, sinkFuture)) {
-                sinkFuture.completeExceptionally(new IllegalStateException(
-                        "sink '" + sinkName + "' rejected the message (not running or queue full)"));
-                continue;
-            }
-            accepted++;
-            scheduleAsyncTimeout(sinkName, sinkFuture);
+        List<CompletableFuture<SyncResult>> outcomes = new ArrayList<>(targets.size());
+        for (SinkContext ctx : targets) {
+            outcomes.add(dispatchCall(ctx, messageSendCall(ctx.surface.backend(), message),
+                    sendSpec(ctx)));
         }
 
-        if (accepted == 0) {
+        List<SyncResult> results = new ArrayList<>(outcomes.size());
+        boolean anyAccepted = false;
+        for (CompletableFuture<SyncResult> outcome : outcomes) {
+            SyncResult result = await(outcome);
+            results.add(result);
+            anyAccepted |= result.isOk();
+        }
+        if (!anyAccepted) {
             releaseEmission(message, stamp);
         }
-        return futures;
-    }
-
-    /**
-     * Bounds every async future so a stopped or wedged sink cannot retain the
-     * caller forever. The timeout is cancelled as soon as the queued task
-     * completes, either successfully or with the real delivery failure.
-     */
-    private void scheduleAsyncTimeout(String sinkName, CompletableFuture<Void> future) {
-        ScheduledFuture<?> timeout;
-        try {
-            timeout = scheduler.schedule(() -> {
-                if (future.completeExceptionally(new TimeoutException(
-                        "sink '" + sinkName + "' did not process the message within "
-                                + asyncTimeoutMillis + "ms"))) {
-                    logger.warn("SyncBus: sink '" + sinkName
-                            + "' did not process an async message within "
-                            + asyncTimeoutMillis + "ms");
-                }
-            }, asyncTimeoutMillis, TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException stopped) {
-            future.completeExceptionally(new IllegalStateException(
-                    "SyncBus scheduler is not running", stopped));
-            return;
-        }
-        future.whenComplete((ignored, error) -> timeout.cancel(false));
+        return List.copyOf(results);
     }
 
     @Override
-    public boolean sendTo(String sinkName, Message message) {
-        SinkContext ctx = sinks.get(sinkName);
+    public List<SyncResult> sendTo(String backend, Message message) {
+        Objects.requireNonNull(backend, "backend");
+        Objects.requireNonNull(message, "message");
+
+        SinkContext ctx = sinks.get(backend);
         if (ctx == null) {
-            logger.warn("SyncBus: sink '" + sinkName + "' not found for directed send");
-            return false;
+            logger.warn("SyncBus: backend '" + backend + "' not found for directed send");
+            return List.of(new SyncResult.Unsupported(
+                    "backend '" + backend + "' is not registered"));
         }
-        return ctx.enqueue(message);
+        if (state.get() != LifecycleState.RUNNING) {
+            return List.of(new SyncResult.HostFailure(
+                    "sync bus is not running; backend '" + backend
+                            + "' did not receive the message"));
+        }
+        return List.of(await(dispatchCall(ctx, messageSendCall(backend, message),
+                sendSpec(ctx))));
+    }
+
+    /** @return contexts in registration order, so results align with surfaces() */
+    private List<SinkContext> orderedContexts() {
+        List<SinkContext> ordered = new ArrayList<>(sinkNamesSnapshot.size());
+        for (String name : sinkNamesSnapshot) {
+            SinkContext ctx = sinks.get(name);
+            if (ctx != null) {
+                ordered.add(ctx);
+            }
+        }
+        return ordered;
+    }
+
+    private static SyncCall copyForBackend(SyncCall call, String backend) {
+        return new SyncCall(backend, call.action(), call.args(), call.principal(),
+                call.idempotencyKey(), call.reason());
+    }
+
+    private static SyncCall messageSendCall(String backend, Message message) {
+        return new SyncCall(
+                backend,
+                SyncSurface.MESSAGE_SEND,
+                Map.of("message", message),
+                new Principal.Official("suite.pipeline"),
+                message.id() + "|" + SyncSurface.MESSAGE_SEND + "|" + backend,
+                "pipeline delivery");
+    }
+
+    private static SyncActionSpec sendSpec(SinkContext ctx) {
+        return ctx.surface.action(SyncSurface.MESSAGE_SEND)
+                .orElseThrow(() -> new IllegalStateException(
+                        "backend '" + ctx.surface.backend() + "' does not publish "
+                                + SyncSurface.MESSAGE_SEND));
+    }
+
+    private long effectiveTimeout(SyncActionSpec spec) {
+        return Math.min(spec.timeoutMillis(), asyncTimeoutMillis);
+    }
+
+    /**
+     * Queues one call on the sink worker and bounds it with an explicit timer.
+     * The returned future always completes: with the real result, with a
+     * rejection, or with {@link SyncResult.Timeout}.
+     */
+    private CompletableFuture<SyncResult> dispatchCall(SinkContext ctx, SyncCall call,
+                                                       SyncActionSpec spec) {
+        CompletableFuture<SyncResult> outcome = new CompletableFuture<>();
+        if (!ctx.enqueue(call, outcome)) {
+            outcome.complete(new SyncResult.HostFailure(
+                    "backend '" + ctx.surface.backend()
+                            + "' rejected the action (not running or queue full)"));
+            return outcome;
+        }
+
+        long timeout = effectiveTimeout(spec);
+        ScheduledFuture<?> timer;
+        try {
+            timer = scheduler.schedule(() -> {
+                if (outcome.complete(new SyncResult.Timeout(
+                        "backend '" + ctx.surface.backend() + "' did not finish '"
+                                + call.action() + "' within " + timeout + "ms"))) {
+                    logger.warn("SyncBus: backend '" + ctx.surface.backend()
+                            + "' timed out after " + timeout + "ms on action '"
+                            + call.action() + "'");
+                }
+            }, timeout, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException stopped) {
+            outcome.complete(new SyncResult.HostFailure(
+                    "sync bus scheduler is not running; action '" + call.action()
+                            + "' was not executed"));
+            return outcome;
+        }
+        ScheduledFuture<?> scheduled = timer;
+        outcome.whenComplete((ignored, failure) -> scheduled.cancel(false));
+        return outcome;
+    }
+
+    private SyncResult executeBounded(SyncSink sink, SyncCall call, long timeoutMillis) {
+        CompletableFuture<SyncResult> outcome;
+        try {
+            outcome = CompletableFuture.supplyAsync(() -> sink.invoke(call), invocationExecutor);
+        } catch (RejectedExecutionException stopped) {
+            return new SyncResult.HostFailure(
+                    "sync bus invocation executor is not running");
+        }
+
+        try {
+            SyncResult result = outcome.get(timeoutMillis, TimeUnit.MILLISECONDS);
+            return result != null
+                    ? result
+                    : new SyncResult.HostFailure("sink returned no result");
+        } catch (TimeoutException timeout) {
+            outcome.cancel(true);
+            return new SyncResult.Timeout(
+                    "action '" + call.canonicalName() + "' exceeded "
+                            + timeoutMillis + "ms");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            outcome.cancel(true);
+            return new SyncResult.HostFailure(
+                    "interrupted while executing '" + call.canonicalName() + "'");
+        } catch (ExecutionException failure) {
+            return new SyncResult.HostFailure(describe(failure.getCause()));
+        }
+    }
+
+    private static SyncResult await(CompletableFuture<SyncResult> outcome) {
+        try {
+            SyncResult result = outcome.get();
+            return result != null
+                    ? result
+                    : new SyncResult.HostFailure("sink returned no result");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return new SyncResult.HostFailure("interrupted while waiting for the action");
+        } catch (ExecutionException failure) {
+            return new SyncResult.HostFailure(describe(failure.getCause()));
+        }
+    }
+
+    private static SyncResult authorize(SyncCall call, SyncActionSpec spec) {
+        if (call.principal() instanceof Principal.Official) {
+            return isLcmAction(spec.id())
+                    ? null
+                    : new SyncResult.Denied(
+                            "Principal.Official may only invoke the least common multiple");
+        }
+        return new SyncResult.Denied(
+                "program grants are not configured; principal "
+                        + principalId(call.principal()) + " is denied");
+    }
+
+    private static String principalId(Principal principal) {
+        if (principal instanceof Principal.Official official) {
+            return "module:" + official.moduleId();
+        }
+        if (principal instanceof Principal.Program program) {
+            return "program:" + program.sha256();
+        }
+        return principal.toString();
+    }
+
+    private static boolean isLcmAction(String action) {
+        return SyncSurface.BACKEND_INFO.equals(action)
+                || SyncSurface.MESSAGE_SEND.equals(action);
+    }
+
+    private static SyncResult validateArguments(SyncCall call, SyncActionSpec spec) {
+        for (SyncParamSpec param : spec.params()) {
+            Object value = call.args().get(param.name());
+            if (value == null) {
+                if (param.required()) {
+                    return new SyncResult.InvalidArgument(
+                            "missing required argument '" + param.name() + "'");
+                }
+                continue;
+            }
+            String problem = validateValue(param.name(), param, value);
+            if (problem != null) {
+                return new SyncResult.InvalidArgument(problem);
+            }
+        }
+        for (String name : call.args().keySet()) {
+            if (spec.params().stream().noneMatch(param -> param.name().equals(name))) {
+                return new SyncResult.InvalidArgument(
+                        "unknown argument '" + name + "' for action '" + spec.id() + "'");
+            }
+        }
+        return null;
+    }
+
+    private static String validateValue(String name, SyncParamSpec param, Object value) {
+        if (param.item() != null) {
+            if (!(value instanceof Iterable<?> items)) {
+                return "'" + name + "' must be a list";
+            }
+            int index = 0;
+            for (Object item : items) {
+                String problem = validateValue(name + "[" + index + "]", param.item(), item);
+                if (problem != null) {
+                    return problem;
+                }
+                index++;
+            }
+            return null;
+        }
+
+        return switch (param.type()) {
+            case STRING -> value instanceof String
+                    ? null : "'" + name + "' must be a string";
+            case INTEGER -> isInteger(value)
+                    ? null : "'" + name + "' must be an integer";
+            case BOOLEAN -> value instanceof Boolean
+                    ? null : "'" + name + "' must be a boolean";
+            case DURATION -> isDuration(value)
+                    ? null : "'" + name + "' must be a non-negative duration";
+            case ACTOR_REF, CHANNEL_REF, ROLE_REF -> value instanceof String text
+                    && !text.isBlank()
+                    ? null : "'" + name + "' must be a non-blank reference";
+            case MESSAGE_REF -> value instanceof Message
+                    || (value instanceof String text && !text.isBlank())
+                    ? null : "'" + name + "' must be a Message or a non-blank message id";
+            case OBJECT -> value instanceof Map<?, ?>
+                    ? null : "'" + name + "' must be an object";
+        };
+    }
+
+    private static boolean isInteger(Object value) {
+        return value instanceof Byte
+                || value instanceof Short
+                || value instanceof Integer
+                || value instanceof Long
+                || value instanceof BigInteger;
+    }
+
+    private static boolean isDuration(Object value) {
+        if (value instanceof Duration duration) {
+            return !duration.isNegative();
+        }
+        return value instanceof Number number && isInteger(number)
+                && number.longValue() >= 0;
+    }
+
+    private static String describe(Throwable failure) {
+        if (failure == null) {
+            return "unknown failure";
+        }
+        String message = failure.getMessage();
+        return message == null || message.isBlank()
+                ? failure.getClass().getSimpleName()
+                : failure.getClass().getSimpleName() + ": " + message;
     }
 
     @Override
@@ -533,6 +822,10 @@ public final class DefaultSyncBus implements SyncBus {
             scheduler.shutdownNow();
             Thread.currentThread().interrupt();
         }
+
+        // Native actions may still be blocked in a backend; interrupting them
+        // is the only cancellation available once the bus is stopping.
+        invocationExecutor.shutdownNow();
     }
 
     @Override
@@ -552,6 +845,12 @@ public final class DefaultSyncBus implements SyncBus {
     public long getTotalDeduped() { return totalDeduped.get(); }
     public int getGlobalQueueSize() { return globalQueue.size(); }
     public int getGlobalQueueRemaining() { return globalQueue.remainingCapacity(); }
+
+    /** @return queued actions for one backend; package-private for tests */
+    int queuedActions(String backend) {
+        SinkContext ctx = sinks.get(backend);
+        return ctx == null ? 0 : ctx.queue.size();
+    }
 
     private void onInboundMessage(SyncSink sink, Message message) {
         SyncListener listener = inboundListener;
@@ -582,14 +881,16 @@ public final class DefaultSyncBus implements SyncBus {
      */
     private final class SinkContext {
         final SyncSink sink;
+        final SyncSurface surface;
         final BlockingQueue<Runnable> queue;
         final ThreadPoolExecutor executor;
         final AtomicBoolean running = new AtomicBoolean(false);
-        final Set<CompletableFuture<Void>> pending = ConcurrentHashMap.newKeySet();
+        final Set<CompletableFuture<SyncResult>> pending = ConcurrentHashMap.newKeySet();
 
-        SinkContext(SyncSink sink) {
+        SinkContext(SyncSink sink, SyncSurface surface) {
             this.sink = sink;
-            this.queue = new LinkedBlockingQueue<>(PER_SINK_QUEUE_CAPACITY);
+            this.surface = surface;
+            this.queue = new LinkedBlockingQueue<>(perSinkQueueCapacity);
             this.executor = new ThreadPoolExecutor(
                 1, 1,
                 60L, TimeUnit.SECONDS,
@@ -599,28 +900,21 @@ public final class DefaultSyncBus implements SyncBus {
             );
         }
 
-        boolean enqueue(Message message) {
-            return enqueue(message, null);
-        }
-
-        boolean enqueue(Message message, CompletableFuture<Void> completion) {
+        boolean enqueue(SyncCall call, CompletableFuture<SyncResult> completion) {
             if (!running.get() || state.get() != LifecycleState.RUNNING) {
                 return false;
             }
-            if (completion != null) {
-                // Register before offering so a worker that picks the task up
-                // immediately cannot leave a completed future in the set.
-                pending.add(completion);
-            }
-            Runnable task = () -> deliverWithRetry(message, 0, completion);
+            // Register before offering so a worker that picks the task up
+            // immediately cannot leave a completed future in the set.
+            pending.add(completion);
+            Runnable task = () -> deliverWithRetry(call, 0, completion);
             boolean offered = queue.offer(task);
             if (!offered) {
-                if (completion != null) {
-                    pending.remove(completion);
-                }
+                pending.remove(completion);
                 // Sink queue full - drop with metric
                 totalDropped.incrementAndGet();
-                logger.warn("SyncBus: sink '" + sink.name() + "' queue full, dropping message");
+                logger.warn("SyncBus: sink '" + sink.name() + "' queue full, dropping action '"
+                        + call.action() + "'");
             }
             return offered;
         }
@@ -641,10 +935,10 @@ public final class DefaultSyncBus implements SyncBus {
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
-            IllegalStateException stopped = new IllegalStateException(
-                    "sink '" + sink.name() + "' stopped before processing the message");
-            for (CompletableFuture<Void> completion : pending) {
-                completion.completeExceptionally(stopped);
+            SyncResult stopped = new SyncResult.HostFailure(
+                    "sink '" + sink.name() + "' stopped before processing the action");
+            for (CompletableFuture<SyncResult> completion : pending) {
+                completion.complete(stopped);
             }
             pending.clear();
         }
@@ -665,60 +959,88 @@ public final class DefaultSyncBus implements SyncBus {
             }
         }
 
-        private void completeTask(CompletableFuture<Void> completion) {
+        private void completeTask(CompletableFuture<SyncResult> completion,
+                                  SyncResult result) {
             if (completion != null) {
                 pending.remove(completion);
-                completion.complete(null);
+                completion.complete(result);
             }
         }
 
-        private void failTask(CompletableFuture<Void> completion, Throwable failure) {
+        private void failTask(CompletableFuture<SyncResult> completion,
+                              SyncResult failure) {
             if (completion != null) {
                 pending.remove(completion);
-                completion.completeExceptionally(failure);
+                completion.complete(failure);
             }
         }
 
-        private void deliverWithRetry(Message message, int attempt,
-                                      CompletableFuture<Void> completion) {
+        private void deliverWithRetry(SyncCall call, int attempt,
+                                      CompletableFuture<SyncResult> completion) {
+            if (completion.isDone()) {
+                // The caller already received a timeout or shutdown result.
+                return;
+            }
+
+            SyncResult result;
             try {
-                sink.send(message);
-                completeTask(completion);
-            } catch (Exception e) {
-                if (attempt < MAX_RETRIES) {
-                    totalRetries.incrementAndGet();
-                    long delay = Math.min(
-                        INITIAL_RETRY_DELAY_MS * (1L << attempt),
-                        MAX_RETRY_DELAY_MS
-                    );
-                    logger.debug("SyncBus: sink '" + sink.name() + "' send failed (attempt " +
-                        (attempt + 1) + "/" + MAX_RETRIES + "), retrying in " + delay + "ms: " + e.getMessage());
+                result = sink.invoke(call);
+            } catch (Exception failure) {
+                result = new SyncResult.HostFailure(describe(failure));
+            }
+            if (result == null) {
+                result = new SyncResult.HostFailure("sink returned no result");
+            }
+            if (completion.isDone()) {
+                return;
+            }
 
-                    int nextAttempt = attempt + 1;
-                    try {
-                        scheduler.schedule(() -> {
-                            if (!running.get() || state.get() != LifecycleState.RUNNING) {
-                                failTask(completion, new IllegalStateException(
-                                        "sink '" + sink.name() + "' stopped before the retry", e));
-                                return;
-                            }
-                            boolean queued = queue.offer(
-                                    () -> deliverWithRetry(message, nextAttempt, completion));
-                            if (!queued) {
-                                totalDropped.incrementAndGet();
-                                failTask(completion, new IllegalStateException(
-                                        "sink '" + sink.name() + "' queue full during retry", e));
-                            }
-                        }, delay, TimeUnit.MILLISECONDS);
-                    } catch (RejectedExecutionException stopped) {
-                        failTask(completion, new IllegalStateException(
-                                "SyncBus scheduler stopped before the retry", stopped));
-                    }
-                } else {
-                    totalDropped.incrementAndGet();
-                    logger.error("SyncBus: sink '" + sink.name() + "' failed after " + MAX_RETRIES + " retries: " + e.getMessage(), e);
-                    failTask(completion, e);
+            SyncActionSpec spec = surface.action(call.action()).orElse(null);
+            boolean retryable = spec != null
+                    && spec.idempotent()
+                    && result instanceof SyncResult.HostFailure;
+
+            if (retryable && attempt < MAX_RETRIES) {
+                totalRetries.incrementAndGet();
+                long delay = Math.min(
+                    INITIAL_RETRY_DELAY_MS * (1L << attempt),
+                    MAX_RETRY_DELAY_MS
+                );
+                logger.debug("SyncBus: sink '" + sink.name() + "' action '"
+                        + call.action() + "' failed (attempt " + (attempt + 1)
+                        + "/" + MAX_RETRIES + "), retrying in " + delay + "ms: "
+                        + ((SyncResult.HostFailure) result).reason());
+
+                int nextAttempt = attempt + 1;
+                try {
+                    scheduler.schedule(() -> {
+                        if (!running.get() || state.get() != LifecycleState.RUNNING) {
+                            failTask(completion, new SyncResult.HostFailure(
+                                    "sink '" + sink.name()
+                                            + "' stopped before the retry"));
+                            return;
+                        }
+                        boolean queued = queue.offer(
+                                () -> deliverWithRetry(call, nextAttempt, completion));
+                        if (!queued) {
+                            totalDropped.incrementAndGet();
+                            failTask(completion, new SyncResult.HostFailure(
+                                    "sink '" + sink.name()
+                                            + "' queue full during retry"));
+                        }
+                    }, delay, TimeUnit.MILLISECONDS);
+                } catch (RejectedExecutionException stopped) {
+                    failTask(completion, new SyncResult.HostFailure(
+                            "SyncBus scheduler stopped before the retry"));
                 }
+            } else {
+                if (result instanceof SyncResult.HostFailure) {
+                    totalDropped.incrementAndGet();
+                    logger.error("SyncBus: sink '" + sink.name()
+                            + "' failed after " + MAX_RETRIES + " retries: "
+                            + ((SyncResult.HostFailure) result).reason());
+                }
+                completeTask(completion, result);
             }
         }
     }
