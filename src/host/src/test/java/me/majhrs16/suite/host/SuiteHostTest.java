@@ -82,7 +82,7 @@ class SuiteHostTest {
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
-              - '<gray>%player_name%: <tr>%content%</tr></gray>'
+              - '<gray>%player_name%: %content%</gray>'
             config-version: 1.0
             """);
         Files.writeString(dir.resolve("config/chattranslator/config.yml"), """
@@ -113,7 +113,7 @@ class SuiteHostTest {
         RoutingResult result = host.deliver(message, ALEX);
 
         assertTrue(result.delivered());
-        assertEquals("Steve: es: hola", PLAIN.serialize(result.rendered()));
+        assertEquals("Steve: hola", PLAIN.serialize(result.rendered()));
     }
 
     @Test
@@ -173,7 +173,7 @@ class SuiteHostTest {
             name: chat
             send-permission: cht.chat.send
             messages:
-              - '<gray><tr>%content%</tr></gray>'
+              - '<gray>%content%</gray>'
             config-version: 1.0
             """);
         PermissionChecker onlySenderCanSend = (actor, permission) -> !permission.equals("cht.chat.send");

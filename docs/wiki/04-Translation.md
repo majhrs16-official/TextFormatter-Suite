@@ -107,18 +107,22 @@ There is no per-channel `translate` boolean. Translation is applied by the
 pipeline when the recipient language differs from the source; an unavailable
 provider returns the original text.
 
-## Translation tags
+## Translation stage
 
-Templates can mark translatable spans with `<tr>`:
+Templates do not carry translation tags. The `translate` stage of
+`chattranslator` runs per recipient, after `route` and before `format`, and
+translates the raw `Message.texts()` entries when the recipient language
+differs from the source. The formatter then renders the already-translated
+text, so `%content%` needs no wrapper:
 
 ```yaml
 messages:
-  - "Welcome <tr>%player_name%</tr> to the server!"
-  - "Server: <tr>Welcome to our server!</tr>"
+  - "Welcome %player_name% to the server!"
 ```
 
-`<tr>` spans are excluded from MiniMessage formatting and sent to the
-translation service; placeholders inside the span are resolved first.
+Translation is skipped explicitly when the message disables it, the source and
+target languages are equal or the target is `auto`, or no provider is
+available; in those cases the original text is rendered unchanged.
 
 ## Cache and deduplication
 

@@ -8,7 +8,7 @@ rate-limit-per-second: 0
 lang-source: auto
 lang-target: auto
 messages:
-  - "<gray>%player_name%: <tr>%content%</tr></gray>"
+  - "<gray>%player_name%: %content%</gray>"
 tooltips:
   - "<gray>Hover: %lang_source% → %lang_target%</gray>"
 sounds:

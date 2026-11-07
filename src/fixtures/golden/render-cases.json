@@ -24,8 +24,8 @@
     "expectPlain": "%unknown_token% y"
   },
   {
-    "name": "tooltip marker tr sin traduccion disponible deja texto",
-    "format": "<white><tr>%content%</tr></white>",
+    "name": "contenido plano sin etiqueta de traduccion",
+    "format": "<white>%content%</white>",
     "vars": { "content": "eco" },
     "expectPlain": "eco"
   }

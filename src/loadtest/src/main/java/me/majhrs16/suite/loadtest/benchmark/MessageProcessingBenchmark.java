@@ -25,11 +25,8 @@ import me.majhrs16.suite.api.message.SoundSpec;
 import me.majhrs16.suite.textformatter.template.MiniEscape;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
-import me.majhrs16.suite.api.spi.TranslatorManager;
-import me.majhrs16.suite.api.spi.Translator;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -66,7 +63,6 @@ public class MessageProcessingBenchmark {
     private VmPolicyEngine router;
     private PermissionChecker permissions;
     private RateLimiter rateLimiter;
-    private TranslationService translation;
 
     @Setup(Level.Trial)
     public void setup() throws Exception {
@@ -88,36 +84,6 @@ public class MessageProcessingBenchmark {
 
         // Setup permissions (allow all)
         permissions = (actor, perm) -> true;
-
-        // Create mock translator
-        Translator mockTranslator = new Translator() {
-            @Override
-            public String translate(String text, String sourceLang, String targetLang) {
-                return text;
-            }
-
-            @Override
-            public String detect(String text) {
-                return "en";
-            }
-
-            @Override
-            public boolean isAvailable() {
-                return true;
-            }
-
-            @Override
-            public String name() {
-                return "mock";
-            }
-};
- 
-         // Create TranslatorManager with mock
-         TranslatorManager mockManager = new TranslatorManager();
-         mockManager.add(mockTranslator);
-
-        // Create TranslationService with mock manager
-        translation = new TranslationService(mockManager);
 
         // Create mock placeholder resolver (no-op)
         PlaceholderResolver mockPlaceholders = new PlaceholderResolver() {
@@ -142,7 +108,7 @@ public class MessageProcessingBenchmark {
         };
 
         // Initialize template renderer with mocks
-        renderer = new TemplateRenderer(translation, mockPlaceholders, mockLogger);
+        renderer = new TemplateRenderer(mockPlaceholders, mockLogger);
 
         // Initialize rate limiter
         rateLimiter = new RateLimiter();
@@ -236,7 +202,6 @@ public class MessageProcessingBenchmark {
         Template template = Template.of("<green>Hello %player_name%!</green>");
         TemplateContext context = TemplateContext.builder(testSender, Language.EN, Language.ES)
             .content("Hello World")
-            .translate(true)
             .build();
 
         String result = renderer.renderPlain(template, context);
@@ -254,7 +219,6 @@ public class MessageProcessingBenchmark {
         );
         TemplateContext context = TemplateContext.builder(testSender, Language.EN, Language.ES)
             .content("This is a test message with some content to format")
-            .translate(true)
             .build();
 
         String result = renderer.renderPlain(template, context);
@@ -264,11 +228,10 @@ public class MessageProcessingBenchmark {
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    public void templateRenderingWithTranslation(Blackhole bh) {
-        Template template = Template.of("<tr>%content%</tr>");
+    public void templateRenderingPlainContent(Blackhole bh) {
+        Template template = Template.of("%content%");
         TemplateContext context = TemplateContext.builder(testSender, Language.EN, Language.ES)
-            .content("This message should be translated")
-            .translate(true)
+            .content("This message has plain content to render")
             .build();
 
         String result = renderer.renderPlain(template, context);

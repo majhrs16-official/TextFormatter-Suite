@@ -9,6 +9,7 @@ import java.util.ServiceLoader;
 import me.majhrs16.suite.api.Capability;
 import me.majhrs16.suite.api.ModuleDescriptor;
 import me.majhrs16.suite.api.SemVer;
+import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.runtime.EventBus;
 import me.majhrs16.suite.api.runtime.ModuleActivatedEvent;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
@@ -69,6 +70,7 @@ public final class ChatTranslatorActivator implements ModuleActivator {
             context.services().register(TranslatorManager.class, manager);
             context.services().register(TranslationService.class, service);
             context.services().register(ChatTranslator.class, translator);
+            context.services().register(PipelineStage.class, new TranslateStage(service));
             context.resources().track(onActivated);
             context.resources().track(onDeactivated);
             context.resources().track(translator);

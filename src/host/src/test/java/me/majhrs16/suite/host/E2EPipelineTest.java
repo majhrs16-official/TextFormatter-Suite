@@ -162,7 +162,7 @@ class E2EPipelineTest {
             name: chat
             receive-permission: vip
             messages:
-              - '<gray>%player_name%: <tr>%content%</tr></gray>'
+              - '<gray>%player_name%: %content%</gray>'
             sounds:
               - name: entity.experience_orb.pickup
                 volume: 1.0
@@ -247,7 +247,7 @@ class E2EPipelineTest {
 
         // Create host with a REDIRECT rule
         writeConfig();
-        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
+        writeChannel("chat", "<gray>%player_name%: %content%</gray>", "entity.experience_orb.pickup");
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", "block.note_block.pling");
 
         SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
@@ -320,7 +320,7 @@ class E2EPipelineTest {
         Files.writeString(dir.resolve("config/textformatter/channels/chat.yml"), """
             name: chat
             messages:
-              - '<gray>%player_name%: <tr>%content%</tr></gray>'
+              - '<gray>%player_name%: %content%</gray>'
             rate-limit-per-second: 1
             sounds:
               - name: entity.experience_orb.pickup
@@ -426,7 +426,7 @@ class E2EPipelineTest {
               - sync
             config-version: 1.0
             """);
-        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", "entity.experience_orb.pickup");
+        writeChannel("chat", "<gray>%player_name%: %content%</gray>", "entity.experience_orb.pickup");
 
         SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());
         MessageDispatcher dispatcher = new MessageDispatcher(
@@ -469,7 +469,7 @@ class E2EPipelineTest {
         RecordingDelivery delivery = new RecordingDelivery();
 
         writeConfig();
-        writeChannel("chat", "<gray>%player_name%: <tr>%content%</tr></gray>", null);
+        writeChannel("chat", "<gray>%player_name%: %content%</gray>", null);
         writeChannel("staff", "<red>⚠ STAFF: %content%</red>", null);
 
         SuiteHost host = HostFixture.bootstrap(dir, PermissionChecker.ALLOW_ALL, null, quietLogger());

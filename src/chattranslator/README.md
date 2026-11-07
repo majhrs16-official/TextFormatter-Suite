@@ -4,8 +4,9 @@
 
 `chattranslator` owns the translation facade. It builds a `TranslatorManager`
 from the `TranslatorProvider` services published by provider packages, registers
-`ChatTranslator` and `TranslationService` in the module scope, and keeps the
-manager in sync with the module lifecycle.
+`ChatTranslator` and `TranslationService` in the module scope, keeps the manager
+in sync with the module lifecycle, and publishes the `translate` pipeline stage
+so translation runs per recipient before formatting.
 
 ## Runtime activation
 
@@ -32,11 +33,14 @@ manager in sync with the module lifecycle.
 | `BackendConfig` | Reads `config/chattranslator/translators/*.yml`, validates provider config and creates translators |
 | `ChatTranslator` | Public facade used by the host |
 | `TranslationService` | Translation/detection service with caches and executor |
+| `TranslateStage` | `translate` stage: translates `Message.texts()` per recipient before `format` |
 
 ## Tests
 
 - `ChatTranslatorActivatorTest`: activation, provider discovery, configuration
   and tracked resource release.
+- `TranslateStageTest`: per-recipient translation, preserved formats,
+  `NOT_APPLICABLE` cases and non-mutation.
 - `BackendConfigTest`: backend configuration and provider selection.
 - `TranslationServiceCacheTest` (in `core-api`): cache contract.
 

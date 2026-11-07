@@ -27,7 +27,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | Funcionalidad | Estado | Evidencia |
 |---------------|--------|-----------|
 | **Arquitectura hexagonal (core-api + SPI)** | ✅ Implementada y probada | `core-api` compila sin dependencias; los puntos de extensión usan ServiceLoader; tests de kernel/module loading pasan |
-| **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 47 tests |
+| **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`; 47 tests |
 | **Motor de reglas iFlow (VM)** | ✅ Implementada y probada | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K; 399 tests (VmInterpreter, HostServiceRegistry, VmPolicyEngine, FirmwareIntegrationTest) |
 | **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 32 tests |
 | **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 38 tests |
@@ -164,7 +164,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 ### Formateo y routing
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
-| `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (47 tests) |
+| `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `MiniEscape` | ✅ Probado (47 tests) |
 | `iflow` | Hub de selección: publica `IflowHub`/`Router` y elige un backend entre `iflow-firewall`, `iflow-vm` e `iflow-wasm` con fallback priorizado | ✅ Probado (13 tests) |
 | `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (399 tests) |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-vm` e `iflow-wasm` | ✅ Probado (47 tests) |

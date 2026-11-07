@@ -936,7 +936,9 @@ verificarla.
    como MiniMessage. Si no coincide, el span no emite texto.
 5. El formato MiniMessage se aplica al texto que satisface el patrón. El patrón no se colorea ni se
    transforma; los grupos de captura no se interpolan automáticamente.
-6. No se anidan etiquetas `<regex>`. `<tr>` conserva su tratamiento independiente.
+6. No se anidan etiquetas `<regex>`. La traducción no es una construcción de plantilla: la etapa
+   `translate` de `chattranslator` transforma `Message.texts()` antes de `format`, y la antigua
+   etiqueta `<tr>` se retira (ADR-036 §11).
 7. El patrón se compila una vez por plantilla y se reutiliza. Un patrón inválido, vacío o fuera de
    límite es error explícito de configuración; no se ignora ni se degrada.
 8. Se imponen límites duros y documentados al patrón y al contenido evaluado para acotar el coste de

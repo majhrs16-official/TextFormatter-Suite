@@ -2,21 +2,16 @@ package me.majhrs16.suite.textformatter.template;
 
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.PluginLogger;
-import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.api.message.Actor;
-import me.majhrs16.suite.api.message.Language;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import static java.util.Locale.ROOT;
 
 /**
  * Renders {@link Template templates} into Adventure {@link Component}s.
@@ -33,32 +28,25 @@ import static java.util.Locale.ROOT;
  *       pre-compiled pattern against the resolved content; the span emits its
  *       content only when the pattern finds a match (anchor it for full
  *       matches);</li>
- *   <li>every {@code <tr>...</tr>} span is extracted, translated from
- *       {@code sourceLanguage} to {@code targetLanguage} and re-inserted
- *       escaped;</li>
  *   <li>the resulting string is parsed with MiniMessage.</li>
  * </ol>
  *
+ * <p>Translation is not part of the renderer: the {@code translate} pipeline
+ * stage transforms the message texts before {@code format} runs this class.</p>
+ *
  * <p>Dynamic policy logic belongs to the iFlow VM; templates are deliberately
- * limited to placeholders, MiniMessage markup, {@code <tr>} and the local
- * {@code <regex>} rendering condition from ADR-028.</p>
+ * limited to placeholders, MiniMessage markup and the local {@code <regex>}
+ * rendering condition from ADR-028.</p>
  */
 public final class TemplateRenderer {
 
     private static final Pattern EXTERNAL_TOKEN = Pattern.compile("%([A-Za-z0-9_]+)%");
 
-    private static final String OPEN_TR = "<tr>";
-    private static final String CLOSE_TR = "</tr>";
-
-    private final TranslationService translation;
     private final PlaceholderResolver placeholders;
     private final MiniMessage miniMessage;
     private final PlainTextComponentSerializer plainText;
 
-    public TemplateRenderer(TranslationService translation,
-                            PlaceholderResolver placeholders,
-                            PluginLogger logger) {
-        this.translation = Objects.requireNonNull(translation, "translation");
+    public TemplateRenderer(PlaceholderResolver placeholders, PluginLogger logger) {
         this.placeholders = placeholders;
         Objects.requireNonNull(logger, "logger");
         this.miniMessage = MiniMessage.miniMessage();
@@ -77,14 +65,8 @@ public final class TemplateRenderer {
         return plainText.serialize(miniMessage.deserialize(rendered));
     }
 
-    /** Exposes the translation service used by this renderer (e.g. detection). */
-    public TranslationService translation() {
-        return translation;
-    }
-
     private String renderString(Template template, TemplateContext context) {
-        String resolved = renderRegexSpans(template, context);
-        return translateSpans(resolved, context);
+        return renderRegexSpans(template, context);
     }
 
     // -- step 4: local regex rendering condition ---------------------------
@@ -165,65 +147,6 @@ public final class TemplateRenderer {
             .replace("%ct_messages%", MiniEscape.escape(context.content()));
     }
 
-    // -- step 5: translatable spans ----------------------------------------
-
-    private String translateSpans(String source, TemplateContext context) {
-        List<Span> spans = findSpans(source);
-        if (spans.isEmpty()) {
-            return source;
-        }
-        StringBuilder result = new StringBuilder(source.length());
-        int cursor = 0;
-        for (Span span : spans) {
-            result.append(source, cursor, span.start);
-            result.append(translateSpan(span.content, context));
-            cursor = span.end;
-        }
-        result.append(source, cursor, source.length());
-        return result.toString();
-    }
-
-    private String translateSpan(String content, TemplateContext context) {
-        if (!context.translate()) {
-            return content;
-        }
-        Language from = context.sourceLanguage();
-        Language to = context.targetLanguage();
-        if (from == to || to == Language.AUTO) {
-            return content;
-        }
-        if (!translation.isAvailable()) {
-            return content;
-        }
-        // Translate the content, then re-escape the result to prevent
-        // translated text from being interpreted as MiniMessage markup
-        String translated = translation.translate(content, from, to);
-        return MiniEscape.escape(translated);
-    }
-
-    private static final Pattern CLOSE_TR_PATTERN = Pattern.compile(Pattern.quote(CLOSE_TR), Pattern.CASE_INSENSITIVE);
-
-    private static List<Span> findSpans(String source) {
-        List<Span> spans = new ArrayList<>();
-        int index = 0;
-        while (index < source.length()) {
-            int open = source.indexOf(OPEN_TR, index);
-            if (open < 0) {
-                break;
-            }
-            Matcher matcher = CLOSE_TR_PATTERN.matcher(source);
-            matcher.region(open + OPEN_TR.length(), source.length());
-            if (!matcher.find()) {
-                break;
-            }
-            int close = matcher.start();
-            String content = source.substring(open + OPEN_TR.length(), close);
-            spans.add(new Span(open, close + CLOSE_TR.length(), content));
-            index = close + CLOSE_TR.length();
-        }
-        return spans;
-    }
-
     private static boolean isContentToken(String token) {
         String name = token.substring(1, token.length() - 1).toLowerCase();
         return name.equals("content") || name.equals("ct_messages");
@@ -231,17 +154,5 @@ public final class TemplateRenderer {
 
     private static String safeUuid(Actor actor) {
         return actor.uuid() != null ? actor.uuid().toString() : "";
-    }
-
-    private static final class Span {
-        private final int start;
-        private final int end;
-        private final String content;
-
-        private Span(int start, int end, String content) {
-            this.start = start;
-            this.end = end;
-            this.content = content;
-        }
     }
 }
