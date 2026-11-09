@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-06
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-09
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -1640,7 +1640,7 @@ reintentos y métricas se reutilizan; la selección por mensaje se define en §1
 
 | Nivel | Quién lo usa | Acciones |
 |---|---|---|
-| Agnóstico oficial (LCM) | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send` |
+| Agnóstico oficial (LCM) | pipeline `sync`, features oficiales, `CoreTranslator.sendDiscord` | `backend.info`, `message.send`, `message.deliver` |
 | Agnóstico extendido | programas de terceros | `textformatter.channel.set` y las acciones agnósticas que se acuerden |
 | Nativo | programas de terceros | `<backend>.<segmento>[...].<verbo>`: `discord.channel.create`, `discord.channel.permission.overwrite`, `discord.role.assign`, `discord.message.edit`, `discord.member.ban`, `telegram.chat.member.ban`, `bukkit.event.cancel`, etc. |
 
@@ -1655,6 +1655,7 @@ public interface SyncSink {                 // evoluciona; no se envuelve
     String name();
     SyncSurface surface();
     SyncResult invoke(SyncCall call);
+    SyncResult deliver(DeliveryEnvelope envelope); // por defecto: send(message)
     // start/stop/setListener se conservan; send(Message) se sustituye por message.send
 }
 
@@ -1665,8 +1666,8 @@ public record SyncSurface(
 ) {}
 
 public record SyncActionSpec(
-        String id,                          // id local: "message.send", "channel.create",
-                                            // "channel.permission.overwrite"
+        String id,                          // id local: "message.send", "message.deliver",
+                                            // "channel.create", "channel.permission.overwrite"
         ActionKind kind,                    // READ, WRITE, DESTRUCTIVE, MODERATION
         List<SyncParamSpec> params,
         SyncParamSpec result,               // null si no devuelve valor
@@ -1678,7 +1679,7 @@ public enum ActionKind { READ, WRITE, DESTRUCTIVE, MODERATION }
 
 public enum SyncValueType {
     STRING, INTEGER, BOOLEAN, DURATION,
-    ACTOR_REF, CHANNEL_REF, MESSAGE_REF, ROLE_REF, OBJECT
+    ACTOR_REF, CHANNEL_REF, MESSAGE_REF, ROLE_REF, DELIVERY_REF, OBJECT
 }
 
 public record SyncParamSpec(
@@ -1687,6 +1688,26 @@ public record SyncParamSpec(
         boolean required,
         SyncParamSpec item                // solo para listas; null en el resto
 ) {}
+
+public record DeliveryUnit(
+        Actor recipient,                    // destinatario de la unidad
+        RouteDecision decision,             // null cuando no aplicó routing
+        Message message,                    // mensaje por destinatario tras route
+        RenderedOutput rendered             // salida de format
+) {}
+
+public record DeliveryEnvelope(
+        Message message,                    // mensaje que produjo las unidades
+        List<DeliveryUnit> units            // unidades renderizadas, en orden
+) {}
+
+public record DeliverySummary(
+        int delivered, int silenced, int redirected, int failed
+) {}
+
+public interface LocalDelivery {            // puerto neutral, lo implementa el host
+    DeliverySummary deliver(DeliveryEnvelope envelope);
+}
 
 public sealed interface Principal {
     record Official(String moduleId) implements Principal {}
@@ -1720,14 +1741,18 @@ public interface SyncBus {
     List<SyncResult> broadcast(SyncCall call);              // fan-out del LCM
     List<SyncResult> send(Message message);                 // comodidad sobre message.send
     List<SyncResult> sendTo(String backend, Message message); // dirigido; misma ruta
+    List<SyncResult> deliver(DeliveryEnvelope envelope);     // comodidad sobre message.deliver
+    List<SyncResult> deliverTo(List<String> backends, DeliveryEnvelope envelope,
+                               ParallelMode mode);           // dirigido; misma ruta
 }
 ```
 
 `SyncParamSpec` tipa los argumentos como datos neutrales (`STRING`, `INTEGER`, `BOOLEAN`, `DURATION`,
-`ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `OBJECT`). `OBJECT` es un mapa anidado
-validado por el backend; el núcleo no interpreta su contenido. Ningún tipo de JDA, Telegram, Bukkit
-o Fabric cruza esta frontera. `backend` es el namespace; las acciones del host usan `textformatter`,
-no `"*"`. El nombre canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria.
+`ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `DELIVERY_REF`, `OBJECT`). `OBJECT` es un mapa
+anidado validado por el backend; el núcleo no interpreta su contenido. `DELIVERY_REF` transporta un
+`DeliveryEnvelope` y no un tipo de SDK. Ningún tipo de JDA, Telegram, Bukkit o Fabric cruza esta
+frontera. `backend` es el namespace; las acciones del host usan `textformatter`, no `"*"`. El nombre
+canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria.
 La capacidad se deriva del origen: `sync.<action>` para acciones de sink y
 `module.<moduleId>.<action>` para acciones de módulo/host. `SyncSurface` solo lo publican los sinks;
 las acciones del host no tienen superficie y el bus las resuelve en su handler interno.
@@ -1737,10 +1762,21 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
 - `backend.info`: `READ`, idempotente; devuelve nombre, versión y versión de superficie.
 - `message.send`: `WRITE`, idempotente por `idempotencyKey`; argumentos `message` (`MESSAGE_REF`) y
   `destination` (`CHANNEL_REF`, opcional).
+- `message.deliver`: `WRITE`, **no idempotente** (no se reintenta); argumento `delivery`
+  (`DELIVERY_REF`). Transporta el `DeliveryEnvelope` con las unidades ya renderizadas por
+  destinatario. Es el camino del pipeline y de la entrega local; un sink remoto puede ignorar las
+  unidades y entregar el mensaje, pero un sink local exige el sobre.
 - `SyncBus.send(Message)` es una comodidad tipada sobre `message.send`; no es un segundo camino.
 - `SyncBus.sendTo(backend, Message)` es la forma dirigida de `message.send`; usa la misma ruta y
   devuelve un resultado por backend, no un booleano de aceptación.
+- `SyncBus.deliver(DeliveryEnvelope)` es una comodidad tipada sobre `message.deliver`; deduplica por
+  id de mensaje. `SyncBus.deliverTo(backends, envelope, mode)` es la forma dirigida y no deduplica:
+  la decisión explícita del llamante prevalece.
 - Un backend que no pueda implementar el LCM no se publica: no existe un `send` que finja éxito.
+- La entrega física local no la hace el sink: la hace el host a través del puerto neutral
+  `LocalDelivery`. El sink local (`sync-bukkit`, `sync-fabric`) resuelve el puerto en cada entrega y
+  devuelve `Ok(DeliverySummary)` con los contadores reales; sin puerto devuelve `HostFailure`, y
+  `message.send` sobre un sink local devuelve `Unsupported` porque el camino local exige el sobre.
 
 #### 16.5 `textformatter.channel.set`
 
@@ -1782,7 +1818,8 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
    argumentos (nunca valores), resultado y duración. Los argumentos marcados como secreto se
    redactan. La ruta la fija `storage.md`; cambiarla requiere autorización.
 7. **Idempotencia.** Solo se reintenta una acción marcada `idempotent`; la clave es
-   `message.id() + action + target`. Las acciones no idempotentes no se reintentan.
+   `message.id() + action + target`. Las acciones no idempotentes no se reintentan. `message.deliver`
+   es no idempotente: un reintento duplicaría la entrega local, así que el sobre se intenta una vez.
 8. **Sin transacción.** Un efecto nativo (ban, creación de canal, edición) no se revierte si el
    mensaje falla después. No hay rollback entre backends ni compensación automática. El operador
    concede acciones destructivas con esa consecuencia explícita.
@@ -1959,8 +1996,14 @@ No aparece en `outputs`.
 - `route` usa el target `iflow` si existe; si no, el hub aplica su default y fallback de ADR-032.
 - La traducción de `<tr>` dentro de `format` usa el target `chattranslator` si existe; si no, la
   fachada aplica su `default-backend` y su fallback de ADR-035. No hay etapa `translate`.
-- `sync` recorre todos los targets `sync` en orden y llama al sink correspondiente; si no hay
-  targets, aplica el fan-out completo actual, incluida la entrega local por `bukkit`/`fabric`.
+- `sync` recorre todos los targets `sync` en orden y llama al sink correspondiente con el
+  `DeliveryEnvelope` que el motor construyó a partir de las unidades de `RECIPIENT`; si no hay
+  targets, aplica el fan-out completo actual, incluida la entrega local por `bukkit`/`fabric`. Tanto
+  el camino declarado como el heredado emiten un `OutputOutcome` por superficie, de modo que la traza
+  no pierde los targets del fan-out.
+- La entrega física local la ejecuta el host: el sink `bukkit`/`fabric` delega el sobre en
+  `LocalDelivery` y el motor suma los contadores de `DeliverySummary`. El sink no entrega en
+  `RECIPIENT` por su cuenta ni el motor salta al adaptador de plataforma: hay un único camino.
 - `format` no es un multiplexor y no se selecciona por `outputs`; solo consume el target
   `chattranslator` para resolver `<tr>`.
 
@@ -1973,7 +2016,9 @@ No aparece en `outputs`.
   fachada.
 - **ADR-019 / ADR-025.** `sync-bukkit`/`sync-fabric` siguen capturando eventos; §17 añade que
   también son sinks locales (`bukkit`/`fabric`) y que su superficie incluye las operaciones sobre el
-  evento actual. La captura no es la razón de ser del sink, pero el sink expone el entorno completo.
+  evento actual. Publican el sink desde `sync-common` y declaran dependencia de paquete con
+  `sync-bus`; la entrega física pasa por el puerto `LocalDelivery` que implementa el host. La captura
+  no es la razón de ser del sink, pero el sink expone el entorno completo.
 - **`config-schema-v2.2.md`.** `outputs` es una lista de cadenas `<multiplexer>.<backend>` y
   `outputs-parallel` un booleano; requieren autorización para actualizar el esquema.
 - **No promete** orden de finalización en modo paralelo, transacciones entre backends ni selección
@@ -2017,9 +2062,9 @@ No aparece en `outputs`.
    aserciones.
 9. **Gate:** `./gradlew build checkArchitecture checkLocks --no-daemon`; si se toca el editor,
    `npm run check`.
-10. **Superficie sync:** el LCM oficial (`backend.info`, `message.send`) funciona sin acciones
-    nativas; `textformatter.channel.set` solo lo invoca un tercero con concesión; una acción nativa
-    sin concesión devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen
+10. **Superficie sync:** el LCM oficial (`backend.info`, `message.send`, `message.deliver`) funciona
+    sin acciones nativas; `textformatter.channel.set` solo lo invoca un tercero con concesión; una
+    acción nativa sin concesión devuelve `Denied` sin efecto; `DESTRUCTIVE`/`MODERATION` exigen
     `allow-destructive`; el puente VM y el de Wasm devuelven los mismos estados para la misma
     llamada.
 11. **Multiplexación:** un mensaje con `sync.discord`, `sync.tcp` y `sync.bukkit` entrega a los tres
@@ -2027,7 +2072,8 @@ No aparece en `outputs`.
     desconocido falla de forma explícita y no se convierte en éxito parcial silencioso;
     `outputs-parallel: false` serializa la finalización.
 12. **Sink local:** `sync-bukkit` y `sync-fabric` publican una superficie que incluye las operaciones
-    del entorno y de eventos, y entregan a jugadores/consola; `bukkit.event.cancel` no sustituye a
+    del entorno y de eventos, y entregan a jugadores/consola mediante `message.deliver` y el puerto
+    `LocalDelivery`; sin ese puerto fallan de forma explícita; `bukkit.event.cancel` no sustituye a
     `CANCEL_EVENT` como target de política.
 
 Tests adicionales obligatorios: ausencia de `iflow` con el resto instalado (debe entregar, no

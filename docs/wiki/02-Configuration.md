@@ -112,6 +112,9 @@ Transform multiplexers (`iflow`, `chattranslator`) accept at most one target. `r
 `chattranslator.<backend>` to pick the translation provider. Without a target both keep their
 configured default and fallback. Two targets of the same transform multiplexer are a conflict, and
 an unknown backend is an explicit error. `sync` accepts several targets and delivers in order.
+`sync.bukkit` and `sync.fabric` are local targets: they deliver the rendered envelope to players and
+the console through the host `LocalDelivery` port. Listing only remote `sync.*` targets omits local
+delivery; `outputs: []` omits every output, including the local one.
 
 `outputs-parallel: true` starts every `sync` target before waiting for completion; `false` waits for
 each target before starting the next one. The result keeps the declared order and reports one

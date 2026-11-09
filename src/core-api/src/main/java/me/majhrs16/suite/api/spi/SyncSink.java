@@ -1,6 +1,7 @@
 package me.majhrs16.suite.api.spi;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.sync.SyncCall;
 import me.majhrs16.suite.api.sync.SyncResult;
 import me.majhrs16.suite.api.sync.SyncSurface;
@@ -20,10 +21,10 @@ import java.util.Objects;
  * must provide an implementation bound to this contract.</p>
  *
  * <p>The default {@link #surface()} publishes only the least common multiple
- * ({@code backend.info} and {@code message.send}) and the default
- * {@link #invoke(SyncCall)} executes it. A backend that publishes native
- * actions must override both methods; declaring an action without executing it
- * is a contract violation.</p>
+ * ({@code backend.info}, {@code message.send} and {@code message.deliver}) and
+ * the default {@link #invoke(SyncCall)} executes it. A backend that publishes
+ * native actions must override both methods; declaring an action without
+ * executing it is a contract violation.</p>
  */
 public interface SyncSink {
 
@@ -53,9 +54,10 @@ public interface SyncSink {
     /**
      * Actions published by this backend.
      *
-     * <p>The default is the official least common multiple: {@code backend.info}
-     * and {@code message.send}. The backend namespace is this sink's
-     * {@link #name()}, which the bus validates before registering it.</p>
+     * <p>The default is the official least common multiple: {@code backend.info},
+     * {@code message.send} and {@code message.deliver}. The backend namespace is
+     * this sink's {@link #name()}, which the bus validates before registering
+     * it.</p>
      *
      * @return the published surface, never {@code null}
      */
@@ -67,11 +69,12 @@ public interface SyncSink {
      * Executes one published action.
      *
      * <p>The default implementation serves the LCM only: {@code backend.info}
-     * returns name and surface version, and {@code message.send} delegates to
-     * {@link #send(Message)}. Every failure is explicit: an unpublished action
-     * returns {@link SyncResult.Unsupported}, a wrong argument type returns
-     * {@link SyncResult.InvalidArgument}, and a delivery crash returns
-     * {@link SyncResult.HostFailure}.</p>
+     * returns name and surface version, {@code message.send} delegates to
+     * {@link #send(Message)}, and {@code message.deliver} delegates to
+     * {@link #deliver(DeliveryEnvelope)}. Every failure is explicit: an
+     * unpublished action returns {@link SyncResult.Unsupported}, a wrong
+     * argument type returns {@link SyncResult.InvalidArgument}, and a delivery
+     * crash returns {@link SyncResult.HostFailure}.</p>
      *
      * @param call invocation whose backend must match this sink
      * @return the explicit outcome, never {@code null}
@@ -96,6 +99,15 @@ public interface SyncSink {
             return new SyncResult.Ok(info);
         }
 
+        if (SyncSurface.MESSAGE_DELIVER.equals(call.action())) {
+            Object value = call.args().get("delivery");
+            if (!(value instanceof DeliveryEnvelope envelope)) {
+                return new SyncResult.InvalidArgument(
+                        "'delivery' must be a DeliveryEnvelope");
+            }
+            return deliver(envelope);
+        }
+
         if (SyncSurface.MESSAGE_SEND.equals(call.action())) {
             Object value = call.args().get("message");
             if (!(value instanceof Message message)) {
@@ -115,6 +127,28 @@ public interface SyncSink {
 
         return new SyncResult.Unsupported(
                 "action '" + call.canonicalName() + "' is not implemented");
+    }
+
+    /**
+     * Delivers a rendered envelope.
+     *
+     * <p>The default implementation has no recipient-specific renderer, so it
+     * delivers the plain message through {@link #send(Message)}. A local sink
+     * overrides it to deliver every unit through the {@code LocalDelivery}
+     * port and return a {@link me.majhrs16.suite.api.pipeline.DeliverySummary}
+     * as the {@link SyncResult.Ok} value.</p>
+     *
+     * @param envelope rendered units and their original message
+     * @return the explicit outcome, never {@code null}
+     */
+    default SyncResult deliver(DeliveryEnvelope envelope) {
+        Objects.requireNonNull(envelope, "envelope");
+        try {
+            send(envelope.message());
+            return new SyncResult.Ok(null);
+        } catch (Exception failure) {
+            return new SyncResult.HostFailure(describe(failure));
+        }
     }
 
     /** @return a non-null description that keeps the failure class visible */

@@ -16,7 +16,9 @@ import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.runtime.PlatformHandle;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageDispatch;
+import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.synccommon.LocalSyncSink;
 import me.majhrs16.suite.synccommon.SyncEventProcessor;
 
 import net.minecraft.server.MinecraftServer;
@@ -42,6 +44,7 @@ public final class SyncFabricActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(21, 0)
                 .provide(Capability.of("sync-fabric", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("sync-sink", SemVer.of(1, 0, 0)))
                 .build();
     }
 
@@ -77,6 +80,10 @@ public final class SyncFabricActivator implements ModuleActivator {
         created.register();
         registered = true;
         context.resources().onRelease(created::deactivate);
+
+        context.services().register(SyncSink.class,
+                new LocalSyncSink("fabric", context.services()));
+        context.logger().info("sync-fabric listeners and local sink registered");
     }
 
     @Override

@@ -30,6 +30,15 @@ public record SyncSurface(
     /** Local id of the mandatory message delivery action. */
     public static final String MESSAGE_SEND = "message.send";
 
+    /**
+     * Local id of the rendered-envelope delivery action.
+     *
+     * <p>It carries the recipient-specific units the pipeline already rendered.
+     * A backend that has no local delivery ignores the units and delivers the
+     * plain message, so the action stays part of the least common multiple.</p>
+     */
+    public static final String MESSAGE_DELIVER = "message.deliver";
+
     /** Version of the surface contract implemented by the suite. */
     public static final SemVer CURRENT_CONTRACT_VERSION = SemVer.of(1, 0, 0);
 
@@ -58,7 +67,9 @@ public record SyncSurface(
 
     /** @return whether this surface publishes every mandatory LCM action */
     public boolean hasLeastCommonMultiple() {
-        return action(BACKEND_INFO).isPresent() && action(MESSAGE_SEND).isPresent();
+        return action(BACKEND_INFO).isPresent()
+                && action(MESSAGE_SEND).isPresent()
+                && action(MESSAGE_DELIVER).isPresent();
     }
 
     /**
@@ -69,6 +80,8 @@ public record SyncSurface(
         List<SyncParamSpec> sendParams = List.of(
                 SyncParamSpec.required("message", SyncValueType.MESSAGE_REF),
                 SyncParamSpec.optional("destination", SyncValueType.CHANNEL_REF));
+        List<SyncParamSpec> deliverParams = List.of(
+                SyncParamSpec.required("delivery", SyncValueType.DELIVERY_REF));
 
         return new SyncSurface(backend, contractVersion, Set.of(
                 new SyncActionSpec(
@@ -84,6 +97,13 @@ public record SyncSurface(
                         sendParams,
                         null,
                         true,
+                        15_000),
+                new SyncActionSpec(
+                        MESSAGE_DELIVER,
+                        ActionKind.WRITE,
+                        deliverParams,
+                        null,
+                        false,
                         15_000)));
     }
 }

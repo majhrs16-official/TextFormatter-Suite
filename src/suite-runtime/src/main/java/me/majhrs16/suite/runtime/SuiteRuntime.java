@@ -26,6 +26,7 @@ import me.majhrs16.suite.api.pipeline.PipelinePlan;
 import me.majhrs16.suite.api.pipeline.PipelineServices;
 import me.majhrs16.suite.api.pipeline.PipelineSettings;
 import me.majhrs16.suite.api.pipeline.PipelineStage;
+import me.majhrs16.suite.api.spi.LocalDelivery;
 import me.majhrs16.suite.api.pipeline.PipelineStatus;
 import me.majhrs16.suite.api.pipeline.PipelineTrace;
 import me.majhrs16.suite.api.runtime.ModuleState;
@@ -93,6 +94,8 @@ public final class SuiteRuntime implements AutoCloseable {
         new ArrayList<>();
     private final RuntimeMessageDispatch messageDispatch = new RuntimeMessageDispatch();
     private PipelineEngine pipeline;
+    private DeliveryExecutor deliveryExecutor;
+    private ServiceRegistry.Registration deliveryRegistration;
     private HostConfig config;
     private long pipelinePlanVersion;
     private String pipelineError = "pipeline has not been built";
@@ -251,8 +254,11 @@ public final class SuiteRuntime implements AutoCloseable {
             RecipientResolver recipients = new RecipientResolver(actors, permissions, logger);
             DeliveryExecutor executor = new DeliveryExecutor(
                     delivery, channels.orElse(null), loaded.soundEnabled(), logger);
+            deliveryExecutor = executor;
+            deliveryRegistration = moduleHost.services().register(
+                    LocalDelivery.class, executor);
             PipelineEngine built = new PipelineEngine(
-                    plan, stages.resolved(), stages.skipped(), recipients, executor,
+                    plan, stages.resolved(), stages.skipped(), recipients,
                     environment, planVersion);
 
             pipeline = built;
@@ -262,9 +268,21 @@ public final class SuiteRuntime implements AutoCloseable {
                     + stages.resolved().size() + " stage(s), "
                     + stages.skipped().size() + " skipped");
         } catch (RuntimeException failure) {
+            releaseDelivery();
             failPipeline(failure.getMessage() == null
                     ? failure.getClass().getSimpleName()
                     : failure.getMessage());
+        }
+    }
+
+    private void releaseDelivery() {
+        if (deliveryRegistration != null) {
+            deliveryRegistration.close();
+            deliveryRegistration = null;
+        }
+        if (deliveryExecutor != null) {
+            deliveryExecutor.close();
+            deliveryExecutor = null;
         }
     }
 
@@ -344,6 +362,7 @@ public final class SuiteRuntime implements AutoCloseable {
             pipeline.close();
             pipeline = null;
         }
+        releaseDelivery();
     }
 
     /**

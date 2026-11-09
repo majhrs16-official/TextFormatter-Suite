@@ -25,16 +25,22 @@ import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.message.SoundSpec;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.PipelineStatus;
 import me.majhrs16.suite.api.runtime.ModuleState;
 import me.majhrs16.suite.api.runtime.PlatformInfo;
 import me.majhrs16.suite.api.runtime.PlatformPorts;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.DispatchOutcome;
+import me.majhrs16.suite.api.spi.LocalDelivery;
 import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.PresetService;
+import me.majhrs16.suite.api.spi.SyncListener;
+import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.render.ChatDelivery;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 import me.majhrs16.suite.manager.apt.ManagerFacade;
 
 import net.kyori.adventure.text.Component;
@@ -500,6 +506,7 @@ class SuiteRuntimeTest {
             runtime.registerPlatformService(ChatDelivery.class, delivery);
             runtime.registerPlatformService(ActorDirectory.class, new FakeActors());
             runtime.registerPlatformService(PermissionChecker.class, PermissionChecker.ALLOW_ALL);
+            runtime.registerPlatformService(SyncSink.class, new FakeLocalSink(runtime));
             runtime.start();
 
             assertTrue(runtime.installLocal(thirdPartyPackage("snakeyaml", "2.3.0"), false)
@@ -514,6 +521,8 @@ class SuiteRuntimeTest {
             assertTrue(runtime.installLocal(packageFromProperty("iflow.package"), false)
                     .get(0).isSuccess());
             assertTrue(runtime.installLocal(packageFromProperty("iflow-vm.package"), false)
+                    .get(0).isSuccess());
+            assertTrue(runtime.installLocal(packageFromProperty("sync-bus.package"), false)
                     .get(0).isSuccess());
 
             assertTrue(runtime.pipelineAvailable(), runtime::pipelineError);
@@ -595,6 +604,66 @@ class SuiteRuntimeTest {
         @Override
         public boolean hasSound(String soundName) {
             return true;
+        }
+    }
+
+    /**
+     * Local sink registered by the test adapter. It resolves the host
+     * {@link LocalDelivery} lazily, exactly like the production
+     * {@code LocalSyncSink} published by {@code sync-bukkit}/{@code sync-fabric}.
+     */
+    private static final class FakeLocalSink implements SyncSink {
+
+        private final SuiteRuntime runtime;
+
+        private FakeLocalSink(SuiteRuntime runtime) {
+            this.runtime = runtime;
+        }
+
+        @Override
+        public String name() {
+            return "test";
+        }
+
+        @Override
+        public SyncSurface surface() {
+            return SyncSurface.lcm("test", SyncSurface.CURRENT_CONTRACT_VERSION);
+        }
+
+        @Override
+        public SyncResult deliver(DeliveryEnvelope envelope) {
+            LocalDelivery delivery = runtime.services().find(LocalDelivery.class).orElse(null);
+            if (delivery == null) {
+                return new SyncResult.HostFailure("LocalDelivery is not registered");
+            }
+            return new SyncResult.Ok(delivery.deliver(envelope));
+        }
+
+        @Override
+        public DeliverySemantics deliverySemantics() {
+            return DeliverySemantics.EXACTLY_ONCE;
+        }
+
+        @Override
+        public Ordering ordering() {
+            return Ordering.GLOBAL;
+        }
+
+        @Override
+        public void start() {
+        }
+
+        @Override
+        public void stop() {
+        }
+
+        @Override
+        public void send(Message message) {
+            throw new UnsupportedOperationException("local sink requires message.deliver");
+        }
+
+        @Override
+        public void setListener(SyncListener listener) {
         }
     }
 

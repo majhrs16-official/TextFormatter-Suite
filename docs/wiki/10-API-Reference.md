@@ -151,9 +151,14 @@ public interface PlaceholderResolver {
 ```java
 public interface SyncSink {
     String name();
-    void start() throws IOException;
+    DeliverySemantics deliverySemantics();
+    Ordering ordering();
+    SyncSurface surface();
+    SyncResult invoke(SyncCall call);
+    SyncResult deliver(DeliveryEnvelope envelope);
+    void start() throws Exception;
     void stop();
-    void send(Message message) throws IOException, InterruptedException;
+    void send(Message message);
     void setListener(SyncListener listener);
 }
 ```
@@ -677,9 +682,14 @@ interface HttpTransport {
 ```java
 interface SyncSink {
     String name();
-    void start() throws IOException;
+    DeliverySemantics deliverySemantics();
+    Ordering ordering();
+    SyncSurface surface();
+    SyncResult invoke(SyncCall call);
+    SyncResult deliver(DeliveryEnvelope envelope);
+    void start() throws Exception;
     void stop();
-    void send(Message message) throws IOException, InterruptedException;
+    void send(Message message);
     void setListener(SyncListener listener);
 }
 ```

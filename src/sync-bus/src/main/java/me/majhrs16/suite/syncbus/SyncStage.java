@@ -1,5 +1,6 @@
 package me.majhrs16.suite.syncbus;
 
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.OutputOutcome;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
@@ -9,6 +10,7 @@ import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.pipeline.StageResult;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,13 +56,26 @@ public final class SyncStage implements PipelineStage {
 
     @Override
     public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+        DeliveryEnvelope envelope = new DeliveryEnvelope(
+                message.message(), message.deliveries());
         OutputPlan outputs = context.outputs();
         if (!outputs.declared()) {
-            List<SyncResult> results = bus.send(message.message());
-            if (results.stream().noneMatch(SyncResult::isOk)) {
-                context.logger().debug("sync stage: no backend delivered the message");
+            List<SyncResult> results = bus.deliver(envelope);
+            List<SyncSurface> surfaces = List.copyOf(bus.surfaces());
+            List<OutputOutcome> inherited = new ArrayList<>(results.size());
+            boolean any = false;
+            for (int index = 0; index < results.size(); index++) {
+                String target = index < surfaces.size()
+                        ? MULTIPLEXER + "." + surfaces.get(index).backend()
+                        : MULTIPLEXER;
+                SyncResult result = results.get(index);
+                inherited.add(new OutputOutcome(target, result));
+                any |= result.isOk();
             }
-            return StageResult.continueWith(message);
+            if (!any) {
+                context.logger().debug("sync stage: no backend delivered the envelope");
+            }
+            return StageResult.continueWith(message, inherited);
         }
 
         List<String> targets = syncTargets(outputs.targets());
@@ -68,8 +83,8 @@ public final class SyncStage implements PipelineStage {
             return StageResult.notApplicable(message);
         }
         List<String> backends = syncBackends(targets);
-        List<SyncResult> results = bus.sendTo(
-                backends, message.message(), outputs.parallel());
+        List<SyncResult> results = bus.deliverTo(
+                backends, envelope, outputs.parallel());
 
         List<OutputOutcome> outcomes = new ArrayList<>(targets.size());
         boolean any = false;

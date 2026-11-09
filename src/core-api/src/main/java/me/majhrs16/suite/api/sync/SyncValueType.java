@@ -15,5 +15,6 @@ public enum SyncValueType {
     CHANNEL_REF,
     MESSAGE_REF,
     ROLE_REF,
-    OBJECT
+    OBJECT,
+    DELIVERY_REF
 }

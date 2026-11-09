@@ -3,6 +3,7 @@ package me.majhrs16.suite.loadtest;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import me.majhrs16.suite.api.channel.ChannelRegistry;
@@ -14,17 +15,26 @@ import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
+import me.majhrs16.suite.api.pipeline.DeliverySummary;
+import me.majhrs16.suite.api.pipeline.OutputOutcome;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.PipelineContext;
+import me.majhrs16.suite.api.pipeline.PipelineMessage;
 import me.majhrs16.suite.api.pipeline.PipelinePlan;
+import me.majhrs16.suite.api.pipeline.PipelineScope;
 import me.majhrs16.suite.api.pipeline.PipelineServices;
 import me.majhrs16.suite.api.pipeline.PipelineSettings;
 import me.majhrs16.suite.api.pipeline.PipelineStage;
+import me.majhrs16.suite.api.pipeline.StageResult;
 import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.LocalDelivery;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslatorManager;
 import me.majhrs16.suite.api.spi.TranslationService;
+import me.majhrs16.suite.api.sync.SyncResult;
 import me.majhrs16.suite.chattranslator.BackendConfig;
 import me.majhrs16.suite.host.DeliveryExecutor;
 import me.majhrs16.suite.host.PipelineEngine;
@@ -150,7 +160,13 @@ public final class HostFixture {
         Router router = router(configDir, channels, permissions, placeholders, translation, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
-        List<PipelineStage> published = List.of(new RouteStage(hub(router)), new FormatStage(formatter));
+        DeliveryExecutor executor = new DeliveryExecutor(
+                delivery == null ? NoopDelivery.INSTANCE : delivery,
+                channels, config.soundEnabled(), logger);
+        List<PipelineStage> published = List.of(
+                new RouteStage(hub(router)),
+                new FormatStage(formatter),
+                new LocalSyncStage(executor));
 
         PipelinePlan plan = PipelinePlan.of(config.pipeline(), 1L);
         List<ResolvedStage> resolved = plan.stageIds().stream()
@@ -177,10 +193,8 @@ public final class HostFixture {
                 logger,
                 config.engineParallel());
         RecipientResolver recipients = new RecipientResolver(effectiveActors, permissions, logger);
-        DeliveryExecutor executor = new DeliveryExecutor(
-                effectiveDelivery, channels, config.soundEnabled(), logger);
         PipelineEngine engine = new PipelineEngine(
-                plan, resolved, skipped, recipients, executor, environment, 1L);
+                plan, resolved, skipped, recipients, environment, 1L);
         return new Pipeline(engine, executor, router, channels, translation, config);
     }
 
@@ -235,6 +249,36 @@ public final class HostFixture {
                 return router.nanosUntilNextRateLimitWindow(message);
             }
         };
+    }
+
+    /**
+     * Load-test double of the {@code sync} stage: delivers the envelope through
+     * the same {@link LocalDelivery} port the production local sink uses.
+     */
+    private static final class LocalSyncStage implements PipelineStage {
+        private final LocalDelivery delivery;
+
+        private LocalSyncStage(LocalDelivery delivery) {
+            this.delivery = delivery;
+        }
+
+        @Override
+        public String id() {
+            return "sync";
+        }
+
+        @Override
+        public Set<PipelineScope> scopes() {
+            return Set.of(PipelineScope.MESSAGE_POST);
+        }
+
+        @Override
+        public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+            DeliverySummary summary = delivery.deliver(
+                    new DeliveryEnvelope(message.message(), message.deliveries()));
+            return StageResult.continueWith(message, List.of(
+                    new OutputOutcome("sync.local", new SyncResult.Ok(summary))));
+        }
     }
 
     private static final class EmptyServices implements PipelineServices {

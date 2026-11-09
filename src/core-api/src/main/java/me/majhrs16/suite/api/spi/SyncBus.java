@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.sync.SyncCall;
 import me.majhrs16.suite.api.sync.SyncResult;
@@ -86,7 +87,8 @@ public interface SyncBus extends AutoCloseable {
     /**
      * Fans out a least-common-multiple action to every registered backend.
      *
-     * <p>Only {@code backend.info} and {@code message.send} are accepted. The
+     * <p>Only {@code backend.info}, {@code message.send} and
+     * {@code message.deliver} are accepted. The
      * {@code backend} field of {@code call} does not select a destination: it
      * is replaced by each surface's backend. Any other action returns one
      * {@link SyncResult.Unsupported} per backend, because a generic broadcast
@@ -135,6 +137,44 @@ public interface SyncBus extends AutoCloseable {
      * @return one result per requested backend, in the same order
      */
     List<SyncResult> sendTo(List<String> backends, Message message, ParallelMode mode);
+
+    /**
+     * Fans a rendered envelope out to every registered backend.
+     *
+     * <p>This is the {@code message.deliver} path of the pipeline. External
+     * sinks receive the plain message through their default
+     * {@link SyncSink#deliver(DeliveryEnvelope)}; local sinks deliver every
+     * unit and report a {@link me.majhrs16.suite.api.pipeline.DeliverySummary}
+     * as the {@link SyncResult.Ok} value.</p>
+     *
+     * <p>The emission is deduplicated by message id, exactly like
+     * {@link #send(Message)}: a duplicate returns an empty list because no
+     * delivery was attempted. The action is not retried, so a crash cannot
+     * produce a double delivery.</p>
+     *
+     * @param envelope rendered units and their original message
+     * @return one result per registered backend, in {@link #surfaces()} order
+     */
+    List<SyncResult> deliver(DeliveryEnvelope envelope);
+
+    /**
+     * Directed form of {@code message.deliver} for several backends.
+     *
+     * <p>The list is ordered and the returned results keep that order. A
+     * backend that is not registered produces one {@link SyncResult.Unsupported}
+     * in its position instead of a silent skip. {@link ParallelMode#PARALLEL}
+     * and {@link ParallelMode#INHERIT} start every target before waiting;
+     * {@link ParallelMode#SEQUENTIAL} waits for each target before starting the
+     * next one. Unlike {@link #deliver(DeliveryEnvelope)}, this directed form
+     * does not deduplicate: the caller already chose the targets.</p>
+     *
+     * @param backends backend namespaces, in delivery order
+     * @param envelope rendered units and their original message
+     * @param mode finalization mode; {@code INHERIT} uses the parallel default
+     * @return one result per requested backend, in the same order
+     */
+    List<SyncResult> deliverTo(List<String> backends, DeliveryEnvelope envelope,
+                               ParallelMode mode);
 
     /**
      * Sets the inbound listener that receives messages from all sinks.

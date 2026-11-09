@@ -21,7 +21,7 @@ class SyncContractTest {
 
         assertTrue(surface.hasLeastCommonMultiple());
         assertEquals("discord", surface.backend());
-        assertEquals(2, surface.actions().size());
+        assertEquals(3, surface.actions().size());
 
         SyncActionSpec info = surface.action(SyncSurface.BACKEND_INFO).orElseThrow();
         assertEquals(ActionKind.READ, info.kind());
@@ -37,6 +37,16 @@ class SyncContractTest {
         assertEquals(SyncValueType.MESSAGE_REF, send.params().get(0).type());
         assertTrue(send.params().get(0).required());
         assertFalse(send.params().get(1).required());
+
+        SyncActionSpec deliver = surface.action(SyncSurface.MESSAGE_DELIVER).orElseThrow();
+        assertEquals(ActionKind.WRITE, deliver.kind());
+        assertFalse(deliver.idempotent(),
+                "a crash after partial delivery must not be retried");
+        assertEquals(15_000, deliver.timeoutMillis());
+        assertEquals(List.of("delivery"),
+                deliver.params().stream().map(SyncParamSpec::name).toList());
+        assertEquals(SyncValueType.DELIVERY_REF, deliver.params().get(0).type());
+        assertTrue(deliver.params().get(0).required());
     }
 
     @Test

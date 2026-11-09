@@ -6,6 +6,9 @@ import me.majhrs16.suite.api.message.Channel;
 import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
+import me.majhrs16.suite.api.pipeline.DeliverySummary;
+import me.majhrs16.suite.api.pipeline.OutputOutcome;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
@@ -22,7 +25,10 @@ import me.majhrs16.suite.api.pipeline.StageTrace;
 import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.render.ComponentRenderedOutput;
 import me.majhrs16.suite.api.spi.ActorDirectory;
+import me.majhrs16.suite.api.spi.LocalDelivery;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.sync.SyncResult;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import net.kyori.adventure.text.Component;
@@ -52,6 +58,13 @@ class PipelineEngineTest {
 
     private final RecordingDelivery delivery = new RecordingDelivery();
     private final ActorDirectory actors = new Directory();
+    private final DeliveryExecutor executor =
+            new DeliveryExecutor(delivery, null, false, new NoopLogger());
+
+    @AfterEach
+    void closeExecutor() {
+        executor.close();
+    }
 
     @Test
     void executesRecipientStagesInPlanOrderAndDeliversTheLastMessage() {
@@ -344,12 +357,22 @@ class PipelineEngineTest {
                 outputs,
                 new NoopLogger(),
                 false);
+
+        List<String> ids = new ArrayList<>(plan.stageIds());
+        List<ResolvedStage> resolved = new ArrayList<>(stages);
+        if (!resolved.isEmpty() && !ids.contains("sync")) {
+            ids.add("sync");
+            resolved.add(new ResolvedStage("sync", "test", new LocalSyncStage(executor)));
+        }
+        PipelinePlan effective = ids.equals(plan.stageIds())
+                ? plan
+                : PipelinePlan.of(ids, plan.version());
+
         return new PipelineEngine(
-                plan,
-                stages,
+                effective,
+                resolved,
                 skipped,
                 new RecipientResolver(actors, PermissionChecker.ALLOW_ALL, new NoopLogger()),
-                new DeliveryExecutor(delivery, null, false, new NoopLogger()),
                 environment,
                 plan.version());
     }
@@ -398,6 +421,32 @@ class PipelineEngineTest {
                 return body.apply(message);
             }
         };
+    }
+
+    private static final class LocalSyncStage implements PipelineStage {
+        private final LocalDelivery delivery;
+
+        private LocalSyncStage(LocalDelivery delivery) {
+            this.delivery = delivery;
+        }
+
+        @Override
+        public String id() {
+            return "sync";
+        }
+
+        @Override
+        public Set<PipelineScope> scopes() {
+            return Set.of(PipelineScope.MESSAGE_POST);
+        }
+
+        @Override
+        public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+            DeliverySummary summary = delivery.deliver(
+                    new DeliveryEnvelope(message.message(), message.deliveries()));
+            return StageResult.continueWith(message, List.of(
+                    new OutputOutcome("sync.local", new SyncResult.Ok(summary))));
+        }
     }
 
     private abstract static class BaseStage implements me.majhrs16.suite.api.pipeline.PipelineStage {

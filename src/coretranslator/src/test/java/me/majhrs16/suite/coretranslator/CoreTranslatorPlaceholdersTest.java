@@ -309,6 +309,21 @@ class CoreTranslatorPlaceholdersTest {
         }
 
         @Override
+        public List<SyncResult> deliver(
+                me.majhrs16.suite.api.pipeline.DeliveryEnvelope envelope) {
+            return List.of(new SyncResult.Ok(null));
+        }
+
+        @Override
+        public List<SyncResult> deliverTo(List<String> backends,
+                                          me.majhrs16.suite.api.pipeline.DeliveryEnvelope envelope,
+                                          me.majhrs16.suite.api.pipeline.ParallelMode mode) {
+            return backends.stream()
+                    .<SyncResult>map(backend -> new SyncResult.Ok(null))
+                    .toList();
+        }
+
+        @Override
         public void setInboundListener(SyncListener listener) {
         }
 

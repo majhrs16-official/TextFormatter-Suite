@@ -1,6 +1,7 @@
 package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
@@ -47,6 +48,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 /**
  * Default implementation of {@link SyncBus} with full synchronization hub capabilities.
@@ -379,8 +381,9 @@ public final class DefaultSyncBus implements SyncBus {
             return invalid;
         }
 
-        if (SyncSurface.MESSAGE_SEND.equals(call.action())) {
-            // The message path stays in the per-sink queue so directed delivery
+        if (SyncSurface.MESSAGE_SEND.equals(call.action())
+                || SyncSurface.MESSAGE_DELIVER.equals(call.action())) {
+            // The message paths stay in the per-sink queue so directed delivery
             // keeps the same isolation and retry policy as a fan-out.
             return await(dispatchCall(ctx, call, spec));
         }
@@ -473,12 +476,84 @@ public final class DefaultSyncBus implements SyncBus {
             return List.of();
         }
 
+        return dispatchDirected(backends, mode,
+                backend -> messageSendCall(backend, message));
+    }
+
+    @Override
+    public List<SyncResult> deliver(DeliveryEnvelope envelope) {
+        Objects.requireNonNull(envelope, "envelope");
+        List<SinkContext> targets = orderedContexts();
+        if (targets.isEmpty()) {
+            return List.of();
+        }
+        Message message = envelope.message();
+        if (state.get() != LifecycleState.RUNNING) {
+            List<SyncResult> stopped = new ArrayList<>(targets.size());
+            for (SinkContext ctx : targets) {
+                stopped.add(new SyncResult.HostFailure(
+                        "sync bus is not running; backend '" + ctx.surface.backend()
+                                + "' did not receive the envelope"));
+            }
+            return List.copyOf(stopped);
+        }
+
+        Long stamp = reserveEmission(message);
+        if (stamp == null) {
+            // No delivery was attempted for this duplicate, so there is no
+            // per-backend result to report.
+            return List.of();
+        }
+        totalBroadcast.incrementAndGet();
+
+        List<CompletableFuture<SyncResult>> outcomes = new ArrayList<>(targets.size());
+        for (SinkContext ctx : targets) {
+            outcomes.add(dispatchCall(ctx,
+                    messageDeliverCall(ctx.surface.backend(), envelope),
+                    deliverSpec(ctx)));
+        }
+
+        List<SyncResult> results = new ArrayList<>(outcomes.size());
+        boolean anyAccepted = false;
+        for (CompletableFuture<SyncResult> outcome : outcomes) {
+            SyncResult result = await(outcome);
+            results.add(result);
+            anyAccepted |= result.isOk();
+        }
+        if (!anyAccepted) {
+            releaseEmission(message, stamp);
+        }
+        return List.copyOf(results);
+    }
+
+    @Override
+    public List<SyncResult> deliverTo(List<String> backends, DeliveryEnvelope envelope,
+                                      ParallelMode mode) {
+        Objects.requireNonNull(backends, "backends");
+        Objects.requireNonNull(envelope, "envelope");
+        Objects.requireNonNull(mode, "mode");
+        if (backends.isEmpty()) {
+            return List.of();
+        }
+
+        return dispatchDirected(backends, mode,
+                backend -> messageDeliverCall(backend, envelope));
+    }
+
+    /**
+     * Dispatches one call per requested backend, preserving order. Missing
+     * backends and a stopped bus complete immediately with an explicit result
+     * instead of throwing, so the caller keeps one result per requested target.
+     */
+    private List<SyncResult> dispatchDirected(List<String> backends,
+                                              ParallelMode mode,
+                                              Function<String, SyncCall> calls) {
         boolean parallel = mode != ParallelMode.SEQUENTIAL;
         List<CompletableFuture<SyncResult>> pending = new ArrayList<>(backends.size());
         List<SyncResult> results = new ArrayList<>(backends.size());
         for (String backend : backends) {
             Objects.requireNonNull(backend, "backend");
-            CompletableFuture<SyncResult> outcome = dispatchTo(backend, message);
+            CompletableFuture<SyncResult> outcome = dispatchTo(backend, calls.apply(backend));
             if (parallel) {
                 pending.add(outcome);
             } else {
@@ -493,24 +568,25 @@ public final class DefaultSyncBus implements SyncBus {
         return List.copyOf(results);
     }
 
-    /**
-     * Starts one directed delivery and returns its completion. Missing
-     * backends and a stopped bus complete immediately with an explicit result
-     * instead of throwing, so the caller keeps one result per requested target.
-     */
-    private CompletableFuture<SyncResult> dispatchTo(String backend, Message message) {
+    private CompletableFuture<SyncResult> dispatchTo(String backend, SyncCall call) {
         SinkContext ctx = sinks.get(backend);
         if (ctx == null) {
-            logger.warn("SyncBus: backend '" + backend + "' not found for directed send");
+            logger.warn("SyncBus: backend '" + backend + "' not found for directed '"
+                    + call.action() + "'");
             return CompletableFuture.completedFuture(new SyncResult.Unsupported(
                     "backend '" + backend + "' is not registered"));
         }
         if (state.get() != LifecycleState.RUNNING) {
             return CompletableFuture.completedFuture(new SyncResult.HostFailure(
                     "sync bus is not running; backend '" + backend
-                            + "' did not receive the message"));
+                            + "' did not receive the action"));
         }
-        return dispatchCall(ctx, messageSendCall(backend, message), sendSpec(ctx));
+        SyncActionSpec spec = ctx.surface.action(call.action()).orElse(null);
+        if (spec == null) {
+            return CompletableFuture.completedFuture(new SyncResult.Unsupported(
+                    "action '" + call.canonicalName() + "' is not published"));
+        }
+        return dispatchCall(ctx, call, spec);
     }
 
     /** @return contexts in registration order, so results align with surfaces() */
@@ -540,11 +616,28 @@ public final class DefaultSyncBus implements SyncBus {
                 "pipeline delivery");
     }
 
+    private static SyncCall messageDeliverCall(String backend, DeliveryEnvelope envelope) {
+        return new SyncCall(
+                backend,
+                SyncSurface.MESSAGE_DELIVER,
+                Map.of("delivery", envelope),
+                new Principal.Official("suite.pipeline"),
+                envelope.message().id() + "|" + SyncSurface.MESSAGE_DELIVER + "|" + backend,
+                "pipeline delivery");
+    }
+
     private static SyncActionSpec sendSpec(SinkContext ctx) {
         return ctx.surface.action(SyncSurface.MESSAGE_SEND)
                 .orElseThrow(() -> new IllegalStateException(
                         "backend '" + ctx.surface.backend() + "' does not publish "
                                 + SyncSurface.MESSAGE_SEND));
+    }
+
+    private static SyncActionSpec deliverSpec(SinkContext ctx) {
+        return ctx.surface.action(SyncSurface.MESSAGE_DELIVER)
+                .orElseThrow(() -> new IllegalStateException(
+                        "backend '" + ctx.surface.backend() + "' does not publish "
+                                + SyncSurface.MESSAGE_DELIVER));
     }
 
     private long effectiveTimeout(SyncActionSpec spec) {
@@ -656,7 +749,8 @@ public final class DefaultSyncBus implements SyncBus {
 
     private static boolean isLcmAction(String action) {
         return SyncSurface.BACKEND_INFO.equals(action)
-                || SyncSurface.MESSAGE_SEND.equals(action);
+                || SyncSurface.MESSAGE_SEND.equals(action)
+                || SyncSurface.MESSAGE_DELIVER.equals(action);
     }
 
     private static SyncResult validateArguments(SyncCall call, SyncActionSpec spec) {
@@ -714,6 +808,8 @@ public final class DefaultSyncBus implements SyncBus {
             case MESSAGE_REF -> value instanceof Message
                     || (value instanceof String text && !text.isBlank())
                     ? null : "'" + name + "' must be a Message or a non-blank message id";
+            case DELIVERY_REF -> value instanceof DeliveryEnvelope
+                    ? null : "'" + name + "' must be a DeliveryEnvelope";
             case OBJECT -> value instanceof Map<?, ?>
                     ? null : "'" + name + "' must be an object";
         };

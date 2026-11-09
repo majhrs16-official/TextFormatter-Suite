@@ -2,6 +2,8 @@ package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.SemVer;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
@@ -563,6 +565,133 @@ class DefaultSyncBusTest {
     }
 
     @Test
+    void deliverDeduplicatesByMessageIdInsideTheWindow() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        DeliveringSink sink = new DeliveringSink("one");
+        bus.register(sink);
+        bus.start();
+        try {
+            DeliveryEnvelope envelope = DeliveryEnvelope.empty(
+                    Message.builder().text("deliver once").build());
+
+            List<SyncResult> first = bus.deliver(envelope);
+            assertEquals(1, first.size());
+            assertTrue(first.get(0).isOk());
+            assertSame(envelope, sink.received);
+
+            assertTrue(bus.deliver(envelope).isEmpty(),
+                    "a duplicate inside the dedup window must not deliver the envelope twice");
+            assertEquals(1, sink.attempts.get());
+            assertEquals(1L, bus.getTotalDeduped());
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void deliverToKeepsDirectedDeliveryWithoutDeduplicating() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        DeliveringSink sink = new DeliveringSink("one");
+        bus.register(sink);
+        bus.start();
+        try {
+            DeliveryEnvelope envelope = DeliveryEnvelope.empty(
+                    Message.builder().text("directed").build());
+
+            List<SyncResult> first = bus.deliverTo(List.of("one"), envelope, ParallelMode.SEQUENTIAL);
+            List<SyncResult> second = bus.deliverTo(List.of("one"), envelope, ParallelMode.SEQUENTIAL);
+
+            assertTrue(first.stream().allMatch(SyncResult::isOk));
+            assertTrue(second.stream().allMatch(SyncResult::isOk));
+            assertEquals(2, sink.attempts.get(),
+                    "directed delivery is an explicit caller decision and must not deduplicate");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void deliverToUnknownBackendReturnsUnsupported() {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        try {
+            List<SyncResult> results = bus.deliverTo(
+                    List.of("missing"),
+                    DeliveryEnvelope.empty(Message.builder().text("hello").build()),
+                    ParallelMode.SEQUENTIAL);
+            assertEquals(1, results.size());
+            assertTrue(results.get(0) instanceof SyncResult.Unsupported);
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void invokeDeliversTheEnvelopeForAnOfficialPrincipal() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        DeliveringSink sink = new DeliveringSink("one");
+        bus.register(sink);
+        bus.start();
+        try {
+            DeliveryEnvelope envelope = DeliveryEnvelope.empty(
+                    Message.builder().text("official").build());
+            SyncResult result = bus.invoke(new SyncCall(
+                    "one", SyncSurface.MESSAGE_DELIVER, Map.of("delivery", envelope),
+                    OFFICIAL, "", "pipeline delivery"));
+
+            assertTrue(result.isOk(), "message.deliver is part of the LCM: " + result);
+            assertSame(envelope, sink.received);
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void messageDeliverRejectsArgumentsThatAreNotAnEnvelope() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        DeliveringSink sink = new DeliveringSink("one");
+        bus.register(sink);
+        bus.start();
+        try {
+            SyncResult wrongType = bus.invoke(new SyncCall(
+                    "one", SyncSurface.MESSAGE_DELIVER, Map.of("delivery", "not an envelope"),
+                    OFFICIAL, "", "pipeline delivery"));
+            assertTrue(wrongType instanceof SyncResult.InvalidArgument,
+                    "a non-envelope delivery must be rejected, got: " + wrongType);
+
+            SyncResult missing = bus.invoke(new SyncCall(
+                    "one", SyncSurface.MESSAGE_DELIVER, Map.of(),
+                    OFFICIAL, "", "pipeline delivery"));
+            assertTrue(missing instanceof SyncResult.InvalidArgument,
+                    "a missing delivery must be rejected, got: " + missing);
+            assertEquals(0, sink.attempts.get(),
+                    "invalid arguments must never reach the sink");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void messageDeliverIsNotRetriedOnFailure() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        DeliveringSink sink = new DeliveringSink("one");
+        sink.failWith(new IllegalStateException("delivery failed"));
+        bus.register(sink);
+        bus.start();
+        try {
+            DeliveryEnvelope envelope = DeliveryEnvelope.empty(
+                    Message.builder().text("no retry").build());
+            List<SyncResult> results = bus.deliver(envelope);
+
+            assertEquals(1, results.size());
+            assertTrue(results.get(0) instanceof SyncResult.HostFailure);
+            assertEquals(1, sink.attempts.get(),
+                    "message.deliver is not idempotent and must not be retried");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
     void surfacesKeepRegistrationOrder() {
         DefaultSyncBus bus = new DefaultSyncBus(logger);
         try {
@@ -683,6 +812,41 @@ class DefaultSyncBusTest {
         @Override public void error(String message, Object... args) {}
         @Override public void error(String message, Throwable throwable) {}
         @Override public void debug(String message, Object... args) {}
+    }
+
+    private static final class DeliveringSink implements SyncSink {
+        private final String name;
+        private final AtomicInteger attempts = new AtomicInteger();
+        private volatile DeliveryEnvelope received;
+        private volatile RuntimeException failure;
+
+        DeliveringSink(String name) {
+            this.name = name;
+        }
+
+        void failWith(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        @Override public String name() { return name; }
+        @Override public DeliverySemantics deliverySemantics() { return DeliverySemantics.EXACTLY_ONCE; }
+        @Override public Ordering ordering() { return Ordering.GLOBAL; }
+        @Override public void start() {}
+        @Override public void stop() {}
+        @Override public void send(Message message) {
+            throw new UnsupportedOperationException("use message.deliver");
+        }
+        @Override public void setListener(SyncListener listener) {}
+
+        @Override
+        public SyncResult deliver(DeliveryEnvelope envelope) {
+            attempts.incrementAndGet();
+            if (failure != null) {
+                throw failure;
+            }
+            received = envelope;
+            return new SyncResult.Ok(null);
+        }
     }
 
     private static final class RecordingSink implements SyncSink {

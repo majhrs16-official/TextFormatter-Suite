@@ -5,6 +5,7 @@ import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
@@ -46,10 +47,26 @@ class SyncStageTest {
                 PipelineMessage.of(message()), context(OutputPlan.inherit()));
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
-        assertTrue(bus.broadcastCalled);
+        assertTrue(bus.deliverCalled);
         assertTrue(bus.targeted.isEmpty());
         assertTrue(result.outputs().isEmpty(),
-                "an inherited fan-out has no declared targets to report");
+                "a bus without surfaces has no target to report");
+    }
+
+    @Test
+    void inheritedPlanReportsOneOutcomePerSurface() {
+        bus.surface("discord");
+        bus.surface("tcp");
+
+        StageResult result = stage().afterMessage(
+                PipelineMessage.of(message()), context(OutputPlan.inherit()));
+
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertTrue(bus.deliverCalled);
+        assertEquals(List.of("sync.discord", "sync.tcp"),
+                result.outputs().stream()
+                        .map(me.majhrs16.suite.api.pipeline.OutputOutcome::target)
+                        .toList());
     }
 
     @Test
@@ -62,7 +79,7 @@ class SyncStageTest {
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertEquals(List.of("discord", "tcp"), bus.targeted);
-        assertFalse(bus.broadcastCalled);
+        assertFalse(bus.deliverCalled);
     }
 
     @Test
@@ -74,7 +91,7 @@ class SyncStageTest {
                 PipelineMessage.of(message()), context(plan));
 
         assertEquals(StageResult.Kind.NOT_APPLICABLE, result.kind());
-        assertFalse(bus.broadcastCalled);
+        assertFalse(bus.deliverCalled);
         assertTrue(bus.targeted.isEmpty());
     }
 
@@ -145,18 +162,22 @@ class SyncStageTest {
     }
 
     private static final class FakeBus implements SyncBus {
-        private boolean broadcastCalled;
+        private boolean deliverCalled;
         private final List<String> targeted = new ArrayList<>();
         private final java.util.Map<String, SyncResult> results = new java.util.HashMap<>();
+        private final List<SyncSurface> surfaces = new ArrayList<>();
         private me.majhrs16.suite.api.pipeline.ParallelMode mode;
 
         void result(String backend, SyncResult result) {
             results.put(backend, result);
         }
 
+        void surface(String backend) {
+            surfaces.add(SyncSurface.lcm(backend, SyncSurface.CURRENT_CONTRACT_VERSION));
+        }
+
         @Override
         public List<SyncResult> send(Message message) {
-            broadcastCalled = true;
             return List.of(new SyncResult.Ok(null));
         }
 
@@ -169,6 +190,25 @@ class SyncStageTest {
         @Override
         public List<SyncResult> sendTo(List<String> backends, Message message,
                                        me.majhrs16.suite.api.pipeline.ParallelMode mode) {
+            return directed(backends, mode);
+        }
+
+        @Override
+        public List<SyncResult> deliver(DeliveryEnvelope envelope) {
+            deliverCalled = true;
+            return surfaces.stream()
+                    .<SyncResult>map(surface -> new SyncResult.Ok(null))
+                    .toList();
+        }
+
+        @Override
+        public List<SyncResult> deliverTo(List<String> backends, DeliveryEnvelope envelope,
+                                          me.majhrs16.suite.api.pipeline.ParallelMode mode) {
+            return directed(backends, mode);
+        }
+
+        private List<SyncResult> directed(List<String> backends,
+                                          me.majhrs16.suite.api.pipeline.ParallelMode mode) {
             targeted.addAll(backends);
             this.mode = mode;
             return backends.stream()
@@ -176,7 +216,9 @@ class SyncStageTest {
                     .toList();
         }
 
-        @Override public Set<SyncSurface> surfaces() { return Set.of(); }
+        @Override public Set<SyncSurface> surfaces() {
+            return new java.util.LinkedHashSet<>(surfaces);
+        }
         @Override public SyncResult invoke(SyncCall call) {
             return new SyncResult.Unsupported("not used by this test");
         }

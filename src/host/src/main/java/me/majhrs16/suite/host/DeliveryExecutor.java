@@ -7,10 +7,13 @@ import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
-import me.majhrs16.suite.api.pipeline.PipelineMessage;
+import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
+import me.majhrs16.suite.api.pipeline.DeliverySummary;
+import me.majhrs16.suite.api.pipeline.DeliveryUnit;
 import me.majhrs16.suite.api.pipeline.RenderedOutput;
 import me.majhrs16.suite.api.render.ChatDelivery;
 import me.majhrs16.suite.api.render.ComponentRenderedOutput;
+import me.majhrs16.suite.api.spi.LocalDelivery;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 import net.kyori.adventure.text.Component;
@@ -26,9 +29,11 @@ import java.util.concurrent.TimeUnit;
  * order.
  *
  * <p>Redirects, sleeps, sounds and the concrete {@link ChatDelivery} calls live
- * here, while {@link PipelineEngine} owns stages, recipients and traces.</p>
+ * here, while {@link PipelineEngine} owns stages, recipients and traces. The
+ * executor is the host implementation of the {@link LocalDelivery} port: the
+ * local sync sink resolves it and hands it the rendered envelope.</p>
  */
-public final class DeliveryExecutor implements AutoCloseable {
+public final class DeliveryExecutor implements LocalDelivery, AutoCloseable {
 
     private static final long SLEEP_POLL_MILLIS = 5_000L;
 
@@ -53,15 +58,32 @@ public final class DeliveryExecutor implements AutoCloseable {
         });
     }
 
-    /**
-     * Delivers {@code unit} to {@code recipient}.
-     *
-     * <p>A missing {@link PipelineMessage#rendered()} is a programmer error:
-     * the engine always supplies a neutral fallback. It is not converted into
-     * a silent success.</p>
-     */
-    public DeliveryResult deliver(Actor recipient, PipelineMessage unit) {
-        Objects.requireNonNull(recipient, "recipient");
+    @Override
+    public DeliverySummary deliver(DeliveryEnvelope envelope) {
+        Objects.requireNonNull(envelope, "envelope");
+        int delivered = 0;
+        int silenced = 0;
+        int redirected = 0;
+        int failed = 0;
+        for (DeliveryUnit unit : envelope.units()) {
+            DeliveryResult result;
+            try {
+                result = deliver(unit);
+            } catch (RuntimeException failure) {
+                logger.error("Error delivering message to " + unit.recipient().name(), failure);
+                result = DeliveryResult.failed(failure.getMessage());
+            }
+            switch (result.kind()) {
+                case DELIVERED -> delivered++;
+                case SILENCED -> silenced++;
+                case REDIRECTED -> redirected++;
+                case FAILED -> failed++;
+            }
+        }
+        return new DeliverySummary(delivered, silenced, redirected, failed);
+    }
+
+    private DeliveryResult deliver(DeliveryUnit unit) {
         Objects.requireNonNull(unit, "unit");
         Component component = componentOf(unit.rendered());
         RouteDecision decision = unit.decision();
@@ -77,11 +99,11 @@ public final class DeliveryExecutor implements AutoCloseable {
         Message message = unit.message();
         long sleepMillis = message.sleepMillis();
         if (sleepMillis > 0) {
-            sleepScheduler.schedule(() -> deliverNow(recipient, component, message),
+            sleepScheduler.schedule(() -> deliverNow(unit.recipient(), component, message),
                     sleepMillis, TimeUnit.MILLISECONDS);
             return DeliveryResult.delivered();
         }
-        deliverNow(recipient, component, message);
+        deliverNow(unit.recipient(), component, message);
         return DeliveryResult.delivered();
     }
 

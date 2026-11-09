@@ -16,7 +16,9 @@ import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.runtime.PlatformHandle;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.MessageDispatch;
+import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.spi.UserLanguageStore;
+import me.majhrs16.suite.synccommon.LocalSyncSink;
 import me.majhrs16.suite.synccommon.SyncEventProcessor;
 
 import org.bukkit.event.HandlerList;
@@ -41,6 +43,7 @@ public final class SyncBukkitActivator implements ModuleActivator {
                 .contractVersion(SemVer.of(1, 0, 0))
                 .jvmRange(21, 0)
                 .provide(Capability.of("sync-bukkit", SemVer.of(1, 0, 0)))
+                .provide(Capability.of("sync-sink", SemVer.of(1, 0, 0)))
                 .build();
     }
 
@@ -77,7 +80,10 @@ public final class SyncBukkitActivator implements ModuleActivator {
             created.deactivate();
             HandlerList.unregisterAll(created);
         });
-        context.logger().info("sync-bukkit listeners registered");
+
+        context.services().register(SyncSink.class,
+                new LocalSyncSink("bukkit", context.services()));
+        context.logger().info("sync-bukkit listeners and local sink registered");
     }
 
     @Override
