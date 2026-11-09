@@ -2,6 +2,8 @@ package me.majhrs16.suite.host;
 
 import me.majhrs16.suite.api.config.ConfigVersion;
 import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.host.config.ConfigLoader;
 import me.majhrs16.suite.host.config.HostConfig;
@@ -51,6 +53,7 @@ class ConfigLoaderTest {
         assertFalse(config.engineParallel());
         assertTrue(config.soundEnabled());
         assertEquals(HostConfig.BASE_PIPELINE, config.pipeline());
+        assertEquals(OutputPlan.inherit(), config.outputs());
         assertFalse(result.isValid()); // missing file = degraded
     }
 
@@ -190,5 +193,89 @@ class ConfigLoaderTest {
         Channel staff = registry.get("staff.alert").orElseThrow();
         assertFalse(staff.showSender());
         assertEquals(Language.ES, registry.get("vip.chat").orElseThrow().langSource());
+    }
+
+    @Test
+    void readsOutputsAndParallelMode() throws Exception {
+        Files.writeString(suiteConfig(), """
+            pipeline:
+              - route
+              - format
+            outputs:
+              - sync.discord
+              - sync.tcp
+            outputs-parallel: false
+            config-version: 1.0
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+        HostConfig config = result.config();
+
+        assertTrue(result.isValid());
+        assertTrue(config.outputs().declared());
+        assertEquals(List.of("sync.discord", "sync.tcp"), config.outputs().targets());
+        assertEquals(ParallelMode.SEQUENTIAL, config.outputs().parallel());
+    }
+
+    @Test
+    void absentOutputsKeepsTheInheritedPlan() throws Exception {
+        Files.writeString(suiteConfig(), """
+            pipeline:
+              - format
+            config-version: 1.0
+            """);
+
+        HostConfig config = ConfigLoader.loadConfig(dir, quietLogger()).config();
+
+        assertEquals(OutputPlan.inherit(), config.outputs());
+    }
+
+    @Test
+    void emptyOutputsIsDeclaredWithNoTargets() throws Exception {
+        Files.writeString(suiteConfig(), """
+            pipeline:
+              - format
+            outputs: []
+            config-version: 1.0
+            """);
+
+        HostConfig config = ConfigLoader.loadConfig(dir, quietLogger()).config();
+
+        assertTrue(config.outputs().declared());
+        assertTrue(config.outputs().targets().isEmpty());
+        assertEquals(ParallelMode.INHERIT, config.outputs().parallel());
+    }
+
+    @Test
+    void rejectsInvalidOutputTarget() throws Exception {
+        Files.writeString(suiteConfig(), """
+            pipeline:
+              - format
+            outputs:
+              - discord
+            config-version: 1.0
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("outputs")));
+        assertEquals(OutputPlan.inherit(), result.config().outputs());
+    }
+
+    @Test
+    void rejectsNonBooleanOutputsParallel() throws Exception {
+        Files.writeString(suiteConfig(), """
+            pipeline:
+              - format
+            outputs-parallel: "yes"
+            config-version: 1.0
+            """);
+
+        ConfigLoader.LoadResult<HostConfig> result = ConfigLoader.loadConfig(dir, quietLogger());
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream()
+                .anyMatch(error -> error.contains("outputs-parallel")));
     }
 }

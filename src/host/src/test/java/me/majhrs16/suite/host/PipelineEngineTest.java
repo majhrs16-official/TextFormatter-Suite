@@ -7,6 +7,8 @@ import me.majhrs16.suite.api.message.Direction;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
+import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
 import me.majhrs16.suite.api.pipeline.PipelinePlan;
 import me.majhrs16.suite.api.pipeline.PipelineScope;
@@ -32,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -211,6 +214,61 @@ class PipelineEngineTest {
         assertTrue(delivery.texts.isEmpty());
     }
 
+    @Test
+    void resolvesTheMessageOutputPlanOverTheSuitePlan() {
+        AtomicReference<OutputPlan> seen = new AtomicReference<>();
+        PipelineStage capture = new BaseStage("capture") {
+            @Override
+            public Set<PipelineScope> scopes() {
+                return Set.of(PipelineScope.MESSAGE_PRE);
+            }
+
+            @Override
+            public StageResult beforeMessage(PipelineMessage message,
+                                             PipelineContext context) {
+                seen.set(context.outputs());
+                return StageResult.continueWith(message);
+            }
+        };
+        OutputPlan suite = OutputPlan.of(
+                List.of("sync.telegram"), ParallelMode.PARALLEL);
+        Message message = message().withOutputPlan(
+                OutputPlan.of(List.of("sync.discord"), ParallelMode.SEQUENTIAL));
+
+        engine(PipelinePlan.of(List.of("capture"), 1L),
+                List.of(new ResolvedStage("capture", "m", capture)),
+                List.of(), suite).dispatch(message);
+
+        assertEquals(OutputPlan.of(
+                List.of("sync.discord"), ParallelMode.SEQUENTIAL), seen.get());
+    }
+
+    @Test
+    void inheritedMessagePlanFallsBackToTheSuitePlan() {
+        AtomicReference<OutputPlan> seen = new AtomicReference<>();
+        PipelineStage capture = new BaseStage("capture") {
+            @Override
+            public Set<PipelineScope> scopes() {
+                return Set.of(PipelineScope.MESSAGE_PRE);
+            }
+
+            @Override
+            public StageResult beforeMessage(PipelineMessage message,
+                                             PipelineContext context) {
+                seen.set(context.outputs());
+                return StageResult.continueWith(message);
+            }
+        };
+        OutputPlan suite = OutputPlan.of(
+                List.of("sync.telegram"), ParallelMode.SEQUENTIAL);
+
+        engine(PipelinePlan.of(List.of("capture"), 1L),
+                List.of(new ResolvedStage("capture", "m", capture)),
+                List.of(), suite).dispatch(message());
+
+        assertEquals(suite, seen.get());
+    }
+
     private PipelineEngine engine(PipelinePlan plan,
                                   List<ResolvedStage> stages) {
         return engine(plan, stages, List.of());
@@ -219,6 +277,13 @@ class PipelineEngineTest {
     private PipelineEngine engine(PipelinePlan plan,
                                   List<ResolvedStage> stages,
                                   List<SkippedStage> skipped) {
+        return engine(plan, stages, skipped, OutputPlan.inherit());
+    }
+
+    private PipelineEngine engine(PipelinePlan plan,
+                                  List<ResolvedStage> stages,
+                                  List<SkippedStage> skipped,
+                                  OutputPlan outputs) {
         PipelineEnvironment environment = new PipelineEnvironment(
                 actors,
                 PermissionChecker.ALLOW_ALL,
@@ -226,7 +291,7 @@ class PipelineEngineTest {
                 Optional.empty(),
                 new PipelineSettings(Language.EN, false, false),
                 new EmptyServices(),
-                OutputPlan.inherit(),
+                outputs,
                 new NoopLogger(),
                 false);
         return new PipelineEngine(

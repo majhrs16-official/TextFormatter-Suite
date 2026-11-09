@@ -43,7 +43,9 @@
     "chat": {
       "claim-mode": "cancel-event",
       "log-to-console": true
-    }
+    },
+    "outputs": [],
+    "outputs-parallel": true
   },
   "channels": {
     "chat.global": {

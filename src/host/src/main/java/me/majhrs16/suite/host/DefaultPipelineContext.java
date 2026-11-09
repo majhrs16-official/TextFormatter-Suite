@@ -19,24 +19,28 @@ import java.util.Optional;
  *
  * <p>A new instance is created for each phase/recipient, so parallel
  * recipients never share a mutable scope. Dependencies are stable for the
- * lifetime of the plan.</p>
+ * lifetime of the plan; the output plan is resolved once per emission and
+ * carried by the context.</p>
  */
 final class DefaultPipelineContext implements PipelineContext {
 
     private final String messageId;
     private final PipelineScope scope;
     private final PipelineEnvironment environment;
+    private final OutputPlan outputs;
     private final PipelineTrace trace;
     private final long planVersion;
 
     DefaultPipelineContext(String messageId,
                            PipelineScope scope,
                            PipelineEnvironment environment,
+                           OutputPlan outputs,
                            PipelineTrace trace,
                            long planVersion) {
         this.messageId = Objects.requireNonNull(messageId, "messageId");
         this.scope = Objects.requireNonNull(scope, "scope");
         this.environment = Objects.requireNonNull(environment, "environment");
+        this.outputs = Objects.requireNonNull(outputs, "outputs");
         this.trace = Objects.requireNonNull(trace, "trace");
         this.planVersion = planVersion;
     }
@@ -48,7 +52,7 @@ final class DefaultPipelineContext implements PipelineContext {
     @Override public PermissionChecker permissions() { return environment.permissions(); }
     @Override public PipelineSettings settings() { return environment.settings(); }
     @Override public PipelineServices services() { return environment.services(); }
-    @Override public OutputPlan outputs() { return environment.outputs(); }
+    @Override public OutputPlan outputs() { return outputs; }
     @Override public PluginLogger logger() { return environment.logger(); }
     @Override public PipelineTrace trace() { return trace; }
     @Override public long planVersion() { return planVersion; }

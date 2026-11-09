@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-07 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` sigue pendiente. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-09 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; la selección por etapa y el paralelismo de entrega siguen pendientes. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -638,8 +638,8 @@ planificar el cambio. Se registra como deuda de baja prioridad, no como requisit
 
 ### Feature propuesta — multiplexación de salidas por mensaje (PL-3, 2026-11-06)
 
-> **Estado:** propuesta, no implementada y no contractual. Depende de **ADR-036 §17** (aceptado el
-> 2026-11-06).
+> **Estado:** contrato y resolución implementados (2026-11-09); etapas selectivas, paralelismo,
+> resultado agregado y sinks locales pendientes. Depende de **ADR-036 §17** (aceptado el 2026-11-06).
 
 #### Objetivo
 
@@ -657,8 +657,9 @@ pipeline.
 | `IflowConfig` elige un motor global | `IflowConfig.java` (`engine`, `fallback-on-unavailable`) | No hay selección por mensaje. |
 | `ChatTranslator` elige un backend global + contexto | `ChatTranslator.java` (`defaultBackend`, `contextOverrideEnabled`) | El contexto es una clave/`ThreadLocal`, no un campo del mensaje. |
 | `SyncBus.broadcast` envía a todos los sinks | `DefaultSyncBus.broadcast` | No hay selección por mensaje ni orden. |
-| `SyncBus.sendTo` existe pero no se usa en el flujo principal | `SyncBus.java`; `CoreTranslatorPlaceholders` | La selección es ad hoc y no cubre el pipeline. |
-| `Message` no tiene `outputs` | `Message.java` | No se puede expresar multi-salida. |
+| `SyncBus.sendTo` se usa cuando hay targets | `SyncStage`; `DefaultSyncBus` | La etapa `sync` ya selecciona por `sync.<backend>`; `CoreTranslatorPlaceholders` sigue siendo ad hoc. |
+| `Message.outputPlan()` y resolución de precedencia | `Message`, `OutputPlanResolver`, `SuiteRuntime` | Mensaje > suite > default del módulo; `outputs-parallel` resuelto. |
+| `outputs`/`outputs-parallel` en `config/suite/config.yml` | `HostConfig`, `ConfigLoader` | Configuración validada; ausente hereda el default. |
 | `sync-bukkit`/`sync-fabric` aún no implementan `SyncSink` | `SyncBukkitActivator.start` solo registra `BukkitChatListener`; no hay `implements SyncSink` en esos módulos | Son sinks por diseño; falta publicar `bukkit`/`fabric` como backends de `sync`. |
 | La entrega local vive en el host | `SpigotChatDelivery.deliver` | Debe quedar detrás del sink `bukkit` para ser seleccionable por `outputs`. |
 
@@ -666,27 +667,28 @@ pipeline.
 
 | Área | Cambio |
 |---|---|
-| `core-api` | `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`; los targets son `List<String>` con formato `multiplexer.backend`. Sin tipos de plataforma. |
-| `suite-runtime` | Resolución de `outputs` (mensaje → suite → módulo), validación y traza. |
+| `core-api` | **Implementado (2026-11-09):** `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`; los targets son `List<String>` con formato `multiplexer.backend`. Sin tipos de plataforma. |
+| `suite-runtime` | **Resolución implementada (2026-11-09):** precedencia mensaje → suite → módulo y validación; la traza del origen sigue pendiente. |
 | `iflow` | `route` usa el target `iflow`; conserva default/fallback de ADR-032. |
 | `chattranslator` | El render de `format` usa el target `chattranslator` para elegir el backend de `<tr>`; conserva default/fallback de ADR-035. |
 | `sync-bus` | `sync` usa los targets `sync`; `sendTo`/`invoke` por backend; fan-out completo si no hay targets. |
 | `sync-bukkit` / `sync-fabric` | Publican el sink local `bukkit`/`fabric` y su superficie (jugadores, consola, canales, eventos); la entrega local pasa por ellos. |
-| Configuración | `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
-| Tests | Orden, paralelo, vacío vs ausente, target desconocido, default de suite y de módulo. |
+| Configuración | **Implementado (2026-11-09):** `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
+| Tests | **Parcial (2026-11-09):** precedencia, vacío vs ausente, target inválido y `outputs-parallel`; faltan orden, paralelo y resultado agregado. |
 
 #### Pasos de implementación
 
-1. **Contrato neutral.** Añadir `OutputPlan`/`ParallelMode` a `core-api` y
+1. **Contrato neutral. ✅ (2026-11-09)** `OutputPlan`/`ParallelMode` en `core-api` y
    `Message.outputPlan()` con `List<String>` de targets `multiplexer.backend`. Inmutable, sin
    `ThreadLocal`; `declared=false` ≠ `targets=[]`.
-2. **Resolución.** Implementar la precedencia mensaje → `config/suite/config.yml` → módulo, con
-   parseo por el primer punto (`multiplexer` / `backend`), validación y error explícito.
-3. **Etapas.** `route` y `sync` leen su target; la traducción de `<tr>` dentro de `format` consulta
-   el target `chattranslator`; sin target aplican su default actual.
-4. **`sync` selectivo.** `sync-bus` expone `sendTo` por `SyncSurface.backend`; conserva el fan-out
-   completo cuando no hay targets. `bukkit` y `fabric` son backends más; la entrega del host queda
-   detrás del sink. No se crea `sync-mux`.
+2. **Resolución. ✅ (2026-11-09)** Precedencia mensaje → `config/suite/config.yml` → módulo, con
+   parseo por el primer punto, validación y error explícito. El plan efectivo se resuelve una vez por
+   emisión en `PipelineEngine` y se expone en `PipelineContext.outputs()`.
+3. **Etapas.** `sync` ya lee sus targets y `route`/`format` conservan su default; falta que `route` y
+   la traducción de `<tr>` consulten `iflow`/`chattranslator`.
+4. **`sync` selectivo. ✅ (2026-11-09)** `sync-bus` expone `sendTo` por `SyncSurface.backend` y
+   conserva el fan-out completo cuando no hay targets. `bukkit` y `fabric` como sinks locales siguen
+   pendientes; no se crea `sync-mux`.
 5. **Orden y paralelismo.** Dispatch en orden; ejecución paralela por defecto solo dentro del mismo
    multiplexor de entrega, con pool acotado; `outputs-parallel: false` para secuencial. La traza
    conserva el orden de la lista.
@@ -697,6 +699,31 @@ pipeline.
    no un camino paralelo al pipeline.
 8. **Documentación y esquema.** `config-schema-v2.2.md` y la wiki; `docs/prompts/` requiere
    autorización.
+
+#### Estado de implementación (2026-11-09)
+
+Completado en esta unidad:
+
+- `Message` gana `outputPlan()` con `OutputPlan.inherit()` por defecto, `withOutputPlan(...)`,
+  copia en `toBuilder()`/`from(...)` y exposición en `toJson()`.
+- `HostConfig` incorpora el plan de suite; `ConfigLoader` lee `outputs` y `outputs-parallel`,
+  valida cada target y reporta como error un valor no booleano o un target sin
+  `<multiplexer>.<backend>`.
+- `OutputPlanResolver` aplica la precedencia mensaje → suite → default del módulo y resuelve
+  `ParallelMode` de forma independiente a los targets.
+- `PipelineEngine` resuelve el plan una vez por emisión y lo entrega a `PipelineContext.outputs()`;
+  `SuiteRuntime` pasa la configuración cargada y `HostFixture` usa el mismo camino.
+- `ConfigSchemaGenerator` expone `config.outputs` (array) y `config.outputs-parallel` (boolean) al
+  editor web; el esquema generado se regeneró y `npm run check` pasa.
+- Tests: `MessageOutputPlanTest`, `OutputPlanResolverTest`, `ConfigLoaderTest` y
+  `PipelineEngineTest` cubren default, precedencia, vacío vs ausente, paralelismo y target inválido.
+
+Pendiente y fuera de esta unidad:
+
+- `route` y la traducción de `<tr>` consultando `iflow.*`/`chattranslator.*`.
+- Orden y paralelismo de entrega, resultado agregado por target y traza del origen del plan.
+- `sync-bukkit`/`sync-fabric` como sinks locales y la entrega local detrás de ellos.
+- Actualización de `config-schema-v2.2.md` (requiere autorización) y `docs/wiki`.
 
 #### Criterios de cierre y tests
 

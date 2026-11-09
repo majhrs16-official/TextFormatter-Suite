@@ -80,6 +80,10 @@ repositories:                       # Host schema; package operations read manag
     url: "https://api.github.com/repos/majhrs16-official/TextFormatter-Suite"
     enabled: true
 module-allowlist: []                # Optional module id allowlist
+outputs:                            # Ordered <multiplexer>.<backend> targets
+  - sync.discord
+  - sync.tcp
+outputs-parallel: true              # true = parallel finalization; false = sequential
 config-version: 1.0
 ```
 
@@ -95,6 +99,13 @@ config-version: 1.0
 | `chat.log-to-console` | boolean | `true` | Mirror chat to the console |
 | `repositories[]` | list | `[]` | Host repository schema (the manager reads `manager/repo.yml`) |
 | `module-allowlist` | list | `[]` | Restrict which modules may activate |
+| `outputs` | list | inherit (fan-out) | Ordered `<multiplexer>.<backend>` targets; absent = module default, `[]` = no outputs |
+| `outputs-parallel` | boolean | `true` | Parallel finalization within the same delivery multiplexer; `false` = sequential |
+
+Output precedence is message (`Message.outputPlan()`) → this file → multiplexer default. Each
+target is split at the first dot: the first segment is the multiplexer and the rest is the backend,
+which may contain dots. An invalid or unknown target is an explicit error, never a silent skip.
+`textformatter` is not a multiplexer and never appears in `outputs`.
 
 The iFlow **backend** is not selected here. `iflow.engine.kind` does not exist.
 The hub owns that decision in `config/iflow/config.yml`.

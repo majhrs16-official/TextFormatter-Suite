@@ -1,6 +1,7 @@
 package me.majhrs16.suite.host.config;
 
 import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.pipeline.OutputPlan;
 
 import java.util.List;
 
@@ -16,6 +17,9 @@ import java.util.List;
  * @param logChatToConsole  whether to also send player chat to server console.
  * @param repositories      list of module repositories (GitHub, local, HTTP)
  * @param pipeline          ordered stage ids from {@code pipeline}
+ * @param outputs           suite-level output plan from {@code outputs} and
+ *                          {@code outputs-parallel}; {@link OutputPlan#inherit()}
+ *                          means "no suite override"
  */
 public record HostConfig(
         boolean quickLook,
@@ -26,7 +30,8 @@ public record HostConfig(
         boolean logChatToConsole,
         List<Repository> repositories,
         List<String> moduleAllowlist,
-        List<String> pipeline
+        List<String> pipeline,
+        OutputPlan outputs
 ) {
 
     /** Base stage order written by the installer on first boot. */
@@ -54,6 +59,6 @@ public record HostConfig(
 
     public static HostConfig defaults() {
         return new HostConfig(true, Language.EN, false, true, ClaimMode.CANCEL_EVENT, true,
-                List.of(), List.of(), BASE_PIPELINE);
+                List.of(), List.of(), BASE_PIPELINE, OutputPlan.inherit());
     }
 }

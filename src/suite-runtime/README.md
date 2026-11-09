@@ -73,6 +73,9 @@ existe un lector de la raíz plana ni de `config/manager/`.
 lee archivos de la raíz plana. `SuiteRuntime.resolveRouter()` exige el hub
 `iflow` y no acepta un `Router` publicado directamente por un motor.
 
+`config/suite/config.yml` acepta `outputs` y `outputs-parallel`; `SuiteRuntime`
+los carga en `HostConfig` y el motor resuelve el plan efectivo por mensaje.
+
 ## 7. Verification
 
 ```bash

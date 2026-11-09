@@ -1,5 +1,7 @@
 package me.majhrs16.suite.api.message;
 
+import me.majhrs16.suite.api.pipeline.OutputPlan;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -37,6 +39,7 @@ public final class Message {
     private final boolean formatPapi;
     private final String channel;
     private final long sleepMillis;
+    private final OutputPlan outputPlan;
 
     private Message(Builder builder) {
         this.id = builder.id != null ? builder.id : UUID.randomUUID();
@@ -56,6 +59,8 @@ public final class Message {
         this.formatPapi = builder.formatPapi;
         this.channel = builder.channel;
         this.sleepMillis = builder.sleepMillis;
+        this.outputPlan = builder.outputPlan != null
+                ? builder.outputPlan : OutputPlan.inherit();
     }
 
     public UUID id() {
@@ -127,6 +132,20 @@ public final class Message {
     /** @return sleep milliseconds for delayed delivery (sleep transform). */
     public long sleepMillis() {
         return sleepMillis;
+    }
+
+    /**
+     * Outputs declared by this message.
+     *
+     * <p>{@link OutputPlan#inherit()} means "use the suite configuration and,
+     * failing that, the multiplexer default"; a declared empty plan means
+     * "no outputs". The engine resolves the effective plan once per emission
+     * and exposes it through the pipeline context.</p>
+     *
+     * @return the immutable output plan, never {@code null}
+     */
+    public OutputPlan outputPlan() {
+        return outputPlan;
     }
 
     /** The first text of the first message; convenience for scripting. */
@@ -204,6 +223,10 @@ public final class Message {
         return toBuilder().sleepMillis(millis).build();
     }
 
+    public Message withOutputPlan(OutputPlan outputPlan) {
+        return toBuilder().outputPlan(outputPlan).build();
+    }
+
     public Message clone() {
         return new Message(toBuilder());
     }
@@ -234,6 +257,9 @@ public final class Message {
         appendJsonField(sb, "formatPapi", formatPapi);
         appendJsonField(sb, "channel", channel);
         appendJsonField(sb, "sleepMillis", sleepMillis);
+        appendJsonField(sb, "outputsDeclared", outputPlan.declared());
+        appendJsonField(sb, "outputs", outputPlan.targets().toArray(new String[0]));
+        appendJsonField(sb, "outputsParallel", outputPlan.parallel().name());
         if (sb.length() > 1) sb.setLength(sb.length() - 1);
         sb.append('}');
         return sb.toString();
@@ -288,6 +314,7 @@ public final class Message {
         private boolean formatPapi = true;
         private String channel;
         private long sleepMillis;
+        private OutputPlan outputPlan;
 
         public Builder() {
         }
@@ -310,6 +337,7 @@ public final class Message {
             this.formatPapi = original.formatPapi;
             this.channel = original.channel;
             this.sleepMillis = original.sleepMillis;
+            this.outputPlan = original.outputPlan;
         }
 
         public Builder id(UUID id) {
@@ -410,6 +438,11 @@ public final class Message {
             return this;
         }
 
+        public Builder outputPlan(OutputPlan outputPlan) {
+            this.outputPlan = outputPlan;
+            return this;
+        }
+
         public Builder from(Message message) {
             if (message == null) return this;
             this.id = message.id;
@@ -429,6 +462,7 @@ public final class Message {
             this.formatPapi = message.formatPapi;
             this.channel = message.channel;
             this.sleepMillis = message.sleepMillis;
+            this.outputPlan = message.outputPlan;
             return this;
         }
 

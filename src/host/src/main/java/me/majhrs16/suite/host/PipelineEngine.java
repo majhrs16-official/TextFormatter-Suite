@@ -3,6 +3,7 @@ package me.majhrs16.suite.host;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
 import me.majhrs16.suite.api.pipeline.PipelinePlan;
@@ -106,18 +107,21 @@ public final class PipelineEngine implements AutoCloseable {
 
         recordSkipped(trace);
         Message resolved = resolveSourceLanguage(message);
+        OutputPlan outputs = OutputPlanResolver.resolve(
+                resolved.outputPlan(), environment.outputs());
         PipelineMessage emission = PipelineMessage.of(resolved);
 
-        StageResult pre = runScope(PipelineScope.MESSAGE_PRE, emission, trace);
+        StageResult pre = runScope(PipelineScope.MESSAGE_PRE, emission, trace, outputs);
         if (pre.terminal()) {
             return terminalOutcome(status, trace, pre);
         }
         emission = pre.message();
 
         List<Actor> expanded = recipients.resolve(emission.message());
-        RecipientCounters counters = deliverToRecipients(emission, expanded, trace);
+        RecipientCounters counters = deliverToRecipients(emission, expanded, trace, outputs);
 
-        PipelineMessage post = runScope(PipelineScope.MESSAGE_POST, emission, trace).message();
+        PipelineMessage post = runScope(
+                PipelineScope.MESSAGE_POST, emission, trace, outputs).message();
         boolean cancelEvent = emission.cancelEvent() || post.cancelEvent()
                 || counters.cancelEvent;
 
@@ -128,14 +132,15 @@ public final class PipelineEngine implements AutoCloseable {
 
     private RecipientCounters deliverToRecipients(PipelineMessage emission,
                                                List<Actor> expanded,
-                                               PipelineTrace trace) {
+                                               PipelineTrace trace,
+                                               OutputPlan outputs) {
         if (expanded.isEmpty()) {
             return new RecipientCounters();
         }
         if (!environment.parallel() || expanded.size() == 1) {
             RecipientCounters counters = new RecipientCounters();
             for (Actor recipient : expanded) {
-                merge(counters, deliverTo(emission, recipient, trace));
+                merge(counters, deliverTo(emission, recipient, trace, outputs));
             }
             return counters;
         }
@@ -143,7 +148,7 @@ public final class PipelineEngine implements AutoCloseable {
         List<CompletableFuture<RecipientOutcome>> futures = new ArrayList<>(expanded.size());
         for (Actor recipient : expanded) {
             futures.add(CompletableFuture.supplyAsync(
-                    () -> deliverTo(emission, recipient, trace), workers));
+                    () -> deliverTo(emission, recipient, trace, outputs), workers));
         }
 
         RecipientCounters counters = new RecipientCounters();
@@ -169,9 +174,10 @@ public final class PipelineEngine implements AutoCloseable {
 
     private RecipientOutcome deliverTo(PipelineMessage emission,
                                        Actor recipient,
-                                       PipelineTrace trace) {
+                                       PipelineTrace trace,
+                                       OutputPlan outputs) {
         PipelineMessage unit = emission.withRecipient(recipient);
-        StageResult result = runScope(PipelineScope.RECIPIENT, unit, trace);
+        StageResult result = runScope(PipelineScope.RECIPIENT, unit, trace, outputs);
         if (result.terminal()) {
             boolean cancel = result.message().cancelEvent();
             return switch (result.kind()) {
@@ -206,14 +212,16 @@ public final class PipelineEngine implements AutoCloseable {
 
     private StageResult runScope(PipelineScope scope,
                                  PipelineMessage unit,
-                                 PipelineTrace trace) {
+                                 PipelineTrace trace,
+                                 OutputPlan outputs) {
         PipelineMessage current = unit;
         for (ResolvedStage stage : stages) {
             if (!stage.scopes().contains(scope)) {
                 continue;
             }
             PipelineContext context = new DefaultPipelineContext(
-                    current.message().id().toString(), scope, environment, trace, planVersion);
+                    current.message().id().toString(), scope, environment, outputs,
+                    trace, planVersion);
             StageResult result = invoke(stage, scope, current, context);
             if (result.terminal()) {
                 return result;

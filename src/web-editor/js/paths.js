@@ -97,6 +97,18 @@
           type: 'boolean',
           default: true,
         },
+        'config.outputs': {
+          label: 'Outputs',
+          desc: '',
+          type: 'array',
+          default: [],
+        },
+        'config.outputs-parallel': {
+          label: 'Outputs Parallel',
+          desc: '',
+          type: 'boolean',
+          default: true,
+        },
         'channels[].name': {
           label: 'Channel Name',
           desc: '',

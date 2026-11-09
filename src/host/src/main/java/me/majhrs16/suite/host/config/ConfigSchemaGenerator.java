@@ -75,6 +75,12 @@ public final class ConfigSchemaGenerator {
         if (enumName.startsWith("QUICK_LOOK")) {
             return "config.quick-look";
         }
+        if (enumName.equals("OUTPUTS_PARALLEL")) {
+            return "config.outputs-parallel";
+        }
+        if (enumName.equals("OUTPUTS")) {
+            return "config.outputs";
+        }
         if (enumName.startsWith("IFLOW_ENGINE_PARALLEL")) {
             return "config.iflow.engine.parallel";
         }
@@ -920,6 +926,7 @@ public final class ConfigSchemaGenerator {
     }
 
     private static String inferType(ConfigLoader.ConfigPath cp) {
+        if (cp == ConfigLoader.ConfigPath.OUTPUTS) return "array";
         String name = cp.name().toLowerCase();
         if (name.contains("parallel") || name.contains("enabled") || name.contains("show") || name.contains("log") || name.contains("dedup")) {
             return "boolean";
@@ -931,6 +938,8 @@ public final class ConfigSchemaGenerator {
     }
 
     private static Object getDefaultValue(ConfigLoader.ConfigPath cp) {
+        if (cp == ConfigLoader.ConfigPath.OUTPUTS) return List.of();
+        if (cp == ConfigLoader.ConfigPath.OUTPUTS_PARALLEL) return true;
         String name = cp.name().toLowerCase();
         if (name.contains("parallel")) return false;
         if (name.contains("enabled") || name.contains("show") || name.contains("log") || name.contains("dedup")) return true;

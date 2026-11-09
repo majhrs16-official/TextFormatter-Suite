@@ -10,7 +10,8 @@
 
 - **Pipeline** — `PipelineEngine` ejecuta la lista ordenada de `PipelineStage`
   en tres fases (`MESSAGE_PRE`, `RECIPIENT`, `MESSAGE_POST`) y produce un
-  `PipelineOutcome` con estado, contadores y traza.
+  `PipelineOutcome` con estado, contadores y traza. `OutputPlanResolver` fija
+  el plan de salidas efectivo una vez por emisión (mensaje → suite → default).
 - **Message dispatch** — `RecipientResolver` expande `Direction` con
   `ActorDirectory`; `DeliveryExecutor` aplica `sleepMillis`, sonidos y
   `ChatDelivery`.
@@ -56,6 +57,7 @@
 | Component | Role |
 |-----------|------|
 | `PipelineEngine` | Orden, fases, expansión por destinatario, entrega y traza |
+| `OutputPlanResolver` | Precedencia mensaje → `config/suite/config.yml` → default del módulo |
 | `RecipientResolver` | Expande `Direction` con `ActorDirectory` y políticas fail-closed |
 | `DeliveryExecutor` | `sleepMillis`, sonidos y llamadas a `ChatDelivery` |
 | `PipelineOutcome` | Estado, contadores y traza de un despacho |
@@ -76,6 +78,8 @@ PipelinePlan + etapas publicadas (route, format, sync)
   ↓
 PipelineEngine.dispatch(Message)
   ↓
+OutputPlanResolver (mensaje → suite → default) → PipelineContext.outputs()
+  ↓
 MESSAGE_PRE → RecipientResolver → RECIPIENT (route → format) → DeliveryExecutor → MESSAGE_POST (sync)
   ↓
 PipelineOutcome (status, considered, delivered, silenced, redirected, failed, trace)
@@ -90,11 +94,12 @@ PipelineOutcome (status, considered, delivered, silenced, redirected, failed, tr
 ## 8. Exploration path
 
 1. `PipelineEngine.java`
-2. `RecipientResolver.java` y `DeliveryExecutor.java`
-3. `PipelineOutcome.java` y `BoundedPipelineTrace.java`
-4. `config/ConfigLoader.java` y `config/HostPaths.java`
-5. `config/MessagesConfig.java`
-6. `debug/DebugEndpoint.java`
+2. `OutputPlanResolver.java`
+3. `RecipientResolver.java` y `DeliveryExecutor.java`
+4. `PipelineOutcome.java` y `BoundedPipelineTrace.java`
+5. `config/ConfigLoader.java` y `config/HostPaths.java`
+6. `config/MessagesConfig.java`
+7. `debug/DebugEndpoint.java`
 
 ## 9. Related modules
 

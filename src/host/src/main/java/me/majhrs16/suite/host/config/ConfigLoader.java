@@ -3,6 +3,8 @@ package me.majhrs16.suite.host.config;
 import me.majhrs16.suite.api.config.ConfigVersion;
 import me.majhrs16.suite.api.config.ConfigVersionException;
 import me.majhrs16.suite.api.message.Language;
+import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
 import org.yaml.snakeyaml.Yaml;
@@ -95,9 +97,10 @@ public final class ConfigLoader {
             List<HostConfig.Repository> repositories = parseRepositories(map, logger);
             List<String> moduleAllowlist = parseModuleAllowlist(map);
             List<String> pipeline = parsePipeline(map, errors);
+            OutputPlan outputs = parseOutputs(map, errors);
 
             HostConfig config = new HostConfig(quickLook, defaultLang, parallel, sound,
-                    claimMode, logChatToConsole, repositories, moduleAllowlist, pipeline);
+                    claimMode, logChatToConsole, repositories, moduleAllowlist, pipeline, outputs);
             return errors.isEmpty()
                     ? LoadResult.success(config)
                     : LoadResult.degraded(config, errors);
@@ -166,6 +169,8 @@ public final class ConfigLoader {
         REPOSITORY_TYPE("type"),
         REPOSITORY_ENABLED("enabled"),
         PIPELINE("pipeline"),
+        OUTPUTS("outputs"),
+        OUTPUTS_PARALLEL("outputs-parallel"),
         CHANNEL_NAME("name"),
         CHANNEL_PERMISSION("permission"),
         CHANNEL_SEND_PERMISSION("send-permission"),
@@ -212,6 +217,51 @@ public final class ConfigLoader {
             stageIds.add(id);
         }
         return List.copyOf(stageIds);
+    }
+
+    /**
+     * Reads the suite-level output plan.
+     *
+     * <p>A missing {@code outputs} key means "no suite override" and resolves
+     * to an inherited plan. An empty list is a declared plan with no outputs.
+     * Invalid targets and a non-boolean {@code outputs-parallel} are reported
+     * as config errors instead of being silently ignored.</p>
+     */
+    private static OutputPlan parseOutputs(Map<String, Object> map, List<String> errors) {
+        ParallelMode parallel = parseParallel(map.get(ConfigPath.OUTPUTS_PARALLEL.key()), errors);
+        Object raw = map.get(ConfigPath.OUTPUTS.key());
+        if (raw == null) {
+            return new OutputPlan(false, List.of(), parallel);
+        }
+        if (!(raw instanceof List<?> list)) {
+            errors.add("'outputs' must be a list of '<multiplexer>.<backend>' targets");
+            return OutputPlan.inherit();
+        }
+        List<String> targets = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof String target) || target.isBlank()) {
+                errors.add("'outputs' contains a non-string or blank target");
+                return OutputPlan.inherit();
+            }
+            targets.add(target);
+        }
+        try {
+            return new OutputPlan(true, targets, parallel);
+        } catch (IllegalArgumentException invalid) {
+            errors.add("invalid 'outputs': " + invalid.getMessage());
+            return OutputPlan.inherit();
+        }
+    }
+
+    private static ParallelMode parseParallel(Object raw, List<String> errors) {
+        if (raw == null) {
+            return ParallelMode.INHERIT;
+        }
+        if (raw instanceof Boolean value) {
+            return value ? ParallelMode.PARALLEL : ParallelMode.SEQUENTIAL;
+        }
+        errors.add("'outputs-parallel' must be a boolean");
+        return ParallelMode.INHERIT;
     }
 
     private static List<HostConfig.Repository> parseRepositories(Map<String, Object> map, PluginLogger logger) {

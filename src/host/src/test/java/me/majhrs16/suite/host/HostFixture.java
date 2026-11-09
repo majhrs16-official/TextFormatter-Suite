@@ -12,7 +12,6 @@ import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.SoundSpec;
-import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelinePlan;
 import me.majhrs16.suite.api.pipeline.PipelineServices;
 import me.majhrs16.suite.api.pipeline.PipelineSettings;
@@ -178,7 +177,7 @@ final class HostFixture {
                 new PipelineSettings(config.defaultLanguage(),
                         config.engineParallel(), config.soundEnabled()),
                 EmptyServices.INSTANCE,
-                OutputPlan.inherit(),
+                config.outputs(),
                 logger,
                 config.engineParallel());
         RecipientResolver recipients = new RecipientResolver(effectiveActors, permissions, logger);

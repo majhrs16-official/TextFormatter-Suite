@@ -22,7 +22,6 @@ import me.majhrs16.suite.api.command.CommandRegistry;
 import me.majhrs16.suite.api.command.CommandRoot;
 import me.majhrs16.suite.api.config.ConfigRegistry;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
-import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelinePlan;
 import me.majhrs16.suite.api.pipeline.PipelineServices;
 import me.majhrs16.suite.api.pipeline.PipelineSettings;
@@ -246,7 +245,7 @@ public final class SuiteRuntime implements AutoCloseable {
                     new PipelineSettings(loaded.defaultLanguage(),
                             loaded.engineParallel(), loaded.soundEnabled()),
                     new RegistryServices(moduleHost.services()),
-                    OutputPlan.inherit(),
+                    loaded.outputs(),
                     logger,
                     loaded.engineParallel());
             RecipientResolver recipients = new RecipientResolver(actors, permissions, logger);

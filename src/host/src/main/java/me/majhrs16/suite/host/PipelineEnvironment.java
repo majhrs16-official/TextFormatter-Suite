@@ -17,7 +17,9 @@ import java.util.Optional;
  *
  * <p>Feature-specific services are resolved by each stage's module and passed
  * to the stage constructor; this environment only carries the cross-cutting
- * ports. {@code channels} is empty when {@code textformatter} is not active.</p>
+ * ports. {@code channels} is empty when {@code textformatter} is not active.
+ * {@code outputs} is the suite-level plan from {@code config.yml}; the engine
+ * resolves the effective per-message plan with {@link OutputPlanResolver}.</p>
  */
 public record PipelineEnvironment(
         ActorDirectory actors,
