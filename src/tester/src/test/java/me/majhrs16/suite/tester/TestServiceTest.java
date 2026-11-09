@@ -68,7 +68,8 @@ class TestServiceTest {
         public DispatchOutcome dispatch(Message message) {
             dispatches.incrementAndGet();
             int delivered = message.direction().kind() == Direction.Kind.SPECIFIC ? 1 : 2;
-            return new DispatchOutcome(PipelineStatus.READY, delivered, delivered, 0, 0, 0);
+            return new DispatchOutcome(PipelineStatus.READY, delivered, delivered, 0, 0, 0,
+                    java.util.List.of());
         }
 
         @Override public void format(Message message) { }

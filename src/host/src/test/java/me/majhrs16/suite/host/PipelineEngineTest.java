@@ -133,6 +133,56 @@ class PipelineEngineTest {
     }
 
     @Test
+    void recordsTheOriginOfTheEffectiveOutputPlan() {
+        PipelineStage stage = recipientStage("format", StageResult::continueWith);
+        PipelinePlan plan = PipelinePlan.of(List.of("format"), 1L);
+        List<ResolvedStage> stages = List.of(new ResolvedStage("format", "textformatter", stage));
+
+        StageTrace fromMessage = outputOrigin(engine(plan, stages).dispatch(
+                message().withOutputPlan(OutputPlan.of(
+                        List.of("sync.discord"), ParallelMode.PARALLEL))));
+        assertEquals("message", fromMessage.detail());
+
+        StageTrace fromSuite = outputOrigin(engine(
+                plan, stages, List.of(),
+                OutputPlan.of(List.of("sync.discord"), ParallelMode.PARALLEL))
+                .dispatch(message()));
+        assertEquals("suite", fromSuite.detail());
+
+        StageTrace fromDefault = outputOrigin(engine(plan, stages).dispatch(message()));
+        assertEquals("module-default", fromDefault.detail());
+    }
+
+    @Test
+    void collectsPerTargetOutputsFromPostStages() {
+        me.majhrs16.suite.api.pipeline.OutputOutcome ok =
+                new me.majhrs16.suite.api.pipeline.OutputOutcome(
+                        "sync.discord", new me.majhrs16.suite.api.sync.SyncResult.Ok(null));
+        me.majhrs16.suite.api.pipeline.OutputOutcome failed =
+                new me.majhrs16.suite.api.pipeline.OutputOutcome(
+                        "sync.tcp", new me.majhrs16.suite.api.sync.SyncResult.HostFailure("down"));
+        PipelineStage sync = new BaseStage("sync") {
+            @Override
+            public Set<PipelineScope> scopes() {
+                return Set.of(PipelineScope.MESSAGE_POST);
+            }
+
+            @Override
+            public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+                return StageResult.continueWith(message, List.of(ok, failed));
+            }
+        };
+
+        PipelineOutcome outcome = engine(
+                PipelinePlan.of(List.of("sync"), 1L),
+                List.of(new ResolvedStage("sync", "sync-bus", sync))).dispatch(message());
+
+        assertEquals(List.of(ok, failed), outcome.outputs());
+        assertTrue(outcome.outputs().get(1).result()
+                instanceof me.majhrs16.suite.api.sync.SyncResult.HostFailure);
+    }
+
+    @Test
     void preAndPostPhasesRunOncePerEmission() {
         AtomicInteger pre = new AtomicInteger();
         AtomicInteger post = new AtomicInteger();
@@ -316,6 +366,13 @@ class PipelineEngineTest {
                 .text("hello")
                 .direction(Direction.all())
                 .build();
+    }
+
+    private static StageTrace outputOrigin(PipelineOutcome outcome) {
+        return outcome.trace().entries().stream()
+                .filter(entry -> entry.stageId().equals("outputs"))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static StageTrace onlyTrace(PipelineOutcome outcome) {

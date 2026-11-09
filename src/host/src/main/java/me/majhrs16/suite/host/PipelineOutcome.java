@@ -1,8 +1,10 @@
 package me.majhrs16.suite.host;
 
+import me.majhrs16.suite.api.pipeline.OutputOutcome;
 import me.majhrs16.suite.api.pipeline.PipelineStatus;
 import me.majhrs16.suite.api.pipeline.PipelineTrace;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -15,6 +17,7 @@ import java.util.Objects;
  * @param redirected console copies produced by a redirect decision
  * @param failed     recipients whose stage or delivery failed
  * @param cancelEvent whether a stage requested cancelling the platform event
+ * @param outputs    per-target delivery results, in output-plan order
  * @param trace      per-stage trace for diagnostics
  * @param skipReason why nothing ran ({@code null} when the pass ran)
  */
@@ -26,18 +29,20 @@ public record PipelineOutcome(
         int redirected,
         int failed,
         boolean cancelEvent,
+        List<OutputOutcome> outputs,
         PipelineTrace trace,
         String skipReason
 ) {
 
     public PipelineOutcome {
         Objects.requireNonNull(status, "status");
+        outputs = List.copyOf(Objects.requireNonNull(outputs, "outputs"));
         Objects.requireNonNull(trace, "trace");
     }
 
     /** Outcome for a message that never entered the pipeline. */
     public static PipelineOutcome none(PipelineStatus status, PipelineTrace trace, String reason) {
-        return new PipelineOutcome(status, 0, 0, 0, 0, 0, false, trace, reason);
+        return new PipelineOutcome(status, 0, 0, 0, 0, 0, false, List.of(), trace, reason);
     }
 
     /** @return whether anything reached a destination */

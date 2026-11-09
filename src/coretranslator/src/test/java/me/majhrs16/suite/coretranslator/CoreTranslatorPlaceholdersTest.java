@@ -301,6 +301,14 @@ class CoreTranslatorPlaceholdersTest {
         }
 
         @Override
+        public List<SyncResult> sendTo(List<String> backends, Message message,
+                                       me.majhrs16.suite.api.pipeline.ParallelMode mode) {
+            return backends.stream()
+                    .flatMap(backend -> sendTo(backend, message).stream())
+                    .toList();
+        }
+
+        @Override
         public void setInboundListener(SyncListener listener) {
         }
 

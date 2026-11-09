@@ -85,6 +85,22 @@ class OutputPlanResolverTest {
     }
 
     @Test
+    void originNamesTheLevelThatDeclaredTheTargets() {
+        OutputPlan message = OutputPlan.of(
+                List.of("sync.discord"), ParallelMode.INHERIT);
+        OutputPlan suite = OutputPlan.of(
+                List.of("sync.telegram"), ParallelMode.PARALLEL);
+
+        assertEquals(OutputPlanResolver.Origin.MESSAGE,
+                OutputPlanResolver.resolveDetailed(message, suite).origin());
+        assertEquals(OutputPlanResolver.Origin.SUITE,
+                OutputPlanResolver.resolveDetailed(OutputPlan.inherit(), suite).origin());
+        assertEquals(OutputPlanResolver.Origin.MODULE_DEFAULT,
+                OutputPlanResolver.resolveDetailed(
+                        OutputPlan.inherit(), OutputPlan.inherit()).origin());
+    }
+
+    @Test
     void suiteParallelAppliesEvenWithoutSuiteTargets() {
         OutputPlan suite = new OutputPlan(
                 false, List.of(), ParallelMode.SEQUENTIAL);

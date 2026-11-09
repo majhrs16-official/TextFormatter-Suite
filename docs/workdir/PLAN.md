@@ -638,8 +638,9 @@ planificar el cambio. Se registra como deuda de baja prioridad, no como requisit
 
 ### Feature propuesta — multiplexación de salidas por mensaje (PL-3, 2026-11-06)
 
-> **Estado:** contrato, resolución y etapas selectivas implementados (2026-11-09); paralelismo,
-> resultado agregado y sinks locales pendientes. Depende de **ADR-036 §17** (aceptado el 2026-11-06).
+> **Estado:** contrato, resolución, etapas selectivas, orden/paralelismo y resultado agregado
+> implementados (2026-11-09); sinks locales pendientes. Depende de **ADR-036 §17** (aceptado el
+> 2026-11-06).
 
 #### Objetivo
 
@@ -668,13 +669,13 @@ pipeline.
 | Área | Cambio |
 |---|---|
 | `core-api` | **Implementado (2026-11-09):** `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`; los targets son `List<String>` con formato `multiplexer.backend`. Sin tipos de plataforma. |
-| `suite-runtime` | **Resolución implementada (2026-11-09):** precedencia mensaje → suite → módulo y validación; la traza del origen sigue pendiente. |
+| `suite-runtime` | **Implementado (2026-11-09):** precedencia mensaje → suite → módulo, validación y traza del origen (`message`, `suite`, `module-default`) como entrada sintética `outputs`. |
 | `iflow` | **Implementado (2026-11-09):** `route` resuelve el target `iflow.<backend>` por el hub y conserva default/fallback de ADR-032; dos targets o un backend desconocido son error explícito. |
 | `chattranslator` | **Implementado (2026-11-09):** el render de `format` usa el target `chattranslator.<backend>` para elegir el backend de `<tr>`; conserva default/fallback de la fachada. |
-| `sync-bus` | `sync` usa los targets `sync`; `sendTo`/`invoke` por backend; fan-out completo si no hay targets. |
+| `sync-bus` | **Implementado (2026-11-09):** `sync` usa los targets `sync` en orden; `sendTo(List, Message, ParallelMode)` respeta `outputs-parallel`; fan-out completo si no hay targets. |
 | `sync-bukkit` / `sync-fabric` | Publican el sink local `bukkit`/`fabric` y su superficie (jugadores, consola, canales, eventos); la entrega local pasa por ellos. |
 | Configuración | **Implementado (2026-11-09):** `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
-| Tests | **Parcial (2026-11-09):** precedencia, vacío vs ausente, target inválido, `outputs-parallel` y selección de backend en `route`/`<tr>`; faltan orden, paralelo y resultado agregado. |
+| Tests | **Implementado (2026-11-09):** precedencia, vacío vs ausente, target inválido, `outputs-parallel`, selección de backend en `route`/`<tr>`, origen del plan, orden/paralelismo de `sync` y resultado agregado por target. |
 
 #### Pasos de implementación
 
@@ -691,11 +692,13 @@ pipeline.
 4. **`sync` selectivo. ✅ (2026-11-09)** `sync-bus` expone `sendTo` por `SyncSurface.backend` y
    conserva el fan-out completo cuando no hay targets. `bukkit` y `fabric` como sinks locales siguen
    pendientes; no se crea `sync-mux`.
-5. **Orden y paralelismo.** Dispatch en orden; ejecución paralela por defecto solo dentro del mismo
-   multiplexor de entrega, con pool acotado; `outputs-parallel: false` para secuencial. La traza
-   conserva el orden de la lista.
-6. **Resultado agregado.** `DispatchOutcome` marca el fallo parcial por target; sin éxito fingido ni
-   rollback.
+5. **Orden y paralelismo. ✅ (2026-11-09)** `sync` inicia los targets en el orden declarado.
+   `SyncBus.sendTo(List, Message, ParallelMode)` encola todos los targets y espera en paralelo por
+   defecto; `SEQUENTIAL` espera cada target antes de iniciar el siguiente. La traza conserva el
+   orden de la lista.
+6. **Resultado agregado. ✅ (2026-11-09)** `OutputOutcome` (target + `SyncResult`) viaja en
+   `StageResult`, `PipelineOutcome` y `DispatchOutcome`; un fallo parcial queda visible sin éxito
+   fingido ni rollback. La traza registra el origen del plan como entrada sintética `outputs`.
 7. **Guardas.** `checkArchitecture`: `core-api` sin SDK; `multiplexer:*` declarativo, nunca
    `Requirement`; `textformatter` no es multiplexor; la entrega local es el sink `bukkit`/`fabric`,
    no un camino paralelo al pipeline.
@@ -726,10 +729,18 @@ Completado en esta unidad:
 - Tests: `RouteStageTest`, `IflowHubTest`, `FormatStageTest`, `TemplateRendererTest` y
   `TranslationServiceBackendTest` cubren selección, conflicto, backend desconocido/no disponible y
   separación de caché por backend.
+- `OutputPlanResolver.resolveDetailed(...)` expone el origen del plan; `PipelineEngine` lo registra
+  como entrada sintética `outputs` (`message`, `suite`, `module-default`).
+- `SyncBus.sendTo(List, Message, ParallelMode)` reutiliza las colas por sink: en paralelo encola
+  todos los targets antes de esperar; en secuencial espera cada uno. `SyncStage` conserva el orden,
+  expone un `OutputOutcome` por target y mantiene el fan-out completo cuando el plan se hereda.
+- `OutputOutcome` viaja en `StageResult`, `PipelineOutcome` y `DispatchOutcome`; los contadores de
+  destinatarios no se mezclan con el fallo parcial de una salida.
+- Tests: `OutputPlanResolverTest`, `PipelineEngineTest`, `SyncStageTest` y `DefaultSyncBusTest`
+  cubren origen del plan, orden, paralelo, secuencial, backend desconocido y fallo parcial.
 
 Pendiente y fuera de esta unidad:
 
-- Orden y paralelismo de entrega, resultado agregado por target y traza del origen del plan.
 - `sync-bukkit`/`sync-fabric` como sinks locales y la entrega local detrás de ellos.
 - Actualización de `config-schema-v2.2.md` (requiere autorización) y `docs/wiki`.
 

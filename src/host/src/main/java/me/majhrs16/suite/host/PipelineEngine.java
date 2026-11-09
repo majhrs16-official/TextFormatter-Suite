@@ -3,6 +3,7 @@ package me.majhrs16.suite.host;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.OutputOutcome;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
@@ -107,8 +108,10 @@ public final class PipelineEngine implements AutoCloseable {
 
         recordSkipped(trace);
         Message resolved = resolveSourceLanguage(message);
-        OutputPlan outputs = OutputPlanResolver.resolve(
+        OutputPlanResolver.Resolution resolution = OutputPlanResolver.resolveDetailed(
                 resolved.outputPlan(), environment.outputs());
+        OutputPlan outputs = resolution.plan();
+        recordOutputOrigin(trace, resolution);
         PipelineMessage emission = PipelineMessage.of(resolved);
 
         StageResult pre = runScope(PipelineScope.MESSAGE_PRE, emission, trace, outputs);
@@ -120,14 +123,19 @@ public final class PipelineEngine implements AutoCloseable {
         List<Actor> expanded = recipients.resolve(emission.message());
         RecipientCounters counters = deliverToRecipients(emission, expanded, trace, outputs);
 
-        PipelineMessage post = runScope(
-                PipelineScope.MESSAGE_POST, emission, trace, outputs).message();
-        boolean cancelEvent = emission.cancelEvent() || post.cancelEvent()
+        StageResult post = runScope(
+                PipelineScope.MESSAGE_POST, emission, trace, outputs);
+        boolean cancelEvent = emission.cancelEvent() || post.message().cancelEvent()
                 || counters.cancelEvent;
+
+        List<OutputOutcome> outputResults = new ArrayList<>();
+        outputResults.addAll(pre.outputs());
+        outputResults.addAll(counters.outputs);
+        outputResults.addAll(post.outputs());
 
         return new PipelineOutcome(status, expanded.size(), counters.delivered,
                 counters.silenced, counters.redirected, counters.failed,
-                cancelEvent, trace, null);
+                cancelEvent, outputResults, trace, null);
     }
 
     private RecipientCounters deliverToRecipients(PipelineMessage emission,
@@ -181,8 +189,8 @@ public final class PipelineEngine implements AutoCloseable {
         if (result.terminal()) {
             boolean cancel = result.message().cancelEvent();
             return switch (result.kind()) {
-                case DROP, REJECT -> RecipientOutcome.silenced(cancel);
-                case ERROR -> RecipientOutcome.failed(cancel);
+                case DROP, REJECT -> RecipientOutcome.silenced(cancel, result.outputs());
+                case ERROR -> RecipientOutcome.failed(cancel, result.outputs());
                 case CONTINUE, NOT_APPLICABLE -> throw new IllegalStateException(
                         "terminal result with non-terminal kind: " + result.kind());
             };
@@ -191,14 +199,14 @@ public final class PipelineEngine implements AutoCloseable {
         boolean cancel = unit.cancelEvent();
         try {
             return switch (delivery.deliver(recipient, unit).kind()) {
-                case DELIVERED -> RecipientOutcome.delivered(cancel);
-                case SILENCED -> RecipientOutcome.silenced(cancel);
-                case REDIRECTED -> RecipientOutcome.redirected(cancel);
-                case FAILED -> RecipientOutcome.failed(cancel);
+                case DELIVERED -> RecipientOutcome.delivered(cancel, result.outputs());
+                case SILENCED -> RecipientOutcome.silenced(cancel, result.outputs());
+                case REDIRECTED -> RecipientOutcome.redirected(cancel, result.outputs());
+                case FAILED -> RecipientOutcome.failed(cancel, result.outputs());
             };
         } catch (RuntimeException failure) {
             environment.logger().error("delivery failed for " + recipient.name(), failure);
-            return RecipientOutcome.failed(cancel);
+            return RecipientOutcome.failed(cancel, result.outputs());
         }
     }
 
@@ -215,6 +223,7 @@ public final class PipelineEngine implements AutoCloseable {
                                  PipelineTrace trace,
                                  OutputPlan outputs) {
         PipelineMessage current = unit;
+        List<OutputOutcome> collected = new ArrayList<>();
         for (ResolvedStage stage : stages) {
             if (!stage.scopes().contains(scope)) {
                 continue;
@@ -223,12 +232,13 @@ public final class PipelineEngine implements AutoCloseable {
                     current.message().id().toString(), scope, environment, outputs,
                     trace, planVersion);
             StageResult result = invoke(stage, scope, current, context);
+            collected.addAll(result.outputs());
             if (result.terminal()) {
-                return result;
+                return result.withOutputs(collected);
             }
             current = result.message();
         }
-        return StageResult.continueWith(current);
+        return StageResult.continueWith(current, collected);
     }
 
     private StageResult invoke(ResolvedStage stage,
@@ -286,6 +296,17 @@ public final class PipelineEngine implements AutoCloseable {
         }
     }
 
+    /**
+     * Records where the effective output plan came from. The entry uses the
+     * synthetic id {@code outputs} and is not a pipeline stage.
+     */
+    private static void recordOutputOrigin(PipelineTrace trace,
+                                           OutputPlanResolver.Resolution resolution) {
+        trace.record(new StageTrace(
+                "outputs", null, null, null,
+                StageStatus.RUN, resolution.origin().wireName(), 0L));
+    }
+
     private void recordSkipped(PipelineTrace trace) {
         for (SkippedStage absent : skipped) {
             trace.record(new StageTrace(
@@ -300,10 +321,10 @@ public final class PipelineEngine implements AutoCloseable {
         return switch (result.kind()) {
             case DROP, REJECT -> new PipelineOutcome(
                     status, 0, 0, 1, 0, 0,
-                    result.message().cancelEvent(), trace, result.detail());
+                    result.message().cancelEvent(), result.outputs(), trace, result.detail());
             case ERROR -> new PipelineOutcome(
                     status, 0, 0, 0, 0, 1,
-                    result.message().cancelEvent(), trace, result.detail());
+                    result.message().cancelEvent(), result.outputs(), trace, result.detail());
             case CONTINUE, NOT_APPLICABLE -> throw new IllegalStateException(
                     "non-terminal result in terminal outcome");
         };
@@ -343,6 +364,7 @@ public final class PipelineEngine implements AutoCloseable {
 
     private static void merge(RecipientCounters counters, RecipientOutcome outcome) {
         counters.cancelEvent |= outcome.cancelEvent();
+        counters.outputs.addAll(outcome.outputs());
         switch (outcome.kind()) {
             case DELIVERED -> counters.delivered++;
             case SILENCED -> counters.silenced++;
@@ -364,24 +386,29 @@ public final class PipelineEngine implements AutoCloseable {
         }
     }
 
-    private record RecipientOutcome(Kind kind, boolean cancelEvent) {
+    private record RecipientOutcome(Kind kind, boolean cancelEvent,
+                                    List<OutputOutcome> outputs) {
 
         enum Kind { DELIVERED, SILENCED, REDIRECTED, FAILED }
 
-        static RecipientOutcome delivered(boolean cancel) {
-            return new RecipientOutcome(Kind.DELIVERED, cancel);
+        RecipientOutcome {
+            outputs = List.copyOf(outputs);
         }
 
-        static RecipientOutcome silenced(boolean cancel) {
-            return new RecipientOutcome(Kind.SILENCED, cancel);
+        static RecipientOutcome delivered(boolean cancel, List<OutputOutcome> outputs) {
+            return new RecipientOutcome(Kind.DELIVERED, cancel, outputs);
         }
 
-        static RecipientOutcome redirected(boolean cancel) {
-            return new RecipientOutcome(Kind.REDIRECTED, cancel);
+        static RecipientOutcome silenced(boolean cancel, List<OutputOutcome> outputs) {
+            return new RecipientOutcome(Kind.SILENCED, cancel, outputs);
         }
 
-        static RecipientOutcome failed(boolean cancel) {
-            return new RecipientOutcome(Kind.FAILED, cancel);
+        static RecipientOutcome redirected(boolean cancel, List<OutputOutcome> outputs) {
+            return new RecipientOutcome(Kind.REDIRECTED, cancel, outputs);
+        }
+
+        static RecipientOutcome failed(boolean cancel, List<OutputOutcome> outputs) {
+            return new RecipientOutcome(Kind.FAILED, cancel, outputs);
         }
     }
 
@@ -391,5 +418,6 @@ public final class PipelineEngine implements AutoCloseable {
         int redirected;
         int failed;
         boolean cancelEvent;
+        final List<OutputOutcome> outputs = new ArrayList<>();
     }
 }

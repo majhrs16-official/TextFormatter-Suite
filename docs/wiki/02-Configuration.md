@@ -113,6 +113,11 @@ Transform multiplexers (`iflow`, `chattranslator`) accept at most one target. `r
 configured default and fallback. Two targets of the same transform multiplexer are a conflict, and
 an unknown backend is an explicit error. `sync` accepts several targets and delivers in order.
 
+`outputs-parallel: true` starts every `sync` target before waiting for completion; `false` waits for
+each target before starting the next one. The result keeps the declared order and reports one
+outcome per target, so a partial failure is visible instead of being counted as a total success.
+With no `outputs` at any level, `sync` keeps the full fan-out to every registered sink.
+
 The iFlow **global default** is not selected here. `iflow.engine.kind` does not exist; the hub owns
 the default in `config/iflow/config.yml`. An `iflow.<backend>` target only overrides that default
 for the message that declares it.

@@ -290,6 +290,12 @@ public final class DebugEndpoint {
                 result.put("silenced", outcome.silenced());
                 result.put("redirected", outcome.redirected());
                 result.put("failed", outcome.failed());
+                result.put("outputs", outcome.outputs().stream()
+                        .map(output -> Map.of(
+                                "target", output.target(),
+                                "ok", output.isOk(),
+                                "result", output.result().toString()))
+                        .toList());
                 result.put("message", content);
                 lastSimulationResult.putAll(result);
 

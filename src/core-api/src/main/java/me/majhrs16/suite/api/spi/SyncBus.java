@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.sync.SyncCall;
 import me.majhrs16.suite.api.sync.SyncResult;
 import me.majhrs16.suite.api.sync.SyncSurface;
@@ -117,6 +118,23 @@ public interface SyncBus extends AutoCloseable {
      *         {@link SyncResult.Unsupported} when it is not registered
      */
     List<SyncResult> sendTo(String backend, Message message);
+
+    /**
+     * Directed form of {@code message.send} for several backends.
+     *
+     * <p>The list is ordered and the returned results keep that order. A
+     * backend that is not registered produces one {@link SyncResult.Unsupported}
+     * in its position instead of a silent skip. {@link ParallelMode#PARALLEL}
+     * and {@link ParallelMode#INHERIT} start every target before waiting;
+     * {@link ParallelMode#SEQUENTIAL} waits for each target before starting the
+     * next one. There is no transaction or rollback between targets.</p>
+     *
+     * @param backends backend namespaces, in delivery order
+     * @param message the message to send, must not be null
+     * @param mode finalization mode; {@code INHERIT} uses the parallel default
+     * @return one result per requested backend, in the same order
+     */
+    List<SyncResult> sendTo(List<String> backends, Message message, ParallelMode mode);
 
     /**
      * Sets the inbound listener that receives messages from all sinks.

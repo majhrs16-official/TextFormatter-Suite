@@ -48,6 +48,8 @@ class SyncStageTest {
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertTrue(bus.broadcastCalled);
         assertTrue(bus.targeted.isEmpty());
+        assertTrue(result.outputs().isEmpty(),
+                "an inherited fan-out has no declared targets to report");
     }
 
     @Test
@@ -82,6 +84,54 @@ class SyncStageTest {
                 SyncStage.syncBackends(List.of("sync.discord.eu.west", "sync.tcp")));
     }
 
+    @Test
+    void declaredPlanReportsOneOutcomePerTargetInOrder() {
+        bus.result("discord", new SyncResult.Ok(null));
+        bus.result("tcp", new SyncResult.HostFailure("down"));
+        OutputPlan plan = OutputPlan.of(List.of("sync.discord", "sync.tcp"),
+                me.majhrs16.suite.api.pipeline.ParallelMode.PARALLEL);
+
+        StageResult result = stage().afterMessage(
+                PipelineMessage.of(message()), context(plan));
+
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertEquals(List.of("discord", "tcp"), bus.targeted);
+        assertEquals(me.majhrs16.suite.api.pipeline.ParallelMode.PARALLEL, bus.mode);
+        assertEquals(List.of("sync.discord", "sync.tcp"),
+                result.outputs().stream()
+                        .map(me.majhrs16.suite.api.pipeline.OutputOutcome::target)
+                        .toList());
+        assertTrue(result.outputs().get(0).isOk());
+        assertFalse(result.outputs().get(1).isOk(),
+                "a partial failure must stay visible in the aggregate");
+    }
+
+    @Test
+    void allFailedTargetsAreNotApplicableButKeepExplicitOutcomes() {
+        bus.result("discord", new SyncResult.HostFailure("down"));
+        bus.result("tcp", new SyncResult.Unsupported("not installed"));
+        OutputPlan plan = OutputPlan.of(List.of("sync.discord", "sync.tcp"),
+                me.majhrs16.suite.api.pipeline.ParallelMode.INHERIT);
+
+        StageResult result = stage().afterMessage(
+                PipelineMessage.of(message()), context(plan));
+
+        assertEquals(StageResult.Kind.NOT_APPLICABLE, result.kind());
+        assertEquals(2, result.outputs().size());
+        assertTrue(result.outputs().stream().noneMatch(
+                me.majhrs16.suite.api.pipeline.OutputOutcome::isOk));
+    }
+
+    @Test
+    void sequentialModeIsForwardedToTheBus() {
+        OutputPlan plan = OutputPlan.of(List.of("sync.discord"),
+                me.majhrs16.suite.api.pipeline.ParallelMode.SEQUENTIAL);
+
+        stage().afterMessage(PipelineMessage.of(message()), context(plan));
+
+        assertEquals(me.majhrs16.suite.api.pipeline.ParallelMode.SEQUENTIAL, bus.mode);
+    }
+
     private SyncStage stage() {
         return new SyncStage(bus);
     }
@@ -97,6 +147,12 @@ class SyncStageTest {
     private static final class FakeBus implements SyncBus {
         private boolean broadcastCalled;
         private final List<String> targeted = new ArrayList<>();
+        private final java.util.Map<String, SyncResult> results = new java.util.HashMap<>();
+        private me.majhrs16.suite.api.pipeline.ParallelMode mode;
+
+        void result(String backend, SyncResult result) {
+            results.put(backend, result);
+        }
 
         @Override
         public List<SyncResult> send(Message message) {
@@ -106,8 +162,18 @@ class SyncStageTest {
 
         @Override
         public List<SyncResult> sendTo(String backend, Message message) {
-            targeted.add(backend);
-            return List.of(new SyncResult.Ok(null));
+            return sendTo(List.of(backend), message,
+                    me.majhrs16.suite.api.pipeline.ParallelMode.SEQUENTIAL);
+        }
+
+        @Override
+        public List<SyncResult> sendTo(List<String> backends, Message message,
+                                       me.majhrs16.suite.api.pipeline.ParallelMode mode) {
+            targeted.addAll(backends);
+            this.mode = mode;
+            return backends.stream()
+                    .map(backend -> results.getOrDefault(backend, new SyncResult.Ok(null)))
+                    .toList();
         }
 
         @Override public Set<SyncSurface> surfaces() { return Set.of(); }

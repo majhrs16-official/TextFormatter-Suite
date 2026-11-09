@@ -16,6 +16,8 @@
 - Fan out only the LCM (`broadcast(SyncCall)`); a native action is never turned
   into a mass operation.
 - Deliver `message.send` through one bounded queue per sink (`send`, `sendTo`).
+- Deliver a declared target list in order with `sendTo(List, Message, ParallelMode)`:
+  parallel starts every target before waiting, sequential waits for each one.
 - Isolate sinks with independent queues and worker threads (bulkhead pattern).
 - Deduplicate messages by ID during a 60-second window.
 - Retry idempotent deliveries with capped exponential backoff.
@@ -132,6 +134,8 @@ the invocation executor.
 Ordering guarantees:
 
 - `surfaces()` and plain `broadcast`/`send` results follow registration order.
+- `sendTo(List, Message, mode)` returns one result per requested backend in the same order; an
+  unregistered backend yields `Unsupported` in its position.
 - `send` with no registered sink returns an empty list.
 - A duplicate suppressed by the dedup window returns an empty list, because no
   delivery was attempted.
@@ -153,6 +157,7 @@ Ordering guarantees:
 | `invoke(SyncCall)` | `DefaultSyncBus.java` | Pipeline, features and iFlow bridge |
 | `broadcast(SyncCall)` | `DefaultSyncBus.java` | LCM fan-out (processed actions) |
 | `send(Message)` / `sendTo(backend, Message)` | `DefaultSyncBus.java` | `SyncStage`, `CoreTranslatorPlaceholders` |
+| `sendTo(List, Message, ParallelMode)` | `DefaultSyncBus.java` | `SyncStage` for a declared `sync.*` target list |
 
 ---
 

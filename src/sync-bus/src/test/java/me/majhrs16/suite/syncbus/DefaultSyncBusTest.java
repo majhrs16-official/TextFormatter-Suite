@@ -480,6 +480,89 @@ class DefaultSyncBusTest {
     }
 
     @Test
+    void sendToBatchKeepsRequestedOrderAndReportsUnknownBackends() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        RecordingSink one = new RecordingSink("one");
+        RecordingSink two = new RecordingSink("two");
+        bus.register(one);
+        bus.register(two);
+        bus.start();
+        try {
+            Message message = Message.builder().text("batch").build();
+            List<SyncResult> results = bus.sendTo(
+                    List.of("two", "missing", "one"), message,
+                    me.majhrs16.suite.api.pipeline.ParallelMode.PARALLEL);
+
+            assertEquals(3, results.size());
+            assertTrue(results.get(0).isOk());
+            assertTrue(results.get(1) instanceof SyncResult.Unsupported);
+            assertTrue(results.get(2).isOk());
+            assertSame(message, two.received);
+            assertSame(message, one.received);
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void parallelBatchStartsEveryTargetBeforeWaiting() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        BlockingSink slow = new BlockingSink("slow");
+        RecordingSink fast = new RecordingSink("fast");
+        bus.register(slow);
+        bus.register(fast);
+        bus.start();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<List<SyncResult>> future = caller.submit(() -> bus.sendTo(
+                    List.of("slow", "fast"),
+                    Message.builder().text("parallel").build(),
+                    me.majhrs16.suite.api.pipeline.ParallelMode.PARALLEL));
+
+            assertTrue(slow.firstSendEntered.await(5, TimeUnit.SECONDS));
+            awaitUntil(() -> fast.received != null, 5, TimeUnit.SECONDS);
+            slow.release.countDown();
+
+            List<SyncResult> results = future.get(5, TimeUnit.SECONDS);
+            assertTrue(results.stream().allMatch(SyncResult::isOk));
+        } finally {
+            slow.release.countDown();
+            caller.shutdownNow();
+            bus.stop();
+        }
+    }
+
+    @Test
+    void sequentialBatchWaitsForEachTargetBeforeStartingTheNext() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        BlockingSink slow = new BlockingSink("slow");
+        RecordingSink fast = new RecordingSink("fast");
+        bus.register(slow);
+        bus.register(fast);
+        bus.start();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<List<SyncResult>> future = caller.submit(() -> bus.sendTo(
+                    List.of("slow", "fast"),
+                    Message.builder().text("sequential").build(),
+                    me.majhrs16.suite.api.pipeline.ParallelMode.SEQUENTIAL));
+
+            assertTrue(slow.firstSendEntered.await(5, TimeUnit.SECONDS));
+            assertFalse(fast.delivered.await(200, TimeUnit.MILLISECONDS),
+                    "a sequential batch must not start the next target early");
+            slow.release.countDown();
+
+            List<SyncResult> results = future.get(5, TimeUnit.SECONDS);
+            assertTrue(results.stream().allMatch(SyncResult::isOk));
+            assertNotNull(fast.received);
+        } finally {
+            slow.release.countDown();
+            caller.shutdownNow();
+            bus.stop();
+        }
+    }
+
+    @Test
     void surfacesKeepRegistrationOrder() {
         DefaultSyncBus bus = new DefaultSyncBus(logger);
         try {

@@ -475,6 +475,8 @@ class SuiteRuntimeTest {
             assertEquals(0, outcome.considered());
             assertEquals(0, outcome.delivered());
             assertEquals(0, outcome.silenced());
+            assertTrue(outcome.outputs().isEmpty());
+            assertFalse(outcome.hasOutputFailure());
             assertNotNull(runtime.pipelineTraces().lastTrace(message.id().toString()),
                 "a dispatch must record its trace even when there is no pipeline");
         }

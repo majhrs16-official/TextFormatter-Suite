@@ -71,7 +71,8 @@ class DebugEndpointIntegrationTest {
         when(channels.resolve("chat.global")).thenReturn(channel);
 
         when(dispatcher.dispatchAndReport(any(Message.class)))
-            .thenReturn(new DispatchOutcome(PipelineStatus.READY, 1, 1, 0, 0, 0));
+            .thenReturn(new DispatchOutcome(PipelineStatus.READY, 1, 1, 0, 0, 0,
+                    java.util.List.of()));
 
         debugEndpoint = new DebugEndpoint(dispatcher, channels, logger, authToken, 0);
         debugEndpoint.start();
@@ -212,6 +213,7 @@ class DebugEndpointIntegrationTest {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("considered");
         assertThat(response.body()).contains("delivered");
+        assertThat(response.body()).contains("\"outputs\":[]");
         verify(dispatcher).dispatchAndReport(any(Message.class));
     }
 

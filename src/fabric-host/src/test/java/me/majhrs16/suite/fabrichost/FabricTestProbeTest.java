@@ -61,7 +61,7 @@ class FabricTestProbeTest {
 
             @Override
             public DispatchOutcome dispatchAndReport(Message message) {
-                return new DispatchOutcome(PipelineStatus.READY, 3, 2, 1, 0, 0);
+                return new DispatchOutcome(PipelineStatus.READY, 3, 2, 1, 0, 0, java.util.List.of());
             }
         };
         FabricTestProbe probe = new FabricTestProbe(
@@ -70,7 +70,7 @@ class FabricTestProbeTest {
             dispatch, new EmptyTraces(), null, () -> 0, Language.EN);
 
         assertThat(probe.dispatch(message()))
-            .isEqualTo(new DispatchOutcome(PipelineStatus.READY, 3, 2, 1, 0, 0));
+            .isEqualTo(new DispatchOutcome(PipelineStatus.READY, 3, 2, 1, 0, 0, java.util.List.of()));
     }
 
     @Test

@@ -17,6 +17,37 @@ import java.util.Objects;
  */
 public final class OutputPlanResolver {
 
+    /** Where the effective targets came from. */
+    public enum Origin {
+        MESSAGE("message"),
+        SUITE("suite"),
+        MODULE_DEFAULT("module-default");
+
+        private final String wireName;
+
+        Origin(String wireName) {
+            this.wireName = wireName;
+        }
+
+        /** @return stable token used by the dispatch trace */
+        public String wireName() {
+            return wireName;
+        }
+    }
+
+    /**
+     * Effective plan plus the precedence level that supplied its targets.
+     *
+     * @param plan   resolved plan
+     * @param origin source of the declared targets
+     */
+    public record Resolution(OutputPlan plan, Origin origin) {
+        public Resolution {
+            Objects.requireNonNull(plan, "plan");
+            Objects.requireNonNull(origin, "origin");
+        }
+    }
+
     private OutputPlanResolver() {
     }
 
@@ -26,6 +57,15 @@ public final class OutputPlanResolver {
      * @return the effective plan, never {@code null}
      */
     public static OutputPlan resolve(OutputPlan messagePlan, OutputPlan suitePlan) {
+        return resolveDetailed(messagePlan, suitePlan).plan();
+    }
+
+    /**
+     * @param messagePlan plan carried by the message
+     * @param suitePlan   plan read from {@code config/suite/config.yml}
+     * @return the effective plan and the origin of its targets
+     */
+    public static Resolution resolveDetailed(OutputPlan messagePlan, OutputPlan suitePlan) {
         Objects.requireNonNull(messagePlan, "messagePlan");
         Objects.requireNonNull(suitePlan, "suitePlan");
 
@@ -34,11 +74,14 @@ public final class OutputPlanResolver {
                 : suitePlan.parallel();
 
         if (messagePlan.declared()) {
-            return new OutputPlan(true, messagePlan.targets(), parallel);
+            return new Resolution(
+                    new OutputPlan(true, messagePlan.targets(), parallel), Origin.MESSAGE);
         }
         if (suitePlan.declared()) {
-            return new OutputPlan(true, suitePlan.targets(), parallel);
+            return new Resolution(
+                    new OutputPlan(true, suitePlan.targets(), parallel), Origin.SUITE);
         }
-        return new OutputPlan(false, List.of(), parallel);
+        return new Resolution(
+                new OutputPlan(false, List.of(), parallel), Origin.MODULE_DEFAULT);
     }
 }

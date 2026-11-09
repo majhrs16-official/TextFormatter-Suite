@@ -1,6 +1,7 @@
 package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
@@ -459,20 +460,57 @@ public final class DefaultSyncBus implements SyncBus {
     public List<SyncResult> sendTo(String backend, Message message) {
         Objects.requireNonNull(backend, "backend");
         Objects.requireNonNull(message, "message");
+        return sendTo(List.of(backend), message, ParallelMode.SEQUENTIAL);
+    }
 
+    @Override
+    public List<SyncResult> sendTo(List<String> backends, Message message,
+                                   ParallelMode mode) {
+        Objects.requireNonNull(backends, "backends");
+        Objects.requireNonNull(message, "message");
+        Objects.requireNonNull(mode, "mode");
+        if (backends.isEmpty()) {
+            return List.of();
+        }
+
+        boolean parallel = mode != ParallelMode.SEQUENTIAL;
+        List<CompletableFuture<SyncResult>> pending = new ArrayList<>(backends.size());
+        List<SyncResult> results = new ArrayList<>(backends.size());
+        for (String backend : backends) {
+            Objects.requireNonNull(backend, "backend");
+            CompletableFuture<SyncResult> outcome = dispatchTo(backend, message);
+            if (parallel) {
+                pending.add(outcome);
+            } else {
+                results.add(await(outcome));
+            }
+        }
+        if (parallel) {
+            for (CompletableFuture<SyncResult> outcome : pending) {
+                results.add(await(outcome));
+            }
+        }
+        return List.copyOf(results);
+    }
+
+    /**
+     * Starts one directed delivery and returns its completion. Missing
+     * backends and a stopped bus complete immediately with an explicit result
+     * instead of throwing, so the caller keeps one result per requested target.
+     */
+    private CompletableFuture<SyncResult> dispatchTo(String backend, Message message) {
         SinkContext ctx = sinks.get(backend);
         if (ctx == null) {
             logger.warn("SyncBus: backend '" + backend + "' not found for directed send");
-            return List.of(new SyncResult.Unsupported(
+            return CompletableFuture.completedFuture(new SyncResult.Unsupported(
                     "backend '" + backend + "' is not registered"));
         }
         if (state.get() != LifecycleState.RUNNING) {
-            return List.of(new SyncResult.HostFailure(
+            return CompletableFuture.completedFuture(new SyncResult.HostFailure(
                     "sync bus is not running; backend '" + backend
                             + "' did not receive the message"));
         }
-        return List.of(await(dispatchCall(ctx, messageSendCall(backend, message),
-                sendSpec(ctx))));
+        return dispatchCall(ctx, messageSendCall(backend, message), sendSpec(ctx));
     }
 
     /** @return contexts in registration order, so results align with surfaces() */
