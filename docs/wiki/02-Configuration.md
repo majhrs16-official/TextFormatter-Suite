@@ -107,8 +107,15 @@ target is split at the first dot: the first segment is the multiplexer and the r
 which may contain dots. An invalid or unknown target is an explicit error, never a silent skip.
 `textformatter` is not a multiplexer and never appears in `outputs`.
 
-The iFlow **backend** is not selected here. `iflow.engine.kind` does not exist.
-The hub owns that decision in `config/iflow/config.yml`.
+Transform multiplexers (`iflow`, `chattranslator`) accept at most one target. `route` uses
+`iflow.<backend>` to pick the engine for that message; `<tr>` inside `format` uses
+`chattranslator.<backend>` to pick the translation provider. Without a target both keep their
+configured default and fallback. Two targets of the same transform multiplexer are a conflict, and
+an unknown backend is an explicit error. `sync` accepts several targets and delivers in order.
+
+The iFlow **global default** is not selected here. `iflow.engine.kind` does not exist; the hub owns
+the default in `config/iflow/config.yml`. An `iflow.<backend>` target only overrides that default
+for the message that declares it.
 
 ### iFlow hub (`config/iflow/config.yml`)
 

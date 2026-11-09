@@ -48,14 +48,40 @@ public final class TextFormatterMessageRenderer
     @Override
     public Component render(Message message, Actor recipient,
                             Language sourceLanguage, Language targetLanguage) {
+        return render(message, recipient, sourceLanguage, targetLanguage, null);
+    }
+
+    /**
+     * Renders with an explicit translation backend selected by a
+     * {@code chattranslator.<backend>} output target.
+     *
+     * @param translationBackend provider name, or {@code null} for the facade
+     *                           default and fallback
+     */
+    public Component render(Message message, Actor recipient,
+                            Language sourceLanguage, Language targetLanguage,
+                            String translationBackend) {
         Objects.requireNonNull(message, "message");
         Language source = normalize(sourceLanguage, recipient);
         Language target = normalize(targetLanguage, source);
-        return render(message, message.text(), recipient, source, target);
+        return render(message, message.text(), recipient, source, target, translationBackend);
+    }
+
+    /**
+     * @param backend provider name from a {@code chattranslator.*} target
+     * @return whether the translation service knows that provider
+     */
+    public boolean hasTranslationBackend(String backend) {
+        return formatter.renderer().translation().hasProvider(backend);
     }
 
     private Component render(Message message, String content, Actor recipient,
                              Language source, Language target) {
+        return render(message, content, recipient, source, target, null);
+    }
+
+    private Component render(Message message, String content, Actor recipient,
+                             Language source, Language target, String translationBackend) {
         Actor sender = message.sender() != null ? message.sender() : recipient;
         if (sender == null) {
             sender = Actor.console("Console", source);
@@ -64,6 +90,7 @@ public final class TextFormatterMessageRenderer
         TemplateContext context = TemplateContext.builder(sender, source, target)
             .content(content == null ? "" : content)
             .translate(message.shouldTranslate())
+            .translationBackend(translationBackend)
             .build();
         return formatter.format(message, context);
     }

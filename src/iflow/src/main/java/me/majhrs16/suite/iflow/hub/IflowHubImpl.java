@@ -31,6 +31,12 @@ final class IflowHubImpl implements IflowHub {
     }
 
     @Override
+    public Router router(String backend) {
+        IflowBackend selected = manager.forBackend(backend);
+        return selected == null ? null : selected.router();
+    }
+
+    @Override
     public String activeBackend() {
         IflowBackend backend = manager.active();
         return backend == null ? "none" : backend.name();

@@ -21,21 +21,35 @@ class TemplateRendererTest {
 
     private static TemplateRenderer renderer() {
         TranslatorManager managers = new TranslatorManager();
-        managers.add(new Translator() {
-            @Override public String name() { return "test"; }
+        managers.add(translator("test", "es: "));
+        return new TemplateRenderer(
+            new TranslationService(managers),
+            null,
+            logger());
+    }
+
+    private static TemplateRenderer backendRenderer() {
+        TranslatorManager managers = new TranslatorManager();
+        managers.add(translator("test", "es: "));
+        managers.add(translator("gtranslate", "google: "));
+        return new TemplateRenderer(
+            new TranslationService(managers),
+            null,
+            logger());
+    }
+
+    private static Translator translator(String name, String prefix) {
+        return new Translator() {
+            @Override public String name() { return name; }
 
             @Override public String translate(String text, String from, String to) {
-                return to + ": " + text;
+                return prefix + text;
             }
 
             @Override public String detect(String text) { return "en"; }
 
             @Override public boolean isAvailable() { return true; }
-        });
-        return new TemplateRenderer(
-            new TranslationService(managers),
-            null,
-            logger());
+        };
     }
 
     private static PluginLogger logger() {
@@ -100,6 +114,20 @@ class TemplateRendererTest {
             context("hola", Language.EN, Language.ES, true));
 
         assertEquals("es: hola mundo", result);
+    }
+
+    @Test
+    void usesTheTranslationBackendFromTheContext() {
+        TemplateContext context = TemplateContext.builder(PLAYER, Language.EN, Language.ES)
+            .content("hola")
+            .translate(true)
+            .translationBackend("gtranslate")
+            .build();
+
+        String result = backendRenderer().renderPlain(
+            Template.of("<tr>hola</tr> mundo"), context);
+
+        assertEquals("google: hola mundo", result);
     }
 
     @Test

@@ -29,7 +29,10 @@ config-version: 1.0
 ```
 
 `default-backend` is the preferred provider. If it is unavailable, the first
-active provider registered by a provider package is used.
+active provider registered by a provider package is used. A message can override
+the provider with a `chattranslator.<backend>` target in `outputs`
+(`config/suite/config.yml` or `Message.outputPlan()`); without that target the
+facade default above applies.
 
 ### Google (`config/chattranslator/translators/google.yml`)
 
@@ -120,14 +123,16 @@ messages:
 
 `TemplateRenderer` resolves placeholders inside the span, translates the span
 through `TranslationService` (`chattranslator`), escapes the result and only
-then parses MiniMessage. The rest of the template is not translated. If
+then parses MiniMessage. The rest of the template is not translated. When the
+effective `outputs` declares a `chattranslator.<backend>` target, that provider
+is used for the span; without a target the facade default applies. If
 `chattranslator` is not installed, the span content is rendered unchanged.
 
 ## Cache and deduplication
 
 `TranslationService` keeps:
 
-- A translation cache keyed by `source|target|text`.
+- A translation cache keyed by `provider|source|target|text`.
 - A detection cache keyed by `detect|text`.
 - In-flight maps that deduplicate concurrent requests for the same key.
 

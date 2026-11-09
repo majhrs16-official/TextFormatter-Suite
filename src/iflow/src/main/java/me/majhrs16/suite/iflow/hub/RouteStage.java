@@ -1,17 +1,20 @@
 package me.majhrs16.suite.iflow.hub;
 
+import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.api.iflow.RouteDecision;
 import me.majhrs16.suite.api.iflow.RouteOutcome;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.pipeline.OutputPlan;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
 import me.majhrs16.suite.api.pipeline.PipelineScope;
 import me.majhrs16.suite.api.pipeline.PipelineStage;
 import me.majhrs16.suite.api.pipeline.StageResult;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -24,6 +27,12 @@ import java.util.Set;
  * {@code DECISION_CONFLICT} and the unit is rejected; there is no recursive
  * re-entry into later stages.</p>
  *
+ * <p>When the effective {@link OutputPlan} declares an {@code iflow.<backend>}
+ * target, the stage resolves that backend through the hub and routes with it;
+ * without a target the hub applies its configured default and fallback. More
+ * than one {@code iflow} target is a conflict, and an unknown or unavailable
+ * backend is an explicit error.</p>
+ *
  * <p>When no iFlow hub is installed this stage is not published: the engine
  * expands recipients and delivers, which is the documented default allow.</p>
  */
@@ -32,10 +41,12 @@ public final class RouteStage implements PipelineStage {
     /** Contract id of the route stage. */
     public static final String ID = "route";
 
-    private final Router router;
+    private static final String MULTIPLEXER = "iflow";
 
-    public RouteStage(Router router) {
-        this.router = Objects.requireNonNull(router, "router");
+    private final IflowHub hub;
+
+    public RouteStage(IflowHub hub) {
+        this.hub = Objects.requireNonNull(hub, "hub");
     }
 
     @Override
@@ -50,6 +61,11 @@ public final class RouteStage implements PipelineStage {
 
     @Override
     public StageResult beforeMessage(PipelineMessage message, PipelineContext context) {
+        Selection selection = selectBackend(context.outputs());
+        if (selection.error() != null) {
+            return StageResult.error(message, selection.error());
+        }
+        Router router = selection.router() == null ? hub : selection.router();
         Message current = message.message();
         if (router.checkEmissionRateLimit(current)) {
             return StageResult.continueWith(message);
@@ -64,6 +80,12 @@ public final class RouteStage implements PipelineStage {
         if (recipient == null) {
             return StageResult.error(unit, "route requires a recipient");
         }
+
+        Selection selection = selectBackend(context.outputs());
+        if (selection.error() != null) {
+            return StageResult.error(unit, selection.error());
+        }
+        Router router = selection.router() == null ? hub : selection.router();
 
         RouteOutcome first = router.route(unit.message(), recipient);
         if (first == null || first.decision() == null || first.message() == null) {
@@ -96,5 +118,53 @@ public final class RouteStage implements PipelineStage {
             case REJECT -> StageResult.reject(resolved, decision.describe());
             default -> StageResult.continueWith(resolved);
         };
+    }
+
+    /**
+     * Resolves the backend requested by the effective output plan.
+     *
+     * <p>A plan without {@code iflow.*} targets keeps the hub default. A
+     * declared target must name exactly one installed and available backend.</p>
+     */
+    private Selection selectBackend(OutputPlan outputs) {
+        List<String> backends = iflowBackends(outputs.targets());
+        if (backends.size() > 1) {
+            return Selection.error("CONFLICT: multiple 'iflow' output targets");
+        }
+        if (backends.isEmpty()) {
+            return Selection.inherited();
+        }
+        String backend = backends.get(0);
+        if (!hub.availableBackends().contains(backend)) {
+            return Selection.error("unknown iflow backend '" + backend + "'");
+        }
+        Router selected = hub.router(backend);
+        if (selected == null) {
+            return Selection.error("iflow backend '" + backend + "' is unavailable");
+        }
+        return Selection.of(selected);
+    }
+
+    /** @return backend names named by {@code iflow.<backend>} targets, in order */
+    static List<String> iflowBackends(List<String> targets) {
+        return targets.stream()
+                .filter(target -> target.startsWith(MULTIPLEXER + "."))
+                .map(target -> target.substring(MULTIPLEXER.length() + 1))
+                .filter(backend -> !backend.isBlank())
+                .toList();
+    }
+
+    private record Selection(Router router, String error) {
+        static Selection inherited() {
+            return new Selection(null, null);
+        }
+
+        static Selection of(Router router) {
+            return new Selection(Objects.requireNonNull(router, "router"), null);
+        }
+
+        static Selection error(String detail) {
+            return new Selection(null, detail);
+        }
     }
 }

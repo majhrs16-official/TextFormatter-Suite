@@ -1,6 +1,7 @@
 package me.majhrs16.suite.iflow.hub;
 
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.api.iflow.RouteDecision;
@@ -10,6 +11,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
 import me.majhrs16.suite.api.pipeline.PipelineScope;
@@ -24,7 +26,9 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -133,20 +137,93 @@ class RouteStageTest {
         assertEquals("route requires a recipient", result.detail());
     }
 
+    @Test
+    void namedBackendTargetRoutesWithThatBackend() {
+        FakeRouter hub = new FakeRouter();
+        FakeRouter named = new FakeRouter();
+        named.first = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null), message());
+        hub.named.put("iflow-vm", named);
+
+        StageResult result = new RouteStage(hub).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE),
+                context(OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertEquals(List.of("chat"), named.routedChannels);
+        assertEquals(List.of(), hub.routedChannels);
+    }
+
+    @Test
+    void unknownBackendIsAnExplicitError() {
+        StageResult result = new RouteStage(new FakeRouter()).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE),
+                context(OutputPlan.of(List.of("iflow.iflow-wasm"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.ERROR, result.kind());
+        assertEquals("unknown iflow backend 'iflow-wasm'", result.detail());
+    }
+
+    @Test
+    void unavailableBackendIsAnExplicitError() {
+        FakeRouter hub = new FakeRouter();
+        hub.named.put("iflow-vm", null);
+
+        StageResult result = new RouteStage(hub).beforeMessage(
+                PipelineMessage.of(message()),
+                context(OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.ERROR, result.kind());
+        assertEquals("iflow backend 'iflow-vm' is unavailable", result.detail());
+    }
+
+    @Test
+    void twoIflowTargetsAreAConflict() {
+        StageResult result = new RouteStage(new FakeRouter()).beforeMessage(
+                PipelineMessage.of(message()),
+                context(OutputPlan.of(
+                        List.of("iflow.iflow-vm", "iflow.iflow-firewall"),
+                        ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.ERROR, result.kind());
+        assertEquals("CONFLICT: multiple 'iflow' output targets", result.detail());
+    }
+
+    @Test
+    void rateLimitUsesTheNamedBackend() {
+        FakeRouter hub = new FakeRouter();
+        FakeRouter named = new FakeRouter();
+        named.rateLimited = true;
+        named.waitNanos = 250_000_000L;
+        hub.named.put("iflow-vm", named);
+
+        StageResult result = new RouteStage(hub).beforeMessage(
+                PipelineMessage.of(message()),
+                context(OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.DROP, result.kind());
+        assertEquals("rate limit exceeded: 250ms", result.detail());
+    }
+
     private static Message message() {
         return Message.builder().text("hello").channel("chat").build();
     }
 
     private static PipelineContext context() {
-        return new Context();
+        return context(OutputPlan.inherit());
     }
 
-    private static final class FakeRouter implements Router {
+    private static PipelineContext context(OutputPlan outputs) {
+        return new Context(outputs);
+    }
+
+    private static final class FakeRouter implements IflowHub {
         private boolean rateLimited;
         private long waitNanos;
         private RouteOutcome first;
         private RouteOutcome second;
         private final List<String> routedChannels = new ArrayList<>();
+        private final Map<String, Router> named = new LinkedHashMap<>();
 
         @Override
         public RouteOutcome route(Message message, Actor recipient) {
@@ -154,12 +231,23 @@ class RouteStageTest {
             return routedChannels.size() == 1 ? first : second;
         }
 
+        @Override public Router router() { return this; }
+        @Override public Router router(String backend) { return named.get(backend); }
+        @Override public String activeBackend() { return "fake"; }
+        @Override public List<String> availableBackends() { return List.copyOf(named.keySet()); }
+        @Override public boolean reload() { return true; }
         @Override public boolean hasPermission(Actor actor, String permission) { return true; }
         @Override public boolean checkEmissionRateLimit(Message message) { return !rateLimited; }
         @Override public long nanosUntilNextRateLimitWindow(Message message) { return waitNanos; }
     }
 
     private static final class Context implements PipelineContext {
+        private final OutputPlan outputs;
+
+        private Context(OutputPlan outputs) {
+            this.outputs = outputs;
+        }
+
         @Override public String messageId() { return "test"; }
         @Override public PipelineScope scope() { return PipelineScope.RECIPIENT; }
         @Override public Optional<ChannelRegistry> channels() { return Optional.empty(); }
@@ -169,7 +257,7 @@ class RouteStageTest {
             return new PipelineSettings(Language.EN, false, false);
         }
         @Override public PipelineServices services() { return EmptyServices.INSTANCE; }
-        @Override public OutputPlan outputs() { return OutputPlan.inherit(); }
+        @Override public OutputPlan outputs() { return outputs; }
         @Override public PluginLogger logger() { return NoopLogger.INSTANCE; }
         @Override public PipelineTrace trace() { return EmptyTrace.INSTANCE; }
         @Override public long planVersion() { return 1L; }

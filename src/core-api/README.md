@@ -78,7 +78,7 @@
 | `Channel` / `ChannelRegistry` | Shared channel model and registry in `api.channel` |
 | `Router` / `RouteDecision` / `RouteOutcome` | Shared iFlow routing contract in `api.iflow` |
 | `ActorDirectory` | SPI: resolve `Actor` by name/UUID; platform-specific impl in adapters |
-| `TranslationService` | SPI: high-level translation entry point; `translate(text, targetLang)` |
+| `TranslationService` | SPI: high-level translation entry point; `translate(text, source, target[, backend])` |
 | `Translator` | SPI: single translation provider; `translate(text, source, target)` |
 | `TranslatorProvider` | SPI: provides `Translator` instances; registered via modules |
 | `TranslatorManager` | SPI: manages multiple providers, fallback chains |

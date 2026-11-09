@@ -638,7 +638,7 @@ planificar el cambio. Se registra como deuda de baja prioridad, no como requisit
 
 ### Feature propuesta — multiplexación de salidas por mensaje (PL-3, 2026-11-06)
 
-> **Estado:** contrato y resolución implementados (2026-11-09); etapas selectivas, paralelismo,
+> **Estado:** contrato, resolución y etapas selectivas implementados (2026-11-09); paralelismo,
 > resultado agregado y sinks locales pendientes. Depende de **ADR-036 §17** (aceptado el 2026-11-06).
 
 #### Objetivo
@@ -669,12 +669,12 @@ pipeline.
 |---|---|
 | `core-api` | **Implementado (2026-11-09):** `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`; los targets son `List<String>` con formato `multiplexer.backend`. Sin tipos de plataforma. |
 | `suite-runtime` | **Resolución implementada (2026-11-09):** precedencia mensaje → suite → módulo y validación; la traza del origen sigue pendiente. |
-| `iflow` | `route` usa el target `iflow`; conserva default/fallback de ADR-032. |
-| `chattranslator` | El render de `format` usa el target `chattranslator` para elegir el backend de `<tr>`; conserva default/fallback de ADR-035. |
+| `iflow` | **Implementado (2026-11-09):** `route` resuelve el target `iflow.<backend>` por el hub y conserva default/fallback de ADR-032; dos targets o un backend desconocido son error explícito. |
+| `chattranslator` | **Implementado (2026-11-09):** el render de `format` usa el target `chattranslator.<backend>` para elegir el backend de `<tr>`; conserva default/fallback de la fachada. |
 | `sync-bus` | `sync` usa los targets `sync`; `sendTo`/`invoke` por backend; fan-out completo si no hay targets. |
 | `sync-bukkit` / `sync-fabric` | Publican el sink local `bukkit`/`fabric` y su superficie (jugadores, consola, canales, eventos); la entrega local pasa por ellos. |
 | Configuración | **Implementado (2026-11-09):** `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
-| Tests | **Parcial (2026-11-09):** precedencia, vacío vs ausente, target inválido y `outputs-parallel`; faltan orden, paralelo y resultado agregado. |
+| Tests | **Parcial (2026-11-09):** precedencia, vacío vs ausente, target inválido, `outputs-parallel` y selección de backend en `route`/`<tr>`; faltan orden, paralelo y resultado agregado. |
 
 #### Pasos de implementación
 
@@ -684,8 +684,10 @@ pipeline.
 2. **Resolución. ✅ (2026-11-09)** Precedencia mensaje → `config/suite/config.yml` → módulo, con
    parseo por el primer punto, validación y error explícito. El plan efectivo se resuelve una vez por
    emisión en `PipelineEngine` y se expone en `PipelineContext.outputs()`.
-3. **Etapas.** `sync` ya lee sus targets y `route`/`format` conservan su default; falta que `route` y
-   la traducción de `<tr>` consulten `iflow`/`chattranslator`.
+3. **Etapas. ✅ (2026-11-09)** `sync` lee sus targets; `route` resuelve `iflow.<backend>` por el hub
+   y la traducción de `<tr>` dentro de `format` resuelve `chattranslator.<backend>` por la fachada.
+   Sin target, ambos conservan su default y fallback. Dos targets del mismo multiplexor de
+   transformación son `CONFLICT`; un backend desconocido es error explícito.
 4. **`sync` selectivo. ✅ (2026-11-09)** `sync-bus` expone `sendTo` por `SyncSurface.backend` y
    conserva el fan-out completo cuando no hay targets. `bukkit` y `fabric` como sinks locales siguen
    pendientes; no se crea `sync-mux`.
@@ -717,10 +719,16 @@ Completado en esta unidad:
   editor web; el esquema generado se regeneró y `npm run check` pasa.
 - Tests: `MessageOutputPlanTest`, `OutputPlanResolverTest`, `ConfigLoaderTest` y
   `PipelineEngineTest` cubren default, precedencia, vacío vs ausente, paralelismo y target inválido.
+- `route` resuelve el target `iflow.<backend>` con `IflowHub.router(backend)`; sin target usa el hub
+  y su fail-closed actual. `FormatStage` resuelve `chattranslator.<backend>` y lo pasa al render de
+  `<tr>`; `TranslationService.translate(..., backend)` conserva el fallback de la fachada y falla
+  explícitamente ante un proveedor desconocido.
+- Tests: `RouteStageTest`, `IflowHubTest`, `FormatStageTest`, `TemplateRendererTest` y
+  `TranslationServiceBackendTest` cubren selección, conflicto, backend desconocido/no disponible y
+  separación de caché por backend.
 
 Pendiente y fuera de esta unidad:
 
-- `route` y la traducción de `<tr>` consultando `iflow.*`/`chattranslator.*`.
 - Orden y paralelismo de entrega, resultado agregado por target y traza del origen del plan.
 - `sync-bukkit`/`sync-fabric` como sinks locales y la entrega local detrás de ellos.
 - Actualización de `config-schema-v2.2.md` (requiere autorización) y `docs/wiki`.

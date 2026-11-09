@@ -6,8 +6,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.IflowHub;
 import me.majhrs16.suite.api.iflow.PermissionChecker;
 import me.majhrs16.suite.api.iflow.RateLimiter;
+import me.majhrs16.suite.api.iflow.RouteOutcome;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
@@ -154,7 +156,7 @@ final class HostFixture {
         Router router = router(configDir, channels, permissions, placeholders, translation, logger);
 
         TextFormatter formatter = TextFormatters.create(channels, translation, placeholders, logger);
-        List<PipelineStage> published = List.of(new RouteStage(router), new FormatStage(formatter));
+        List<PipelineStage> published = List.of(new RouteStage(hub(router)), new FormatStage(formatter));
 
         PipelinePlan plan = PipelinePlan.of(config.pipeline(), 1L);
         List<ResolvedStage> resolved = plan.stageIds().stream()
@@ -211,6 +213,35 @@ final class HostFixture {
         VmPolicyEngine vm = new VmPolicyEngine(channels, permissions, new RateLimiter());
         vm.setProgram(program);
         return vm;
+    }
+
+    /**
+     * Single-backend hub for the host integration tests. The fixture wires the
+     * VM engine directly, so only {@code iflow-vm} is selectable by an
+     * {@code iflow.*} target; any other name is reported as unavailable.
+     */
+    private static IflowHub hub(Router router) {
+        return new IflowHub() {
+            @Override public Router router() { return router; }
+            @Override public Router router(String backend) {
+                return "iflow-vm".equals(backend) ? router : null;
+            }
+            @Override public String activeBackend() { return "iflow-vm"; }
+            @Override public List<String> availableBackends() { return List.of("iflow-vm"); }
+            @Override public boolean reload() { return true; }
+            @Override public RouteOutcome route(Message message, Actor recipient) {
+                return router.route(message, recipient);
+            }
+            @Override public boolean hasPermission(Actor actor, String permission) {
+                return router.hasPermission(actor, permission);
+            }
+            @Override public boolean checkEmissionRateLimit(Message message) {
+                return router.checkEmissionRateLimit(message);
+            }
+            @Override public long nanosUntilNextRateLimitWindow(Message message) {
+                return router.nanosUntilNextRateLimitWindow(message);
+            }
+        };
     }
 
     private static final class EmptyServices implements PipelineServices {

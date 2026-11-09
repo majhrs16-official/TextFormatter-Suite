@@ -2,6 +2,7 @@ package me.majhrs16.suite.iflow.hub;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -163,6 +164,63 @@ class IflowHubTest {
         assertTrue(hub.hasPermission(Actor.unknown("player"), "test"));
         assertTrue(hub.checkEmissionRateLimit(message));
         assertEquals(42, hub.nanosUntilNextRateLimitWindow(message));
+    }
+
+    @Test
+    void namedBackendReturnsItsRouter() {
+        FakeContext context = new FakeContext(dir);
+        FakeRouter firewall = new FakeRouter();
+        FakeRouter vm = new FakeRouter();
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-firewall", firewall, true));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-vm", vm, true));
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+
+        assertSame(firewall, hub.router("iflow-firewall"));
+        assertSame(vm, hub.router("iflow-vm"));
+        assertNull(hub.router("iflow-unknown"));
+    }
+
+    @Test
+    void unavailableNamedBackendUsesFallbackWhenEnabled() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-firewall
+                fallback-on-unavailable: true
+                config-version: 1.0
+                """);
+        FakeContext context = new FakeContext(dir);
+        FakeRouter firewall = new FakeRouter();
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-firewall", firewall, true));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-vm", new FakeRouter(), false));
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+
+        assertSame(firewall, hub.router("iflow-vm"));
+    }
+
+    @Test
+    void unavailableNamedBackendFailsClosedWithoutFallback() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-firewall
+                fallback-on-unavailable: false
+                config-version: 1.0
+                """);
+        FakeContext context = new FakeContext(dir);
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-firewall", new FakeRouter(), true));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-vm", new FakeRouter(), false));
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+
+        assertNull(hub.router("iflow-vm"));
     }
 
     private static final class FakeBackend implements IflowBackend {

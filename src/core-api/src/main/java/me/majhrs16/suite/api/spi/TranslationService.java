@@ -66,13 +66,37 @@ public final class TranslationService implements AutoCloseable {
      *         translation disabled, or the provider is unavailable.
      */
     public String translate(String text, Language from, Language to) {
-        if (!shouldTranslate(from, to) || text == null || text.isEmpty()) {
+        return translate(text, from, to, null);
+    }
+
+    /**
+     * Translates a single fragment with an optional backend override.
+     *
+     * <p>{@code backend} is the provider name from a {@code chattranslator.*}
+     * output target. A registered but unavailable provider falls back to the
+     * active one, preserving the facade default. An unknown name is an explicit
+     * error instead of a silent fallback.</p>
+     *
+     * @param backend provider name, or {@code null}/blank for the active one
+     * @return the translated fragment; input text when {@code from == to},
+     *         translation disabled, or the provider is unavailable
+     * @throws IllegalArgumentException when {@code backend} is not registered
+     */
+    public String translate(String text, Language from, Language to, String backend) {
+        // Resolve first so an unknown backend is always an explicit error,
+        // even when there is nothing to translate.
+        Translator provider = resolveProvider(backend);
+        if (text == null || text.isEmpty()) {
             return text == null ? "" : text;
+        }
+        if (!shouldTranslate(provider, from, to)) {
+            return text;
         }
         String source = localization(from, text);
         
-        // Build cache key using full text to avoid hashCode collisions
-        String cacheKey = source + "|" + to.code() + "|" + text;
+        // Build cache key using full text to avoid hashCode collisions. The
+        // provider name keeps backend-specific translations apart.
+        String cacheKey = provider.name() + "|" + source + "|" + to.code() + "|" + text;
         
         // Check cache first
         String cached = translationCache.get(cacheKey);
@@ -86,7 +110,7 @@ public final class TranslationService implements AutoCloseable {
              future = inFlightTranslations.computeIfAbsent(cacheKey, k -> 
                  executor.submit(() -> {
                      try {
-                         String translated = manager.active().translate(text, source, to.code());
+                         String translated = provider.translate(text, source, to.code());
                          // Store in cache with size limit
                          if (translationCache.size() < MAX_TRANSLATION_CACHE_SIZE) {
                              translationCache.put(cacheKey, translated);
@@ -178,6 +202,14 @@ public final class TranslationService implements AutoCloseable {
         return manager.active().isAvailable();
     }
 
+    /**
+     * @param name provider name
+     * @return whether a provider with that name is registered, available or not
+     */
+    public boolean hasProvider(String name) {
+        return name != null && !name.isBlank() && providerByName(name) != null;
+    }
+
     /** @return the name of the active provider (e.g. {@code "google"}). */
     public String activeName() {
         return manager.active().name();
@@ -219,11 +251,32 @@ public final class TranslationService implements AutoCloseable {
         executor.close();
     }
 
-    private boolean shouldTranslate(Language from, Language to) {
+    private boolean shouldTranslate(Translator provider, Language from, Language to) {
         if (from == null || to == null || to == Language.AUTO) {
             return false;
         }
-        return from != to && manager.active().isAvailable();
+        return from != to && provider.isAvailable();
+    }
+
+    private Translator resolveProvider(String backend) {
+        if (backend == null || backend.isBlank()) {
+            return manager.active();
+        }
+        Translator named = providerByName(backend);
+        if (named == null) {
+            throw new IllegalArgumentException(
+                "unknown translation backend '" + backend + "'");
+        }
+        return named.isAvailable() ? named : manager.active();
+    }
+
+    private Translator providerByName(String name) {
+        for (Translator provider : manager.providers()) {
+            if (provider.name().equalsIgnoreCase(name)) {
+                return provider;
+            }
+        }
+        return null;
     }
 
     private String localization(Language from, String text) {

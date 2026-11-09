@@ -22,6 +22,9 @@ import java.util.Objects;
  *       {@code %lang_target%}.</li>
  *   <li>{@code translate} — when false, {@code <tr>} spans are left untouched
  *       (e.g. the sender seeing their own native message).</li>
+ *   <li>{@code translationBackend} — optional provider name selected by a
+ *       {@code chattranslator.<backend>} output target; {@code null} keeps the
+ *       facade default and fallback.</li>
  * </ul>
  */
 public final class TemplateContext {
@@ -31,6 +34,7 @@ public final class TemplateContext {
     private final Language sourceLanguage;
     private final Language targetLanguage;
     private final boolean translate;
+    private final String translationBackend;
     private final Map<String, String> variables;
 
     private TemplateContext(Builder builder) {
@@ -39,6 +43,7 @@ public final class TemplateContext {
         this.sourceLanguage = Objects.requireNonNull(builder.sourceLanguage, "sourceLanguage");
         this.targetLanguage = Objects.requireNonNull(builder.targetLanguage, "targetLanguage");
         this.translate = builder.translate;
+        this.translationBackend = builder.translationBackend;
         this.variables = Collections.unmodifiableMap(new LinkedHashMap<>(builder.variables));
     }
 
@@ -62,6 +67,10 @@ public final class TemplateContext {
         return translate;
     }
 
+    public String translationBackend() {
+        return translationBackend;
+    }
+
     public String variable(String key) {
         return variables.get(key);
     }
@@ -81,6 +90,7 @@ public final class TemplateContext {
         private final Language targetLanguage;
         private String content;
         private boolean translate = true;
+        private String translationBackend;
         private final Map<String, String> variables = new LinkedHashMap<>();
 
         private Builder(Actor sender, Language source, Language target) {
@@ -96,6 +106,11 @@ public final class TemplateContext {
 
         public Builder translate(boolean translate) {
             this.translate = translate;
+            return this;
+        }
+
+        public Builder translationBackend(String translationBackend) {
+            this.translationBackend = translationBackend;
             return this;
         }
 

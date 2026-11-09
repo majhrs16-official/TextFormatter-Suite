@@ -35,7 +35,7 @@ runtime y el instalador las ignoran, no las migran y no las eliminan.
 | Tipo | Paquete | Rol |
 |------|---------|-----|
 | `Router` | `core-api` | Contrato que consume el host para enrutar mensajes |
-| `IflowHub` | `core-api` | Fachada del hub: router activo, backends disponibles y `reload()` |
+| `IflowHub` | `core-api` | Fachada del hub: router activo, `router(backend)` por mensaje, backends disponibles y `reload()` |
 | `IflowBackend` | `core-api` | Servicio que publica cada motor: nombre, router y disponibilidad |
 
 Los motores publican `IflowBackend` en su `ModuleContext`:
@@ -60,15 +60,19 @@ motor se activa o desactiva, el hub se refresca con `ModuleActivatedEvent` y
    pipeline del runtime queda sin motor y `IflowHub.router()` devuelve `null`.
    Las llamadas directas al hub fallan cerradas (`REJECT`).
 
+Un mensaje puede sobrescribir el default con un target `iflow.<backend>` en
+`outputs` (`config/suite/config.yml` o `Message.outputPlan()`). El hub resuelve
+el backend pedido con `IflowHub.router(backend)`; si está instalado pero no
+disponible aplica el fallback anterior cuando está habilitado. Un backend
+desconocido, dos targets `iflow.*` o un backend no disponible sin fallback son
+un error explícito de la etapa `route`, nunca un skip silencioso.
+
 ## Integración con el runtime
 
-`SuiteRuntime` resuelve el router desde `IflowHub`; el hub registra además
-`Router` para los consumidores que lo resuelvan por tipo.
-
-> **Deuda P0.** El código todavía conserva un fallback a un `Router` publicado
-> directamente por un motor cuando el hub no está instalado. Ese camino es
-> deuda de la purga pre-1.0 (PLAN P0.3), no un contrato de compatibilidad ni
-> un modo soportado.
+El módulo publica `RouteStage` como `PipelineStage` y `IflowHub`/`Router` como
+servicios. `SuiteRuntime` no conoce motores: solo ordena las etapas según la
+lista `pipeline` de `config/suite/config.yml`. `RouteStage` resuelve el backend
+por mensaje a través del hub y conserva el fail-closed cuando no hay ninguno.
 
 ## Build y tests
 
@@ -81,4 +85,6 @@ Tests actuales:
 
 - `IflowConfigTest`: defaults, alias, YAML inválido y normalización.
 - `IflowHubTest`: registro del hub, refresco por eventos, fallback con prioridad
-  explícita, fallo cerrado y delegación al backend activo.
+  explícita, fallo cerrado, delegación al backend activo y `router(backend)`.
+- `RouteStageTest`: rate limit por emisión, decisión por destinatario, redirect
+  único, conflicto de canal y selección/validación del backend `iflow.*`.

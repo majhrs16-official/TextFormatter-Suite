@@ -90,6 +90,45 @@ final class IflowBackendManager {
         return active;
     }
 
+    /**
+     * Resuelve el backend para un override por mensaje.
+     *
+     * <p>Un nombre desconocido devuelve {@code null}. Un backend instalado pero
+     * no disponible aplica la prioridad de fallback de ADR-032 cuando
+     * {@code fallback-on-unavailable} está habilitado; si no, devuelve
+     * {@code null}.</p>
+     */
+    IflowBackend forBackend(String requested) {
+        if (requested == null || requested.isBlank()) {
+            return active;
+        }
+        IflowBackend named = backendNamed(requested);
+        if (named == null) {
+            return null;
+        }
+        if (named.isAvailable()) {
+            return named;
+        }
+        if (config.fallback()) {
+            for (String name : FALLBACK_PRIORITY) {
+                IflowBackend candidate = backendNamed(name);
+                if (candidate != null && candidate.isAvailable()) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    private IflowBackend backendNamed(String name) {
+        for (IflowBackend backend : backends) {
+            if (backend.name().equals(name)) {
+                return backend;
+            }
+        }
+        return null;
+    }
+
     List<IflowBackend> backends() {
         return backends;
     }

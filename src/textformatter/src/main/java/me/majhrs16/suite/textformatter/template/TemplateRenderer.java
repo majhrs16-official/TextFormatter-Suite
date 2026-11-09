@@ -197,7 +197,10 @@ public final class TemplateRenderer {
         }
         // Translate the content, then re-escape the result to prevent
         // translated text from being interpreted as MiniMessage markup
-        String translated = translation.translate(content, from, to);
+        String backend = context.translationBackend();
+        String translated = backend == null || backend.isBlank()
+                ? translation.translate(content, from, to)
+                : translation.translate(content, from, to, backend);
         return MiniEscape.escape(translated);
     }
 

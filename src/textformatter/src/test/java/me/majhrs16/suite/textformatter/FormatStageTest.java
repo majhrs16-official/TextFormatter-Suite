@@ -7,6 +7,7 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.pipeline.OutputPlan;
+import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.pipeline.PipelineContext;
 import me.majhrs16.suite.api.pipeline.PipelineMessage;
 import me.majhrs16.suite.api.pipeline.PipelineScope;
@@ -17,6 +18,9 @@ import me.majhrs16.suite.api.pipeline.StageResult;
 import me.majhrs16.suite.api.pipeline.StageTrace;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.spi.Translator;
+import me.majhrs16.suite.api.spi.TranslatorManager;
+import me.majhrs16.suite.api.spi.TranslationService;
 import me.majhrs16.suite.textformatter.template.Template;
 import me.majhrs16.suite.textformatter.template.TemplateContext;
 import me.majhrs16.suite.textformatter.template.TemplateRenderer;
@@ -73,16 +77,91 @@ class FormatStageTest {
         assertEquals("format requires a recipient", result.detail());
     }
 
+    @Test
+    void translationTargetSelectsTheProvider() {
+        StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
+                .perRecipient(unit(), context(Language.EN,
+                        OutputPlan.of(List.of("chattranslator.gtranslate"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertEquals("ES->FR:hola|gtranslate", result.message().rendered().plainText());
+    }
+
+    @Test
+    void unknownTranslationBackendIsAnExplicitError() {
+        StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
+                .perRecipient(unit(), context(Language.EN,
+                        OutputPlan.of(List.of("chattranslator.nope"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.ERROR, result.kind());
+        assertEquals("unknown chattranslator backend 'nope'", result.detail());
+    }
+
+    @Test
+    void twoTranslationTargetsAreAConflict() {
+        StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
+                .perRecipient(unit(), context(Language.EN, OutputPlan.of(
+                        List.of("chattranslator.gtranslate", "chattranslator.ltranslate"),
+                        ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.ERROR, result.kind());
+        assertEquals("CONFLICT: multiple 'chattranslator' output targets", result.detail());
+    }
+
+    private static PipelineMessage unit() {
+        Message message = Message.builder()
+                .text("hola")
+                .resolvedSourceLanguage(Language.ES)
+                .build();
+        return PipelineMessage.of(message).withRecipient(ALEX);
+    }
+
     private static PipelineContext context(Language defaultLanguage) {
-        return new Context(defaultLanguage);
+        return context(defaultLanguage, OutputPlan.inherit());
+    }
+
+    private static PipelineContext context(Language defaultLanguage, OutputPlan outputs) {
+        return new Context(defaultLanguage, outputs);
+    }
+
+    private static TemplateRenderer backendRenderer(String... names) {
+        TranslatorManager manager = new TranslatorManager();
+        for (String name : names) {
+            manager.add(new Translator() {
+                @Override public String name() { return name; }
+
+                @Override public String translate(String text, String from, String to) {
+                    return name + ":" + text;
+                }
+
+                @Override public String detect(String text) { return "en"; }
+
+                @Override public boolean isAvailable() { return true; }
+            });
+        }
+        return new TemplateRenderer(
+                new TranslationService(manager), null, NoopLogger.INSTANCE);
     }
 
     private static final class EchoFormatter implements TextFormatter {
+        private final TemplateRenderer renderer;
+
+        private EchoFormatter() {
+            this(null);
+        }
+
+        private EchoFormatter(TemplateRenderer renderer) {
+            this.renderer = renderer;
+        }
+
         @Override public ChannelRegistry channels() { return null; }
-        @Override public TemplateRenderer renderer() { return null; }
+        @Override public TemplateRenderer renderer() { return renderer; }
         @Override public Component format(Message message, TemplateContext context) {
+            String suffix = context.translationBackend() == null
+                    ? ""
+                    : "|" + context.translationBackend();
             return Component.text(context.sourceLanguage() + "->"
-                    + context.targetLanguage() + ":" + context.content());
+                    + context.targetLanguage() + ":" + context.content() + suffix);
         }
         @Override public Component formatTooltip(Message message, TemplateContext context) {
             return Component.empty();
@@ -97,9 +176,11 @@ class FormatStageTest {
 
     private static final class Context implements PipelineContext {
         private final Language defaultLanguage;
+        private final OutputPlan outputs;
 
-        private Context(Language defaultLanguage) {
+        private Context(Language defaultLanguage, OutputPlan outputs) {
             this.defaultLanguage = defaultLanguage;
+            this.outputs = outputs;
         }
 
         @Override public String messageId() { return "test"; }
@@ -111,7 +192,7 @@ class FormatStageTest {
             return new PipelineSettings(defaultLanguage, false, false);
         }
         @Override public PipelineServices services() { return EmptyServices.INSTANCE; }
-        @Override public OutputPlan outputs() { return OutputPlan.inherit(); }
+        @Override public OutputPlan outputs() { return outputs; }
         @Override public PluginLogger logger() { return NoopLogger.INSTANCE; }
         @Override public PipelineTrace trace() { return EmptyTrace.INSTANCE; }
         @Override public long planVersion() { return 1L; }
