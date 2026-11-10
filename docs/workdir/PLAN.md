@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-09 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado y entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`; quedan wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-09 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —multiplexación de salidas— y `PL-4` —import/export de la suite en el editor— como propuestas documentadas y no implementadas. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -638,9 +638,9 @@ planificar el cambio. Se registra como deuda de baja prioridad, no como requisit
 
 ### Feature propuesta — multiplexación de salidas por mensaje (PL-3, 2026-11-06)
 
-> **Estado:** contrato, resolución, etapas selectivas, orden/paralelismo, resultado agregado y sinks
-> locales implementados (2026-11-09); pendientes wiki y esquema. Depende de **ADR-036 §17**
-> (aceptado el 2026-11-06).
+> **Estado:** implementado (2026-11-09): contrato, resolución, etapas selectivas, orden/paralelismo,
+> resultado agregado, sinks locales, wiki y esquema. Depende de **ADR-036 §17** (aceptado el
+> 2026-11-06).
 
 #### Objetivo
 
@@ -674,7 +674,7 @@ pipeline.
 | `chattranslator` | **Implementado (2026-11-09):** el render de `format` usa el target `chattranslator.<backend>` para elegir el backend de `<tr>`; conserva default/fallback de la fachada. |
 | `sync-bus` | **Implementado (2026-11-09):** `sync` usa los targets `sync` en orden; `sendTo(List, Message, ParallelMode)` y `deliverTo(List, DeliveryEnvelope, ParallelMode)` respetan `outputs-parallel`; fan-out completo si no hay targets. `deliver`/`deliverTo` despachan `message.deliver`; `deliver` deduplica y `deliverTo` no. |
 | `sync-bukkit` / `sync-fabric` | **Implementado (2026-11-09):** publican `LocalSyncSink` como `bukkit`/`fabric` con la superficie LCM y la capacidad `sync-sink`; la entrega local delega en `LocalDelivery` y devuelve `Ok(DeliverySummary)`. |
-| Configuración | **Implementado (2026-11-09):** `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`. |
+| Configuración | **Implementado (2026-11-09):** `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`; contrato del editor actualizado en `config-schema-v2.2.md`. |
 | Tests | **Implementado (2026-11-09):** precedencia, vacío vs ausente, target inválido, `outputs-parallel`, selección de backend en `route`/`<tr>`, origen del plan, orden/paralelismo de `sync`, resultado agregado por target, dedup/no-dedup de entrega y sink local con y sin puerto. |
 
 #### Pasos de implementación
@@ -702,8 +702,8 @@ pipeline.
 7. **Guardas.** `checkArchitecture`: `core-api` sin SDK; `multiplexer:*` declarativo, nunca
    `Requirement`; `textformatter` no es multiplexor; la entrega local es el sink `bukkit`/`fabric`,
    no un camino paralelo al pipeline.
-8. **Documentación y esquema.** `config-schema-v2.2.md` y la wiki; `docs/prompts/` requiere
-   autorización.
+8. **Documentación y esquema. ✅ (2026-11-09)** `config-schema-v2.2.md` documenta `outputs` y
+   `outputs-parallel`; la wiki describe la selección de salidas y la entrega local.
 
 #### Estado de implementación (2026-11-09)
 
@@ -757,7 +757,7 @@ Completado en esta unidad:
 
 Pendiente y fuera de esta unidad:
 
-- Actualización de `config-schema-v2.2.md` (requiere autorización) y `docs/wiki`.
+- Ninguno. PL-3 queda cerrado; el E2E real y el betatesting siguen en ADR-034.
 
 #### Criterios de cierre y tests
 
@@ -795,13 +795,11 @@ Pendiente y fuera de esta unidad:
 | ADR-036 §3 | La configuración global solo define `pipeline`. | Se añaden `outputs` (lista de `multiplexer.backend`) y `outputs-parallel`; `config-version: 1.0`. |
 | ADR-019 | Prohíbe `feature → feature`. | `sync` es `sync-bus`; no se crea `sync-mux` ni se requiere otra feature. |
 | ADR-034 | Prohíbe aliases. | `outputs` es una lista de cadenas; no hay claves `multiplexer`/`backend` ni alias en español. |
-| `config-schema-v2.2.md` | No tiene `outputs`. | Requiere autorización para actualizarlo. |
+| `config-schema-v2.2.md` | No tenía `outputs`. | Actualizado: `outputs` y `outputs-parallel` documentados con sus reglas de validación. |
 
 #### Bloqueos
 
-- Autorización para `config-schema-v2.2.md` solo si se añaden `outputs`/`outputs-parallel` al
-  esquema; la wiki es documentación de usuario y no requiere esa autorización.
-- PL-1/PL-2 y TF-006 para el flujo completo (TF-005 cerrado el 2026-11-06).
+- Ninguno para PL-3. El E2E real y el betatesting se ejecutan después de la base 1.0 (ADR-034).
 
 ---
 

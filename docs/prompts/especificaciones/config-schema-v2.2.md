@@ -48,8 +48,22 @@ chat:
   log-to-console: true
 repositories: []
 module-allowlist: []
+outputs:                      # LIST de "<multiplexer>.<backend>"; ausente = heredar
+  - sync.discord
+  - sync.tcp
+  - sync.bukkit
+outputs-parallel: true        # BOOLEAN; true = finalización en paralelo, false = secuencial
 config-version: 1.0
 ```
+
+`outputs` es una lista ordenada de cadenas `<multiplexer>.<backend>`; el primer punto separa el
+multiplexor del backend, que puede contener puntos. `iflow`, `chattranslator` y `sync` son los
+multiplexores válidos; `textformatter` no lo es. Una lista vacía (`outputs: []`) declara «sin
+salidas» y no se interpreta como «todas». Si la clave falta, el host hereda el default del módulo:
+`sync` hace fan-out a todos los sinks, incluidos los locales `bukkit` y `fabric`.
+`outputs-parallel` solo controla la finalización dentro de `sync`; `true` inicia todos los targets
+antes de esperar y `false` espera cada uno. Un target sin punto, con segmentos vacíos o con un
+multiplexor/backend desconocido es un error explícito de validación, nunca un skip silencioso.
 
 `iflow.engine.kind` no forma parte de este contrato. La selección de motor vive en
 `config/iflow/config.yml` (hub iFlow):
@@ -61,7 +75,8 @@ config-version: 1.0
 ```
 
 Reglas: claves opcionales, desconocidas ignoradas por el host (degradan). Defaults del editor =
-`HostConfig.defaults()`: quick-look `true`, language `en`, parallel `false`, sonido `true`.
+`HostConfig.defaults()`: quick-look `true`, language `en`, parallel `false`, sonido `true`,
+`outputs` ausente y `outputs-parallel` `true`.
 
 ## 3. `channels/<id>.yml` (claves del host)
 

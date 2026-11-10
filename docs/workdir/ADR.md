@@ -2020,7 +2020,8 @@ No aparece en `outputs`.
   `sync-bus`; la entrega física pasa por el puerto `LocalDelivery` que implementa el host. La captura
   no es la razón de ser del sink, pero el sink expone el entorno completo.
 - **`config-schema-v2.2.md`.** `outputs` es una lista de cadenas `<multiplexer>.<backend>` y
-  `outputs-parallel` un booleano; requieren autorización para actualizar el esquema.
+  `outputs-parallel` un booleano; el contrato del editor ya los documenta con sus reglas de
+  validación.
 - **No promete** orden de finalización en modo paralelo, transacciones entre backends ni selección
   automática por salud. El modo secuencial es explícito.
 
