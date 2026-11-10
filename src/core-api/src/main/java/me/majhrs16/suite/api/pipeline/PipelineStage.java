@@ -24,6 +24,20 @@ public interface PipelineStage {
     /** @return phases in which the engine must invoke this stage */
     Set<PipelineScope> scopes();
 
+    /**
+     * Declares which {@code sync.<backend>} targets this stage consumes.
+     *
+     * <p>The engine validates every declared target against the union of the
+     * resolved stages: a backend without an owner or with more than one owner
+     * is an explicit error. A stage only processes the targets it owns.</p>
+     *
+     * @param backend backend segment of a {@code sync.<backend>} target
+     * @return whether this stage consumes that backend
+     */
+    default boolean ownsOutput(String backend) {
+        return false;
+    }
+
     /** Runs once per emission, before recipients are expanded. */
     default StageResult beforeMessage(PipelineMessage message, PipelineContext context) {
         return StageResult.continueWith(message);

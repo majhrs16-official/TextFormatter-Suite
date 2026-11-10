@@ -60,12 +60,13 @@ motor se activa o desactiva, el hub se refresca con `ModuleActivatedEvent` y
    pipeline del runtime queda sin motor y `IflowHub.router()` devuelve `null`.
    Las llamadas directas al hub fallan cerradas (`REJECT`).
 
-Un mensaje puede sobrescribir el default con un target `iflow.<backend>` en
-`outputs` (`config/suite/config.yml` o `Message.outputPlan()`). El hub resuelve
-el backend pedido con `IflowHub.router(backend)`; si está instalado pero no
-disponible aplica el fallback anterior cuando está habilitado. Un backend
-desconocido, dos targets `iflow.*` o un backend no disponible sin fallback son
-un error explícito de la etapa `route`, nunca un skip silencioso.
+Un mensaje puede sobrescribir el default con un target `sync.<backend>` cuyo
+backend sea iFlow en `outputs` (`config/suite/config.yml` o
+`Message.outputPlan()`). El hub resuelve el backend pedido con
+`IflowHub.router(backend)`; si está instalado pero no disponible aplica el
+fallback anterior cuando está habilitado. Un backend iFlow no disponible o dos
+targets propios son un error explícito de la etapa `route`; un backend sin dueño
+lo rechaza el motor antes de `MESSAGE_PRE`, nunca un skip silencioso.
 
 ## Integración con el runtime
 

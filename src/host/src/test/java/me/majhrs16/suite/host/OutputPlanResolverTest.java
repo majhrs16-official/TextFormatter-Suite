@@ -40,7 +40,7 @@ class OutputPlanResolverTest {
     }
 
     @Test
-    void noDeclarationKeepsTheMultiplexerDefault() {
+    void noDeclarationKeepsTheModuleDefault() {
         OutputPlan effective = OutputPlanResolver.resolve(
                 OutputPlan.inherit(), OutputPlan.inherit());
 

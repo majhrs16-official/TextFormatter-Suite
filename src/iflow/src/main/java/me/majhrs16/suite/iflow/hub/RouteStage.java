@@ -27,11 +27,12 @@ import java.util.Set;
  * {@code DECISION_CONFLICT} and the unit is rejected; there is no recursive
  * re-entry into later stages.</p>
  *
- * <p>When the effective {@link OutputPlan} declares an {@code iflow.<backend>}
- * target, the stage resolves that backend through the hub and routes with it;
- * without a target the hub applies its configured default and fallback. More
- * than one {@code iflow} target is a conflict, and an unknown or unavailable
- * backend is an explicit error.</p>
+ * <p>The stage owns the iFlow backends. When the effective {@link OutputPlan}
+ * declares a {@code sync.<backend>} target whose backend is an available iFlow
+ * engine, the stage resolves that backend through the hub and routes with it;
+ * without an owned target the hub applies its configured default and fallback.
+ * More than one owned target is a conflict, and a backend that is listed but
+ * has no router is an explicit error.</p>
  *
  * <p>When no iFlow hub is installed this stage is not published: the engine
  * expands recipients and delivers, which is the documented default allow.</p>
@@ -40,8 +41,6 @@ public final class RouteStage implements PipelineStage {
 
     /** Contract id of the route stage. */
     public static final String ID = "route";
-
-    private static final String MULTIPLEXER = "iflow";
 
     private final IflowHub hub;
 
@@ -57,6 +56,11 @@ public final class RouteStage implements PipelineStage {
     @Override
     public Set<PipelineScope> scopes() {
         return Set.of(PipelineScope.MESSAGE_PRE, PipelineScope.RECIPIENT);
+    }
+
+    @Override
+    public boolean ownsOutput(String backend) {
+        return backend != null && hub.availableBackends().contains(backend);
     }
 
     @Override
@@ -123,33 +127,33 @@ public final class RouteStage implements PipelineStage {
     /**
      * Resolves the backend requested by the effective output plan.
      *
-     * <p>A plan without {@code iflow.*} targets keeps the hub default. A
-     * declared target must name exactly one installed and available backend.</p>
+     * <p>Only targets owned by this stage are considered; the engine already
+     * rejected an unknown or ambiguous backend. A plan without owned targets
+     * keeps the hub default. A declared target must name exactly one installed
+     * and available backend.</p>
      */
     private Selection selectBackend(OutputPlan outputs) {
-        List<String> backends = iflowBackends(outputs.targets());
+        List<String> backends = declaredBackends(outputs.targets()).stream()
+                .filter(this::ownsOutput)
+                .toList();
         if (backends.size() > 1) {
-            return Selection.error("CONFLICT: multiple 'iflow' output targets");
+            return Selection.error("CONFLICT: multiple iFlow output targets");
         }
         if (backends.isEmpty()) {
             return Selection.inherited();
         }
         String backend = backends.get(0);
-        if (!hub.availableBackends().contains(backend)) {
-            return Selection.error("unknown iflow backend '" + backend + "'");
-        }
         Router selected = hub.router(backend);
         if (selected == null) {
-            return Selection.error("iflow backend '" + backend + "' is unavailable");
+            return Selection.error("iFlow backend '" + backend + "' is unavailable");
         }
         return Selection.of(selected);
     }
 
-    /** @return backend names named by {@code iflow.<backend>} targets, in order */
-    static List<String> iflowBackends(List<String> targets) {
+    /** @return backend names named by the declared targets, in order */
+    static List<String> declaredBackends(List<String> targets) {
         return targets.stream()
-                .filter(target -> target.startsWith(MULTIPLEXER + "."))
-                .map(target -> target.substring(MULTIPLEXER.length() + 1))
+                .map(OutputPlan::backend)
                 .filter(backend -> !backend.isBlank())
                 .toList();
     }

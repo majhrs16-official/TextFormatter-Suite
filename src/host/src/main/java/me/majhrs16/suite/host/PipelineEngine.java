@@ -116,6 +116,15 @@ public final class PipelineEngine implements AutoCloseable {
         recordOutputOrigin(trace, resolution);
         PipelineMessage emission = PipelineMessage.of(resolved);
 
+        String outputError = validateOutputs(outputs);
+        if (outputError != null) {
+            trace.record(new StageTrace(
+                    "outputs", null, null, null,
+                    StageStatus.ERROR, outputError, 0L));
+            return terminalOutcome(status, trace,
+                    StageResult.error(emission, outputError));
+        }
+
         StageResult pre = runScope(PipelineScope.MESSAGE_PRE, emission, trace, outputs);
         if (pre.terminal()) {
             return terminalOutcome(status, trace, pre);
@@ -292,6 +301,39 @@ public final class PipelineEngine implements AutoCloseable {
             }
             cursor = index;
         }
+    }
+
+    /**
+     * Validates that every declared target has exactly one owning stage.
+     *
+     * <p>The namespace is already enforced by {@link OutputPlan}; this check
+     * resolves the backend against the resolved stages before any stage runs.
+     * An unknown backend or one claimed by two stages is an explicit error, so
+     * a declared output is never silently ignored.</p>
+     *
+     * @return the failure detail, or {@code null} when the plan is valid
+     */
+    private String validateOutputs(OutputPlan outputs) {
+        if (!outputs.declared()) {
+            return null;
+        }
+        for (String target : outputs.targets()) {
+            String backend = OutputPlan.backend(target);
+            List<String> owners = new ArrayList<>();
+            for (ResolvedStage stage : stages) {
+                if (stage.stage().ownsOutput(backend)) {
+                    owners.add(stage.stageId());
+                }
+            }
+            if (owners.isEmpty()) {
+                return "unknown output backend '" + backend + "'";
+            }
+            if (owners.size() > 1) {
+                return "ambiguous output backend '" + backend + "': "
+                        + String.join(", ", owners);
+            }
+        }
+        return null;
     }
 
     /**

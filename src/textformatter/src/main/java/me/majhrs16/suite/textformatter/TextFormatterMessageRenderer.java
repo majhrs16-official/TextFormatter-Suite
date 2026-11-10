@@ -53,7 +53,7 @@ public final class TextFormatterMessageRenderer
 
     /**
      * Renders with an explicit translation backend selected by a
-     * {@code chattranslator.<backend>} output target.
+     * {@code sync.<backend>} output target.
      *
      * @param translationBackend provider name, or {@code null} for the facade
      *                           default and fallback
@@ -68,7 +68,7 @@ public final class TextFormatterMessageRenderer
     }
 
     /**
-     * @param backend provider name from a {@code chattranslator.*} target
+     * @param backend provider name from a {@code sync.*} target
      * @return whether the translation service knows that provider
      */
     public boolean hasTranslationBackend(String backend) {

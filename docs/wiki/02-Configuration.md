@@ -80,7 +80,7 @@ repositories:                       # Host schema; package operations read manag
     url: "https://api.github.com/repos/majhrs16-official/TextFormatter-Suite"
     enabled: true
 module-allowlist: []                # Optional module id allowlist
-outputs:                            # Ordered <multiplexer>.<backend> targets
+outputs:                            # Ordered sync.<backend> targets
   - sync.discord
   - sync.tcp
 outputs-parallel: true              # true = parallel finalization; false = sequential
@@ -99,19 +99,21 @@ config-version: 1.0
 | `chat.log-to-console` | boolean | `true` | Mirror chat to the console |
 | `repositories[]` | list | `[]` | Host repository schema (the manager reads `manager/repo.yml`) |
 | `module-allowlist` | list | `[]` | Restrict which modules may activate |
-| `outputs` | list | inherit (fan-out) | Ordered `<multiplexer>.<backend>` targets; absent = module default, `[]` = no outputs |
-| `outputs-parallel` | boolean | `true` | Parallel finalization within the same delivery multiplexer; `false` = sequential |
+| `outputs` | list | inherit (fan-out) | Ordered `sync.<backend>` targets; absent = module default, `[]` = no outputs |
+| `outputs-parallel` | boolean | `true` | Parallel finalization within `sync`; `false` = sequential |
 
-Output precedence is message (`Message.outputPlan()`) → this file → multiplexer default. Each
-target is split at the first dot: the first segment is the multiplexer and the rest is the backend,
-which may contain dots. An invalid or unknown target is an explicit error, never a silent skip.
-`textformatter` is not a multiplexer and never appears in `outputs`.
+Output precedence is message (`Message.outputPlan()`) → this file → module default. Every target
+uses the `sync` namespace and the backend after `sync.` may contain dots. The engine validates each
+backend against the resolved stages: a backend without an owner or claimed by two stages is an
+explicit error, never a silent skip. `textformatter` is not a delivery backend and never appears as
+a sink in `outputs`.
 
-Transform multiplexers (`iflow`, `chattranslator`) accept at most one target. `route` uses
-`iflow.<backend>` to pick the engine for that message; `<tr>` inside `format` uses
-`chattranslator.<backend>` to pick the translation provider. Without a target both keep their
-configured default and fallback. Two targets of the same transform multiplexer are a conflict, and
-an unknown backend is an explicit error. `sync` accepts several targets and delivers in order.
+`route` owns the iFlow backends (`sync.iflow-vm`, `sync.iflow-wasm`, `sync.iflow-firewall`) and uses
+the selected engine for that message. `<tr>` inside `format` owns the translation backends
+(`sync.gtranslate`, `sync.ltranslate`) and uses the selected provider. Without an owned target both
+keep their configured default and fallback. `route` and `format` accept at most one owned target; a
+second one is a conflict. The terminal `sync` stage owns the sink backends (`sync.discord`,
+`sync.tcp`, `sync.bukkit`, ...) and accepts several targets, delivered in order.
 `sync.bukkit` and `sync.fabric` are local targets: they deliver the rendered envelope to players and
 the console through the host `LocalDelivery` port. Listing only remote `sync.*` targets omits local
 delivery; `outputs: []` omits every output, including the local one.
@@ -119,10 +121,11 @@ delivery; `outputs: []` omits every output, including the local one.
 `outputs-parallel: true` starts every `sync` target before waiting for completion; `false` waits for
 each target before starting the next one. The result keeps the declared order and reports one
 outcome per target, so a partial failure is visible instead of being counted as a total success.
-With no `outputs` at any level, `sync` keeps the full fan-out to every registered sink.
+With no `outputs` at any level, the terminal `sync` stage keeps the full fan-out to every registered
+sink.
 
 The iFlow **global default** is not selected here. `iflow.engine.kind` does not exist; the hub owns
-the default in `config/iflow/config.yml`. An `iflow.<backend>` target only overrides that default
+the default in `config/iflow/config.yml`. A `sync.<iflow-backend>` target only overrides that default
 for the message that declares it.
 
 ### iFlow hub (`config/iflow/config.yml`)

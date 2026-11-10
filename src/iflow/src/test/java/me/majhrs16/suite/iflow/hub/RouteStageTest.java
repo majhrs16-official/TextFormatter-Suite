@@ -33,6 +33,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteStageTest {
 
@@ -147,7 +149,7 @@ class RouteStageTest {
 
         StageResult result = new RouteStage(hub).perRecipient(
                 PipelineMessage.of(message()).withRecipient(STEVE),
-                context(OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT)));
+                context(OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertEquals(List.of("chat"), named.routedChannels);
@@ -155,13 +157,18 @@ class RouteStageTest {
     }
 
     @Test
-    void unknownBackendIsAnExplicitError() {
-        StageResult result = new RouteStage(new FakeRouter()).perRecipient(
-                PipelineMessage.of(message()).withRecipient(STEVE),
-                context(OutputPlan.of(List.of("iflow.iflow-wasm"), ParallelMode.INHERIT)));
+    void targetOwnedByAnotherStageIsIgnored() {
+        FakeRouter hub = new FakeRouter();
+        hub.first = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null), message());
 
-        assertEquals(StageResult.Kind.ERROR, result.kind());
-        assertEquals("unknown iflow backend 'iflow-wasm'", result.detail());
+        StageResult result = new RouteStage(hub).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE),
+                context(OutputPlan.of(List.of("sync.gtranslate"), ParallelMode.INHERIT)));
+
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertEquals(List.of("chat"), hub.routedChannels,
+                "a backend owned by format must not change the route backend");
     }
 
     @Test
@@ -171,22 +178,26 @@ class RouteStageTest {
 
         StageResult result = new RouteStage(hub).beforeMessage(
                 PipelineMessage.of(message()),
-                context(OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT)));
+                context(OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.ERROR, result.kind());
-        assertEquals("iflow backend 'iflow-vm' is unavailable", result.detail());
+        assertEquals("iFlow backend 'iflow-vm' is unavailable", result.detail());
     }
 
     @Test
-    void twoIflowTargetsAreAConflict() {
-        StageResult result = new RouteStage(new FakeRouter()).beforeMessage(
+    void twoOwnedTargetsAreAConflict() {
+        FakeRouter hub = new FakeRouter();
+        hub.named.put("iflow-vm", new FakeRouter());
+        hub.named.put("iflow-firewall", new FakeRouter());
+
+        StageResult result = new RouteStage(hub).beforeMessage(
                 PipelineMessage.of(message()),
                 context(OutputPlan.of(
-                        List.of("iflow.iflow-vm", "iflow.iflow-firewall"),
+                        List.of("sync.iflow-vm", "sync.iflow-firewall"),
                         ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.ERROR, result.kind());
-        assertEquals("CONFLICT: multiple 'iflow' output targets", result.detail());
+        assertEquals("CONFLICT: multiple iFlow output targets", result.detail());
     }
 
     @Test
@@ -199,10 +210,22 @@ class RouteStageTest {
 
         StageResult result = new RouteStage(hub).beforeMessage(
                 PipelineMessage.of(message()),
-                context(OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT)));
+                context(OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.DROP, result.kind());
         assertEquals("rate limit exceeded: 250ms", result.detail());
+    }
+
+    @Test
+    void ownsOnlyAvailableIflowBackends() {
+        FakeRouter hub = new FakeRouter();
+        hub.named.put("iflow-vm", new FakeRouter());
+        RouteStage stage = new RouteStage(hub);
+
+        assertTrue(stage.ownsOutput("iflow-vm"));
+        assertFalse(stage.ownsOutput("iflow-wasm"));
+        assertFalse(stage.ownsOutput("gtranslate"));
+        assertFalse(stage.ownsOutput(null));
     }
 
     private static Message message() {

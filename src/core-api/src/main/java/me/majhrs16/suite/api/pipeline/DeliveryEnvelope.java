@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Delivery payload handed to the {@code sync} multiplexer.
+ * Delivery payload handed to the {@code sync} stage.
  *
  * <p>The envelope keeps the original {@link Message} together with the
  * recipient-specific units the pipeline already rendered. It is the payload of

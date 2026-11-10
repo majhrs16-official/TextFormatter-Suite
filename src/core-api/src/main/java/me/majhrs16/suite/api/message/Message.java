@@ -138,7 +138,7 @@ public final class Message {
      * Outputs declared by this message.
      *
      * <p>{@link OutputPlan#inherit()} means "use the suite configuration and,
-     * failing that, the multiplexer default"; a declared empty plan means
+     * failing that, the module default"; a declared empty plan means
      * "no outputs". The engine resolves the effective plan once per emission
      * and exposes it through the pipeline context.</p>
      *

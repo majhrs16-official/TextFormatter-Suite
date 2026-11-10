@@ -47,15 +47,31 @@ class PipelineContractsTest {
     }
 
     @Test
-    void outputTargetsRequireMultiplexerAndBackend() {
+    void outputTargetsRequireTheSyncNamespace() {
         assertThrows(IllegalArgumentException.class,
                 () -> OutputPlan.of(List.of("discord"), ParallelMode.INHERIT));
         assertThrows(IllegalArgumentException.class,
                 () -> OutputPlan.of(List.of(".discord"), ParallelMode.INHERIT));
         assertThrows(IllegalArgumentException.class,
+                () -> OutputPlan.of(List.of("sync"), ParallelMode.INHERIT));
+        assertThrows(IllegalArgumentException.class,
                 () -> OutputPlan.of(List.of("sync."), ParallelMode.INHERIT));
         assertThrows(IllegalArgumentException.class,
                 () -> OutputPlan.of(List.of("sync..discord"), ParallelMode.INHERIT));
+        assertThrows(IllegalArgumentException.class,
+                () -> OutputPlan.of(List.of("sync.discord."), ParallelMode.INHERIT));
+        assertThrows(IllegalArgumentException.class,
+                () -> OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT));
+        assertThrows(IllegalArgumentException.class,
+                () -> OutputPlan.of(List.of("chattranslator.gtranslate"), ParallelMode.INHERIT));
+    }
+
+    @Test
+    void backendExtractsTheSyncSegment() {
+        assertEquals("discord", OutputPlan.backend("sync.discord"));
+        assertEquals("discord.eu.west", OutputPlan.backend("sync.discord.eu.west"));
+        assertThrows(IllegalArgumentException.class,
+                () -> OutputPlan.backend("iflow.iflow-vm"));
     }
 
     @Test

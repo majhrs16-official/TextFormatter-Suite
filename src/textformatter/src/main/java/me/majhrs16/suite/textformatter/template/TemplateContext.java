@@ -23,7 +23,7 @@ import java.util.Objects;
  *   <li>{@code translate} — when false, {@code <tr>} spans are left untouched
  *       (e.g. the sender seeing their own native message).</li>
  *   <li>{@code translationBackend} — optional provider name selected by a
- *       {@code chattranslator.<backend>} output target; {@code null} keeps the
+ *       {@code sync.<backend>} output target; {@code null} keeps the
  *       facade default and fallback.</li>
  * </ul>
  */

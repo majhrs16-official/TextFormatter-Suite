@@ -332,6 +332,83 @@ class PipelineEngineTest {
         assertEquals(suite, seen.get());
     }
 
+    @Test
+    void unknownOutputBackendFailsBeforeAnyStageRuns() {
+        AtomicInteger runs = new AtomicInteger();
+        PipelineStage sync = new BaseStage("sync") {
+            @Override
+            public Set<PipelineScope> scopes() {
+                return Set.of(PipelineScope.MESSAGE_POST);
+            }
+
+            @Override
+            public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+                runs.incrementAndGet();
+                return StageResult.continueWith(message);
+            }
+        };
+
+        PipelineOutcome outcome = engine(
+                PipelinePlan.of(List.of("sync"), 1L),
+                List.of(new ResolvedStage("sync", "sync-bus", sync))).dispatch(
+                        message().withOutputPlan(OutputPlan.of(
+                                List.of("sync.unknown"), ParallelMode.INHERIT)));
+
+        assertEquals(1, outcome.failed());
+        assertEquals(0, outcome.delivered());
+        assertEquals(0, runs.get(), "no stage may run with an invalid output plan");
+        StageTrace error = outcome.trace().entries().stream()
+                .filter(entry -> entry.stageId().equals("outputs"))
+                .filter(entry -> entry.status() == StageStatus.ERROR)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("unknown output backend 'unknown'", error.detail());
+    }
+
+    @Test
+    void ambiguousOutputBackendFailsBeforeAnyStageRuns() {
+        AtomicInteger runs = new AtomicInteger();
+        PipelineStage first = owningStage("extra", "discord", runs);
+        PipelineStage second = owningStage("sync", "discord", runs);
+
+        PipelineOutcome outcome = engine(
+                PipelinePlan.of(List.of("extra", "sync"), 1L),
+                List.of(new ResolvedStage("extra", "m1", first),
+                        new ResolvedStage("sync", "sync-bus", second))).dispatch(
+                        message().withOutputPlan(OutputPlan.of(
+                                List.of("sync.discord"), ParallelMode.INHERIT)));
+
+        assertEquals(1, outcome.failed());
+        assertEquals(0, outcome.delivered());
+        assertEquals(0, runs.get(), "no stage may run with an ambiguous backend");
+        StageTrace error = outcome.trace().entries().stream()
+                .filter(entry -> entry.stageId().equals("outputs"))
+                .filter(entry -> entry.status() == StageStatus.ERROR)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("ambiguous output backend 'discord': extra, sync", error.detail());
+    }
+
+    private static PipelineStage owningStage(String id, String backend, AtomicInteger runs) {
+        return new BaseStage(id) {
+            @Override
+            public Set<PipelineScope> scopes() {
+                return Set.of(PipelineScope.MESSAGE_POST);
+            }
+
+            @Override
+            public boolean ownsOutput(String candidate) {
+                return backend.equals(candidate);
+            }
+
+            @Override
+            public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
+                runs.incrementAndGet();
+                return StageResult.continueWith(message);
+            }
+        };
+    }
+
     private PipelineEngine engine(PipelinePlan plan,
                                   List<ResolvedStage> stages) {
         return engine(plan, stages, List.of());
@@ -438,6 +515,13 @@ class PipelineEngineTest {
         @Override
         public Set<PipelineScope> scopes() {
             return Set.of(PipelineScope.MESSAGE_POST);
+        }
+
+        @Override
+        public boolean ownsOutput(String backend) {
+            // Stand-in for the terminal sync stage: every declared sink backend
+            // belongs to it in these engine tests.
+            return backend != null;
         }
 
         @Override

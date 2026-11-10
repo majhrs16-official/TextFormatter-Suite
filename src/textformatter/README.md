@@ -92,10 +92,11 @@ Formatted message (Adventure Component)
 Translation is not a separate pipeline stage: `<tr>` spans are resolved inside
 `TemplateRenderer` during the `format` stage. `chattranslator` supplies the
 `TranslationService`; if it is absent, the span content is rendered unchanged.
-When the effective `outputs` declares a `chattranslator.<backend>` target, the
-stage validates it and renders the span with that provider; without a target the
-facade default and fallback apply. Two `chattranslator.*` targets are a
-conflict, and an unknown provider is an explicit stage error.
+When the effective `outputs` declares a translation backend
+(`sync.gtranslate`, `sync.ltranslate`), the stage validates it and renders the
+span with that provider; without an owned target the facade default and fallback
+apply. Two translation targets are a conflict, and a backend without an owner is
+an explicit engine error.
 
 Templates intentionally have no `<expr>` or `${...}` scripting step. Policy decisions are executed by the iFlow VM; the formatter only substitutes values.
 

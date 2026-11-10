@@ -34,6 +34,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FormatStageTest {
 
@@ -81,31 +83,43 @@ class FormatStageTest {
     void translationTargetSelectsTheProvider() {
         StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
                 .perRecipient(unit(), context(Language.EN,
-                        OutputPlan.of(List.of("chattranslator.gtranslate"), ParallelMode.INHERIT)));
+                        OutputPlan.of(List.of("sync.gtranslate"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertEquals("ES->FR:hola|gtranslate", result.message().rendered().plainText());
     }
 
     @Test
-    void unknownTranslationBackendIsAnExplicitError() {
+    void targetOwnedByAnotherStageIsIgnored() {
         StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
                 .perRecipient(unit(), context(Language.EN,
-                        OutputPlan.of(List.of("chattranslator.nope"), ParallelMode.INHERIT)));
+                        OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
 
-        assertEquals(StageResult.Kind.ERROR, result.kind());
-        assertEquals("unknown chattranslator backend 'nope'", result.detail());
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertEquals("ES->FR:hola", result.message().rendered().plainText(),
+                "a backend owned by route must not select a translation provider");
     }
 
     @Test
-    void twoTranslationTargetsAreAConflict() {
-        StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
+    void twoOwnedTargetsAreAConflict() {
+        StageResult result = new FormatStage(
+                new EchoFormatter(backendRenderer("gtranslate", "ltranslate")))
                 .perRecipient(unit(), context(Language.EN, OutputPlan.of(
-                        List.of("chattranslator.gtranslate", "chattranslator.ltranslate"),
+                        List.of("sync.gtranslate", "sync.ltranslate"),
                         ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.ERROR, result.kind());
-        assertEquals("CONFLICT: multiple 'chattranslator' output targets", result.detail());
+        assertEquals("CONFLICT: multiple translation output targets", result.detail());
+    }
+
+    @Test
+    void ownsOnlyKnownTranslationBackends() {
+        FormatStage stage = new FormatStage(
+                new EchoFormatter(backendRenderer("gtranslate")));
+
+        assertTrue(stage.ownsOutput("gtranslate"));
+        assertFalse(stage.ownsOutput("iflow-vm"));
+        assertFalse(stage.ownsOutput(null));
     }
 
     private static PipelineMessage unit() {

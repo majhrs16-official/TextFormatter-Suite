@@ -21,11 +21,12 @@ import java.util.Set;
  * Terminal {@code sync} stage: fans the delivered message out to sync sinks.
  *
  * <p>It runs once per emission, in {@link PipelineScope#MESSAGE_POST}, after
- * the platform deliveries. Sinks are discovered by the bus; the stage never
- * enumerates or orders them. A declared {@link OutputPlan} limits the fan-out
- * to the {@code sync.<backend>} targets it names, in declaration order, and
- * reports one {@link OutputOutcome} per target; an inherited plan keeps the
- * existing broadcast-to-all behaviour.</p>
+ * the platform deliveries. The stage owns the sink backends; the bus discovers
+ * and starts the sinks, so the stage never enumerates or orders them. A
+ * declared {@link OutputPlan} limits the fan-out to the {@code sync.<backend>}
+ * targets this stage owns, in declaration order, and reports one
+ * {@link OutputOutcome} per target; an inherited plan keeps the existing
+ * broadcast-to-all behaviour.</p>
  *
  * <p>The stage does not alter the message. A sink failure is the bus's
  * responsibility, is exposed in the aggregate result and never stops the rest
@@ -35,8 +36,6 @@ public final class SyncStage implements PipelineStage {
 
     /** Contract id of the terminal stage. */
     public static final String ID = "sync";
-
-    private static final String MULTIPLEXER = "sync";
 
     private final SyncBus bus;
 
@@ -55,6 +54,11 @@ public final class SyncStage implements PipelineStage {
     }
 
     @Override
+    public boolean ownsOutput(String backend) {
+        return backend != null && bus.sinkNames().contains(backend);
+    }
+
+    @Override
     public StageResult afterMessage(PipelineMessage message, PipelineContext context) {
         DeliveryEnvelope envelope = new DeliveryEnvelope(
                 message.message(), message.deliveries());
@@ -66,8 +70,8 @@ public final class SyncStage implements PipelineStage {
             boolean any = false;
             for (int index = 0; index < results.size(); index++) {
                 String target = index < surfaces.size()
-                        ? MULTIPLEXER + "." + surfaces.get(index).backend()
-                        : MULTIPLEXER;
+                        ? OutputPlan.NAMESPACE + "." + surfaces.get(index).backend()
+                        : OutputPlan.NAMESPACE;
                 SyncResult result = results.get(index);
                 inherited.add(new OutputOutcome(target, result));
                 any |= result.isOk();
@@ -78,7 +82,9 @@ public final class SyncStage implements PipelineStage {
             return StageResult.continueWith(message, inherited);
         }
 
-        List<String> targets = syncTargets(outputs.targets());
+        List<String> targets = syncTargets(outputs.targets()).stream()
+                .filter(target -> ownsOutput(OutputPlan.backend(target)))
+                .toList();
         if (targets.isEmpty()) {
             return StageResult.notApplicable(message);
         }
@@ -109,14 +115,14 @@ public final class SyncStage implements PipelineStage {
     /** @return declared {@code sync.<backend>} targets, in order */
     static List<String> syncTargets(List<String> targets) {
         return targets.stream()
-                .filter(target -> target.startsWith(MULTIPLEXER + "."))
+                .filter(target -> target.startsWith(OutputPlan.NAMESPACE + "."))
                 .toList();
     }
 
     /** @return backend names named by {@code sync.<backend>} targets, in order */
     static List<String> syncBackends(List<String> targets) {
         return syncTargets(targets).stream()
-                .map(target -> target.substring(MULTIPLEXER.length() + 1))
+                .map(OutputPlan::backend)
                 .filter(backend -> !backend.isBlank())
                 .toList();
     }

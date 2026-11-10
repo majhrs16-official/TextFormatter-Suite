@@ -7,7 +7,7 @@ import java.util.Objects;
 /**
  * Result of one selected delivery target.
  *
- * <p>The target keeps the declared {@code <multiplexer>.<backend>} form and the
+ * <p>The target keeps the declared {@code sync.<backend>} form and the
  * order of the effective {@link OutputPlan}. A failed target is reported as an
  * explicit {@link SyncResult}; the aggregate never turns a partial delivery
  * into a total success.</p>

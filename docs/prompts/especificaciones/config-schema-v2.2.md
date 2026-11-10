@@ -48,7 +48,7 @@ chat:
   log-to-console: true
 repositories: []
 module-allowlist: []
-outputs:                      # LIST de "<multiplexer>.<backend>"; ausente = heredar
+outputs:                      # LIST de "sync.<backend>"; ausente = heredar
   - sync.discord
   - sync.tcp
   - sync.bukkit
@@ -56,14 +56,16 @@ outputs-parallel: true        # BOOLEAN; true = finalización en paralelo, false
 config-version: 1.0
 ```
 
-`outputs` es una lista ordenada de cadenas `<multiplexer>.<backend>`; el primer punto separa el
-multiplexor del backend, que puede contener puntos. `iflow`, `chattranslator` y `sync` son los
-multiplexores válidos; `textformatter` no lo es. Una lista vacía (`outputs: []`) declara «sin
-salidas» y no se interpreta como «todas». Si la clave falta, el host hereda el default del módulo:
-`sync` hace fan-out a todos los sinks, incluidos los locales `bukkit` y `fabric`.
-`outputs-parallel` solo controla la finalización dentro de `sync`; `true` inicia todos los targets
-antes de esperar y `false` espera cada uno. Un target sin punto, con segmentos vacíos o con un
-multiplexor/backend desconocido es un error explícito de validación, nunca un skip silencioso.
+`outputs` es una lista ordenada de cadenas `sync.<backend>`; el backend puede contener puntos. `sync`
+es el único namespace válido; `iflow`, `chattranslator` y `textformatter` no son namespaces. El motor
+resuelve cada backend contra las etapas: `route` posee los backends iFlow, `format` los de traducción
+y `sync` los sinks. Un backend sin dueño o con más de un dueño es un error explícito. Una lista vacía
+(`outputs: []`) declara «sin salidas» y no se interpreta como «todas». Si la clave falta, el host
+hereda el default del módulo: la etapa `sync` hace fan-out a todos los sinks, incluidos los locales
+`bukkit` y `fabric`. `outputs-parallel` solo controla la finalización dentro de la etapa `sync`;
+`true` inicia todos los targets antes de esperar y `false` espera cada uno. Un target sin el prefijo
+`sync.`, con segmentos vacíos o con un backend desconocido o ambiguo es un error explícito de
+validación, nunca un skip silencioso.
 
 `iflow.engine.kind` no forma parte de este contrato. La selección de motor vive en
 `config/iflow/config.yml` (hub iFlow):

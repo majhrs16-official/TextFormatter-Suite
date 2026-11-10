@@ -9,8 +9,8 @@ import java.util.Objects;
 /**
  * Resolves the effective output plan for one emission.
  *
- * <p>Precedence is message → suite configuration → multiplexer default. The
- * multiplexer default is represented by {@link OutputPlan#inherit()}: a plan
+ * <p>Precedence is message → suite configuration → module default. The
+ * module default is represented by {@link OutputPlan#inherit()}: a plan
  * that declares nothing and lets each stage apply its own behaviour. Targets
  * and finalization mode are resolved independently, so a message can override
  * the targets while inheriting {@code outputs-parallel}, or vice versa.</p>

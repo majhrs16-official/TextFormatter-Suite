@@ -71,20 +71,25 @@ class SyncStageTest {
 
     @Test
     void declaredPlanSendsOnlyNamedSyncBackends() {
-        OutputPlan plan = OutputPlan.of(List.of("sync.discord", "telegram.chat", "sync.tcp"),
+        bus.surface("discord");
+        bus.surface("tcp");
+        OutputPlan plan = OutputPlan.of(
+                List.of("sync.discord", "sync.gtranslate", "sync.tcp"),
                 me.majhrs16.suite.api.pipeline.ParallelMode.INHERIT);
 
         StageResult result = stage().afterMessage(
                 PipelineMessage.of(message()), context(plan));
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
-        assertEquals(List.of("discord", "tcp"), bus.targeted);
+        assertEquals(List.of("discord", "tcp"), bus.targeted,
+                "only backends owned by this stage are sent");
         assertFalse(bus.deliverCalled);
     }
 
     @Test
-    void declaredPlanWithoutSyncTargetsDoesNotFanOut() {
-        OutputPlan plan = OutputPlan.of(List.of("telegram.chat"),
+    void declaredPlanWithoutOwnedSyncTargetsDoesNotFanOut() {
+        bus.surface("discord");
+        OutputPlan plan = OutputPlan.of(List.of("sync.gtranslate"),
                 me.majhrs16.suite.api.pipeline.ParallelMode.INHERIT);
 
         StageResult result = stage().afterMessage(
@@ -103,6 +108,8 @@ class SyncStageTest {
 
     @Test
     void declaredPlanReportsOneOutcomePerTargetInOrder() {
+        bus.surface("discord");
+        bus.surface("tcp");
         bus.result("discord", new SyncResult.Ok(null));
         bus.result("tcp", new SyncResult.HostFailure("down"));
         OutputPlan plan = OutputPlan.of(List.of("sync.discord", "sync.tcp"),
@@ -125,6 +132,8 @@ class SyncStageTest {
 
     @Test
     void allFailedTargetsAreNotApplicableButKeepExplicitOutcomes() {
+        bus.surface("discord");
+        bus.surface("tcp");
         bus.result("discord", new SyncResult.HostFailure("down"));
         bus.result("tcp", new SyncResult.Unsupported("not installed"));
         OutputPlan plan = OutputPlan.of(List.of("sync.discord", "sync.tcp"),
@@ -141,12 +150,23 @@ class SyncStageTest {
 
     @Test
     void sequentialModeIsForwardedToTheBus() {
+        bus.surface("discord");
         OutputPlan plan = OutputPlan.of(List.of("sync.discord"),
                 me.majhrs16.suite.api.pipeline.ParallelMode.SEQUENTIAL);
 
         stage().afterMessage(PipelineMessage.of(message()), context(plan));
 
         assertEquals(me.majhrs16.suite.api.pipeline.ParallelMode.SEQUENTIAL, bus.mode);
+    }
+
+    @Test
+    void ownsOnlyRegisteredSinkBackends() {
+        bus.surface("discord");
+        SyncStage stage = stage();
+
+        assertTrue(stage.ownsOutput("discord"));
+        assertFalse(stage.ownsOutput("gtranslate"));
+        assertFalse(stage.ownsOutput(null));
     }
 
     private SyncStage stage() {
@@ -226,7 +246,12 @@ class SyncStageTest {
         @Override public void register(SyncSink sink) { }
         @Override public boolean unregister(String name) { return false; }
         @Override public Collection<SyncSink> sinks() { return List.of(); }
-        @Override public Set<String> sinkNames() { return Set.of(); }
+        @Override public Set<String> sinkNames() {
+            return surfaces.stream()
+                    .map(SyncSurface::backend)
+                    .collect(java.util.stream.Collectors.toCollection(
+                            java.util.LinkedHashSet::new));
+        }
         @Override public void setInboundListener(SyncListener listener) { }
         @Override public void start() { }
         @Override public void stop() { }

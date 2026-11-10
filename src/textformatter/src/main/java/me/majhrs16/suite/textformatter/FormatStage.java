@@ -27,18 +27,17 @@ import java.util.Set;
  * emission, so the stage reads it from the message and falls back to the
  * neutral settings.</p>
  *
- * <p>When the effective {@link OutputPlan} declares a
- * {@code chattranslator.<backend>} target, the {@code <tr>} spans of this
- * rendering use that provider; without a target the translation facade keeps
- * its default backend and fallback. More than one target is a conflict, and an
- * unknown provider is an explicit error.</p>
+ * <p>The stage owns the translation backends. When the effective
+ * {@link OutputPlan} declares a {@code sync.<backend>} target whose backend is
+ * a known translation provider, the {@code <tr>} spans of this rendering use
+ * that provider; without an owned target the translation facade keeps its
+ * default backend and fallback. More than one owned target is a conflict, and
+ * a backend listed but without a provider is an explicit error.</p>
  */
 public final class FormatStage implements PipelineStage {
 
     /** Contract id of the format stage. */
     public static final String ID = "format";
-
-    private static final String MULTIPLEXER = "chattranslator";
 
     private final TextFormatterMessageRenderer renderer;
 
@@ -58,6 +57,11 @@ public final class FormatStage implements PipelineStage {
     }
 
     @Override
+    public boolean ownsOutput(String backend) {
+        return backend != null && renderer.hasTranslationBackend(backend);
+    }
+
+    @Override
     public StageResult perRecipient(PipelineMessage unit, PipelineContext context) {
         Actor recipient = unit.recipient();
         if (recipient == null) {
@@ -69,25 +73,23 @@ public final class FormatStage implements PipelineStage {
         Language target = recipient.language() != null && recipient.language() != Language.AUTO
                 ? recipient.language()
                 : fallback;
-        List<String> backends = translationBackends(context.outputs().targets());
+        List<String> backends = declaredBackends(context.outputs().targets()).stream()
+                .filter(this::ownsOutput)
+                .toList();
         if (backends.size() > 1) {
-            return StageResult.error(unit, "CONFLICT: multiple 'chattranslator' output targets");
+            return StageResult.error(unit, "CONFLICT: multiple translation output targets");
         }
         String backend = backends.isEmpty() ? null : backends.get(0);
-        if (backend != null && !renderer.hasTranslationBackend(backend)) {
-            return StageResult.error(unit, "unknown chattranslator backend '" + backend + "'");
-        }
         Component rendered = renderer.render(message, recipient, source, target, backend);
         String plain = PlainTextComponentSerializer.plainText().serialize(rendered);
         return StageResult.continueWith(
                 unit.withRendered(new ComponentRenderedOutput(rendered, plain)));
     }
 
-    /** @return backend names named by {@code chattranslator.<backend>} targets, in order */
-    static List<String> translationBackends(List<String> targets) {
+    /** @return backend names named by the declared targets, in order */
+    static List<String> declaredBackends(List<String> targets) {
         return targets.stream()
-                .filter(target -> target.startsWith(MULTIPLEXER + "."))
-                .map(target -> target.substring(MULTIPLEXER.length() + 1))
+                .map(OutputPlan::backend)
                 .filter(backend -> !backend.isBlank())
                 .toList();
     }

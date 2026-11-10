@@ -48,7 +48,7 @@ class MessageOutputPlanTest {
     @Test
     void builderFromPreservesThePlan() {
         OutputPlan plan = OutputPlan.of(
-                List.of("iflow.iflow-wasm"), ParallelMode.INHERIT);
+                List.of("sync.iflow-wasm"), ParallelMode.INHERIT);
         Message original = Message.builder()
                 .text("hello")
                 .outputPlan(plan)

@@ -234,7 +234,7 @@ public final class ConfigLoader {
             return new OutputPlan(false, List.of(), parallel);
         }
         if (!(raw instanceof List<?> list)) {
-            errors.add("'outputs' must be a list of '<multiplexer>.<backend>' targets");
+            errors.add("'outputs' must be a list of 'sync.<backend>' targets");
             return OutputPlan.inherit();
         }
         List<String> targets = new ArrayList<>();
