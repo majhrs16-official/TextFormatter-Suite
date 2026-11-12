@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo e interfaz implementados; quedan CST, paquetes, ROM, desensamblador, validación, DEFLATE y documentación final. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz y CST de YAML implementados; quedan paquetes, ROM, desensamblador, validación, DEFLATE y documentación final. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -815,8 +815,9 @@ Pendiente y fuera de esta unidad:
 ### Feature propuesta — importar/exportar la suite completa desde el editor web (PL-4, 2026-11-06)
 
 > **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1), el archivo de
-> suite (paso 2), el mapeo modelo ↔ suite (paso 3) y la interfaz (paso 4) están implementados con
-> tests de regresión; los pasos 5–12 siguen pendientes. El ZIP completo no depende de ADR-036; el mapeo de canales usa
+> suite (paso 2), el mapeo modelo ↔ suite (paso 3), la interfaz (paso 4) y el CST de YAML (paso 5)
+> están implementados con tests de regresión; los pasos 6–12 siguen pendientes. El ZIP completo no
+> depende de ADR-036; el mapeo de canales usa
 > `config/textformatter/channels/`, que es la ruta vigente y no se mueve. Cualquier cambio en
 > `docs/prompts/` requiere autorización explícita.
 
@@ -902,9 +903,9 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
   simbólicos y duplicados normalizados.
 - Exportar siempre `TextFormatter-Suite/<ruta>`, con orden determinista y fecha fija.
 - Un archivo no editado se reexporta con sus bytes originales. Un archivo editado conserva sus
-  comentarios y formato mediante un CST (árbol de sintaxis concreta); si una edición no puede
-  preservarlos, se bloquea con error explícito en lugar de perderlos en silencio. El parser actual
-  (`yaml.js`) descarta comentarios y no sirve para este requisito.
+  comentarios y formato mediante el CST de `js/yamlCst.js` (paso 5); si una edición no puede
+  preservarlos, se bloquea con error explícito en lugar de perderlos en silencio. `yaml.js` sigue
+  usándose solo para serializar archivos nuevos, donde no hay formato previo que conservar.
 - Límites anti-bomba **provisionales y generosos**, revisables tras medir carpetas reales:
   100.000 entradas (archivos y directorios), 1 GiB descomprimido total, 256 MiB por archivo y ratio
   500:1. El ratio se evalúa solo en archivos de más de 1 MiB descomprimidos, para no rechazar YAML
@@ -953,10 +954,20 @@ legacy ni lectores alternativos (ADR-034).
    conservar el resto como opacos. Un archivo no tocado no se re-serializa.
 4. **Interfaz. ✅ (2026-11-12)** Separar “Importar/Exportar proyecto” de “Importar/Exportar suite”;
    mostrar resumen (archivos, módulos, avisos) y confirmar el reemplazo del estado.
-5. **CST de YAML.** Introducir un parser/serializador con árbol de sintaxis concreta que conserve
-   comentarios, orden de claves, comillas y saltos de línea. El actual `yaml.js` descarta los
-   comentarios; no se reutiliza para archivos editados. Si una edición no se puede representar sin
-   perder formato, la operación falla con un error explícito.
+5. **CST de YAML. ✅ (2026-11-12)** `js/yamlCst.js` parsea mapas y secuencias de bloque, colecciones
+   de flujo en una línea, escalares planos y entre comillas, comentarios y líneas en blanco, con
+   spans y trivia. `apply(text, baseline, current, options)` aplica solo el delta y conserva
+   comentarios, orden, comillas, sangría y saltos de línea (LF/CRLF, BOM); `create` serializa
+   archivos nuevos y `parseValue` hidrata el baseline. `toSuite` proyecta el modelo con `project()`
+   para no añadir defaults ausentes en el archivo, usa `parseValue(texts[source])` como baseline y
+   precalcula `writes`/`deletes` antes de mutar el ZIP: una edición no representable lanza
+   `SuiteMappingError` con la ruta y deja el archivo de suite intacto. Se rechazan explícitamente
+   block scalars, anclas, alias, tags, claves complejas, documentos múltiples, flujo multilínea,
+   comentarios dentro de flujo, tabs en la sangría, CR aislado y saltos mixtos; esos archivos
+   quedan opacos y se preservan. Tests: `tests/unit/yamlCst.test.cjs` (47 casos, incluido el
+   round-trip exacto de los 35 YAML reales de `src/`, con `plugin.yml` como única diferencia por
+   recibir `config-version`) y `tests/unit/suiteMapping.test.cjs` (101 casos con regresiones de
+   comentarios y atomicidad).
 6. **Base de datos de paquetes.** Añadir un lector/escritor de `manager/library/status` separado del
    parser YAML, con listado y edición. La interfaz muestra una advertencia prominente de que el
    archivo es la fuente de verdad de instalación y que editarlo a mano puede dejar el manager

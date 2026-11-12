@@ -72,6 +72,10 @@
     return '{' + keys.map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
   }
 
+  function isMapLike(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
   function stripMeta(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       return clone(value);
@@ -121,10 +125,17 @@
     return text;
   }
 
+  function parseYaml(text) {
+    if (global.Suite.yamlCst && typeof global.Suite.yamlCst.parseValue === 'function') {
+      return global.Suite.yamlCst.parseValue(text);
+    }
+    return global.Suite.yaml.parse(text);
+  }
+
   function parseMap(text, path, warnings) {
     let parsed = null;
     try {
-      parsed = global.Suite.yaml.parse(text);
+      parsed = parseYaml(text);
     } catch (error) {
       warnings.push({ path, message: 'YAML inválido: ' + error.message });
       return null;
@@ -178,6 +189,8 @@
     const deferred = new Set();
     const baselines = { config: null, graph: null, channels: {}, translators: {}, sync: {}, extra: {} };
     const sources = { config: null, graph: null, channels: {}, translators: {}, sync: {}, extra: {} };
+    const texts = {};
+    const baselineValues = { config: null, graph: null, channels: {}, translators: {}, sync: {} };
     const initial = initialSnapshot(state);
 
     // config/suite/config.yml
@@ -188,6 +201,8 @@
         state.config = model.deepMerge(state.config, stripMeta(parsed));
         baselines.config = canonical(state.config);
         sources.config = FIXED.config;
+        texts[FIXED.config] = text;
+        baselineValues.config = clone(state.config);
         consumed.add(FIXED.config);
       } else {
         opaque.add(FIXED.config);
@@ -200,7 +215,7 @@
       let parsed = null;
       if (text !== null) {
         try {
-          parsed = global.Suite.yaml.parse(text);
+          parsed = parseYaml(text);
         } catch (error) {
           warnings.push({ path: FIXED.graph, message: 'YAML inválido: ' + error.message });
         }
@@ -209,6 +224,8 @@
         state.graph = model.deepMerge(state.graph, stripMeta(parsed));
         baselines.graph = canonical(state.graph);
         sources.graph = FIXED.graph;
+        texts[FIXED.graph] = text;
+        baselineValues.graph = clone(state.graph);
         consumed.add(FIXED.graph);
       } else {
         if (Array.isArray(parsed)) {
@@ -244,6 +261,8 @@
       state.channels[key] = merged;
       baselines.channels[key] = canonical(merged);
       sources.channels[key] = path;
+      texts[path] = text;
+      baselineValues.channels[key] = clone(merged);
       consumed.add(path);
     }
 
@@ -263,6 +282,8 @@
       state.translators[id] = model.deepMerge(state.translators[id] || {}, stripMeta(parsed));
       baselines.translators[id] = canonical(state.translators[id]);
       sources.translators[id] = path;
+      texts[path] = text;
+      baselineValues.translators[id] = clone(state.translators[id]);
       consumed.add(path);
     }
 
@@ -280,6 +301,8 @@
       state.sync[key] = model.deepMerge(state.sync[key] || {}, stripMeta(parsed));
       baselines.sync[key] = canonical(state.sync[key]);
       sources.sync[key] = path;
+      texts[path] = text;
+      baselineValues.sync[key] = clone(state.sync[key]);
       consumed.add(path);
     }
 
@@ -317,6 +340,8 @@
       initial,
       baselines,
       sources,
+      texts,
+      baselineValues,
       warnings,
       consumed: Array.from(consumed).sort(),
       opaque: Array.from(opaque).sort(),
@@ -359,10 +384,14 @@
     const written = [];
     const preserved = [];
     const removed = [];
+    const writes = new Map();
+    const deletes = new Set();
     const blocked = blockedPaths(mapping);
     const initial = mapping && mapping.initial ? mapping.initial : null;
     const baselines = (mapping && mapping.baselines) || {};
     const sources = (mapping && mapping.sources) || {};
+    const texts = (mapping && mapping.texts) || {};
+    const baselineValues = (mapping && mapping.baselineValues) || {};
     const mappedPaths = new Set([FIXED.config, FIXED.graph]);
     for (const key of Object.keys(state.channels || {})) {
       mappedPaths.add(channelPath(key));
@@ -377,7 +406,49 @@
       }
     }
 
-    function put(path, value, baseline, source, initialValue) {
+    /* El modelo hidratado mezcla defaults con el archivo. El CST solo debe ver
+     * las claves que estaban en el archivo más las que el usuario cambió; si no,
+     * añadiría defaults ausentes y dejaría de conservar el formato original. */
+    function project(fileValue, baselineValue, current) {
+      if (!isMapLike(current) || !isMapLike(fileValue)) {
+        return current;
+      }
+      const out = {};
+      for (const [key, value] of Object.entries(current)) {
+        if (Object.prototype.hasOwnProperty.call(fileValue, key)) {
+          out[key] = project(fileValue[key], baselineValue ? baselineValue[key] : undefined, value);
+          continue;
+        }
+        const base =
+          baselineValue && Object.prototype.hasOwnProperty.call(baselineValue, key) ? baselineValue[key] : undefined;
+        if (canonical(value) !== canonical(base)) {
+          out[key] = value;
+        }
+      }
+      return out;
+    }
+
+    /* Aplica el delta del modelo sobre el texto original con el CST. Un archivo
+     * nuevo se serializa completo; un archivo existente nunca se reescribe si
+     * el CST no puede representar la edición sin perder formato. */
+    function render(path, value, baselineValue, source) {
+      const original = source ? texts[source] : undefined;
+      if (original === undefined) {
+        return serializeYaml(value);
+      }
+      const cst = global.Suite.yamlCst;
+      if (!cst || typeof cst.apply !== 'function') {
+        throw new SuiteMappingError('Suite.yamlCst no está disponible para conservar el formato de ' + path);
+      }
+      try {
+        const fileValue = cst.parseValue(original);
+        return cst.apply(original, fileValue, project(fileValue, baselineValue, value), { ensureConfigVersion: true });
+      } catch (error) {
+        throw new SuiteMappingError('no se puede conservar el formato de ' + path + ': ' + error.message);
+      }
+    }
+
+    function put(path, value, baseline, baselineValue, source, initialValue) {
       if (blocked.has(path)) {
         warnings.push({ path, message: 'archivo opaco o diferido; no se sobrescribe' });
         return;
@@ -388,12 +459,26 @@
         }
         return;
       }
-      target.set(path, new TextEncoder().encode(serializeYaml(value)));
+      writes.set(path, new TextEncoder().encode(render(path, value, baselineValue, source)));
       written.push(path);
     }
 
-    put(FIXED.config, state.config, baselines.config, sources.config, initial ? initial.config : undefined);
-    put(FIXED.graph, state.graph, baselines.graph, sources.graph, initial ? initial.graph : undefined);
+    put(
+      FIXED.config,
+      state.config,
+      baselines.config,
+      baselineValues.config,
+      sources.config,
+      initial ? initial.config : undefined
+    );
+    put(
+      FIXED.graph,
+      state.graph,
+      baselines.graph,
+      baselineValues.graph,
+      sources.graph,
+      initial ? initial.graph : undefined
+    );
 
     const channels = state.channels || {};
     for (const [key, cfg] of Object.entries(channels)) {
@@ -403,17 +488,18 @@
         path,
         cfg,
         baselines.channels ? baselines.channels[key] : null,
+        baselineValues.channels ? baselineValues.channels[key] : null,
         source,
         initial && initial.channels ? initial.channels[key] : undefined
       );
       if (source && source !== path) {
-        target.delete(source);
+        deletes.add(source);
         removed.push(source);
       }
     }
     for (const [key, source] of Object.entries(sources.channels || {})) {
       if (!(key in channels)) {
-        target.delete(source);
+        deletes.add(source);
         removed.push(source);
       }
     }
@@ -426,17 +512,18 @@
         path,
         cfg,
         baselines.translators ? baselines.translators[id] : null,
+        baselineValues.translators ? baselineValues.translators[id] : null,
         source,
         initial && initial.translators ? initial.translators[id] : undefined
       );
       if (source && source !== path) {
-        target.delete(source);
+        deletes.add(source);
         removed.push(source);
       }
     }
     for (const [id, source] of Object.entries(sources.translators || {})) {
       if (!(id in translators)) {
-        target.delete(source);
+        deletes.add(source);
         removed.push(source);
       }
     }
@@ -453,17 +540,18 @@
         path,
         cfg,
         baselines.sync ? baselines.sync[key] : null,
+        baselineValues.sync ? baselineValues.sync[key] : null,
         source,
         initial && initial.sync ? initial.sync[key] : undefined
       );
       if (source && source !== path) {
-        target.delete(source);
+        deletes.add(source);
         removed.push(source);
       }
     }
     for (const [key, source] of Object.entries(sources.sync || {})) {
       if (!(key in sync)) {
-        target.delete(source);
+        deletes.add(source);
         removed.push(source);
       }
     }
@@ -483,14 +571,25 @@
         preserved.push(path);
         continue;
       }
-      target.setText(path, text);
+      writes.set(path, new TextEncoder().encode(text));
       written.push(path);
     }
     for (const path of Object.keys((baselines && baselines.extra) || {})) {
       if (!(path in extra)) {
-        target.delete(path);
+        deletes.add(path);
         removed.push(path);
       }
+    }
+
+    /* Ninguna escritura toca el archivo hasta que todos los CST han tenido
+     * éxito: una edición no representable deja el ZIP intacto. */
+    for (const path of deletes) {
+      if (!writes.has(path)) {
+        target.delete(path);
+      }
+    }
+    for (const [path, bytes] of writes) {
+      target.set(path, bytes);
     }
 
     function uniqueSorted(items) {

@@ -13,7 +13,7 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
 const { window } = dom;
 window.TextEncoder = globalThis.TextEncoder;
 window.TextDecoder = globalThis.TextDecoder;
-for (const code of ['yaml.js', 'zip.js', 'suiteArchive.js', 'model.js', 'suiteMapping.js']) {
+for (const code of ['yaml.js', 'yamlCst.js', 'zip.js', 'suiteArchive.js', 'model.js', 'suiteMapping.js']) {
   window.eval(fs.readFileSync(path.join(dir, 'js', code), 'utf8'));
 }
 const Suite = window.Suite;
@@ -188,6 +188,91 @@ const editedConfig = text(source, 'config/suite/config.yml');
 assert(editedConfig.includes('quick-look: true'), 'writes the new config value');
 assert(editedConfig.trimEnd().endsWith('config-version: 1.0'), 'adds config-version at the end');
 assert(!editedConfig.includes('# comentario'), 'does not invent comments');
+
+console.log('\n--- toSuite: CST preserves comments and format ---');
+const commentedText = [
+  '# cabecera del canal',
+  "name: 'chat.global' # nombre visible",
+  'permission: cht.chat.global',
+  'messages:',
+  '  - "<green>hola</green>" # saludo',
+  '  - "<gray>adios</gray>"',
+  'config-version: 1.0',
+  '',
+].join('\n');
+const commentedSource = archiveOf([entry('config/textformatter/channels/chat.global.yml', commentedText)]);
+const commentedImport = Mapping.fromSuite(commentedSource);
+commentedImport.state.channels['chat.global'].permission = 'cht.nuevo';
+commentedImport.state.channels['chat.global'].messages.push('<yellow>nuevo</yellow>');
+const commentedExport = Mapping.toSuite(commentedImport.state, commentedSource, commentedImport);
+const commentedOut = text(commentedSource, 'config/textformatter/channels/chat.global.yml');
+assert(commentedExport.written.includes('config/textformatter/channels/chat.global.yml'), 'rewrites the edited channel');
+assertEq(
+  commentedOut,
+  [
+    '# cabecera del canal',
+    "name: 'chat.global' # nombre visible",
+    'permission: cht.nuevo',
+    'messages:',
+    '  - "<green>hola</green>" # saludo',
+    '  - "<gray>adios</gray>"',
+    '  - <yellow>nuevo</yellow>',
+    'config-version: 1.0',
+    '',
+  ].join('\n'),
+  'conserva comentarios, comillas, orden y config-version al editar'
+);
+
+console.log('\n--- toSuite: unrepresentable edits fail without writing ---');
+const atomicConfig = 'quick-look: false\nconfig-version: 1.0\n';
+const atomicGraph = [
+  'guard:',
+  '  # comentario interno',
+  '  max-steps: 99',
+  'nodes: []',
+  'config-version: 1.0',
+  '',
+].join('\n');
+const atomicSource = archiveOf([
+  entry('config/suite/config.yml', atomicConfig),
+  entry('config/iflow-firewall/rules.yml', atomicGraph),
+]);
+const atomicImport = Mapping.fromSuite(atomicSource);
+atomicImport.state.config['quick-look'] = true;
+atomicImport.state.graph.guard = 'plano';
+let atomicError = null;
+try {
+  Mapping.toSuite(atomicImport.state, atomicSource, atomicImport);
+} catch (error) {
+  atomicError = error;
+}
+assert(atomicError && atomicError.name === 'SuiteMappingError', 'lanza SuiteMappingError');
+assert(
+  atomicError && atomicError.message.includes('config/iflow-firewall/rules.yml'),
+  'el error identifica la ruta no representable'
+);
+assertEq(text(atomicSource, 'config/suite/config.yml'), atomicConfig, 'no escribe el config válido si otro archivo falla');
+assertEq(text(atomicSource, 'config/iflow-firewall/rules.yml'), atomicGraph, 'no toca el archivo no representable');
+
+const badSuite = Mapping.fromSuite(
+  archiveOf([entry('config/suite/config.yml', 'options:\n  # interno\n  a: 1\nconfig-version: 1.0\n')])
+);
+const badSuiteArchive = archiveOf([
+  entry('config/suite/config.yml', 'options:\n  # interno\n  a: 1\nconfig-version: 1.0\n'),
+]);
+badSuite.state.config.options = 'plano';
+let nestedError = null;
+try {
+  Mapping.toSuite(badSuite.state, badSuiteArchive, badSuite);
+} catch (error) {
+  nestedError = error;
+}
+assert(nestedError && nestedError.message.includes('perdería formato'), 'rechaza convertir una colección comentada en escalar');
+assertEq(
+  text(badSuiteArchive, 'config/suite/config.yml'),
+  'options:\n  # interno\n  a: 1\nconfig-version: 1.0\n',
+  'la colección comentada queda intacta'
+);
 
 console.log('\n--- toSuite: channels add, rename and remove ---');
 const channelState = Mapping.fromSuite(
