@@ -1,4 +1,9 @@
-/* importExport.js — import/export ZIP */
+/* importExport.js — import/export del proyecto plano y de la suite.
+ *
+ * El modo proyecto conserva el ZIP plano del editor (`config.yml`, `channels/`,
+ * `sync/`...). El modo suite trabaja con el conjunto seleccionado de artefactos
+ * de `config/` y `manager/library/status`, conserva los archivos no editados y
+ * confirma el reemplazo del estado antes de aplicarlo. */
 (function (global) {
   'use strict';
 
@@ -6,32 +11,51 @@
   const Suite = global.Suite;
   const StateStore = global.StateStore;
 
+  // Base importada de la suite: el archivo original y sus baselines. Se clona
+  // en cada exportación para que un undo no reexporte bytes ya escritos.
+  let suiteSource = null;
+  let pendingSuiteImport = null;
+
+  function resetSuiteSource() {
+    suiteSource = null;
+  }
+
+  function download(buffer, name) {
+    const blob = new Blob([buffer], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function bindImportExport() {
-    const dlBtn = Suite.utils.$('#dlBtn');
+    bindProject();
+    bindSuite();
+    bindPaste();
+  }
+
+  /* ── Proyecto plano ─────────────────────────────────────── */
+  function bindProject() {
+    const dlBtn = $('#dlBtn');
     if (dlBtn) {
       dlBtn.addEventListener('click', () => {
         const st = StateStore.getState();
         const v = Suite.validate.validate(st);
         if (v.blocking) {
-          Suite.utils.toast(v.errors + ' error(s) — ' + global.Suite.i18n.t('toast_blocked'), 'err', 3600);
+          Suite.utils.toast(v.errors + ' error(s) — ' + Suite.i18n.t('toast_blocked'), 'err', 3600);
           return;
         }
         const files = Suite.model.exportFiles(st, v);
         const entries = Object.keys(files)
           .sort()
           .map(path => ({ name: path, data: files[path] }));
-        const buf = Suite.zip.build(entries);
-        const blob = new Blob([buf], { type: 'application/zip' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'suite-project-' + Date.now() + '.zip';
-        a.click();
-        URL.revokeObjectURL(url);
-        Suite.utils.toast(global.Suite.i18n.t('toast_export_ok'), 'ok');
+        download(Suite.zip.build(entries), 'suite-project-' + Date.now() + '.zip');
+        Suite.utils.toast(Suite.i18n.t('toast_export_ok'), 'ok');
       });
     }
-    const fileInput = Suite.utils.$('#fileInput');
+    const fileInput = $('#fileInput');
     if (fileInput) {
       fileInput.addEventListener('change', e => {
         const file = e.target.files[0];
@@ -52,41 +76,216 @@
             }
             if (Object.keys(files).length) {
               StateStore.replace(Suite.model.importFromFiles(StateStore.getState(), files));
-              Suite.utils.toast(global.Suite.i18n.t('toast_import_ok'), 'ok');
+              resetSuiteSource();
+              Suite.utils.toast(Suite.i18n.t('toast_import_ok'), 'ok');
               Suite.views.renderAll();
             } else {
-              Suite.utils.toast(global.Suite.i18n.t('toast_yml_not_found'), 'warn');
+              Suite.utils.toast(Suite.i18n.t('toast_yml_not_found'), 'warn');
             }
           } catch (err) {
-            Suite.utils.toast(global.Suite.i18n.t('toast_zip_invalid') + err.message, 'err');
+            Suite.utils.toast(Suite.i18n.t('toast_zip_invalid') + err.message, 'err');
           }
         };
         reader.readAsArrayBuffer(file);
         e.target.value = '';
       });
     }
-    $('#pasteBtn').addEventListener('click', () => {
-      $('#modal').classList.add('show');
-      $('#modalText').value = '';
-      $('#modalText').focus();
-    });
-    $('#modalCancel').addEventListener('click', () => $('#modal').classList.remove('show'));
-    $('#modalApply').addEventListener('click', () => {
-      const txt = $('#modalText').value;
-      if (!txt.trim()) {
+  }
+
+  /* ── Suite ──────────────────────────────────────────────── */
+  function bindSuite() {
+    const importSuiteBtn = $('#importSuiteBtn');
+    const suiteInput = $('#suiteInput');
+    if (importSuiteBtn && suiteInput) {
+      importSuiteBtn.addEventListener('click', () => suiteInput.click());
+      suiteInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) {
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const archive = Suite.suiteArchive.fromZip(new Uint8Array(reader.result));
+            if (!archive.paths().length) {
+              Suite.utils.toast(Suite.i18n.t('toast_suite_empty'), 'warn');
+              return;
+            }
+            const mapping = Suite.suiteMapping.fromSuite(archive);
+            const summary = Suite.suiteMapping.summarize(archive, mapping);
+            showSuiteSummary(summary, mapping.warnings, () => {
+              suiteSource = { archive, mapping };
+              StateStore.replace(mapping.state);
+              Suite.views.renderAll();
+              Suite.utils.toast(Suite.i18n.t('toast_suite_import_ok'), 'ok');
+            });
+          } catch (err) {
+            Suite.utils.toast(Suite.i18n.t('toast_suite_error') + err.message, 'err', 4200);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+        e.target.value = '';
+      });
+    }
+
+    const dlSuiteBtn = $('#dlSuiteBtn');
+    if (dlSuiteBtn) {
+      dlSuiteBtn.addEventListener('click', exportSuite);
+    }
+
+    const cancel = $('#suiteModalCancel');
+    if (cancel) {
+      cancel.addEventListener('click', () => {
+        pendingSuiteImport = null;
+        closeSuiteModal();
+      });
+    }
+    const apply = $('#suiteModalApply');
+    if (apply) {
+      apply.addEventListener('click', () => {
+        const run = pendingSuiteImport;
+        pendingSuiteImport = null;
+        closeSuiteModal();
+        if (run) {
+          run();
+        }
+      });
+    }
+  }
+
+  function closeSuiteModal() {
+    const modal = $('#suiteModal');
+    if (modal) {
+      modal.classList.remove('show');
+    }
+  }
+
+  function showSuiteSummary(summary, warnings, onApply) {
+    const modal = $('#suiteModal');
+    const body = $('#suiteModalBody');
+    if (!modal || !body) {
+      return;
+    }
+    const t = key => Suite.i18n.t(key);
+    const title = $('#suiteModalTitle');
+    if (title) {
+      title.textContent = t('suite_import_title');
+    }
+
+    body.textContent = '';
+    const rows = [
+      ['suite_summary_files', summary.files],
+      ['suite_summary_modules', summary.modules.length ? summary.modules.join(', ') : '—'],
+      ['suite_summary_mapped', summary.mapped],
+      ['suite_summary_opaque', summary.opaque],
+      ['suite_summary_deferred', summary.deferred],
+      ['suite_summary_extra', summary.extra],
+      ['suite_summary_warnings', summary.warnings],
+    ];
+    for (const [key, value] of rows) {
+      const row = document.createElement('div');
+      row.className = 'm-row';
+      const label = document.createElement('span');
+      label.textContent = t(key);
+      const val = document.createElement('b');
+      val.textContent = String(value);
+      row.appendChild(label);
+      row.appendChild(val);
+      body.appendChild(row);
+    }
+
+    const note = document.createElement('p');
+    note.className = 'm-note';
+    note.textContent = t('suite_import_replace');
+    body.appendChild(note);
+
+    if (warnings && warnings.length) {
+      const limit = 20;
+      const list = document.createElement('ul');
+      list.className = 'm-warn';
+      for (const warning of warnings.slice(0, limit)) {
+        const item = document.createElement('li');
+        item.textContent = warning.path + ' — ' + warning.message;
+        list.appendChild(item);
+      }
+      if (warnings.length > limit) {
+        const item = document.createElement('li');
+        item.textContent = '… +' + (warnings.length - limit);
+        list.appendChild(item);
+      }
+      body.appendChild(list);
+    }
+
+    const cancel = $('#suiteModalCancel');
+    if (cancel) {
+      cancel.textContent = t('suite_import_cancel');
+    }
+    const apply = $('#suiteModalApply');
+    if (apply) {
+      apply.textContent = t('suite_import_apply');
+    }
+    pendingSuiteImport = onApply;
+    modal.classList.add('show');
+  }
+
+  function exportSuite() {
+    const st = StateStore.getState();
+    const v = Suite.validate.validate(st);
+    if (v.blocking) {
+      Suite.utils.toast(v.errors + ' error(s) — ' + Suite.i18n.t('toast_blocked'), 'err', 3600);
+      return;
+    }
+    try {
+      const base = suiteSource ? suiteSource.archive.clone() : undefined;
+      const mapping = suiteSource ? suiteSource.mapping : undefined;
+      const result = Suite.suiteMapping.toSuite(st, base, mapping);
+      download(result.archive.toZip(), 'TextFormatter-Suite-' + Date.now() + '.zip');
+      Suite.utils.toast(
+        Suite.i18n.t('toast_suite_export_ok') + ' · ' + result.archive.paths().length + ' file(s)',
+        'ok'
+      );
+      if (result.warnings.length) {
+        Suite.utils.toast(result.warnings.length + ' ' + Suite.i18n.t('suite_summary_warnings'), 'warn', 3600);
+      }
+    } catch (err) {
+      Suite.utils.toast(Suite.i18n.t('toast_suite_error') + err.message, 'err', 4200);
+    }
+  }
+
+  /* ── Pegar YAML ─────────────────────────────────────────── */
+  function bindPaste() {
+    const pasteBtn = $('#pasteBtn');
+    if (pasteBtn) {
+      pasteBtn.addEventListener('click', () => {
+        $('#modal').classList.add('show');
+        $('#modalText').value = '';
+        $('#modalText').focus();
+      });
+    }
+    const cancel = $('#modalCancel');
+    if (cancel) {
+      cancel.addEventListener('click', () => $('#modal').classList.remove('show'));
+    }
+    const apply = $('#modalApply');
+    if (apply) {
+      apply.addEventListener('click', () => {
+        const txt = $('#modalText').value;
+        if (!txt.trim()) {
+          $('#modal').classList.remove('show');
+          return;
+        }
+        const files = classifyPaste(txt);
+        if (!files) {
+          Suite.utils.toast(Suite.i18n.t('toast_yaml_invalid'), 'err');
+        } else {
+          StateStore.replace(Suite.model.importFromFiles(StateStore.getState(), files));
+          resetSuiteSource();
+          Suite.utils.toast(Suite.i18n.t('toast_imported'), 'ok');
+          Suite.views.renderAll();
+        }
         $('#modal').classList.remove('show');
-        return;
-      }
-      const files = classifyPaste(txt);
-      if (!files) {
-        Suite.utils.toast(global.Suite.i18n.t('toast_yaml_invalid'), 'err');
-      } else {
-        StateStore.replace(Suite.model.importFromFiles(StateStore.getState(), files));
-        Suite.utils.toast(global.Suite.i18n.t('toast_imported'), 'ok');
-        Suite.views.renderAll();
-      }
-      $('#modal').classList.remove('show');
-    });
+      });
+    }
   }
 
   function classifyPaste(txt) {
@@ -134,5 +333,5 @@
 
   global.Suite = global.Suite || {};
   global.Suite.views = global.Suite.views || {};
-  Object.assign(global.Suite.views, { bindImportExport, classifyPaste });
+  Object.assign(global.Suite.views, { bindImportExport, classifyPaste, exportSuite, showSuiteSummary });
 })(window || this);

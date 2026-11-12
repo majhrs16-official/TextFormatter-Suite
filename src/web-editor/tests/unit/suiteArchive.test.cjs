@@ -261,5 +261,15 @@ assertThrows(
   'import enforces the entry limit'
 );
 
+console.log('\n--- clone ---');
+const cloneSource = Archive.fromEntries([entry('config/a.yml', 'a'), entry('manager/library/status', 's')]);
+const cloneCopy = cloneSource.clone();
+cloneCopy.set('config/b.yml', 'b');
+cloneCopy.setText('config/a.yml', 'changed');
+assertEq(cloneSource.paths(), ['config/a.yml', 'manager/library/status'], 'clone does not add paths to the original');
+assertEq(cloneSource.getText('config/a.yml'), 'a', 'clone does not mutate original bytes');
+assertEq(cloneCopy.paths(), ['config/a.yml', 'config/b.yml', 'manager/library/status'], 'clone accepts new paths');
+assertEq(cloneCopy.getText('config/a.yml'), 'changed', 'clone carries the mutation');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

@@ -20,6 +20,7 @@ export default [
         fetch: 'readonly',
         URL: 'readonly',
         Blob: 'readonly',
+        FileReader: 'readonly',
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
         AudioContext: 'readonly',

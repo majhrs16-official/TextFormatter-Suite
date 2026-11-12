@@ -11,6 +11,12 @@
 - **Import/export** de proyectos (`textformatter-suite.zip`) con round-trip
   exacto panel → YAML → panel. El lector ZIP acepta STORE y DEFLATE con CRC,
   descriptor de datos y límites anti-bomba; el escritor actual usa STORE.
+- **Import/export de la suite** desde la barra de herramientas, separado del
+  modo proyecto. La importación acepta un `.zip` con `TextFormatter-Suite/` o
+  los archivos en la raíz, muestra un resumen (archivos, módulos, mapeados,
+  opacos, diferidos, texto extra y avisos) y exige confirmación antes de
+  reemplazar el estado y borrar el historial. La exportación reutiliza el
+  archivo importado como base, clona sus bytes y solo escribe lo editado.
 - **Archivo de suite** (`js/suiteArchive.js`): normaliza rutas, detecta la raíz
   `TextFormatter-Suite/`, conserva binarios y archivos desconocidos bajo
   `config/`, ignora basura y excluye JARs, caché, journal, backups y temporales.
@@ -63,6 +69,11 @@ Requiere Node.js >= 20.
   ZIP del editor, no del runtime. La correspondencia con `config/suite/`,
   `config/textformatter/`, `config/sync-*/`, etc. está en el schema y en
   `js/suiteMapping.js`.
+- La importación de suite normaliza la raíz y no adivina layouts mixtos. Un
+  archivo opaco o diferido (YAML inválido, binario, ROM o base de paquetes) se
+  conserva y nunca se sobrescribe; la exportación lo reporta como aviso.
+- Importar un proyecto plano o pegar YAML descarta la base de la suite: la
+  siguiente exportación de suite parte del modelo actual, no de bytes viejos.
 - Todo `.yml` exportado declara `config-version: "1.0"`.
 - `manifest.json` declara `suite-version: "1.0.0"` y la revisión del schema.
 - Un archivo sin `config-version` se reporta como issue bloqueante antes de

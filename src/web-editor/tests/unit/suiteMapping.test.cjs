@@ -335,5 +335,32 @@ bytesEq(
   'round trip preserves binary ROM bytes'
 );
 
+console.log('\n--- summarize ---');
+const summarySource = archiveOf([
+  entry('config/suite/config.yml', 'quick-look: true\nconfig-version: 1.0\n'),
+  entry('config/textformatter/channels/chat.yml', 'name: chat\nconfig-version: 1.0\n'),
+  entry('config/iflow-wasm/policy.wasm', new Uint8Array([1, 2, 3])),
+  entry('manager/library/status', 'package: textformatter\n'),
+  entry('config/unknown/module.yml', 'a: 1\nconfig-version: 1.0\n'),
+]);
+const summaryImport = Mapping.fromSuite(summarySource);
+const summary = Mapping.summarize(summarySource, summaryImport);
+assertEq(summary.files, 5, 'summarize counts files');
+assertEq(
+  summary.modules,
+  ['iflow-wasm', 'manager', 'suite', 'textformatter', 'unknown'],
+  'summarize lists module directories'
+);
+assertEq(summary.mapped, summaryImport.consumed.length, 'summarize reports mapped files');
+assertEq(summary.opaque, summaryImport.opaque.length, 'summarize reports opaque files');
+assertEq(summary.deferred, summaryImport.deferred.length, 'summarize reports deferred files');
+assertEq(summary.extra, 1, 'summarize reports extra text files');
+assertEq(summary.warnings, summaryImport.warnings.length, 'summarize reports warnings');
+assert(summary.bytes > 0, 'summarize reports total bytes');
+const bareSummary = Mapping.summarize(summarySource, null);
+assertEq(bareSummary.mapped, 0, 'summarize without mapping reports zero mapped files');
+assertEq(bareSummary.warnings, 0, 'summarize without mapping reports zero warnings');
+assertEq(Mapping.summarize(null, null).files, 0, 'summarize tolerates an absent archive');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

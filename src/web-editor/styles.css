@@ -1094,6 +1094,36 @@ table.perms td .rowtoggle {
   padding: 0 12px 12px;
   justify-content: flex-end;
 }
+.modal .m-body {
+  margin: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.modal .m-body .m-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+.modal .m-body .m-row b {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.modal .m-body .m-note {
+  margin-top: 12px;
+  color: var(--txt2);
+}
+.modal .m-body .m-warn {
+  margin-top: 8px;
+  padding-left: 18px;
+  color: var(--yellow, #e0b34a);
+}
+.modal .m-body .m-warn li {
+  margin: 2px 0;
+}
 
 /* TOASTS */
 #toasts {

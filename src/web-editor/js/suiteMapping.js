@@ -506,6 +506,32 @@
     };
   }
 
+  function summarize(archive, mapping) {
+    const paths = archive && typeof archive.paths === 'function' ? archive.paths() : [];
+    const modules = new Set();
+    for (const path of paths) {
+      const parts = path.split('/');
+      if (parts[0] === 'config' && parts[1]) {
+        modules.add(parts[1]);
+      } else if (parts[0] === 'manager') {
+        modules.add('manager');
+      }
+    }
+    const info =
+      archive && typeof archive.summary === 'function' ? archive.summary() : { files: paths.length, bytes: 0 };
+    const state = mapping && mapping.state ? mapping.state : null;
+    return {
+      files: info.files,
+      bytes: info.bytes,
+      modules: Array.from(modules).sort(),
+      mapped: mapping && mapping.consumed ? mapping.consumed.length : 0,
+      opaque: mapping && mapping.opaque ? mapping.opaque.length : 0,
+      deferred: mapping && mapping.deferred ? mapping.deferred.length : 0,
+      extra: state && state.extra ? Object.keys(state.extra).length : 0,
+      warnings: mapping && mapping.warnings ? mapping.warnings.length : 0,
+    };
+  }
+
   global.Suite = global.Suite || {};
   global.Suite.suiteMapping = {
     SuiteMappingError,
@@ -520,6 +546,7 @@
     canonical,
     stripMeta,
     serializeYaml,
+    summarize,
     fromSuite,
     toSuite,
   };

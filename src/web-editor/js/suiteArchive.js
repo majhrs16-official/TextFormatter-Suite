@@ -225,6 +225,14 @@
       };
     }
 
+    clone() {
+      return new SuiteArchive(new Map(this.files), {
+        root: this.root,
+        ignored: this.ignored,
+        limits: this.limits,
+      });
+    }
+
     toEntries(options) {
       const limits = limitsOf(options || { limits: this.limits });
       const paths = this.paths();
