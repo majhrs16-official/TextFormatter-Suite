@@ -205,7 +205,7 @@
                 <span class="etab on" data-edge="discord">Discord</span>
                 <span class="etab" data-edge="telegram">Telegram</span>
                 <span class="etab" data-edge="http">HTTP</span>
-                <span class="etab" data-edge="tcpudp">TCP-UDP</span>
+                <span class="etab" data-edge="tcpudp">TCP / UDP</span>
                 <span class="etab" data-edge="velocity">Velocity</span>
               </div>
               <div class="edge-pane" data-pane="discord">
@@ -225,10 +225,6 @@
                   <span class="cap">Canal remoto → local</span
                   ><input type="text" style="width: 180px" id="discordChannel" />
                 </div>
-                <div class="field">
-                  <span class="cap">Intents<small>GUILD_MESSAGES · MESSAGE_CONTENT</small></span
-                  ><span class="switch on" id="discordIntents" title="toggle intents"></span>
-                </div>
               </div>
               <div class="edge-pane" data-pane="telegram" hidden>
                 <div class="field">
@@ -240,33 +236,46 @@
                 <div class="field">
                   <span class="cap">Chat id</span><input type="text" style="width: 130px" id="telegramChat" />
                 </div>
-                <div class="field"><span class="cap">Hub</span><input type="text" id="telegramHub" /></div>
               </div>
               <div class="edge-pane" data-pane="http" hidden>
                 <div class="field">
                   <span class="cap">Habilitado</span><span class="switch" data-bind="sync.http.enabled"></span>
                 </div>
-                <div class="big-field"><label>Webhook URL</label><input type="text" id="httpUrl" /></div>
+                <div class="big-field"><label>Outbound URL</label><input type="text" id="httpUrl" /></div>
                 <div class="field">
                   <span class="cap">Puerto inbound</span><input type="text" style="width: 100px" id="httpPort" />
                 </div>
                 <div class="field">
-                  <span class="cap">Path</span><input type="text" style="width: 180px" id="httpPath" />
+                  <span class="cap">Inbound path</span><input type="text" style="width: 180px" id="httpPath" />
                 </div>
               </div>
               <div class="edge-pane" data-pane="tcpudp" hidden>
                 <div class="field">
-                  <span class="cap">Habilitado</span><span class="switch" data-bind="sync.tcp-udp.enabled"></span>
+                  <span class="cap">TCP habilitado</span><span class="switch" data-bind="sync.tcp.enabled"></span>
                 </div>
                 <div class="field">
-                  <span class="cap">Protocolo</span>
-                  <div class="seg"><span class="on" data-prot="TCP">TCP</span><span data-prot="UDP">UDP</span></div>
+                  <span class="cap">Host remoto TCP</span><input type="text" style="width: 150px" id="tcpHost" />
                 </div>
                 <div class="field">
-                  <span class="cap">Host</span><input type="text" style="width: 150px" id="tcpHost" />
+                  <span class="cap">Puerto remoto TCP</span
+                  ><input type="text" style="width: 100px" id="tcpRemotePort" />
                 </div>
                 <div class="field">
-                  <span class="cap">Puertos out / in</span><input type="text" style="width: 150px" id="tcpPorts" />
+                  <span class="cap">Puerto local TCP</span><input type="text" style="width: 100px" id="tcpLocalPort" />
+                </div>
+                <hr />
+                <div class="field">
+                  <span class="cap">UDP habilitado</span><span class="switch" data-bind="sync.udp.enabled"></span>
+                </div>
+                <div class="field">
+                  <span class="cap">Host remoto UDP</span><input type="text" style="width: 150px" id="udpHost" />
+                </div>
+                <div class="field">
+                  <span class="cap">Puerto remoto UDP</span
+                  ><input type="text" style="width: 100px" id="udpRemotePort" />
+                </div>
+                <div class="field">
+                  <span class="cap">Puerto local UDP</span><input type="text" style="width: 100px" id="udpLocalPort" />
                 </div>
               </div>
               <div class="edge-pane" data-pane="velocity" hidden>
@@ -435,6 +444,7 @@
     <script src="js/zip.js"></script>
     <script src="js/suiteArchive.js"></script>
     <script src="js/model.js"></script>
+    <script src="js/suiteMapping.js"></script>
     <script src="js/validate.js"></script>
     <script src="js/preview.js"></script>
     <script src="js/stateStore.js"></script>

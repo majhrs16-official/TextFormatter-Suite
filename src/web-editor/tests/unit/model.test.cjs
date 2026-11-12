@@ -68,6 +68,11 @@ assertEq(typeof d.extra, 'object', 'has extra');
 assertEq(Object.keys(d.channels).length, 4, 'defaults has 4 channels');
 assertEq(d.graph.nodes.length, 8, 'defaults has 8 nodes');
 assertEq(d.graph.edges.length, 8, 'defaults has 8 edges');
+assertEq(d.sync.tcp.remoteHost, '', 'defaults has a tcp socket');
+assertEq(d.sync.udp.remotePort, 0, 'defaults has a udp socket');
+assert(!('tcp-udp' in d.sync), 'defaults no longer has the combined tcp-udp key');
+assertEq(d.sync.telegram.chatId, 0, 'telegram uses the runtime chatId key');
+assertEq(d.sync.http.outboundUrl, '', 'http uses the runtime outboundUrl key');
 
 console.log('\n--- clone ---');
 const orig = { a: 1, b: { c: 2 } };
@@ -141,6 +146,17 @@ const imported = Suite.model.importFromFiles(Suite.model.defaults(), files);
 assertEq(imported.channels['chat.global'].name, 'chat.global', 'import restores channel');
 assertEq(imported.graph.nodes.length, 8, 'import restores nodes');
 assertEq(imported.graph.edges.length, 8, 'import restores edges');
+
+console.log('\n--- importFromFiles: imported values win over defaults ---');
+const overrides = Suite.model.importFromFiles(Suite.model.defaults(), {
+  'translators/google.yml': 'provider: custom\nactive: false\nconfig-version: 1.0\n',
+  'sync/telegram.yml': 'enabled: true\ntoken: abc\nchatId: 42\nconfig-version: 1.0\n',
+});
+assertEq(overrides.translators.google.provider, 'custom', 'imported translator provider wins');
+assertEq(overrides.translators.google.active, false, 'imported translator active wins');
+assertEq(overrides.sync.telegram.enabled, true, 'imported sync enabled wins');
+assertEq(overrides.sync.telegram.token, 'abc', 'imported sync token wins');
+assertEq(overrides.sync.telegram.chatId, 42, 'imported sync chatId wins');
 
 console.log('\n=== SUMMARY ===');
 console.log(`Passed: ${passed}`);

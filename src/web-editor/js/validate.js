@@ -153,11 +153,29 @@
         if (s.telegram && s.telegram.enabled && !s.telegram.token) {
           err('sync', 'telegram.token', 'Telegram habilitado sin token');
         }
-        if (s.http && s.http.enabled && !s.http['webhook-url']) {
-          err('sync', 'http.webhook-url', 'HTTP habilitado sin webhook-url');
+        if (s.telegram && s.telegram.enabled && !s.telegram.chatId) {
+          warn('sync', 'telegram.chatId', 'Telegram habilitado sin chatId');
         }
-        if (s['tcp-udp'] && s['tcp-udp'].enabled && !/^(TCP|UDP)$/i.test(s['tcp-udp'].protocol)) {
-          err('sync', 'tcp-udp.protocol', 'protocolo debe ser TCP o UDP');
+        if (s.http && s.http.enabled && !s.http.outboundUrl) {
+          err('sync', 'http.outboundUrl', 'HTTP habilitado sin outboundUrl');
+        }
+        if (s.http && s.http.enabled && !(s.http.inboundPort >= 0 && s.http.inboundPort <= 65535)) {
+          err('sync', 'http.inboundPort', 'puerto inbound fuera de rango');
+        }
+        for (const proto of ['tcp', 'udp']) {
+          const socket = s[proto];
+          if (!socket) {
+            continue;
+          }
+          if (socket.enabled && !socket.remoteHost) {
+            err('sync', proto + '.remoteHost', proto.toUpperCase() + ' habilitado sin host remoto');
+          }
+          if (socket.enabled && !(socket.remotePort > 0 && socket.remotePort <= 65535)) {
+            err('sync', proto + '.remotePort', proto.toUpperCase() + ' habilitado sin puerto remoto válido');
+          }
+          if (!(socket.localPort >= 0 && socket.localPort <= 65535)) {
+            err('sync', proto + '.localPort', 'puerto local fuera de rango');
+          }
         }
         if (s.velocity && s.velocity.enabled && !s.velocity.secret) {
           warn('sync', 'velocity.secret', 'Velocity habilitado sin secret');

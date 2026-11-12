@@ -210,15 +210,30 @@ assert(v19.errors > 0, 'errors on telegram enabled without token');
 
 const s20 = baseState();
 s20.sync.http.enabled = true;
-delete s20.sync.http['webhook-url'];
+delete s20.sync.http.outboundUrl;
 let v20 = Suite.validate.validate(s20);
-assert(v20.errors > 0, 'errors on http enabled without webhook-url');
+assert(v20.errors > 0, 'errors on http enabled without outboundUrl');
 
 const s21 = baseState();
-s21.sync['tcp-udp'].enabled = true;
-s21.sync['tcp-udp'].protocol = 'INVALID';
+s21.sync.tcp.enabled = true;
+s21.sync.tcp.remoteHost = '';
+s21.sync.tcp.remotePort = 0;
 let v21 = Suite.validate.validate(s21);
-assert(v21.errors > 0, 'errors on invalid tcp-udp protocol');
+assert(v21.errors > 0, 'errors on tcp enabled without remote host and port');
+
+const s22 = baseState();
+s22.sync.udp.enabled = true;
+s22.sync.udp.remoteHost = '127.0.0.1';
+s22.sync.udp.remotePort = 9093;
+let v22 = Suite.validate.validate(s22);
+assert(v22.errors === 0, 'accepts a complete udp socket');
+
+const s23 = baseState();
+s23.sync.telegram.enabled = true;
+s23.sync.telegram.token = 'token';
+s23.sync.telegram.chatId = 0;
+let v23 = Suite.validate.validate(s23);
+assert(v23.warnings > 0, 'warns on telegram enabled without chatId');
 
 console.log('\n=== SUMMARY ===');
 console.log('Passed: ' + passed);

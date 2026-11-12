@@ -57,14 +57,6 @@
         Suite.views.renderStatus();
       });
     }
-    $('#discordIntents').addEventListener('click', () => {
-      StateStore.mutate('intents', () => {
-        const s = StateStore.getState();
-        const d = s.sync.discord;
-        d.intents = d.intents && d.intents.length ? [] : ['GUILD_MESSAGES', 'MESSAGE_CONTENT'];
-      });
-      $('#discordIntents').classList.toggle('on', StateStore.getState().sync.discord.intents.length > 0);
-    });
   }
 
   function renderSwitches() {
@@ -125,28 +117,21 @@
       });
     };
     set('#discordToken', 'sync.discord.token');
+    set('#discordChannel', 'sync.discord.channel', parseInt);
     set('#telegramToken', 'sync.telegram.token');
-    set('#telegramChatId', 'sync.telegram.chat-id');
-    set('#telegramHub', 'sync.telegram.hub');
-    set('#httpWebhook', 'sync.http.webhook-url');
-    set('#httpPort', 'sync.http.inbound-port', parseInt);
-    set('#httpPath', 'sync.http.path');
-    set('#tcpHost', 'sync.tcp-udp.host');
+    set('#telegramChat', 'sync.telegram.chatId', parseInt);
+    set('#httpUrl', 'sync.http.outboundUrl');
+    set('#httpPort', 'sync.http.inboundPort', parseInt);
+    set('#httpPath', 'sync.http.inboundPath');
+    set('#tcpHost', 'sync.tcp.remoteHost');
+    set('#tcpRemotePort', 'sync.tcp.remotePort', parseInt);
+    set('#tcpLocalPort', 'sync.tcp.localPort', parseInt);
+    set('#udpHost', 'sync.udp.remoteHost');
+    set('#udpRemotePort', 'sync.udp.remotePort', parseInt);
+    set('#udpLocalPort', 'sync.udp.localPort', parseInt);
     set('#velocitySecret', 'sync.velocity.secret');
     set('#velocityMapping', 'sync.velocity.mapping');
     const st = StateStore.getState();
-    const tcpPortsEl = Suite.utils.$('#tcpPorts');
-    if (tcpPortsEl) {
-      tcpPortsEl.value = [st.sync['tcp-udp']['outbound-port'], st.sync['tcp-udp']['inbound-port']].join(' ');
-      tcpPortsEl.addEventListener('change', () => {
-        const p = (tcpPortsEl.value.match(/\d+/g) || []).map(Number);
-        StateStore.mutate('sync', () => {
-          const s = StateStore.getState();
-          s.sync['tcp-udp']['outbound-port'] = p[0] || 0;
-          s.sync['tcp-udp']['inbound-port'] = p[1] || 0;
-        });
-      });
-    }
     const velocityServersEl = Suite.utils.$('#velocityServers');
     if (velocityServersEl) {
       velocityServersEl.value = (st.sync.velocity.servers || []).join(', ');
@@ -187,24 +172,6 @@
       });
     }
 
-    const proto = document.querySelector('[data-pane="tcpudp"]').querySelectorAll('[data-prot]');
-    function refreshProto() {
-      const st = StateStore.getState();
-      proto.forEach(p =>
-        p.classList.toggle('on', (st.sync['tcp-udp'].protocol || 'TCP').toUpperCase() === p.dataset.prot)
-      );
-    }
-    refreshProto();
-    proto.forEach(p =>
-      p.addEventListener('click', () => {
-        StateStore.mutate('proto', () => {
-          const s = StateStore.getState();
-          s.sync['tcp-udp'].protocol = p.dataset.prot;
-        });
-        refreshProto();
-        Suite.views.renderStatus();
-      })
-    );
     Suite.utils.$$('.etab').forEach(tab =>
       tab.addEventListener('click', () => {
         Suite.utils.$$('.etab').forEach(t => t.classList.toggle('active', t === tab));
@@ -299,13 +266,6 @@
         sw.classList.toggle('on', desired);
       }
     });
-    const discordIntents = Suite.utils.$('#discordIntents');
-    if (discordIntents) {
-      const desired = (st.sync.discord.intents || []).length > 0;
-      if (discordIntents.classList.contains('on') !== desired) {
-        discordIntents.classList.toggle('on', desired);
-      }
-    }
   }
 
   global.Suite = global.Suite || {};

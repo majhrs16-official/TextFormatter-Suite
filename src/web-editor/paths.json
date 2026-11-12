@@ -223,12 +223,6 @@
       "type": "integer",
       "default": 0
     },
-    "sync.discord.intents": {
-      "label": "Intents (Discord)",
-      "desc": "",
-      "type": "array",
-      "default": ["GUILD_MESSAGES", "MESSAGE_CONTENT"]
-    },
     "sync.telegram.enabled": {
       "label": "Habilitado (Telegram)",
       "desc": "",
@@ -241,17 +235,11 @@
       "type": "string",
       "default": ""
     },
-    "sync.telegram.chat-id": {
+    "sync.telegram.chatId": {
       "label": "Chat ID (Telegram)",
       "desc": "",
       "type": "integer",
       "default": 0
-    },
-    "sync.telegram.hub": {
-      "label": "Hub Channel (Telegram)",
-      "desc": "",
-      "type": "string",
-      "default": ""
     },
     "sync.http.enabled": {
       "label": "Habilitado (HTTP)",
@@ -259,50 +247,68 @@
       "type": "boolean",
       "default": false
     },
-    "sync.http.webhook-url": {
-      "label": "Webhook URL (HTTP)",
+    "sync.http.outboundUrl": {
+      "label": "Outbound URL (HTTP)",
       "desc": "",
       "type": "string",
       "default": ""
     },
-    "sync.http.inbound-port": {
+    "sync.http.inboundPort": {
       "label": "Inbound Port (HTTP)",
       "desc": "",
       "type": "integer",
       "default": 0
     },
-    "sync.http.path": {
-      "label": "Path (HTTP)",
+    "sync.http.inboundPath": {
+      "label": "Inbound Path (HTTP)",
       "desc": "",
       "type": "string",
-      "default": ""
+      "default": "/hook"
     },
-    "sync.tcp-udp.enabled": {
-      "label": "Habilitado (TCP/UDP)",
+    "sync.tcp.enabled": {
+      "label": "Habilitado (TCP)",
       "desc": "",
       "type": "boolean",
       "default": false
     },
-    "sync.tcp-udp.protocol": {
-      "label": "Protocol (TCP/UDP)",
+    "sync.tcp.remoteHost": {
+      "label": "Host remoto (TCP)",
       "desc": "",
       "type": "string",
-      "default": "TCP"
+      "default": ""
     },
-    "sync.tcp-udp.host": {
-      "label": "Host (TCP/UDP)",
-      "desc": "",
-      "type": "string",
-      "default": "0.0.0.0"
-    },
-    "sync.tcp-udp.outbound-port": {
-      "label": "Outbound Port (TCP/UDP)",
+    "sync.tcp.remotePort": {
+      "label": "Puerto remoto (TCP)",
       "desc": "",
       "type": "integer",
       "default": 0
     },
-    "sync.tcp-udp.inbound-port": {
-      "label": "Inbound Port (TCP/UDP)",
+    "sync.tcp.localPort": {
+      "label": "Puerto local (TCP)",
+      "desc": "",
+      "type": "integer",
+      "default": 0
+    },
+    "sync.udp.enabled": {
+      "label": "Habilitado (UDP)",
+      "desc": "",
+      "type": "boolean",
+      "default": false
+    },
+    "sync.udp.remoteHost": {
+      "label": "Host remoto (UDP)",
+      "desc": "",
+      "type": "string",
+      "default": ""
+    },
+    "sync.udp.remotePort": {
+      "label": "Puerto remoto (UDP)",
+      "desc": "",
+      "type": "integer",
+      "default": 0
+    },
+    "sync.udp.localPort": {
+      "label": "Puerto local (UDP)",
       "desc": "",
       "type": "integer",
       "default": 0

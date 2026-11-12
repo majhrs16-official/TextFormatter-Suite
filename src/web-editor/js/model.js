@@ -288,26 +288,34 @@
           enabled: false,
           token: '',
           channel: 0,
-          intents: ['GUILD_MESSAGES', 'MESSAGE_CONTENT'],
+          format: '{sender}: {content}',
+          transport: 'jda',
         },
         telegram: {
           enabled: false,
           token: '',
-          'chat-id': 0,
-          hub: '',
+          chatId: 0,
         },
         http: {
           enabled: false,
-          'webhook-url': '',
-          'inbound-port': 0,
-          path: '',
+          outboundUrl: '',
+          inboundPort: 0,
+          inboundPath: '/hook',
+          bind: '127.0.0.1',
+          authToken: '',
+          hmacSecret: '',
         },
-        'tcp-udp': {
+        tcp: {
           enabled: false,
-          protocol: 'TCP',
-          host: '0.0.0.0',
-          'outbound-port': 0,
-          'inbound-port': 0,
+          remoteHost: '',
+          remotePort: 0,
+          localPort: 0,
+        },
+        udp: {
+          enabled: false,
+          remoteHost: '',
+          remotePort: 0,
+          localPort: 0,
         },
         velocity: {
           enabled: false,
@@ -411,7 +419,7 @@
       if (files['translators/' + key + '.yml']) {
         const parsed = Suite.yaml.parse(files['translators/' + key + '.yml']);
         if (parsed) {
-          next.translators[key] = deepMerge(parsed, next.translators[key]);
+          next.translators[key] = deepMerge(next.translators[key] || {}, parsed);
         }
       }
     }
@@ -419,7 +427,7 @@
       if (files['sync/' + key + '.yml']) {
         const parsed = Suite.yaml.parse(files['sync/' + key + '.yml']);
         if (parsed) {
-          next.sync[key] = deepMerge(parsed, next.sync[key]);
+          next.sync[key] = deepMerge(next.sync[key] || {}, parsed);
         }
       }
     }
@@ -560,6 +568,8 @@
     renameChannel,
     addEdge,
     removeEdge,
+    channel: ch,
+    deepMerge,
     KNOWN_LANGS,
   };
 })(window || this);

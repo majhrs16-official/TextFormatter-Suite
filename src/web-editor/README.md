@@ -15,6 +15,10 @@
   `TextFormatter-Suite/`, conserva binarios y archivos desconocidos bajo
   `config/`, ignora basura y excluye JARs, caché, journal, backups y temporales.
   Exporta con prefijo fijo y orden determinista.
+- **Mapeo modelo ↔ suite** (`js/suiteMapping.js`): hidrata `config/suite/`,
+  canales, grafo, traductores y sinks desde sus rutas canónicas y vuelca solo lo
+  editado. Un archivo no tocado conserva sus bytes; un archivo opaco o diferido
+  (YAML inválido, binario, ROM o base de paquetes) nunca se sobrescribe.
 - **Validación** contra el contrato del editor
   (`docs/prompts/especificaciones/config-schema-v2.2.md`) y contra las claves
   que consume el host.
@@ -37,7 +41,7 @@
 index.html          entrada de la aplicación
 js/                 estado, modelo, validación, UI y exportación
 styles.css          estilos
-tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive
+tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, suiteMapping
 tests/integration/  func, interact, click, chain, undo, diffing, bind
 package.json        scripts de lint, format, test y check
 ```
@@ -57,7 +61,8 @@ Requiere Node.js >= 20.
 
 - Las rutas planas del proyecto (`config.yml`, `channels/`, `sync/`) son del
   ZIP del editor, no del runtime. La correspondencia con `config/suite/`,
-  `config/textformatter/`, `config/sync-*/`, etc. está en el schema.
+  `config/textformatter/`, `config/sync-*/`, etc. está en el schema y en
+  `js/suiteMapping.js`.
 - Todo `.yml` exportado declara `config-version: "1.0"`.
 - `manifest.json` declara `suite-version: "1.0.0"` y la revisión del schema.
 - Un archivo sin `config-version` se reporta como issue bloqueante antes de

@@ -814,10 +814,11 @@ Pendiente y fuera de esta unidad:
 
 ### Feature propuesta — importar/exportar la suite completa desde el editor web (PL-4, 2026-11-06)
 
-> **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1) y el archivo de
-> suite (paso 2) están implementados con tests de regresión; los pasos 3–12 siguen pendientes. El ZIP
-> completo no depende de ADR-036; el mapeo de canales usa `config/textformatter/channels/`, que es la
-> ruta vigente y no se mueve. Cualquier cambio en `docs/prompts/` requiere autorización explícita.
+> **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1), el archivo de
+> suite (paso 2) y el mapeo modelo ↔ suite (paso 3) están implementados con tests de regresión; los
+> pasos 4–12 siguen pendientes. El ZIP completo no depende de ADR-036; el mapeo de canales usa
+> `config/textformatter/channels/`, que es la ruta vigente y no se mueve. Cualquier cambio en
+> `docs/prompts/` requiere autorización explícita.
 
 #### Objetivo
 
@@ -935,10 +936,12 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
 `config/chattranslator/config.yml` completo y cualquier módulo no mapeado. El mapeo no crea rutas
 legacy ni lectores alternativos (ADR-034).
 
-> **Deuda del editor:** `paths.json` y `config.js` todavía usan la clave de UI `sync.tcp-udp` y
-> `sync/tcp.yml`; el runtime vigente es `sync-socket` con `config/sync-socket/tcp.yml` y
-> `udp.yml`. El modo suite mapea `sync.tcp`/`sync.udp` a esas rutas y retira la clave vieja del
-> editor; no se añade un alias de runtime (ADR-034).
+> **Deuda del editor, resuelta en el slice 3:** el modelo, `paths.json`, `config.js`, la validación
+> y la UI ya usan `sync.tcp`/`sync.udp` con los campos del runtime (`remoteHost`, `remotePort`,
+> `localPort`) y las rutas `config/sync-socket/tcp.yml` y `udp.yml`. La clave combinada
+> `sync.tcp-udp` se retiró; no se añadió ningún alias de runtime (ADR-034). En el mismo cambio se
+> alinearon Telegram (`chatId`), HTTP (`outboundUrl`, `inboundPort`, `inboundPath`) y Discord con
+> los esquemas reales de cada sink.
 
 #### Pasos de implementación
 
@@ -946,7 +949,7 @@ legacy ni lectores alternativos (ADR-034).
    descriptor de datos, límites y errores explícitos. Tests de regresión que fallen sin él.
 2. **Archivo de suite. ✅ (2026-11-12)** Añadir `suiteArchive.js`: normalización, detección de raíz, mapa
    `ruta → {bytes, texto?}`, exclusión de basura y exportación con prefijo fijo.
-3. **Mapeo.** Hidratar el modelo visual desde las rutas conocidas y volcar los cambios al mapa;
+3. **Mapeo. ✅ (2026-11-12)** Hidratar el modelo visual desde las rutas conocidas y volcar los cambios al mapa;
    conservar el resto como opacos. Un archivo no tocado no se re-serializa.
 4. **Interfaz.** Separar “Importar/Exportar proyecto” de “Importar/Exportar suite”; mostrar resumen
    (archivos, módulos, avisos) y confirmar el reemplazo del estado.
@@ -1019,7 +1022,40 @@ Completado en el slice 2 (paso 2):
   duplicados, zip-slip, symlinks, raíz anidada, round-trip, `set/get/delete`, límites y `fromReader`.
 - `npm run check` pasa; el test unitario se añadió a `npm test`.
 
-Pendiente: pasos 3–12 (mapeo, interfaz, CST, base de paquetes, ROM, desensamblador, validación,
+Completado en el slice 3 (paso 3):
+
+- `js/suiteMapping.js` publica `Suite.suiteMapping` con `SuiteMappingError`, `FIXED`, `SYNC_FILES`,
+  `channelPath`, `translatorPath`, `syncPath`, `canonical`, `stripMeta`, `serializeYaml`,
+  `fromSuite` y `toSuite`.
+- `fromSuite(archive)` hidrata `config/suite/config.yml`, `config/textformatter/channels/*.yml`,
+  `config/iflow-firewall/rules.yml`, `config/chattranslator/translators/*.yml` y los sinks
+  `config/sync-*/config.yml` y `config/sync-socket/{tcp,udp}.yml`. Los archivos no mapeados que son
+  texto UTF-8 se guardan en `state.extra`; los binarios quedan opacos.
+- `rules.yml` solo se hidrata si la raíz es un mapa con `nodes`, `edges`, `guard` o `filter`. Un
+  arreglo SpEL ejecutable se conserva sin hidratar y produce un aviso explícito.
+- La raíz `config-version` se retira del modelo y se vuelve a añadir al serializar un archivo
+  editado, al final y con el valor `1.0`. Un archivo no editado conserva sus bytes originales,
+  incluidos comentarios y orden de claves.
+- `toSuite(state, archive, mapping)` vuelca solo las secciones que cambiaron. Si un archivo estaba
+  presente y no se editó, no se re-serializa. Si una sección no existía en la suite importada y el
+  usuario no la tocó, no se inventa. Las secciones añadidas, renombradas o eliminadas se escriben,
+  renombran o borran en su ruta canónica.
+- Los archivos opacos (YAML inválido, binarios, SpEL) y los diferidos (`manager/library/status`,
+  `config/iflow-vm/policy.flow`, `config/iflow-wasm/policy.wasm` y su sidecar) nunca se sobrescriben;
+  la exportación lo reporta como aviso. `state.extra` tampoco puede pisar una ruta mapeada.
+- El mapeo no añade `manifest.json` ni transporta JARs, caché, journal, backups o temporales.
+- Se alineó el modelo de sync con el runtime: `tcp`/`udp` separados con `remoteHost`, `remotePort` y
+  `localPort`; Telegram con `chatId`; HTTP con `outboundUrl`, `inboundPort`, `inboundPath`, `bind`,
+  `authToken` y `hmacSecret`; Discord con `format` y `transport`. Se retiró `sync.tcp-udp`, la UI
+  combinada, `telegram.hub`, `discord.intents` y sus bindings muertos.
+- Se corrigió el orden de mezcla de `importFromFiles` en traductores y sync: los valores importados
+  ahora ganan a los defaults, con test de regresión.
+- `tests/unit/suiteMapping.test.cjs` cubre rutas, `serializeYaml`, hidratación, archivos opacos,
+  preservación byte a byte, edición, alta/renombrado/borrado de canales, `state.extra`, exportación
+  nueva y round-trip ZIP con binarios.
+- `npm run check` pasa; el test unitario se añadió a `npm test`.
+
+Pendiente: pasos 4–12 (interfaz, CST, base de paquetes, ROM, desensamblador, validación,
 exportación DEFLATE, tests de integración y documentación).
 
 #### Criterios de cierre y tests
