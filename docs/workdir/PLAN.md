@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM y desensamblador implementados; quedan validación, DEFLATE y documentación final. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador y validación implementados; quedan DEFLATE y documentación final. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -816,8 +816,9 @@ Pendiente y fuera de esta unidad:
 
 > **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1), el archivo de
 > suite (paso 2), el mapeo modelo ↔ suite (paso 3), la interfaz (paso 4), el CST de YAML (paso 5),
-> la base de paquetes (paso 6), la ROM de iFlow (paso 7) y el desensamblador (paso 8) están
-> implementados con tests de regresión; los pasos 9–12 siguen pendientes. El ZIP completo no depende de ADR-036; el mapeo de canales usa
+> la base de paquetes (paso 6), la ROM de iFlow (paso 7), el desensamblador (paso 8) y la validación
+> del YAML exportado (paso 9) están implementados con tests de regresión; los pasos 10–12 siguen
+> pendientes. El ZIP completo no depende de ADR-036; el mapeo de canales usa
 > `config/textformatter/channels/`, que es la ruta vigente y no se mueve. Cualquier cambio en
 > `docs/prompts/` requiere autorización explícita.
 
@@ -993,9 +994,12 @@ legacy ni lectores alternativos (ADR-034).
    La vista ROM del editor (`js/disasm.js`) reutiliza el mismo algoritmo en modo de solo lectura; un
    test contrasta su tabla de opcodes con `types.ts` y `Opcode.java`. El proceso inverso sigue siendo
    desensamblado, no metadatos de grafo en la ROM.
-9. **Validación.** Parsear YAML, comprobar `config-version: "1.0"` en cada `.yml` de `config/` y
-   bloquear la exportación con errores. Un módulo desconocido es aviso, no error. La ROM y la base de
-   paquetes se validan con sus propios formatos, no con el validador YAML.
+9. **Validación. ✅ (2026-11-12)** `Suite.suiteMapping.validateSuite(archive, mapping)` parsea cada
+   `.yml`/`.yaml` de `config/` con el CST, exige raíz mapa y `config-version: 1.0`, y devuelve
+   `{errors, warnings, modules}`. `exportSuite` valida el ZIP resultante antes de descargarlo: si hay
+   errores muestra un modal con la lista y **no** genera el archivo. Un módulo desconocido y un
+   archivo opaco preservado son avisos, no errores. La ROM y la base de paquetes se omiten porque
+   tienen su propio formato.
 10. **Exportación.** ZIP con raíz `TextFormatter-Suite/`, rutas ordenadas, binarios intactos,
     DEFLATE en nivel máximo y sin añadir el `manifest.json` del editor en modo suite. Los límites
     anti-bomba se aplican al importar y al exportar.
@@ -1187,7 +1191,32 @@ Completado en el slice 8 (paso 8):
   `tests/integration/roms.cjs` cubre el botón, el listado y el ocultado.
 - `npm run check` y `npm run test:integration` pasan con 0 errores.
 
-Pendiente: pasos 9–12 (validación, exportación DEFLATE, tests de integración y documentación final).
+Completado en el slice 9 (paso 9):
+
+- `js/suiteMapping.js` publica `validateSuite(archive, mapping)`: recorre cada `.yml`/`.yaml` bajo
+  `config/`, lo decodifica como UTF-8 estricto, lo parsea con `Suite.yamlCst.parseValue` y exige
+  raíz mapa y `config-version: 1.0` (acepta el número `1` que produce el CST para `1.0` y la cadena
+  `'1.0'`). Devuelve `{errors, warnings, modules}` ordenados.
+- Los errores bloquean: `falta config-version`, `config-version no es 1.0`, `la raíz no es un mapa`,
+  `YAML inválido: …` y `no es texto UTF-8`. Los avisos no bloquean: `módulo desconocido` (uno por
+  directorio de primer nivel) y `archivo opaco preservado; no se valida`.
+- `KNOWN_MODULES` enumera los módulos que el runtime reconoce bajo `config/`; un directorio fuera de
+  la lista es un aviso porque puede ser una extensión válida que el editor aún no modela.
+- Las ROM (`config/iflow-vm/`, `config/iflow-wasm/`) y `manager/library/status` no son YAML y quedan
+  fuera del validador: se validan con `Suite.rom` y `Suite.packageDb` en sus propios slices.
+- `js/importExport.js` valida el archivo que devuelve `toSuite` **antes** de descargar. Si hay
+  errores muestra `showSuiteErrors` en el modal existente (`#suiteModal`, con `#suiteModalApply`
+  oculto y el botón de cierre) y no genera el ZIP; si solo hay avisos, exporta y los reporta.
+- `showSuiteSummary` restaura el texto y la visibilidad de los botones del modal para que un resumen
+  posterior a un error no herede el estado del error.
+- `tests/unit/suiteMapping.test.cjs` añade 21 casos de `validateSuite`: suite válida, versión
+  ausente/errónea, YAML inválido, raíz no mapa, UTF-8 inválido, archivo opaco, módulo desconocido
+  (un aviso por módulo), `config-version: "1.0"` entre comillas, ROM y paquetes omitidos y archivo
+  ausente (177 casos en total).
+- `npm run check` (0 errores, 38 avisos preexistentes, 177 tests) y `npm run test:integration`
+  (func 28, interact 5, click/chain/undo/diffing/bind con `ERRORS (0)`, packages 12, roms 28) pasan.
+
+Pendiente: pasos 10–12 (exportación DEFLATE, tests de integración y documentación final).
 
 #### Criterios de cierre y tests
 
@@ -1213,8 +1242,10 @@ Pendiente: pasos 9–12 (validación, exportación DEFLATE, tests de integració
 11. **ROM:** se pueden listar, añadir, borrar, editar y clonar ROM; un `.wasm` editado sin hash
     actualizado se rechaza; el desensamblado se limita al rango de usuario (`>= 0x1000`) y produce un
     CFG; la exclusión de firmware/BIOS/bootloader/kernel/stdlib es requisito de v3.
-12. **Sin regresión:** el modo proyecto actual sigue funcionando.
-13. **Gate:** `cd src/web-editor && npm run check`.
+12. **Validación:** cada `.yml` de `config/` declara `config-version: 1.0`; un error bloquea la
+    exportación y muestra la lista; un módulo desconocido y un archivo opaco son avisos.
+13. **Sin regresión:** el modo proyecto actual sigue funcionando.
+14. **Gate:** `cd src/web-editor && npm run check`.
 
 #### Decisiones abiertas
 

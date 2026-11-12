@@ -694,5 +694,62 @@ assertEq(bareSummary.mapped, 0, 'summarize without mapping reports zero mapped f
 assertEq(bareSummary.warnings, 0, 'summarize without mapping reports zero warnings');
 assertEq(Mapping.summarize(null, null).files, 0, 'summarize tolerates an absent archive');
 
+console.log('\n--- validateSuite ---');
+const validSuite = archiveOf([
+  entry('config/suite/config.yml', 'quick-look: true\nconfig-version: 1.0\n'),
+  entry('config/textformatter/channels/chat.yml', 'name: chat\nconfig-version: "1.0"\n'),
+  entry('config/iflow-wasm/policy.wasm', new Uint8Array([0x00, 0x61, 0x73, 0x6d])),
+  entry('manager/library/status', 'Name: x\n'),
+]);
+const validCheck = Mapping.validateSuite(validSuite, { opaque: [] });
+assertEq(validCheck.errors, [], 'accepts a valid suite');
+assertEq(validCheck.warnings, [], 'a valid suite has no warnings');
+assertEq(validCheck.modules, ['iflow-wasm', 'suite', 'textformatter'], 'lists the modules');
+
+const missingVersion = archiveOf([entry('config/suite/config.yml', 'quick-look: true\n')]);
+const missingCheck = Mapping.validateSuite(missingVersion, { opaque: [] });
+assertEq(missingCheck.errors.length, 1, 'rejects a missing config-version');
+assertEq(missingCheck.errors[0].message, 'falta config-version', 'explains the missing version');
+
+const wrongVersion = archiveOf([entry('config/suite/config.yml', 'a: 1\nconfig-version: 2.0\n')]);
+const wrongCheck = Mapping.validateSuite(wrongVersion, { opaque: [] });
+assertEq(wrongCheck.errors.length, 1, 'rejects a wrong config-version');
+assertEq(wrongCheck.errors[0].message, 'config-version no es 1.0', 'explains the wrong version');
+
+const brokenYaml = archiveOf([entry('config/suite/config.yml', 'a: [1, 2\nconfig-version: 1.0\n')]);
+const brokenCheck = Mapping.validateSuite(brokenYaml, { opaque: [] });
+assertEq(brokenCheck.errors.length, 1, 'rejects invalid YAML');
+assert(brokenCheck.errors[0].message.startsWith('YAML inválido'), 'explains the invalid YAML');
+
+const spelRules = archiveOf([entry('config/iflow-firewall/rules.yml', '- id: drop\n  target: DROP\n')]);
+const spelCheck = Mapping.validateSuite(spelRules, {
+  opaque: ['config/iflow-firewall/rules.yml'],
+});
+assertEq(spelCheck.errors, [], 'an opaque file is not an error');
+assertEq(spelCheck.warnings.length, 1, 'an opaque file is a warning');
+assertEq(spelCheck.warnings[0].message, 'archivo opaco preservado; no se valida', 'explains the opaque file');
+
+const arrayRoot = archiveOf([entry('config/suite/config.yml', '- a\n- b\n')]);
+const arrayCheck = Mapping.validateSuite(arrayRoot, { opaque: [] });
+assertEq(arrayCheck.errors.length, 1, 'rejects a non-map root');
+assertEq(arrayCheck.errors[0].message, 'la raíz no es un mapa', 'explains the non-map root');
+
+const unknownModule = archiveOf([
+  entry('config/extension-x/config.yml', 'a: 1\nconfig-version: 1.0\n'),
+  entry('config/extension-x/other.yml', 'b: 1\nconfig-version: 1.0\n'),
+]);
+const unknownCheck = Mapping.validateSuite(unknownModule, { opaque: [] });
+assertEq(unknownCheck.errors, [], 'an unknown module is not an error');
+assertEq(unknownCheck.warnings.length, 1, 'an unknown module warns once');
+assertEq(unknownCheck.warnings[0].path, 'config/extension-x/', 'points at the module');
+assertEq(unknownCheck.warnings[0].message, 'módulo desconocido', 'explains the unknown module');
+
+const binaryYaml = archiveOf([entry('config/suite/config.yml', new Uint8Array([0xff, 0xfe, 0x00]))]);
+const binaryCheck = Mapping.validateSuite(binaryYaml, { opaque: [] });
+assertEq(binaryCheck.errors.length, 1, 'rejects a non-UTF-8 YAML');
+assertEq(binaryCheck.errors[0].message, 'no es texto UTF-8', 'explains the encoding');
+
+assertEq(Mapping.validateSuite(null, null).errors, [], 'tolerates an absent archive');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

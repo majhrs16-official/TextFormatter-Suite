@@ -17,6 +17,12 @@
   opacos, diferidos, texto extra y avisos) y exige confirmación antes de
   reemplazar el estado y borrar el historial. La exportación reutiliza el
   archivo importado como base, clona sus bytes y solo escribe lo editado.
+- **Validación del YAML exportado** (`js/suiteMapping.js`): antes de descargar,
+  `validateSuite` parsea cada `.yml`/`.yaml` de `config/` y exige raíz mapa y
+  `config-version: 1.0`. Un error (versión ausente o distinta, YAML inválido,
+  raíz no mapa, texto no UTF-8) abre un modal con la lista y bloquea el ZIP; un
+  módulo desconocido y un archivo opaco preservado son avisos. ROM y
+  `manager/library/status` se validan con sus propios formatos.
 - **Archivo de suite** (`js/suiteArchive.js`): normaliza rutas, detecta la raíz
   `TextFormatter-Suite/`, conserva binarios y archivos desconocidos bajo
   `config/`, ignora basura y excluye JARs, caché, journal, backups y temporales.

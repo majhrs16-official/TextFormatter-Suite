@@ -160,6 +160,44 @@
     }
   }
 
+  function showSuiteErrors(errors) {
+    const modal = $('#suiteModal');
+    const body = $('#suiteModalBody');
+    if (!modal || !body) {
+      return;
+    }
+    const t = key => Suite.i18n.t(key);
+    const title = $('#suiteModalTitle');
+    if (title) {
+      title.textContent = t('suite_validate_title');
+    }
+    body.textContent = '';
+    const list = document.createElement('ul');
+    list.className = 'm-warn';
+    const limit = 20;
+    for (const error of errors.slice(0, limit)) {
+      const item = document.createElement('li');
+      item.textContent = error.path + ' — ' + error.message;
+      list.appendChild(item);
+    }
+    if (errors.length > limit) {
+      const item = document.createElement('li');
+      item.textContent = '… +' + (errors.length - limit);
+      list.appendChild(item);
+    }
+    body.appendChild(list);
+    const cancel = $('#suiteModalCancel');
+    if (cancel) {
+      cancel.textContent = t('suite_validate_close');
+    }
+    const apply = $('#suiteModalApply');
+    if (apply) {
+      apply.style.display = 'none';
+    }
+    pendingSuiteImport = null;
+    modal.classList.add('show');
+  }
+
   function showSuiteSummary(summary, warnings, onApply) {
     const modal = $('#suiteModal');
     const body = $('#suiteModalBody');
@@ -223,6 +261,7 @@
     const apply = $('#suiteModalApply');
     if (apply) {
       apply.textContent = t('suite_import_apply');
+      apply.style.display = '';
     }
     pendingSuiteImport = onApply;
     modal.classList.add('show');
@@ -239,12 +278,20 @@
       const base = suiteSource ? suiteSource.archive.clone() : undefined;
       const mapping = suiteSource ? suiteSource.mapping : undefined;
       const result = Suite.suiteMapping.toSuite(st, base, mapping);
+      const check = Suite.suiteMapping.validateSuite(result.archive, mapping);
+      if (check.errors.length > 0) {
+        Suite.utils.toast(Suite.i18n.t('suite_validate_blocked') + ' ' + check.errors.length, 'err', 4200);
+        showSuiteErrors(check.errors);
+        return;
+      }
       download(result.archive.toZip(), 'TextFormatter-Suite-' + Date.now() + '.zip');
       Suite.utils.toast(
         Suite.i18n.t('toast_suite_export_ok') + ' · ' + result.archive.paths().length + ' file(s)',
         'ok'
       );
-      if (result.warnings.length) {
+      if (check.warnings.length) {
+        Suite.utils.toast(check.warnings.length + ' ' + Suite.i18n.t('suite_summary_warnings'), 'warn', 3600);
+      } else if (result.warnings.length) {
         Suite.utils.toast(result.warnings.length + ' ' + Suite.i18n.t('suite_summary_warnings'), 'warn', 3600);
       }
     } catch (err) {

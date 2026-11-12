@@ -116,6 +116,9 @@
       suite_summary_deferred: 'Deferred files (preserved)',
       suite_summary_extra: 'Extra text files',
       suite_summary_warnings: 'Warnings',
+      suite_validate_title: 'Suite validation failed',
+      suite_validate_close: 'close',
+      suite_validate_blocked: 'Export blocked:',
       suite_import_replace:
         'Importing the suite replaces the current editor state and clears undo history. Unedited, opaque and deferred files keep their original bytes.',
       suite_import_apply: 'replace state',
@@ -342,6 +345,9 @@
       suite_summary_deferred: 'Archivos diferidos (preservados)',
       suite_summary_extra: 'Archivos de texto extra',
       suite_summary_warnings: 'Avisos',
+      suite_validate_title: 'La validación de la suite falló',
+      suite_validate_close: 'cerrar',
+      suite_validate_blocked: 'Exportación bloqueada:',
       suite_import_replace:
         'Importar la suite reemplaza el estado actual del editor y borra el historial de deshacer. Los archivos no editados, opacos y diferidos conservan sus bytes originales.',
       suite_import_apply: 'reemplazar estado',

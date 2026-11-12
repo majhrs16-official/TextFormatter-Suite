@@ -33,6 +33,31 @@
 
   const CHANNEL_DIR = 'config/textformatter/channels/';
   const TRANSLATOR_DIR = 'config/chattranslator/translators/';
+
+  /* Módulos que el runtime reconoce bajo `config/`. Un directorio fuera de esta
+   * lista es un aviso, no un error: puede ser una extensión válida que el editor
+   * todavía no modela. */
+  const KNOWN_MODULES = new Set([
+    'suite',
+    'iflow',
+    'iflow-firewall',
+    'iflow-vm',
+    'iflow-wasm',
+    'textformatter',
+    'chattranslator',
+    'sync-bus',
+    'sync-discord',
+    'sync-telegram',
+    'sync-http',
+    'sync-websocket',
+    'sync-socket',
+    'sync-velocity-core',
+    'sync-bukkit',
+    'sync-fabric',
+    'inworld',
+    'observability',
+    'presets',
+  ]);
   const DEFERRED = [];
 
   class SuiteMappingError extends Error {
@@ -836,6 +861,71 @@
     };
   }
 
+  /* ── VALIDACIÓN ─────────────────────────────────────────── */
+
+  /**
+   * Valida el YAML exportado: cada `.yml`/`.yaml` bajo `config/` debe parsear y
+   * declarar `config-version: 1.0`. Un módulo desconocido y un archivo opaco
+   * preservado son avisos; un archivo que el editor escribe y no cumple el
+   * contrato es un error que bloquea la exportación. Las ROM y
+   * `manager/library/status` tienen su propio formato y no pasan por aquí.
+   */
+  function validateSuite(archive, mapping) {
+    const errors = [];
+    const warnings = [];
+    const paths = archive && typeof archive.paths === 'function' ? archive.paths() : [];
+    const opaque = new Set(mapping && Array.isArray(mapping.opaque) ? mapping.opaque : []);
+    const modules = new Set();
+    const reported = new Set();
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    for (const path of paths) {
+      const moduleMatch = /^config\/([^/]+)\//.exec(path);
+      if (moduleMatch) {
+        modules.add(moduleMatch[1]);
+        if (!KNOWN_MODULES.has(moduleMatch[1]) && !reported.has(moduleMatch[1])) {
+          reported.add(moduleMatch[1]);
+          warnings.push({ path: 'config/' + moduleMatch[1] + '/', message: 'módulo desconocido' });
+        }
+      }
+      if (!/\.ya?ml$/i.test(path)) {
+        continue;
+      }
+      const bytes = archive.get(path);
+      if (!bytes) {
+        continue;
+      }
+      if (opaque.has(path)) {
+        warnings.push({ path, message: 'archivo opaco preservado; no se valida' });
+        continue;
+      }
+      let text;
+      try {
+        text = decoder.decode(bytes);
+      } catch (error) {
+        errors.push({ path, message: 'no es texto UTF-8' });
+        continue;
+      }
+      let value;
+      try {
+        value = global.Suite.yamlCst ? global.Suite.yamlCst.parseValue(text) : global.Suite.yaml.parse(text);
+      } catch (error) {
+        errors.push({ path, message: 'YAML inválido: ' + error.message });
+        continue;
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        errors.push({ path, message: 'la raíz no es un mapa' });
+        continue;
+      }
+      const version = value['config-version'];
+      if (version === undefined) {
+        errors.push({ path, message: 'falta config-version' });
+      } else if (!(version === 1 || version === '1.0')) {
+        errors.push({ path, message: 'config-version no es 1.0' });
+      }
+    }
+    return { errors, warnings, modules: Array.from(modules).sort() };
+  }
+
   function summarize(archive, mapping) {
     const paths = archive && typeof archive.paths === 'function' ? archive.paths() : [];
     const modules = new Set();
@@ -876,6 +966,7 @@
     canonical,
     stripMeta,
     serializeYaml,
+    validateSuite,
     summarize,
     fromSuite,
     toSuite,
