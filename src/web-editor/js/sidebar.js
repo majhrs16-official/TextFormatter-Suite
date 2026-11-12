@@ -230,8 +230,8 @@
       const g = c.split('.')[0] || 'misc';
       (byGroup[g] = byGroup[g] || []).push(c);
     }
-    const views = ['config', 'txf', 'iflow', 'translators', 'sync', 'perm', 'kernel', 'packages'];
-    let h = '<div class="sgroup"><h4>' + t('views') + ' <span class="badge">8</span></h4><ul>';
+    const views = ['config', 'txf', 'iflow', 'translators', 'sync', 'perm', 'kernel', 'packages', 'rom'];
+    let h = '<div class="sgroup"><h4>' + t('views') + ' <span class="badge">9</span></h4><ul>';
     for (const v of views) {
       h += '<li data-view="' + v + '" class="' + (UI.view === v ? 'active' : '') + '">' + t('v_' + v) + '</li>';
     }

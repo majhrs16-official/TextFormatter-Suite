@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { JSDOM } = require('jsdom');
 
 const dir = path.join(__dirname, '..', '..');
@@ -13,13 +14,23 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
 const { window } = dom;
 window.TextEncoder = globalThis.TextEncoder;
 window.TextDecoder = globalThis.TextDecoder;
-for (const code of ['yaml.js', 'yamlCst.js', 'packageDb.js', 'zip.js', 'suiteArchive.js', 'model.js', 'suiteMapping.js']) {
+for (const code of [
+  'yaml.js',
+  'yamlCst.js',
+  'packageDb.js',
+  'rom.js',
+  'zip.js',
+  'suiteArchive.js',
+  'model.js',
+  'suiteMapping.js',
+]) {
   window.eval(fs.readFileSync(path.join(dir, 'js', code), 'utf8'));
 }
 const Suite = window.Suite;
 const Mapping = Suite.suiteMapping;
 const Archive = Suite.suiteArchive;
 const Db = Suite.packageDb;
+const Rom = Suite.rom;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -57,6 +68,42 @@ function archiveOf(entries) {
 function text(archive, path) {
   const bytes = archive.get(path);
   return bytes ? decoder.decode(bytes) : null;
+}
+
+function hashOf(bytes) {
+  return crypto.createHash('sha256').update(Buffer.from(bytes)).digest();
+}
+
+function buildFlow(over) {
+  const options = Object.assign({ code: [0x00, 0x00], capabilities: ['log'], debug: 'main' }, over || {});
+  const caps = [];
+  for (const cap of options.capabilities) {
+    caps.push(...Buffer.from(cap, 'utf8'), 0);
+  }
+  const debug = Buffer.from(options.debug, 'utf8');
+  const size = 20 + options.code.length + caps.length + debug.length;
+  const out = Buffer.alloc(size);
+  out.writeUInt32BE(0x464c4f57, 0);
+  out[4] = 2;
+  out[5] = 2;
+  out[6] = 2;
+  out[7] = 1;
+  out.writeUInt16BE(0, 8);
+  out.writeUInt16BE(options.code.length, 10);
+  out.writeUInt16BE(0, 12);
+  out[14] = options.capabilities.length;
+  out.writeUInt16BE(debug.length, 16);
+  let offset = 20;
+  Buffer.from(options.code).copy(out, offset);
+  offset += options.code.length;
+  Buffer.from(caps).copy(out, offset);
+  offset += caps.length;
+  debug.copy(out, offset);
+  return new Uint8Array(Buffer.concat([out, hashOf(out)]));
+}
+
+function buildWasm() {
+  return new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 }
 
 console.log('\n=== Suite.suiteMapping Unit Tests ===\n');
@@ -152,9 +199,12 @@ assertEq(state.packages[0].name, 'iflow', 'hydrates a package');
 assertEq(state.packages[0].files.length, 1, 'hydrates the package file list');
 assert(imported.consumed.includes('config/suite/config.yml'), 'marks config as consumed');
 assert(imported.consumed.includes('manager/library/status'), 'marks the package database as consumed');
-assert(imported.deferred.includes('config/iflow-vm/policy.flow'), 'defers the VM ROM');
-assert(!imported.deferred.includes('manager/library/status'), 'does not defer the package database');
-assert(imported.opaque.includes('config/iflow-vm/policy.flow') === false, 'does not mark deferred files as opaque');
+assertEq(imported.deferred.length, 0, 'no files are deferred');
+assert(imported.opaque.includes('config/iflow-vm/policy.flow'), 'keeps the invalid VM ROM opaque');
+assert(
+  imported.warnings.some(w => w.path === 'config/iflow-vm/policy.flow' && w.message.includes('ROM inválida')),
+  'warns about the invalid VM ROM'
+);
 
 console.log('\n--- fromSuite: opaque and malformed ---');
 const spiel = archiveOf([
@@ -185,6 +235,111 @@ assert(
   'warns when name and filename differ'
 );
 
+console.log('\n--- fromSuite/toSuite: ROM ---');
+const flowBytes = buildFlow();
+const wasmBytes = buildWasm();
+const wasmHash = Rom.sha256Hex(wasmBytes);
+const romSource = archiveOf([
+  entry('config/iflow-vm/policy.flow', flowBytes),
+  entry('config/iflow-wasm/policy.wasm', wasmBytes),
+  entry('config/iflow-wasm/policy.sha256', wasmHash + '  policy.wasm\n'),
+]);
+const romImport = Mapping.fromSuite(romSource);
+assertEq(romImport.state.roms.length, 2, 'hydrates both ROMs');
+assertEq(romImport.state.roms[0].kind, 'flow', 'hydrates the VM ROM first');
+assertEq(romImport.state.roms[1].kind, 'wasm', 'hydrates the Wasm ROM second');
+assertEq(romImport.state.roms[0].sha256, null, 'the flow does not invent a sidecar');
+assertEq(romImport.state.roms[1].sha256, wasmHash, 'hydrates the wasm hash');
+assertEq(romImport.state.roms[1].sidecarPath, 'config/iflow-wasm/policy.sha256', 'hydrates the sidecar path');
+assert(romImport.consumed.includes('config/iflow-vm/policy.flow'), 'marks the flow as consumed');
+assert(romImport.consumed.includes('config/iflow-wasm/policy.wasm'), 'marks the wasm as consumed');
+assert(romImport.consumed.includes('config/iflow-wasm/policy.sha256'), 'marks the sidecar as consumed');
+
+const romUntouched = Mapping.toSuite(romImport.state, romSource, romImport);
+assertEq(romUntouched.written, [], 'does not rewrite untouched ROMs');
+assert(romUntouched.preserved.includes('config/iflow-vm/policy.flow'), 'preserves the untouched flow');
+assert(romUntouched.preserved.includes('config/iflow-wasm/policy.wasm'), 'preserves the untouched wasm');
+assert(romUntouched.preserved.includes('config/iflow-wasm/policy.sha256'), 'preserves the untouched sidecar');
+bytesEq(romSource.get('config/iflow-vm/policy.flow'), flowBytes, 'flow bytes are identical');
+bytesEq(romSource.get('config/iflow-wasm/policy.wasm'), wasmBytes, 'wasm bytes are identical');
+
+const editedFlow = buildFlow({ code: [0x00, 0x00, 0x00] });
+const flowEdit = Mapping.fromSuite(romSource);
+flowEdit.state.roms[0].data = Rom.toBase64(editedFlow);
+const flowOut = Mapping.toSuite(flowEdit.state, romSource, flowEdit);
+assert(flowOut.written.includes('config/iflow-vm/policy.flow'), 'writes the edited flow');
+bytesEq(romSource.get('config/iflow-vm/policy.flow'), editedFlow, 'writes the new flow bytes');
+
+const newWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00]);
+const newWasmHash = Rom.sha256Hex(newWasm);
+const wasmEdit = Mapping.fromSuite(romSource);
+wasmEdit.state.roms[1].data = Rom.toBase64(newWasm);
+wasmEdit.state.roms[1].sha256 = newWasmHash;
+wasmEdit.state.roms[1].sidecarText = Rom.formatSidecar(newWasmHash, 'policy.wasm');
+const wasmOut = Mapping.toSuite(wasmEdit.state, romSource, wasmEdit);
+assert(wasmOut.written.includes('config/iflow-wasm/policy.wasm'), 'writes the edited wasm');
+assert(wasmOut.written.includes('config/iflow-wasm/policy.sha256'), 'rewrites the sidecar with the new hash');
+bytesEq(romSource.get('config/iflow-wasm/policy.wasm'), newWasm, 'writes the new wasm bytes');
+assertEq(
+  text(romSource, 'config/iflow-wasm/policy.sha256'),
+  newWasmHash + '  policy.wasm\n',
+  'writes the recalculated sidecar'
+);
+
+const badHash = Mapping.fromSuite(romSource);
+badHash.state.roms[1].data = Rom.toBase64(newWasm);
+badHash.state.roms[1].sha256 = newWasmHash;
+badHash.state.roms[1].sidecarText = '0'.repeat(64) + '  policy.wasm\n';
+let hashError = null;
+try {
+  Mapping.toSuite(badHash.state, romSource, badHash);
+} catch (error) {
+  hashError = error;
+}
+assert(hashError && /no coincide/.test(hashError.message), 'refuses a wasm whose sidecar does not match');
+bytesEq(romSource.get('config/iflow-wasm/policy.wasm'), newWasm, 'leaves the wasm untouched on a hash error');
+
+const noSidecar = archiveOf([entry('config/iflow-wasm/policy.wasm', wasmBytes)]);
+const noSidecarImport = Mapping.fromSuite(noSidecar);
+assertEq(noSidecarImport.state.roms.length, 0, 'does not hydrate a wasm without a sidecar');
+assert(noSidecarImport.opaque.includes('config/iflow-wasm/policy.wasm'), 'keeps a wasm without a sidecar opaque');
+assert(
+  noSidecarImport.warnings.some(w => w.path === 'config/iflow-wasm/policy.wasm'),
+  'warns about the missing sidecar'
+);
+
+const cloneSource = archiveOf([
+  entry('config/iflow-vm/policy.flow', flowBytes),
+  entry('config/iflow-wasm/policy.wasm', wasmBytes),
+  entry('config/iflow-wasm/policy.sha256', wasmHash + '  policy.wasm\n'),
+]);
+const cloneImport = Mapping.fromSuite(cloneSource);
+const clone = JSON.parse(JSON.stringify(cloneImport.state.roms[1]));
+clone.id = 'config/iflow-wasm/policy-copy.wasm';
+clone.path = clone.id;
+clone.canonical = false;
+clone.sidecarPath = 'config/iflow-wasm/policy-copy.sha256';
+clone.sidecarText = Rom.formatSidecar(clone.sha256, 'policy-copy.wasm');
+cloneImport.state.roms.push(clone);
+const cloneOut = Mapping.toSuite(cloneImport.state, cloneSource, cloneImport);
+assert(cloneOut.written.includes('config/iflow-wasm/policy-copy.wasm'), 'writes a wasm clone');
+assert(cloneOut.written.includes('config/iflow-wasm/policy-copy.sha256'), 'writes the clone sidecar');
+bytesEq(cloneSource.get('config/iflow-wasm/policy-copy.wasm'), wasmBytes, 'the clone copies the wasm bytes');
+assertEq(
+  text(cloneSource, 'config/iflow-wasm/policy-copy.sha256'),
+  wasmHash + '  policy-copy.wasm\n',
+  'the clone copies the sidecar with its own name'
+);
+
+const deleteImport = Mapping.fromSuite(romSource);
+deleteImport.state.roms = [];
+const deleteOut = Mapping.toSuite(deleteImport.state, romSource, deleteImport);
+assert(deleteOut.removed.includes('config/iflow-vm/policy.flow'), 'deletes the removed flow');
+assert(deleteOut.removed.includes('config/iflow-wasm/policy.wasm'), 'deletes the removed wasm');
+assert(deleteOut.removed.includes('config/iflow-wasm/policy.sha256'), 'deletes the removed sidecar');
+assert(!romSource.has('config/iflow-vm/policy.flow'), 'the flow is gone from the archive');
+assert(!romSource.has('config/iflow-wasm/policy.wasm'), 'the wasm is gone from the archive');
+
 console.log('\n--- toSuite: untouched files preserve bytes ---');
 const originalConfig = text(source, 'config/suite/config.yml');
 const originalChannel = text(source, 'config/textformatter/channels/chat.global.yml');
@@ -204,7 +359,7 @@ bytesEq(
 bytesEq(source.get('config/sync-discord/config.yml'), encoder.encode(originalDiscord), 'sync bytes are identical');
 bytesEq(source.get('config/suite/messages.yml'), encoder.encode(originalMessages), 'extra bytes are identical');
 bytesEq(source.get('manager/library/status'), encoder.encode(originalStatus), 'package database bytes are identical');
-assertEq(text(source, 'config/iflow-vm/policy.flow'), '\u0000\u0001\u0002\u0003', 'deferred ROM bytes are identical');
+assertEq(text(source, 'config/iflow-vm/policy.flow'), '\u0000\u0001\u0002\u0003', 'opaque ROM bytes are identical');
 
 console.log('\n--- toSuite: package database ---');
 const packageSource = archiveOf([entry('manager/library/status', statusText)]);
@@ -220,17 +375,23 @@ assert(packageOut.includes('Dependencies: iflow-vm@>=1.0.0'), 'writes the edited
 assert(packageOut.includes('Installed-Time: 2024-01-01T00:00:00Z'), 'writes the edited extra field');
 assertEq(Db.parse(packageOut)[0].files, packageImport.state.packages[0].files, 'preserves the package files');
 
-const addedPackage = Mapping.fromSuite(
-  archiveOf([entry('manager/library/status', statusText)])
-);
+const addedPackage = Mapping.fromSuite(archiveOf([entry('manager/library/status', statusText)]));
 addedPackage.state.packages.push(Db.create());
-const addedOut = Mapping.toSuite(addedPackage.state, archiveOf([entry('manager/library/status', statusText)]), addedPackage);
+const addedOut = Mapping.toSuite(
+  addedPackage.state,
+  archiveOf([entry('manager/library/status', statusText)]),
+  addedPackage
+);
 assert(addedOut.written.includes('manager/library/status'), 'writes a newly added package');
 assert(text(addedOut.archive, 'manager/library/status').includes('Name: new-package'), 'serializes the new package');
 
 const emptyPackages = Mapping.fromSuite(archiveOf([entry('manager/library/status', statusText)]));
 emptyPackages.state.packages = [];
-const emptyOut = Mapping.toSuite(emptyPackages.state, archiveOf([entry('manager/library/status', statusText)]), emptyPackages);
+const emptyOut = Mapping.toSuite(
+  emptyPackages.state,
+  archiveOf([entry('manager/library/status', statusText)]),
+  emptyPackages
+);
 assert(emptyOut.written.includes('manager/library/status'), 'rewrites the database when all packages are removed');
 assertEq(text(emptyOut.archive, 'manager/library/status'), '', 'an empty database serializes as empty text');
 
@@ -239,7 +400,9 @@ const invalidImport = Mapping.fromSuite(invalidStatus);
 assert(invalidImport.opaque.includes('manager/library/status'), 'keeps an invalid package database opaque');
 assertEq(invalidImport.state.packages, null, 'does not hydrate an invalid package database');
 assert(
-  invalidImport.warnings.some(w => w.path === 'manager/library/status' && w.message.includes('base de paquetes inválida')),
+  invalidImport.warnings.some(
+    w => w.path === 'manager/library/status' && w.message.includes('base de paquetes inválida')
+  ),
   'warns about an invalid package database'
 );
 invalidImport.state.packages = [Db.create()];
@@ -248,8 +411,11 @@ assert(
   invalidOut.warnings.some(w => w.path === 'manager/library/status'),
   'refuses to overwrite an opaque package database'
 );
-assertEq(text(invalidStatus, 'manager/library/status'), '# comentario\n', 'opaque package database bytes are untouched');
-
+assertEq(
+  text(invalidStatus, 'manager/library/status'),
+  '# comentario\n',
+  'opaque package database bytes are untouched'
+);
 
 console.log('\n--- toSuite: edited files are serialized ---');
 imported.state.config['quick-look'] = true;
@@ -277,7 +443,10 @@ commentedImport.state.channels['chat.global'].permission = 'cht.nuevo';
 commentedImport.state.channels['chat.global'].messages.push('<yellow>nuevo</yellow>');
 const commentedExport = Mapping.toSuite(commentedImport.state, commentedSource, commentedImport);
 const commentedOut = text(commentedSource, 'config/textformatter/channels/chat.global.yml');
-assert(commentedExport.written.includes('config/textformatter/channels/chat.global.yml'), 'rewrites the edited channel');
+assert(
+  commentedExport.written.includes('config/textformatter/channels/chat.global.yml'),
+  'rewrites the edited channel'
+);
 assertEq(
   commentedOut,
   [
@@ -322,7 +491,11 @@ assert(
   atomicError && atomicError.message.includes('config/iflow-firewall/rules.yml'),
   'el error identifica la ruta no representable'
 );
-assertEq(text(atomicSource, 'config/suite/config.yml'), atomicConfig, 'no escribe el config válido si otro archivo falla');
+assertEq(
+  text(atomicSource, 'config/suite/config.yml'),
+  atomicConfig,
+  'no escribe el config válido si otro archivo falla'
+);
 assertEq(text(atomicSource, 'config/iflow-firewall/rules.yml'), atomicGraph, 'no toca el archivo no representable');
 
 const badSuite = Mapping.fromSuite(
@@ -338,7 +511,10 @@ try {
 } catch (error) {
   nestedError = error;
 }
-assert(nestedError && nestedError.message.includes('perdería formato'), 'rechaza convertir una colección comentada en escalar');
+assert(
+  nestedError && nestedError.message.includes('perdería formato'),
+  'rechaza convertir una colección comentada en escalar'
+);
 assertEq(
   text(badSuiteArchive, 'config/suite/config.yml'),
   'options:\n  # interno\n  a: 1\nconfig-version: 1.0\n',

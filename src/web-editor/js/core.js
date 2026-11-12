@@ -24,6 +24,9 @@
     if (v === 'packages') {
       Suite.views.renderPackages();
     }
+    if (v === 'rom') {
+      Suite.views.renderRoms();
+    }
     if (v === 'sync') {
       UI.sel = null;
     }
@@ -64,6 +67,8 @@
       Suite.views.renderTxf();
     } else if (UI.view === 'packages') {
       Suite.views.renderPackages();
+    } else if (UI.view === 'rom') {
+      Suite.views.renderRoms();
     }
     Suite.views.renderSidebar();
     Suite.views.renderPreviewChannels();
@@ -79,6 +84,7 @@
     Suite.views.renderKernel();
     Suite.views.renderConfigValues();
     Suite.views.renderPackages();
+    Suite.views.renderRoms();
     Suite.views.buildCrumbs();
     if (UI.view === 'iflow' || UI.view === 'rules') {
       Suite.views.renderCanvas(UI.view);
@@ -105,6 +111,7 @@
     Suite.views.bindImportExport();
     Suite.views.bindToolbar();
     Suite.views.bindPackages();
+    Suite.views.bindRoms();
     Suite.views.initDocking();
     Suite.views.renderPerms();
     Suite.views.renderKernel();

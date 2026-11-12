@@ -339,6 +339,27 @@
               </div>
             </section>
 
+            <section class="view" data-view="rom">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--purple)" class="gr"></span>
+                <span data-rom-title>ROMs</span>
+                <span class="sub" data-rom-sub>policy.flow · policy.wasm + SHA-256</span>
+              </h2>
+              <div class="pkg-warning" id="romWarning" role="alert"></div>
+              <div class="pkg-toolbar">
+                <button class="tbtn primary-blue" id="romAdd">＋ add ROM</button>
+                <button class="tbtn" id="romClone">⧉ clone selected</button>
+                <button class="tbtn" id="romReplace">⇪ replace bytes</button>
+                <button class="tbtn" id="romRemove">✕ remove selected</button>
+                <span class="pkg-count" id="romCount"></span>
+              </div>
+              <div class="pkg-grid">
+                <div class="pkg-list" id="romList"></div>
+                <div class="pkg-form" id="romEditor"></div>
+              </div>
+              <input type="file" id="romInput" hidden accept=".flow,.wasm" />
+            </section>
+
             <div id="propPanel" class="panel" data-dockable="propPanel">
               <div class="p-head" data-drag="propPanel">
                 <span class="grip">⠿</span> <span id="pfTitle">Propiedades</span>
@@ -475,6 +496,7 @@
     <script src="js/yaml.js"></script>
     <script src="js/yamlCst.js"></script>
     <script src="js/packageDb.js"></script>
+    <script src="js/rom.js"></script>
     <script src="js/zip.js"></script>
     <script src="js/suiteArchive.js"></script>
     <script src="js/model.js"></script>
@@ -497,6 +519,7 @@
     <script src="js/previewView.js"></script>
     <script src="js/importExport.js"></script>
     <script src="js/packages.js"></script>
+    <script src="js/roms.js"></script>
     <script src="js/toolbar.js"></script>
     <script src="js/status.js"></script>
     <script src="js/core.js"></script>

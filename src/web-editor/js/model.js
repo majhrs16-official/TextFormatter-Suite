@@ -338,6 +338,7 @@
       },
       extensions: {},
       packages: null,
+      roms: [],
       extra: {},
     };
   }

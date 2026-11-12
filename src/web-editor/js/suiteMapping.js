@@ -33,7 +33,7 @@
 
   const CHANNEL_DIR = 'config/textformatter/channels/';
   const TRANSLATOR_DIR = 'config/chattranslator/translators/';
-  const DEFERRED = [FIXED['rom.iflow-vm'], FIXED['rom.iflow-wasm'], FIXED['rom.iflow-wasm.sha256']];
+  const DEFERRED = [];
 
   class SuiteMappingError extends Error {
     constructor(message) {
@@ -175,6 +175,7 @@
       config: canonical(state.config),
       graph: canonical(state.graph),
       packages: state.packages === null || state.packages === undefined ? null : canonical(state.packages),
+      roms: canonical(state.roms || []),
       channels: {},
       translators: {},
       sync: {},
@@ -202,7 +203,16 @@
     const consumed = new Set();
     const opaque = new Set();
     const deferred = new Set();
-    const baselines = { config: null, graph: null, packages: null, channels: {}, translators: {}, sync: {}, extra: {} };
+    const baselines = {
+      config: null,
+      graph: null,
+      packages: null,
+      rom: {},
+      channels: {},
+      translators: {},
+      sync: {},
+      extra: {},
+    };
     const sources = { config: null, graph: null, packages: null, channels: {}, translators: {}, sync: {}, extra: {} };
     const texts = {};
     const baselineValues = { config: null, graph: null, packages: null, channels: {}, translators: {}, sync: {} };
@@ -268,6 +278,53 @@
         consumed.add(FIXED.packages);
       } else {
         opaque.add(FIXED.packages);
+      }
+    }
+
+    // ROM de iFlow: .flow y .wasm bajo sus directorios canónicos. Una ROM
+    // inválida queda opaca y se preserva; nunca se hidrata a medias.
+    const romModule = global.Suite.rom;
+    if (romModule) {
+      for (const path of archive.paths()) {
+        if (!romModule.isRomPath(path)) {
+          continue;
+        }
+        const bytes = archive.get(path);
+        const kind = romModule.kindOfPath(path);
+        let sidecarPath = null;
+        let sidecarText = null;
+        if (kind === 'wasm') {
+          for (const candidate of [romModule.sidecarPathFor(path), path + '.sha256']) {
+            if (archive.has(candidate)) {
+              sidecarPath = candidate;
+              sidecarText = readText(archive, candidate, warnings);
+              break;
+            }
+          }
+        }
+        const entry = romModule.entryFromBytes(path, bytes, {
+          sidecarPath,
+          sidecarText,
+          requireSidecar: kind === 'wasm',
+        });
+        if (entry.valid) {
+          state.roms.push(entry);
+          baselines.rom[path] = romModule.toBase64(bytes);
+          if (sidecarPath && sidecarText !== null) {
+            baselines.rom[sidecarPath] = sidecarText;
+            texts[sidecarPath] = sidecarText;
+          }
+          consumed.add(path);
+          if (sidecarPath) {
+            consumed.add(sidecarPath);
+          }
+        } else {
+          opaque.add(path);
+          warnings.push({ path, message: 'ROM inválida: ' + entry.error });
+          if (sidecarPath) {
+            opaque.add(sidecarPath);
+          }
+        }
       }
     }
 
@@ -337,7 +394,8 @@
       consumed.add(path);
     }
 
-    // Archivos conocidos que se gestionan en pasos posteriores (paquetes y ROM).
+    // Rutas diferidas explícitas. Vacío desde que paquetes y ROM se hidratan;
+    // se conserva el contrato para futuras secciones que aún no se modelen.
     for (const path of DEFERRED) {
       if (archive.has(path)) {
         deferred.add(path);
@@ -436,6 +494,17 @@
         mappedPaths.add(path);
       }
     }
+    for (const entry of Array.isArray(state.roms) ? state.roms : []) {
+      if (entry && typeof entry.path === 'string') {
+        mappedPaths.add(entry.path);
+        if (entry.kind === 'wasm' && global.Suite.rom) {
+          mappedPaths.add(entry.sidecarPath || global.Suite.rom.sidecarPathFor(entry.path));
+        }
+      }
+    }
+    for (const path of Object.keys((mapping && mapping.baselines && mapping.baselines.rom) || {})) {
+      mappedPaths.add(path);
+    }
 
     /* El modelo hidratado mezcla defaults con el archivo. El CST solo debe ver
      * las claves que estaban en el archivo más las que el usuario cambió; si no,
@@ -525,6 +594,104 @@
       }
     }
 
+    /* Las ROM no son YAML ni se serializan: se validan y se escriben byte a
+     * byte. Un .wasm exige que su sidecar declare el SHA-256 real; si no
+     * coincide, la exportación falla antes de tocar el ZIP. */
+    function putRoms() {
+      const entries = Array.isArray(state.roms) ? state.roms : [];
+      const baselineRom = baselines.rom || {};
+      if (entries.length === 0 && Object.keys(baselineRom).length === 0) {
+        return;
+      }
+      const romModule = global.Suite.rom;
+      if (!romModule) {
+        throw new SuiteMappingError('Suite.rom no está disponible para exportar las ROM');
+      }
+      const seen = new Set();
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object' || typeof entry.path !== 'string') {
+          throw new SuiteMappingError('entrada de ROM inválida');
+        }
+        if (seen.has(entry.path)) {
+          throw new SuiteMappingError('ruta de ROM duplicada: ' + entry.path);
+        }
+        seen.add(entry.path);
+        const kind = romModule.kindOfPath(entry.path);
+        if (!kind) {
+          throw new SuiteMappingError('la ruta de ROM no termina en .flow o .wasm: ' + entry.path);
+        }
+        if (entry.kind && entry.kind !== kind) {
+          throw new SuiteMappingError('el tipo declarado de ' + entry.path + ' no coincide con su extensión');
+        }
+        if (blocked.has(entry.path)) {
+          warnings.push({ path: entry.path, message: 'archivo opaco o diferido; no se sobrescribe' });
+          continue;
+        }
+        let bytes;
+        try {
+          bytes = romModule.fromBase64(entry.data);
+        } catch (error) {
+          throw new SuiteMappingError('datos base64 inválidos en ' + entry.path + ': ' + error.message);
+        }
+        const result = romModule.validate(kind, bytes);
+        if (!result.ok) {
+          throw new SuiteMappingError('ROM inválida ' + entry.path + ': ' + result.error);
+        }
+        const current = romModule.toBase64(bytes);
+        const baseline = baselineRom[entry.path];
+        const changed = baseline !== current;
+        if (changed || !target.has(entry.path)) {
+          writes.set(entry.path, bytes);
+          written.push(entry.path);
+        } else {
+          preserved.push(entry.path);
+        }
+        if (kind !== 'wasm') {
+          continue;
+        }
+
+        const hash = romModule.sha256Hex(bytes);
+        const sidecarPath = entry.sidecarPath || romModule.sidecarPathFor(entry.path);
+        if (seen.has(sidecarPath)) {
+          throw new SuiteMappingError('ruta de sidecar duplicada: ' + sidecarPath);
+        }
+        seen.add(sidecarPath);
+        if (blocked.has(sidecarPath)) {
+          warnings.push({ path: sidecarPath, message: 'archivo opaco o diferido; no se sobrescribe' });
+          continue;
+        }
+        const declared = romModule.sidecarHash(entry.sidecarText || '') || String(entry.sha256 || '').toLowerCase();
+        if (!declared) {
+          throw new SuiteMappingError('falta el SHA-256 de ' + entry.path + '; recalcula el hash');
+        }
+        if (declared !== hash) {
+          throw new SuiteMappingError('el SHA-256 de ' + entry.path + ' no coincide; recalcula el hash');
+        }
+        const baselineSidecar = baselineRom[sidecarPath];
+        if (!changed && baselineSidecar !== undefined && target.has(sidecarPath)) {
+          preserved.push(sidecarPath);
+        } else {
+          writes.set(
+            sidecarPath,
+            new TextEncoder().encode(romModule.formatSidecar(hash, romModule.basename(entry.path)))
+          );
+          written.push(sidecarPath);
+        }
+      }
+
+      for (const path of Object.keys(baselineRom)) {
+        if (seen.has(path)) {
+          continue;
+        }
+        if (blocked.has(path)) {
+          warnings.push({ path, message: 'archivo opaco o diferido; no se sobrescribe' });
+          continue;
+        }
+        deletes.add(path);
+        removed.push(path);
+      }
+    }
+
     put(
       FIXED.config,
       state.config,
@@ -542,6 +709,7 @@
       initial ? initial.graph : undefined
     );
     putPackages();
+    putRoms();
 
     const channels = state.channels || {};
     for (const [key, cfg] of Object.entries(channels)) {

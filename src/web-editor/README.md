@@ -45,6 +45,16 @@
   con una advertencia permanente, porque el archivo es la fuente de verdad de
   instalación del Manager. La edición valida el candidato con
   `Suite.packageDb.validate` antes de mutar el estado.
+- **ROM de iFlow** (`js/rom.js`): valida el contenedor `.flow` v2 (magic,
+  versiones, longitudes de sección, punto de entrada y trailer SHA-256) y el
+  `.wasm` v1 (magic, versión y longitudes de sección). Calcula SHA-256 en
+  JavaScript síncrono y mantiene el sidecar `policy.sha256` que exige
+  `WasmPolicyRouter`. Una ROM inválida se rechaza y nunca sobrescribe los bytes
+  importados.
+- **Vista ROMs** (`js/roms.js`): lista, añade, reemplaza, clona y borra ROM.
+  Los clones son entradas editables con ruta propia y, en `.wasm`, su propio
+  sidecar; se exportan con la suite, pero el runtime solo carga las rutas
+  canónicas `policy.flow` y `policy.wasm`.
 - **Validación** contra el contrato del editor
   (`docs/prompts/especificaciones/config-schema-v2.2.md`) y contra las claves
   que consume el host.
@@ -67,8 +77,8 @@
 index.html          entrada de la aplicación
 js/                 estado, modelo, validación, UI y exportación
 styles.css          estilos
-tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, packageDb, suiteMapping
-tests/integration/  func, interact, click, chain, undo, diffing, bind, packages
+tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, packageDb, rom, suiteMapping
+tests/integration/  func, interact, click, chain, undo, diffing, bind, packages, roms
 package.json        scripts de lint, format, test y check
 ```
 
