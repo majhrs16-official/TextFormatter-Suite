@@ -22,9 +22,10 @@
   `config/`, ignora basura y excluye JARs, caché, journal, backups y temporales.
   Exporta con prefijo fijo y orden determinista.
 - **Mapeo modelo ↔ suite** (`js/suiteMapping.js`): hidrata `config/suite/`,
-  canales, grafo, traductores y sinks desde sus rutas canónicas y vuelca solo lo
-  editado. Un archivo no tocado conserva sus bytes; un archivo opaco o diferido
-  (YAML inválido, binario, ROM o base de paquetes) nunca se sobrescribe.
+  canales, grafo, traductores, sinks y la base de paquetes desde sus rutas
+  canónicas y vuelca solo lo editado. Un archivo no tocado conserva sus bytes;
+  un archivo opaco o diferido (YAML inválido, binario o ROM) nunca se
+  sobrescribe.
 - **CST de YAML** (`js/yamlCst.js`): parser y editor que conserva comentarios,
   orden de claves, comillas, sangría y saltos de línea (LF/CRLF) al exportar.
   Aplica solo el delta entre el valor hidratado y el estado actual, y proyecta
@@ -33,6 +34,17 @@
   con comentarios internos en escalar), falla con `CstError` y la exportación
   aborta sin escribir ningún archivo. Los archivos nuevos se serializan con
   `js/yaml.js`.
+- **Base de paquetes** (`js/packageDb.js`): lector y escritor estricto de
+  `manager/library/status`, que **no es YAML**. Reproduce el formato de bloques
+  de `ManifestParser` (`manager-spi`): campos `Clave: valor` y una sección
+  `Files:` con líneas `ruta<TAB>tamaño<TAB>sha256<TAB>dueño`, separadas por una
+  línea en blanco. Conserva los campos desconocidos y la lista de archivos,
+  normaliza dependencias y ordena por `name`, `version`, `channel` y `type`. Una
+  base inválida queda opaca, no se hidrata y nunca se sobrescribe.
+- **Vista Packages** (`js/packages.js`): lista, añade, edita y elimina entradas
+  con una advertencia permanente, porque el archivo es la fuente de verdad de
+  instalación del Manager. La edición valida el candidato con
+  `Suite.packageDb.validate` antes de mutar el estado.
 - **Validación** contra el contrato del editor
   (`docs/prompts/especificaciones/config-schema-v2.2.md`) y contra las claves
   que consume el host.
@@ -55,8 +67,8 @@
 index.html          entrada de la aplicación
 js/                 estado, modelo, validación, UI y exportación
 styles.css          estilos
-tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, suiteMapping
-tests/integration/  func, interact, click, chain, undo, diffing, bind
+tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, packageDb, suiteMapping
+tests/integration/  func, interact, click, chain, undo, diffing, bind, packages
 package.json        scripts de lint, format, test y check
 ```
 
@@ -78,8 +90,14 @@ Requiere Node.js >= 20.
   `config/textformatter/`, `config/sync-*/`, etc. está en el schema y en
   `js/suiteMapping.js`.
 - La importación de suite normaliza la raíz y no adivina layouts mixtos. Un
-  archivo opaco o diferido (YAML inválido, binario, ROM o base de paquetes) se
-  conserva y nunca se sobrescribe; la exportación lo reporta como aviso.
+  archivo opaco o diferido (YAML inválido, binario o ROM) se conserva y nunca
+  se sobrescribe; la exportación lo reporta como aviso.
+- `manager/library/status` no es YAML. Se hidrata con `Suite.packageDb`; si el
+  archivo no existe, `state.packages` es `null` y no se inventa. Un array vacío
+  se exporta como archivo vacío; `null` nunca borra el archivo existente.
+- La base de paquetes se reescribe solo si cambió respecto al baseline. Un
+  archivo inválido se rechaza en la importación, queda opaco y la exportación
+  avisa en lugar de pisarlo.
 - Importar un proyecto plano o pegar YAML descarta la base de la suite: la
   siguiente exportación de suite parte del modelo actual, no de bytes viejos.
 - Un archivo YAML existente se reescribe con el CST: se conservan comentarios,

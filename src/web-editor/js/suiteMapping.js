@@ -33,7 +33,7 @@
 
   const CHANNEL_DIR = 'config/textformatter/channels/';
   const TRANSLATOR_DIR = 'config/chattranslator/translators/';
-  const DEFERRED = [FIXED.packages, FIXED['rom.iflow-vm'], FIXED['rom.iflow-wasm'], FIXED['rom.iflow-wasm.sha256']];
+  const DEFERRED = [FIXED['rom.iflow-vm'], FIXED['rom.iflow-wasm'], FIXED['rom.iflow-wasm.sha256']];
 
   class SuiteMappingError extends Error {
     constructor(message) {
@@ -147,6 +147,20 @@
     return parsed;
   }
 
+  function parsePackages(text, path, warnings) {
+    const db = global.Suite.packageDb;
+    if (!db || typeof db.parse !== 'function') {
+      warnings.push({ path, message: 'Suite.packageDb no está disponible; se conserva sin hidratar' });
+      return null;
+    }
+    try {
+      return db.parse(text);
+    } catch (error) {
+      warnings.push({ path, message: 'base de paquetes inválida: ' + error.message });
+      return null;
+    }
+  }
+
   function isGraph(value) {
     return (
       value &&
@@ -160,6 +174,7 @@
     const snapshot = {
       config: canonical(state.config),
       graph: canonical(state.graph),
+      packages: state.packages === null || state.packages === undefined ? null : canonical(state.packages),
       channels: {},
       translators: {},
       sync: {},
@@ -187,10 +202,10 @@
     const consumed = new Set();
     const opaque = new Set();
     const deferred = new Set();
-    const baselines = { config: null, graph: null, channels: {}, translators: {}, sync: {}, extra: {} };
-    const sources = { config: null, graph: null, channels: {}, translators: {}, sync: {}, extra: {} };
+    const baselines = { config: null, graph: null, packages: null, channels: {}, translators: {}, sync: {}, extra: {} };
+    const sources = { config: null, graph: null, packages: null, channels: {}, translators: {}, sync: {}, extra: {} };
     const texts = {};
-    const baselineValues = { config: null, graph: null, channels: {}, translators: {}, sync: {} };
+    const baselineValues = { config: null, graph: null, packages: null, channels: {}, translators: {}, sync: {} };
     const initial = initialSnapshot(state);
 
     // config/suite/config.yml
@@ -237,6 +252,22 @@
           warnings.push({ path: FIXED.graph, message: 'no parece un grafo del editor; se conserva sin hidratar' });
         }
         opaque.add(FIXED.graph);
+      }
+    }
+
+    // manager/library/status
+    if (archive.has(FIXED.packages)) {
+      const text = readText(archive, FIXED.packages, warnings);
+      const entries = text === null ? null : parsePackages(text, FIXED.packages, warnings);
+      if (entries) {
+        state.packages = entries;
+        baselines.packages = canonical(entries);
+        sources.packages = FIXED.packages;
+        texts[FIXED.packages] = text;
+        baselineValues.packages = clone(entries);
+        consumed.add(FIXED.packages);
+      } else {
+        opaque.add(FIXED.packages);
       }
     }
 
@@ -392,7 +423,7 @@
     const sources = (mapping && mapping.sources) || {};
     const texts = (mapping && mapping.texts) || {};
     const baselineValues = (mapping && mapping.baselineValues) || {};
-    const mappedPaths = new Set([FIXED.config, FIXED.graph]);
+    const mappedPaths = new Set([FIXED.config, FIXED.graph, FIXED.packages]);
     for (const key of Object.keys(state.channels || {})) {
       mappedPaths.add(channelPath(key));
     }
@@ -463,6 +494,37 @@
       written.push(path);
     }
 
+    /* La base de paquetes no es YAML: se serializa con `packageDb` y solo si el
+     * modelo cambió. Un archivo opaco o ausente no se inventa ni se pisa. */
+    function putPackages() {
+      const current = state.packages;
+      if (current === null || current === undefined) {
+        return;
+      }
+      if (blocked.has(FIXED.packages)) {
+        warnings.push({ path: FIXED.packages, message: 'archivo opaco o diferido; no se sobrescribe' });
+        return;
+      }
+      if (
+        !shouldWrite(current, baselines.packages, sources.packages, initial ? initial.packages : undefined, mapping)
+      ) {
+        if (target.has(FIXED.packages)) {
+          preserved.push(FIXED.packages);
+        }
+        return;
+      }
+      const db = global.Suite.packageDb;
+      if (!db || typeof db.serialize !== 'function') {
+        throw new SuiteMappingError('Suite.packageDb no está disponible para serializar ' + FIXED.packages);
+      }
+      try {
+        writes.set(FIXED.packages, new TextEncoder().encode(db.serialize(current)));
+        written.push(FIXED.packages);
+      } catch (error) {
+        throw new SuiteMappingError('no se puede serializar ' + FIXED.packages + ': ' + error.message);
+      }
+    }
+
     put(
       FIXED.config,
       state.config,
@@ -479,6 +541,7 @@
       sources.graph,
       initial ? initial.graph : undefined
     );
+    putPackages();
 
     const channels = state.channels || {};
     for (const [key, cfg] of Object.entries(channels)) {

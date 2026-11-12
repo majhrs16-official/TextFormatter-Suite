@@ -21,6 +21,9 @@
     if (v === 'txf') {
       Suite.views.renderTxf();
     }
+    if (v === 'packages') {
+      Suite.views.renderPackages();
+    }
     if (v === 'sync') {
       UI.sel = null;
     }
@@ -59,6 +62,8 @@
       Suite.views.renderProps();
     } else if (UI.view === 'txf') {
       Suite.views.renderTxf();
+    } else if (UI.view === 'packages') {
+      Suite.views.renderPackages();
     }
     Suite.views.renderSidebar();
     Suite.views.renderPreviewChannels();
@@ -73,6 +78,7 @@
     Suite.views.renderPerms();
     Suite.views.renderKernel();
     Suite.views.renderConfigValues();
+    Suite.views.renderPackages();
     Suite.views.buildCrumbs();
     if (UI.view === 'iflow' || UI.view === 'rules') {
       Suite.views.renderCanvas(UI.view);
@@ -98,6 +104,7 @@
     Suite.views.bindPropsInputs();
     Suite.views.bindImportExport();
     Suite.views.bindToolbar();
+    Suite.views.bindPackages();
     Suite.views.initDocking();
     Suite.views.renderPerms();
     Suite.views.renderKernel();

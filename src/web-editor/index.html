@@ -321,6 +321,24 @@
               ></div>
             </section>
 
+            <section class="view" data-view="packages">
+              <h2 class="view-title">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: var(--amber)" class="gr"></span>
+                <span data-pkg-title>Packages</span>
+                <span class="sub" data-pkg-sub>manager/library/status — fuente de verdad del Manager</span>
+              </h2>
+              <div class="pkg-warning" id="pkgWarning" role="alert"></div>
+              <div class="pkg-toolbar">
+                <button class="tbtn primary-blue" id="pkgAdd">＋ add package</button>
+                <button class="tbtn" id="pkgRemove">✕ remove selected</button>
+                <span class="pkg-count" id="pkgCount"></span>
+              </div>
+              <div class="pkg-grid">
+                <div class="pkg-list" id="pkgList"></div>
+                <div class="pkg-form" id="pkgEditor"></div>
+              </div>
+            </section>
+
             <div id="propPanel" class="panel" data-dockable="propPanel">
               <div class="p-head" data-drag="propPanel">
                 <span class="grip">⠿</span> <span id="pfTitle">Propiedades</span>
@@ -456,6 +474,7 @@
 
     <script src="js/yaml.js"></script>
     <script src="js/yamlCst.js"></script>
+    <script src="js/packageDb.js"></script>
     <script src="js/zip.js"></script>
     <script src="js/suiteArchive.js"></script>
     <script src="js/model.js"></script>
@@ -477,6 +496,7 @@
     <script src="js/kernel.js"></script>
     <script src="js/previewView.js"></script>
     <script src="js/importExport.js"></script>
+    <script src="js/packages.js"></script>
     <script src="js/toolbar.js"></script>
     <script src="js/status.js"></script>
     <script src="js/core.js"></script>

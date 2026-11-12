@@ -337,6 +337,7 @@
         },
       },
       extensions: {},
+      packages: null,
       extra: {},
     };
   }

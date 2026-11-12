@@ -13,12 +13,13 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
 const { window } = dom;
 window.TextEncoder = globalThis.TextEncoder;
 window.TextDecoder = globalThis.TextDecoder;
-for (const code of ['yaml.js', 'yamlCst.js', 'zip.js', 'suiteArchive.js', 'model.js', 'suiteMapping.js']) {
+for (const code of ['yaml.js', 'yamlCst.js', 'packageDb.js', 'zip.js', 'suiteArchive.js', 'model.js', 'suiteMapping.js']) {
   window.eval(fs.readFileSync(path.join(dir, 'js', code), 'utf8'));
 }
 const Suite = window.Suite;
 const Mapping = Suite.suiteMapping;
 const Archive = Suite.suiteArchive;
+const Db = Suite.packageDb;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -88,6 +89,24 @@ assertEq(
 assert(!Mapping.serializeYaml([{ id: 'x' }]).includes('config-version'), 'does not append config-version to an array');
 assertEq(Mapping.stripMeta({ a: 1, 'config-version': 1 }), { a: 1 }, 'stripMeta removes only the root version');
 
+const sha256 = 'abcdef0123456789'.repeat(4);
+const statusText = [
+  'Name: iflow',
+  'Version: 1.0.0',
+  'Channel: stable',
+  'Type: PACKAGE',
+  'Dependencies: ',
+  'Arch: none',
+  'Platform: common',
+  'URL: ',
+  'OS: none',
+  'SHA256: ' + sha256,
+  'Size: 48213',
+  'Files: ',
+  '  iflow.jar\t48213\t' + sha256 + '\tiflow',
+  '',
+].join('\n');
+
 console.log('\n--- fromSuite: known files ---');
 const source = archiveOf([
   entry('config/suite/config.yml', 'quick-look: false\noutputs:\n  - sync.discord\nconfig-version: 1.0\n'),
@@ -110,7 +129,7 @@ const source = archiveOf([
   ),
   entry('config/suite/messages.yml', 'prefix: "[suite]"\n'),
   entry('config/iflow-vm/policy.flow', new Uint8Array([0, 1, 2, 3])),
-  entry('manager/library/status', 'suite-x 1.0.0\n'),
+  entry('manager/library/status', statusText),
 ]);
 const imported = Mapping.fromSuite(source);
 const state = imported.state;
@@ -128,9 +147,13 @@ assertEq(state.sync.discord.channel, 42, 'hydrates the discord channel');
 assertEq(state.sync.tcp.remoteHost, '127.0.0.1', 'hydrates tcp remoteHost');
 assertEq(state.sync.tcp.remotePort, 9093, 'hydrates tcp remotePort');
 assertEq(state.extra['config/suite/messages.yml'], 'prefix: "[suite]"\n', 'keeps unmapped text in extra');
+assertEq(state.packages.length, 1, 'hydrates the package database');
+assertEq(state.packages[0].name, 'iflow', 'hydrates a package');
+assertEq(state.packages[0].files.length, 1, 'hydrates the package file list');
 assert(imported.consumed.includes('config/suite/config.yml'), 'marks config as consumed');
+assert(imported.consumed.includes('manager/library/status'), 'marks the package database as consumed');
 assert(imported.deferred.includes('config/iflow-vm/policy.flow'), 'defers the VM ROM');
-assert(imported.deferred.includes('manager/library/status'), 'defers the package database');
+assert(!imported.deferred.includes('manager/library/status'), 'does not defer the package database');
 assert(imported.opaque.includes('config/iflow-vm/policy.flow') === false, 'does not mark deferred files as opaque');
 
 console.log('\n--- fromSuite: opaque and malformed ---');
@@ -167,9 +190,11 @@ const originalConfig = text(source, 'config/suite/config.yml');
 const originalChannel = text(source, 'config/textformatter/channels/chat.global.yml');
 const originalDiscord = text(source, 'config/sync-discord/config.yml');
 const originalMessages = text(source, 'config/suite/messages.yml');
+const originalStatus = text(source, 'manager/library/status');
 const untouched = Mapping.toSuite(imported.state, source, imported);
 assertEq(untouched.written, [], 'writes nothing when nothing changed');
 assert(untouched.preserved.includes('config/suite/config.yml'), 'preserves the untouched config');
+assert(untouched.preserved.includes('manager/library/status'), 'preserves the untouched package database');
 bytesEq(source.get('config/suite/config.yml'), encoder.encode(originalConfig), 'config bytes are identical');
 bytesEq(
   source.get('config/textformatter/channels/chat.global.yml'),
@@ -178,7 +203,53 @@ bytesEq(
 );
 bytesEq(source.get('config/sync-discord/config.yml'), encoder.encode(originalDiscord), 'sync bytes are identical');
 bytesEq(source.get('config/suite/messages.yml'), encoder.encode(originalMessages), 'extra bytes are identical');
+bytesEq(source.get('manager/library/status'), encoder.encode(originalStatus), 'package database bytes are identical');
 assertEq(text(source, 'config/iflow-vm/policy.flow'), '\u0000\u0001\u0002\u0003', 'deferred ROM bytes are identical');
+
+console.log('\n--- toSuite: package database ---');
+const packageSource = archiveOf([entry('manager/library/status', statusText)]);
+const packageImport = Mapping.fromSuite(packageSource);
+packageImport.state.packages[0].version = '1.0.1';
+packageImport.state.packages[0].dependencies = ['iflow-vm@>=1.0.0'];
+packageImport.state.packages[0].extra['Installed-Time'] = '2024-01-01T00:00:00Z';
+const packageExport = Mapping.toSuite(packageImport.state, packageSource, packageImport);
+assert(packageExport.written.includes('manager/library/status'), 'rewrites the edited package database');
+const packageOut = text(packageSource, 'manager/library/status');
+assert(packageOut.includes('Version: 1.0.1'), 'writes the edited package version');
+assert(packageOut.includes('Dependencies: iflow-vm@>=1.0.0'), 'writes the edited dependencies');
+assert(packageOut.includes('Installed-Time: 2024-01-01T00:00:00Z'), 'writes the edited extra field');
+assertEq(Db.parse(packageOut)[0].files, packageImport.state.packages[0].files, 'preserves the package files');
+
+const addedPackage = Mapping.fromSuite(
+  archiveOf([entry('manager/library/status', statusText)])
+);
+addedPackage.state.packages.push(Db.create());
+const addedOut = Mapping.toSuite(addedPackage.state, archiveOf([entry('manager/library/status', statusText)]), addedPackage);
+assert(addedOut.written.includes('manager/library/status'), 'writes a newly added package');
+assert(text(addedOut.archive, 'manager/library/status').includes('Name: new-package'), 'serializes the new package');
+
+const emptyPackages = Mapping.fromSuite(archiveOf([entry('manager/library/status', statusText)]));
+emptyPackages.state.packages = [];
+const emptyOut = Mapping.toSuite(emptyPackages.state, archiveOf([entry('manager/library/status', statusText)]), emptyPackages);
+assert(emptyOut.written.includes('manager/library/status'), 'rewrites the database when all packages are removed');
+assertEq(text(emptyOut.archive, 'manager/library/status'), '', 'an empty database serializes as empty text');
+
+const invalidStatus = archiveOf([entry('manager/library/status', '# comentario\n')]);
+const invalidImport = Mapping.fromSuite(invalidStatus);
+assert(invalidImport.opaque.includes('manager/library/status'), 'keeps an invalid package database opaque');
+assertEq(invalidImport.state.packages, null, 'does not hydrate an invalid package database');
+assert(
+  invalidImport.warnings.some(w => w.path === 'manager/library/status' && w.message.includes('base de paquetes inválida')),
+  'warns about an invalid package database'
+);
+invalidImport.state.packages = [Db.create()];
+const invalidOut = Mapping.toSuite(invalidImport.state, invalidStatus, invalidImport);
+assert(
+  invalidOut.warnings.some(w => w.path === 'manager/library/status'),
+  'refuses to overwrite an opaque package database'
+);
+assertEq(text(invalidStatus, 'manager/library/status'), '# comentario\n', 'opaque package database bytes are untouched');
+
 
 console.log('\n--- toSuite: edited files are serialized ---');
 imported.state.config['quick-look'] = true;
