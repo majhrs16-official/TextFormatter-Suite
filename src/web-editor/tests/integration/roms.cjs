@@ -23,6 +23,7 @@ const files = [
   'yamlCst',
   'packageDb',
   'rom',
+  'disasm',
   'zip',
   'suiteArchive',
   'model',
@@ -98,18 +99,30 @@ setTimeout(() => {
   ok($('#romWarning').textContent.includes('runtime'), 'warning is visible');
   ok($('#romList').querySelectorAll('[data-rom-index]').length === 0, 'starts with no ROM');
 
-  const flow = buildFlow([0x00, 0x00]);
+  const flow = buildFlow([0x00, 0x00, 0x00, 0x00, 0x68]);
   const addedFlow = S.views.addRomBytes(flow, 'policy.flow');
   ok(addedFlow && addedFlow.valid, 'adds a valid .flow');
   ok(store.getState().roms.length === 1, 'the flow is in the state');
   ok(store.getState().roms[0].path === 'config/iflow-vm/policy.flow', 'uses the canonical flow path');
   ok($('#romList').querySelectorAll('[data-rom-index]').length === 1, 'list shows the flow');
 
+  const disasmBtn = $('#romDisasmBtn');
+  ok(disasmBtn !== null, 'the flow offers disassembly');
+  if (disasmBtn) {
+    disasmBtn.onclick();
+    ok($('#romDisasm pre') !== null, 'shows the read-only listing');
+    ok($('#romDisasm').textContent.includes('LI R0, 0x0000'), 'the listing decodes the program');
+    ok($('#romDisasm').textContent.includes('; CFG'), 'the listing shows the CFG');
+    $('#romDisasmBtn').onclick();
+    ok($('#romDisasm').textContent === '', 'hides the listing');
+  }
+
   const wasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
   const addedWasm = S.views.addRomBytes(wasm, 'policy.wasm');
   ok(addedWasm && addedWasm.valid, 'adds a valid .wasm');
   ok(addedWasm.sha256 === Rom.sha256Hex(wasm), 'calculates the wasm SHA-256');
   ok(addedWasm.sidecarPath === 'config/iflow-wasm/policy.sha256', 'assigns the canonical sidecar');
+  ok($('#romDisasmBtn') === null, 'a .wasm does not offer disassembly');
 
   const secondFlow = S.views.addRomBytes(buildFlow([0x00, 0x00, 0x00]), 'policy.flow');
   ok(secondFlow.path === 'config/iflow-vm/policy-copy.flow', 'a second flow becomes a clone');

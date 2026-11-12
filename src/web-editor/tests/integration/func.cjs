@@ -36,6 +36,7 @@ const files = [
   'previewView',
   'packageDb',
   'rom',
+  'disasm',
   'importExport',
   'packages',
   'roms',

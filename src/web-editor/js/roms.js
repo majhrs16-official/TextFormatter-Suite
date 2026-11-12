@@ -14,6 +14,7 @@
   const Rom = global.Suite.rom;
 
   let selected = -1;
+  let showDisasm = false;
 
   function entriesOf(state) {
     return Array.isArray(state.roms) ? state.roms : [];
@@ -150,11 +151,39 @@
         : '') +
       '<div class="pkg-hint">' +
       Suite.utils.esc(t('rom_add_hint')) +
-      '</div>';
+      '</div>' +
+      (entry.kind === 'flow' && entry.valid
+        ? '<div class="rom-disasm-head"><button class="tbtn" id="romDisasmBtn">' +
+          Suite.utils.esc(t(showDisasm ? 'rom_disasm_hide' : 'rom_disasm')) +
+          '</button></div><div class="rom-disasm" id="romDisasm"></div>'
+        : '');
 
     const path = editor.querySelector('[data-rom-field="path"]');
     if (path && !entry.canonical) {
       path.addEventListener('change', () => applyPath(path));
+    }
+    const disasmBtn = editor.querySelector('#romDisasmBtn');
+    if (disasmBtn) {
+      disasmBtn.onclick = () => {
+        showDisasm = !showDisasm;
+        renderRoms();
+      };
+    }
+    const disasmHost = editor.querySelector('#romDisasm');
+    if (disasmHost && showDisasm) {
+      renderDisasm(entry, disasmHost);
+    }
+  }
+
+  function renderDisasm(entry, host) {
+    try {
+      const result = Suite.disasm.decode(Rom.fromBase64(entry.data));
+      host.innerHTML = '<pre class="rom-listing">' + Suite.utils.esc(Suite.disasm.formatListing(result)) + '</pre>';
+    } catch (error) {
+      host.innerHTML =
+        '<div class="rom-listing-error">' +
+        Suite.utils.esc(t('rom_disasm_error') + ' ' + (error && error.message ? error.message : String(error))) +
+        '</div>';
     }
   }
 
@@ -214,10 +243,10 @@
       entry.sidecarText = Rom.formatSidecar(entry.sha256, Rom.basename(path));
     }
     const index = entries.length;
+    selected = index;
     StateStore.mutate('add rom', () => {
       StateStore.getState().roms.push(entry);
     });
-    selected = index;
     Suite.utils.toast(t('rom_added'), 'ok');
     return entry;
   }
@@ -279,10 +308,10 @@
       clone.sidecarText = Rom.formatSidecar(clone.sha256, Rom.basename(path));
     }
     const index = entries.length;
+    selected = index;
     StateStore.mutate('clone rom', () => {
       StateStore.getState().roms.push(clone);
     });
-    selected = index;
     Suite.utils.toast(t('rom_cloned'), 'ok');
     return clone;
   }

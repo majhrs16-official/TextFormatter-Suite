@@ -55,6 +55,12 @@
   Los clones son entradas editables con ruta propia y, en `.wasm`, su propio
   sidecar; se exportan con la suite, pero el runtime solo carga las rutas
   canónicas `policy.flow` y `policy.wasm`.
+- **Desensamblado** (`js/disasm.js`): decodifica el rango de usuario de un
+  `.flow` v2 (`>= 0x1000`, o desde `0x0000` en binarios bare-metal) y construye
+  la CFG de bloques básicos. La vista ROM lo muestra en modo de solo lectura; no
+  reconstruye el grafo de reglas del editor. La tabla de opcodes y tamaños se
+  contrasta con `tools/iflow-compiler/src/types.ts` y `Opcode.java` en un test
+  de regresión.
 - **Validación** contra el contrato del editor
   (`docs/prompts/especificaciones/config-schema-v2.2.md`) y contra las claves
   que consume el host.
@@ -77,7 +83,7 @@
 index.html          entrada de la aplicación
 js/                 estado, modelo, validación, UI y exportación
 styles.css          estilos
-tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, packageDb, rom, suiteMapping
+tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, packageDb, rom, disasm, suiteMapping
 tests/integration/  func, interact, click, chain, undo, diffing, bind, packages, roms
 package.json        scripts de lint, format, test y check
 ```

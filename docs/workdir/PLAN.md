@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes y ROM implementados; quedan desensamblador, validación, DEFLATE y documentación final. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; backends, concesiones y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM y desensamblador implementados; quedan validación, DEFLATE y documentación final. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -816,8 +816,8 @@ Pendiente y fuera de esta unidad:
 
 > **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1), el archivo de
 > suite (paso 2), el mapeo modelo ↔ suite (paso 3), la interfaz (paso 4), el CST de YAML (paso 5),
-> la base de paquetes (paso 6) y la ROM de iFlow (paso 7) están implementados con tests de
-> regresión; los pasos 8–12 siguen pendientes. El ZIP completo no depende de ADR-036; el mapeo de canales usa
+> la base de paquetes (paso 6), la ROM de iFlow (paso 7) y el desensamblador (paso 8) están
+> implementados con tests de regresión; los pasos 9–12 siguen pendientes. El ZIP completo no depende de ADR-036; el mapeo de canales usa
 > `config/textformatter/channels/`, que es la ruta vigente y no se mueve. Cualquier cambio en
 > `docs/prompts/` requiere autorización explícita.
 
@@ -984,12 +984,15 @@ legacy ni lectores alternativos (ADR-034).
    `config/iflow-wasm/policy.wasm` con su sidecar SHA-256: listar, añadir, borrar, editar y clonar.
    El clon copia bytes y sidecar; al editar un `.wasm` se recalcula el hash y se reescribe el
    sidecar. Se validan cabecera, versión, longitudes y hash antes de aceptar el archivo.
-8. **Desensamblador.** Crear una herramienta en `tools/iflow-compiler` que decodifique el rango de
-   usuario (`>= 0x1000`) del `.flow` v2 a instrucciones y produzca un CFG. La exclusión completa de
-   firmware, BIOS, bootloader, kernel y stdlib es de v3; en v2 solo se aplica el corte de usuario. El
-   proceso inverso del editor (grafo → assembler → ROM) usa desensamblado, no metadatos de grafo en
-   la ROM, para aceptar cualquier ROM, incluso editada externamente. La salida es texto/JSON
-   inspeccionable y se integra en el editor como vista de solo lectura.
+8. **Desensamblador. ✅ (2026-11-12)** `tools/iflow-compiler/src/disassembler.ts` parsea el `.flow`
+   v2 con las comprobaciones de `ProgramImageParser` y decodifica el rango de usuario (`>= 0x1000`,
+   o desde `0x0000` sin firmware) a instrucciones con bytes, mnemónico, operandos y destino, más una
+   CFG de bloques básicos. Los saltos al firmware se reportan como salidas externas. `iflow-dis`
+   (`src/disasm-cli.ts`) ofrece listado o JSON con `--user-start` y `--no-verify`, y falla
+   explícitamente ante hash inválido, cabecera truncada, opcode desconocido o salto fuera del código.
+   La vista ROM del editor (`js/disasm.js`) reutiliza el mismo algoritmo en modo de solo lectura; un
+   test contrasta su tabla de opcodes con `types.ts` y `Opcode.java`. El proceso inverso sigue siendo
+   desensamblado, no metadatos de grafo en la ROM.
 9. **Validación.** Parsear YAML, comprobar `config-version: "1.0"` en cada `.yml` de `config/` y
    bloquear la exportación con errores. Un módulo desconocido es aviso, no error. La ROM y la base de
    paquetes se validan con sus propios formatos, no con el validador YAML.
@@ -1156,8 +1159,35 @@ Completado en el slice 7 (paso 7):
   `tests/integration/roms.cjs` (22 casos de la vista).
 - `npm run check` y `npm run test:integration` pasan con 0 errores.
 
-Pendiente: pasos 8–12 (desensamblador, validación, exportación DEFLATE, tests de integración y
-documentación final).
+Completado en el slice 8 (paso 8):
+
+- `tools/iflow-compiler/src/disassembler.ts` publica `DisassemblerError`,
+  `parseProgramImage`, `decodeProgramImage`, `disassemble` y `formatListing`, con los tipos
+  `DisassembledInstruction`, `BasicBlock`, `DisassemblyDiagnostic` y `DisassemblyResult`.
+- El parser reproduce las comprobaciones de `ProgramImageParser` (magic, formato/ISA/ABI/firmware,
+  longitudes, capacidades NUL, debug opcional, SHA-256 final y ausencia de bytes extra). El
+  desensamblador verifica el hash salvo con `--no-verify`.
+- Decodifica toda la ISA v2: `LI`, `MOV`, memoria directa (`LDB`/`LDW`/`STB`/`STW`) e indirecta
+  (`LDBI`/`LDWI`/`STBI`/`STWI`), `COPY`/`MOVE`, aritmética, lógica, desplazamientos, comparación,
+  saltos relativos con signo, `CALL`/`RET`, `HOST`, `HALT` y `TRAP`. Un opcode desconocido se emite
+  como `.byte`, produce diagnóstico y la decodificación continúa.
+- El corte de usuario es `0x1000` cuando la imagen lleva firmware y `0x0000` en binarios
+  `--no-firmware`; `--user-start` lo sobrescribe. El `entryPoint` de la cabecera es `fw_reset`
+  cuando hay BIOS, así que el CFG arranca en el inicio del rango de usuario.
+- La CFG usa líderes por entrada, destinos de salto y la instrucción siguiente a una transferencia;
+  los saltos al firmware son `exit`, no error. Un salto fuera del código o a un límite no
+  decodificado produce diagnóstico.
+- `src/disasm-cli.ts` publica el bin `iflow-dis` (listado o `--json`). `src/index.ts` exporta la API
+  programática y `test/disasm/run.js` cubre los cinco fixtures, cobertura de bytes y bloques,
+  destinos de `CALL`, bare-metal, listado, errores y determinismo (79 casos); `npm test` ejecuta
+  validation + determinism + disasm.
+- La vista ROM del editor carga `js/disasm.js`: un `.flow` válido ofrece «desensamblar» y muestra
+  el listado y la CFG en un `pre` de solo lectura; un `.wasm` no lo ofrece. `tests/unit/disasm.test.cjs`
+  (79 casos) contrasta la tabla de opcodes y tamaños con `types.ts` y `Opcode.java`, y
+  `tests/integration/roms.cjs` cubre el botón, el listado y el ocultado.
+- `npm run check` y `npm run test:integration` pasan con 0 errores.
+
+Pendiente: pasos 9–12 (validación, exportación DEFLATE, tests de integración y documentación final).
 
 #### Criterios de cierre y tests
 
@@ -1199,8 +1229,6 @@ documentación final).
 
 #### Bloqueos
 
-- El desensamblador no existe hoy en `tools/iflow-compiler` (solo `assembler.ts`); es trabajo nuevo,
-  no un ajuste, y bloquea el paso 8.
 - Autorización para `storage.md` y `config-schema-v2.2.md` solo si el mapeo cambia alguna ruta; la
   ruta de canales se conserva en `config/textformatter/channels/` y el mapeo de ROM usa las rutas
   canónicas del runtime.

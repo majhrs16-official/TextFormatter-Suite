@@ -22,6 +22,7 @@ const files = [
   'yamlCst',
   'packageDb',
   'rom',
+  'disasm',
   'zip',
   'suiteArchive',
   'model',
