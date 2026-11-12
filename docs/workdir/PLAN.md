@@ -814,10 +814,10 @@ Pendiente y fuera de esta unidad:
 
 ### Feature propuesta — importar/exportar la suite completa desde el editor web (PL-4, 2026-11-06)
 
-> **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1) está implementado
-> con tests de regresión; los pasos 2–12 siguen pendientes. El ZIP completo no depende de ADR-036;
-> el mapeo de canales usa `config/textformatter/channels/`, que es la ruta vigente y no se mueve.
-> Cualquier cambio en `docs/prompts/` requiere autorización explícita.
+> **Estado:** en implementación por slices (2026-11-12). El lector ZIP (paso 1) y el archivo de
+> suite (paso 2) están implementados con tests de regresión; los pasos 3–12 siguen pendientes. El ZIP
+> completo no depende de ADR-036; el mapeo de canales usa `config/textformatter/channels/`, que es la
+> ruta vigente y no se mueve. Cualquier cambio en `docs/prompts/` requiere autorización explícita.
 
 #### Objetivo
 
@@ -944,7 +944,7 @@ legacy ni lectores alternativos (ADR-034).
 
 1. **Lector ZIP. ✅ (2026-11-12)** Implementar `Suite.zip.Reader` con directorio central, STORE/DEFLATE, CRC,
    descriptor de datos, límites y errores explícitos. Tests de regresión que fallen sin él.
-2. **Archivo de suite.** Añadir `suiteArchive.js`: normalización, detección de raíz, mapa
+2. **Archivo de suite. ✅ (2026-11-12)** Añadir `suiteArchive.js`: normalización, detección de raíz, mapa
    `ruta → {bytes, texto?}`, exclusión de basura y exportación con prefijo fijo.
 3. **Mapeo.** Hidratar el modelo visual desde las rutas conocidas y volcar los cambios al mapa;
    conservar el resto como opacos. Un archivo no tocado no se re-serializa.
@@ -997,8 +997,30 @@ Completado en este slice:
   desconocido, duplicados, límites, ratio, UTF-8, directorios, iteración e `inflateRaw`.
 - `npm run check` pasa; el test unitario se añadió a `npm test`.
 
-Pendiente: pasos 2–12 (archivo de suite, mapeo, interfaz, CST, base de paquetes, ROM,
-desensamblador, validación, exportación DEFLATE, tests de integración y documentación).
+Completado en el slice 2 (paso 2):
+
+- `js/suiteArchive.js` publica `Suite.suiteArchive` con `SuiteArchive`, `SuiteArchiveError`,
+  `normalizePath`, `detectRoot`, `isGarbage`, `isExcluded`, `isSuiteFile` y `fromEntries`/`fromReader`/`fromZip`.
+- La normalización convierte `\` en `/`, elimina `./` y segmentos vacíos y rechaza `..`, rutas
+  absolutas, unidades de disco y NUL. Los duplicados normalizados y los enlaces simbólicos se rechazan.
+- La raíz se detecta una sola vez: `TextFormatter-Suite/` se elimina; los archivos en la raíz se usan
+  tal cual; una raíz única distinta o una mezcla de raíces falla con error explícito. Un prefijo
+  anidado `TextFormatter-Suite/TextFormatter-Suite/` también se rechaza.
+- El mapa `ruta → Uint8Array` conserva los binarios y los archivos desconocidos bajo `config/`. Solo
+  se aceptan `config/**` y `manager/library/status`; el resto se ignora y se contabiliza.
+- Se ignoran `__MACOSX/`, `.DS_Store` y `Thumbs.db`; se excluyen `manager/library/{packages,dependencies,cache}/`,
+  `journal/`, `backup/`, `trash/`, `tmp/`, `manager/runtime/`, `logs/` y los sufijos `.jar`, `.log`, `.tmp`.
+- `toEntries()` exporta con prefijo fijo, orden determinista y sin `manifest.json`; `toZip()` usa
+  `Suite.zip.build` (STORE por ahora; DEFLATE de nivel máximo es el paso 10). `fromZip()` usa
+  `Suite.zip.Reader`.
+- Los límites se aplican al importar y al mutar/exportar el mapa; viven en código y fallan con error
+  explícito.
+- `tests/unit/suiteArchive.test.cjs` cubre normalización, raíces, basura, exclusiones, binarios,
+  duplicados, zip-slip, symlinks, raíz anidada, round-trip, `set/get/delete`, límites y `fromReader`.
+- `npm run check` pasa; el test unitario se añadió a `npm test`.
+
+Pendiente: pasos 3–12 (mapeo, interfaz, CST, base de paquetes, ROM, desensamblador, validación,
+exportación DEFLATE, tests de integración y documentación).
 
 #### Criterios de cierre y tests
 

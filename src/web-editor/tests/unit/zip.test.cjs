@@ -120,6 +120,7 @@ function buildZip(entries) {
       crc,
       compressedSize: compressed.length,
       uncompressedSize: raw.length,
+      externalAttributes: spec.externalAttributes || 0,
       localOffset,
     });
     offset += local.length;
@@ -146,6 +147,7 @@ function buildZip(entries) {
     view.setUint32(20, entry.compressedSize, true);
     view.setUint32(24, entry.uncompressedSize, true);
     view.setUint16(28, entry.nameBytes.length, true);
+    view.setUint32(38, entry.externalAttributes, true);
     view.setUint32(42, entry.localOffset, true);
     out.set(entry.nameBytes, pos + 46);
     pos += 46 + entry.nameBytes.length;
@@ -231,6 +233,9 @@ assert(directoryReader.entries[0].isDirectory, 'directory entry is detected');
 assertEq(directoryReader.entries[0].getData().length, 0, 'directory entry yields empty data');
 assertEq(directoryReader.entries[1].filename, 'config/añadido.yml', 'UTF-8 names are decoded');
 assertEq(new TextDecoder().decode(directoryReader.entries[1].getData()), 'ok', 'UTF-8 entry round-trips');
+
+const symlink = buildZip([{ name: 'link', data: 'target', externalAttributes: 0xa1ff0000 }]);
+assert(new Zip.Reader(symlink.bytes).entries[0].isSymlink, 'detects Unix symlink entries');
 
 console.log('\n--- iteration ---');
 const names = [];

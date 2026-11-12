@@ -255,6 +255,7 @@
       const nameLength = u16(bytes, pos + 28);
       const extraLength = u16(bytes, pos + 30);
       const commentLength = u16(bytes, pos + 32);
+      const externalAttributes = u32(bytes, pos + 38);
       const localOffset = u32(bytes, pos + 42);
       const end = pos + 46 + nameLength + extraLength + commentLength;
       if (end > centralOffset + centralSize) {
@@ -308,6 +309,7 @@
           crc,
           compressedSize,
           uncompressedSize,
+          externalAttributes,
           localOffset,
         })
       );
@@ -325,12 +327,18 @@
       this.crc32 = fields.crc;
       this.compressedSize = fields.compressedSize;
       this.uncompressedSize = fields.uncompressedSize;
+      this.externalAttributes = fields.externalAttributes;
       this.localOffset = fields.localOffset;
       this._data = null;
     }
 
     get isDirectory() {
       return this.filename.endsWith('/');
+    }
+
+    get isSymlink() {
+      const mode = (this.externalAttributes >>> 16) & 0xffff;
+      return (mode & 0xf000) === 0xa000;
     }
 
     getData() {
