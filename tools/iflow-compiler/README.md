@@ -59,6 +59,42 @@ node dist/cli.js test/firmware.flowasm -o test/firmware.flow -l
 
 ---
 
+## Desensamblador (`.flow` → texto/JSON)
+
+`dist/disasm-cli.js` (bin `iflow-dis`) decodifica el **rango de usuario** del
+`.flow` v2 y produce un listado con la CFG de bloques básicos. No reconstruye el
+grafo de reglas del editor: la ROM no guarda ese grafo, así que se muestra lo que
+los bytes dicen.
+
+```bash
+# Listado legible
+node dist/disasm-cli.js test/firmware.flow
+
+# JSON inspeccionable (instrucciones, bytes, targets y CFG)
+node dist/disasm-cli.js test/firmware.flow --json
+
+# Forzar el inicio del rango de usuario
+node dist/disasm-cli.js test/simple.flow --user-start 0x1000
+
+# Omitir la verificación SHA-256 (solo para inspeccionar bytes alterados)
+node dist/disasm-cli.js test/simple.flow --no-verify
+```
+
+- **Corte de usuario.** Con firmware, el código de usuario empieza en `0x1000`;
+  un binario `--no-firmware` se decodifica desde `0x0000`. El `entryPoint` de la
+  cabecera es `fw_reset` cuando hay BIOS, no el `main`; por eso el CFG arranca en
+  el inicio del rango de usuario.
+- **Salidas externas.** Un `CALL` a una utilidad del firmware (`fw_strlen`, …)
+  aparece como `exit` del bloque, no como error.
+- **Errores explícitos.** Hash que no coincide, cabecera truncada, opcode
+  desconocido o salto fuera del código producen un diagnóstico y el CLI termina
+  con código distinto de cero. Un opcode desconocido se emite como `.byte` y la
+  decodificación continúa.
+- **API.** `disassemble(bytes, options)`, `parseProgramImage(bytes)`,
+  `decodeProgramImage(program, options)` y `formatListing(result)`.
+
+---
+
 ## Sintaxis `.flowasm`
 
 ### Instrucciones (mnemónicos ISA v2)
@@ -315,11 +351,14 @@ tools/iflow-compiler/
 ├── src/
 │   ├── assembler.ts      # Two-pass assembler (core)
 │   ├── cli.ts            # CLI entry point (commander)
+│   ├── disassembler.ts   # .flow v2 parser, decoder and CFG builder
+│   ├── disasm-cli.ts     # Disassembler CLI entry point (iflow-dis)
 │   ├── index.ts          # Public API barrel (library entry point)
 │   └── types.ts          # ISA definitions, types
 ├── test/
 │   ├── *.flowasm         # Fixtures (firmware, simple, main_only)
 │   ├── *.flow            # Assembled binaries
+│   ├── disasm/           # run.js (listing, CFG and error-path tests)
 │   └── validation/       # run.js + cases.json (CLI golden tests)
 ├── package.json
 ├── tsconfig.json
@@ -335,7 +374,10 @@ tools/iflow-compiler/
 npm run build
 
 # Validación del ensamblador (golden CLI: test/validation/*)
-npm test            # alias de npm run test:validation
+npm test            # validation + determinism + disassembler
+
+# Solo el desensamblador
+npm run test:disasm
 
 # Recompilar el fixture de firmware
 npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow

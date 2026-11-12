@@ -6,4 +6,19 @@
  * as a library (`package.json` points `main`/`types` here).
  */
 export { Assembler } from './assembler';
+export {
+  DisassemblerError,
+  disassemble,
+  decodeProgramImage,
+  formatListing,
+  parseProgramImage,
+} from './disassembler';
+export type {
+  BasicBlock,
+  DisassembledInstruction,
+  DisassemblyDiagnostic,
+  DisassemblyOptions,
+  DisassemblyResult,
+  FlowKind,
+} from './disassembler';
 export * from './types';
