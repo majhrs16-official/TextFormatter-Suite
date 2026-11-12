@@ -9,7 +9,8 @@
 ## 1. Responsibilities
 
 - **Import/export** de proyectos (`textformatter-suite.zip`) con round-trip
-  exacto panel → YAML → panel.
+  exacto panel → YAML → panel. El lector ZIP acepta STORE y DEFLATE con CRC,
+  descriptor de datos y límites anti-bomba; el escritor actual usa STORE.
 - **Validación** contra el contrato del editor
   (`docs/prompts/especificaciones/config-schema-v2.2.md`) y contra las claves
   que consume el host.
@@ -32,7 +33,7 @@
 index.html          entrada de la aplicación
 js/                 estado, modelo, validación, UI y exportación
 styles.css          estilos
-tests/unit/         stateStore, model, validate
+tests/unit/         stateStore, model, validate, versionLabels, zip
 tests/integration/  func, interact, click, chain, undo, diffing, bind
 package.json        scripts de lint, format, test y check
 ```
