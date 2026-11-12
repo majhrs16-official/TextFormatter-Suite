@@ -362,5 +362,63 @@ console.log('\n--- inflateRaw ---');
 const direct = new Uint8Array(zlib.deflateRawSync(Buffer.from(repetitive)));
 assertEq(Array.from(Zip.inflateRaw(direct)), Array.from(repetitive), 'inflateRaw decodes a raw DEFLATE stream');
 
+console.log('\n--- deflateRaw ---');
+function roundTrips(label, data) {
+  const compressed = Zip.deflateRaw(data);
+  const ours = Zip.inflateRaw(compressed);
+  assertEq(Array.from(ours), Array.from(data), 'deflateRaw round-trips through inflateRaw: ' + label);
+  const reference = new Uint8Array(zlib.inflateRawSync(Buffer.from(compressed)));
+  assertEq(Array.from(reference), Array.from(data), 'deflateRaw round-trips through zlib: ' + label);
+  return compressed;
+}
+
+const emptyCompressed = roundTrips('empty', new Uint8Array(0));
+roundTrips('one byte', new Uint8Array([0x41]));
+roundTrips('two bytes', new Uint8Array([0x00, 0xff]));
+roundTrips('repetitive text', encoder.encode('hello hello hello hello hello'));
+const longText = encoder.encode('config-version: 1.0\nname: chat\nrules:\n  - id: a\n    match: hello\n'.repeat(400));
+const longCompressed = roundTrips('long YAML', longText);
+assert(longCompressed.length < longText.length / 10, 'deflateRaw compresses repetitive YAML');
+assert(
+  longCompressed.length <= zlib.deflateRawSync(Buffer.from(longText), { level: 9 }).length * 1.25,
+  'deflateRaw is close to zlib level 9'
+);
+const pseudoRandom = new Uint8Array(4096);
+for (let i = 0; i < pseudoRandom.length; i++) {
+  pseudoRandom[i] = (i * 2654435761) >>> 24;
+}
+roundTrips('pseudo-random bytes', pseudoRandom);
+const ramp = new Uint8Array(1024);
+for (let i = 0; i < ramp.length; i++) {
+  ramp[i] = i & 0xff;
+}
+roundTrips('binary ramp', ramp);
+assertEq(Array.from(Zip.deflateRaw(longText)), Array.from(longCompressed), 'deflateRaw is deterministic');
+
+console.log('\n--- build with DEFLATE ---');
+const compressibleName = 'TextFormatter-Suite/config/suite/config.yml';
+const incompressible = new Uint8Array(require('crypto').randomBytes(512));
+const built = new Uint8Array(
+  Zip.build([
+    { name: compressibleName, data: longText },
+    { name: 'TextFormatter-Suite/binary.dat', data: incompressible },
+  ])
+);
+const builtReader = new Zip.Reader(built);
+assertEq(builtReader.entries.length, 2, 'build writes both entries');
+const yamlEntry = builtReader.entries.find(entry => entry.filename === compressibleName);
+const binaryEntry = builtReader.entries.find(entry => entry.filename === 'TextFormatter-Suite/binary.dat');
+assertEq(yamlEntry.method, 8, 'build compresses a compressible entry with DEFLATE');
+assertEq(binaryEntry.method, 0, 'build stores an incompressible entry');
+assertEq(Array.from(yamlEntry.getData()), Array.from(longText), 'the compressed entry round-trips');
+assertEq(Array.from(binaryEntry.getData()), Array.from(incompressible), 'the stored entry round-trips');
+const rebuilt = new Uint8Array(
+  Zip.build([
+    { name: compressibleName, data: longText },
+    { name: 'TextFormatter-Suite/binary.dat', data: incompressible },
+  ])
+);
+assertEq(Array.from(rebuilt), Array.from(built), 'build is deterministic');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

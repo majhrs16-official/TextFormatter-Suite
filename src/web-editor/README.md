@@ -10,7 +10,12 @@
 
 - **Import/export** de proyectos (`textformatter-suite.zip`) con round-trip
   exacto panel → YAML → panel. El lector ZIP acepta STORE y DEFLATE con CRC,
-  descriptor de datos y límites anti-bomba; el escritor actual usa STORE.
+  descriptor de datos y límites anti-bomba; el escritor comprime cada entrada
+  con DEFLATE y usa STORE solo si comprimir no reduce el tamaño.
+- **Compresor DEFLATE** (`js/zip.js`): LZ77 con ventana de 32 KiB, búsqueda
+  perezosa y árboles Huffman canónicos de hasta 15 bits. Elige el menor de
+  bloque dinámico, fijo o almacenado, es síncrono, sin dependencias y
+  determinista; su salida la aceptan el lector propio, `zlib` e Info-ZIP.
 - **Import/export de la suite** desde la barra de herramientas, separado del
   modo proyecto. La importación acepta un `.zip` con `TextFormatter-Suite/` o
   los archivos en la raíz, muestra un resumen (archivos, módulos, mapeados,
