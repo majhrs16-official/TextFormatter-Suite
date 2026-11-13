@@ -95,7 +95,7 @@ index.html          entrada de la aplicación
 js/                 estado, modelo, validación, UI y exportación
 styles.css          estilos
 tests/unit/         stateStore, model, validate, versionLabels, zip, suiteArchive, yamlCst, packageDb, rom, disasm, suiteMapping
-tests/integration/  func, interact, click, chain, undo, diffing, bind, packages, roms
+tests/integration/  func, interact, click, chain, undo, diffing, bind, packages, roms, suite
 package.json        scripts de lint, format, test y check
 ```
 
