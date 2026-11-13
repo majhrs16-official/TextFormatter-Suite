@@ -185,18 +185,6 @@ class PolicySessionTest {
     }
 
     @Test
-    void setChannelValidatesExistenceAndPermissions() {
-        PolicySession session = session();
-
-        session.setChannel("private");
-        assertEquals("private", session.message().channel());
-
-        assertStatus(PolicyAbiV3.STATUS_NOT_FOUND, () -> session.setChannel("missing"));
-        assertStatus(PolicyAbiV3.STATUS_DENIED, () -> session.setChannel("staff"));
-        assertStatus(PolicyAbiV3.STATUS_INVALID_ARGUMENT, () -> session.setChannel(" "));
-    }
-
-    @Test
     void transformsPlaceholdersAndDetectsLanguage() {
         PolicySession session = session();
 

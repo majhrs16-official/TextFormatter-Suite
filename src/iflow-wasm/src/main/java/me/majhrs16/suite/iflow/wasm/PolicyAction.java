@@ -3,9 +3,10 @@ package me.majhrs16.suite.iflow.wasm;
 /**
  * Acción final de una política iFlow v3.
  *
- * <p>No existe redirección: un cambio de canal se expresa con
- * {@code set_channel} antes de decidir. La acción solo indica qué hace el host
- * con el mensaje ya transformado.</p>
+ * <p>No existe redirección: un cambio de canal se expresa con la acción de
+ * host {@code textformatter.channel.set} (import {@code sync_invoke}) antes de
+ * decidir. La acción solo indica qué hace el host con el mensaje ya
+ * transformado.</p>
  */
 public enum PolicyAction {
 

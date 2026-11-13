@@ -1,6 +1,9 @@
 package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.SemVer;
+import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.iflow.PermissionChecker;
+import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.ParallelMode;
@@ -9,6 +12,8 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
 import me.majhrs16.suite.api.sync.ActionKind;
+import me.majhrs16.suite.api.sync.HostActionContext;
+import me.majhrs16.suite.api.sync.HostActionHandler;
 import me.majhrs16.suite.api.sync.Principal;
 import me.majhrs16.suite.api.sync.SyncActionSpec;
 import me.majhrs16.suite.api.sync.SyncCall;
@@ -731,6 +736,110 @@ class DefaultSyncBusTest {
         }
     }
 
+    @Test
+    void hostActionWithoutAHandlerIsUnsupported() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        FakeRegistry registry = new FakeRegistry();
+        bus.discoverSinks(registry);
+        bus.start();
+        try {
+            SyncResult result = bus.invokeHost(hostCall(OFFICIAL, "channel.set"), hostContext());
+
+            assertTrue(result instanceof SyncResult.Unsupported, result.toString());
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void hostActionDeniesOfficialBeforeReachingTheHandler() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        FakeRegistry registry = new FakeRegistry();
+        RecordingHostHandler handler = new RecordingHostHandler();
+        registry.add(HostActionHandler.class, handler);
+        bus.discoverSinks(registry);
+        bus.start();
+        try {
+            SyncResult result = bus.invokeHost(hostCall(OFFICIAL, "channel.set"), hostContext());
+
+            assertTrue(result instanceof SyncResult.Denied, result.toString());
+            assertEquals(0, handler.calls.get(),
+                    "a denied host action must never reach the handler");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void hostActionDeniesProgramUntilTheGrantStoreExists() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        FakeRegistry registry = new FakeRegistry();
+        RecordingHostHandler handler = new RecordingHostHandler();
+        registry.add(HostActionHandler.class, handler);
+        bus.discoverSinks(registry);
+        bus.start();
+        try {
+            Principal program = new Principal.Program("a".repeat(64));
+            SyncResult result = bus.invokeHost(hostCall(program, "channel.set"), hostContext());
+
+            assertTrue(result instanceof SyncResult.Denied, result.toString());
+            assertEquals(0, handler.calls.get(),
+                    "a program without a grant must not reach the handler");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void hostActionStopsBeingReachableWhenItsHandlerDisappears() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        FakeRegistry registry = new FakeRegistry();
+        RecordingHostHandler handler = new RecordingHostHandler();
+        registry.add(HostActionHandler.class, handler);
+        bus.discoverSinks(registry);
+        bus.start();
+        try {
+            registry.remove(HostActionHandler.class, handler);
+            bus.discoverSinks(registry);
+
+            SyncResult result = bus.invokeHost(hostCall(OFFICIAL, "channel.set"), hostContext());
+
+            assertTrue(result instanceof SyncResult.Unsupported, result.toString());
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void hostActionWithAnUnknownActionIsUnsupported() throws Exception {
+        DefaultSyncBus bus = new DefaultSyncBus(logger);
+        FakeRegistry registry = new FakeRegistry();
+        registry.add(HostActionHandler.class, new RecordingHostHandler());
+        bus.discoverSinks(registry);
+        bus.start();
+        try {
+            SyncResult result = bus.invokeHost(hostCall(OFFICIAL, "other.action"), hostContext());
+
+            assertTrue(result instanceof SyncResult.Unsupported, result.toString());
+        } finally {
+            bus.stop();
+        }
+    }
+
+    private static SyncCall hostCall(Principal principal, String action) {
+        return new SyncCall("textformatter", action, Map.of("channel", "chat"),
+                principal, "key", "test");
+    }
+
+    private static HostActionContext hostContext() {
+        return new HostActionContext(
+                Message.builder().text("hello").build(),
+                Actor.unknown("Alice"),
+                Actor.unknown("Bob"),
+                ChannelRegistry.empty(),
+                PermissionChecker.ALLOW_ALL);
+    }
+
     private static SyncSurface surfaceWithNative(String backend) {
         SyncSurface lcm = SyncSurface.lcm(backend, SemVer.of(1, 0, 0));
         Set<SyncActionSpec> actions = new LinkedHashSet<>(lcm.actions());
@@ -846,6 +955,25 @@ class DefaultSyncBusTest {
             }
             received = envelope;
             return new SyncResult.Ok(null);
+        }
+    }
+
+    private static final class RecordingHostHandler implements HostActionHandler {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override public String backend() { return "textformatter"; }
+        @Override public SyncActionSpec action() {
+            return new SyncActionSpec(
+                    "channel.set",
+                    ActionKind.WRITE,
+                    List.of(SyncParamSpec.required("channel", SyncValueType.CHANNEL_REF)),
+                    null,
+                    true,
+                    1_000);
+        }
+        @Override public SyncResult invoke(SyncCall call, HostActionContext context) {
+            calls.incrementAndGet();
+            return new SyncResult.Ok(context.message());
         }
     }
 

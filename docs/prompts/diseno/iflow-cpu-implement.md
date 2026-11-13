@@ -264,6 +264,13 @@ implementadas**; su ejecución pertenece a W3.5 y a las fases de render/dispatch
 | ABI de entrada/salida | **TLV.** Campos tipo-longitud-valor, ausencia explícita distinta de cadena vacía y UTF-8 sin truncar. |
 | Decisiones múltiples | **Error y abortar.** Una sola decisión de routing por ejecución; una segunda produce `DECISION_CONFLICT` y no se entrega. D41 ya prohibía “la última gana”. |
 
+> **Actualización 2026-11-13 (ADR-036 §16.5).** El import dedicado `set_channel` de la ABI v3 se
+> retira. El cambio de canal se expresa con la acción agnóstica `textformatter.channel.set`,
+> invocada mediante `sync_invoke("textformatter", "channel.set", ...)`. La acción conserva la
+> validación de existencia y permisos de D02 y dispara la segunda fase de routing de §7; no hay
+> alias ni doble lector (ADR-034). Las referencias históricas a `SET_CHANNEL` en este documento
+> describen el baseline anterior y no el contrato vigente.
+
 ## 6. Matemática de la cola: correcciones y límites
 
 > **Nota (2026-10-20):** estas cuentas describen el VM actual de 16 bits y 64 KB. La dirección

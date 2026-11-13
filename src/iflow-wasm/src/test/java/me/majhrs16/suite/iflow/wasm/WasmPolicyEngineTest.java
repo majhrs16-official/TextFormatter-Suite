@@ -1,6 +1,7 @@
 package me.majhrs16.suite.iflow.wasm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -141,35 +142,23 @@ class WasmPolicyEngineTest {
     }
 
     @Test
-    void setChannelFromGuestMemoryUpdatesMessage() {
+    void dedicatedSetChannelImportIsRejected() {
         WasmTestModule module = new WasmTestModule();
         int setChannelType = module.functionType(
             new int[]{WasmTestModule.I32, WasmTestModule.I32},
             new int[]{WasmTestModule.I32});
-        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.SET_CHANNEL, setChannelType);
-        int decisionType = module.functionType(
-            new int[]{WasmTestModule.I32, WasmTestModule.I32, WasmTestModule.I32,
-                WasmTestModule.I32, WasmTestModule.I32},
-            new int[]{WasmTestModule.I32});
-        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.DECISION, decisionType);
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, "set_channel", setChannelType);
         int decideType = module.functionType(new int[0], new int[]{WasmTestModule.I32});
         int decide = module.function(decideType);
         module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
-        module.memory(1, 1);
-        module.data(0, "private".getBytes(StandardCharsets.UTF_8));
-        module.code(new byte[]{
-            0x41, 0x00, // namePtr
-            0x41, 0x07, // nameLen
-            0x10, 0x00, 0x1a, // set_channel, drop
-            0x41, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x00,
-            0x10, 0x01, 0x1a, // decision DELIVER, drop
-            0x41, 0x00
-        });
+        module.code(new byte[]{0x41, 0x00});
 
         PolicyOutcome outcome = evaluate(module);
 
-        assertEquals(PolicyAction.DELIVER, outcome.action());
-        assertEquals("private", outcome.message().channel());
+        assertEquals(PolicyAction.ERROR, outcome.action());
+        assertTrue(outcome.reason().contains("set_channel"), outcome.reason());
+        assertFalse(PolicyAbiV3.imports().containsKey("iflow.set_channel"),
+            "the dedicated set_channel import must not survive in the v3 ABI");
     }
 
     @Test

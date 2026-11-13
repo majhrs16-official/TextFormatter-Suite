@@ -77,7 +77,8 @@ class RouteStageTest {
                 new RouteDecision(PolicyTarget.CHANNEL_REDIRECT, "legacy", 0, STEVE, null, "staff"),
                 message());
         router.second = RouteOutcome.of(
-                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null), message());
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null),
+                message().withChannel("staff"));
 
         StageResult result = new RouteStage(router).perRecipient(
                 PipelineMessage.of(message()).withRecipient(STEVE), context());
@@ -85,6 +86,43 @@ class RouteStageTest {
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertEquals(PolicyTarget.LOG, result.message().decision().target());
         assertEquals(List.of("chat", "staff"), router.routedChannels);
+        assertEquals("staff", result.message().message().channel());
+    }
+
+    @Test
+    void channelMutationReroutesOnceOnTheNewChannel() {
+        FakeRouter router = new FakeRouter();
+        router.first = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null),
+                message().withChannel("staff"));
+        router.second = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null),
+                message().withChannel("staff"));
+
+        StageResult result = new RouteStage(router).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE), context());
+
+        assertEquals(StageResult.Kind.CONTINUE, result.kind());
+        assertEquals(PolicyTarget.LOG, result.message().decision().target());
+        assertEquals(List.of("chat", "staff"), router.routedChannels);
+        assertEquals("staff", result.message().message().channel());
+    }
+
+    @Test
+    void secondChannelMutationIsADecisionConflict() {
+        FakeRouter router = new FakeRouter();
+        router.first = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null),
+                message().withChannel("staff"));
+        router.second = RouteOutcome.of(
+                new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null),
+                message().withChannel("other"));
+
+        StageResult result = new RouteStage(router).perRecipient(
+                PipelineMessage.of(message()).withRecipient(STEVE), context());
+
+        assertEquals(StageResult.Kind.REJECT, result.kind());
+        assertEquals("DECISION_CONFLICT", result.detail());
     }
 
     @Test
@@ -114,7 +152,7 @@ class RouteStageTest {
     }
 
     @Test
-    void secondChannelMutationIsADecisionConflict() {
+    void secondChannelRedirectIsADecisionConflict() {
         FakeRouter router = new FakeRouter();
         router.first = RouteOutcome.of(
                 new RouteDecision(PolicyTarget.CHANNEL_REDIRECT, "legacy", 0, STEVE, null, "staff"),

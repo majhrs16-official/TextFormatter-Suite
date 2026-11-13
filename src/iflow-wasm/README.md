@@ -88,7 +88,6 @@ Todas las firmas usan `i32` salvo `now_nanos`, que devuelve `i64`.
 | `read_property` | `(scope, property, outPtr, outCap) -> status` | Lee una propiedad y escribe un valor TLV en memoria del guest. |
 | `write_property` | `(scope, property, inPtr, inLen) -> status` | Aplica una propiedad editable desde un valor TLV. |
 | `transform_apply` | `(kind, inPtr, inLen, outPtr, outCap) -> status` | Resuelve placeholders o detecta idioma; devuelve TLV string. |
-| `set_channel` | `(namePtr, nameLen) -> status` | Cambia el canal validando existencia y permiso de recepción. |
 | `permission_check` | `(actorPtr, actorLen, nodePtr, nodeLen) -> i32` | `1` si el actor tiene el permiso; `0` si no. |
 | `channel_policy` | `(namePtr, nameLen, kind, outPtr, outCap) -> status` | Lee política de envío/recepción/rate de un canal. |
 | `decision` | `(action, targetPtr, targetLen, reasonPtr, reasonLen) -> status` | Registra la decisión única de la ejecución. |
@@ -115,8 +114,9 @@ Todas las firmas usan `i32` salvo `now_nanos`, que devuelve `i64`.
 | `1` | `CANCEL_EVENT` | Cancela el evento de plataforma; no hay entrega. |
 | `2` | `ERROR` | Error controlado; no hay entrega y se registra la razón. |
 
-No existen `REDIRECT` ni `CHANNEL_REDIRECT`: el cambio de canal se expresa con `set_channel`, que
-valida el canal y el permiso antes de modificar el mensaje.
+No existen `REDIRECT` ni `CHANNEL_REDIRECT`: el cambio de canal se expresa con la acción de host
+`textformatter.channel.set` invocada mediante `sync_invoke("textformatter", "channel.set", ...)`.
+El import dedicado `set_channel` se retiró del ABI v3 y no se conserva como alias (ADR-034).
 
 ### Scopes y propiedades v3
 
@@ -170,8 +170,9 @@ mensaje transformado.
   posteriores ven el cambio. El `Message` original no se muta.
 - **Decisión única:** la primera llamada a `decision` gana; la segunda devuelve `CONFLICT` y el
   outcome final es `ERROR`. Si no hay decisión, el outcome también es `ERROR` (deny-by-default).
-- **`set_channel` validado:** comprueba que el canal exista y que el emisor tenga el permiso de
-  envío y el recipient el de recepción. No hay `REDIRECT` ni `CHANNEL_REDIRECT`.
+- **Canal sin import dedicado:** el guest no tiene `set_channel`; el cambio de canal es la acción
+  `textformatter.channel.set`, validada por `textformatter` y sujeta a la segunda fase de routing.
+  No hay `REDIRECT` ni `CHANNEL_REDIRECT` en el guest.
 - **Transformaciones:** `transform_apply` resuelve placeholders con el recipient original o detecta
   idioma; el resultado se escribe como TLV string en la memoria del guest.
 - **Permisos:** `permission_check` responde `1`/`0`; los actores conocidos se resuelven por nombre
@@ -273,8 +274,9 @@ Cobertura actual:
   estricto, longitudes inválidas, bytes sobrantes y copia defensiva.
 - `PolicySessionTest`: lectura/escritura de propiedades, journal read-your-writes, canales y
   permisos, transformaciones, decisión única y deny-by-default, logs acotados.
-- `WasmPolicyEngineTest`: módulos binarios que llaman a `decision`, `write_property`,
-  `set_channel` y `transform_apply`, incluyendo memoria lineal y data segments.
+- `WasmPolicyEngineTest`: módulos binarios que llaman a `decision`, `write_property` y
+  `transform_apply`, incluyendo memoria lineal y data segments; y rechazo del import retirado
+  `set_channel`.
 - `IflowWasmActivatorTest`: registro del loader, contrato, router y backend; fallo cerrado sin
   artefacto.
 - `WasmPolicyRouterTest`: hash correcto/ausente/incorrecto, mapeo de acciones, recarga explícita y

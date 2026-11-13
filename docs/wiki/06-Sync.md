@@ -196,6 +196,7 @@ boolean unregister(String name);
 Collection<SyncSink> sinks();
 Set<SyncSurface> surfaces();
 SyncResult invoke(SyncCall call);
+SyncResult invokeHost(SyncCall call, HostActionContext context);
 List<SyncResult> broadcast(SyncCall call);
 List<SyncResult> send(Message message);
 List<SyncResult> sendTo(String backend, Message message);
@@ -241,6 +242,23 @@ sinks (`sync-bukkit`/`sync-fabric` through `LocalSyncSink`) publish and execute
 native actions, but third parties cannot execute them until the grant store
 exists. An unknown native action returns `Unsupported`; an adapter that is not
 connected returns `HostFailure`.
+
+### Agnostic host action: `textformatter.channel.set`
+
+Host actions have no surface: the bus resolves a `HostActionHandler` by its
+canonical name and validates the call against the handler's `SyncActionSpec`.
+`textformatter.channel.set` is `WRITE`, takes `channel` (`CHANNEL_REF`) and
+returns the working `Message` with the new channel. It is not part of the LCM,
+so `Principal.Official` is always denied. A third-party program reaches it
+through `sync_invoke("textformatter", "channel.set", ...)` once the operator
+grants `module.textformatter.channel.set`; until the grant store exists,
+`Principal.Program` is denied as well. The handler validates that the channel
+exists and that the emitter may send and the recipient may receive: an unknown
+channel is `NotFound`, a missing permission is `Denied`, and a missing handler
+is `Unsupported`. The engine detects the channel change and runs exactly one
+secondary routing pass; a second mutation is `DECISION_CONFLICT`. The dedicated
+`set_channel` import of the iFlow ABI v3 was removed, with no alias or second
+reader (ADR-034).
 
 ### Native Discord actions
 

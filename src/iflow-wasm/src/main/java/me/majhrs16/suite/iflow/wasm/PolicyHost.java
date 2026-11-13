@@ -37,7 +37,6 @@ public final class PolicyHost {
         built.add(function(PolicyAbiV3.READ_PROPERTY, this::readProperty));
         built.add(function(PolicyAbiV3.WRITE_PROPERTY, this::writeProperty));
         built.add(function(PolicyAbiV3.TRANSFORM_APPLY, this::transformApply));
-        built.add(function(PolicyAbiV3.SET_CHANNEL, this::setChannel));
         built.add(function(PolicyAbiV3.PERMISSION_CHECK, this::permissionCheck));
         built.add(function(PolicyAbiV3.CHANNEL_POLICY, this::channelPolicy));
         built.add(function(PolicyAbiV3.DECISION, this::decision));
@@ -108,20 +107,6 @@ public final class PolicyHost {
             String output = session.transform(i32(args[0]), input);
             return status(writeTlv(instance, TlvCodec.stringValue(output),
                 i32(args[3]), i32(args[4])));
-        } catch (PolicyException e) {
-            return status(e.status());
-        } catch (RuntimeException e) {
-            return status(PolicyAbiV3.STATUS_HOST_FAILURE);
-        }
-    }
-
-    private long[] setChannel(Instance instance, long... args) {
-        if (args.length < 2) {
-            return status(PolicyAbiV3.STATUS_INVALID_ARGUMENT);
-        }
-        try {
-            session.setChannel(readString(instance, i32(args[0]), i32(args[1])));
-            return status(PolicyAbiV3.STATUS_OK);
         } catch (PolicyException e) {
             return status(e.status());
         } catch (RuntimeException e) {

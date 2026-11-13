@@ -36,8 +36,6 @@ public final class PolicyAbiV3 {
     public static final String WRITE_PROPERTY = "write_property";
     /** {@code transform_apply(kind, inPtr, inLen, outPtr, outCap) -> status}. */
     public static final String TRANSFORM_APPLY = "transform_apply";
-    /** {@code set_channel(namePtr, nameLen) -> status}. */
-    public static final String SET_CHANNEL = "set_channel";
     /** {@code permission_check(actorPtr, actorLen, nodePtr, nodeLen) -> 1|0}. */
     public static final String PERMISSION_CHECK = "permission_check";
     /** {@code channel_policy(namePtr, nameLen, kind, outPtr, outCap) -> status}. */
@@ -155,9 +153,6 @@ public final class PolicyAbiV3 {
             new ValType[]{ValType.I32}));
         map.put(key(TRANSFORM_APPLY), FunctionType.of(
             new ValType[]{ValType.I32, ValType.I32, ValType.I32, ValType.I32, ValType.I32},
-            new ValType[]{ValType.I32}));
-        map.put(key(SET_CHANNEL), FunctionType.of(
-            new ValType[]{ValType.I32, ValType.I32},
             new ValType[]{ValType.I32}));
         map.put(key(PERMISSION_CHECK), FunctionType.of(
             new ValType[]{ValType.I32, ValType.I32, ValType.I32, ValType.I32},

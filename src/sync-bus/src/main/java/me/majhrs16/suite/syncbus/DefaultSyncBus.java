@@ -8,6 +8,8 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.HostActionContext;
+import me.majhrs16.suite.api.sync.HostActionHandler;
 import me.majhrs16.suite.api.sync.Principal;
 import me.majhrs16.suite.api.sync.SyncActionSpec;
 import me.majhrs16.suite.api.sync.SyncCall;
@@ -23,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Default implementation of {@link SyncBus} with full synchronization hub capabilities.
@@ -80,6 +84,7 @@ public final class DefaultSyncBus implements SyncBus {
 
     private final Map<String, SinkContext> sinks = new ConcurrentHashMap<>();
     private final Set<String> sinkNamesSnapshot = new CopyOnWriteArraySet<>();
+    private volatile Map<String, HostActionHandler> hostHandlers = Map.of();
     private volatile SyncListener inboundListener;
     private final PluginLogger logger;
     private final long asyncTimeoutMillis;
@@ -293,15 +298,18 @@ public final class DefaultSyncBus implements SyncBus {
     }
 
     /**
-     * Indexes every {@link SyncSink} published by an active module.
+     * Indexes every {@link SyncSink} and {@link HostActionHandler} published by
+     * an active module.
      *
      * <p>Discovery is idempotent by sink name: a sink that is already
      * registered is left untouched, and a sink whose service disappeared is
-     * unregistered and stopped. The runtime calls this at bus start and after
-     * every module activation or deactivation, so a sink package no longer has
+     * unregistered and stopped. Host action handlers are reindexed by their
+     * canonical name on every pass, so a handler that disappears stops being
+     * reachable. The runtime calls this at bus start and after every module
+     * activation or deactivation, so a sink or handler package no longer has
      * to look up the bus when it activates.</p>
      *
-     * @param services registry whose {@code SyncSink} services must be indexed
+     * @param services registry whose services must be indexed
      */
     public void discoverSinks(ServiceRegistry services) {
         Objects.requireNonNull(services, "services");
@@ -330,6 +338,32 @@ public final class DefaultSyncBus implements SyncBus {
                 unregister(registered);
             }
         }
+        indexHostHandlers(services);
+    }
+
+    /**
+     * Rebuilds the host action index. A duplicate canonical name keeps the
+     * first handler and is reported, so an ambiguous action is never routed by
+     * registration order.
+     */
+    private void indexHostHandlers(ServiceRegistry services) {
+        Map<String, HostActionHandler> discovered = new LinkedHashMap<>();
+        for (HostActionHandler handler : services.findAll(HostActionHandler.class)) {
+            String name;
+            try {
+                name = handler.canonicalName();
+            } catch (RuntimeException invalid) {
+                logger.warn("SyncBus: invalid host action handler: "
+                        + invalid.getMessage());
+                continue;
+            }
+            HostActionHandler previous = discovered.putIfAbsent(name, handler);
+            if (previous != null) {
+                logger.warn("SyncBus: duplicate host action handler for '" + name
+                        + "'; keeping the first");
+            }
+        }
+        hostHandlers = Map.copyOf(discovered);
     }
 
     @Override
@@ -388,6 +422,40 @@ public final class DefaultSyncBus implements SyncBus {
             return await(dispatchCall(ctx, call, spec));
         }
         return executeBounded(ctx.sink, call, effectiveTimeout(spec));
+    }
+
+    @Override
+    public SyncResult invokeHost(SyncCall call, HostActionContext context) {
+        Objects.requireNonNull(call, "call");
+        Objects.requireNonNull(context, "context");
+        if (state.get() != LifecycleState.RUNNING) {
+            return new SyncResult.HostFailure("sync bus is not running");
+        }
+
+        HostActionHandler handler = hostHandlers.get(call.canonicalName());
+        if (handler == null) {
+            return new SyncResult.Unsupported(
+                    "host action '" + call.canonicalName() + "' is not registered");
+        }
+        if (!handler.handles(call)) {
+            return new SyncResult.Unsupported(
+                    "host action '" + call.canonicalName()
+                            + "' does not match its registered handler");
+        }
+
+        SyncActionSpec spec = handler.action();
+        SyncResult denied = authorizeHost(call);
+        if (denied != null) {
+            return denied;
+        }
+
+        SyncResult invalid = validateArguments(call, spec);
+        if (invalid != null) {
+            return invalid;
+        }
+
+        return executeBounded(
+                () -> handler.invoke(call, context), call, effectiveTimeout(spec));
     }
 
     @Override
@@ -683,9 +751,14 @@ public final class DefaultSyncBus implements SyncBus {
     }
 
     private SyncResult executeBounded(SyncSink sink, SyncCall call, long timeoutMillis) {
+        return executeBounded(() -> sink.invoke(call), call, timeoutMillis);
+    }
+
+    private SyncResult executeBounded(Supplier<SyncResult> action, SyncCall call,
+                                      long timeoutMillis) {
         CompletableFuture<SyncResult> outcome;
         try {
-            outcome = CompletableFuture.supplyAsync(() -> sink.invoke(call), invocationExecutor);
+            outcome = CompletableFuture.supplyAsync(action, invocationExecutor);
         } catch (RejectedExecutionException stopped) {
             return new SyncResult.HostFailure(
                     "sync bus invocation executor is not running");
@@ -695,7 +768,7 @@ public final class DefaultSyncBus implements SyncBus {
             SyncResult result = outcome.get(timeoutMillis, TimeUnit.MILLISECONDS);
             return result != null
                     ? result
-                    : new SyncResult.HostFailure("sink returned no result");
+                    : new SyncResult.HostFailure("action returned no result");
         } catch (TimeoutException timeout) {
             outcome.cancel(true);
             return new SyncResult.Timeout(
@@ -731,6 +804,21 @@ public final class DefaultSyncBus implements SyncBus {
                     ? null
                     : new SyncResult.Denied(
                             "Principal.Official may only invoke the least common multiple");
+        }
+        return new SyncResult.Denied(
+                "program grants are not configured; principal "
+                        + principalId(call.principal()) + " is denied");
+    }
+
+    /**
+     * Host actions are never part of the LCM, so an official caller is always
+     * denied. Program grants are not configured yet, so a third-party program
+     * is denied too until the operator grant store exists.
+     */
+    private static SyncResult authorizeHost(SyncCall call) {
+        if (call.principal() instanceof Principal.Official) {
+            return new SyncResult.Denied(
+                    "Principal.Official may not invoke host actions");
         }
         return new SyncResult.Denied(
                 "program grants are not configured; principal "

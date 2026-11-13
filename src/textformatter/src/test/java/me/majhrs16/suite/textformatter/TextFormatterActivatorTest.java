@@ -1,5 +1,6 @@
 package me.majhrs16.suite.textformatter;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -18,6 +19,7 @@ import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.render.MessageComponentRenderer;
 import me.majhrs16.suite.api.spi.MessageRenderer;
 import me.majhrs16.suite.api.spi.PluginLogger;
+import me.majhrs16.suite.api.sync.HostActionHandler;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -43,6 +45,9 @@ class TextFormatterActivatorTest {
         assertTrue(registry.find(MessageRenderer.class).isPresent());
         assertTrue(registry.find(MessageComponentRenderer.class).isPresent());
         assertTrue(registry.find(ChannelRegistry.class).isPresent());
+        assertTrue(registry.find(HostActionHandler.class).isPresent());
+        assertEquals("textformatter.channel.set",
+                registry.find(HostActionHandler.class).orElseThrow().canonicalName());
     }
 
     private static final class FakeRegistry implements ServiceRegistry {

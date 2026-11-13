@@ -20,7 +20,7 @@ import java.util.function.Function;
  * @param message          mensaje original de esta entrega
  * @param emitter          actor que originó el evento
  * @param recipient        actor que recibirá esta entrega
- * @param channels         catálogo de canales para validar {@code set_channel}
+ * @param channels         catálogo de canales para validar {@code channel_policy}
  * @param permissions      comprobador de permisos de la plataforma
  * @param placeholders     resolvedor de placeholders; {@code null} = identidad
  * @param languageDetector detector de idioma; {@code null} = {@link Language#EN}

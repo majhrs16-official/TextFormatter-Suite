@@ -2,11 +2,13 @@ package me.majhrs16.suite.api.spi;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.ParallelMode;
+import me.majhrs16.suite.api.sync.HostActionContext;
 import me.majhrs16.suite.api.sync.SyncCall;
 import me.majhrs16.suite.api.sync.SyncResult;
 import me.majhrs16.suite.api.sync.SyncSurface;
@@ -83,6 +85,33 @@ public interface SyncBus extends AutoCloseable {
      * @return the explicit outcome, never {@code null}
      */
     SyncResult invoke(SyncCall call);
+
+    /**
+     * Executes an agnostic host action such as
+     * {@code textformatter.channel.set}.
+     *
+     * <p>Host actions do not have a {@link SyncSurface}: the bus resolves the
+     * registered {@link me.majhrs16.suite.api.sync.HostActionHandler} by the
+     * canonical name, validates the arguments against its spec and applies the
+     * same fail-closed authority as {@link #invoke(SyncCall)}. A missing
+     * handler returns {@link SyncResult.Unsupported}; an unauthorized caller
+     * returns {@link SyncResult.Denied} without effect.</p>
+     *
+     * <p>The default implementation keeps third-party buses that predate host
+     * actions explicit: they return {@code Unsupported} instead of silently
+     * ignoring the call.</p>
+     *
+     * @param call    invocation, must not be null
+     * @param context current message and neutral services, must not be null
+     * @return the explicit outcome, never {@code null}
+     */
+    default SyncResult invokeHost(SyncCall call, HostActionContext context) {
+        Objects.requireNonNull(call, "call");
+        Objects.requireNonNull(context, "context");
+        return new SyncResult.Unsupported(
+                "host actions are not available; '" + call.canonicalName()
+                        + "' was not executed");
+    }
 
     /**
      * Fans out a least-common-multiple action to every registered backend.

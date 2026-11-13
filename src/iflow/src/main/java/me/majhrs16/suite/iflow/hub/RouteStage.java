@@ -22,8 +22,9 @@ import java.util.Set;
  * {@code route} stage: evaluates the iFlow policy once per emission for the
  * rate limit and once per recipient for the actual decision.
  *
- * <p>A legacy {@code CHANNEL_REDIRECT} decision triggers exactly one secondary
- * routing pass on the redirected channel. A second channel mutation is a
+ * <p>A channel mutation —produced by {@code textformatter.channel.set} or by
+ * the legacy {@code CHANNEL_REDIRECT} decision— triggers exactly one secondary
+ * routing pass on the new channel. A second channel mutation is a
  * {@code DECISION_CONFLICT} and the unit is rejected; there is no recursive
  * re-entry into later stages.</p>
  *
@@ -91,6 +92,7 @@ public final class RouteStage implements PipelineStage {
         }
         Router router = selection.router() == null ? hub : selection.router();
 
+        String initialChannel = unit.message().channel();
         RouteOutcome first = router.route(unit.message(), recipient);
         if (first == null || first.decision() == null || first.message() == null) {
             return StageResult.error(unit, "router returned an incomplete outcome");
@@ -98,18 +100,30 @@ public final class RouteStage implements PipelineStage {
         RouteDecision decision = first.decision();
         Message message = first.message();
 
-        if (decision.target() == PolicyTarget.CHANNEL_REDIRECT) {
-            String target = decision.redirectChannel();
-            if (target == null || target.isBlank()) {
-                return StageResult.reject(unit.withMessage(message),
-                        "CHANNEL_REDIRECT without a target channel");
-            }
-            RouteOutcome second = router.route(message.withChannel(target), recipient);
+        // A guest mutates the channel through textformatter.channel.set; the
+        // legacy iflow-firewall still expresses it as CHANNEL_REDIRECT. Both
+        // signals require exactly one secondary pass on the new channel.
+        boolean redirect = decision.target() == PolicyTarget.CHANNEL_REDIRECT;
+        String redirectedChannel = redirect ? decision.redirectChannel() : null;
+        if (redirect && (redirectedChannel == null || redirectedChannel.isBlank())) {
+            return StageResult.reject(unit.withMessage(message),
+                    "CHANNEL_REDIRECT without a target channel");
+        }
+        boolean mutated = !Objects.equals(initialChannel, message.channel());
+        if (redirect || mutated) {
+            Message rerouteInput = redirect
+                    ? message.withChannel(redirectedChannel)
+                    : message;
+            RouteOutcome second = router.route(rerouteInput, recipient);
             if (second == null || second.decision() == null || second.message() == null) {
                 return StageResult.error(unit.withMessage(message),
                         "router returned an incomplete secondary outcome");
             }
-            if (second.decision().target() == PolicyTarget.CHANNEL_REDIRECT) {
+            boolean secondRedirect =
+                    second.decision().target() == PolicyTarget.CHANNEL_REDIRECT;
+            boolean secondMutation = !Objects.equals(
+                    rerouteInput.channel(), second.message().channel());
+            if (secondRedirect || secondMutation) {
                 return StageResult.reject(unit.withMessage(message), "DECISION_CONFLICT");
             }
             decision = second.decision();

@@ -75,25 +75,6 @@ public final class PolicySession {
         }
     }
 
-    /**
-     * Cambia el canal de trabajo validando existencia y permisos.
-     *
-     * <p>Se comprueba el permiso de envío del emisor y el de recepción del
-     * recipient. Un canal inexistente devuelve {@code NOT_FOUND}; un permiso
-     * ausente devuelve {@code DENIED}. El cambio es visible para lecturas
-     * posteriores de {@code MESSAGE_CHANNEL} y {@code CHANNEL}.</p>
-     */
-    public void setChannel(String name) {
-        if (name == null || name.isBlank()) {
-            throw new PolicyException(PolicyAbiV3.STATUS_INVALID_ARGUMENT, "canal vacío");
-        }
-        Channel channel = request.channels().get(name).orElseThrow(() -> new PolicyException(
-            PolicyAbiV3.STATUS_NOT_FOUND, "canal inexistente: " + name));
-        requirePermission(request.emitter(), channel.sendPolicy());
-        requirePermission(request.recipient(), channel.receivePolicy());
-        message = message.withChannel(name);
-    }
-
     public String transform(int kind, String input) {
         Objects.requireNonNull(input, "input");
         return switch (kind) {
@@ -247,16 +228,6 @@ public final class PolicySession {
             return request.recipient();
         }
         return Actor.unknown(name);
-    }
-
-    private void requirePermission(Actor actor, String permission) {
-        if (permission == null || permission.isBlank()) {
-            return;
-        }
-        if (!request.permissions().has(actor, permission)) {
-            throw new PolicyException(
-                PolicyAbiV3.STATUS_DENIED, "permiso denegado: " + permission);
-        }
     }
 
     private static String requireString(TlvCodec.TlvValue value) {
