@@ -517,7 +517,11 @@ final class FixtureModules {
                 import me.majhrs16.suite.api.SemVer;
                 import me.majhrs16.suite.api.discord.DiscordConnection;
                 import me.majhrs16.suite.api.discord.DiscordConnectionFactory;
+                import java.util.Map;
+
                 import me.majhrs16.suite.api.discord.DiscordListener;
+                import me.majhrs16.suite.api.discord.DiscordOperation;
+                import me.majhrs16.suite.api.discord.DiscordResult;
                 import me.majhrs16.suite.api.discord.DiscordSettings;
                 import me.majhrs16.suite.api.runtime.ModuleActivator;
                 import me.majhrs16.suite.api.runtime.ModuleContext;
@@ -561,6 +565,9 @@ final class FixtureModules {
                         @Override public void connect() { connected = true; }
                         @Override public boolean isConnected() { return connected; }
                         @Override public void send(String text) { }
+                        @Override public DiscordResult execute(DiscordOperation operation) {
+                            return new DiscordResult.Ok(Map.of());
+                        }
                         @Override public void setListener(DiscordListener listener) {
                             this.listener = listener;
                         }

@@ -116,6 +116,16 @@ public final class HttpTransport implements Transport {
         return executeRequest(url, "POST", headers, jsonBody);
     }
 
+    @Override
+    public String put(String url, Map<String, String> headers, String jsonBody) throws IOException {
+        return executeRequest(url, "PUT", headers, jsonBody);
+    }
+
+    @Override
+    public String delete(String url, Map<String, String> headers) throws IOException {
+        return executeRequest(url, "DELETE", headers, null);
+    }
+
     /**
      * Executes an HTTP request with manual redirect handling that preserves
      * method, headers, and body for 307/308 redirects.
@@ -255,7 +265,7 @@ public final class HttpTransport implements Transport {
                 }
                 String response = sb.toString();
                 if (status >= 400) {
-                    throw new IOException("HTTP " + status + ": " + response);
+                    throw new TransportException(status, response);
                 }
                 return response;
             } finally {

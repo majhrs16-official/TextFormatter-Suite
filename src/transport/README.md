@@ -10,7 +10,7 @@
 
 ## 1. Responsibilities
 
-- **Transport abstraction** — `Transport` interface: `send(request) → response`
+- **Transport abstraction** — `Transport` interface: `get`, `post`, `put` and `delete`; HTTP failures carry `TransportException` with status code and body
 - **HTTP transport** — `HttpTransport` implementation using `HttpURLConnection` (avoids `java.net.http.HttpClient` module accessibility issues in plugin classloaders)
 - **SSRF Protection** — Validates URLs against private/internal address ranges (RFC 1918, RFC 3927, RFC 6598, loopback, multicast) using `InetAddress.getAllByName()` to prevent DNS rebinding attacks
 - **Message codec** — `MessageCodec` interface for encoding/decoding messages
@@ -53,10 +53,9 @@
 
 | Component | Role |
 |-----------|------|
-| `Transport` | Interface: `send(TransportRequest) → TransportResponse` |
-| `HttpTransport` | Implementation: `java.net.http.HttpClient` wrapper |
-| `TransportRequest` | Request model: URL, method, headers, body |
-| `TransportResponse` | Response model: status, headers, body |
+| `Transport` | Interface: `get(url)`, `post(url, body)`, `post(url, headers, body)`, `put(url, headers, body)`, `delete(url, headers)` |
+| `HttpTransport` | `HttpURLConnection` implementation with SSRF protection, redirects and a 1 MB response cap |
+| `TransportException` | `IOException` carrying the HTTP status code and response body |
 | `MessageCodec` | Interface: `encode(Message) → bytes`, `decode(bytes) → Message` |
 | `MessageCodec` (impl) | JSON-based codec for `Message` serialization |
 
@@ -67,15 +66,15 @@
 ```text
 Caller (sync module, translation provider)
          ↓
-HttpTransport.send(TransportRequest)
+HttpTransport.get/post/put/delete(url, ...)
          ↓
 HttpURLConnection.openConnection() → configure timeouts, headers, SSRF validation
          ↓
-If POST: write request body to output stream
+If the method has a body: write it to the output stream
          ↓
 Follow redirects manually (max 5) with SSRF validation on each redirect
          ↓
-Read response → TransportResponse
+Read response → String; status >= 400 raises TransportException
          ↓
 MessageCodec.decode() if needed
          ↓
@@ -99,9 +98,9 @@ Return to caller
 
 | Extension Point | How to Extend |
 |-----------------|---------------|
-| Custom `Transport` | Implement `Transport` interface (e.g., WebSocket, gRPC) |
+| Custom `Transport` | Implement `Transport` (e.g., WebSocket, gRPC); `put`/`delete` default to an explicit `UnsupportedOperationException` |
 | Custom `MessageCodec` | Implement `MessageCodec` for different wire formats (Protobuf, etc.) |
-| HTTP client config | Configure `HttpClient` builder in `HttpTransport` |
+| HTTP client config | Configure timeouts and SSRF behavior through the `HttpTransport` constructor |
 
 ---
 
@@ -109,8 +108,8 @@ Return to caller
 
 ```
 1. Transport.java                 → Transport interface
-2. HttpTransport.java             → HTTP implementation
-3. TransportRequest/Response.java → Request/response models
+2. TransportException.java        → Typed HTTP failure
+3. HttpTransport.java             → HTTP implementation
 4. MessageCodec.java              → Codec interface
 5. sync-http/HttpSink.java        → Usage example
 6. gtranslate/GTranslate.java     → Usage example

@@ -2,18 +2,23 @@ package me.majhrs16.suite.syncdiscord.jdk;
 
 import me.majhrs16.suite.api.discord.DiscordListener;
 import me.majhrs16.suite.api.discord.DiscordMessage;
+import me.majhrs16.suite.api.discord.DiscordOperation;
+import me.majhrs16.suite.api.discord.DiscordResult;
 import me.majhrs16.suite.api.discord.DiscordSettings;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.transport.Transport;
+import me.majhrs16.suite.transport.TransportException;
 
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,15 +34,47 @@ class JdkDiscordConnectionTest {
 
     private static final class StubTransport implements Transport {
         final List<String> urls = new CopyOnWriteArrayList<>();
+        final List<String> methods = new CopyOnWriteArrayList<>();
         final List<Map<String, String>> headers = new CopyOnWriteArrayList<>();
         final List<String> bodies = new CopyOnWriteArrayList<>();
         String response = "{\"id\":\"m1\",\"channel_id\":\"42\"}";
+        IOException failure;
 
         @Override
-        public String post(String url, Map<String, String> headers, String jsonBody) {
+        public String post(String url, Map<String, String> headers, String jsonBody)
+                throws IOException {
+            methods.add("POST");
+            if (failure != null) {
+                throw failure;
+            }
             urls.add(url);
             this.headers.add(headers);
             bodies.add(jsonBody);
+            return response;
+        }
+
+        @Override
+        public String put(String url, Map<String, String> headers, String jsonBody)
+                throws IOException {
+            methods.add("PUT");
+            if (failure != null) {
+                throw failure;
+            }
+            urls.add(url);
+            this.headers.add(headers);
+            bodies.add(jsonBody == null ? "" : jsonBody);
+            return response;
+        }
+
+        @Override
+        public String delete(String url, Map<String, String> headers) throws IOException {
+            methods.add("DELETE");
+            if (failure != null) {
+                throw failure;
+            }
+            urls.add(url);
+            this.headers.add(headers);
+            bodies.add("");
             return response;
         }
 
@@ -48,7 +85,11 @@ class JdkDiscordConnectionTest {
 
         @Override
         public String post(String url, String jsonBody) {
-            return post(url, Map.of(), jsonBody);
+            try {
+                return post(url, Map.of(), jsonBody);
+            } catch (IOException failure) {
+                throw new IllegalStateException(failure);
+            }
         }
     }
 
@@ -178,5 +219,110 @@ class JdkDiscordConnectionTest {
         assertEquals("jdk", factory.name());
         assertTrue(factory.create(new DiscordSettings("tok", 42), LOGGER)
             instanceof JdkDiscordConnection);
+    }
+
+    @Test
+    void createChannelPostsToTheGuildAndReturnsTheCreatedId() throws Exception {
+        StubTransport transport = new StubTransport();
+        transport.response = "{\"id\":\"c1\",\"name\":\"general\"}";
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.CreateChannel("7", "general", "chat"));
+
+        DiscordResult.Ok ok = assertInstanceOf(DiscordResult.Ok.class, result);
+        assertEquals("c1", ok.value().get("id"));
+        assertEquals("general", ok.value().get("name"));
+        assertEquals("POST", transport.methods.get(0));
+        assertTrue(transport.urls.get(0).endsWith("/guilds/7/channels"),
+            transport.urls.get(0));
+        assertTrue(transport.bodies.get(0).contains("\"name\":\"general\""),
+            transport.bodies.get(0));
+        assertTrue(transport.bodies.get(0).contains("\"topic\":\"chat\""),
+            transport.bodies.get(0));
+        assertEquals("Bot abc", transport.headers.get(0).get("Authorization"));
+    }
+
+    @Test
+    void deleteMessageUsesDeleteAndTheAuditReason() throws Exception {
+        StubTransport transport = new StubTransport();
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.DeleteMessage("42", "99", "clean up"));
+
+        assertInstanceOf(DiscordResult.Ok.class, result);
+        assertEquals("DELETE", transport.methods.get(0));
+        assertTrue(transport.urls.get(0).endsWith("/channels/42/messages/99"),
+            transport.urls.get(0));
+        assertEquals("clean%20up",
+            transport.headers.get(0).get("X-Audit-Log-Reason"));
+    }
+
+    @Test
+    void banMemberPutsTheDeleteSeconds() throws Exception {
+        StubTransport transport = new StubTransport();
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.BanMember("7", "9", 3600, "spam"));
+
+        assertInstanceOf(DiscordResult.Ok.class, result);
+        assertEquals("PUT", transport.methods.get(0));
+        assertTrue(transport.urls.get(0).endsWith("/guilds/7/bans/9"),
+            transport.urls.get(0));
+        assertTrue(transport.bodies.get(0).contains("\"delete_message_seconds\":3600"),
+            transport.bodies.get(0));
+    }
+
+    @Test
+    void assignRolePutsTheRoleEndpoint() throws Exception {
+        StubTransport transport = new StubTransport();
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.AssignRole("7", "9", "11", "promote"));
+
+        assertInstanceOf(DiscordResult.Ok.class, result);
+        assertEquals("PUT", transport.methods.get(0));
+        assertTrue(transport.urls.get(0).endsWith("/guilds/7/members/9/roles/11"),
+            transport.urls.get(0));
+    }
+
+    @Test
+    void platformErrorsMapToExplicitResults() throws Exception {
+        StubTransport transport = new StubTransport();
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+        DiscordOperation operation = new DiscordOperation.DeleteMessage("42", "99", null);
+
+        transport.failure = new TransportException(404, "Not Found");
+        assertInstanceOf(DiscordResult.NotFound.class, connection.execute(operation));
+
+        transport.failure = new TransportException(403, "Forbidden");
+        assertInstanceOf(DiscordResult.Forbidden.class, connection.execute(operation));
+
+        transport.failure = new TransportException(409, "Conflict");
+        assertInstanceOf(DiscordResult.Conflict.class, connection.execute(operation));
+
+        transport.failure = new TransportException(429, "{\"retry_after\":1.5}");
+        DiscordResult.RateLimited limited = assertInstanceOf(
+            DiscordResult.RateLimited.class, connection.execute(operation));
+        assertEquals(1500, limited.retryAfterMillis());
+
+        transport.failure = new TransportException(500, "Boom");
+        assertInstanceOf(DiscordResult.Failed.class, connection.execute(operation));
+    }
+
+    @Test
+    void nativeOperationAfterCloseFailsWithoutARequest() throws Exception {
+        StubTransport transport = new StubTransport();
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+        connection.close();
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.DeleteMessage("42", "99", null));
+
+        assertInstanceOf(DiscordResult.Failed.class, result);
+        assertTrue(transport.urls.isEmpty());
     }
 }

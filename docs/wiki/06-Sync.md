@@ -235,8 +235,25 @@ is reported as `Timeout`/`HostFailure`, not as success.
 
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
-(`config/iflow/grants.yml`) exists. Native backend actions are not executable by
-third parties yet.
+(`config/iflow/grants.yml`) exists. `sync-discord` publishes and executes native
+actions through both the JDA and JDK adapters, but third parties cannot execute
+them until the grant store exists. An unknown native action returns
+`Unsupported`; an adapter that is not connected returns `HostFailure`.
+
+### Native Discord actions
+
+| Action | Kind | Arguments | Adapters |
+|---|---|---|---|
+| `discord.channel.create` | `WRITE` | `guild`, `name`, optional `topic` | JDA, JDK |
+| `discord.channel.delete` | `DESTRUCTIVE` | `channel`, optional `reason` | JDA, JDK |
+| `discord.message.delete` | `DESTRUCTIVE` | `channel`, `message`, optional `reason` | JDA, JDK |
+| `discord.member.ban` | `MODERATION` | `guild`, `user`, optional `reason`, optional `deleteMessageSeconds` | JDA, JDK |
+| `discord.role.assign` | `MODERATION` | `guild`, `user`, `role`, optional `reason` | JDA, JDK |
+
+Native ids are neutral strings (Discord snowflakes). `reason` is sent as the
+Discord audit-log reason. `message.edit` is not published yet: the neutral
+`Transport` does not support `PATCH`, and a backend never declares an action it
+cannot execute.
 
 ## Outputs and local delivery
 

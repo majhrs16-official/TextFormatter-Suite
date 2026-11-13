@@ -1,5 +1,7 @@
 package me.majhrs16.suite.syncdiscord.jda;
 
+import me.majhrs16.suite.api.discord.DiscordOperation;
+import me.majhrs16.suite.api.discord.DiscordResult;
 import me.majhrs16.suite.api.discord.DiscordSettings;
 import me.majhrs16.suite.api.spi.PluginLogger;
 
@@ -54,5 +56,16 @@ class JdaDiscordConnectionTest {
 
         assertFalse(connection.isConnected());
         assertThrows(IllegalStateException.class, () -> connection.send("hola"));
+    }
+
+    @Test
+    void executeBeforeConnectFailsExplicitly() {
+        JdaDiscordConnection connection =
+            new JdaDiscordConnection(new DiscordSettings("tok", 42), LOGGER);
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.CreateChannel("7", "general", null));
+
+        assertTrue(result instanceof DiscordResult.Failed);
     }
 }

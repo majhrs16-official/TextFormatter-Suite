@@ -29,6 +29,20 @@ public interface DiscordConnection extends AutoCloseable {
     void send(String text) throws Exception;
 
     /**
+     * Executes one native platform operation.
+     *
+     * <p>The operation vocabulary is neutral data. The adapter translates it to
+     * its own SDK and returns an explicit {@link DiscordResult}; an operation it
+     * cannot execute fails, it never becomes a no-op. Implementations must be
+     * prepared to run after {@link #isConnected()} returns {@code true}.</p>
+     *
+     * @param operation neutral operation, never {@code null}
+     * @return explicit outcome, never {@code null}
+     * @throws Exception on an unexpected transport or adapter failure
+     */
+    DiscordResult execute(DiscordOperation operation) throws Exception;
+
+    /**
      * Registers the inbound callback. Exactly one listener is supported.
      *
      * @param listener listener, or {@code null} to clear it

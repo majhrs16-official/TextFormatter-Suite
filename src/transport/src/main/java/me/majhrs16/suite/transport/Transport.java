@@ -46,6 +46,35 @@ public interface Transport {
     }
 
     /**
+     * Performs a PUT request with a JSON body and custom headers.
+     *
+     * @param url the full URL
+     * @param headers optional custom headers (may be null)
+     * @param jsonBody JSON-encoded request body; {@code null} for no body
+     * @return response body as string
+     * @throws IOException on network or HTTP error (status >= 400)
+     * @throws UnsupportedOperationException when the implementation has no PUT
+     */
+    default String put(String url, java.util.Map<String, String> headers, String jsonBody)
+            throws java.io.IOException {
+        throw new UnsupportedOperationException("PUT is not supported by this transport");
+    }
+
+    /**
+     * Performs a DELETE request with custom headers.
+     *
+     * @param url the full URL
+     * @param headers optional custom headers (may be null)
+     * @return response body as string
+     * @throws IOException on network or HTTP error (status >= 400)
+     * @throws UnsupportedOperationException when the implementation has no DELETE
+     */
+    default String delete(String url, java.util.Map<String, String> headers)
+            throws java.io.IOException {
+        throw new UnsupportedOperationException("DELETE is not supported by this transport");
+    }
+
+    /**
      * Builds a URL with percent-encoded query parameters.
      *
      * @param base base URL (without query string)

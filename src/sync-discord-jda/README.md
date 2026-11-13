@@ -11,6 +11,8 @@ package. It is the only Discord package that imports JDA.
 - Build JDA with the required gateway intents.
 - Translate `MessageReceivedEvent` to `DiscordMessage`.
 - Send plain text to the configured channel.
+- Execute the neutral native operations (`channel.create`, `channel.delete`,
+  `message.delete`, `member.ban`, `role.assign`).
 - Own the bot token copy and wipe it on close.
 - Return from `connect()` without waiting for `JDA.Status.CONNECTED`.
 
@@ -38,6 +40,10 @@ package. It is the only Discord package that imports JDA.
   adapter copy of the token is wiped immediately; JDA owns its own copy.
 - `isConnected()` is true only when JDA reports `CONNECTED`.
 - `send()` fails fast while JDA is not connected or the channel is not cached.
+- `execute()` maps each neutral operation to JDA (`createTextChannel`, `delete`,
+  `deleteMessageById`, `ban`, `addRoleToMember`) and returns an explicit
+  `DiscordResult`. `ErrorResponseException` maps to `NotFound`, `Forbidden` or
+  `Failed`; a disconnected adapter returns `Failed` without touching the SDK.
 - `close()` calls `shutdownNow()` and is idempotent.
 
 This removes the previous 30-second blocking wait from package activation.
@@ -51,6 +57,7 @@ This removes the previous 30-second blocking wait from package activation.
 - factory name and creation;
 - blank-token rejection before any network access;
 - fail-fast send before connect;
+- fail-fast native operation before connect;
 - idempotent close and blocked sends after close.
 
 No test opens a real Discord connection. End-to-end validation against Discord

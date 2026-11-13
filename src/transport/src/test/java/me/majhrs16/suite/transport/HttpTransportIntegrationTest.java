@@ -325,4 +325,49 @@ class HttpTransportIntegrationTest {
             .isInstanceOf(IOException.class)
             .hasMessageContaining("HTTP 500");
     }
+
+    @Test
+    @DisplayName("PUT request envía headers y body")
+    void putWithHeadersAndBody() throws Exception {
+        wireMock.stubFor(put(urlEqualTo("/put"))
+            .withHeader("X-Test", equalTo("yes"))
+            .withRequestBody(equalToJson("{\"a\":1}"))
+            .willReturn(aResponse().withStatus(200).withBody("ok")));
+
+        String result = transport.put(
+            "http://localhost:" + wireMock.port() + "/put",
+            java.util.Map.of("X-Test", "yes", "Content-Type", "application/json"),
+            "{\"a\":1}");
+
+        assertThat(result).isEqualTo("ok");
+    }
+
+    @Test
+    @DisplayName("DELETE request no envía body")
+    void deleteWithoutBody() throws Exception {
+        wireMock.stubFor(delete(urlEqualTo("/delete"))
+            .willReturn(aResponse().withStatus(204)));
+
+        String result = transport.delete(
+            "http://localhost:" + wireMock.port() + "/delete",
+            java.util.Map.of("X-Test", "yes"));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("El error conserva status y body tipados")
+    void errorKeepsStatusAndBody() throws Exception {
+        wireMock.stubFor(get(urlEqualTo("/typed-error"))
+            .willReturn(aResponse().withStatus(404).withBody("missing")));
+
+        assertThatThrownBy(() -> transport.get(
+            "http://localhost:" + wireMock.port() + "/typed-error"))
+            .isInstanceOf(TransportException.class)
+            .satisfies(error -> {
+                TransportException typed = (TransportException) error;
+                assertThat(typed.statusCode()).isEqualTo(404);
+                assertThat(typed.body()).isEqualTo("missing");
+            });
+    }
 }

@@ -84,9 +84,10 @@
 | `TranslatorManager` | SPI: manages multiple providers, fallback chains |
 | `SyncSink` | SPI: send messages to remote servers and publish a sync action surface (HTTP, Discord, TCP, etc.) |
 | `SyncListener` | SPI: receive messages from remote servers |
-| `SyncSurface` / `SyncActionSpec` / `SyncParamSpec` | Declarative actions published by each sync backend; every surface includes the least common multiple (`backend.info`, `message.send`) |
+| `SyncSurface` / `SyncActionSpec` / `SyncParamSpec` | Declarative actions published by each sync backend; every surface includes the least common multiple (`backend.info`, `message.send`, `message.deliver`) |
 | `SyncCall` / `SyncResult` | One action invocation and its explicit outcome (`Ok`, `Denied`, `Unsupported`, `InvalidArgument`, `NotFound`, `Conflict`, `RateLimited`, `Timeout`, `HostFailure`) |
 | `Principal` / `ActionKind` / `SyncValueType` | Caller origin, authorization nature and neutral argument vocabulary; no SDK type crosses the boundary |
+| `DiscordConnection` / `DiscordOperation` / `DiscordResult` | Neutral Discord port: native operations and their explicit adapter outcomes, without JDA or HTTP types |
 | `PlaceholderResolver` | SPI: resolve `{placeholder}` in messages |
 | `PluginLogger` | SPI: abstract logging for platform adapters |
 | `UserLanguageStore` | SPI: persist/load user language preferences |
@@ -98,8 +99,8 @@
 ### Sync action surface
 
 `SyncSink.surface()` publishes the actions a backend accepts. Every surface must
-contain the least common multiple: `backend.info` (`READ`, 5 s) and
-`message.send` (`WRITE`, 15 s). The backend namespace must equal
+contain the least common multiple: `backend.info` (`READ`, 5 s), `message.send`
+(`WRITE`, 15 s) and `message.deliver` (`WRITE`, 15 s, not idempotent). The backend namespace must equal
 `SyncSink.name()`; the bus rejects a backend that does not publish the LCM.
 
 `SyncCall` is the invocation envelope: backend, local action, neutral arguments,
@@ -112,6 +113,14 @@ never carry SDK objects.
 fabricated success. Authority is fail-closed in this slice:
 `Principal.Official` may only invoke the LCM and `Principal.Program` is denied
 until the operator grant store exists.
+
+A backend with native operations publishes them next to the LCM and overrides
+`invoke()`. `sync-discord` is the first one: it declares `channel.create`,
+`channel.delete`, `message.delete`, `member.ban` and `role.assign`, and executes
+them through `DiscordConnection.execute(DiscordOperation)`. `DiscordOperation`
+records carry neutral ids, names and reasons; each adapter returns
+`DiscordResult` and the sink maps it to `SyncResult`. An action the adapter
+cannot execute is never declared as a no-op.
 
 ---
 
@@ -154,7 +163,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 | `PlatformHandle` | Opaque native handle registered by the host; only platform packages resolve it |
 | `ActorDirectory` | Implement in platform adapter (see `SpigotActorDirectory`, `FabricActorDirectory`) |
 | `TranslationService` / `TranslatorProvider` | Implement in translation module (see `GTranslateProvider`, `LTranslateProvider`) |
-| `SyncSink` | Implement in sync module (see `HttpSink`, `JdaDiscordSink`, `TcpSink`, `UdpSink`); override `surface()`/`invoke()` for native actions. Declaring an action without executing it is a contract violation |
+| `SyncSink` | Implement in sync module (see `HttpSink`, `DiscordSink`, `TcpSink`, `UdpSink`); override `surface()`/`invoke()` for native actions and execute every declared action. Declaring an action without executing it is a contract violation |
 | `PlaceholderResolver` | Implement in platform adapter (see `SpigotPlaceholderResolver`, `FabricPlaceholderResolver`) |
 | `MessageRenderer` | Implement in the formatter package (`TextFormatterMessageRenderer`); adapters consume plain text without importing textformatter |
 | `MessageDispatch` / `DispatchOutcome` | Hosts implement dispatch; adapters and diagnostics consume neutral counters and per-target `OutputOutcome` results without importing the pipeline engine or the removed dispatcher types |

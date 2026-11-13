@@ -12,6 +12,8 @@ abstraction; it does not depend on JDA.
 - Handle the Discord Gateway v10 handshake (`Hello`, heartbeat, `Identify`,
   `READY`, `MESSAGE_CREATE`).
 - Send outbound messages through `Transport` (REST).
+- Execute the neutral native operations over REST (`POST`, `DELETE`, `PUT`) and
+  map HTTP failures with `TransportException`.
 - Wipe the token on close.
 - Return from `connect()` immediately; the gateway handshake runs on a daemon
   thread.
@@ -31,6 +33,10 @@ abstraction; it does not depend on JDA.
 
 - Outbound sends only need the token, so they are available as soon as the
   adapter is connected, even while the gateway is still negotiating.
+- Native operations use the same REST base (`/api/v10`) with `Authorization:
+  Bot ...`, `Content-Type` and `X-Audit-Log-Reason`. HTTP 404/401/403/409/429/5xx
+  map to `NotFound`/`Forbidden`/`Conflict`/`RateLimited`/`Failed`; a 429 reads
+  `retry_after` from the response body.
 - The gateway thread logs a warning if `READY` is not reached; it never blocks
   module activation.
 - `close()` stops the heartbeat scheduler, closes the socket and wipes the
@@ -44,9 +50,10 @@ abstraction; it does not depend on JDA.
 
 - REST payload, URL and `Authorization: Bot ...` header;
 - API error payloads fail;
+- native `POST`/`DELETE`/`PUT` operations, audit reason and error mapping;
 - inbound `MESSAGE_CREATE` translation;
 - heartbeat and `Identify` frames;
 - `connect()` returns in under one second;
-- send after close fails without touching the transport.
+- send and native operation after close fail without touching the transport.
 
 No external network is required.
