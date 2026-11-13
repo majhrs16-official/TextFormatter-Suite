@@ -138,6 +138,41 @@ under `config/suite/` or `config/<module>/` before restarting the server.
 - Unknown fields preserved in `extra` field
 - No data loss on round-trip
 
+### Import/Export Suite (runtime artifacts)
+
+The toolbar also offers a **suite** mode, separate from the editor project. It
+moves the selected artifacts the runtime reads, not the flat editor layout:
+
+- **Import suite** accepts a `.zip` whose entries are either under
+  `TextFormatter-Suite/` or at the ZIP root (`config/...`). It shows a summary
+  with files, modules, mapped/opaque/deferred files and warnings, and only
+  applies the import after you confirm. Applying replaces the editor state and
+  clears the undo history.
+- Only `config/**` and `manager/library/status` are part of the set. The package
+  database, channels, translators, sync sinks, iFlow rules and iFlow ROMs
+  (`policy.flow`, `policy.wasm` plus `policy.sha256`) are mapped to their
+  canonical paths. Unknown files under `config/` are preserved byte for byte;
+  anything outside `config/` (JARs, dependencies, cache, journal, backups,
+  trash, temporaries, logs) is ignored.
+- **Suite ZIP** always exports with the `TextFormatter-Suite/` root and a
+  deterministic order. It starts from the imported archive: unchanged files
+  keep their original bytes and only edited sections are rewritten. The ZIP uses
+  DEFLATE when it reduces the entry and STORE otherwise.
+- Edited YAML is rewritten through the comment-preserving CST. Comments, key
+  order, quotes and line endings survive; an edit the CST cannot represent fails
+  the export instead of losing formatting.
+- Before downloading, every `.yml`/`.yaml` under `config/` must parse as a map
+  and declare `config-version: 1.0`. A missing or wrong version, invalid YAML,
+  a non-map root or a non-UTF-8 file blocks the export and lists the errors in a
+  modal; an unknown module and a preserved opaque file are warnings.
+- The package database is listed and edited in **Packages** with a permanent
+  warning because it is the Manager's installation source of truth. A corrupt
+  file is reported on import, is never hydrated, and is re-exported unchanged.
+- Import rejects `..` traversal, absolute and drive-qualified paths, symlinks,
+  duplicate entries and archives over the anti-bomb limits (entries, total
+  bytes, per-file bytes and compression ratio). Encrypted and ZIP64 archives
+  fail with an explicit error.
+
 ## Validation
 
 ### Real-time Validation

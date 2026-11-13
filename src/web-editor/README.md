@@ -105,7 +105,7 @@ package.json        scripts de lint, format, test y check
 cd src/web-editor
 npm run check           # format:check + lint + unit
 npm run test            # tests unitarios
-npm run test:integration
+npm run test:integration # flujos DOM, incluido suite.cjs (import/export completo)
 ```
 
 Requiere Node.js >= 20.
