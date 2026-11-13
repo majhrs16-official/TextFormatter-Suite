@@ -16,13 +16,17 @@
   gating de traducción y la construcción de `Message`.
 - **Despachar** — usa el `MessageDispatch` publicado por `SuiteRuntime`; no
   formatea, no enruta y no entrega.
+- **Publicar el sink local** — registra `LocalSyncSink` (`sync-common`) como
+  servicio `SyncSink` con backend `bukkit`; la entrega física la ejecuta el host
+  a través del puerto `LocalDelivery`.
 - **Ciclo de vida** — registra el listener en `start()` y lo desregistra en
   `stop()` con `HandlerList.unregisterAll`.
 
 ## 2. Non-Responsibilities
 
 - No importa features, `host`, `kernel`, `manager` ni otro sincronizador.
-- No es un `SyncSink`: no hace fan-out; eso pertenece a `sync-bus`.
+- No implementa el sink local: publica `LocalSyncSink` de `sync-common`; el
+  fan-out y el ciclo de vida de los sinks pertenecen a `sync-bus`.
 - No crea el pipeline ni conoce sus etapas.
 - No bloquea `start()` esperando red.
 
@@ -30,8 +34,8 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `ModuleActivator`, `MessageDispatch`, `PlatformHandle` |
-| `sync-common` | Compile | `SyncEventProcessor`, `EventRules`, `ChannelSelector` |
+| `core-api` | Compile | `ModuleActivator`, `MessageDispatch`, `PlatformHandle`, `SyncSink` |
+| `sync-common` | Compile | `SyncEventProcessor`, `EventRules`, `ChannelSelector`, `LocalSyncSink` |
 | `paper-api` | CompileOnly | SDK de Bukkit/Paper |
 | `junit` / `mockito` | Test | Listener, activador y configuración |
 
@@ -43,8 +47,9 @@ familia.
 
 | Component | Role |
 |-----------|------|
-| `SyncBukkitActivator` | Resuelve `PlatformHandle`, registra el listener y lo retira |
+| `SyncBukkitActivator` | Resuelve `PlatformHandle`, registra el listener y el sink local, y los retira |
 | `BukkitChatListener` | Traduce eventos Bukkit a llamadas neutrales |
+| `LocalSyncSink` (`sync-common`) | Sink `bukkit`: LCM más `local.info`; entrega por `LocalDelivery` |
 | `SyncBukkitConfig` | `enabled`, `claim-mode`, `log-chat-to-console` |
 
 ## 5. Data Flow
@@ -86,5 +91,21 @@ valores por defecto. `start()` no falla por configuración ausente.
 ```
 
 Cubren los tres modos de claim, el despacho de chat, el offload de eventos
-tipados, la desactivación y el registro/desregistro del listener. No hay E2E
-contra un servidor Paper real.
+tipados, la desactivación y el registro/desregistro del listener. El sink local
+se prueba en `sync-common` (`LocalSyncSinkTest`). No hay E2E contra un servidor
+Paper real.
+
+## 8. Native actions
+
+`LocalSyncSink` publica el LCM más `local.info` con el namespace `bukkit`:
+
+| Acción | Kind | Argumentos | Resultado |
+|---|---|---|---|
+| `bukkit.local.info` | `READ` | ninguno | `Ok` con `name`, `surfaceVersion`, `localDeliveryRegistered`, `deliverySemantics`, `ordering` |
+
+`local.info` es de solo lectura, idempotente, no recibe argumentos y funciona
+antes de `start()` porque el sink local no abre ninguna conexión. Nunca expone el
+puerto `LocalDelivery` ni un sobre; solo informa si el host ya registró el
+puerto. `Principal.Official` recibe `Denied` (solo puede invocar el LCM) y una
+acción no publicada devuelve `Unsupported`. `message.send` devuelve
+`Unsupported` porque el camino local exige `message.deliver`.

@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`; concesiones, auditoría, cuotas y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; concesiones, auditoría, cuotas y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -531,8 +531,9 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 3. **Bus de acciones. ✅ (salvo auditoría, cuotas y `textformatter.channel.set`)** Indexar `SyncSurface` por backend, validar duplicados, enrutar `invoke`,
    aplicar timeout/cuotas, emitir auditoría y mapear cada estado a `SyncResult`. `send(Message)` pasa
    a ser una comodidad sobre `message.send`.
-4. **Backends.** Migrar `sync-discord` y `sync-telegram` primero (superficie completa: canales,
-   roles, mensajes, miembros, moderación); después `sync-http`, `sync-websocket`, `sync-socket`,
+4. **Backends. ✅ (2026-11-13, salvo la superficie de entorno/eventos de §17.5)** Migrar
+   `sync-discord` y `sync-telegram` primero (superficie completa: canales, roles, mensajes,
+   miembros, moderación); después `sync-http`, `sync-websocket`, `sync-socket`,
    `sync-velocity-core`, `sync-bukkit` y `sync-fabric` (LCM, entrega local y nativas que apliquen).
    Una acción no soportada devuelve `Unsupported`, nunca un no-op.
 5. **`textformatter.channel.set`.** Implementar el handler de host en el motor del pipeline,
@@ -573,9 +574,11 @@ Pendiente y fuera de esta unidad:
 
 - `config/iflow/grants.yml`, autenticación de `Principal.Program`, cuotas por
   programa y auditoría append-only.
-- Migración de los backends restantes (`sync-bukkit` y `sync-fabric`);
+- Migración de los backends restantes (`sync-bukkit` y `sync-fabric`):
   `sync-discord`, `sync-telegram`, `sync-http`, `sync-websocket`, `sync-socket`
-  y `sync-velocity-core` ya publican sus nativas.
+  y `sync-velocity-core` ya publican sus nativas, y los sinks locales publican
+  `local.info` (2026-11-13); la superficie de entorno y eventos de §17.5 sigue
+  pendiente como slice propio.
 - `textformatter.channel.set`, el puente VM/Wasm y la paridad de `SyncResult`.
 - La retirada del fuel queda para la migración v3 (véase «Trayectoria v2 → v3 y
   fuel»).
@@ -804,6 +807,33 @@ Pendiente y fuera de esta unidad:
 - Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
   el puente VM/Wasm de PL-2.
 
+#### Estado de implementación — superficie nativa de `sync-bukkit`/`sync-fabric` (2026-11-13)
+
+Completado en esta unidad:
+
+- `LocalSyncSink` (`sync-common`), que publican `sync-bukkit` y `sync-fabric` con
+  los namespaces `bukkit` y `fabric`, publica en `surface()` el LCM más
+  `local.info` (`READ`, sin argumentos, idempotente, 5 s).
+- `local.info` devuelve `name`, `surfaceVersion`, `localDeliveryRegistered`
+  (si el host ya registró el puerto `LocalDelivery`), `deliverySemantics` y
+  `ordering`; nunca expone el puerto ni un sobre. Funciona antes de `start()`
+  porque el sink local no abre conexión.
+- `invoke()` rechaza `Principal.Official` con `Denied` (solo puede invocar el
+  LCM), devuelve `Unsupported` para una acción no publicada o una llamada
+  dirigida a otro backend, y conserva `message.send` como `Unsupported` porque
+  el camino local exige `message.deliver`.
+- Tests: `LocalSyncSinkTest` cubre la superficie con `local.info`, la acción con
+  y sin puerto registrado, `Denied` oficial, `Unsupported`, backend ajeno,
+  `message.send` rechazado y `message.deliver` ejecutado por la superficie.
+
+Pendiente y fuera de esta unidad:
+
+- La superficie de entorno y eventos de ADR-036 §17.5 (jugadores, consola,
+  canales, scoreboard y acción sobre el evento actual); se añadirá en slices
+  propios con sus adaptadores, no como acciones declaradas sin ejecución.
+- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
+  el puente VM/Wasm de PL-2.
+
 #### Criterios de cierre y tests
 
 1. **LCM:** con cualquier subconjunto de backends, `backend.info` y `message.send` funcionan sin
@@ -901,7 +931,7 @@ es una salida más de `sync`, no un camino paralelo al pipeline.
 | `iflow` | **Implementado (2026-11-09):** `route` posee los backends iFlow (`sync.iflow-vm`, `sync.iflow-wasm`, `sync.iflow-firewall`) y los resuelve por el hub; conserva default/fallback de ADR-032; dos targets propios son conflicto y un backend no disponible es error explícito. |
 | `textformatter` | **Implementado (2026-11-09):** `format` posee los backends de traducción (`sync.gtranslate`, `sync.ltranslate`) y los usa para elegir el proveedor de `<tr>`; conserva default/fallback de la fachada. |
 | `sync-bus` | **Implementado (2026-11-09):** `sync` posee los backends de sink y usa sus targets en orden; `sendTo(List, Message, ParallelMode)` y `deliverTo(List, DeliveryEnvelope, ParallelMode)` respetan `outputs-parallel`; fan-out completo si no hay targets. `deliver`/`deliverTo` despachan `message.deliver`; `deliver` deduplica y `deliverTo` no. |
-| `sync-bukkit` / `sync-fabric` | **Implementado (2026-11-09):** publican `LocalSyncSink` como `bukkit`/`fabric` con la superficie LCM y la capacidad `sync-sink`; la entrega local delega en `LocalDelivery` y devuelve `Ok(DeliverySummary)`. |
+| `sync-bukkit` / `sync-fabric` | **Implementado (2026-11-09; `local.info` el 2026-11-13):** publican `LocalSyncSink` como `bukkit`/`fabric` con la superficie LCM más `local.info` y la capacidad `sync-sink`; la entrega local delega en `LocalDelivery` y devuelve `Ok(DeliverySummary)`. La superficie de entorno/eventos de §17.5 sigue pendiente. |
 | Configuración | **Implementado (2026-11-09):** `outputs`, `outputs-parallel` en `config/suite/config.yml`; `config-version: 1.0`; contrato del editor actualizado en `config-schema-v2.2.md`. |
 | Tests | **Implementado (2026-11-09):** precedencia, vacío vs ausente, target inválido, namespace `sync` obligatorio, `outputs-parallel`, propiedad de backends por etapa, backend desconocido y ambiguo, origen del plan, orden/paralelismo de `sync`, resultado agregado por target, dedup/no-dedup de entrega y sink local con y sin puerto. |
 

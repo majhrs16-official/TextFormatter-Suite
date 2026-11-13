@@ -236,10 +236,11 @@ is reported as `Timeout`/`HostFailure`, not as success.
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
 (`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram`,
-`sync-http`, `sync-websocket`, `sync-socket` and `sync-velocity-core` publish and
-execute native actions, but third parties cannot execute them until the grant
-store exists. An unknown native action returns `Unsupported`; an adapter that is
-not connected returns `HostFailure`.
+`sync-http`, `sync-websocket`, `sync-socket`, `sync-velocity-core` and the local
+sinks (`sync-bukkit`/`sync-fabric` through `LocalSyncSink`) publish and execute
+native actions, but third parties cannot execute them until the grant store
+exists. An unknown native action returns `Unsupported`; an adapter that is not
+connected returns `HostFailure`.
 
 ### Native Discord actions
 
@@ -338,6 +339,20 @@ servers; `type` defaults to `CUSTOM`. `queue.purge` drops queued retries and
 reports how many entries it removed. A stopped, disabled or shutting-down sink
 returns `HostFailure`, and `send(Message)` on a disabled sink throws
 `IOException` instead of silently dropping the message.
+
+### Native local actions
+
+| Action | Kind | Arguments |
+|---|---|---|
+| `bukkit.local.info` | `READ` | none |
+| `fabric.local.info` | `READ` | none |
+
+`local.info` reports the backend name, surface version, whether the host
+registered the `LocalDelivery` port, and the declared delivery semantics and
+ordering. It takes no arguments, is idempotent and works before `start()` because
+the local sink opens no connection. It never exposes the port or an envelope.
+`Principal.Official` receives `Denied`, and `message.send` returns
+`Unsupported` because the local path requires `message.deliver`.
 
 
 ## Outputs and local delivery

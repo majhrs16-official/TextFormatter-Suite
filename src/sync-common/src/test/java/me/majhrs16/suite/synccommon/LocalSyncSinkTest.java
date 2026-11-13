@@ -6,7 +6,9 @@ import me.majhrs16.suite.api.pipeline.DeliverySummary;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.LocalDelivery;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.ActionKind;
 import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncActionSpec;
 import me.majhrs16.suite.api.sync.SyncCall;
 import me.majhrs16.suite.api.sync.SyncResult;
 import me.majhrs16.suite.api.sync.SyncSurface;
@@ -17,12 +19,15 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalSyncSinkTest {
 
     private static final Principal OFFICIAL = new Principal.Official("suite.test");
+    private static final Principal PROGRAM =
+            new Principal.Program("0".repeat(64));
 
     @Test
     void publishesItsBackendAndTheLeastCommonMultiple() {
@@ -34,6 +39,81 @@ class LocalSyncSinkTest {
                 "the local sink must publish the full LCM");
         assertEquals(SyncSink.DeliverySemantics.EXACTLY_ONCE, sink.deliverySemantics());
         assertEquals(SyncSink.Ordering.GLOBAL, sink.ordering());
+    }
+
+    @Test
+    void publishesLocalInfoAsAReadOnlyIdempotentAction() {
+        LocalSyncSink sink = new LocalSyncSink("fabric", new FakeRegistry());
+
+        SyncActionSpec info = sink.surface().action("local.info").orElseThrow();
+
+        assertEquals(ActionKind.READ, info.kind());
+        assertTrue(info.idempotent(), "local.info must be safe to retry");
+        assertEquals(5_000, info.timeoutMillis());
+        assertTrue(info.params().isEmpty(), "local.info takes no arguments");
+    }
+
+    @Test
+    void reportsLocalStateWithoutExposingThePort() {
+        LocalSyncSink sink = new LocalSyncSink("bukkit", new FakeRegistry());
+
+        SyncResult result = sink.invoke(call("bukkit", "local.info", PROGRAM));
+
+        assertTrue(result instanceof SyncResult.Ok, "expected Ok, got: " + result);
+        Map<?, ?> info = (Map<?, ?>) ((SyncResult.Ok) result).value();
+        assertEquals("bukkit", info.get("name"));
+        assertEquals(SyncSurface.CURRENT_CONTRACT_VERSION.toString(),
+                info.get("surfaceVersion"));
+        assertEquals(false, info.get("localDeliveryRegistered"));
+        assertEquals("EXACTLY_ONCE", info.get("deliverySemantics"));
+        assertEquals("GLOBAL", info.get("ordering"));
+    }
+
+    @Test
+    void reportsWhetherTheHostRegisteredTheLocalPort() {
+        FakeRegistry registry = new FakeRegistry();
+        registry.add(LocalDelivery.class, envelope -> new DeliverySummary(1, 0, 0, 0));
+        LocalSyncSink sink = new LocalSyncSink("fabric", registry);
+
+        SyncResult result = sink.invoke(call("fabric", "local.info", PROGRAM));
+
+        assertTrue(result instanceof SyncResult.Ok, "expected Ok, got: " + result);
+        Map<?, ?> info = (Map<?, ?>) ((SyncResult.Ok) result).value();
+        assertEquals(true, info.get("localDeliveryRegistered"));
+        assertFalse(info.containsKey("delivery"),
+                "local.info must not leak the port or the envelope");
+    }
+
+    @Test
+    void deniesLocalInfoToOfficialCallers() {
+        FakeRegistry registry = new FakeRegistry();
+        registry.add(LocalDelivery.class, envelope -> new DeliverySummary(1, 0, 0, 0));
+        LocalSyncSink sink = new LocalSyncSink("bukkit", registry);
+
+        SyncResult result = sink.invoke(call("bukkit", "local.info", OFFICIAL));
+
+        assertTrue(result instanceof SyncResult.Denied, "got: " + result);
+        assertTrue(((SyncResult.Denied) result).reason().contains("least common multiple"));
+    }
+
+    @Test
+    void rejectsUnpublishedLocalActionsExplicitly() {
+        LocalSyncSink sink = new LocalSyncSink("bukkit", new FakeRegistry());
+
+        SyncResult result = sink.invoke(call("bukkit", "local.purge", PROGRAM));
+
+        assertTrue(result instanceof SyncResult.Unsupported, "got: " + result);
+        assertTrue(((SyncResult.Unsupported) result).reason().contains("not published"));
+    }
+
+    @Test
+    void rejectsCallsAddressedToAnotherBackend() {
+        LocalSyncSink sink = new LocalSyncSink("bukkit", new FakeRegistry());
+
+        SyncResult result = sink.invoke(call("fabric", "local.info", PROGRAM));
+
+        assertTrue(result instanceof SyncResult.Unsupported, "got: " + result);
+        assertTrue(((SyncResult.Unsupported) result).reason().contains("not served"));
     }
 
     @Test
@@ -94,6 +174,27 @@ class LocalSyncSinkTest {
 
         assertTrue(result instanceof SyncResult.Unsupported, "got: " + result);
         assertTrue(((SyncResult.Unsupported) result).reason().contains("message.deliver"));
+    }
+
+    @Test
+    void executesMessageDeliverThroughThePublishedSurface() {
+        FakeRegistry registry = new FakeRegistry();
+        DeliverySummary summary = new DeliverySummary(1, 0, 0, 0);
+        registry.add(LocalDelivery.class, envelope -> summary);
+        LocalSyncSink sink = new LocalSyncSink("bukkit", registry);
+        DeliveryEnvelope envelope = DeliveryEnvelope.empty(
+                Message.builder().text("hello").build());
+
+        SyncResult result = sink.invoke(new SyncCall(
+                "bukkit", SyncSurface.MESSAGE_DELIVER, Map.of("delivery", envelope),
+                OFFICIAL, "", "pipeline delivery"));
+
+        assertTrue(result instanceof SyncResult.Ok, "got: " + result);
+        assertSame(summary, ((SyncResult.Ok) result).value());
+    }
+
+    private static SyncCall call(String backend, String action, Principal principal) {
+        return new SyncCall(backend, action, Map.of(), principal, "", "test");
     }
 
     private static final class FakeRegistry implements ServiceRegistry {

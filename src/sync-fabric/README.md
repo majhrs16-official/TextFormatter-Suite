@@ -16,6 +16,9 @@
 - **Traducir a neutral** — delega en `sync-common` la selección de canal, el
   gating de traducción y la construcción de `Message`.
 - **Despachar** — usa el `MessageDispatch` publicado por `SuiteRuntime`.
+- **Publicar el sink local** — registra `LocalSyncSink` (`sync-common`) como
+  servicio `SyncSink` con backend `fabric`; la entrega física la ejecuta el host
+  a través del puerto `LocalDelivery`.
 - **Ciclo de vida** — en `start()` registra los callbacks; en `stop()` los deja
   inertes. Fabric API no permite desregistrarlos, así que un unload en caliente
   marca `RESTART_REQUIRED`. En un apagado completo del servidor no se marca
@@ -24,7 +27,8 @@
 ## 2. Non-Responsibilities
 
 - No importa features, `host`, `kernel`, `manager` ni otro sincronizador.
-- No es un `SyncSink`: no hace fan-out; eso pertenece a `sync-bus`.
+- No implementa el sink local: publica `LocalSyncSink` de `sync-common`; el
+  fan-out y el ciclo de vida de los sinks pertenecen a `sync-bus`.
 - No cancela el chat vanilla: Fabric API no expone un evento cancelable en el
   baseline usado por este paquete.
 - No crea el pipeline ni conoce sus etapas.
@@ -34,8 +38,8 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `ModuleActivator`, `MessageDispatch`, `PlatformHandle` |
-| `sync-common` | Compile | `SyncEventProcessor`, `EventRules`, `ChannelSelector` |
+| `core-api` | Compile | `ModuleActivator`, `MessageDispatch`, `PlatformHandle`, `SyncSink` |
+| `sync-common` | Compile | `SyncEventProcessor`, `EventRules`, `ChannelSelector`, `LocalSyncSink` |
 | `fabric-loader` | Mod compile | Entrypoint y `MinecraftServer` |
 | `fabric-api` | Mod compile | Eventos de mensaje, conexión y tick |
 | `minecraft` / `yarn` | Loom | SDK de Minecraft |
@@ -48,9 +52,10 @@ resultado de `remapJar`; el JAR fino de `jar` no se publica.
 
 | Component | Role |
 |-----------|------|
-| `SyncFabricActivator` | Resuelve `PlatformHandle`, registra callbacks y aplica `RESTART_REQUIRED` |
+| `SyncFabricActivator` | Resuelve `PlatformHandle`, registra callbacks y el sink local, y aplica `RESTART_REQUIRED` |
 | `FabricEventListener` | Traduce eventos Fabric a llamadas neutrales |
 | `FabricDeathTracker` | Estado de una emisión por muerte |
+| `LocalSyncSink` (`sync-common`) | Sink `fabric`: LCM más `local.info`; entrega por `LocalDelivery` |
 | `SyncFabricConfig` | `enabled`, `log-chat-to-console` |
 
 ## 5. Data Flow
@@ -89,5 +94,21 @@ valores por defecto.
 ./gradlew :src:sync-fabric:modulePackage
 ```
 
-Cubren configuración y el tracker de muerte. La compilación valida el uso real
-de la API Fabric/Minecraft. No hay E2E contra un servidor Fabric real.
+Cubren configuración y el tracker de muerte. El sink local se prueba en
+`sync-common` (`LocalSyncSinkTest`). La compilación valida el uso real de la API
+Fabric/Minecraft. No hay E2E contra un servidor Fabric real.
+
+## 8. Native actions
+
+`LocalSyncSink` publica el LCM más `local.info` con el namespace `fabric`:
+
+| Acción | Kind | Argumentos | Resultado |
+|---|---|---|---|
+| `fabric.local.info` | `READ` | ninguno | `Ok` con `name`, `surfaceVersion`, `localDeliveryRegistered`, `deliverySemantics`, `ordering` |
+
+`local.info` es de solo lectura, idempotente, no recibe argumentos y funciona
+antes de `start()` porque el sink local no abre ninguna conexión. Nunca expone el
+puerto `LocalDelivery` ni un sobre; solo informa si el host ya registró el
+puerto. `Principal.Official` recibe `Denied` (solo puede invocar el LCM) y una
+acción no publicada devuelve `Unsupported`. `message.send` devuelve
+`Unsupported` porque el camino local exige `message.deliver`.
