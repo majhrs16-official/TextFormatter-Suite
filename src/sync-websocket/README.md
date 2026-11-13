@@ -8,6 +8,7 @@
 
 - **WebSocket server** — binds to configurable address/port (default 127.0.0.1:9092)
 - **Subscription management** — clients subscribe to paths (`/ws/chat`, `/ws/events`, `/ws/sync`, `/ws/logs`)
+- **Native action surface** — `path.broadcast` and `client.info`, executed through the sink and mapped to an explicit `SyncResult`
 - **Auth token required** — rejects connections without valid token (config `token`)
 - **Rate limiting** — fixed-window 100 msg/s per connection (recovers under sustained load)
 - **Message framing** — uses `MessageCodec` for JSON encoding
@@ -50,7 +51,7 @@
 
 | Component | Role |
 |-----------|------|
-| `WebSocketSyncSink` | `SyncSink` impl: `org.java_websocket.server.WebSocketServer`, subscriptions, auth, rate limiting |
+| `WebSocketSyncSink` | `SyncSink` impl: `org.java_websocket.server.WebSocketServer`, subscriptions, auth, rate limiting, surface and native action dispatch |
 | `WebSocketSyncConfig` | Reads `config/sync-websocket/config.yml` |
 | `SyncWebSocketActivator` | Registers/unregisters the sink with the running bus |
 | `SyncWebSocketModule` | Legacy kernel descriptor publishing the `sync-sink` and `websocket-server` capabilities |
@@ -67,7 +68,48 @@ MessageCodec.toJson(message) → JSON string
 WebSocketSyncSink.broadcastToPath(path, json)
          ↓
 All subscribed clients receive message
+
+SyncBus.invoke(SyncCall)
+         ↓
+WebSocketSyncSink.invoke(call)
+         ↓
+path.broadcast → {"type":"broadcast","path":...,"payload":{...}} to subscribers
+client.info    → in-memory counters (no addresses, no token)
 ```
+
+### Native actions
+
+`WebSocketSyncSink.surface()` publishes the LCM plus two native actions.
+`invoke()` requires a `Principal.Program` for both: `Principal.Official`
+receives `Denied` and only reaches the LCM. A stopped sink returns
+`HostFailure` without touching the network.
+
+| Action | Kind | Arguments | Result |
+|---|---|---|---|
+| `path.broadcast` | `WRITE` | `path` (`STRING`, required), `payload` (`OBJECT`, required) | `Ok` with `path` and `delivered` count |
+| `client.info` | `READ` | optional `path` (`STRING`) | `Ok` with connection and subscription counters |
+
+`path.broadcast` accepts `/ws/chat`, `/ws/events` and `/ws/sync`. `/ws/logs`
+is reserved for the diagnostics channel (`sendLog`) and is not reachable
+through the action surface. The payload is wrapped in a self-describing
+envelope and limited to 64 KiB. Invalid paths, a missing or non-object
+payload, non-string keys, non-finite numbers and unsupported value types
+return `InvalidArgument` without sending anything.
+
+`client.info` reports the sink name, running flag, bound port, total clients
+and the subscriber count per endpoint (or for one endpoint when `path` is
+given). It never exposes client addresses, subscription paths of individual
+clients or the auth token.
+
+### Lifecycle
+
+`start()` builds a fresh `WebSocketServer`, waits until the selector thread is
+ready and fails explicitly when the token is missing, the bind fails or the
+startup times out. `stop()` closes the clients, clears subscriptions and
+releases the server. `org.java_websocket` does not allow starting the same
+server twice, so a bus restart creates a new instance instead of reusing the
+closed one; `WebSocketSyncSinkTest.restartsAfterStop` guards that regression.
+The configured port `0` binds an ephemeral port, which is only used by tests.
 
 **Config** (`config/sync-websocket/config.yml`):
 ```yaml
@@ -88,6 +130,12 @@ without token is skipped with a log line; the package still activates.
 installs the real `sync-common`, `transport`, `sync-bus` and `sync-websocket`
 packages on a free port, verifies the sink is registered, then unloads it and
 checks that the running bus is empty.
+
+`WebSocketSyncSinkTest` covers the published surface, a real client receiving
+`path.broadcast` and routed `send` messages, `client.info` counters without
+secrets, `Denied` for `Principal.Official`, `Unsupported`, invalid arguments
+(no network), a stopped sink, a missing token and the `stop()` → `start()`
+restart regression.
 
 ---
 
@@ -111,8 +159,8 @@ checks that the running bus is empty.
 ## 9. Exploration Path
 
 ```
-1. WebSocketSyncSink.java           → SyncSink implementation (server)
-2. WebSocketSyncServer.java         → WebSocket server logic
+1. WebSocketSyncSink.java           → SyncSink implementation (server, surface, lifecycle)
+2. WebSocketSyncSink.SyncWebSocketServer → WebSocket server logic (inner class)
 3. WebSocketSyncConfig.java         → Module config schema
 4. SyncWebSocketActivator.java      → Package lifecycle and bus registration
 ```

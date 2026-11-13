@@ -235,10 +235,11 @@ is reported as `Timeout`/`HostFailure`, not as success.
 
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
-(`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram` and
-`sync-http` publish and execute native actions, but third parties cannot execute
-them until the grant store exists. An unknown native action returns
-`Unsupported`; an adapter that is not connected returns `HostFailure`.
+(`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram`,
+`sync-http` and `sync-websocket` publish and execute native actions, but third
+parties cannot execute them until the grant store exists. An unknown native
+action returns `Unsupported`; an adapter that is not connected returns
+`HostFailure`.
 
 ### Native Discord actions
 
@@ -290,6 +291,22 @@ or query from the webhook URL. HTTP statuses map to explicit results: 2xx →
 milliseconds) and anything else → `HostFailure`. A `Timeout` comes from
 `HttpTimeoutException`. A stopped sink returns `HostFailure` without touching
 the network.
+
+### Native WebSocket actions
+
+| Action | Kind | Arguments |
+|---|---|---|
+| `websocket.path.broadcast` | `WRITE` | `path` (`STRING`, required), `payload` (`OBJECT`, required) |
+| `websocket.client.info` | `READ` | optional `path` (`STRING`) |
+
+`path.broadcast` accepts `/ws/chat`, `/ws/events` and `/ws/sync`; `/ws/logs` is
+reserved for the diagnostics channel. The payload is wrapped in
+`{"type":"broadcast","path":...,"payload":{...}}`, limited to 64 KiB, and sent
+to every open subscriber of that path; the result reports the delivered count.
+`client.info` reports the sink name, running flag, bound port, total clients
+and subscriber counts per endpoint, never client addresses or the auth token.
+Invalid arguments return `InvalidArgument` without sending, a stopped sink
+returns `HostFailure`, and `Principal.Official` receives `Denied`.
 
 
 ## Outputs and local delivery

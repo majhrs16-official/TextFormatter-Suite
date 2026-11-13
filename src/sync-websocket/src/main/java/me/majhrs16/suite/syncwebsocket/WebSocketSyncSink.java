@@ -1,17 +1,28 @@
 package me.majhrs16.suite.syncwebsocket;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.metrics.Metrics;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.ActionKind;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncActionSpec;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncParamSpec;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
+import me.majhrs16.suite.api.sync.SyncValueType;
 import me.majhrs16.suite.transport.MessageCodec;
-import me.majhrs16.suite.api.metrics.Metrics;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
@@ -19,13 +30,17 @@ import com.google.gson.JsonSyntaxException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 /**
  * WebSocket-based sync sink providing real-time synchronization endpoints:
@@ -38,6 +53,11 @@ import java.util.function.Consumer;
  *
  * <p>Supports subscription filtering, authentication via token, message broadcasting,
  * and protection against oversized payloads and connection flooding.</p>
+ *
+ * <p>The sink publishes the official least common multiple plus two native
+ * actions: {@code path.broadcast} sends a neutral payload to the subscribers of
+ * one endpoint, and {@code client.info} reports connection counters without
+ * exposing addresses or the auth token.</p>
  */
 public final class WebSocketSyncSink implements SyncSink {
 
@@ -49,10 +69,21 @@ public final class WebSocketSyncSink implements SyncSink {
     private static final int MAX_MESSAGE_SIZE = 64 * 1024; // 64KB per message
     private static final int MAX_MESSAGES_PER_SECOND = 100; // Rate limit per connection
 
+    private static final String PATH_BROADCAST = "path.broadcast";
+    private static final String CLIENT_INFO = "client.info";
+    private static final Set<String> NATIVE_ACTIONS = Set.of(PATH_BROADCAST, CLIENT_INFO);
+    private static final Set<String> BROADCAST_PATHS = Set.of(CHAT_PATH, EVENTS_PATH, SYNC_PATH);
+    private static final List<String> ALL_PATHS =
+        List.of(CHAT_PATH, EVENTS_PATH, SYNC_PATH, LOGS_PATH);
+    private static final SyncSurface SURFACE = buildSurface();
+    private static final Gson GSON = new Gson();
+    private static final long START_TIMEOUT_MILLIS = 5_000;
+
     private final int port;
     private final String authToken;
+    private final String bindAddress;
     private final PluginLogger logger;
-    private final WebSocketServer server;
+    private volatile WebSocketServer server;
     private volatile SyncListener listener;
     private volatile boolean running = false;
 
@@ -67,18 +98,26 @@ public final class WebSocketSyncSink implements SyncSink {
         this(port, authToken, logger, "127.0.0.1");
     }
 
+    /**
+     * @param port listen port; {@code 0} binds an ephemeral port and
+     *             {@code < 0} falls back to {@value #DEFAULT_PORT}
+     */
     public WebSocketSyncSink(int port, String authToken, PluginLogger logger, String bindAddress) {
-        this.port = port > 0 ? port : DEFAULT_PORT;
+        this.port = port >= 0 ? port : DEFAULT_PORT;
         this.authToken = authToken;
         this.logger = logger;
         // Bind to localhost by default for security; can be overridden via system property or parameter
-        String effectiveBind = System.getProperty("textformattersuite.ws.bind", bindAddress);
-        this.server = new SyncWebSocketServer(new InetSocketAddress(effectiveBind, this.port));
+        this.bindAddress = System.getProperty("textformattersuite.ws.bind", bindAddress);
     }
 
     @Override
     public String name() {
         return "websocket";
+    }
+
+    @Override
+    public SyncSurface surface() {
+        return SURFACE;
     }
 
     @Override
@@ -91,6 +130,43 @@ public final class WebSocketSyncSink implements SyncSink {
         return Ordering.PER_CHANNEL;
     }
 
+    /**
+     * Executes the least common multiple through the default implementation and
+     * the WebSocket-native actions through this sink.
+     *
+     * <p>Native actions require a {@link Principal.Program};
+     * {@link Principal.Official} only reaches the LCM. A stopped sink rejects
+     * both native actions instead of pretending to broadcast.</p>
+     */
+    @Override
+    public SyncResult invoke(SyncCall call) {
+        Objects.requireNonNull(call, "call");
+        if (!name().equals(call.backend()) || !NATIVE_ACTIONS.contains(call.action())) {
+            return SyncSink.super.invoke(call);
+        }
+        if (call.principal() instanceof Principal.Official) {
+            return new SyncResult.Denied(
+                "Principal.Official may only invoke the least common multiple");
+        }
+        if (!running) {
+            return new SyncResult.HostFailure("websocket sink is stopped");
+        }
+        if (CLIENT_INFO.equals(call.action())) {
+            return clientInfo(call);
+        }
+        try {
+            return broadcast(call);
+        } catch (IllegalArgumentException invalid) {
+            return new SyncResult.InvalidArgument(invalid.getMessage());
+        }
+    }
+
+    /**
+     * Starts the server. The underlying {@link WebSocketServer} cannot be
+     * started twice, so every start builds a fresh instance; the previous one is
+     * released by {@link #stop()}. Startup fails explicitly when the token is
+     * missing, the bind fails or the selector thread does not become ready.
+     */
     @Override
     public synchronized void start() throws IOException {
         if (running) return;
@@ -100,17 +176,42 @@ public final class WebSocketSyncSink implements SyncSink {
             throw new IOException("WebSocket sync sink cannot start: auth token is required but not configured");
         }
 
-        server.start();
+        SyncWebSocketServer created = new SyncWebSocketServer(
+            new InetSocketAddress(bindAddress, port));
+        created.start();
+        boolean started;
+        try {
+            started = created.awaitStarted(START_TIMEOUT_MILLIS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            releaseServer(created);
+            throw new IOException("interrupted while starting the WebSocket server", interrupted);
+        }
+        if (!started) {
+            releaseServer(created);
+            throw new IOException("WebSocket server did not start within "
+                + START_TIMEOUT_MILLIS + " ms");
+        }
+        Exception failure = created.startFailure();
+        if (failure != null) {
+            releaseServer(created);
+            throw new IOException("WebSocket server failed to bind "
+                + bindAddress + ":" + port, failure);
+        }
+
+        server = created;
         running = true;
-        logger.info("WebSocket sync server started on port " + port);
+        logger.info("WebSocket sync server started on port " + boundPort());
         logger.info("Endpoints: " + CHAT_PATH + ", " + EVENTS_PATH + ", " + SYNC_PATH + ", " + LOGS_PATH);
     }
 
-@Override
+    @Override
     public synchronized void stop() {
-        if (!running) return;
+        WebSocketServer current = server;
+        if (current == null && !running) return;
 
         running = false;
+        server = null;
         // Close all connections
         for (WebSocket client : allClients) {
             try {
@@ -121,16 +222,28 @@ public final class WebSocketSyncSink implements SyncSink {
         subscriptions.clear();
         clientSubscriptions.clear();
 
+        if (current != null) {
+            releaseServer(current);
+            logger.info("WebSocket sync server stopped");
+        }
+    }
+
+    private void releaseServer(WebSocketServer target) {
         try {
-            server.stop(1000);
-        } catch (Exception e) {
+            target.stop(1000);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            logger.warn("Interrupted while stopping WebSocket server");
+        } catch (RuntimeException e) {
             logger.warn("Error stopping WebSocket server: " + e.getMessage());
         }
-        logger.info("WebSocket sync server stopped");
     }
 
     @Override
     public void send(Message message) throws IOException, InterruptedException {
+        if (!running) {
+            throw new IOException("websocket sink is stopped");
+        }
         String json = MessageCodec.toJson(message).toString();
         String path = getPathForMessage(message);
         broadcastToPath(path, json);
@@ -144,24 +257,29 @@ public final class WebSocketSyncSink implements SyncSink {
 
     /**
      * Broadcasts a message to all subscribers of a specific path.
+     *
+     * @return the number of open subscribers that received the message
      */
-    public void broadcastToPath(String path, String jsonMessage) {
+    public int broadcastToPath(String path, String jsonMessage) {
         Set<WebSocket> subscribers = subscriptions.get(path);
         if (subscribers == null || subscribers.isEmpty()) {
-            return;
+            return 0;
         }
 
+        int delivered = 0;
         for (WebSocket client : new CopyOnWriteArrayList<>(subscribers)) {
             if (client.isOpen()) {
                 try {
                     client.send(jsonMessage);
                     Metrics.recordSyncSent("websocket", "success");
+                    delivered++;
                 } catch (Exception e) {
                     Metrics.recordSyncSent("websocket", "failed");
                     logger.warn("Failed to send to client: " + e.getMessage());
                 }
             }
         }
+        return delivered;
     }
 
     /**
@@ -186,6 +304,136 @@ public final class WebSocketSyncSink implements SyncSink {
         };
     }
 
+    /**
+     * Sends a neutral payload to the subscribers of one broadcast endpoint.
+     * {@code /ws/logs} is reserved for the diagnostics channel and is not
+     * reachable through the action surface.
+     */
+    private SyncResult broadcast(SyncCall call) {
+        String path = pathOf(call);
+        if (!BROADCAST_PATHS.contains(path)) {
+            throw new IllegalArgumentException(
+                "'path' must be one of " + BROADCAST_PATHS);
+        }
+        JsonObject envelope = new JsonObject();
+        envelope.addProperty("type", "broadcast");
+        envelope.addProperty("path", path);
+        envelope.add("payload", payloadOf(call));
+        String json = GSON.toJson(envelope);
+        if (json.getBytes(StandardCharsets.UTF_8).length > MAX_MESSAGE_SIZE) {
+            throw new IllegalArgumentException(
+                "payload exceeds " + MAX_MESSAGE_SIZE + " bytes");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("path", path);
+        result.put("delivered", broadcastToPath(path, json));
+        return new SyncResult.Ok(result);
+    }
+
+    /** Reports connection counters; never addresses, paths or the auth token. */
+    private SyncResult clientInfo(SyncCall call) {
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("name", name());
+        info.put("running", running);
+        info.put("port", boundPort());
+        info.put("clients", getClientCount());
+        Object requested = call.args().get("path");
+        if (requested == null) {
+            Map<String, Integer> subscribers = new LinkedHashMap<>();
+            for (String path : ALL_PATHS) {
+                subscribers.put(path, getSubscriptionCount(path));
+            }
+            info.put("subscribers", subscribers);
+            return new SyncResult.Ok(info);
+        }
+        if (!(requested instanceof String path) || !ALL_PATHS.contains(path)) {
+            return new SyncResult.InvalidArgument(
+                "'path' must be one of " + ALL_PATHS);
+        }
+        info.put("path", path);
+        info.put("subscribers", getSubscriptionCount(path));
+        return new SyncResult.Ok(info);
+    }
+
+    private static String pathOf(SyncCall call) {
+        Object value = call.args().get("path");
+        if (!(value instanceof String path) || path.isBlank()) {
+            throw new IllegalArgumentException("'path' must be a non-blank string");
+        }
+        return path;
+    }
+
+    private static JsonElement payloadOf(SyncCall call) {
+        Object value = call.args().get("payload");
+        if (!(value instanceof Map<?, ?> payload)) {
+            throw new IllegalArgumentException("'payload' must be an object map");
+        }
+        return toJsonValue(payload);
+    }
+
+    private static JsonElement toJsonValue(Object value) {
+        if (value == null) {
+            return JsonNull.INSTANCE;
+        }
+        if (value instanceof String || value instanceof Boolean) {
+            return GSON.toJsonTree(value);
+        }
+        if (value instanceof Number number) {
+            boolean finite = !(number instanceof Double d && !Double.isFinite(d))
+                && !(number instanceof Float f && !Float.isFinite(f));
+            if (!finite) {
+                throw new IllegalArgumentException(
+                    "'payload' must not contain non-finite numbers");
+            }
+            return GSON.toJsonTree(number);
+        }
+        if (value instanceof Map<?, ?> map) {
+            JsonObject object = new JsonObject();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (!(entry.getKey() instanceof String key) || key.isBlank()) {
+                    throw new IllegalArgumentException(
+                        "'payload' keys must be non-blank strings");
+                }
+                object.add(key, toJsonValue(entry.getValue()));
+            }
+            return object;
+        }
+        if (value instanceof Iterable<?> list) {
+            JsonArray array = new JsonArray();
+            for (Object element : list) {
+                array.add(toJsonValue(element));
+            }
+            return array;
+        }
+        throw new IllegalArgumentException(
+            "'payload' contains an unsupported value type: "
+                + value.getClass().getName());
+    }
+
+    private static SyncSurface buildSurface() {
+        SyncSurface lcm = SyncSurface.lcm(
+            "websocket", SyncSurface.CURRENT_CONTRACT_VERSION);
+        Set<SyncActionSpec> actions = new LinkedHashSet<>(lcm.actions());
+        actions.add(new SyncActionSpec(
+            PATH_BROADCAST,
+            ActionKind.WRITE,
+            List.of(
+                SyncParamSpec.required("path", SyncValueType.STRING),
+                SyncParamSpec.required("payload", SyncValueType.OBJECT)),
+            SyncParamSpec.optional("result", SyncValueType.OBJECT),
+            false,
+            15_000));
+        actions.add(new SyncActionSpec(
+            CLIENT_INFO,
+            ActionKind.READ,
+            List.of(SyncParamSpec.optional("path", SyncValueType.STRING)),
+            SyncParamSpec.optional("info", SyncValueType.OBJECT),
+            true,
+            5_000));
+        return new SyncSurface(
+            "websocket", SyncSurface.CURRENT_CONTRACT_VERSION, actions);
+    }
+
     // ============================================================
     // WebSocket Server Implementation
     // ============================================================
@@ -193,6 +441,8 @@ public final class WebSocketSyncSink implements SyncSink {
     private final class SyncWebSocketServer extends WebSocketServer {
 
         private final Gson gson = new Gson();
+        private final CountDownLatch startLatch = new CountDownLatch(1);
+        private volatile Exception startFailure;
         // Rate limiting per connection: track message count per fixed 1-second window
         // Key: WebSocket, Value: message count for current window
         private final ConcurrentHashMap<WebSocket, Integer> messageCount = new ConcurrentHashMap<>();
@@ -206,6 +456,14 @@ public final class WebSocketSyncSink implements SyncSink {
             } catch (Exception e) {
                 logger.debug("Could not set SO_REUSEADDR: " + e.getMessage());
             }
+        }
+
+        boolean awaitStarted(long millis) throws InterruptedException {
+            return startLatch.await(millis, TimeUnit.MILLISECONDS);
+        }
+
+        Exception startFailure() {
+            return startFailure;
         }
 
         @Override
@@ -239,7 +497,10 @@ public final class WebSocketSyncSink implements SyncSink {
             Set<String> subs = clientSubscriptions.remove(conn);
             if (subs != null) {
                 for (String path : subs) {
-                    subscriptions.getOrDefault(path, Set.of()).remove(conn);
+                    Set<WebSocket> pathSubscribers = subscriptions.get(path);
+                    if (pathSubscribers != null) {
+                        pathSubscribers.remove(conn);
+                    }
                 }
             }
             logger.debug("WebSocket closed: " + conn.getRemoteSocketAddress() + " (" + code + ")");
@@ -258,10 +519,10 @@ public final class WebSocketSyncSink implements SyncSink {
             // Rate limiting per connection (fixed 1-second window aligned to epoch)
             long now = System.currentTimeMillis();
             long windowStart = now / 1000 * 1000; // Align to start of current second
-            
+
             // Get or initialize the window start for this connection
             long storedWindowStart = windowStartTimes.getOrDefault(conn, windowStart);
-            
+
             // Check if we're in a new window (fixed window, not sliding)
             if (windowStart != storedWindowStart) {
                 // New fixed window - reset counter
@@ -270,7 +531,7 @@ public final class WebSocketSyncSink implements SyncSink {
             } else {
                 // Same fixed window - increment counter
                 int count = messageCount.merge(conn, 1, Integer::sum);
-                
+
                 if (count > MAX_MESSAGES_PER_SECOND) {
                     conn.send(createError("Rate limit exceeded: max " + MAX_MESSAGES_PER_SECOND + " messages/second"));
                     logger.warn("WebSocket rate limit exceeded from " + conn.getRemoteSocketAddress());
@@ -300,11 +561,23 @@ public final class WebSocketSyncSink implements SyncSink {
 
         @Override
         public void onError(WebSocket conn, Exception ex) {
+            if (conn == null) {
+                // A null connection is a server-level failure: a bind error
+                // surfaces here before onStart() and must fail start().
+                if (startLatch.getCount() > 0) {
+                    startFailure = ex;
+                    startLatch.countDown();
+                } else {
+                    logger.error("WebSocket server error", ex);
+                }
+                return;
+            }
             logger.error("WebSocket error for " + conn.getRemoteSocketAddress(), ex);
         }
 
         @Override
         public void onStart() {
+            startLatch.countDown();
             logger.info("WebSocket server started on port " + getPort());
         }
 
@@ -437,8 +710,15 @@ public final class WebSocketSyncSink implements SyncSink {
         return allClients.size();
     }
 
+    /** @return the configured port, or the bound port once the server is up */
     public int getPort() {
-        return port;
+        return boundPort();
+    }
+
+    /** @return the actual listening port; {@code 0} while an ephemeral bind is pending */
+    public int boundPort() {
+        WebSocketServer current = server;
+        return current != null ? current.getPort() : port;
     }
 
     public boolean isRunning() {
