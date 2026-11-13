@@ -8,6 +8,7 @@
 
 - **TCP sink** — persistent TCP connection with reconnection logic
 - **UDP sink** — datagram-based fire-and-forget delivery
+- **Native action surface** — `tcp.endpoint.info`, `tcp.connection.probe` and `udp.endpoint.info`, each mapped to an explicit `SyncResult`
 - **Message framing** — `MessageCodec` encodes/decodes length-prefixed JSON
 - **Module registration** — `SyncSocketActivator` registers each configured sink with the running bus
 
@@ -47,8 +48,8 @@
 
 | Component | Role |
 |-----------|------|
-| `TcpSink` | `SyncSink` impl: TCP client, auto-reconnect, length-prefixed JSON |
-| `UdpSink` | `SyncSink` impl: UDP datagram, length-prefixed JSON |
+| `TcpSink` | `SyncSink` impl: TCP client, auto-reconnect, length-prefixed JSON, surface and native action dispatch |
+| `UdpSink` | `SyncSink` impl: UDP datagram, length-prefixed JSON, surface and native action dispatch |
 | `MessageCodec` | Frames messages: `[4-byte length][JSON bytes]` |
 | `SyncSocketActivator` | Reads `tcp.yml`/`udp.yml`, registers each usable sink with the bus and unregisters it on stop |
 | `SyncSocketModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
@@ -65,7 +66,36 @@ MessageCodec.encode(message) → byte[] (length + JSON)
 TcpSink: socket.write(bytes) with reconnect logic
    OR
 UdpSink: datagramSocket.send(bytes)
+
+SyncBus.invoke(SyncCall)
+         ↓
+TcpSink.invoke(call)                 UdpSink.invoke(call)
+         ↓                                    ↓
+endpoint.info → in-memory description   endpoint.info → in-memory description
+connection.probe → TCP connect check
 ```
+
+### Native actions
+
+Both sinks publish the LCM plus an `endpoint.info` action. `TcpSink` also
+publishes `connection.probe`. `invoke()` requires a `Principal.Program`:
+`Principal.Official` receives `Denied` and only reaches the LCM. A stopped sink
+returns `HostFailure` and `send(Message)` throws `IOException` instead of
+opening a socket or dereferencing a closed one.
+
+| Backend | Action | Kind | Arguments | Result |
+|---|---|---|---|---|
+| `tcp` | `endpoint.info` | `READ` | none | `Ok` with host, ports and listener state |
+| `tcp` | `connection.probe` | `READ` | none | `Ok` with `reachable` and latency, or `HostFailure` |
+| `udp` | `endpoint.info` | `READ` | none | `Ok` with host, ports and listener state |
+
+`endpoint.info` reports the configured remote host/port, the bound inbound port
+and whether the listener is open; it exposes no credentials. `connection.probe`
+opens and immediately closes a TCP connection to the remote listener with a 4 s
+connect timeout; it sends no message and returns `HostFailure` when the remote
+is unreachable. `send()` and the inbound loops capture the socket they own, so
+a `stop()` → `start()` cycle cannot leave a stale loop reading from the new
+socket.
 
 **Config** (`config/sync-socket/tcp.yml` / `config/sync-socket/udp.yml`):
 ```yaml
@@ -86,6 +116,11 @@ incomplete file is skipped with a log line; the package still activates.
 installs the real `sync-common`, `transport`, `sync-bus` and `sync-socket`
 packages, verifies both sinks are registered, then unloads `sync-socket` and
 checks that the running bus has no sinks left.
+
+`TcpSinkTest` and `UdpSinkTest` cover the published surfaces, `endpoint.info`
+without secrets, the TCP probe against a reachable and an unreachable remote,
+`Denied` for `Principal.Official`, `Unsupported`, a stopped sink (including the
+explicit `send` failure) and the inbound listener restarting after `stop()`.
 
 ---
 

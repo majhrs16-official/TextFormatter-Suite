@@ -236,10 +236,10 @@ is reported as `Timeout`/`HostFailure`, not as success.
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
 (`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram`,
-`sync-http` and `sync-websocket` publish and execute native actions, but third
-parties cannot execute them until the grant store exists. An unknown native
-action returns `Unsupported`; an adapter that is not connected returns
-`HostFailure`.
+`sync-http`, `sync-websocket` and `sync-socket` publish and execute native
+actions, but third parties cannot execute them until the grant store exists. An
+unknown native action returns `Unsupported`; an adapter that is not connected
+returns `HostFailure`.
 
 ### Native Discord actions
 
@@ -307,6 +307,21 @@ to every open subscriber of that path; the result reports the delivered count.
 and subscriber counts per endpoint, never client addresses or the auth token.
 Invalid arguments return `InvalidArgument` without sending, a stopped sink
 returns `HostFailure`, and `Principal.Official` receives `Denied`.
+
+### Native TCP and UDP actions
+
+| Backend | Action | Kind | Arguments |
+|---|---|---|---|
+| `tcp` | `tcp.endpoint.info` | `READ` | none |
+| `tcp` | `tcp.connection.probe` | `READ` | none |
+| `udp` | `udp.endpoint.info` | `READ` | none |
+
+`endpoint.info` reports the configured remote host/port, the bound inbound port
+and whether the listener is open, without credentials. `connection.probe` opens
+and closes a TCP connection to the remote listener with a 4 s connect timeout,
+sends no message, and returns `Ok` with `reachable` and latency or `HostFailure`
+when the remote is unreachable. A stopped sink returns `HostFailure` and
+`send(Message)` throws `IOException` instead of sending through a closed socket.
 
 
 ## Outputs and local delivery
