@@ -235,10 +235,10 @@ is reported as `Timeout`/`HostFailure`, not as success.
 
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
-(`config/iflow/grants.yml`) exists. `sync-discord` publishes and executes native
-actions through both the JDA and JDK adapters, but third parties cannot execute
-them until the grant store exists. An unknown native action returns
-`Unsupported`; an adapter that is not connected returns `HostFailure`.
+(`config/iflow/grants.yml`) exists. `sync-discord` and `sync-telegram` publish
+and execute native actions, but third parties cannot execute them until the
+grant store exists. An unknown native action returns `Unsupported`; an adapter
+that is not connected returns `HostFailure`.
 
 ### Native Discord actions
 
@@ -254,6 +254,26 @@ Native ids are neutral strings (Discord snowflakes). `reason` is sent as the
 Discord audit-log reason. `message.edit` is not published yet: the neutral
 `Transport` does not support `PATCH`, and a backend never declares an action it
 cannot execute.
+
+### Native Telegram actions
+
+| Action | Kind | Arguments |
+|---|---|---|
+| `telegram.chat.title.set` | `WRITE` | `chat`, `title` |
+| `telegram.chat.leave` | `DESTRUCTIVE` | `chat` |
+| `telegram.message.delete` | `DESTRUCTIVE` | `chat`, `message` |
+| `telegram.message.edit` | `WRITE` | `chat`, `message`, `text` |
+| `telegram.chat.member.ban` | `MODERATION` | `chat`, `user`, optional `revokeMessages` |
+| `telegram.chat.member.unban` | `MODERATION` | `chat`, `user`, optional `onlyIfBanned` |
+
+`chat` is a numeric chat id or an `@channel` username, `user` and `message` are
+positive Telegram ids. Native actions always require an explicit `chat`; the
+configured `chatId` is only the `message.send` destination. Telegram reports a
+missing message or chat as HTTP 400, so a `not found` description maps to
+`NotFound` and any other 400 maps to `InvalidArgument`; 401/403 and 5xx map to
+`HostFailure`, 409 to `Conflict` and 429 to `RateLimited` with
+`retry_after` converted to milliseconds.
+
 
 ## Outputs and local delivery
 

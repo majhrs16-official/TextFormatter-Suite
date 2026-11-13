@@ -8,6 +8,9 @@
 
 - **Telegram Bot API integration** — HTTP calls to `api.telegram.org`
 - **Chat messaging** — send messages to the configured chat id
+- **Native action surface** — `chat.title.set`, `chat.leave`, `message.delete`,
+  `message.edit`, `chat.member.ban` and `chat.member.unban`, each executed
+  through the Bot API and mapped to an explicit `SyncResult`
 - **Inbound polling** — `poll()` reads `getUpdates` and feeds `SyncListener`
 - **Module registration** — `SyncTelegramActivator` registers the sink with the running bus
 
@@ -39,7 +42,6 @@
 |----------|-------|
 | module runtime | Activates `SyncTelegramActivator` from the `sync-telegram` ZIP |
 | `SyncBus` | Receives the `telegram` sink when its config is usable |
-| `spigot-host` | Legacy wiring: still constructs the sink until F4b |
 
 ---
 
@@ -47,7 +49,8 @@
 
 | Component | Role |
 |-----------|------|
-| `TelegramSink` | `SyncSink` impl: POST to `sendMessage`, long-poll `getUpdates` |
+| `TelegramSink` | `SyncSink` impl: publishes the LCM plus six native actions, posts `sendMessage`, long-polls `getUpdates` |
+| `TelegramApi` | Bot API client over the neutral `Transport`; parses `ok`/`error_code` bodies and zeroes the token buffer on close |
 | `SyncTelegramActivator` | Reads `config.yml`, registers the sink with the bus and unregisters it on stop |
 | `SyncTelegramModule` | Legacy kernel descriptor publishing the `sync-sink` capability |
 
@@ -56,13 +59,13 @@
 ## 6. Data Flow
 
 ```text
-SyncSink.send(message)
-         ↓
-TelegramSink: build JSON payload (chat_id, text, parse_mode)
-         ↓
-HttpTransport.post(https://api.telegram.org/bot<token>/sendMessage)
-         ↓
-Telegram API responds
+SyncSink.send(message)                 SyncSink.invoke(SyncCall)
+         ↓                                      ↓
+TelegramSink: {chat_id, text}          TelegramSink: native params
+         ↓                                      ↓
+TelegramApi.post(https://api.telegram.org/bot<token>/sendMessage)
+         ↓                                      ↓
+Telegram API responds → ok / error_code mapped to SyncResult
 ```
 
 **Config** (`config/sync-telegram/config.yml`):

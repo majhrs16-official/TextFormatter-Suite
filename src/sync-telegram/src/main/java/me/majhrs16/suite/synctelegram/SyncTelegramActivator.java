@@ -60,6 +60,8 @@ public final class SyncTelegramActivator implements ModuleActivator {
             bus.unregister(sink.name());
         }
         sink.stop();
+        // The token buffer is destroyed only here: the package is going away.
+        sink.close();
         sink = null;
         bus = null;
     }

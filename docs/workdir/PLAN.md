@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK; concesiones, auditoría, cuotas y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-12 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, y `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API; concesiones, auditoría, cuotas y puente iFlow siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -461,10 +461,11 @@ de sinks ya están aplicados. La fachada legacy está retirada y solo queda la c
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
-> **Estado:** contratos, bus y primera superficie nativa de `sync-discord` implementados
-> (2026-11-12); el resto de backends, concesiones, auditoría, cuotas y puente iFlow siguen
-> pendientes. Depende de **ADR-036 §16** (aceptado el 2026-11-06); **TF-006 quedó cerrado el
-> 2026-11-07** y TF-005 el 2026-11-06.
+> **Estado:** contratos, bus y superficies nativas de `sync-discord` y
+> `sync-telegram` implementados (2026-11-12); el resto de backends, concesiones,
+> auditoría, cuotas y puente iFlow siguen pendientes. Depende de **ADR-036 §16**
+> (aceptado el 2026-11-06); **TF-006 quedó cerrado el 2026-11-07** y TF-005 el
+> 2026-11-06.
 
 #### Objetivo
 
@@ -571,9 +572,9 @@ Pendiente y fuera de esta unidad:
 
 - `config/iflow/grants.yml`, autenticación de `Principal.Program`, cuotas por
   programa y auditoría append-only.
-- Migración de los backends restantes (`sync-telegram`, `sync-http`,
-  `sync-websocket`, `sync-socket`, `sync-velocity-core`, `sync-bukkit` y
-  `sync-fabric`); `sync-discord` ya publica sus primeras nativas.
+- Migración de los backends restantes (`sync-http`, `sync-websocket`,
+  `sync-socket`, `sync-velocity-core`, `sync-bukkit` y `sync-fabric`);
+  `sync-discord` y `sync-telegram` ya publican sus nativas.
 - `textformatter.channel.set`, el puente VM/Wasm y la paridad de `SyncResult`.
 - La retirada del fuel queda para la migración v3 (véase «Trayectoria v2 → v3 y
   fuel»).
@@ -616,6 +617,42 @@ Pendiente y fuera de esta unidad:
   adaptador JDK no puede ejecutar.
 - `channel.permission.overwrite`, consultas de miembros/roles, canales de voz y
   eventos de auditoría; se añadirán con sus propios slices.
+- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
+  el puente VM/Wasm de PL-2.
+
+#### Estado de implementación — superficie nativa de `sync-telegram` (2026-11-12)
+
+Completado en esta unidad:
+
+- `sync-telegram` publica en `TelegramSink.surface()` el LCM más seis acciones
+  nativas: `chat.title.set` (`WRITE`), `chat.leave` (`DESTRUCTIVE`),
+  `message.delete` (`DESTRUCTIVE`), `message.edit` (`WRITE`),
+  `chat.member.ban` (`MODERATION`) y `chat.member.unban` (`MODERATION`).
+  `TelegramSink.invoke()` exige `Principal.Program` para las nativas, rechaza
+  `Principal.Official` con `Denied`, valida ids positivos y banderas booleanas y
+  exige un `chat` explícito; el `chatId` configurado solo se usa para
+  `message.send`.
+- `TelegramApi` centraliza la Bot API sobre el `Transport` neutral: `POST` con
+  cuerpo JSON, `GET` con query para `getUpdates`, parseo de `ok`/`error_code` y
+  conversión de `parameters.retry_after` (segundos) a milisegundos. El token
+  vive en `char[]`, se materializa solo en la URL de la llamada y se borra con
+  `Arrays.fill('\0')` en `stop()`; el `String` con el token que antes retenía
+  `baseUrl` desaparece.
+- Mapeo explícito de errores: 400 con descripción `not found` → `NotFound`,
+  otro 400 → `InvalidArgument`, 401/403 y 5xx → `HostFailure`, 404 → `NotFound`,
+  409 → `Conflict`, 429 → `RateLimited`. Un fallo de red → `HostFailure`.
+- `poll()` deja de devolver `0` cuando la Bot API responde `ok=false`: falla de
+  forma explícita, y un sink detenido rechaza `send`, `poll` e `invoke` sin
+  tocar la red.
+- Tests: `TelegramSinkTest` cubre superficie, `sendMessage` por POST JSON,
+  polling con offset, rechazo explícito del poll, `Denied` oficial,
+  `Unsupported`, las seis nativas, argumentos inválidos, todo el mapeo de
+  `error_code`, fallo de red y sink detenido.
+
+Pendiente y fuera de esta unidad:
+
+- `chat.member.restrict` (mute), `message.pin`/`unpin`, `chat.permission.set` y
+  `chat.description.set`; se añadirán con sus propios slices.
 - Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
   el puente VM/Wasm de PL-2.
 
