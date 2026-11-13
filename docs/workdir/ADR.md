@@ -1843,6 +1843,83 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
   que se distribuyen con la suite no declaran `sync.invoke`; un test lo verifica. Solo los programas
   de terceros lo declaran.
 
+##### 16.7.1 Codec y layout de cable
+
+El codec es único y vive en `core-api` (`me.majhrs16.suite.api.iflow.TlvCodec`), no en cada motor.
+Un valor se codifica como `[type:u8][length:u32 LE][payload]`; los tipos son `NULL=0`, `STRING=1`,
+`I64=2`, `BOOL=3`, `BYTES=4`, `LIST=5` y `MAP=6`. Una lista es la concatenación de valores TLV y un
+mapa es la concatenación de pares `[clave string][valor]`, en orden de inserción y sin claves
+duplicadas. Las cadenas son UTF-8 estricto: no se truncan caracteres ni se aceptan surrogates
+sueltos. `NULL` es ausencia explícita y no equivale a cadena vacía.
+
+El contrato de cable vive en `core-api` (`me.majhrs16.suite.api.sync.SyncBridgeCodec`). Ambos
+motores lo usan tal cual; ningún motor redefine el formato.
+
+| Operación | Petición | Respuesta |
+|---|---|---|
+| `sync_surface` | TLV string: namespace del backend; vacío = todos | TLV list de superficies |
+| `sync_invoke` | TLV map: `backend`, `action`, `args` | TLV map: `status` + (`result` o `reason`) |
+
+Una superficie es un mapa `backend`, `contractVersion`, `actions`. Una acción es un mapa `id`,
+`kind`, `params`, `result`, `idempotent`, `timeoutMillis`. Un parámetro es un mapa `name`, `type`,
+`required`, `item`. Las superficies se ordenan por `backend` y las acciones por `id` para que la
+codificación sea determinista. Los argumentos y el resultado usan el mapeo neutral de
+`SyncBridgeCodec`: `null`, string, i64, bool, bytes, lista y mapa.
+
+##### 16.7.2 Estados
+
+Los nombres de `status` son canónicos y no dependen del motor. Cada motor los proyecta a su registro
+de estado; el payload no cambia.
+
+| `status` | VM (`ServiceResult.Status`) | Wasm (`PolicyAbiV3`) |
+|---|---|---|
+| `OK` | `OK` (0) | `STATUS_OK` (0) |
+| `NOT_FOUND` | `NOT_FOUND` (1) | `STATUS_NOT_FOUND` (1) |
+| `INVALID_ARGUMENT` | `INVALID_ARGUMENT` (3) | `STATUS_INVALID_ARGUMENT` (3) |
+| `DENIED` | `DENIED` (2) | `STATUS_DENIED` (4) |
+| `CONFLICT` | `CONFLICT` (6) | `STATUS_CONFLICT` (5) |
+| `HOST_FAILURE` | `HOST_FAILURE` (7) | `STATUS_HOST_FAILURE` (6) |
+| `UNSUPPORTED` | `UNSUPPORTED` (5) | `STATUS_UNSUPPORTED` (7) |
+| `RATE_LIMITED` | `RATE_LIMITED` (10) | `STATUS_RATE_LIMITED` (8) |
+| `TIMEOUT` | `TIMEOUT` (9) | `STATUS_TIMEOUT` (9) |
+
+La numeración de cada motor es la suya y no se reordena; la paridad se garantiza en el nombre del
+payload y en el mapeo, no en el valor numérico. `RATE_LIMITED` viaja con el retry en milisegundos:
+la VM lo deja además en `R4`.
+
+##### 16.7.3 Convención de buffer
+
+- **VM.** `R2` es la base del buffer y `R3` su capacidad. La respuesta se escribe **sobre** la
+  petición: al salir, `R3` son los bytes escritos. Solo se lee el primer TLV (`decodePrefix`), de
+  modo que el relleno de la capacidad no se confunde con bytes sobrantes. Si la respuesta no cabe,
+  `BUFFER_TOO_SMALL` deja el tamaño requerido en `R3`.
+- **Wasm.** `sync_surface(inPtr, inLen, outPtr, outCap) -> status` y
+  `sync_invoke(inPtr, inLen, outPtr, outCap) -> status`. La entrada tiene longitud exacta; la salida
+  se escribe completa o devuelve `BUFFER_TOO_SMALL`, y si `outCap >= 4` se escribe la longitud
+  requerida en little-endian para reintentar.
+- El servicio decodifica exactamente el primer TLV del buffer de petición; el resto se trata como
+  relleno de capacidad y no como datos. Un payload truncado o con un tipo incorrecto devuelve
+  `INVALID_ARGUMENT`; no se adivina.
+
+##### 16.7.4 Autoridad, despacho y mutación
+
+- El principal es `Principal.Program(SHA-256)`. La VM usa `ProgramImage.hash()`; Wasm usa el
+  SHA-256 verificado de `policy.wasm` en `reload()`. Un programa sin hash verificado recibe
+  `UNSUPPORTED`: no se inventa una identidad.
+- El namespace decide el despachador: si el backend es un sink registrado se usa
+  `SyncBus.invoke`; en cualquier otro caso se usa `SyncBus.invokeHost` con el `HostActionContext`
+  de la unidad. `textformatter` es el namespace del host y no un sink.
+- Una acción que devuelve `Ok(Message)` muta el mensaje de trabajo: la VM journaliza el diff
+  (`SET_CHANNEL`, `SET_TEXT`, idiomas, color) y Wasm actualiza la sesión. Por el cable el programa
+  recibe `Ok(null)`: el efecto es el mensaje, no un valor.
+- Una segunda mutación de canal en la misma unidad es `CONFLICT` y no se aplica. En la VM la
+  detección mira el journal (`SET_CHANNEL`/`REDIRECT_CHANNEL`); en Wasm compara el mensaje de trabajo
+  con el original.
+- El bus se resuelve con un `Supplier` por invocación: `iflow-vm` e `iflow-wasm` pueden activarse
+  antes que `sync-bus`. Sin bus, `sync_surface`/`sync_invoke` devuelven `UNSUPPORTED`.
+- El puente no crea un presupuesto de fuel nuevo: usa el base y el coste por byte del registro de
+  servicios. `sync.invoke` no se concede por declarar una capacidad de acción.
+
 #### 16.8 Enmiendas y límites
 
 - **ADR-003.** Se añaden invariantes: concesión por hash, marca destructiva, auditoría, fail-closed y

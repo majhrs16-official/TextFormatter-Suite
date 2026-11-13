@@ -270,6 +270,14 @@ implementadas**; su ejecución pertenece a W3.5 y a las fases de render/dispatch
 > validación de existencia y permisos de D02 y dispara la segunda fase de routing de §7; no hay
 > alias ni doble lector (ADR-034). Las referencias históricas a `SET_CHANNEL` en este documento
 > describen el baseline anterior y no el contrato vigente.
+>
+> **Actualización 2026-11-13 (ADR-036 §16.7).** El puente genérico se concreta en dos operaciones,
+> no en una por acción: la VM expone los servicios `HOST` `SYNC_SURFACE` (`0x0800`) y `SYNC_INVOKE`
+> (`0x0801`), y la ABI v3 expone `sync_surface`/`sync_invoke` con la misma codificación. Ambos usan
+> el `TlvCodec` y el contrato de cable `SyncBridgeCodec` de `core-api`, y proyectan los mismos
+> estados canónicos. La autoridad se resuelve por `Principal.Program(SHA-256)`; sin identidad
+> verificada la operación devuelve `UNSUPPORTED`. El detalle del layout, los estados y la convención
+> de buffer vive en el ADR y no se duplica aquí.
 
 ## 6. Matemática de la cola: correcciones y límites
 

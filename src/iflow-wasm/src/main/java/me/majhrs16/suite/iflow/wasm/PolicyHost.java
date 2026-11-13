@@ -5,6 +5,11 @@ import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.WasmFunctionHandle;
 
+import me.majhrs16.suite.api.iflow.TlvCodec;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -42,6 +47,8 @@ public final class PolicyHost {
         built.add(function(PolicyAbiV3.DECISION, this::decision));
         built.add(function(PolicyAbiV3.NOW_NANOS, this::nowNanos));
         built.add(function(PolicyAbiV3.LOG, this::log));
+        built.add(function(PolicyAbiV3.SYNC_SURFACE, this::syncSurface));
+        built.add(function(PolicyAbiV3.SYNC_INVOKE, this::syncInvoke));
         this.functions = List.copyOf(built);
         this.imports = ImportValues.builder()
             .addFunction(this.functions.toArray(new HostFunction[0]))
@@ -173,6 +180,104 @@ public final class PolicyHost {
         } catch (RuntimeException e) {
             return status(PolicyAbiV3.STATUS_HOST_FAILURE);
         }
+    }
+
+    private long[] syncSurface(Instance instance, long... args) {
+        if (args.length < 4) {
+            return status(PolicyAbiV3.STATUS_INVALID_ARGUMENT);
+        }
+        try {
+            String backend = SyncBridgeCodec.decodeSurfaceRequest(
+                readBytes(instance, i32(args[0]), i32(args[1])));
+            List<SyncSurface> surfaces = session.syncSurface(backend);
+            byte[] payload = SyncBridgeCodec.encodeSurfaceResponseBytes(surfaces);
+            return status(writeRaw(instance, payload, i32(args[2]), i32(args[3])));
+        } catch (PolicyException e) {
+            return status(e.status());
+        } catch (IllegalArgumentException e) {
+            return status(PolicyAbiV3.STATUS_INVALID_ARGUMENT);
+        } catch (RuntimeException e) {
+            return status(PolicyAbiV3.STATUS_HOST_FAILURE);
+        }
+    }
+
+    private long[] syncInvoke(Instance instance, long... args) {
+        if (args.length < 4) {
+            return status(PolicyAbiV3.STATUS_INVALID_ARGUMENT);
+        }
+        try {
+            SyncBridgeCodec.InvokeRequest request = SyncBridgeCodec.decodeInvokeRequest(
+                readBytes(instance, i32(args[0]), i32(args[1])));
+            SyncResult result = session.syncInvoke(request);
+            byte[] payload = SyncBridgeCodec.encodeResultBytes(result);
+            int written = writeRaw(instance, payload, i32(args[2]), i32(args[3]));
+            if (written != PolicyAbiV3.STATUS_OK) {
+                return status(written);
+            }
+            return status(syncStatus(result));
+        } catch (PolicyException e) {
+            return status(e.status());
+        } catch (IllegalArgumentException e) {
+            return status(PolicyAbiV3.STATUS_INVALID_ARGUMENT);
+        } catch (RuntimeException e) {
+            return status(PolicyAbiV3.STATUS_HOST_FAILURE);
+        }
+    }
+
+    /** Mapea el resultado neutral al estado del ABI v3. */
+    static int syncStatus(SyncResult result) {
+        if (result instanceof SyncResult.Ok) {
+            return PolicyAbiV3.STATUS_OK;
+        }
+        if (result instanceof SyncResult.Denied) {
+            return PolicyAbiV3.STATUS_DENIED;
+        }
+        if (result instanceof SyncResult.Unsupported) {
+            return PolicyAbiV3.STATUS_UNSUPPORTED;
+        }
+        if (result instanceof SyncResult.InvalidArgument) {
+            return PolicyAbiV3.STATUS_INVALID_ARGUMENT;
+        }
+        if (result instanceof SyncResult.NotFound) {
+            return PolicyAbiV3.STATUS_NOT_FOUND;
+        }
+        if (result instanceof SyncResult.Conflict) {
+            return PolicyAbiV3.STATUS_CONFLICT;
+        }
+        if (result instanceof SyncResult.RateLimited) {
+            return PolicyAbiV3.STATUS_RATE_LIMITED;
+        }
+        if (result instanceof SyncResult.Timeout) {
+            return PolicyAbiV3.STATUS_TIMEOUT;
+        }
+        if (result instanceof SyncResult.HostFailure) {
+            return PolicyAbiV3.STATUS_HOST_FAILURE;
+        }
+        throw new IllegalArgumentException("resultado sin estado de puente: " + result);
+    }
+
+    private static int writeRaw(Instance instance, byte[] encoded, int ptr, int cap) {
+        if (ptr < 0 || cap < 0) {
+            throw new PolicyException(
+                PolicyAbiV3.STATUS_INVALID_ARGUMENT, "buffer de salida inválido");
+        }
+        if (encoded.length > cap) {
+            if (cap >= Integer.BYTES) {
+                try {
+                    instance.memory().write(ptr, littleEndian(encoded.length));
+                } catch (RuntimeException ignored) {
+                    // El guest puede reintentar; no hay espacio o el puntero no es válido.
+                }
+            }
+            return PolicyAbiV3.STATUS_BUFFER_TOO_SMALL;
+        }
+        try {
+            instance.memory().write(ptr, encoded);
+        } catch (RuntimeException e) {
+            throw new PolicyException(
+                PolicyAbiV3.STATUS_INVALID_ARGUMENT, "no se pudo escribir el buffer", e);
+        }
+        return PolicyAbiV3.STATUS_OK;
     }
 
     private static int writeTlv(Instance instance, TlvCodec.TlvValue value, int ptr, int cap) {

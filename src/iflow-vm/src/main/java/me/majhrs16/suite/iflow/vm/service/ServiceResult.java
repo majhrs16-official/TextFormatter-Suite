@@ -36,7 +36,11 @@ public final class ServiceResult {
         UNSUPPORTED(5),
         CONFLICT(6),
         HOST_FAILURE(7),
-        PARTIAL(8);
+        PARTIAL(8),
+        /** The action exceeded its declared timeout (sync bridge). */
+        TIMEOUT(9),
+        /** A quota or rate limit was exhausted (sync bridge). */
+        RATE_LIMITED(10);
 
         private final int code;
 
@@ -128,6 +132,19 @@ public final class ServiceResult {
 
     public static ServiceResult partial(int bytesTransferred, int result) {
         return new ServiceResult(Status.PARTIAL, bytesTransferred, result);
+    }
+
+    /**
+     * Builds a result with an explicit status and transferred bytes. The sync
+     * bridge uses it to report a mapped {@code SyncResult} status while still
+     * handing the response payload to the program.
+     */
+    public static ServiceResult of(Status status, int bytesTransferred, int result,
+                                   String detail) {
+        if (status == null) {
+            throw new NullPointerException("status");
+        }
+        return new ServiceResult(status, bytesTransferred, result, detail);
     }
 
     public Status status() { return status; }

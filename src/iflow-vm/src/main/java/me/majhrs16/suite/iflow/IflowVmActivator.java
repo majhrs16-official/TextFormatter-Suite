@@ -10,6 +10,7 @@ import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
+import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.engine.VmPolicyEngine;
 
@@ -47,6 +48,8 @@ public final class IflowVmActivator implements ModuleActivator {
                 .orElse(PermissionChecker.ALLOW_ALL);
 
         VmPolicyEngine engine = new VmPolicyEngine(channels, permissions, new RateLimiter());
+        // The sync bus may activate after this engine; resolve it on every call.
+        engine.syncBus(() -> context.services().find(SyncBus.class).orElse(null));
         try {
             engine.setProgram(VmConfigLoader.loadProgram(context.configDir(), context.logger()));
             context.services().register(Router.class, engine);

@@ -182,9 +182,10 @@ Convención de registros (estilo syscall):
 | `1` | NOT_FOUND | | `6` | CONFLICT |
 | `2` | DENIED | | `7` | HOST_FAILURE |
 | `3` | INVALID_ARGUMENT | | `8` | PARTIAL |
-| `4` | BUFFER_TOO_SMALL (`R3` = bytes requeridos) | | | |
+| `4` | BUFFER_TOO_SMALL (`R3` = bytes requeridos) | | `9` | TIMEOUT (puente sync) |
+| | | | `10` | RATE_LIMITED (`R4` = retry ms) |
 
-Servicios estándar (15 IDs; **todos registrados** — cualquier otro responde `status=5` UNSUPPORTED):
+Servicios estándar (17 IDs; **todos registrados** — cualquier otro responde `status=5` UNSUPPORTED):
 
 | ID | Servicio | Capability |
 |----|----------|------------|
@@ -203,6 +204,8 @@ Servicios estándar (15 IDs; **todos registrados** — cualquier otro responde `
 | 0x0601 | CHANNEL_POLICY | `channel.resolve` |
 | 0x0700 | MESSAGE_CLONE | `message.clone` |
 | 0x0701 | MESSAGE_ID | `message.id` |
+| 0x0800 | SYNC_SURFACE | `sync.surface` |
+| 0x0801 | SYNC_INVOKE | `sync.invoke` |
 
 `TRANSFORM_APPLY` (0x0400): el byte bajo de `options` elige el tipo — `0` resuelve
 placeholders (hook `placeholderResolver`) y `1` detecta el idioma (hook `translationDetector`);
@@ -223,6 +226,27 @@ Servicios añadidos en el lote 6 (D26):
 - `MESSAGE_CLONE` (0x0700): `R2=dst`, `R3=n`; copia `n` bytes del payload serializado de entrada
   (`0x7000`) al destino vía DMA.
 - `MESSAGE_ID` (0x0701): escribe el id del mensaje en el buffer.
+
+Puente sync (ADR-036 §16.7). `SYNC_SURFACE` (0x0800) y `SYNC_INVOKE` (0x0801) son servicios
+genéricos: no hay una instrucción ni un servicio por acción. Ambos usan el `TlvCodec` compartido de
+`core-api` y el contrato de cable `SyncBridgeCodec`, con la misma codificación que los imports
+`sync_surface`/`sync_invoke` de `iflow-wasm`.
+
+- Petición y respuesta van por `R2`/`R3` y se transfieren con DMA. La respuesta **sobrescribe** la
+  petición; al salir, `R3` son los bytes escritos. Si no cabe, `BUFFER_TOO_SMALL` deja el tamaño
+  requerido en `R3`.
+- `SYNC_SURFACE`: petición = TLV string con el backend (vacío = todos); respuesta = TLV list de
+  superficies (`backend`, `contractVersion`, `actions`).
+- `SYNC_INVOKE`: petición = TLV map `backend`/`action`/`args`; respuesta = TLV map con `status` y
+  `result` o `reason`.
+- La identidad es `Principal.Program(SHA-256)`: se toma de `ProgramImage.hash()`. Sin hash no se
+  inventa identidad y la llamada queda `UNSUPPORTED`.
+- El namespace decide el despachador: un sink registrado usa `SyncBus.invoke`; el resto usa
+  `SyncBus.invokeHost`. `textformatter.channel.set` es una acción de host.
+- Una acción que devuelve `Ok(Message)` muta el mensaje de trabajo vía journal y el programa recibe
+  `OK` con `result = null`. Una segunda mutación de canal en la misma unidad es `CONFLICT`.
+- Sin `SyncBus` instalado, ambos servicios responden `UNSUPPORTED`. El bus se resuelve por
+  invocación, de modo que el orden de activación de módulos no importa.
 
 `options` para servicios de propiedad: `(scope << 8) | propId`, con `propId` en los **8 bits bajos** (namespaceado por `scope`).
 `scope`: `0x01` MESSAGE · `0x02` EMITTER · `0x03` RECIPIENT · `0x04` CHANNEL · `0x05` SERVER.
@@ -312,8 +336,9 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmDmaControllerTest` | 24 tests DMA (cross-page, perms, overlap) |
 | `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
-| `HostServiceRegistryTest` | ABI v2 de los 15 servicios HOST, capabilities, journal, transferencias vía DMA, copy-on-write del buffer |
-| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30); pantalla mapeada en memoria (D31) |
+| `HostServiceRegistryTest` | ABI v2 de los 17 servicios HOST, capabilities, journal, transferencias vía DMA, copy-on-write del buffer; puente sync (superficies, filtro por backend, mapeo de estados, petición malformada) |
+| `PassThroughProgramTest` | La política oficial no declara `sync.invoke` ni `sync.surface` (ADR-036 §16.7) |
+| `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30); pantalla mapeada en memoria (D31); puente sync (mutación, conflicto y `UNSUPPORTED` sin bus) |
 | `VmDisplayTest` | Periférico de vídeo: decodificación de la ventana y del banco de registros, geometría, carácter/atributo, bloques, limpieza y render ANSI (D31) |
 | `VmNvramTest` | NVRAM del BIOS: decodificación de ventana, R/W byte/palabra/bloque, ventana por defecto (D32) |
 | `VmPicTest` | Controlador de interrupciones: decodificación, latch/máscara, prioridad, servicio/ACK, registros MMIO (D33) |
@@ -323,7 +348,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `BiosBootTest` | End-to-end del BIOS activo: resetea en `fw_reset`, configura la pantalla, encadena a `main` y toma el camino caliente en el segundo mensaje (D32) |
 | `IrqDeliveryTest` | End-to-end de IRQ: el BIOS publica la tabla, `main` instala su manejador, habilita y dispara la línea; el manejador corre y la interrupción es transparente (registros restaurados) (D33) |
 
-**Total: 397 tests passing**
+**Total: 411 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 

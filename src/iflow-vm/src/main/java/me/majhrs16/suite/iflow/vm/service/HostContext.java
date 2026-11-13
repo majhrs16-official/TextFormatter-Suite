@@ -1,5 +1,10 @@
 package me.majhrs16.suite.iflow.vm.service;
 
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
+
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -84,5 +89,37 @@ public interface HostContext {
 
     /** Writes a persistent host state entry. */
     default void writeState(int key, Object value) {
+    }
+
+    /**
+     * Publishes the sync action surfaces visible to this program.
+     *
+     * <p>{@link Optional#empty()} means the sync bridge is not installed, so
+     * {@code SYNC_SURFACE} reports {@code UNSUPPORTED}. A present empty list
+     * means the bridge exists and no backend is registered: an explicit empty
+     * answer, not a missing feature.</p>
+     *
+     * @return the published surfaces, or empty when the bridge is absent
+     */
+    default Optional<List<SyncSurface>> syncSurfaces() {
+        return Optional.empty();
+    }
+
+    /**
+     * Executes one sync action on behalf of this program.
+     *
+     * <p>The host resolves the program identity, applies the action's authority
+     * and, when the action returns a mutated {@link me.majhrs16.suite.api.message.Message},
+     * journals the change against the current routing unit. The default is
+     * explicit: without a bridge the action is not available.</p>
+     *
+     * @param backend backend namespace, e.g. {@code textformatter}
+     * @param action  local action id, e.g. {@code channel.set}
+     * @param args    neutral argument map
+     * @return the explicit outcome, never {@code null}
+     */
+    default SyncResult invokeHostAction(String backend, String action,
+                                        Map<String, Object> args) {
+        return new SyncResult.Unsupported("sync bridge is not installed");
     }
 }

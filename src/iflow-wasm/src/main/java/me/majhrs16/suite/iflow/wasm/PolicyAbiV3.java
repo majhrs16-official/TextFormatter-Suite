@@ -3,6 +3,8 @@ package me.majhrs16.suite.iflow.wasm;
 import com.dylibso.chicory.wasm.types.FunctionType;
 import com.dylibso.chicory.wasm.types.ValType;
 
+import me.majhrs16.suite.api.iflow.TlvCodec;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,6 +48,10 @@ public final class PolicyAbiV3 {
     public static final String NOW_NANOS = "now_nanos";
     /** {@code log(level, messagePtr, messageLen) -> status}. */
     public static final String LOG = "log";
+    /** {@code sync_surface(inPtr, inLen, outPtr, outCap) -> status}. */
+    public static final String SYNC_SURFACE = "sync_surface";
+    /** {@code sync_invoke(inPtr, inLen, outPtr, outCap) -> status}. */
+    public static final String SYNC_INVOKE = "sync_invoke";
 
     // ===== Status =====
 
@@ -56,6 +62,12 @@ public final class PolicyAbiV3 {
     public static final int STATUS_DENIED = 4;
     public static final int STATUS_CONFLICT = 5;
     public static final int STATUS_HOST_FAILURE = 6;
+    /** El puente sync no está instalado o la acción no se publica. */
+    public static final int STATUS_UNSUPPORTED = 7;
+    /** La cuota o el rate limit de la acción se agotó. */
+    public static final int STATUS_RATE_LIMITED = 8;
+    /** La acción superó su timeout declarado. */
+    public static final int STATUS_TIMEOUT = 9;
 
     // ===== Acciones de decisión =====
 
@@ -168,6 +180,12 @@ public final class PolicyAbiV3 {
             new ValType[]{ValType.I64}));
         map.put(key(LOG), FunctionType.of(
             new ValType[]{ValType.I32, ValType.I32, ValType.I32},
+            new ValType[]{ValType.I32}));
+        map.put(key(SYNC_SURFACE), FunctionType.of(
+            new ValType[]{ValType.I32, ValType.I32, ValType.I32, ValType.I32},
+            new ValType[]{ValType.I32}));
+        map.put(key(SYNC_INVOKE), FunctionType.of(
+            new ValType[]{ValType.I32, ValType.I32, ValType.I32, ValType.I32},
             new ValType[]{ValType.I32}));
         return Collections.unmodifiableMap(map);
     }

@@ -8,12 +8,12 @@ bits); no hereda el ISA `.flow`, el ABI `HOST` v2 ni el modelo BIOS/kernel.
 
 **W1, W2 y W3 cerrados en su alcance de motor.** `WasmContract.policyV3()` declara el módulo de
 imports `iflow`, sus firmas y el export `decide`; `WasmModuleLoader` valida nombres, firmas,
-memoria, `start` y tamaño, y permite instanciar con `ImportValues`. `TlvCodec` implementa los
-buffers; `PolicySession` mantiene el journal read-your-writes y la decisión única; `PolicyHost`
-enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un `.wasm` y devuelve un
-`PolicyOutcome`. `WasmPolicyRouter` conecta ese resultado con `Router`, exige SHA-256 del
-artefacto y recarga automáticamente al cambiar el archivo. La matriz de paridad `.flow` v3 sigue
-pendiente (W3.5).
+memoria, `start` y tamaño, y permite instanciar con `ImportValues`. El `TlvCodec` compartido de
+`core-api` implementa los buffers; `PolicySession` mantiene el journal read-your-writes y la
+decisión única; `PolicyHost` enlaza las host functions `iflow.*`; `WasmPolicyEngine` evalúa un
+`.wasm` y devuelve un `PolicyOutcome`. `WasmPolicyRouter` conecta ese resultado con `Router`, exige
+SHA-256 del artefacto y recarga automáticamente al cambiar el archivo. La matriz de paridad `.flow`
+v3 sigue pendiente (W3.5).
 
 | Pieza | Estado |
 |---|---|
@@ -22,8 +22,9 @@ pendiente (W3.5).
 | `WasmModuleLoader` (parsear / validar / instanciar / invocar) | ✅ W2 |
 | `WasmContract` + `ValidationResult` | ✅ W2; firmas de imports/exports en W1 |
 | `PolicyAbiV3` (nombres, firmas, estados, acciones, propiedades) | ✅ W1 |
-| `TlvCodec` (UTF-8 estricto, nulo vs vacío) | ✅ W1 |
+| `TlvCodec` (UTF-8 estricto, nulo vs vacío; compartido en `core-api`) | ✅ W1 |
 | Host functions `iflow.*` sobre `PolicySession` | ✅ W2 |
+| Puente `sync_surface`/`sync_invoke` (ADR-036 §16.7) | ✅ 2026-11-13 |
 | `WasmPolicyEngine` (evaluación aislada) | ✅ W2 |
 | `WasmPolicyRouter` conectado a `Router` | ✅ W3 |
 | SHA-256 obligatorio del `.wasm` y hot-reload automático | ✅ W3 |
@@ -42,7 +43,6 @@ src/iflow-wasm/
     │   ├── WasmContract.java
     │   ├── ValidationResult.java
     │   ├── PolicyAbiV3.java
-    │   ├── TlvCodec.java
     │   ├── PolicyRequest.java
     │   ├── PolicySession.java
     │   ├── PolicyHost.java
@@ -56,7 +56,6 @@ src/iflow-wasm/
     └── test/java/me/majhrs16/suite/iflow/wasm/
         ├── WasmModuleLoaderTest.java
         ├── WasmTestModule.java
-        ├── TlvCodecTest.java
         ├── PolicySessionTest.java
         ├── WasmPolicyEngineTest.java
         ├── WasmPolicyRouterTest.java
@@ -93,6 +92,8 @@ Todas las firmas usan `i32` salvo `now_nanos`, que devuelve `i64`.
 | `decision` | `(action, targetPtr, targetLen, reasonPtr, reasonLen) -> status` | Registra la decisión única de la ejecución. |
 | `now_nanos` | `() -> i64` | Reloj monótono para políticas temporales. |
 | `log` | `(level, msgPtr, msgLen) -> status` | Auditoría acotada; no entrega ni modifica el mensaje. |
+| `sync_surface` | `(inPtr, inLen, outPtr, outCap) -> status` | Publica las superficies de acciones del bus; petición TLV string (backend, vacío = todos), respuesta TLV list. |
+| `sync_invoke` | `(inPtr, inLen, outPtr, outCap) -> status` | Invoca una acción publicada; petición TLV map `backend`/`action`/`args`, respuesta TLV map con `status` y `result` o `reason`. |
 
 ### Estados
 
@@ -103,8 +104,11 @@ Todas las firmas usan `i32` salvo `now_nanos`, que devuelve `i64`.
 | `2` | `BUFFER_TOO_SMALL` | El buffer de salida no cabe; si hay espacio para 4 bytes, se escribe la longitud requerida en little-endian. |
 | `3` | `INVALID_ARGUMENT` | Scope, propiedad, tipo TLV o UTF-8 inválido. |
 | `4` | `DENIED` | Propiedad de solo lectura o permiso insuficiente. |
-| `5` | `CONFLICT` | Segunda llamada a `decision` en la misma ejecución. |
+| `5` | `CONFLICT` | Segunda llamada a `decision` en la misma ejecución, o segunda mutación de canal en la misma unidad. |
 | `6` | `HOST_FAILURE` | Error interno del host; el mensaje no se entrega. |
+| `7` | `UNSUPPORTED` | El puente sync no está instalado o la acción no se publica. |
+| `8` | `RATE_LIMITED` | La cuota o el rate limit de la acción se agotó. |
+| `9` | `TIMEOUT` | La acción superó su timeout declarado. |
 
 ### Acciones de decisión
 
@@ -145,8 +149,12 @@ Un valor se codifica como:
 | `I64` | `2` | Exactamente 8 bytes little-endian. |
 | `BOOL` | `3` | Un byte `0` o `1`. |
 | `BYTES` | `4` | Bytes opacos. |
+| `LIST` | `5` | Concatenación de valores TLV. |
+| `MAP` | `6` | Concatenación de pares `[clave string][valor]`, en orden de inserción y sin claves duplicadas. |
 
-`TlvCodec` copia defensivamente el payload y no trunca caracteres multibyte.
+`TlvCodec` copia defensivamente el payload y no trunca caracteres multibyte. El codec es único y
+vive en `core-api` (`me.majhrs16.suite.api.iflow.TlvCodec`), compartido con `iflow-vm`; el contrato
+de cable del puente sync está en `me.majhrs16.suite.api.sync.SyncBridgeCodec`.
 
 ### Límites
 
@@ -179,6 +187,27 @@ mensaje transformado.
   contra emisor/recipient y el resto se representa como `Actor.unknown`.
 - **Fallos:** cualquier error de carga, instanciación o ejecución se convierte en
   `PolicyOutcome.error(...)`; el host no recibe excepciones de un artefacto no confiable.
+
+## Puente sync (ADR-036 §16.7)
+
+`sync_surface` y `sync_invoke` son imports genéricos: no hay un import por acción. El payload y el
+contrato de cable son los mismos que en `iflow-vm` (`TlvCodec` y `SyncBridgeCodec` de `core-api`),
+y los estados canónicos (`OK`, `DENIED`, `UNSUPPORTED`, `INVALID_ARGUMENT`, `NOT_FOUND`,
+`CONFLICT`, `RATE_LIMITED`, `TIMEOUT`, `HOST_FAILURE`) se proyectan al registro del ABI v3.
+
+- **Identidad:** `Principal.Program(SHA-256)` con el hash verificado de `policy.wasm` que guarda
+  `WasmPolicyRouter.reload()`. Sin hash verificado, `sync_invoke` devuelve `UNSUPPORTED`.
+- **Bus:** `WasmPolicyEngine.syncBus(Supplier<SyncBus>)` se resuelve por invocación, así que el
+  orden de activación entre `iflow-wasm` y `sync-bus` no importa. Sin bus, ambos imports devuelven
+  `UNSUPPORTED`.
+- **Despacho:** si el backend es un sink registrado se usa `SyncBus.invoke`; en cualquier otro caso
+  `SyncBus.invokeHost` con el `HostActionContext` de la unidad. `textformatter` es el namespace del
+  host y no un sink.
+- **Mutación:** una acción que devuelve `Ok(Message)` actualiza el mensaje de trabajo de la sesión y
+  el guest recibe `OK` con `result = null`. Una segunda mutación de canal en la misma unidad es
+  `CONFLICT` y no se aplica.
+- **Buffers:** la salida se escribe completa o devuelve `BUFFER_TOO_SMALL`; con `outCap >= 4` se
+  escribe la longitud requerida en little-endian para reintentar.
 
 ## Integración con `Router` (W3)
 
@@ -270,13 +299,17 @@ Cobertura actual:
 
 - `WasmModuleLoaderTest`: parseo, límites de tamaño/memoria, `start`, imports/exports obligatorios,
   firmas de imports y exports, instanciación con `ImportValues` e invocación de `decide`.
-- `TlvCodecTest`: round-trip de string/i64/bool/bytes/nulo, distinción nulo vs string vacío, UTF-8
-  estricto, longitudes inválidas, bytes sobrantes y copia defensiva.
+- `TlvCodecTest` (en `core-api`): round-trip de string/i64/bool/bytes/nulo, listas, mapas, prefijo,
+  secuencia, distinción nulo vs string vacío, UTF-8 estricto, longitudes inválidas y copia
+  defensiva.
+- `SyncBridgeCodecTest` (en `core-api`): vectores de conformidad del cable del puente y mapeo
+  neutral de valores y estados.
 - `PolicySessionTest`: lectura/escritura de propiedades, journal read-your-writes, canales y
-  permisos, transformaciones, decisión única y deny-by-default, logs acotados.
-- `WasmPolicyEngineTest`: módulos binarios que llaman a `decision`, `write_property` y
-  `transform_apply`, incluyendo memoria lineal y data segments; y rechazo del import retirado
-  `set_channel`.
+  permisos, transformaciones, decisión única y deny-by-default, logs acotados y conflicto de la
+  segunda mutación de canal.
+- `WasmPolicyEngineTest`: módulos binarios que llaman a `decision`, `write_property`,
+  `transform_apply` y `sync_invoke`, incluyendo memoria lineal y data segments; rechazo del import
+  retirado `set_channel`; mutación por el bus, `UNSUPPORTED` sin bus y mapeo de todos los estados.
 - `IflowWasmActivatorTest`: registro del loader, contrato, router y backend; fallo cerrado sin
   artefacto.
 - `WasmPolicyRouterTest`: hash correcto/ausente/incorrecto, mapeo de acciones, recarga explícita y

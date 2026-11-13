@@ -1,5 +1,7 @@
 package me.majhrs16.suite.iflow.wasm;
 
+import me.majhrs16.suite.api.iflow.TlvCodec;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;

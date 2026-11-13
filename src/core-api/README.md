@@ -87,6 +87,9 @@
 | `SyncSurface` / `SyncActionSpec` / `SyncParamSpec` | Declarative actions published by each sync backend; every surface includes the least common multiple (`backend.info`, `message.send`, `message.deliver`) |
 | `SyncCall` / `SyncResult` | One action invocation and its explicit outcome (`Ok`, `Denied`, `Unsupported`, `InvalidArgument`, `NotFound`, `Conflict`, `RateLimited`, `Timeout`, `HostFailure`) |
 | `Principal` / `ActionKind` / `SyncValueType` | Caller origin, authorization nature and neutral argument vocabulary; no SDK type crosses the boundary |
+| `HostActionHandler` / `HostActionContext` | Agnostic host actions resolved by canonical name (no published surface); the context carries the working message, actors and registries |
+| `TlvCodec` | Shared TLV codec (`NULL`/`STRING`/`I64`/`BOOL`/`BYTES`/`LIST`/`MAP`) used by `iflow-vm` and `iflow-wasm` |
+| `SyncBridgeCodec` | Wire contract of the iFlow sync bridge: `sync_surface`/`sync_invoke` payloads and canonical status names |
 | `DiscordConnection` / `DiscordOperation` / `DiscordResult` | Neutral Discord port: native operations and their explicit adapter outcomes, without JDA or HTTP types |
 | `PlaceholderResolver` | SPI: resolve `{placeholder}` in messages |
 | `PluginLogger` | SPI: abstract logging for platform adapters |
@@ -190,9 +193,11 @@ None — this is a contract library. Entry points are in modules that **implemen
 11. api/spi/TestProbe.java → Neutral live-runtime test probe
 12. api/spi/TestRunner.java → Neutral test execution contract
 13. api/iflow/Router.java          → Shared iFlow routing contract
-14. api/sync/SyncSurface.java      → Actions published by a sync backend
-15. api/sync/SyncCall.java         → Action invocation envelope
-16. api/sync/SyncResult.java       → Explicit action outcome
+14. api/iflow/TlvCodec.java       → TLV codec shared by the iFlow engines
+15. api/sync/SyncSurface.java      → Actions published by a sync backend
+16. api/sync/SyncCall.java         → Action invocation envelope
+17. api/sync/SyncResult.java       → Explicit action outcome
+18. api/sync/SyncBridgeCodec.java  → Wire contract of the iFlow sync bridge
 ```
 
 ---

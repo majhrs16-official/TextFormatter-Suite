@@ -4,10 +4,17 @@ import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
 import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.isa.RegisterFile;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
+import me.majhrs16.suite.api.iflow.TlvCodec;
 import me.majhrs16.suite.api.message.ColorMode;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 import me.majhrs16.suite.logger.Logger;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -87,6 +94,10 @@ public final class HostServiceRegistry {
     // Message services
     public static final int MESSAGE_CLONE     = 0x0700;
     public static final int MESSAGE_ID        = 0x0701;
+
+    // Sync bridge services (ADR-036 §16.7)
+    public static final int SYNC_SURFACE      = 0x0800;
+    public static final int SYNC_INVOKE       = 0x0801;
 
     // ===== Property scopes (options bits 8-15) =====
 
@@ -333,6 +344,26 @@ public final class HostServiceRegistry {
             @Override public int baseCost() { return 10; }
             @Override public int varCostPerByte() { return 1; }
             @Override public String[] requiredCapabilities() { return new String[]{"message.id"}; }
+        });
+
+        // Sync bridge: discover the published action surfaces (ADR-036 §16.7).
+        register(SYNC_SURFACE, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doSyncSurface(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 20; }
+            @Override public int varCostPerByte() { return 1; }
+            @Override public String[] requiredCapabilities() { return new String[]{"sync.surface"}; }
+        });
+
+        // Sync bridge: execute one published action (ADR-036 §16.7).
+        register(SYNC_INVOKE, new HostService() {
+            @Override public ServiceResult invoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+                return doSyncInvoke(ctx, argVAddr, argLength, options);
+            }
+            @Override public int baseCost() { return 25; }
+            @Override public int varCostPerByte() { return 1; }
+            @Override public String[] requiredCapabilities() { return new String[]{"sync.invoke"}; }
         });
     }
 
@@ -846,6 +877,160 @@ public final class HostServiceRegistry {
             return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
         }
         return ServiceResult.ok(bytes.length);
+    }
+
+    /**
+     * SYNC_SURFACE: publishes the actions the host exposes to this program.
+     *
+     * <p>The request buffer holds a TLV string with the backend namespace, or an
+     * empty string for every backend. The response is a TLV list of surfaces
+     * written back over the request buffer (R3 is the buffer capacity on input
+     * and the bytes written on output). A missing bridge is
+     * {@code UNSUPPORTED}; an unknown backend is {@code NOT_FOUND}.</p>
+     */
+    private ServiceResult doSyncSurface(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        Optional<List<SyncSurface>> surfaces = ctx.hostContext().syncSurfaces();
+        if (surfaces.isEmpty()) {
+            return ServiceResult.unsupported("sync bridge is not installed");
+        }
+
+        String backend;
+        try {
+            byte[] request = argLength <= 0 ? new byte[0] : ctx.dma().getRegion(argVAddr, argLength);
+            backend = request.length == 0 ? "" : SyncBridgeCodec.decodeSurfaceRequest(request);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ServiceResult.invalidArgument("invalid sync_surface request: " + e.getMessage());
+        }
+
+        List<SyncSurface> selected = surfaces.get();
+        if (!backend.isEmpty()) {
+            selected = selected.stream()
+                .filter(surface -> surface.backend().equals(backend))
+                .toList();
+            if (selected.isEmpty()) {
+                return ServiceResult.notFound("unknown backend: " + backend);
+            }
+        }
+
+        byte[] out = SyncBridgeCodec.encodeSurfaceResponseBytes(selected);
+        if (out.length > argLength) {
+            return ServiceResult.bufferTooSmall(out.length);
+        }
+        try {
+            ctx.dma().writeBlock(argVAddr, out, 0, out.length);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
+        }
+        return ServiceResult.ok(out.length);
+    }
+
+    /**
+     * SYNC_INVOKE: executes one published action on behalf of the program.
+     *
+     * <p>The request buffer holds a TLV map {@code backend, action, args}. The
+     * response map {@code status, result | reason} is written back over it, and
+     * the same canonical status travels in R0 so the program can branch without
+     * decoding the payload. A rate-limited action reports its retry delay in
+     * R4.</p>
+     */
+    private ServiceResult doSyncInvoke(ExecutionContext ctx, int argVAddr, int argLength, int options) {
+        if (argLength <= 0) {
+            return ServiceResult.invalidArgument("sync_invoke requires a request");
+        }
+
+        SyncBridgeCodec.InvokeRequest request;
+        try {
+            request = SyncBridgeCodec.decodeInvokeRequest(
+                ctx.dma().getRegion(argVAddr, argLength));
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory read failed: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ServiceResult.invalidArgument("invalid sync_invoke request: " + e.getMessage());
+        }
+
+        SyncResult result = ctx.hostContext().invokeHostAction(
+            request.backend(), request.action(), request.args());
+
+        byte[] out = SyncBridgeCodec.encodeResultBytes(result);
+        if (out.length > argLength) {
+            return ServiceResult.bufferTooSmall(out.length);
+        }
+        try {
+            ctx.dma().writeBlock(argVAddr, out, 0, out.length);
+        } catch (VmException e) {
+            return ServiceResult.hostFailure("Memory write failed: " + e.getMessage());
+        }
+
+        int scalar = result instanceof SyncResult.RateLimited limited
+            ? (int) Math.min(limited.retryAfterMillis(), Integer.MAX_VALUE)
+            : 0;
+        return ServiceResult.of(syncStatus(result), out.length, scalar, syncDetail(result));
+    }
+
+    /** Maps a neutral {@link SyncResult} to the VM status register. */
+    private static ServiceResult.Status syncStatus(SyncResult result) {
+        if (result instanceof SyncResult.Ok) {
+            return ServiceResult.Status.OK;
+        }
+        if (result instanceof SyncResult.Denied) {
+            return ServiceResult.Status.DENIED;
+        }
+        if (result instanceof SyncResult.Unsupported) {
+            return ServiceResult.Status.UNSUPPORTED;
+        }
+        if (result instanceof SyncResult.InvalidArgument) {
+            return ServiceResult.Status.INVALID_ARGUMENT;
+        }
+        if (result instanceof SyncResult.NotFound) {
+            return ServiceResult.Status.NOT_FOUND;
+        }
+        if (result instanceof SyncResult.Conflict) {
+            return ServiceResult.Status.CONFLICT;
+        }
+        if (result instanceof SyncResult.RateLimited) {
+            return ServiceResult.Status.RATE_LIMITED;
+        }
+        if (result instanceof SyncResult.Timeout) {
+            return ServiceResult.Status.TIMEOUT;
+        }
+        if (result instanceof SyncResult.HostFailure) {
+            return ServiceResult.Status.HOST_FAILURE;
+        }
+        throw new IllegalArgumentException("resultado sin estado de puente: " + result);
+    }
+
+    /** Host-side diagnostic for a failed invocation; empty on success. */
+    private static String syncDetail(SyncResult result) {
+        if (result instanceof SyncResult.Ok) {
+            return "";
+        }
+        if (result instanceof SyncResult.Denied denied) {
+            return denied.reason();
+        }
+        if (result instanceof SyncResult.Unsupported unsupported) {
+            return unsupported.reason();
+        }
+        if (result instanceof SyncResult.InvalidArgument invalid) {
+            return invalid.reason();
+        }
+        if (result instanceof SyncResult.NotFound notFound) {
+            return notFound.reason();
+        }
+        if (result instanceof SyncResult.Conflict conflict) {
+            return conflict.reason();
+        }
+        if (result instanceof SyncResult.RateLimited limited) {
+            return "rate limited: retry after " + limited.retryAfterMillis() + " ms";
+        }
+        if (result instanceof SyncResult.Timeout timeout) {
+            return timeout.reason();
+        }
+        if (result instanceof SyncResult.HostFailure failure) {
+            return failure.reason();
+        }
+        return "";
     }
 
     /** Decodes a NUL-terminated C string from a (possibly longer) byte buffer. */

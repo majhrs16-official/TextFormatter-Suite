@@ -10,6 +10,12 @@ import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.spi.SyncBus;
+import me.majhrs16.suite.api.sync.HostActionContext;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 import me.majhrs16.suite.iflow.vm.VmConfigLoader;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
@@ -661,5 +667,185 @@ class VmPolicyEngineTest {
         assertEquals('H', engine.display().cellChar(0));
         assertEquals('I', engine.display().cellChar(1));
         assertTrue(engine.display().renderTextTrimmed().startsWith("HI"));
+    }
+
+    // ===== Sync bridge (ADR-036 §16.7) =====
+
+    /**
+     * Builds the HOST call that hands a TLV request in the constants page to
+     * {@code service}, with the whole page as the response capacity.
+     */
+    private static byte[] syncCall(int service, int requestBase, int capacity) {
+        return new byte[]{
+            Opcode.LI, 0, (byte) (service >> 8), (byte) (service & 0xFF),
+            Opcode.LI, 1, 0, 0,
+            Opcode.LI, 2, (byte) (requestBase >> 8), (byte) (requestBase & 0xFF),
+            Opcode.LI, 3, (byte) (capacity >> 8), (byte) (capacity & 0xFF),
+            Opcode.HOST, 0x00
+        };
+    }
+
+    private static byte[] concat(byte[]... parts) {
+        int size = 0;
+        for (byte[] part : parts) {
+            size += part.length;
+        }
+        byte[] out = new byte[size];
+        int offset = 0;
+        for (byte[] part : parts) {
+            System.arraycopy(part, 0, out, offset, part.length);
+            offset += part.length;
+        }
+        return out;
+    }
+
+    /** Packs bytes into the little-endian 16-bit words of the constants page. */
+    private static int[] constants(byte[] bytes) {
+        int[] out = new int[(bytes.length + 1) / 2];
+        for (int i = 0; i < out.length; i++) {
+            int lo = bytes[2 * i] & 0xFF;
+            int hi = 2 * i + 1 < bytes.length ? bytes[2 * i + 1] & 0xFF : 0;
+            out[i] = (hi << 8) | lo;
+        }
+        return out;
+    }
+
+    private static byte[] continueCode() {
+        return new byte[]{
+            Opcode.LI, 0, (byte) (HostServiceRegistry.ROUTE_DECISION >> 8),
+                (byte) (HostServiceRegistry.ROUTE_DECISION & 0xFF),
+            Opcode.LI, 1, 0, (byte) HostServiceRegistry.DECISION_CONTINUE,
+            Opcode.HOST, 0x00,
+            Opcode.HALT
+        };
+    }
+
+    /**
+     * Minimal {@link SyncBus} for the engine tests: only the members the bridge
+     * touches are answered; everything else is an explicit failure.
+     */
+    private static SyncBus fakeBus(java.util.Set<SyncSurface> surfaces,
+                                   java.util.function.Function<SyncCall, SyncResult> invoke,
+                                   java.util.function.BiFunction<SyncCall, HostActionContext,
+                                       SyncResult> invokeHost) {
+        return (SyncBus) java.lang.reflect.Proxy.newProxyInstance(
+            SyncBus.class.getClassLoader(), new Class<?>[]{SyncBus.class},
+            (proxy, method, args) -> switch (method.getName()) {
+                case "surfaces" -> surfaces;
+                case "sinkNames" -> java.util.Set.of();
+                case "invoke" -> invoke.apply((SyncCall) args[0]);
+                case "invokeHost" -> invokeHost.apply((SyncCall) args[0],
+                    (HostActionContext) args[1]);
+                case "toString" -> "FakeSyncBus";
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                default -> throw new UnsupportedOperationException(method.getName());
+            });
+    }
+
+    @Test
+    void syncInvokeAppliesTheChannelMutationJournaledByTheBridge() {
+        byte[] request = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("textformatter", "channel.set",
+                java.util.Map.of("channel", "global")));
+
+        VmPolicyEngine engine = createEngine();
+        engine.syncBus(() -> fakeBus(
+            java.util.Set.of(),
+            call -> new SyncResult.Unsupported("no sink"),
+            (call, context) -> new SyncResult.Ok(
+                context.message().withChannel((String) call.args().get("channel")))));
+
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .capabilities(new String[]{"sync.invoke", "routing.decide"})
+            .hash(new byte[32])
+            .constants(constants(request))
+            .code(concat(
+                syncCall(HostServiceRegistry.SYNC_INVOKE, 0x2000, 1024),
+                continueCode()))
+            .build();
+        engine.setProgram(program);
+
+        Actor sender = createActor("Alice");
+        RouteOutcome outcome = engine.route(
+            createMessage("hello", "chat", sender), createActor("Bob"));
+
+        assertEquals("global", outcome.message().channel(),
+            "the bridge mutation must reach the routed message");
+    }
+
+    @Test
+    void syncInvokeRejectsASecondChannelMutationInTheSameUnit() {
+        byte[] first = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("textformatter", "channel.set",
+                java.util.Map.of("channel", "global")));
+        byte[] second = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("textformatter", "channel.set",
+                java.util.Map.of("channel", "chat")));
+
+        VmPolicyEngine engine = createEngine();
+        engine.syncBus(() -> fakeBus(
+            java.util.Set.of(),
+            call -> new SyncResult.Unsupported("no sink"),
+            (call, context) -> new SyncResult.Ok(
+                context.message().withChannel((String) call.args().get("channel")))));
+
+        int secondBase = 0x2000 + ((first.length + 1) / 2) * 2;
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .capabilities(new String[]{"sync.invoke", "routing.decide"})
+            .hash(new byte[32])
+            .constants(constants(concat(first, second)))
+            .code(concat(
+                syncCall(HostServiceRegistry.SYNC_INVOKE, 0x2000, 1024),
+                syncCall(HostServiceRegistry.SYNC_INVOKE, secondBase, 1024),
+                continueCode()))
+            .build();
+        engine.setProgram(program);
+
+        Actor sender = createActor("Alice");
+        RouteOutcome outcome = engine.route(
+            createMessage("hello", "chat", sender), createActor("Bob"));
+
+        assertEquals("global", outcome.message().channel(),
+            "the second channel mutation must be a conflict, not an overwrite");
+    }
+
+    @Test
+    void syncSurfaceWithoutBusReportsUnsupportedToTheProgram() {
+        byte[] request = SyncBridgeCodec.encodeSurfaceRequest("");
+
+        VmPolicyEngine engine = createEngine();
+        // R0 = 5 (UNSUPPORTED) must take the continue branch; any other status
+        // falls through to DROP, so the outcome proves what the program saw.
+        ProgramImage program = ProgramImage.builder()
+            .entryPoint(0)
+            .capabilities(new String[]{"sync.surface", "routing.decide"})
+            .hash(new byte[32])
+            .constants(constants(request))
+            .code(concat(
+                syncCall(HostServiceRegistry.SYNC_SURFACE, 0x2000, 1024),
+                new byte[]{
+                    Opcode.LI, 1, 0, 5,
+                    Opcode.CMP, (0 << 4) | 1,
+                    Opcode.JZ, 0, 11,
+                    // status != UNSUPPORTED: drop
+                    Opcode.LI, 0, (byte) (HostServiceRegistry.ROUTE_DECISION >> 8),
+                        (byte) (HostServiceRegistry.ROUTE_DECISION & 0xFF),
+                    Opcode.LI, 1, 0, (byte) HostServiceRegistry.DECISION_DROP,
+                    Opcode.HOST, 0x00,
+                    Opcode.HALT
+                },
+                continueCode()))
+            .build();
+        engine.setProgram(program);
+
+        Actor sender = createActor("Alice");
+        RouteOutcome outcome = engine.route(
+            createMessage("hello", "chat", sender), createActor("Bob"));
+
+        assertEquals(PolicyTarget.LOG, outcome.decision().target(),
+            "the program must see UNSUPPORTED and continue, not fail fatally");
     }
 }

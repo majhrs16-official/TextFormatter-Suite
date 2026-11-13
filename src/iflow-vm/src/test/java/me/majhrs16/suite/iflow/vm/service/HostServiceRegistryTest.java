@@ -7,10 +7,22 @@ import me.majhrs16.suite.iflow.vm.memory.PageEntry;
 import me.majhrs16.suite.iflow.vm.memory.SoftMMU;
 import me.majhrs16.suite.iflow.vm.memory.VmDmaController;
 import me.majhrs16.suite.iflow.vm.memory.VmMemoryMap;
+import me.majhrs16.suite.api.SemVer;
+import me.majhrs16.suite.api.sync.ActionKind;
+import me.majhrs16.suite.api.sync.SyncActionSpec;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
+import me.majhrs16.suite.api.sync.SyncParamSpec;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
+import me.majhrs16.suite.api.sync.SyncValueType;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -736,5 +748,169 @@ class HostServiceRegistryTest {
         VmException clone = assertThrows(VmException.class, () -> hsr.invoke(ctx,
             HostServiceRegistry.MESSAGE_CLONE, ctx.outputBufferVAddr(), 4, 0));
         assertEquals(VmException.Code.HOST_SERVICE_DENIED, clone.code());
+    }
+
+    // ===== Sync bridge (ADR-036 §16.7) =====
+
+    private ExecutionContext createSyncContext(HostServiceRegistry hsr, HostContext host) {
+        ExecutionContext ctx = createContext(hsr, "sync.surface", "sync.invoke");
+        ctx.hostContext(host);
+        return ctx;
+    }
+
+    @Test
+    void syncSurfaceReportsUnsupportedWithoutBridge() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {});
+
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_SURFACE,
+            ctx.outputBufferVAddr(), 16, 0);
+
+        assertEquals(ServiceResult.Status.UNSUPPORTED, result.status());
+    }
+
+    @Test
+    void syncSurfaceEncodesPublishedActions() {
+        SyncSurface discord = new SyncSurface("discord", SemVer.of(1, 0, 0), Set.of(
+            new SyncActionSpec("channel.create", ActionKind.WRITE,
+                List.of(SyncParamSpec.required("guild", SyncValueType.CHANNEL_REF)),
+                null, false, 5_000)));
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+            @Override public Optional<List<SyncSurface>> syncSurfaces() {
+                return Optional.of(List.of(discord));
+            }
+        });
+
+        byte[] request = SyncBridgeCodec.encodeSurfaceRequest("");
+        int base = ctx.outputBufferVAddr();
+        ctx.softMMU().writeBlock(base, request, 0, request.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_SURFACE,
+            base, ctx.ioBufferSize(), 0);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        byte[] out = ctx.softMMU().getRegion(base, result.bytesTransferred());
+        assertEquals(List.of(discord), SyncBridgeCodec.decodeSurfaceResponse(out));
+    }
+
+    @Test
+    void syncSurfaceFiltersByBackendAndReportsUnknown() {
+        SyncSurface discord = SyncSurface.lcm("discord", SemVer.of(1, 0, 0));
+        SyncSurface telegram = SyncSurface.lcm("telegram", SemVer.of(1, 0, 0));
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+            @Override public Optional<List<SyncSurface>> syncSurfaces() {
+                return Optional.of(List.of(discord, telegram));
+            }
+        });
+
+        int base = ctx.outputBufferVAddr();
+        byte[] request = SyncBridgeCodec.encodeSurfaceRequest("telegram");
+        ctx.softMMU().writeBlock(base, request, 0, request.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_SURFACE,
+            base, ctx.ioBufferSize(), 0);
+        assertEquals(ServiceResult.Status.OK, result.status());
+        assertEquals(List.of(telegram), SyncBridgeCodec.decodeSurfaceResponse(
+            ctx.softMMU().getRegion(base, result.bytesTransferred())));
+
+        byte[] missing = SyncBridgeCodec.encodeSurfaceRequest("absent");
+        ctx.softMMU().writeBlock(base, missing, 0, missing.length);
+        ServiceResult notFound = hsr.invoke(ctx, HostServiceRegistry.SYNC_SURFACE,
+            base, ctx.ioBufferSize(), 0);
+        assertEquals(ServiceResult.Status.NOT_FOUND, notFound.status());
+    }
+
+    @Test
+    void syncInvokeRoundTripsTheResultAndMapsTheStatus() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+            @Override public SyncResult invokeHostAction(String backend, String action,
+                                                         Map<String, Object> args) {
+                return new SyncResult.Ok("pong");
+            }
+        });
+
+        byte[] request = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("discord", "backend.info", Map.of()));
+        int base = ctx.outputBufferVAddr();
+        ctx.softMMU().writeBlock(base, request, 0, request.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_INVOKE,
+            base, ctx.ioBufferSize(), 0);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        assertEquals(new SyncResult.Ok("pong"), SyncBridgeCodec.decodeResult(
+            ctx.softMMU().getRegion(base, result.bytesTransferred())));
+    }
+
+    @Test
+    void syncInvokeMapsEveryFailureStatus() {
+        Map<SyncResult, ServiceResult.Status> cases = new LinkedHashMap<>();
+        cases.put(new SyncResult.Denied("no"), ServiceResult.Status.DENIED);
+        cases.put(new SyncResult.Unsupported("missing"), ServiceResult.Status.UNSUPPORTED);
+        cases.put(new SyncResult.InvalidArgument("bad"), ServiceResult.Status.INVALID_ARGUMENT);
+        cases.put(new SyncResult.NotFound("absent"), ServiceResult.Status.NOT_FOUND);
+        cases.put(new SyncResult.Conflict("twice"), ServiceResult.Status.CONFLICT);
+        cases.put(new SyncResult.RateLimited(750), ServiceResult.Status.RATE_LIMITED);
+        cases.put(new SyncResult.Timeout("slow"), ServiceResult.Status.TIMEOUT);
+        cases.put(new SyncResult.HostFailure("boom"), ServiceResult.Status.HOST_FAILURE);
+
+        for (Map.Entry<SyncResult, ServiceResult.Status> entry : cases.entrySet()) {
+            HostServiceRegistry hsr = new HostServiceRegistry();
+            ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+                @Override public SyncResult invokeHostAction(String backend, String action,
+                                                             Map<String, Object> args) {
+                    return entry.getKey();
+                }
+            });
+            byte[] request = SyncBridgeCodec.encodeInvokeRequest(
+                new SyncBridgeCodec.InvokeRequest("textformatter", "channel.set",
+                    Map.of("channel", "staff")));
+            int base = ctx.outputBufferVAddr();
+            ctx.softMMU().writeBlock(base, request, 0, request.length);
+
+            ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_INVOKE,
+                base, ctx.ioBufferSize(), 0);
+
+            assertEquals(entry.getValue(), result.status(), entry.getKey().toString());
+            assertEquals(entry.getKey(), SyncBridgeCodec.decodeResult(
+                ctx.softMMU().getRegion(base, result.bytesTransferred())));
+            if (entry.getKey() instanceof SyncResult.RateLimited limited) {
+                assertEquals(limited.retryAfterMillis(), result.result());
+            }
+        }
+    }
+
+    @Test
+    void syncInvokeRejectsMalformedRequests() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+            @Override public SyncResult invokeHostAction(String backend, String action,
+                                                         Map<String, Object> args) {
+                fail("the bridge must not be reached with a malformed request");
+                return new SyncResult.Ok(null);
+            }
+        });
+
+        int base = ctx.outputBufferVAddr();
+        byte[] garbage = "not-tlv".getBytes(StandardCharsets.UTF_8);
+        ctx.softMMU().writeBlock(base, garbage, 0, garbage.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_INVOKE,
+            base, garbage.length, 0);
+
+        assertEquals(ServiceResult.Status.INVALID_ARGUMENT, result.status());
+    }
+
+    @Test
+    void syncServicesRequireTheirCapability() {
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createContext(hsr, "property.read");
+
+        VmException surface = assertThrows(VmException.class, () -> hsr.invoke(ctx,
+            HostServiceRegistry.SYNC_SURFACE, ctx.outputBufferVAddr(), 8, 0));
+        assertEquals(VmException.Code.HOST_SERVICE_DENIED, surface.code());
+
+        VmException invoke = assertThrows(VmException.class, () -> hsr.invoke(ctx,
+            HostServiceRegistry.SYNC_INVOKE, ctx.outputBufferVAddr(), 8, 0));
+        assertEquals(VmException.Code.HOST_SERVICE_DENIED, invoke.code());
     }
 }

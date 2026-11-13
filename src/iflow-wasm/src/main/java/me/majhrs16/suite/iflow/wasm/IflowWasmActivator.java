@@ -10,6 +10,7 @@ import me.majhrs16.suite.api.iflow.Router;
 import me.majhrs16.suite.api.runtime.ModuleActivator;
 import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.TranslationService;
 
 /**
@@ -58,6 +59,8 @@ public final class IflowWasmActivator implements ModuleActivator {
                 placeholders,
                 translation == null ? null : translation::detect,
                 context.logger());
+        // El bus sync puede activarse después de este motor; se resuelve por llamada.
+        router.syncBus(() -> context.services().find(SyncBus.class).orElse(null));
 
         context.services().register(WasmModuleLoader.class, loader);
         context.services().register(WasmContract.class, contract);

@@ -1,14 +1,23 @@
 package me.majhrs16.suite.iflow.wasm;
 
 import me.majhrs16.suite.api.channel.Channel;
+import me.majhrs16.suite.api.iflow.TlvCodec;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.ColorMode;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.spi.SyncBus;
+import me.majhrs16.suite.api.sync.HostActionContext;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * Estado de una ejecución de política y journal de transformaciones.
@@ -28,12 +37,29 @@ public final class PolicySession {
 
     private final PolicyRequest request;
     private final List<LogEntry> logs = new ArrayList<>();
+    private final Principal.Program principal;
+    private final Supplier<SyncBus> syncBus;
     private Message message;
     private Decision decision;
     private boolean conflict;
 
     public PolicySession(PolicyRequest request) {
+        this(request, null, () -> null);
+    }
+
+    /**
+     * Sesión con puente sync.
+     *
+     * @param request   petición de la evaluación
+     * @param principal identidad SHA-256 del programa, o {@code null} si el
+     *                  artefacto no está verificado
+     * @param syncBus   resuelve el bus sync; puede devolver {@code null}
+     */
+    public PolicySession(PolicyRequest request, Principal.Program principal,
+                         Supplier<SyncBus> syncBus) {
         this.request = Objects.requireNonNull(request, "request");
+        this.principal = principal;
+        this.syncBus = Objects.requireNonNull(syncBus, "syncBus");
         this.message = request.message();
     }
 
@@ -144,6 +170,90 @@ public final class PolicySession {
 
     public long nowNanos() {
         return System.nanoTime();
+    }
+
+    /**
+     * Superficies de acciones publicadas por el puente sync.
+     *
+     * @param backend namespace del backend, vacío para todos
+     * @return las superficies publicadas, nunca {@code null}
+     */
+    public List<SyncSurface> syncSurface(String backend) {
+        SyncBus bus = syncBus.get();
+        if (bus == null) {
+            throw new PolicyException(
+                PolicyAbiV3.STATUS_UNSUPPORTED, "el puente sync no está instalado");
+        }
+        List<SyncSurface> all = List.copyOf(bus.surfaces());
+        if (backend == null || backend.isEmpty()) {
+            return all;
+        }
+        List<SyncSurface> selected = all.stream()
+            .filter(surface -> surface.backend().equals(backend))
+            .toList();
+        if (selected.isEmpty()) {
+            throw new PolicyException(
+                PolicyAbiV3.STATUS_NOT_FOUND, "backend desconocido: " + backend);
+        }
+        return selected;
+    }
+
+    /**
+     * Ejecuta una acción publicada. El efecto sobre el mensaje se aplica al
+     * mensaje de trabajo; una segunda mutación de canal en la misma unidad es
+     * un {@link SyncResult.Conflict}.
+     */
+    public SyncResult syncInvoke(SyncBridgeCodec.InvokeRequest invoke) {
+        Objects.requireNonNull(invoke, "invoke");
+        SyncBus bus = syncBus.get();
+        if (bus == null) {
+            return new SyncResult.Unsupported("el puente sync no está instalado");
+        }
+        if (principal == null) {
+            return new SyncResult.Unsupported(
+                "el programa no tiene identidad SHA-256 verificada");
+        }
+
+        SyncCall call;
+        try {
+            call = new SyncCall(invoke.backend(), invoke.action(), invoke.args(), principal,
+                message.id() + ":" + invoke.backend() + "." + invoke.action(),
+                "iflow program " + principal.sha256());
+        } catch (IllegalArgumentException e) {
+            return new SyncResult.InvalidArgument(e.getMessage());
+        }
+
+        SyncResult result;
+        try {
+            // El namespace decide el despachador: un sink registrado se invoca
+            // directamente; cualquier otro backend es una acción del host.
+            result = bus.sinkNames().contains(invoke.backend())
+                ? bus.invoke(call)
+                : bus.invokeHost(call, new HostActionContext(
+                    message, request.emitter(), request.recipient(),
+                    request.channels(), request.permissions()));
+        } catch (RuntimeException e) {
+            return new SyncResult.HostFailure("fallo del puente sync: " + e.getMessage());
+        }
+        return applyActionValue(result);
+    }
+
+    private SyncResult applyActionValue(SyncResult result) {
+        if (!(result instanceof SyncResult.Ok ok)
+                || !(ok.value() instanceof Message updated)) {
+            return result;
+        }
+        if (updated != message) {
+            boolean alreadyMutated = !Objects.equals(
+                request.message().channel(), message.channel());
+            boolean changesChannel = !Objects.equals(message.channel(), updated.channel());
+            if (alreadyMutated && changesChannel) {
+                return new SyncResult.Conflict(
+                    "el canal ya se mutó en esta unidad de routing");
+            }
+            message = updated;
+        }
+        return new SyncResult.Ok(null);
     }
 
     /**

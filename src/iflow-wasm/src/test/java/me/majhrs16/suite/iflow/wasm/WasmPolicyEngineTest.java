@@ -1,5 +1,7 @@
 package me.majhrs16.suite.iflow.wasm;
 
+import me.majhrs16.suite.api.iflow.TlvCodec;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,6 +14,12 @@ import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.spi.PlaceholderResolver;
+import me.majhrs16.suite.api.spi.SyncBus;
+import me.majhrs16.suite.api.sync.HostActionContext;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
 import org.junit.jupiter.api.Test;
 
 class WasmPolicyEngineTest {
@@ -207,7 +215,129 @@ class WasmPolicyEngineTest {
         assertEquals("Hola Bob", outcome.message().text());
     }
 
-    private PolicyOutcome evaluate(WasmTestModule module) {
+    @Test
+    void syncInvokeAppliesTheChannelMutationReturnedByTheBus() {
+        byte[] request = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("textformatter", "channel.set",
+                java.util.Map.of("channel", "private")));
+
+        WasmTestModule module = new WasmTestModule();
+        int syncType = module.functionType(
+            new int[]{WasmTestModule.I32, WasmTestModule.I32,
+                WasmTestModule.I32, WasmTestModule.I32},
+            new int[]{WasmTestModule.I32});
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.SYNC_INVOKE, syncType);
+        int decisionType = module.functionType(
+            new int[]{WasmTestModule.I32, WasmTestModule.I32, WasmTestModule.I32,
+                WasmTestModule.I32, WasmTestModule.I32},
+            new int[]{WasmTestModule.I32});
+        module.importFunction(PolicyAbiV3.IMPORT_MODULE, PolicyAbiV3.DECISION, decisionType);
+        int decideType = module.functionType(new int[0], new int[]{WasmTestModule.I32});
+        int decide = module.function(decideType);
+        module.exportFunction(PolicyAbiV3.EXPORT_DECIDE, decide);
+        module.memory(1, 1);
+        module.data(0, request);
+        module.code(concat(
+            new byte[]{
+                0x41, 0x00,                 // inPtr
+                0x41}, WasmTestModule.sleb(request.length), // inLen
+            new byte[]{
+                0x41}, WasmTestModule.sleb(256), // outPtr
+            new byte[]{
+                0x41}, WasmTestModule.sleb(256), // outCap
+            new byte[]{
+                0x10, 0x00, 0x1a,           // sync_invoke, drop
+                0x41, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x00,
+                0x10, 0x01, 0x1a,           // decision DELIVER, drop
+                0x41, 0x00}));
+
+        engine.syncBus(() -> fakeBus((call, context) -> new SyncResult.Ok(
+            context.message().withChannel((String) call.args().get("channel")))));
+        PolicyOutcome outcome = evaluate(module,
+            new Principal.Program("a".repeat(64)));
+
+        assertEquals(PolicyAction.DELIVER, outcome.action());
+        assertEquals("private", outcome.message().channel());
+    }
+
+    @Test
+    void syncInvokeWithoutBusIsUnsupported() {
+        PolicySession session = new PolicySession(request());
+        SyncResult result = session.syncInvoke(new SyncBridgeCodec.InvokeRequest(
+            "discord", "channel.create", java.util.Map.of()));
+
+        assertTrue(result instanceof SyncResult.Unsupported, result.toString());
+        PolicyException surface = org.junit.jupiter.api.Assertions.assertThrows(
+            PolicyException.class, () -> session.syncSurface(""));
+        assertEquals(PolicyAbiV3.STATUS_UNSUPPORTED, surface.status());
+    }
+
+    @Test
+    void syncInvokeRejectsASecondChannelMutation() {
+        PolicySession session = new PolicySession(request(),
+            new Principal.Program("b".repeat(64)), () -> fakeBus((call, context) ->
+                new SyncResult.Ok(context.message().withChannel(
+                    (String) call.args().get("channel")))));
+
+        SyncResult first = session.syncInvoke(new SyncBridgeCodec.InvokeRequest(
+            "textformatter", "channel.set", java.util.Map.of("channel", "private")));
+        SyncResult second = session.syncInvoke(new SyncBridgeCodec.InvokeRequest(
+            "textformatter", "channel.set", java.util.Map.of("channel", "chat")));
+
+        assertEquals(new SyncResult.Ok(null), first);
+        assertTrue(second instanceof SyncResult.Conflict, second.toString());
+        assertEquals("private", session.message().channel());
+    }
+
+    @Test
+    void syncStatusMapsEveryResult() {
+        assertEquals(PolicyAbiV3.STATUS_OK, PolicyHost.syncStatus(new SyncResult.Ok(null)));
+        assertEquals(PolicyAbiV3.STATUS_DENIED, PolicyHost.syncStatus(new SyncResult.Denied("no")));
+        assertEquals(PolicyAbiV3.STATUS_UNSUPPORTED,
+            PolicyHost.syncStatus(new SyncResult.Unsupported("no")));
+        assertEquals(PolicyAbiV3.STATUS_INVALID_ARGUMENT,
+            PolicyHost.syncStatus(new SyncResult.InvalidArgument("bad")));
+        assertEquals(PolicyAbiV3.STATUS_NOT_FOUND,
+            PolicyHost.syncStatus(new SyncResult.NotFound("absent")));
+        assertEquals(PolicyAbiV3.STATUS_CONFLICT,
+            PolicyHost.syncStatus(new SyncResult.Conflict("twice")));
+        assertEquals(PolicyAbiV3.STATUS_RATE_LIMITED,
+            PolicyHost.syncStatus(new SyncResult.RateLimited(10)));
+        assertEquals(PolicyAbiV3.STATUS_TIMEOUT,
+            PolicyHost.syncStatus(new SyncResult.Timeout("slow")));
+        assertEquals(PolicyAbiV3.STATUS_HOST_FAILURE,
+            PolicyHost.syncStatus(new SyncResult.HostFailure("boom")));
+    }
+
+    private static SyncBus fakeBus(
+            java.util.function.BiFunction<SyncCall, HostActionContext, SyncResult> invokeHost) {
+        return (SyncBus) java.lang.reflect.Proxy.newProxyInstance(
+            SyncBus.class.getClassLoader(), new Class<?>[]{SyncBus.class},
+            (proxy, method, args) -> switch (method.getName()) {
+                case "surfaces" -> java.util.Set.of();
+                case "sinkNames" -> java.util.Set.of();
+                case "invokeHost" -> invokeHost.apply((SyncCall) args[0],
+                    (HostActionContext) args[1]);
+                case "toString" -> "FakeSyncBus";
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == args[0];
+                default -> throw new UnsupportedOperationException(method.getName());
+            });
+    }
+
+    private static byte[] concat(byte[]... parts) {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        for (byte[] part : parts) {
+            out.writeBytes(part);
+        }
+        return out.toByteArray();
+    }
+
+    private PolicyOutcome evaluate(WasmTestModule module, Principal.Program principal) {
+        return engine.evaluate(loader.load(module.build()), request(), principal);
+    }
+
+    private static PolicyRequest request() {
         Message message = Message.builder()
             .text("hola")
             .sender(EMITTER)
@@ -226,15 +356,13 @@ class WasmPolicyEngineTest {
                 return true;
             }
         };
-        PolicyRequest request = new PolicyRequest(
-            message,
-            EMITTER,
-            RECIPIENT,
-            CHANNELS,
-            PermissionChecker.ALLOW_ALL,
-            placeholders,
+        return new PolicyRequest(message, EMITTER, RECIPIENT, CHANNELS,
+            PermissionChecker.ALLOW_ALL, placeholders,
             text -> text.equals("bonjour") ? Language.FR : Language.EN);
-        return engine.evaluate(loader.load(module.build()), request);
+    }
+
+    private PolicyOutcome evaluate(WasmTestModule module) {
+        return engine.evaluate(loader.load(module.build()), request());
     }
 
     private static WasmTestModule decisionModule(int action) {

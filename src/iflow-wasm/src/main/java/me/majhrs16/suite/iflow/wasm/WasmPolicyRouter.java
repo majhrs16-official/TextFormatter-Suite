@@ -32,6 +32,8 @@ import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.api.iflow.RouteDecision;
 import me.majhrs16.suite.api.iflow.RouteOutcome;
 import me.majhrs16.suite.api.iflow.Router;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.message.Actor;
 import me.majhrs16.suite.api.message.Language;
 import me.majhrs16.suite.api.message.Message;
@@ -71,7 +73,11 @@ public final class WasmPolicyRouter implements Router, AutoCloseable {
     private final WasmContract contract;
     private final RateLimiter rateLimiter;
 
-    private volatile WasmModule module;
+    /** Política cargada y su SHA-256 verificado, publicados como una unidad. */
+    private record LoadedPolicy(WasmModule module, String sha256) {
+    }
+
+    private volatile LoadedPolicy loaded;
     private volatile String lastError = "not loaded";
     private final CountDownLatch watcherReady = new CountDownLatch(1);
     private volatile boolean closed;
@@ -120,6 +126,18 @@ public final class WasmPolicyRouter implements Router, AutoCloseable {
     }
 
     /**
+     * Instala el resolvedor del bus sync en el engine (ADR-036 §16.7). Se
+     * evalúa por invocación para tolerar el orden de activación.
+     *
+     * @param supplier resuelve el bus, o {@code null} cuando no está instalado
+     * @return este router
+     */
+    public WasmPolicyRouter syncBus(java.util.function.Supplier<SyncBus> supplier) {
+        engine.syncBus(supplier);
+        return this;
+    }
+
+    /**
      * Recarga la política desde disco. Es público para que el runtime o un
      * comando administrativo puedan forzar la recarga sin esperar al watcher.
      *
@@ -149,7 +167,7 @@ public final class WasmPolicyRouter implements Router, AutoCloseable {
                 unavailable("artefacto Wasm inválido: " + validation.errors());
                 return false;
             }
-            module = parsed;
+            loaded = new LoadedPolicy(parsed, actual.toLowerCase(Locale.ROOT));
             lastError = "";
             logger.info("iFlow Wasm policy loaded: " + wasmFile + " (" + actual + ")");
             return true;
@@ -161,7 +179,7 @@ public final class WasmPolicyRouter implements Router, AutoCloseable {
 
     /** @return {@code true} si hay una política verificada y validada. */
     public boolean isAvailable() {
-        return module != null;
+        return loaded != null;
     }
 
     /** @return último error de carga/verificación, o cadena vacía. */
@@ -188,15 +206,16 @@ public final class WasmPolicyRouter implements Router, AutoCloseable {
                     "recipient lacks receive permission on " + path, recipient, emitter, message);
         }
 
-        WasmModule current = module;
-        if (current == null) {
+        LoadedPolicy policy = loaded;
+        if (policy == null) {
             return outcome(PolicyTarget.REJECT,
                     "iflow-wasm unavailable: " + lastError, recipient, emitter, message);
         }
         try {
             PolicyRequest request = new PolicyRequest(
                     message, emitter, recipient, channels, permissions, placeholders, languageDetector);
-            PolicyOutcome result = engine.evaluate(current, request);
+            PolicyOutcome result = engine.evaluate(policy.module(), request,
+                    new Principal.Program(policy.sha256()));
             PolicyTarget target = switch (result.action()) {
                 case DELIVER -> PolicyTarget.LOG;
                 case CANCEL_EVENT -> PolicyTarget.DROP;
@@ -337,7 +356,7 @@ public final class WasmPolicyRouter implements Router, AutoCloseable {
     }
 
     private void unavailable(String reason) {
-        module = null;
+        loaded = null;
         lastError = reason;
         logger.warn("iFlow Wasm unavailable: " + reason);
     }

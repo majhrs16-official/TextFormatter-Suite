@@ -10,6 +10,12 @@ import me.majhrs16.suite.api.iflow.RateLimiter;
 import me.majhrs16.suite.api.iflow.PolicyTarget;
 import me.majhrs16.suite.api.channel.Channel;
 import me.majhrs16.suite.api.channel.ChannelRegistry;
+import me.majhrs16.suite.api.spi.SyncBus;
+import me.majhrs16.suite.api.sync.HostActionContext;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 import me.majhrs16.suite.logger.Logger;
 import me.majhrs16.suite.iflow.vm.engine.PolicyResultValidator;
 import me.majhrs16.suite.iflow.vm.execution.ExecutionContext;
@@ -41,6 +47,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
+import java.util.function.Supplier;
 
 /**
  * VM-based policy engine implementing the Router interface.
@@ -66,6 +74,14 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      * keyed by the 16-bit key the program passes in {@code options}.
      */
     private final Map<Integer, Object> hostState = new ConcurrentHashMap<>();
+
+    /**
+     * Resolves the sync bus lazily: the engine may start before the
+     * {@code sync-bus} module is active. Returning {@code null} means the
+     * bridge is not installed, which the HOST services report as
+     * {@code UNSUPPORTED} instead of failing silently.
+     */
+    private volatile Supplier<SyncBus> syncBusSupplier = () -> null;
 
     /**
      * Serializes executions on the program's single physical machine (one core).
@@ -159,6 +175,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         registry.declareCapability("channel.resolve");
         registry.declareCapability("message.clone");
         registry.declareCapability("message.id");
+        registry.declareCapability("sync.surface");
+        registry.declareCapability("sync.invoke");
 
         // Inject host dependencies. The message/property/state/channel views are
         // supplied per execution through the HostContext port (see route()),
@@ -173,6 +191,21 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
     private void configureContext(ExecutionContext ctx) {
         // Set standard configuration
         ctx.fuelBudget(defaultFuelBudget);
+    }
+
+    /**
+     * Installs the sync bridge supplier (ADR-036 §16.7).
+     *
+     * <p>The supplier is evaluated on every invocation so the engine tolerates
+     * the module activation order: {@code iflow-vm} may start before
+     * {@code sync-bus} and still see the bus as soon as it is registered.</p>
+     *
+     * @param supplier resolves the bus, or {@code null} when it is absent
+     * @return this engine, for chaining
+     */
+    public VmPolicyEngine syncBus(Supplier<SyncBus> supplier) {
+        this.syncBusSupplier = Objects.requireNonNull(supplier, "supplier");
+        return this;
     }
 
     @Override
@@ -212,7 +245,7 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
                 // live memory, shared by every message (no fork): writes land in
                 // the program's own RAM and stay there.
                 ctx.executionId(java.util.UUID.randomUUID().toString())
-                   .programId(loaded.program.hashCode() + "")
+                   .programId(programId(loaded.program))
                    .messageId(message.id().toString())
                    .actorId(recipient.name())
                    .softMMU(loaded.softMMU)
@@ -227,7 +260,8 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
 
                 // Install the host view for this message: property reads, channel
                 // resolution and persistent state now go through the HostContext port.
-                ctx.hostContext(new MessageHostContext(ctx, message, emitter, recipient, path));
+                ctx.hostContext(new MessageHostContext(ctx, message, emitter, recipient, path,
+                    programPrincipal(loaded.program)));
 
                 // Prepare input: serialize message to the input buffer (see VmMemoryMap)
                 prepareInput(ctx, message, emitter, recipient, path);
@@ -264,6 +298,32 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         } finally {
             machineLock.unlock();
         }
+    }
+
+    /**
+     * Stable identity of the loaded program: its SHA-256 when the image was
+     * verified, or a diagnostic marker when it has no hash (the pass-through
+     * program). The marker is never used as a sync principal.
+     */
+    static String programId(ProgramImage program) {
+        String sha256 = sha256(program);
+        return sha256 != null ? sha256 : "unhashed:" + program.hashCode();
+    }
+
+    /**
+     * Builds the sync principal of the loaded program, or {@code null} when the
+     * image has no verified SHA-256. A program without identity cannot invoke
+     * actions: {@code sync_invoke} reports {@code UNSUPPORTED} instead of
+     * inventing an authority.
+     */
+    static Principal.Program programPrincipal(ProgramImage program) {
+        String sha256 = sha256(program);
+        return sha256 == null ? null : new Principal.Program(sha256);
+    }
+
+    private static String sha256(ProgramImage program) {
+        byte[] hash = program.hash();
+        return hash != null && hash.length == 32 ? HexFormat.of().formatHex(hash) : null;
     }
 
     /**
@@ -409,18 +469,20 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
      */
     private final class MessageHostContext implements HostContext {
         private final ExecutionContext ctx;
-        private final Message message;
+        private Message message;
         private final Actor emitter;
         private final Actor recipient;
         private final String path;
+        private final Principal.Program principal;
 
         MessageHostContext(ExecutionContext ctx, Message message, Actor emitter,
-                           Actor recipient, String path) {
+                           Actor recipient, String path, Principal.Program principal) {
             this.ctx = ctx;
             this.message = message;
             this.emitter = emitter;
             this.recipient = recipient;
             this.path = path;
+            this.principal = principal;
         }
 
         @Override
@@ -500,10 +562,116 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             }
         }
 
+        @Override
+        public Optional<List<SyncSurface>> syncSurfaces() {
+            SyncBus bus = syncBusSupplier.get();
+            if (bus == null) {
+                return Optional.empty();
+            }
+            return Optional.of(List.copyOf(bus.surfaces()));
+        }
+
+        @Override
+        public SyncResult invokeHostAction(String backend, String action,
+                                           Map<String, Object> args) {
+            SyncBus bus = syncBusSupplier.get();
+            if (bus == null) {
+                return new SyncResult.Unsupported("sync bus is not installed");
+            }
+            if (principal == null) {
+                return new SyncResult.Unsupported(
+                    "the program has no verified SHA-256 identity");
+            }
+
+            SyncCall call;
+            try {
+                call = new SyncCall(backend, action, args, principal,
+                    message.id() + ":" + backend + "." + action,
+                    "iflow program " + principal.sha256());
+            } catch (IllegalArgumentException e) {
+                return new SyncResult.InvalidArgument(e.getMessage());
+            }
+
+            SyncResult result;
+            try {
+                // Sink actions and host actions share the same wire contract but
+                // not the same dispatcher. The namespace decides: a registered
+                // sink is invoked directly, anything else is a host action.
+                result = bus.sinkNames().contains(backend)
+                    ? bus.invoke(call)
+                    : bus.invokeHost(call, new HostActionContext(
+                        message, emitter, recipient, channels, permissions));
+            } catch (RuntimeException e) {
+                return new SyncResult.HostFailure(
+                    "sync bridge failure: " + e.getMessage());
+            }
+            return applyActionValue(result);
+        }
+
+        /**
+         * Applies the message an action returned and normalizes the wire value.
+         *
+         * <p>A host action returns {@code Ok(Message)} to express a mutation of
+         * the current routing unit. The engine journals the diff so the
+         * validator commits it atomically; a second channel mutation in the same
+         * unit is a {@link SyncResult.Conflict}. The program receives
+         * {@code Ok(null)} because the effect is the message, not a value.</p>
+         */
+        private SyncResult applyActionValue(SyncResult result) {
+            if (!(result instanceof SyncResult.Ok ok)
+                    || !(ok.value() instanceof Message updated)) {
+                return result;
+            }
+            Message current = message;
+            if (updated != current) {
+                boolean channelChanged = !Objects.equals(current.channel(), updated.channel());
+                if (channelChanged && journaledChannelChange()) {
+                    return new SyncResult.Conflict(
+                        "channel was already mutated in this routing unit");
+                }
+                if (channelChanged) {
+                    ctx.journal().record(new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_CHANNEL, updated.channel(), "syncInvoke"));
+                }
+                if (!Objects.equals(current.text(), updated.text())) {
+                    ctx.journal().record(new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_TEXT, updated.text(), "syncInvoke"));
+                }
+                if (!Objects.equals(current.langSource(), updated.langSource())) {
+                    ctx.journal().record(new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_LANG_SOURCE,
+                        String.valueOf(updated.langSource()), "syncInvoke"));
+                }
+                if (!Objects.equals(current.langTarget(), updated.langTarget())) {
+                    ctx.journal().record(new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_LANG_TARGET,
+                        String.valueOf(updated.langTarget()), "syncInvoke"));
+                }
+                if (!Objects.equals(current.colorMode(), updated.colorMode())) {
+                    ctx.journal().record(new ModificationJournal.Entry(
+                        ModificationJournal.OpType.SET_COLOR_MODE,
+                        String.valueOf(updated.colorMode()), "syncInvoke"));
+                }
+                message = updated;
+            }
+            return new SyncResult.Ok(null);
+        }
+
+        private boolean journaledChannelChange() {
+            for (ModificationJournal.Entry entry : ctx.journal().entries()) {
+                if (entry.type == ModificationJournal.OpType.SET_CHANNEL
+                        || entry.type == ModificationJournal.OpType.REDIRECT_CHANNEL) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private String messageProperty(int propId) {
             return switch (propId) {
                 case HostServiceRegistry.PROP_CONTENT -> message.text();
-                case HostServiceRegistry.PROP_CHANNEL -> path;
+                case HostServiceRegistry.PROP_CHANNEL ->
+                    message.channel() != null ? message.channel() : path;
                 case HostServiceRegistry.PROP_DIRECTION -> message.direction().toString();
                 case HostServiceRegistry.PROP_TYPE -> message.type().toString();
                 case HostServiceRegistry.PROP_LANG_SOURCE -> String.valueOf(message.langSource());

@@ -83,8 +83,7 @@ final class WasmTestModule {
      * Añade el cuerpo de una función local. {@code instructions} no incluye el
      * vector de locales ni el {@code end} final.
      */
-    void code(byte[] instructions) {
-        bodies.add(concat(new byte[]{0x00}, instructions, new byte[]{0x0b}));
+    void code(byte[] instructions) {        bodies.add(concat(new byte[]{0x00}, instructions, new byte[]{0x0b}));
     }
 
     byte[] build() {
@@ -156,7 +155,7 @@ final class WasmTestModule {
     }
 
     /** LEB128 con signo, usado por {@code i32.const} y offsets de datos. */
-    private static byte[] sleb(int value) {
+    static byte[] sleb(int value) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         int remaining = value;
         boolean more = true;
