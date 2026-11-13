@@ -235,10 +235,10 @@ is reported as `Timeout`/`HostFailure`, not as success.
 
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
-(`config/iflow/grants.yml`) exists. `sync-discord` and `sync-telegram` publish
-and execute native actions, but third parties cannot execute them until the
-grant store exists. An unknown native action returns `Unsupported`; an adapter
-that is not connected returns `HostFailure`.
+(`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram` and
+`sync-http` publish and execute native actions, but third parties cannot execute
+them until the grant store exists. An unknown native action returns
+`Unsupported`; an adapter that is not connected returns `HostFailure`.
 
 ### Native Discord actions
 
@@ -273,6 +273,23 @@ missing message or chat as HTTP 400, so a `not found` description maps to
 `NotFound` and any other 400 maps to `InvalidArgument`; 401/403 and 5xx map to
 `HostFailure`, 409 to `Conflict` and 429 to `RateLimited` with
 `retry_after` converted to milliseconds.
+
+### Native HTTP actions
+
+| Action | Kind | Arguments |
+|---|---|---|
+| `http.webhook.send` | `WRITE` | `payload` (`OBJECT`, required) |
+| `http.endpoint.info` | `READ` | none |
+
+`webhook.send` posts the neutral `OBJECT` payload as the JSON body to the
+configured webhook. `endpoint.info` describes the local inbound endpoint and the
+outbound target without exposing secrets: no token, no HMAC secret, and no path
+or query from the webhook URL. HTTP statuses map to explicit results: 2xx →
+`Ok`, 400 → `InvalidArgument`, 401/403 → `HostFailure`, 404 → `NotFound`, 409 →
+`Conflict`, 429 → `RateLimited` (`Retry-After` in seconds converted to
+milliseconds) and anything else → `HostFailure`. A `Timeout` comes from
+`HttpTimeoutException`. A stopped sink returns `HostFailure` without touching
+the network.
 
 
 ## Outputs and local delivery
