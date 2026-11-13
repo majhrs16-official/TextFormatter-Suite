@@ -23,6 +23,7 @@ when a matching `VelocityConnectionFactory` appears or disappears.
 - Queue failed sends and retry with exponential backoff.
 - Verify the shared secret on inbound payloads.
 - Expose metrics and health.
+- Publish `proxy.info`, `mapping.resolve` and `queue.purge` as native actions.
 - Never import `com.velocitypowered`.
 
 ## 2. Non-responsibilities
@@ -39,7 +40,7 @@ when a matching `VelocityConnectionFactory` appears or disappears.
 
 | Component | Role |
 |-----------|------|
-| `VelocitySink` | Neutral `SyncSink`: encode/decode, mapping, retry, metrics, health. |
+| `VelocitySink` | Neutral `SyncSink`: encode/decode, mapping, retry, metrics, health, surface and native action dispatch. |
 | `VelocityConfig` | Loads `config/sync-velocity-core/config.yml`; no Velocity types. |
 | `SyncVelocityActivator` | Resolves `SyncBus` + `VelocityConnectionFactory`, hot attach/detach. |
 | `SyncVelocityModule` | Legacy kernel descriptor, kept for the kernel graph. |
@@ -111,16 +112,40 @@ queue, stops the adapter connection and shuts down its daemon executors.
 
 ---
 
-## 6. Tests
+## 6. Native actions
+
+`VelocitySink.surface()` publishes the LCM plus three native actions. `invoke()`
+requires a `Principal.Program`: `Principal.Official` receives `Denied` and only
+reaches the LCM. A stopped, disabled or shutting-down sink returns
+`HostFailure`; `send(Message)` on a disabled sink throws `IOException` instead
+of silently dropping the message.
+
+| Action | Kind | Arguments | Result |
+|---|---|---|---|
+| `proxy.info` | `READ` | none | `Ok` with channel, transport, servers, queue and health |
+| `mapping.resolve` | `READ` | `channel` (`STRING`, required), optional `type` (`STRING`) | `Ok` with the resolved `targets` |
+| `queue.purge` | `DESTRUCTIVE` | none | `Ok` with the number of purged entries |
+
+`proxy.info` never exposes the shared secret. `mapping.resolve` applies the same
+rules as `send`: exact channel, `regex:`, `type:` and `*`, then the static
+server list or dynamic discovery; `type` defaults to `CUSTOM` and a missing or
+blank `channel` returns `InvalidArgument` without resolving anything.
+`queue.purge` drops queued retries and reports how many entries it removed.
+
+---
+
+## 7. Tests
 
 `VelocitySinkTest` uses `FakeConnection`; no proxy and no network:
 
 - start/stop idempotence;
-- disabled config does not touch the transport;
+- disabled config does not touch the transport and rejects `send`;
 - mapped send;
-- retry queue;
+- retry queue and `queue.purge`;
 - secret verification;
-- health and metrics;
+- health, metrics and `proxy.info`;
+- `mapping.resolve` with wildcard and type rules;
+- surface, `Denied` for `Principal.Official`, `Unsupported` and stopped sinks;
 - config validation.
 
 `PackageRuntimeTest.installsNeutralVelocityPackageWithATransportAdapter`
@@ -129,7 +154,7 @@ attach, adapter unload and package unload.
 
 ---
 
-## 7. Related modules
+## 8. Related modules
 
 - [core-api](../core-api/README.md) — ports and suite contracts
 - [sync-bus](../sync-bus/README.md) — sink lifecycle and fan-out

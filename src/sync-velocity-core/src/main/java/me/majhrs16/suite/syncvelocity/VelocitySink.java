@@ -1,9 +1,18 @@
 package me.majhrs16.suite.syncvelocity;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.ActionKind;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncActionSpec;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncParamSpec;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
+import me.majhrs16.suite.api.sync.SyncValueType;
 import me.majhrs16.suite.api.velocity.VelocityConnection;
 import me.majhrs16.suite.api.velocity.VelocitySettings;
 import me.majhrs16.suite.transport.MessageCodec;
@@ -16,9 +25,12 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
@@ -37,6 +49,13 @@ import java.util.regex.Pattern;
  * imports {@code com.velocitypowered}.</p>
  */
 public final class VelocitySink implements SyncSink {
+
+    private static final String PROXY_INFO = "proxy.info";
+    private static final String MAPPING_RESOLVE = "mapping.resolve";
+    private static final String QUEUE_PURGE = "queue.purge";
+    private static final Set<String> NATIVE_ACTIONS =
+        Set.of(PROXY_INFO, MAPPING_RESOLVE, QUEUE_PURGE);
+    private static final SyncSurface SURFACE = buildSurface();
 
     private final VelocityConnection connection;
     private final VelocityConfig config;
@@ -117,6 +136,43 @@ public final class VelocitySink implements SyncSink {
     @Override
     public String name() {
         return "velocity";
+    }
+
+    @Override
+    public SyncSurface surface() {
+        return SURFACE;
+    }
+
+    /**
+     * Executes the least common multiple through the default implementation and
+     * the Velocity-native actions through this sink. Native actions require a
+     * {@link Principal.Program}; {@link Principal.Official} only reaches the
+     * LCM, and a stopped or disabled sink returns {@link SyncResult.HostFailure}.
+     */
+    @Override
+    public SyncResult invoke(SyncCall call) {
+        Objects.requireNonNull(call, "call");
+        if (!name().equals(call.backend()) || !NATIVE_ACTIONS.contains(call.action())) {
+            return SyncSink.super.invoke(call);
+        }
+        if (call.principal() instanceof Principal.Official) {
+            return new SyncResult.Denied(
+                "Principal.Official may only invoke the least common multiple");
+        }
+        if (!config.enabled || !started.get() || shuttingDown.get()) {
+            return new SyncResult.HostFailure("velocity sink is not running");
+        }
+        if (QUEUE_PURGE.equals(call.action())) {
+            return new SyncResult.Ok(Map.of("purged", purgeQueue()));
+        }
+        if (MAPPING_RESOLVE.equals(call.action())) {
+            try {
+                return new SyncResult.Ok(mappingResolve(call));
+            } catch (IllegalArgumentException invalid) {
+                return new SyncResult.InvalidArgument(invalid.getMessage());
+            }
+        }
+        return new SyncResult.Ok(proxyInfo());
     }
 
     @Override
@@ -204,7 +260,7 @@ public final class VelocitySink implements SyncSink {
     @Override
     public void send(Message message) throws IOException {
         if (!config.enabled) {
-            return;
+            throw new IOException("velocity sink is disabled");
         }
         if (!started.get()) {
             throw new IOException("Velocity sink is not started");
@@ -367,6 +423,53 @@ public final class VelocitySink implements SyncSink {
         listenerRef.set(listener);
     }
 
+    /** Describes the proxy edge without exposing the shared secret. */
+    private Map<String, Object> proxyInfo() {
+        HealthStatus health = getHealth();
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("name", name());
+        info.put("channel", settings.channel());
+        info.put("subchannel", settings.subchannel());
+        info.put("transport", config.transport);
+        info.put("servers", List.copyOf(connection.servers()));
+        info.put("dynamicDiscovery", config.dynamicDiscovery);
+        info.put("queueSize", sendQueue.size());
+        info.put("status", health.status());
+        info.put("detail", health.detail());
+        info.put("metrics", health.metrics());
+        return info;
+    }
+
+    /** Resolves the target servers for a channel and message type. */
+    private Map<String, Object> mappingResolve(SyncCall call) {
+        Object channelValue = call.args().get("channel");
+        if (!(channelValue instanceof String channel) || channel.isBlank()) {
+            throw new IllegalArgumentException("'channel' must be a non-blank string");
+        }
+        String type = MessageType.CUSTOM.name();
+        Object typeValue = call.args().get("type");
+        if (typeValue != null) {
+            if (!(typeValue instanceof String text) || text.isBlank()) {
+                throw new IllegalArgumentException("'type' must be a non-blank string");
+            }
+            type = text;
+        }
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("channel", channel);
+        value.put("type", type);
+        value.put("targets", resolveTargets(channel, type));
+        return value;
+    }
+
+    /** Drops every queued retry and returns how many entries were removed. */
+    private int purgeQueue() {
+        int purged = 0;
+        while (sendQueue.poll() != null) {
+            purged++;
+        }
+        return purged;
+    }
+
     private void shutdownExecutors() {
         if (retryExecutor != null) {
             retryExecutor.shutdownNow();
@@ -474,6 +577,37 @@ public final class VelocitySink implements SyncSink {
 
     public long getQueueSize() {
         return sendQueue.size();
+    }
+
+    private static SyncSurface buildSurface() {
+        SyncSurface lcm = SyncSurface.lcm(
+            "velocity", SyncSurface.CURRENT_CONTRACT_VERSION);
+        Set<SyncActionSpec> actions = new LinkedHashSet<>(lcm.actions());
+        actions.add(new SyncActionSpec(
+            PROXY_INFO,
+            ActionKind.READ,
+            List.of(),
+            SyncParamSpec.optional("info", SyncValueType.OBJECT),
+            true,
+            5_000));
+        actions.add(new SyncActionSpec(
+            MAPPING_RESOLVE,
+            ActionKind.READ,
+            List.of(
+                SyncParamSpec.required("channel", SyncValueType.STRING),
+                SyncParamSpec.optional("type", SyncValueType.STRING)),
+            SyncParamSpec.optional("result", SyncValueType.OBJECT),
+            true,
+            5_000));
+        actions.add(new SyncActionSpec(
+            QUEUE_PURGE,
+            ActionKind.DESTRUCTIVE,
+            List.of(),
+            SyncParamSpec.optional("result", SyncValueType.OBJECT),
+            true,
+            5_000));
+        return new SyncSurface(
+            "velocity", SyncSurface.CURRENT_CONTRACT_VERSION, actions);
     }
 
     public static final class QueuedMessage {

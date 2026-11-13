@@ -7,6 +7,11 @@ import me.majhrs16.suite.api.message.Message;
 import me.majhrs16.suite.api.message.MessageType;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncListener;
+import me.majhrs16.suite.api.sync.ActionKind;
+import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.SyncCall;
+import me.majhrs16.suite.api.sync.SyncResult;
+import me.majhrs16.suite.api.sync.SyncSurface;
 import me.majhrs16.suite.api.velocity.VelocityConnection;
 import me.majhrs16.suite.api.velocity.VelocityListener;
 import me.majhrs16.suite.transport.MessageCodec;
@@ -30,10 +35,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VelocitySinkTest {
+
+    private static final Principal PROGRAM =
+        new Principal.Program("0123456789abcdef".repeat(4));
 
     private FakeConnection connection;
     private VelocityConfig config;
@@ -208,6 +217,151 @@ class VelocitySinkTest {
         sink.stop();
 
         assertTrue(sink.getQueueSize() <= 1);
+    }
+
+    @Test
+    void publishesLeastCommonMultipleAndNativeActions() {
+        SyncSurface surface = sink.surface();
+
+        assertEquals("velocity", surface.backend());
+        assertTrue(surface.hasLeastCommonMultiple());
+        assertEquals(ActionKind.READ,
+            surface.action("proxy.info").orElseThrow().kind());
+        assertEquals(ActionKind.READ,
+            surface.action("mapping.resolve").orElseThrow().kind());
+        assertEquals(ActionKind.DESTRUCTIVE,
+            surface.action("queue.purge").orElseThrow().kind());
+    }
+
+    @Test
+    void proxyInfoReportsStateWithoutSecret() throws Exception {
+        sink.start();
+        try {
+            SyncResult result = sink.invoke(nativeCall("proxy.info", Map.of()));
+
+            String info = String.valueOf(
+                assertInstanceOf(SyncResult.Ok.class, result).value());
+            assertTrue(info.contains("channel=textformatter:velocity"), info);
+            assertTrue(info.contains("subchannel=textformatter"), info);
+            assertTrue(info.contains("transport=velocity"), info);
+            assertTrue(info.contains("servers=[server1, server2]"), info);
+            assertTrue(info.contains("status=UP"), info);
+            assertFalse(info.contains("test-secret"), info);
+        } finally {
+            sink.stop();
+        }
+    }
+
+    @Test
+    void mappingResolveUsesConfiguredRules() throws Exception {
+        sink.start();
+        try {
+            SyncResult result = sink.invoke(nativeCall("mapping.resolve",
+                Map.of("channel", "chat.global", "type", "CHAT")));
+
+            String resolved = String.valueOf(
+                assertInstanceOf(SyncResult.Ok.class, result).value());
+            assertTrue(resolved.contains("channel=chat.global"), resolved);
+            assertTrue(resolved.contains("targets=[server1]"), resolved);
+        } finally {
+            sink.stop();
+        }
+    }
+
+    @Test
+    void mappingResolveMatchesTypeRules() throws Exception {
+        VelocityConfig typedConfig = new VelocityConfig();
+        typedConfig.enabled = true;
+        typedConfig.servers = List.of("server1", "server2");
+        typedConfig.mapping = "type:CHAT -> server2";
+        VelocitySink typedSink = new VelocitySink(connection, typedConfig, new NoopLogger());
+        typedSink.start();
+        try {
+            SyncResult result = typedSink.invoke(new SyncCall(
+                "velocity", "mapping.resolve",
+                Map.of("channel", "any", "type", "CHAT"),
+                PROGRAM, "", "test"));
+
+            String resolved = String.valueOf(
+                assertInstanceOf(SyncResult.Ok.class, result).value());
+            assertTrue(resolved.contains("targets=[server2]"), resolved);
+        } finally {
+            typedSink.stop();
+        }
+    }
+
+    @Test
+    void queuePurgeDropsQueuedRetries() throws Exception {
+        connection.failing.add("server1");
+        sink.start();
+        try {
+            sink.send(chatMessage("retry"));
+            assertEquals(1, sink.getQueueSize());
+
+            SyncResult result = sink.invoke(nativeCall("queue.purge", Map.of()));
+
+            String purged = String.valueOf(
+                assertInstanceOf(SyncResult.Ok.class, result).value());
+            assertTrue(purged.contains("purged=1"), purged);
+            assertEquals(0, sink.getQueueSize());
+        } finally {
+            sink.stop();
+        }
+    }
+
+    @Test
+    void officialPrincipalCannotInvokeNativeActions() {
+        SyncResult result = sink.invoke(new SyncCall(
+            "velocity", "proxy.info", Map.of(),
+            new Principal.Official("sync-bus"), "", "test"));
+
+        assertInstanceOf(SyncResult.Denied.class, result);
+    }
+
+    @Test
+    void unsupportedActionIsExplicit() {
+        SyncResult result = sink.invoke(new SyncCall(
+            "velocity", "channel.create", Map.of(), PROGRAM, "", "test"));
+
+        assertInstanceOf(SyncResult.Unsupported.class, result);
+    }
+
+    @Test
+    void mappingResolveRejectsInvalidArguments() throws Exception {
+        sink.start();
+        try {
+            SyncResult missing = sink.invoke(nativeCall("mapping.resolve", Map.of()));
+            SyncResult blankType = sink.invoke(nativeCall("mapping.resolve",
+                Map.of("channel", "chat", "type", " ")));
+
+            assertInstanceOf(SyncResult.InvalidArgument.class, missing);
+            assertInstanceOf(SyncResult.InvalidArgument.class, blankType);
+        } finally {
+            sink.stop();
+        }
+    }
+
+    @Test
+    void stoppedSinkRejectsNativeActionsAndSend() {
+        SyncResult info = sink.invoke(nativeCall("proxy.info", Map.of()));
+
+        assertInstanceOf(SyncResult.HostFailure.class, info);
+        assertThrows(IOException.class, () -> sink.send(chatMessage("detenido")));
+    }
+
+    @Test
+    void disabledSinkRejectsSend() throws Exception {
+        VelocityConfig disabled = new VelocityConfig();
+        disabled.enabled = false;
+        VelocitySink disabledSink = new VelocitySink(connection, disabled, new NoopLogger());
+        disabledSink.start();
+
+        assertThrows(IOException.class, () -> disabledSink.send(chatMessage("disabled")));
+        disabledSink.stop();
+    }
+
+    private static SyncCall nativeCall(String action, Map<String, Object> args) {
+        return new SyncCall("velocity", action, args, PROGRAM, "", "test");
     }
 
     private static Message chatMessage(String text) {

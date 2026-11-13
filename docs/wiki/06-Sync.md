@@ -236,10 +236,10 @@ is reported as `Timeout`/`HostFailure`, not as success.
 Authority is fail-closed in this slice: `Principal.Official` may only invoke the
 LCM, and `Principal.Program` is denied until the operator grant store
 (`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram`,
-`sync-http`, `sync-websocket` and `sync-socket` publish and execute native
-actions, but third parties cannot execute them until the grant store exists. An
-unknown native action returns `Unsupported`; an adapter that is not connected
-returns `HostFailure`.
+`sync-http`, `sync-websocket`, `sync-socket` and `sync-velocity-core` publish and
+execute native actions, but third parties cannot execute them until the grant
+store exists. An unknown native action returns `Unsupported`; an adapter that is
+not connected returns `HostFailure`.
 
 ### Native Discord actions
 
@@ -322,6 +322,22 @@ and closes a TCP connection to the remote listener with a 4 s connect timeout,
 sends no message, and returns `Ok` with `reachable` and latency or `HostFailure`
 when the remote is unreachable. A stopped sink returns `HostFailure` and
 `send(Message)` throws `IOException` instead of sending through a closed socket.
+
+### Native Velocity actions
+
+| Action | Kind | Arguments |
+|---|---|---|
+| `velocity.proxy.info` | `READ` | none |
+| `velocity.mapping.resolve` | `READ` | `channel` (`STRING`, required), optional `type` (`STRING`) |
+| `velocity.queue.purge` | `DESTRUCTIVE` | none |
+
+`proxy.info` reports channel, subchannel, transport, available servers, queue
+size and health without exposing the shared secret. `mapping.resolve` applies
+the configured exact, `regex:`, `type:` and `*` rules and returns the target
+servers; `type` defaults to `CUSTOM`. `queue.purge` drops queued retries and
+reports how many entries it removed. A stopped, disabled or shutting-down sink
+returns `HostFailure`, and `send(Message)` on a disabled sink throws
+`IOException` instead of silently dropping the message.
 
 
 ## Outputs and local delivery
