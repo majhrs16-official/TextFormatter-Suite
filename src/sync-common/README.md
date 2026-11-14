@@ -16,13 +16,23 @@
 - Provide the platform-neutral event helpers used by `sync-bukkit` and
   `sync-fabric`: channel selection, translation gating, `Message` construction
   and dispatch.
+- Publish `LocalSyncSink`, the sink that both platform packages expose as
+  `bukkit`/`fabric`. It owns the LCM (`backend.info`, `message.send`,
+  `message.deliver`) and the environment surface (`local.info`, `player.*`,
+  `console.command`, `scoreboard.set`, `event.info`, `event.cancel`).
+- Define the neutral `LocalEnvironment` port, with `LocalPlayer`, `LocalEvent`
+  and `LocalActionException` (`NOT_FOUND`, `UNSUPPORTED`, `INVALID_ARGUMENT`,
+  `HOST_FAILURE`). Platform types never cross this port.
 
 ---
 
 ## 2. Non-Responsibilities
 
-- No sink lifecycle, transport or message delivery.
+- No transport, connection lifecycle or fan-out: those belong to `sync-bus`.
+  `LocalSyncSink` delegates physical local delivery to the host's
+  `LocalDelivery` port.
 - No platform SDK types: Bukkit/Fabric events stay in their platform package.
+  The platform implements `LocalEnvironment`; this package only consumes it.
 - No validation of semantic fields (tokens, ports, chat ids): each sink module
   owns its schema and its `usable()` rule.
 
@@ -32,7 +42,7 @@
 
 | Dependency | Type | Reason |
 |------------|------|--------|
-| `core-api` | Compile | `Message`, `ChannelRegistry`, `MessageDispatch`, `ActorDirectory` |
+| `core-api` | Compile | `Message`, `ChannelRegistry`, `MessageDispatch`, `ActorDirectory`, `SyncSink`, `SyncSurface` |
 | `snakeyaml` | Compile | Safe YAML parsing |
 | JDK | Compile | `Path`, `Files` |
 
@@ -51,8 +61,8 @@ declared dependency scope.
 | `sync-socket` | `SocketConfig` |
 | `sync-telegram` | `TelegramConfig` |
 | `sync-websocket` | `WebSocketSyncConfig` |
-| `sync-bukkit` | `SyncEventProcessor`, `EventRules`, `ChannelSelector` |
-| `sync-fabric` | `SyncEventProcessor`, `EventRules`, `ChannelSelector` |
+| `sync-bukkit` | `SyncEventProcessor`, `EventRules`, `ChannelSelector`, `LocalSyncSink`, `LocalEnvironment` |
+| `sync-fabric` | `SyncEventProcessor`, `EventRules`, `ChannelSelector`, `LocalSyncSink`, `LocalEnvironment` |
 
 ---
 
@@ -66,6 +76,10 @@ declared dependency scope.
 | `EventRules` | Conventional event channels and `off` translation gating |
 | `EventMessages` | Builds neutral `Message` values for chat and typed events |
 | `SyncEventProcessor` | Dispatches chat/join/quit/death through `MessageDispatch` |
+| `LocalSyncSink` | Sink `bukkit`/`fabric`: LCM, `local.info` and environment actions |
+| `LocalEnvironment` | Neutral port implemented by each platform: players, message, kick, console, scoreboard, event |
+| `LocalPlayer` / `LocalEvent` | Immutable neutral snapshots exposed by the port |
+| `LocalActionException` | Typed failure that the sink maps to `SyncResult` |
 
 ---
 
@@ -80,3 +94,6 @@ declared dependency scope.
 ignored.
 `SyncEventProcessorTest` covers chat fan-out, console copy, `off` translation,
 channel fallback and typed-event gating.
+`LocalSyncSinkTest` covers the full surface, the LCM, `Principal.Official` denial,
+invalid arguments, the four failure families of `LocalActionException`, a foreign
+backend and `message.send` being rejected in favour of `message.deliver`.

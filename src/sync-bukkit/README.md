@@ -19,14 +19,19 @@
 - **Publicar el sink local** — registra `LocalSyncSink` (`sync-common`) como
   servicio `SyncSink` con backend `bukkit`; la entrega física la ejecuta el host
   a través del puerto `LocalDelivery`.
+- **Entorno y eventos** — `BukkitLocalEnvironment` implementa el puerto neutral
+  `LocalEnvironment`: jugadores en línea, mensaje privado, expulsión, comando de
+  consola, scoreboard y el evento de chat ligado al dispatch. Las operaciones se
+  ejecutan en el hilo principal y se esperan.
 - **Ciclo de vida** — registra el listener en `start()` y lo desregistra en
   `stop()` con `HandlerList.unregisterAll`.
 
 ## 2. Non-Responsibilities
 
 - No importa features, `host`, `kernel`, `manager` ni otro sincronizador.
-- No implementa el sink local: publica `LocalSyncSink` de `sync-common`; el
-  fan-out y el ciclo de vida de los sinks pertenecen a `sync-bus`.
+- No implementa el sink: publica `LocalSyncSink` de `sync-common`; el fan-out y
+  el ciclo de vida de los sinks pertenecen a `sync-bus`. Sí implementa el puerto
+  neutral `LocalEnvironment` que ese sink consume.
 - No crea el pipeline ni conoce sus etapas.
 - No bloquea `start()` esperando red.
 
@@ -48,8 +53,9 @@ familia.
 | Component | Role |
 |-----------|------|
 | `SyncBukkitActivator` | Resuelve `PlatformHandle`, registra el listener y el sink local, y los retira |
-| `BukkitChatListener` | Traduce eventos Bukkit a llamadas neutrales |
-| `LocalSyncSink` (`sync-common`) | Sink `bukkit`: LCM más `local.info`; entrega por `LocalDelivery` |
+| `BukkitChatListener` | Traduce eventos Bukkit a llamadas neutrales y liga el evento de chat |
+| `BukkitLocalEnvironment` | Ejecuta las acciones de entorno en el hilo principal |
+| `LocalSyncSink` (`sync-common`) | Sink `bukkit`: LCM, `local.info` y acciones de entorno |
 | `SyncBukkitConfig` | `enabled`, `claim-mode`, `log-chat-to-console` |
 
 ## 5. Data Flow
@@ -91,21 +97,30 @@ valores por defecto. `start()` no falla por configuración ausente.
 ```
 
 Cubren los tres modos de claim, el despacho de chat, el offload de eventos
-tipados, la desactivación y el registro/desregistro del listener. El sink local
-se prueba en `sync-common` (`LocalSyncSinkTest`). No hay E2E contra un servidor
-Paper real.
+tipados, la desactivación, el registro/desregistro del listener, el binding del
+evento de chat y las operaciones de entorno (jugadores, mensaje, expulsión,
+consola, scoreboard, cancelación y ejecución fuera del hilo principal). El sink
+local se prueba en `sync-common` (`LocalSyncSinkTest`). No hay E2E contra un
+servidor Paper real.
 
 ## 8. Native actions
 
-`LocalSyncSink` publica el LCM más `local.info` con el namespace `bukkit`:
+`LocalSyncSink` publica el LCM y las acciones de entorno con el namespace
+`bukkit`:
 
 | Acción | Kind | Argumentos | Resultado |
 |---|---|---|---|
-| `bukkit.local.info` | `READ` | ninguno | `Ok` con `name`, `surfaceVersion`, `localDeliveryRegistered`, `deliverySemantics`, `ordering` |
+| `local.info` | `READ` | ninguno | `name`, `surfaceVersion`, `localDeliveryRegistered`, `deliverySemantics`, `ordering`, `environmentRegistered`, `eventBound` |
+| `player.list` | `READ` | ninguno | lista de jugadores (`uuid`, `name`, `world`) |
+| `player.info` | `READ` | `player` | jugador o `NotFound` |
+| `player.message` | `WRITE` | `player`, `text` | `Ok` |
+| `player.kick` | `DESTRUCTIVE` | `player`, `reason` opcional | `Ok` |
+| `console.command` | `DESTRUCTIVE` | `command` | `Ok` o `HostFailure` |
+| `scoreboard.set` | `WRITE` | `objective`, `entry`, `value` | `Ok` o `NotFound` |
+| `event.info` | `READ` | ninguno | evento ligado o `NotFound` |
+| `event.cancel` | `WRITE` | ninguno | `Ok`, `NotFound` o `Unsupported` |
 
-`local.info` es de solo lectura, idempotente, no recibe argumentos y funciona
-antes de `start()` porque el sink local no abre ninguna conexión. Nunca expone el
-puerto `LocalDelivery` ni un sobre; solo informa si el host ya registró el
-puerto. `Principal.Official` recibe `Denied` (solo puede invocar el LCM) y una
-acción no publicada devuelve `Unsupported`. `message.send` devuelve
-`Unsupported` porque el camino local exige `message.deliver`.
+Las acciones nativas exigen `Principal.Program`; `Principal.Official` recibe
+`Denied` (solo puede invocar el LCM). Una acción no publicada devuelve
+`Unsupported`. `message.send` devuelve `Unsupported` porque el camino local exige
+`message.deliver`. `event.cancel` solo cancela eventos Bukkit `Cancellable`.

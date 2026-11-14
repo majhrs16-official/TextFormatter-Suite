@@ -19,6 +19,10 @@
 - **Publicar el sink local** — registra `LocalSyncSink` (`sync-common`) como
   servicio `SyncSink` con backend `fabric`; la entrega física la ejecuta el host
   a través del puerto `LocalDelivery`.
+- **Entorno y eventos** — `FabricLocalEnvironment` implementa el puerto neutral
+  `LocalEnvironment`: jugadores en línea, mensaje privado, expulsión, comando de
+  consola, scoreboard y el evento de chat ligado al dispatch. Las operaciones se
+  ejecutan en el hilo del servidor y se esperan (`submit().get()`).
 - **Ciclo de vida** — en `start()` registra los callbacks; en `stop()` los deja
   inertes. Fabric API no permite desregistrarlos, así que un unload en caliente
   marca `RESTART_REQUIRED`. En un apagado completo del servidor no se marca
@@ -27,10 +31,12 @@
 ## 2. Non-Responsibilities
 
 - No importa features, `host`, `kernel`, `manager` ni otro sincronizador.
-- No implementa el sink local: publica `LocalSyncSink` de `sync-common`; el
-  fan-out y el ciclo de vida de los sinks pertenecen a `sync-bus`.
-- No cancela el chat vanilla: Fabric API no expone un evento cancelable en el
-  baseline usado por este paquete.
+- No implementa el sink: publica `LocalSyncSink` de `sync-common`; el fan-out y
+  el ciclo de vida de los sinks pertenecen a `sync-bus`. Sí implementa el puerto
+  neutral `LocalEnvironment` que ese sink consume.
+- No cancela el chat vanilla: la callback de Fabric ya se despachó y no es un
+  objeto cancelable. `event.cancel` devuelve `Unsupported` explícito; no finge la
+  cancelación.
 - No crea el pipeline ni conoce sus etapas.
 - No bloquea `start()` esperando red.
 
@@ -53,9 +59,10 @@ resultado de `remapJar`; el JAR fino de `jar` no se publica.
 | Component | Role |
 |-----------|------|
 | `SyncFabricActivator` | Resuelve `PlatformHandle`, registra callbacks y el sink local, y aplica `RESTART_REQUIRED` |
-| `FabricEventListener` | Traduce eventos Fabric a llamadas neutrales |
+| `FabricEventListener` | Traduce eventos Fabric a llamadas neutrales y liga el evento de chat |
 | `FabricDeathTracker` | Estado de una emisión por muerte |
-| `LocalSyncSink` (`sync-common`) | Sink `fabric`: LCM más `local.info`; entrega por `LocalDelivery` |
+| `FabricLocalEnvironment` | Ejecuta las acciones de entorno en el hilo del servidor |
+| `LocalSyncSink` (`sync-common`) | Sink `fabric`: LCM, `local.info` y acciones de entorno |
 | `SyncFabricConfig` | `enabled`, `log-chat-to-console` |
 
 ## 5. Data Flow
@@ -94,21 +101,34 @@ valores por defecto.
 ./gradlew :src:sync-fabric:modulePackage
 ```
 
-Cubren configuración y el tracker de muerte. El sink local se prueba en
-`sync-common` (`LocalSyncSinkTest`). La compilación valida el uso real de la API
-Fabric/Minecraft. No hay E2E contra un servidor Fabric real.
+Cubren configuración y el tracker de muerte. `FabricLocalEventTest` valida el
+contrato neutral del evento ligado, incluida la cancelación no soportada. El sink
+local se prueba en `sync-common` (`LocalSyncSinkTest`) y la compilación valida el
+uso real de la API Fabric/Minecraft. Los tests JVM no bootstrapean registros de
+Minecraft (`IllegalAccessError` en `SimpleRegistry`), así que
+`FabricLocalEnvironment` se valida por compilación y no con un servidor
+levantado. No hay E2E contra un servidor Fabric real.
 
 ## 8. Native actions
 
-`LocalSyncSink` publica el LCM más `local.info` con el namespace `fabric`:
+`LocalSyncSink` publica el LCM y las acciones de entorno con el namespace
+`fabric`:
 
 | Acción | Kind | Argumentos | Resultado |
 |---|---|---|---|
-| `fabric.local.info` | `READ` | ninguno | `Ok` con `name`, `surfaceVersion`, `localDeliveryRegistered`, `deliverySemantics`, `ordering` |
+| `local.info` | `READ` | ninguno | `name`, `surfaceVersion`, `localDeliveryRegistered`, `deliverySemantics`, `ordering`, `environmentRegistered`, `eventBound` |
+| `player.list` | `READ` | ninguno | lista de jugadores (`uuid`, `name`, `world`) |
+| `player.info` | `READ` | `player` | jugador o `NotFound` |
+| `player.message` | `WRITE` | `player`, `text` | `Ok` |
+| `player.kick` | `DESTRUCTIVE` | `player`, `reason` opcional | `Ok` |
+| `console.command` | `DESTRUCTIVE` | `command` | `Ok` o `HostFailure` |
+| `scoreboard.set` | `WRITE` | `objective`, `entry`, `value` | `Ok` o `NotFound` |
+| `event.info` | `READ` | ninguno | evento ligado o `NotFound` |
+| `event.cancel` | `WRITE` | ninguno | `NotFound` o `Unsupported` (Fabric no permite cancelar tras el dispatch) |
 
-`local.info` es de solo lectura, idempotente, no recibe argumentos y funciona
-antes de `start()` porque el sink local no abre ninguna conexión. Nunca expone el
-puerto `LocalDelivery` ni un sobre; solo informa si el host ya registró el
-puerto. `Principal.Official` recibe `Denied` (solo puede invocar el LCM) y una
-acción no publicada devuelve `Unsupported`. `message.send` devuelve
-`Unsupported` porque el camino local exige `message.deliver`.
+`local.info` funciona antes de `start()` porque el sink local no abre ninguna
+conexión. Nunca expone el puerto `LocalDelivery` ni un sobre; solo informa si el
+host ya registró el puerto. Las acciones nativas exigen `Principal.Program`;
+`Principal.Official` recibe `Denied` (solo puede invocar el LCM) y una acción no
+publicada devuelve `Unsupported`. `message.send` devuelve `Unsupported` porque el
+camino local exige `message.deliver`.
