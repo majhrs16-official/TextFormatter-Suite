@@ -75,6 +75,14 @@ public final class MachineFault extends RuntimeException {
         return new MachineFault(Code.INSTRUCTION_FAULT, pc, detail);
     }
 
+    public static MachineFault divideByZero(int pc) {
+        return new MachineFault(Code.DIVIDE_BY_ZERO, pc, "division by zero");
+    }
+
+    public static MachineFault arithmeticOverflow(int pc, String detail) {
+        return new MachineFault(Code.ARITHMETIC_OVERFLOW, pc, detail);
+    }
+
     private static String format(Code code, int pc, Integer badAddress, String detail) {
         StringBuilder message = new StringBuilder(code.name())
                 .append(" at PC=0x")
