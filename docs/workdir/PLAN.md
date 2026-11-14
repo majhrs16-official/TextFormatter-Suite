@@ -1816,11 +1816,12 @@ Reglas de diseño:
 
 ### Trayectoria v2 → v3 y fuel (2026-11-07)
 
-La línea vigente sigue siendo la **v2 de 16 bits**. Se prioriza hacerla estable y cerrar
-PL-1/PL-2/PL-3 sobre sus contratos actuales; la migración a v3 (ISA/ABI de 32 bits, scheduler,
-persistencia, quantum) es posterior y no se mezcla con esos slices. Por eso el fuel sigue siendo
-el límite de ejecución vigente en v2 y las referencias de ADR-036 §16.6/§16.7 al coste de fuel
-describen esa línea, no el objetivo v3.
+La línea vigente de `iflow-vm` sigue siendo la **v2 de 16 bits** mientras V2 sustituye el núcleo
+por el contrato v3 de ADR-037. V2-0 ya implementó el contenedor ROM v3 aislado y no cableado; no
+existe un despacho dual v2/v3. La migración a v3 (ISA/ABI de 32 bits, scheduler, persistencia,
+quantum) es posterior y no se mezcla con esos slices. Por eso el fuel sigue siendo el límite de
+ejecución vigente en v2 y las referencias de ADR-036 §16.6/§16.7 al coste de fuel describen esa
+línea, no el objetivo v3.
 
 `IFLOW-MAN-D36R` (retirar el fuel como límite) sigue siendo el objetivo de v3, pero su reemplazo
 —quantum de scheduler, timer IRQ, watchdog de host, cuotas por actor o una combinación— no está
@@ -1834,7 +1835,7 @@ camino v2/v3: la migración sustituye la línea vigente.
 |---|---|---|
 | **V0 — Módulo y spec** | `src/iflow-vm/` renombrado, Gradle/CI/docs actualizados y especificación v3 enlazada | ✅ `:src:iflow-vm:build`, `:src:iflow-wasm:build` y `:src:host:build` verificados con JDK 21 |
 | **V1 — Contrato 32 bits** | ✅ **ADR-037 (2026-11-14):** ISA, memoria/MMU, IRQ, scheduler, tiempo, formato ROM y ABI `HOST` v3; corte limpio sin compatibilidad `.flow` v2 | Contrato congelado antes de tocar el núcleo |
-| **V2 — Núcleo** | CPU/MMU/bus de 32 bits, arranque BIOS/kernel, fixtures actualizados | Tests de memoria, privilegios y arranque |
+| **V2 — Núcleo** | **V2-0 completado (2026-11-14):** contenedor ROM v3 aislado en `me.majhrs16.suite.iflow.vm.rom` (`RomParser`, cabecera/TOC de 80/64 bytes, `PRG3`, capacidades, hashes SHA-256, `W^X`, rechazo explícito de `.flow` v2) con 62 tests; **no cableado** a `VmPolicyEngine`/`VmConfigLoader`/`IflowVmActivator`. Siguiente: ISA/decoder, MMU, bus, PIC y ABI `HOST` v3. | Tests de memoria, privilegios y arranque |
 | **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
 | **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
 | **V5 — Herramientas de ensamblado** | Assembler `.flowasm` v3, firmware, ejemplos y validador | Build reproducible + tests |
@@ -2315,7 +2316,7 @@ Líneas Prod/Test = líneas físicas de todas las `.java` de `src/main` y `src/t
 
 **Próxima acción T4:** ✅ **COMPLETADO** — tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld` (14 tests neutrales: dominio, activador y descriptor), `observability` (15 tests) y `messages` (18 tests) — usando mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
 
-**Próxima acción:** V1 cerrado con ADR-037; siguiente en la línea VM: V2 (núcleo de 32 bits). W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
+**Próxima acción:** V1 cerrado con ADR-037 y V2-0 (contenedor ROM v3 aislado) completado con 62 tests. Siguiente slice de V2: ISA/decoder, MMU, bus, PIC y ABI `HOST` v3, sustituyendo el núcleo v2 sin camino dual. W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
 
 ---
 
