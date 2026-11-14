@@ -1944,8 +1944,9 @@ la VM lo deja además en `R4`.
   retira el import dedicado, sin reintroducir `REDIRECT` ni `CHANNEL_REDIRECT`.
 - **ADR-019.** Los `sync-*` dejan de requerir `sync-bus` (§15); publican `SyncSink` y el bus los
   descubre.
-- **`storage.md` §1 (Terminología), regla 2.** La regla «un submódulo declara `require(...)` del
-  padre» contradice §15 y esta sección; actualizarla requiere autorización explícita.
+- **`storage.md` §1 (Terminología), regla 2.** Actualizada (2026-11-13) para alinearse con §15: el
+  submódulo no exige al padre, publica su puerto y el padre lo descubre; el requisito duro queda solo
+  para dependencias estructurales (`manager-apt`/`manager-core` sobre la API de `manager-spi`).
 - **Rutas.** Las concesiones viven en `config/iflow/grants.yml` (layout `config/<módulo>/`), no en
   `config/suite/iflow/`: `config/suite/` es solo para la configuración global.
 - **Especificación iFlow.** El baseline v3 limita al guest a contenido/metadatos; esta sección amplía

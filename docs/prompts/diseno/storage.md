@@ -20,12 +20,15 @@
 | Término | Definición | Ejemplos |
 |---|---|---|
 | **Módulo** | Aplicación con responsabilidad cohesiva, ciclo de vida propio y registro vía SPI (`ModuleDescriptor`). | `chattranslator`, `sync-bus`, `textformatter`, `iflow`, `host`, `observability` |
-| **Submódulo** | Especialización que extiende un módulo central y se registra como proveedor de su capability. No existe sin el módulo padre. | `gtranslate`/`ltranslate` (de `chattranslator`), `sync-discord`/`sync-telegram` (de `sync-bus`) |
+| **Submódulo** | Especialización que extiende un módulo central y publica su propia capability. El padre lo descubre y queda inerte si este no está activo, pero no se exige como requisito de activación. | `gtranslate`/`ltranslate` (de `chattranslator`), `sync-discord`/`sync-telegram` (de `sync-bus`) |
 
 Reglas:
 
 1. Un módulo declara `provide(Capability.of("<nombre>", ...))`.
-2. Un submódulo declara `require(...)` del padre y `provide(...)` de su propia capability.
+2. Un submódulo declara `provide(...)` de su propia capability y **no** exige al padre: publica su
+   puerto neutral (`SyncSink`, `TranslatorProvider`, …) y el padre lo descubre (ADR-036 §15). Solo
+   declara `require(...)` cuando la dependencia es estructural e imposible de resolver por
+   descubrimiento (por ejemplo, `manager-apt`/`manager-core` sobre la API de `manager-spi`).
 3. Cada módulo y submódulo es dueño de `config/<id>/config.yml` (o de sus subarchivos).
 4. El módulo padre solo coordina; no parsea la configuración de sus submódulos.
 

@@ -961,7 +961,7 @@ Pendiente y fuera de esta unidad:
 | ADR-003 | La autoridad del guest se limita a contenido/metadatos. | ADR-036 §16 añade concesiones por hash, marca destructiva, auditoría y fail-closed; las firmas siguen siendo opcionales. |
 | ADR-031 | `SET_CHANNEL` es la única mutación de canal y no se expone a terceros. | No cambia D01–D05; `textformatter.channel.set` reutiliza D02 y retira el import dedicado. La exposición cambia, la semántica no. |
 | ADR-019 | Permite `feature → feature` con dependencia declarada. | ADR-036 §2 elimina la excepción; §15 migra los descriptores. |
-| `storage.md` §2 | Un submódulo declara `require(...)` del padre (`sync-*` → `sync-bus`). | Contradice §15 y §16; actualizar el documento requiere autorización. |
+| `storage.md` §1 | Un submódulo declara `require(...)` del padre (`sync-*` → `sync-bus`). | Resuelto el 2026-11-13: la regla 2 se alineó con §15; el submódulo publica su puerto y el padre lo descubre, y el requisito duro queda solo para dependencias estructurales (`manager-*`). |
 | Especificación iFlow v3 | El guest solo transforma contenido/metadatos; no hay efectos de host. | §16 amplía la autoridad a acciones de backend con concesión; requiere autorización para la spec. |
 | Auditoría TF-006 | `broadcastAsync` no era fiable. | Resuelto el 2026-11-07: cada futuro se ata a su mensaje y tiene timeout explícito. `broadcastAsync` se retiró al abrir PL-2; `invoke`/`send` conservan ambas garantías. |
 | ADR-035 | `CoreTranslator.sendDiscord` usa el bus actual. | Pasa al LCM `message.send`; no usa acciones nativas. Sin contradicción. |
