@@ -12,7 +12,7 @@ Antes de trabajar, lee como mínimo:
 
 Siempre que se limpie el contexto de trabajo por compactación, la primera acción obligatoria es releer el contexto normativo completo. Como mínimo se leen los tres documentos anteriores. Cada uno se lee completo, de principio a fin; no basta con la cabecera, el índice, un resumen, las secciones de estado ni fragmentos. No se edita, ejecuta ni reanuda ninguna tarea hasta terminar esa lectura. Solo después se continúa con el trabajo. El resumen de compactación es una ayuda, no la autoridad: no sustituye la relectura de los documentos.
 
-`docs/workdir/AUDITORIA.md` no es lectura obligatoria: es el informe de un ciclo cerrado y se consulta solo cuando el trabajo afecta a uno de sus hallazgos. Sigue sin poder modificarse (véase «Documentación»).
+`docs/workdir/AUDITORIA.md` no es lectura obligatoria: es el diagnóstico de la auditoría vigente y se consulta cuando el trabajo afecta a uno de sus hallazgos. Se edita solo mientras una auditoría **manual** está en curso; en una auditoría **agéntica**, o con el diagnóstico terminado, no se modifica: se reemplaza (véase «Documentación»).
 
 La primera respuesta tras una compactación debe incluir literalmente esta frase:
 
@@ -35,7 +35,7 @@ Si el ADR y el PLAN se contradicen, o el código no permite cumplirlos, detente 
 
 ## Documentación
 
-- `docs/workdir/AUDITORIA.md` no se modifica. Contiene el informe de la auditoría vigente y solo se reemplaza por completo al cerrar su ciclo; no se le añaden notas, addendas ni referencias.
+- `docs/workdir/AUDITORIA.md` es el diagnóstico de la auditoría vigente. Una auditoría **manual** se edita mientras está en curso: cada fallo o inconsistencia que encuentra la revisión humana —función por función, en lenguaje natural— se anota ahí, y el archivo queda congelado al terminar el diagnóstico. Una auditoría **agéntica** no se edita nunca: su informe se reemplaza por completo. Un ciclo cerrado no se reabre ni recibe notas o addendas; el ciclo nuevo empieza reemplazando el archivo.
 - Los documentos de diseño de `docs/prompts/` son de solo lectura, salvo instrucción explícita.
 - No se agrega documentación adicional dentro de `docs/workdir/` ni `docs/prompts/` sin una pregunta explícita y su autorización.
 - `docs/wiki/` queda excluida de esa prohibición porque es documentación de usuario, pero no es fuente de verdad.
