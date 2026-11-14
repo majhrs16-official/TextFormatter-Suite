@@ -39,6 +39,23 @@ class JdkDiscordConnectionTest {
         final List<String> bodies = new CopyOnWriteArrayList<>();
         String response = "{\"id\":\"m1\",\"channel_id\":\"42\"}";
         IOException failure;
+        boolean patchSupported = true;
+
+        @Override
+        public String patch(String url, Map<String, String> headers, String jsonBody)
+                throws IOException {
+            methods.add("PATCH");
+            if (failure != null) {
+                throw failure;
+            }
+            if (!patchSupported) {
+                throw new UnsupportedOperationException("PATCH is not supported by this transport");
+            }
+            urls.add(url);
+            this.headers.add(headers);
+            bodies.add(jsonBody == null ? "" : jsonBody);
+            return response;
+        }
 
         @Override
         public String post(String url, Map<String, String> headers, String jsonBody)
@@ -257,6 +274,38 @@ class JdkDiscordConnectionTest {
             transport.urls.get(0));
         assertEquals("clean%20up",
             transport.headers.get(0).get("X-Audit-Log-Reason"));
+    }
+
+    @Test
+    void editMessagePatchesTheMessageAndReturnsTheId() throws Exception {
+        StubTransport transport = new StubTransport();
+        transport.response = "{\"id\":\"99\",\"content\":\"editado\"}";
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.EditMessage("42", "99", "editado"));
+
+        DiscordResult.Ok ok = assertInstanceOf(DiscordResult.Ok.class, result);
+        assertEquals(Map.of("id", "99"), ok.value());
+        assertEquals("PATCH", transport.methods.get(0));
+        assertTrue(transport.urls.get(0).endsWith("/channels/42/messages/99"),
+            transport.urls.get(0));
+        assertTrue(transport.bodies.get(0).contains("\"content\":\"editado\""),
+            transport.bodies.get(0));
+        assertEquals("Bot abc", transport.headers.get(0).get("Authorization"));
+    }
+
+    @Test
+    void editMessageFailsExplicitlyWithoutPatchSupport() throws Exception {
+        StubTransport transport = new StubTransport();
+        transport.patchSupported = false;
+        JdkDiscordConnection connection = connection(transport, "wss://gateway.invalid");
+
+        DiscordResult result = connection.execute(
+            new DiscordOperation.EditMessage("42", "99", "editado"));
+
+        DiscordResult.Failed failed = assertInstanceOf(DiscordResult.Failed.class, result);
+        assertTrue(failed.reason().contains("PATCH"), failed.reason());
     }
 
     @Test

@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo); `storage.md` §1 se alineó con ADR-036 §15. Quedan registradas **AUD-1** (implementación de `sync`) y **AUD-2** (funcionamiento general del Manager) como revisiones **manuales, hechas por una persona** función por función, cuyo diagnóstico se escribe en `AUDITORIA.md` mientras la auditoría está en curso y queda congelado al terminar (prioridad baja/media).**)
+> Última actualización: 2026-11-14 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `message.edit`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo); `storage.md` §1 se alineó con ADR-036 §15. Quedan registradas **AUD-1** (implementación de `sync`) y **AUD-2** (funcionamiento general del Manager) como revisiones **manuales, hechas por una persona** función por función, cuyo diagnóstico se escribe en `AUDITORIA.md` mientras la auditoría está en curso y queda congelado al terminar (prioridad baja/media). PL-2 se amplía (2026-11-14) con `PATCH` en el `Transport` neutral y `discord.message.edit` en `sync-discord` sobre ambos adaptadores.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -688,42 +688,48 @@ Completado en esta unidad:
   acciones de host) y `SyncBridgeCodecTest` (incluye `statusName(Ok)`).
 - Documentación: ADR-036 §16.6.5/§16.6.6/§16.7.1/§16.7.4, `storage.md` §2/§4.1.1/§5 y este PLAN.
 
-#### Estado de implementación — superficie nativa de `sync-discord` (2026-11-12)
+#### Estado de implementación — superficie nativa de `sync-discord` (2026-11-12, ampliada 2026-11-14)
 
 Completado en esta unidad:
 
 - `core-api` gana los tipos neutrales `DiscordOperation` y `DiscordResult`, y
   `DiscordConnection.execute(DiscordOperation)`. Las operaciones no llevan tipos
   de JDA ni de HTTP: ids, nombres, motivos y la ventana de borrado son datos.
-- `sync-discord` publica en `DiscordSink.surface()` el LCM más cinco acciones
+- `sync-discord` publica en `DiscordSink.surface()` el LCM más seis acciones
   nativas: `channel.create` (`WRITE`), `channel.delete` (`DESTRUCTIVE`),
-  `message.delete` (`DESTRUCTIVE`), `member.ban` (`MODERATION`) y `role.assign`
-  (`MODERATION`). `DiscordSink.invoke()` traduce los argumentos neutrales, exige
-  un `Principal.Program`, rechaza `Principal.Official` con `Denied` y mapea cada
-  `DiscordResult` a `SyncResult` (`Ok`, `NotFound`, `Conflict`, `RateLimited`,
-  `HostFailure`); un adaptador ausente o desconectado devuelve `HostFailure`.
-- `sync-discord-jda` ejecuta las cinco operaciones con JDA (`createTextChannel`,
-  `delete`, `deleteMessageById`, `ban`, `addRoleToMember`) y mapea
-  `ErrorResponseException` a `NotFound`/`Forbidden`/`Failed`.
-- `sync-discord-jdk` ejecuta las cinco operaciones por REST (`POST`, `DELETE`,
-  `PUT`) con `Authorization`, `Content-Type` y `X-Audit-Log-Reason`; mapea
-  `TransportException` (404/401/403/409/429/5xx) a resultados explícitos y lee
-  `retry_after` del cuerpo 429.
+  `message.delete` (`DESTRUCTIVE`), `message.edit` (`WRITE`, idempotente),
+  `member.ban` (`MODERATION`) y `role.assign` (`MODERATION`). `DiscordSink.invoke()`
+  traduce los argumentos neutrales, exige un `Principal.Program`, rechaza
+  `Principal.Official` con `Denied` y mapea cada `DiscordResult` a `SyncResult`
+  (`Ok`, `NotFound`, `Conflict`, `RateLimited`, `HostFailure`); un adaptador
+  ausente o desconectado devuelve `HostFailure`.
+- `sync-discord-jda` ejecuta las seis operaciones con JDA (`createTextChannel`,
+  `delete`, `deleteMessageById`, `editMessageById`, `ban`, `addRoleToMember`) y
+  mapea `ErrorResponseException` a `NotFound`/`Forbidden`/`Failed`.
+- `sync-discord-jdk` ejecuta las seis operaciones por REST (`POST`, `DELETE`,
+  `PATCH`, `PUT`) con `Authorization`, `Content-Type` y `X-Audit-Log-Reason`;
+  mapea `TransportException` (404/401/403/409/429/5xx) a resultados explícitos
+  y lee `retry_after` del cuerpo 429. `message.edit` falla con `Failed` explícito
+  si el `Transport` inyectado no implementa `PATCH`.
 - `transport` añade `put`/`delete` (defaults que fallan explícitamente si no se
-  implementan) y `TransportException` con `statusCode`/`body`; `HttpTransport`
-  los implementa y conserva el mensaje `HTTP <status>: <body>`.
+  implementan), `patch` (default que lanza `UnsupportedOperationException`) y
+  `TransportException` con `statusCode`/`body`; `HttpTransport` implementa
+  `PATCH` con `java.net.http.HttpClient` porque `HttpURLConnection` rechaza ese
+  método. El `PATCH` conserva la validación SSRF de la URL inicial y de cada
+  redirección, el límite de cinco redirecciones, HTTP/1.1, el timeout de la
+  petición y el límite de respuesta de 1 MB; el pinning anti-TOCTOU de
+  `HttpURLConnection` no aplica a este método y así se documenta.
 - Tests: `DiscordSinkTest` cubre superficie, éxito, `Denied` oficial,
   `Unsupported`, argumentos inválidos, `NotFound`, `Conflict`, `RateLimited`,
-  `HostFailure` y estado desconectado; `JdkDiscordConnectionTest` cubre las cinco
-  operaciones y el mapeo de errores; `HttpTransportIntegrationTest` cubre
-  `PUT`/`DELETE` y `TransportException`; `DiscordOperationTest` valida ids y
-  rangos.
+  `HostFailure` y estado desconectado; `JdkDiscordConnectionTest` cubre las seis
+  operaciones, la ausencia de `PATCH` y el mapeo de errores;
+  `HttpTransportIntegrationTest` cubre `PATCH` (método, cabeceras, cuerpo,
+  redirect 307 y 302, límite de redirects, error tipado, SSRF y default
+  explícito) junto con `PUT`/`DELETE` y `TransportException`;
+  `DiscordOperationTest` valida ids, rangos y contenido no vacío.
 
 Pendiente y fuera de esta unidad:
 
-- `message.edit`: requiere `PATCH` en el `Transport` neutral; hoy
-  `HttpURLConnection` rechaza ese método, así que no se publica una acción que el
-  adaptador JDK no puede ejecutar.
 - `channel.permission.overwrite`, consultas de miembros/roles, canales de voz y
   eventos de auditoría; se añadirán con sus propios slices.
 

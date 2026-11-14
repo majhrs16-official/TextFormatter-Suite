@@ -142,6 +142,9 @@ public final class JdkDiscordConnection implements DiscordConnection {
             if (operation instanceof DiscordOperation.DeleteMessage delete) {
                 return deleteMessage(delete);
             }
+            if (operation instanceof DiscordOperation.EditMessage edit) {
+                return editMessage(edit);
+            }
             if (operation instanceof DiscordOperation.BanMember ban) {
                 return banMember(ban);
             }
@@ -193,6 +196,27 @@ public final class JdkDiscordConnection implements DiscordConnection {
                 + "/messages/" + operation.messageId(),
             headers(operation.reason()));
         return new DiscordResult.Ok(Map.of());
+    }
+
+    private DiscordResult editMessage(DiscordOperation.EditMessage operation) throws Exception {
+        String response;
+        try {
+            response = transport.patch(
+                apiBase + "/channels/" + operation.channelId()
+                    + "/messages/" + operation.messageId(),
+                headers(null),
+                new JSONObject().put("content", operation.content()).toString());
+        } catch (UnsupportedOperationException unsupported) {
+            return new DiscordResult.Failed(
+                "Discord message.edit requires a transport with PATCH support");
+        }
+        JSONObject edited = new JSONObject(response);
+        String id = edited.optString("id", "");
+        if (id.isEmpty()) {
+            return new DiscordResult.Failed(
+                "discord did not return a message id: " + response);
+        }
+        return new DiscordResult.Ok(Map.of("id", id));
     }
 
     private DiscordResult banMember(DiscordOperation.BanMember operation) throws Exception {

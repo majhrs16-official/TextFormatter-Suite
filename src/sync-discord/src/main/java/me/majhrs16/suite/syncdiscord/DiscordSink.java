@@ -42,11 +42,13 @@ public final class DiscordSink implements SyncSink {
     private static final String CHANNEL_CREATE = "channel.create";
     private static final String CHANNEL_DELETE = "channel.delete";
     private static final String MESSAGE_DELETE = "message.delete";
+    private static final String MESSAGE_EDIT = "message.edit";
     private static final String MEMBER_BAN = "member.ban";
     private static final String ROLE_ASSIGN = "role.assign";
 
     private static final Set<String> NATIVE_ACTIONS = Set.of(
-            CHANNEL_CREATE, CHANNEL_DELETE, MESSAGE_DELETE, MEMBER_BAN, ROLE_ASSIGN);
+            CHANNEL_CREATE, CHANNEL_DELETE, MESSAGE_DELETE, MESSAGE_EDIT,
+            MEMBER_BAN, ROLE_ASSIGN);
 
     private static final SyncSurface SURFACE = buildSurface();
 
@@ -187,6 +189,16 @@ public final class DiscordSink implements SyncSink {
             false,
             15_000));
         actions.add(new SyncActionSpec(
+            MESSAGE_EDIT,
+            ActionKind.WRITE,
+            List.of(
+                SyncParamSpec.required("channel", SyncValueType.CHANNEL_REF),
+                SyncParamSpec.required("message", SyncValueType.STRING),
+                SyncParamSpec.required("content", SyncValueType.STRING)),
+            SyncParamSpec.optional("message", SyncValueType.OBJECT),
+            true,
+            15_000));
+        actions.add(new SyncActionSpec(
             MEMBER_BAN,
             ActionKind.MODERATION,
             List.of(
@@ -224,6 +236,10 @@ public final class DiscordSink implements SyncSink {
                 text(call, "channel"),
                 text(call, "message"),
                 optionalText(call, "reason"));
+            case MESSAGE_EDIT -> new DiscordOperation.EditMessage(
+                text(call, "channel"),
+                text(call, "message"),
+                text(call, "content"));
             case MEMBER_BAN -> new DiscordOperation.BanMember(
                 text(call, "guild"),
                 text(call, "user"),

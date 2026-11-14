@@ -202,7 +202,7 @@ class DiscordSinkTest {
         assertEquals("discord", surface.backend());
         assertTrue(surface.hasLeastCommonMultiple());
         for (String action : List.of(
-                "channel.create", "channel.delete", "message.delete",
+                "channel.create", "channel.delete", "message.delete", "message.edit",
                 "member.ban", "role.assign")) {
             assertTrue(surface.action(action).isPresent(), action);
         }
@@ -220,6 +220,21 @@ class DiscordSinkTest {
         SyncResult.Ok ok = assertInstanceOf(SyncResult.Ok.class, result);
         assertEquals(Map.of("id", "99", "name", "general"), ok.value());
         assertEquals(List.of(new DiscordOperation.CreateChannel("7", "general", "chat")),
+            connection.operations);
+    }
+
+    @Test
+    void messageEditIsExecutedByTheAdapter() throws Exception {
+        FakeConnection connection = new FakeConnection();
+        connection.next = new DiscordResult.Ok(Map.of("id", "99"));
+        DiscordSink sink = startedSink(connection);
+
+        SyncResult result = sink.invoke(nativeCall("message.edit",
+            Map.of("channel", "42", "message", "99", "content", "editado")));
+
+        SyncResult.Ok ok = assertInstanceOf(SyncResult.Ok.class, result);
+        assertEquals(Map.of("id", "99"), ok.value());
+        assertEquals(List.of(new DiscordOperation.EditMessage("42", "99", "editado")),
             connection.operations);
     }
 
@@ -260,6 +275,9 @@ class DiscordSinkTest {
                 Map.of("guild", "not-a-snowflake", "name", "general"))));
         assertInstanceOf(SyncResult.InvalidArgument.class,
             sink.invoke(nativeCall("message.delete", Map.of("channel", "42"))));
+        assertInstanceOf(SyncResult.InvalidArgument.class,
+            sink.invoke(nativeCall("message.edit",
+                Map.of("channel", "42", "message", "99", "content", " "))));
         assertInstanceOf(SyncResult.InvalidArgument.class,
             sink.invoke(nativeCall("member.ban",
                 Map.of("guild", "7", "user", "9", "deleteMessageSeconds", -1))));

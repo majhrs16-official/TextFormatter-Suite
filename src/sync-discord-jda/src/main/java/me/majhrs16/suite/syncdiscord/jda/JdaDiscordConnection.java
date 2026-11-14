@@ -11,6 +11,7 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.UserSnowflake;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -109,6 +110,9 @@ public final class JdaDiscordConnection implements DiscordConnection {
             if (operation instanceof DiscordOperation.DeleteMessage delete) {
                 return deleteMessage(current, delete);
             }
+            if (operation instanceof DiscordOperation.EditMessage edit) {
+                return editMessage(current, edit);
+            }
             if (operation instanceof DiscordOperation.BanMember ban) {
                 return banMember(current, ban);
             }
@@ -168,6 +172,18 @@ public final class JdaDiscordConnection implements DiscordConnection {
         }
         action.complete();
         return new DiscordResult.Ok(Map.of());
+    }
+
+    private static DiscordResult editMessage(JDA jda,
+                                             DiscordOperation.EditMessage operation) {
+        TextChannel channel = jda.getTextChannelById(operation.channelId());
+        if (channel == null) {
+            return new DiscordResult.NotFound(
+                "channel " + operation.channelId() + " is not available");
+        }
+        Message edited = channel.editMessageById(
+            operation.messageId(), operation.content()).complete();
+        return new DiscordResult.Ok(Map.of("id", edited.getId()));
     }
 
     private static DiscordResult banMember(JDA jda,

@@ -56,6 +56,22 @@ public sealed interface DiscordOperation {
     }
 
     /**
+     * Edits the text content of a message.
+     *
+     * @param channelId numeric channel id
+     * @param messageId numeric message id
+     * @param content   new non-blank text content
+     */
+    record EditMessage(String channelId, String messageId, String content)
+            implements DiscordOperation {
+        public EditMessage {
+            channelId = snowflake("channelId", channelId);
+            messageId = snowflake("messageId", messageId);
+            content = text("content", content);
+        }
+    }
+
+    /**
      * Bans a user from a guild.
      *
      * @param guildId              numeric guild id

@@ -22,7 +22,19 @@ class DiscordOperationTest {
         assertThrows(IllegalArgumentException.class,
             () -> new DiscordOperation.DeleteMessage("42", "abc", null));
         assertThrows(IllegalArgumentException.class,
+            () -> new DiscordOperation.EditMessage("42x", "99", "texto"));
+        assertThrows(IllegalArgumentException.class,
+            () -> new DiscordOperation.EditMessage("42", "9x", "texto"));
+        assertThrows(IllegalArgumentException.class,
             () -> new DiscordOperation.AssignRole("7", "9", "12x", null));
+    }
+
+    @Test
+    void editMessageRequiresNonBlankContent() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new DiscordOperation.EditMessage("42", "99", " "));
+        assertEquals("editado",
+            new DiscordOperation.EditMessage("42", "99", "editado").content());
     }
 
     @Test
