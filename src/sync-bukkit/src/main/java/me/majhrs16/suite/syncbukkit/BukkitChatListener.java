@@ -26,7 +26,8 @@ import org.bukkit.event.player.PlayerQuitEvent;
  * translates the native events into neutral calls and never touches the host
  * pipeline directly. Chat runs on the async chat thread; join/quit/death are
  * offloaded to the module scheduler so translation cannot block the server
- * tick.</p>
+ * tick. The chat event stays bound to its dispatch call, so a
+ * {@code bukkit.event.*} native action acts on exactly that event.</p>
  */
 public final class BukkitChatListener implements Listener {
 
@@ -35,18 +36,21 @@ public final class BukkitChatListener implements Listener {
     private final SyncBukkitConfig config;
     private final Scheduler scheduler;
     private final PluginLogger logger;
+    private final BukkitLocalEnvironment environment;
     private volatile boolean active = true;
 
     public BukkitChatListener(SyncEventProcessor processor,
                               ActorDirectory actors,
                               SyncBukkitConfig config,
                               Scheduler scheduler,
-                              PluginLogger logger) {
+                              PluginLogger logger,
+                              BukkitLocalEnvironment environment) {
         this.processor = Objects.requireNonNull(processor, "processor");
         this.actors = Objects.requireNonNull(actors, "actors");
         this.config = Objects.requireNonNull(config, "config");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.environment = Objects.requireNonNull(environment, "environment");
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -61,7 +65,9 @@ public final class BukkitChatListener implements Listener {
                 // Vanilla chat remains visible by explicit configuration.
             }
         }
-        processor.chat(actor(event.getPlayer()), event.getMessage(), config.logChatToConsole());
+        environment.withEvent(event, () ->
+                processor.chat(actor(event.getPlayer()), event.getMessage(),
+                        config.logChatToConsole()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

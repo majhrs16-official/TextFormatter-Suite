@@ -1,15 +1,19 @@
 package me.majhrs16.suite.syncbukkit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -21,13 +25,16 @@ import me.majhrs16.suite.api.runtime.Scheduler;
 import me.majhrs16.suite.api.spi.ActorDirectory;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.synccommon.EventRules;
+import me.majhrs16.suite.synccommon.LocalEvent;
 import me.majhrs16.suite.synccommon.SyncEventProcessor;
 
+import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.Test;
 
 class BukkitChatListenerTest {
@@ -120,9 +127,40 @@ class BukkitChatListenerTest {
         verify(processor, never()).chat(any(), any(), anyBoolean());
     }
 
+    @Test
+    void bindsTheChatEventAroundDispatch() {
+        SyncEventProcessor processor = mock(SyncEventProcessor.class);
+        BukkitLocalEnvironment environment = environment();
+        BukkitChatListener listener = listener(
+                processor, SyncBukkitConfig.ClaimMode.NONE, false, environment);
+        AsyncPlayerChatEvent event = mock(AsyncPlayerChatEvent.class);
+        Player sender = player();
+        when(event.getPlayer()).thenReturn(sender);
+        when(event.getMessage()).thenReturn("hello");
+        List<Optional<LocalEvent>> seen = new ArrayList<>();
+        doAnswer(invocation -> {
+            seen.add(environment.currentEvent());
+            return null;
+        }).when(processor).chat(any(), any(), anyBoolean());
+
+        listener.onChat(event);
+
+        assertEquals(1, seen.size());
+        assertTrue(seen.get(0).isPresent(), "the chat event must be bound");
+        assertTrue(environment.currentEvent().isEmpty(),
+                "the binding must not leak past the dispatch call");
+    }
+
     private static BukkitChatListener listener(SyncEventProcessor processor,
                                                SyncBukkitConfig.ClaimMode mode,
                                                boolean logToConsole) {
+        return listener(processor, mode, logToConsole, environment());
+    }
+
+    private static BukkitChatListener listener(SyncEventProcessor processor,
+                                               SyncBukkitConfig.ClaimMode mode,
+                                               boolean logToConsole,
+                                               BukkitLocalEnvironment environment) {
         ActorDirectory actors = mock(ActorDirectory.class);
         when(actors.byUuid(PLAYER_ID)).thenReturn(Optional.of(PLAYER));
         return new BukkitChatListener(
@@ -130,7 +168,14 @@ class BukkitChatListenerTest {
                 actors,
                 new SyncBukkitConfig(true, mode, logToConsole),
                 inlineScheduler(),
-                noopLogger());
+                noopLogger(),
+                environment);
+    }
+
+    private static BukkitLocalEnvironment environment() {
+        Plugin plugin = mock(Plugin.class);
+        when(plugin.getServer()).thenReturn(mock(Server.class));
+        return new BukkitLocalEnvironment(plugin);
     }
 
     private static Player player() {

@@ -31,6 +31,7 @@ public final class FabricEventListener {
     private final SyncFabricConfig config;
     private final Scheduler scheduler;
     private final PluginLogger logger;
+    private final FabricLocalEnvironment environment;
     private final FabricDeathTracker deaths = new FabricDeathTracker();
     private volatile boolean active = true;
 
@@ -38,12 +39,14 @@ public final class FabricEventListener {
                                ActorDirectory actors,
                                SyncFabricConfig config,
                                Scheduler scheduler,
-                               PluginLogger logger) {
+                               PluginLogger logger,
+                               FabricLocalEnvironment environment) {
         this.processor = Objects.requireNonNull(processor, "processor");
         this.actors = Objects.requireNonNull(actors, "actors");
         this.config = Objects.requireNonNull(config, "config");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.logger = Objects.requireNonNull(logger, "logger");
+        this.environment = Objects.requireNonNull(environment, "environment");
     }
 
     /** Registers the global Fabric callbacks. Called once from the activator. */
@@ -54,7 +57,11 @@ public final class FabricEventListener {
             }
             Actor actor = actor(sender);
             String text = message.getContent().getString();
-            scheduler.execute(() -> processor.chat(actor, text, config.logChatToConsole()));
+            String playerName = sender.getName().getString();
+            scheduler.execute(() -> environment.withEvent(
+                    new FabricLocalEnvironment.FabricLocalEvent(
+                            "CHAT_MESSAGE", playerName, null),
+                    () -> processor.chat(actor, text, config.logChatToConsole())));
         });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {

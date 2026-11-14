@@ -61,6 +61,8 @@ public final class SyncBukkitActivator implements ModuleActivator {
                         "sync-bukkit requires the platform handle"));
         Plugin plugin = handle.unwrap(Plugin.class);
 
+        BukkitLocalEnvironment environment = new BukkitLocalEnvironment(plugin);
+
         SyncEventProcessor processor = new SyncEventProcessor(
                 required(context, MessageDispatch.class),
                 optionalChannels(context),
@@ -73,7 +75,8 @@ public final class SyncBukkitActivator implements ModuleActivator {
                 required(context, ActorDirectory.class),
                 config,
                 context.scheduler(),
-                context.logger());
+                context.logger(),
+                environment);
         plugin.getServer().getPluginManager().registerEvents(created, plugin);
         listener = created;
         context.resources().onRelease(() -> {
@@ -82,7 +85,7 @@ public final class SyncBukkitActivator implements ModuleActivator {
         });
 
         context.services().register(SyncSink.class,
-                new LocalSyncSink("bukkit", context.services()));
+                new LocalSyncSink("bukkit", context.services(), environment));
         context.logger().info("sync-bukkit listeners and local sink registered");
     }
 

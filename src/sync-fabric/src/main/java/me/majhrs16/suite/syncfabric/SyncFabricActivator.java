@@ -61,7 +61,8 @@ public final class SyncFabricActivator implements ModuleActivator {
         PlatformHandle handle = context.services().find(PlatformHandle.class)
                 .orElseThrow(() -> new IllegalStateException(
                         "sync-fabric requires the platform handle"));
-        handle.unwrap(MinecraftServer.class);
+        MinecraftServer server = handle.unwrap(MinecraftServer.class);
+        FabricLocalEnvironment environment = new FabricLocalEnvironment(server);
 
         SyncEventProcessor processor = new SyncEventProcessor(
                 required(context, MessageDispatch.class),
@@ -75,14 +76,15 @@ public final class SyncFabricActivator implements ModuleActivator {
                 required(context, ActorDirectory.class),
                 config,
                 context.scheduler(),
-                context.logger());
+                context.logger(),
+                environment);
         listener = created;
         created.register();
         registered = true;
         context.resources().onRelease(created::deactivate);
 
         context.services().register(SyncSink.class,
-                new LocalSyncSink("fabric", context.services()));
+                new LocalSyncSink("fabric", context.services(), environment));
         context.logger().info("sync-fabric listeners and local sink registered");
     }
 
