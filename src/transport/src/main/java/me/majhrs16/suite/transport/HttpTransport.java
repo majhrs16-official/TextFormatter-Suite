@@ -9,7 +9,11 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.net.URI;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
@@ -31,8 +35,10 @@ import javax.net.ssl.X509TrustManager;
 /**
  * Production {@link Transport} backed by {@link HttpURLConnection}.
  * <p>
- * Avoids {@code java.net.http.HttpClient} module accessibility issues
- * in plugin classloaders (Paper/Spigot).
+ * Uses {@link HttpURLConnection} for GET, POST, PUT and DELETE to avoid
+ * {@code java.net.http.HttpClient} module accessibility issues in plugin
+ * classloaders (Paper/Spigot); only PATCH, which that API rejects, uses
+ * {@link HttpClient}.
  * <p>
  * SSRF Protection: Validates URLs against private/internal address ranges
  * before connecting. Configured with a deny-list of RFC 1918, RFC 3927,
@@ -43,6 +49,13 @@ import javax.net.ssl.X509TrustManager;
  * TOCTOU Protection: Resolves hostname once, validates all IPs, then connects
  * directly to the pinned IP while preserving the original hostname for
  * TLS SNI, hostname verification, and HTTP Host header.
+ * </p>
+ * <p>
+ * PATCH is not accepted by {@link HttpURLConnection}, so that single method
+ * uses the JDK {@link HttpClient}. It applies the same URL and SSRF validation
+ * to the initial request and to every redirect target, but the client resolves
+ * the hostname internally, so connection pinning does not apply to PATCH.
+ * GET, POST, PUT and DELETE keep the pinned path above.
  * </p>
  */
 public final class HttpTransport implements Transport {
@@ -72,6 +85,8 @@ public final class HttpTransport implements Transport {
 
     private static final Pattern[] DENY_PATTERNS;
     private static final int MAX_RESPONSE_SIZE = 1024 * 1024; // 1MB
+    private static final int MAX_REDIRECTS = 5;
+    private static final String USER_AGENT = "TextFormatterSuite/1.0.0";
 
     static {
         String denyProp = System.getProperty("textformattersuite.http.deny");
@@ -87,6 +102,7 @@ public final class HttpTransport implements Transport {
 
     private final Duration timeout;
     private final boolean ssrfProtectionEnabled;
+    private volatile HttpClient patchClient;
 
     public HttpTransport() {
         this(Duration.ofSeconds(10));
@@ -124,6 +140,126 @@ public final class HttpTransport implements Transport {
     @Override
     public String delete(String url, Map<String, String> headers) throws IOException {
         return executeRequest(url, "DELETE", headers, null);
+    }
+
+    @Override
+    public String patch(String url, Map<String, String> headers, String jsonBody) throws IOException {
+        URI uri = parseUri(url);
+        String method = "PATCH";
+        String body = jsonBody;
+        int redirects = 0;
+
+        while (true) {
+            validateRequestTarget(uri);
+            HttpResponse<byte[]> response = sendPatch(uri, method, headers, body);
+            int status = response.statusCode();
+            String responseBody = new String(response.body(), StandardCharsets.UTF_8);
+
+            if (isRedirect(status)) {
+                if (redirects >= MAX_REDIRECTS) {
+                    throw new IOException("Too many redirects (" + MAX_REDIRECTS + ")");
+                }
+                String location = response.headers()
+                    .firstValue("Location")
+                    .orElse(null);
+                if (location == null || location.isBlank()) {
+                    throw new IOException("Redirect without Location header");
+                }
+                uri = uri.resolve(location);
+                validateRequestTarget(uri);
+                if (status != 307 && status != 308) {
+                    method = "GET";
+                    body = null;
+                }
+                redirects++;
+                continue;
+            }
+
+            if (status >= 400) {
+                throw new TransportException(status, responseBody);
+            }
+            return responseBody;
+        }
+    }
+
+    private static URI parseUri(String url) throws IOException {
+        try {
+            return URI.create(url);
+        } catch (IllegalArgumentException invalid) {
+            throw new IOException("Invalid URL: " + url, invalid);
+        }
+    }
+
+    private void validateRequestTarget(URI uri) throws IOException {
+        if (uri.getUserInfo() != null) {
+            throw new IOException("URL userinfo is not allowed");
+        }
+        if (ssrfProtectionEnabled) {
+            validateUrlAndGetAddress(uri.toURL());
+        }
+    }
+
+    /**
+     * Sends one PATCH exchange through the JDK client. The request timeout
+     * covers the response body because it is consumed into a byte array.
+     */
+    private HttpResponse<byte[]> sendPatch(
+            URI uri, String method, Map<String, String> headers, String body)
+            throws IOException {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
+            .version(HttpClient.Version.HTTP_1_1)
+            .timeout(timeout)
+            .header("User-Agent", USER_AGENT);
+
+        if (headers != null) {
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                if (header.getKey() == null || header.getValue() == null) {
+                    continue;
+                }
+                try {
+                    builder.setHeader(header.getKey(), header.getValue());
+                } catch (IllegalArgumentException restricted) {
+                    throw new IOException(
+                        "HTTP header not allowed: " + header.getKey(), restricted);
+                }
+            }
+        }
+
+        HttpRequest.BodyPublisher publisher = body == null
+            ? HttpRequest.BodyPublishers.noBody()
+            : HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8);
+        builder.method(method, publisher);
+
+        HttpResponse<byte[]> response;
+        try {
+            response = patchClient().send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("HTTP request interrupted", interrupted);
+        }
+
+        if (response.body().length > MAX_RESPONSE_SIZE) {
+            throw new IOException("Response body exceeds maximum allowed size: "
+                + MAX_RESPONSE_SIZE + " bytes");
+        }
+        return response;
+    }
+
+    private HttpClient patchClient() {
+        HttpClient current = patchClient;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (patchClient == null) {
+                patchClient = HttpClient.newBuilder()
+                    .connectTimeout(timeout)
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .build();
+            }
+            return patchClient;
+        }
     }
 
     /**
@@ -171,7 +307,7 @@ public final class HttpTransport implements Transport {
         conn.setReadTimeout((int) timeout.toMillis());
         // Disable automatic redirects - we handle them manually with validation
         conn.setInstanceFollowRedirects(false);
-        conn.setRequestProperty("User-Agent", "TextFormatterSuite/1.0.0");
+        conn.setRequestProperty("User-Agent", USER_AGENT);
 
         // For HTTPS, configure SSL to use original hostname for SNI and verification
         if (conn instanceof HttpsURLConnection && pinnedAddress != null) {
@@ -197,8 +333,7 @@ public final class HttpTransport implements Transport {
 
     private String readResponseWithRedirects(HttpURLConnection conn, RequestState state) throws IOException {
         int redirectCount = 0;
-        final int MAX_REDIRECTS = 5;
-        
+
         while (true) {
             int status = conn.getResponseCode();
             

@@ -5,7 +5,9 @@ import java.util.Map;
 
 /**
  * Unified HTTP transport seam so backends are testable without network.
- * The production implementation uses the JDK {@link java.net.http.HttpClient}.
+ * The production implementation uses {@link java.net.HttpURLConnection} for
+ * GET, POST, PUT and DELETE, and the JDK {@link java.net.http.HttpClient} for
+ * PATCH, which the former rejects.
  *
  * <p>This interface unifies the previously duplicated variants:
  * - {@code get(url)} + {@code post(url, jsonBody)} for translation APIs (Google, Libre, Telegram)
@@ -72,6 +74,21 @@ public interface Transport {
     default String delete(String url, java.util.Map<String, String> headers)
             throws java.io.IOException {
         throw new UnsupportedOperationException("DELETE is not supported by this transport");
+    }
+
+    /**
+     * Performs a PATCH request with a JSON body and custom headers.
+     *
+     * @param url the full URL
+     * @param headers optional custom headers (may be null)
+     * @param jsonBody JSON-encoded request body; {@code null} for no body
+     * @return response body as string
+     * @throws IOException on network or HTTP error (status >= 400)
+     * @throws UnsupportedOperationException when the implementation has no PATCH
+     */
+    default String patch(String url, java.util.Map<String, String> headers, String jsonBody)
+            throws java.io.IOException {
+        throw new UnsupportedOperationException("PATCH is not supported by this transport");
     }
 
     /**

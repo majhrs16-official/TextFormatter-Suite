@@ -356,6 +356,142 @@ class HttpTransportIntegrationTest {
     }
 
     @Test
+    @DisplayName("PATCH request envía método, headers y body")
+    void patchWithHeadersAndBody() throws Exception {
+        wireMock.stubFor(patch(urlEqualTo("/patch"))
+            .withHeader("X-Test", equalTo("yes"))
+            .withHeader("User-Agent", equalTo("TextFormatterSuite/1.0.0"))
+            .withRequestBody(equalToJson("{\"content\":\"editado\"}"))
+            .willReturn(aResponse().withStatus(200)
+                .withBody("{\"id\":\"99\"}")));
+
+        String result = transport.patch(
+            "http://localhost:" + wireMock.port() + "/patch",
+            java.util.Map.of("X-Test", "yes", "Content-Type", "application/json"),
+            "{\"content\":\"editado\"}");
+
+        assertThat(result).isEqualTo("{\"id\":\"99\"}");
+    }
+
+    @Test
+    @DisplayName("PATCH conserva método y body en redirect 307")
+    void patchFollows307PreservingMethod() throws Exception {
+        wireMock.stubFor(patch(urlEqualTo("/redirect-patch"))
+            .willReturn(aResponse()
+                .withStatus(307)
+                .withHeader("Location", "http://localhost:" + wireMock.port() + "/final-patch")));
+        wireMock.stubFor(patch(urlEqualTo("/final-patch"))
+            .withRequestBody(equalToJson("{\"a\":1}"))
+            .willReturn(aResponse().withStatus(200).withBody("patched")));
+
+        String result = transport.patch(
+            "http://localhost:" + wireMock.port() + "/redirect-patch",
+            java.util.Map.of("Content-Type", "application/json"),
+            "{\"a\":1}");
+
+        assertThat(result).isEqualTo("patched");
+    }
+
+    @Test
+    @DisplayName("PATCH degrada a GET sin body en redirect 302")
+    void patchDowngradesToGetOn302() throws Exception {
+        wireMock.stubFor(patch(urlEqualTo("/redirect-302-patch"))
+            .willReturn(aResponse()
+                .withStatus(302)
+                .withHeader("Location", "http://localhost:" + wireMock.port() + "/final-get")));
+        wireMock.stubFor(get(urlEqualTo("/final-get"))
+            .willReturn(aResponse().withStatus(200).withBody("get final")));
+
+        String result = transport.patch(
+            "http://localhost:" + wireMock.port() + "/redirect-302-patch",
+            java.util.Map.of("Content-Type", "application/json"),
+            "{\"a\":1}");
+
+        assertThat(result).isEqualTo("get final");
+    }
+
+    @Test
+    @DisplayName("PATCH conserva status y body tipados ante error")
+    void patchKeepsStatusAndBody() throws Exception {
+        wireMock.stubFor(patch(urlEqualTo("/patch-error"))
+            .willReturn(aResponse().withStatus(404).withBody("missing")));
+
+        assertThatThrownBy(() -> transport.patch(
+            "http://localhost:" + wireMock.port() + "/patch-error",
+            java.util.Map.of("Content-Type", "application/json"),
+            "{}"))
+            .isInstanceOf(TransportException.class)
+            .satisfies(error -> {
+                TransportException typed = (TransportException) error;
+                assertThat(typed.statusCode()).isEqualTo(404);
+                assertThat(typed.body()).isEqualTo("missing");
+            });
+    }
+
+    @Test
+    @DisplayName("PATCH aplica la validación SSRF a la URL inicial")
+    void patchAppliesSsrfProtection() {
+        HttpTransport ssrfTransport = new HttpTransport(Duration.ofSeconds(5), true);
+
+        assertThatThrownBy(() -> ssrfTransport.patch(
+            "http://127.0.0.1:" + wireMock.port() + "/patch",
+            java.util.Map.of("Content-Type", "application/json"),
+            "{}"))
+            .isInstanceOf(IOException.class)
+            .hasMessageContaining("SSRF blocked");
+    }
+
+    @Test
+    @DisplayName("PATCH rechaza redirecciones sin Location")
+    void patchRejectsRedirectWithoutLocation() {
+        wireMock.stubFor(patch(urlEqualTo("/patch-bad-redirect"))
+            .willReturn(aResponse().withStatus(307)));
+
+        assertThatThrownBy(() -> transport.patch(
+            "http://localhost:" + wireMock.port() + "/patch-bad-redirect",
+            java.util.Map.of("Content-Type", "application/json"),
+            "{}"))
+            .isInstanceOf(IOException.class)
+            .hasMessageContaining("Redirect without Location header");
+    }
+
+    @Test
+    @DisplayName("PATCH respeta el límite de redirects")
+    void patchRespectsMaxRedirects() throws Exception {
+        for (int i = 1; i <= 6; i++) {
+            String from = "/patch-redirect-" + i;
+            String to = (i == 6) ? "/patch-final" : "/patch-redirect-" + (i + 1);
+            wireMock.stubFor(patch(urlEqualTo(from))
+                .willReturn(aResponse()
+                    .withStatus(307)
+                    .withHeader("Location", "http://localhost:" + wireMock.port() + to)));
+        }
+        wireMock.stubFor(patch(urlEqualTo("/patch-final"))
+            .willReturn(aResponse().withStatus(200).withBody("final")));
+
+        assertThatThrownBy(() -> transport.patch(
+            "http://localhost:" + wireMock.port() + "/patch-redirect-1",
+            java.util.Map.of("Content-Type", "application/json"),
+            "{}"))
+            .isInstanceOf(IOException.class)
+            .hasMessageContaining("Too many redirects");
+    }
+
+    @Test
+    @DisplayName("PATCH en un transporte sin soporte falla explícitamente")
+    void patchDefaultFailsExplicitly() {
+        Transport minimal = new Transport() {
+            @Override public String get(String url) { return ""; }
+            @Override public String post(String url, String jsonBody) { return ""; }
+        };
+
+        assertThatThrownBy(() -> minimal.patch(
+            "http://localhost/", java.util.Map.of(), "{}"))
+            .isInstanceOf(UnsupportedOperationException.class)
+            .hasMessageContaining("PATCH");
+    }
+
+    @Test
     @DisplayName("El error conserva status y body tipados")
     void errorKeepsStatusAndBody() throws Exception {
         wireMock.stubFor(get(urlEqualTo("/typed-error"))
