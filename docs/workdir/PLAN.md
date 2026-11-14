@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-14 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `message.edit`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo); `storage.md` §1 se alineó con ADR-036 §15. Quedan registradas **AUD-1** (implementación de `sync`) y **AUD-2** (funcionamiento general del Manager) como revisiones **manuales, hechas por una persona** función por función, cuyo diagnóstico se escribe en `AUDITORIA.md` mientras la auditoría está en curso y queda congelado al terminar (prioridad baja/media). PL-2 se amplía (2026-11-14) con `PATCH` en el `Transport` neutral y `discord.message.edit` en `sync-discord` sobre ambos adaptadores, y con la superficie de entorno/eventos de §17.5 en `sync-bukkit`/`sync-fabric` mediante el puerto neutral `LocalEnvironment` (`player.*`, `console.command`, `scoreboard.set`, `event.*`).**)
+> Última actualización: 2026-11-14 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `message.edit`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo); `storage.md` §1 se alineó con ADR-036 §15. Quedan registradas **AUD-1** (implementación de `sync`) y **AUD-2** (funcionamiento general del Manager) como revisiones **manuales, hechas por una persona** función por función, cuyo diagnóstico se escribe en `AUDITORIA.md` mientras la auditoría está en curso y queda congelado al terminar (prioridad baja/media). PL-2 se amplía (2026-11-14) con `PATCH` en el `Transport` neutral y `discord.message.edit` en `sync-discord` sobre ambos adaptadores, y con la superficie de entorno/eventos de §17.5 en `sync-bukkit`/`sync-fabric` mediante el puerto neutral `LocalEnvironment` (`player.*`, `console.command`, `scoreboard.set`, `event.*`). **V1 cerrado (2026-11-14): contrato de máquina, ISA y ABI `HOST` v3 congelado en ADR-037; el núcleo sigue en v2 hasta V2 y no se abre un camino paralelo v2/v3.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -31,8 +31,9 @@
 > producción. Cerrados en su alcance: comandos neutrales y raíz configurable, sincronizadores de
 > plataforma, empaquetado reproducible, paquetes de terceros y presets. ADR-027 implementado: adquisición,
 > commit con journal y activación separada; la etapa 2 es el único rollback automático. `iflow-vm`
-> (v2 de 16 bits, objetivo v3) e `iflow-wasm` (Chicory) son líneas paralelas; W3.5 (paridad `.flow`
-> v3/VM) sigue pendiente y V6 (compilador C) está bloqueado por V1 y V5. `CoreTranslator` se
+> conserva el núcleo v2 de 16 bits mientras V2 implementa el contrato v3 congelado en ADR-037;
+> `iflow-wasm` (Chicory) es la línea paralela. W3.5 (paridad `.flow` v3/VM) sigue pendiente y V6
+> (compilador C) está bloqueado por V5. `CoreTranslator` se
 > restauró como expansión PAPI legacy `%cot_*` (ADR-035). El E2E real es posterior a `1.0.0`.
 > El historial cerrado vive en Git; este PLAN solo conserva estado y trabajo activo.
 
@@ -229,7 +230,7 @@ La retirada final de `SuiteHost`/`MessageDispatcher` quedó cerrada y TF-006 des
 `docs/workdir/P0.1-inventory.md`, ruta que no existe; el inventario vigente está integrado en este
 PLAN. El informe de 2026-11-06 ya no contiene esa cita. No se crea un archivo auxiliar.
 
-**Orden de trabajo:** cierre de los P0 de la auditoría (TF-002 ✅ → TF-005 ✅ → TF-006 ✅ → TF-001/PL-1) → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V1 y V5).
+**Orden de trabajo:** cierre de los P0 de la auditoría (TF-002 ✅ → TF-005 ✅ → TF-006 ✅ → TF-001/PL-1) → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V5; la ejecución del corpus requiere V2–V4).
 
 **Cierre del ciclo anterior:** D-009 quedó resuelto. `IflowBackendManager` aplica la prioridad
 explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
@@ -247,7 +248,7 @@ explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptaci
   `transform` legacy, los constructores de compatibilidad sin uso, `%s`, `reset`, W2, las
   etiquetas `F7+` de la UI, las versiones `2.1`/`3.0` y los metadatos propios
   `2.1.0-SNAPSHOT`. P0.8 y P0.6 cerrados.
-- W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V1 y V5.
+- W3.5 espera la paridad `.flow` v3/VM y V6 sigue bloqueado por V5; V1 ya está cerrado.
 - Con la independencia de descriptores (ADR-036 §15), el orden de activación deja de estar impuesto
   por el grafo. `coretranslator` se activa inerte si `chattranslator` no está presente; para usar sus
   placeholders hay que reactivarlo después de instalar la fachada. El aviso de activación lo indica.
@@ -1268,9 +1269,9 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
   sección `debug` opcional incluye dirección, fuente y símbolos. El desensamblador debe construirse
   a partir de `Opcode`/`INSTRUCTION_SIZES`.
 - **Límite del formato actual:** en v2 no hay secciones separadas de BIOS, bootloader, kernel ni
-  stdlib; esa separación pertenece al ISA v3 (V1–V5). En v2 el desensamblado es una aproximación
-  limitada: solo decodifica el rango de usuario (`>= 0x1000`) y no interpreta el firmware como
-  programa. No se le atribuye la semántica de exclusión de v3.
+  stdlib; esa separación pertenece al contrato v3 (V1 congelado; implementación V2–V5). En v2 el
+  desensamblado es una aproximación limitada: solo decodifica el rango de usuario (`>= 0x1000`) y
+  no interpreta el firmware como programa. No se le atribuye la semántica de exclusión de v3.
 - **Grafos:** la página construye su configuración como grafo, la compila a assembler y de ahí a la
   ROM. El proceso inverso usa **desensamblado**, no metadatos de grafo almacenados en la ROM: así se
   acepta cualquier ROM, incluso editada externamente. El desensamblado produce un CFG (flujo de
@@ -1710,7 +1711,7 @@ Pendiente y fuera de esta unidad:
   congelarlo. Viven en código, no en YAML.
 - **Secciones de exclusión:** la exclusión completa de firmware, BIOS, bootloader, kernel y stdlib
   pertenece a v3; en `.flow` v2 solo existe el corte de usuario (`>= 0x1000`). La separación real
-  depende del ISA v3 (V1–V5) y se revisa entonces.
+  depende del contrato v3 (V1 congelado; implementación V2–V5) y se revisa entonces.
 - **Grafos desde ROM:** resuelto; el proceso inverso usa desensamblado y CFG, no metadatos de grafo
   en la ROM. No queda una decisión pendiente sobre declarar el grafo dentro del artefacto.
 
@@ -1832,7 +1833,7 @@ camino v2/v3: la migración sustituye la línea vigente.
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
 | **V0 — Módulo y spec** | `src/iflow-vm/` renombrado, Gradle/CI/docs actualizados y especificación v3 enlazada | ✅ `:src:iflow-vm:build`, `:src:iflow-wasm:build` y `:src:host:build` verificados con JDK 21 |
-| **V1 — Contrato 32 bits** | ADR de ISA, memoria/MMU, IRQ, scheduler, tiempo y ABI `HOST` v3; corte limpio sin compatibilidad `.flow` v2 | Contrato congelado antes de tocar el núcleo |
+| **V1 — Contrato 32 bits** | ✅ **ADR-037 (2026-11-14):** ISA, memoria/MMU, IRQ, scheduler, tiempo, formato ROM y ABI `HOST` v3; corte limpio sin compatibilidad `.flow` v2 | Contrato congelado antes de tocar el núcleo |
 | **V2 — Núcleo** | CPU/MMU/bus de 32 bits, arranque BIOS/kernel, fixtures actualizados | Tests de memoria, privilegios y arranque |
 | **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
 | **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
@@ -1842,7 +1843,8 @@ camino v2/v3: la migración sustituye la línea vigente.
 #### V6 — Compilador C (ADR-023)
 
 **Estado:** diseño aceptado; implementación pendiente. No se inicia antes de
-V1 (ISA/ABI v3) y V5 (assembler v3); la ejecución del corpus requiere V2/V3/V4.
+V5 (assembler v3); V1 (ISA/ABI v3) ya está congelado en ADR-037 y la ejecución del corpus requiere
+V2/V3/V4.
 No se implementa contra el ISA v2 de 16 bits ni se reutiliza su ABI `HOST` v2.
 
 **Objetivo.** Permitir que las políticas de iFlow se escriban en C sin perder el
@@ -1937,9 +1939,10 @@ mismo orden de símbolos.
    subconjunto o la ABI.
 
 **Por qué no ahora.** V6 depende de un ISA v3, un ABI `HOST` v3 y un assembler
-v3 que aún no existen. Implementarlo antes obligaría a inventar el contrato o a
-clonar el ISA v2; ambas cosas contradicen la regla de no crear un segundo
-camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
+v3 que aún no están implementados; el contrato ya está congelado en ADR-037.
+Implementarlo antes obligaría a inventar el contrato o a clonar el ISA v2;
+ambas cosas contradicen la regla de no crear un segundo camino. Se documenta y
+se deja bloqueado por V5; V1 ya está congelado, no se adelanta como POC.
 
 ### Fases de `chattranslator` (Facade de traducción unificada)
 
@@ -2045,7 +2048,7 @@ camino. Se documenta y se deja bloqueado por V1/V5, no se adelanta como POC.
 > histórica; sus `PROP_*`, `MessageHostContext`, `PolicyTarget` y `HOST` v2 **no son contrato vigente**.
 >
 > **Alcance:** replicar en Wasm el contrato v3 de transformación, decisión y entrega, sin heredar ISA,
-> MMU, BIOS/kernel ni ABI `HOST` v2. **No** incluye el backlog V1–V5 de la VM de 32 bits.
+> MMU, BIOS/kernel ni ABI `HOST` v2. **No** incluye el backlog V2–V5 de la VM de 32 bits; V1 ya está congelado en ADR-037.
 
 El objetivo es que una política `.wasm` observe y transforme el mensaje y emita la misma decisión
 explícita que una política `.flow` v3, con el mismo resultado observable. La paridad es de **contrato**,
@@ -2102,7 +2105,7 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 **Fases:** W1 define los imports alineados a la spec v3 (✅ cerrado); W2 implementa las host
 functions y el engine aislado (✅ cerrado); W3 integra el motor en el pipeline con router, hash y
 hot-reload (✅ cerrado); W3.5 cierra la paridad. W3.5 está desbloqueado por ADR-031. No se toca el
-backlog V1–V5 de `iflow-vm`.
+backlog V2–V5 de `iflow-vm`; V1 ya está congelado en ADR-037.
 
 ### Decisiones pendientes (ADR)
 
@@ -2124,9 +2127,9 @@ exports, el hash del `.wasm` y el hot-reload quedaron cerrados en W1/W3 (`Policy
 2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
 3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. ADRs del motor Wasm y de la VM de 32 bits: cerrados en ADR-031, ADR-032 y ADR-033.
-5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5, desbloqueado por ADR-031); W3 ya está cerrado con `WasmPolicyRouter`, SHA-256 y hot-reload. No se toma el código v2 como contrato ni se aborda el backlog V1–V5 de `iflow-vm`.
+5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5, desbloqueado por ADR-031); W3 ya está cerrado con `WasmPolicyRouter`, SHA-256 y hot-reload. No se toma el código v2 como contrato ni se aborda el backlog V2–V5 de `iflow-vm` (V1 ya está congelado en ADR-037).
 6. **ChatTranslator:** CT4 completado; CT5 diferido con el editor web.
-7. **V6 — Compilador C:** diseño en ADR-023; no se inicia antes de V1/V5. La implementación empieza por C0 (subconjunto y ABI) cuando el ISA v3 esté congelado; no se adelanta contra el ISA v2.
+7. **V6 — Compilador C:** diseño en ADR-023; no se inicia antes de V5. La implementación empieza por C0 (subconjunto y ABI) con el ISA v3 ya congelado en ADR-037; no se adelanta contra el ISA v2.
 
 ---
 
@@ -2312,7 +2315,7 @@ Líneas Prod/Test = líneas físicas de todas las `.java` de `src/main` y `src/t
 
 **Próxima acción T4:** ✅ **COMPLETADO** — tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld` (14 tests neutrales: dominio, activador y descriptor), `observability` (15 tests) y `messages` (18 tests) — usando mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
 
-**Próxima acción:** W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
+**Próxima acción:** V1 cerrado con ADR-037; siguiente en la línea VM: V2 (núcleo de 32 bits). W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
 
 ---
 

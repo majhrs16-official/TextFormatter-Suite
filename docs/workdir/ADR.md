@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-13
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-14
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -2212,3 +2212,589 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
 - No sustituye el E2E real ni declara estable la integración; eso sigue en ADR-034.
 - No autoriza por sí mismo cambios en `docs/prompts/`: `storage.md` y el esquema requieren
   autorización explícita.
+
+---
+
+## ADR-037 — Contrato de máquina, ISA y ABI `HOST` v3 de `iflow-vm`
+
+**Estado:** Aceptada y congelada (2026-11-14). Cierra V1. La implementación pertenece a V2–V5;
+este ADR no autoriza a conservar el camino v2 en paralelo.
+
+**Contexto.** `src/iflow-vm` implementa hoy la máquina v2 de 16 bits y 64 KB, con fuel por
+ejecución, un `.flow` ejecutable y un ABI `HOST` basado en registros. La especificación v3
+(`docs/prompts/diseno/iflow-cpu-implement.md`, §8) exige una máquina de 32 bits, ROM con BIOS,
+bootloader y kernel, MMU paginada, IRQ, tiempo virtual, persistencia entre mensajes y un ABI de
+servicios acotado. Las preguntas 1–25 y 27–34 de §8.8 seguían abiertas. Este ADR las resuelve y fija
+el contrato que V2–V5 deben implementar.
+
+**Decisión.** Se sustituye la línea v2 por una única máquina v3. No hay convivencia de ISAs,
+lectores dobles, migración en runtime ni adaptadores de compatibilidad. Un `.flow` v2 se rechaza
+con un error explícito de formato; el ensamblador y el compilador v3 generan únicamente ROM v3.
+
+### 1. Modelo de ejecución y registros
+
+1. La máquina es de **32 bits**: registros, direcciones, desplazamientos, tamaños e inmediatos.
+   El espacio virtual y el físico son de 32 bits; el máximo arquitectónico es 4 GiB. La RAM real es
+   dispersa y acotada por VM.
+2. **Little-endian único** en ROM, cabecera, TOC, segmentos, instrucciones, memoria y MMIO. No hay
+   conversión de orden en el loader ni en el bus.
+3. Hay **dieciséis registros de propósito general** de 32 bits:
+   - `R0`–`R12`: uso general.
+   - `R13` (`FP`): frame pointer.
+   - `R14` (`SP`): stack pointer.
+   - `R15` (`LR`): link register.
+4. `PC` es un registro arquitectónico de 32 bits no direccionable como GPR. `FLAGS` es un registro
+   arquitectónico de 32 bits con `Z` (bit 0), `N` (bit 1), `C` (bit 2) y `V` (bit 3); el resto de
+   bits es cero. `FLAGS` se lee y escribe con `CSRR`/`CSRW` desde modo supervisor.
+5. La pila es **full-descending**: `PUSH` resta 4 a `SP` y almacena; `POP` carga y suma 4. La
+   alineación de pila es de 4 bytes; 8 bytes para valores de 64 bits y llamadas que los usen.
+6. `CALL` escribe la dirección de retorno en `R15` y salta; `RET` salta a `R15`. No hay pila de
+   retorno automática. Una función que llame a otra debe preservar `R15`.
+7. El ABI C de ADR-023 se mantiene: argumentos en pila de derecha a izquierda, limpieza del
+   llamador, retorno en `R0` o `R1:R0`, `R0`–`R12` y `R15` caller-saved, `R13`/`R14` preservados,
+   `struct`/`union` por valor con puntero oculto, `char` sin signo y `size_t`/`uintptr_t`/
+   `ptrdiff_t` de 32 bits. `float`/`double` se pasan en pila y se retornan en `R0`/`R1:R0`; el
+   baseline es soft-float.
+8. El estado de reset es determinista: `PC = resetVector`, `SP = FP = LR = 0`, GPR a cero,
+   `FLAGS = 0`, `STATUS = 0x0000_0002` (supervisor, MMU apagada, interrupciones deshabilitadas),
+   `TVEC = 0`, `PTBR = 0`, `PIDENT = MIDENT = 0xFFFF_FFFF`, `SCRATCH = 0`. El BIOS fija su pila
+   antes de usar `CALL`.
+
+### 2. Privilegios y excepciones
+
+1. Hay dos niveles: **supervisor** (`S`) y **usuario** (`U`). El BIOS, el bootloader y el kernel
+   corren en `S`; los programas de política corren en `U`. No hay anillo intermedio.
+2. `STATUS` tiene `IE` (bit 0), `PRV` (bit 1; 0 = U, 1 = S), `PIE` (bit 2), `PPRV` (bit 3), `MMU`
+   (bit 4) y `TRAP` (bit 5). El resto debe ser cero.
+3. En una excepción o IRQ: `PIE = IE`, `PPRV = PRV`, `IE = 0`, `PRV = S`, `TRAP = 1`,
+   `PC = TVEC + 4 * CAUSE`. `EPC` es la dirección de la instrucción que falló en las excepciones
+   síncronas, `PC + 3` en `ECALL` y la dirección de la instrucción siguiente en una IRQ. Si `TRAP` ya era 1,
+   se entra en `DOUBLE_FAULT`; una segunda falta durante el doble fallo aborta la ejecución en el
+   host con un error explícito. `ERET` restaura `IE`/`PRV` desde `PIE`/`PPRV`, limpia `TRAP` y
+   vuelve a `EPC`; si `TRAP` era 0, `ERET` es `ILLEGAL_INSTRUCTION`.
+4. `TVEC` es la base de una tabla de 64 entradas de 4 bytes (256 bytes), alineada a 256 bytes. Las
+   entradas se interpretan en el espacio de direcciones actual (físico con MMU apagada, virtual con
+   MMU encendida). Si `TVEC = 0`, cualquier trap es un error del host (`UNHANDLED_TRAP`); el BIOS
+   debe publicar la tabla antes de habilitar interrupciones.
+5. Códigos de excepción (0–15): `ILLEGAL_INSTRUCTION` (0), `BREAKPOINT` (1), `LOAD_FAULT` (2),
+   `STORE_FAULT` (3), `INSTRUCTION_FAULT` (4), `ALIGNMENT` (5), `PRIVILEGE` (6), `ECALL_USER` (7),
+   `ECALL_SUPERVISOR` (8), `DIVIDE_BY_ZERO` (9), `ARITHMETIC_OVERFLOW` (10), `BUS_ERROR` (11),
+   reservados (12–13), `DOUBLE_FAULT` (14), reservado (15). Las IRQ ocupan 16–47 y se corresponden
+   con las líneas 0–31 del PIC. `CAUSE` contiene el índice de vector; `BADVADDR` es válido para
+   faltas de memoria, alineación y bus.
+6. `ECALL` es la llamada al kernel: número en `R0`, argumentos en `R1`–`R6`, retorno en `R0`.
+   Desde `U` usa el vector 7; desde `S`, el 8. El hardware no guarda GPR: el kernel guarda y
+   restaura su marco. `HOST` no es `ECALL`: es una hiperllamada al host y no cambia `STATUS`.
+
+### 3. ISA v3: codificación
+
+1. Cada instrucción es una secuencia de cajas little-endian:
+   - **Caja de opcode** (1 byte): `[7:6]` familia, `[5:2]` operación (0–15), `[1:0]` forma.
+   - **Caja de descriptor** (2 bytes): `[15:12] rd`, `[11:8] rs`, `[7:4] base`, `[3] idx`,
+     `[2:1] size`, `[0]` reservado.
+   - **Caja de inmediato/desplazamiento** (4 bytes), solo cuando la forma la exige.
+2. Formas: `00` registro-registro, `01` registro-inmediato, `10` lectura de memoria (o `LEA`),
+   `11` escritura de memoria. En formas de memoria, `base` es el registro base, `rs` es el índice
+   cuando `idx = 1` y queda reservado cuando `idx = 0`, y `rd` es el registro de datos: destino en
+   lectura (forma 10) y fuente en escritura (forma 11). El desplazamiento es siempre de 32 bits y se
+   suma a `base + index`; la suma es módulo 2^32. Un índice no se escala: el programa calcula
+   `index * escala` con `SHL`/`ADD`. `base` e `idx` deben ser cero fuera de las formas de memoria.
+3. `size`: `00` = 8 bits, `01` = 16 bits, `10` = 32 bits, `11` = reservado. En formas de memoria,
+   el acceso debe estar alineado naturalmente (2 bytes para 16 bits, 4 para 32); si no, `ALIGNMENT`.
+   Las cargas de 8/16 bits zero-extienden a 32 bits. Los almacenes escriben los bits bajos.
+4. En `MOV` inmediato y en toda la ALU, `size` debe ser `10` (32 bits); usar 8/16 bits en esos
+   casos es `ILLEGAL_INSTRUCTION`. Para cargar un valor pequeño, el programa usa un registro de
+   32 bits y luego un almacén de 8/16 bits.
+5. `MOV` forma 00 copia `rs` a `rd` (8/16 zero-extiende); forma 01 carga `imm32` en `rd`; forma 10
+   carga `[base + index + disp32]` en `rd`; forma 11 almacena `rd` en `[base + index + disp32]`. En
+   forma 11, `rd` es la fuente y `rs` es índice solo si `idx = 1`.
+6. Longitud: 3 bytes para formas `00`; 7 bytes para formas `01`, y para las formas de memoria
+   `10`/`11` de `MOV`/`LEA`. Los bits reservados de opcode/descriptor deben ser cero; si no,
+   `ILLEGAL_INSTRUCTION`. No hay instrucciones de longitud fija: el decoder recorre las cajas y
+   calcula la frontera con el mismo código que ejecuta. Una instrucción puede cruzar página; si la
+   segunda página no es ejecutable, `INSTRUCTION_FAULT`.
+7. No hay `MOV [mem], imm`: el ensamblador **no** sintetiza un registro temporal oculto. El autor
+   escribe `MOV Rt, imm` y después `MOV [mem], Rt`. `LI` no es un opcode; es un alias de ensamblador
+   que emite `MOV rd, imm32`.
+
+### 4. ISA v3: instrucciones
+
+| Familia | Op | Mnemónico | Formas | Semántica |
+|---|---:|---|---|---|
+| 0 | 0 | `MOV` | 00/01/10/11 | Registro, inmediato, carga y almacén. Único mnemónico para movimiento. |
+| 0 | 1 | `LEA` | 10 | Calcula `base + index + disp32` y lo escribe en `rd`; no accede a memoria. |
+| 0 | 2 | `PUSH` | 00 | `SP -= 4`; `[SP] = rs` (32 bits). |
+| 0 | 3 | `POP` | 00 | `rd = [SP]`; `SP += 4` (32 bits). |
+| 0 | 4–15 | — | — | Reservado. |
+| 1 | 0 | `ADD` | 00/01 | `rd = rd + operando`; actualiza `Z/N/C/V`. |
+| 1 | 1 | `ADC` | 00/01 | `rd = rd + operando + C`; actualiza `Z/N/C/V`. |
+| 1 | 2 | `SUB` | 00/01 | `rd = rd - operando`; actualiza `Z/N/C/V`. |
+| 1 | 3 | `AND` | 00/01 | `rd &= operando`; actualiza `Z/N`; limpia `C/V`. |
+| 1 | 4 | `OR` | 00/01 | `rd = rd OR operando`; actualiza `Z/N`; limpia `C/V`. |
+| 1 | 5 | `XOR` | 00/01 | `rd ^= operando`; actualiza `Z/N`; limpia `C/V`. |
+| 1 | 6 | `SHL` | 00/01 | Desplaza a la izquierda; cuenta en `rs[4:0]` o inmediato; `Z/N/C`; `V = 0`. |
+| 1 | 7 | `SHR` | 00/01 | Desplazamiento lógico; misma cuenta y flags. |
+| 1 | 8 | `SAR` | 00/01 | Desplazamiento aritmético; misma cuenta y flags. |
+| 1 | 9 | `MUL` | 00/01 | Producto bajo de 32 bits; `Z/N`; `C/V = 0`. |
+| 1 | 10 | `DIV` | 00/01 | División entera con signo; cociente en `rd`; divisor cero o `INT_MIN / -1` trapa. |
+| 1 | 11 | `DIVU` | 00/01 | División entera sin signo; divisor cero trapa. |
+| 1 | 12 | `MOD` | 00/01 | Resto con signo; divisor cero o `INT_MIN % -1` trapa. |
+| 1 | 13 | `MODU` | 00/01 | Resto sin signo; divisor cero trapa. |
+| 1 | 14 | `CMP` | 00/01 | `SUB` sin escribir `rd`; actualiza `Z/N/C/V`. |
+| 1 | 15 | `TEST` | 00/01 | `AND` sin escribir `rd`; actualiza `Z/N`; limpia `C/V`. |
+| 2 | 0 | `JMP` | 00/01 | Salto a `rs` (forma 00) o relativo a `PC + 7 + disp32` (forma 01). |
+| 2 | 1 | `Jcc` | 01 | Salto relativo si la condición de `rs` se cumple. `rd`/`base` reservados. |
+| 2 | 2 | `CALL` | 00/01 | `R15 = PC + longitud`; salta a `rs` (forma 00) o a `PC + 7 + disp32`. |
+| 2 | 3 | `RET` | 00 | `PC = R15`. |
+| 2 | 4 | `ECALL` | 00 | Trap de syscall; vector 7/8 según `PRV`; número en `R0`. |
+| 2 | 5 | `ERET` | 00 | Retorno de trap; solo supervisor y con `TRAP = 1`. |
+| 2 | 6 | `HALT` | 00 | Detiene el vCPU hasta IRQ habilitada, evento o watchdog; solo supervisor. |
+| 2 | 7 | `BREAK` | 00 | Trap de breakpoint; código en `R0`; vector 1. |
+| 2 | 8 | `NOP` | 00 | No hace nada. |
+| 2 | 9–15 | — | — | Reservado. |
+| 3 | 0 | `HOST` | 00 | Hiperllamada síncrona al host; convención de §7. |
+| 3 | 1 | `RDCYCLE` | 00 | `rd = low32(cycles)`, `rs = high32(cycles)` en un snapshot atómico. |
+| 3 | 2 | `RDTIME` | 00 | `rd = low32(timeNs)`, `rs = high32(timeNs)` en un snapshot atómico. |
+| 3 | 3 | `CSRRW` | 01 | Lee el CSR a `rd` (si `rd != 0`) y escribe `rs`; número en `imm32[11:0]`. |
+| 3 | 4 | `CSRRS` | 01 | Lee el CSR a `rd` y activa los bits de `rs`; si `rs = 0`, no escribe. |
+| 3 | 5 | `CSRRC` | 01 | Lee el CSR a `rd` y limpia los bits de `rs`; si `rs = 0`, no escribe. |
+| 3 | 6 | `CSRR` | 01 | Alias de `CSRRS rd, csr, 0`; lectura pura. |
+| 3 | 7 | `CSRW` | 01 | Alias de `CSRRW 0, csr, rs`; escritura pura. |
+| 3 | 8 | `SFENCE.VMA` | 00 | Vacía la TLB; necesario tras cambiar PTBR o una página. |
+| 3 | 9 | `FENCE` | 00 | Ordena accesos de memoria/MMIO/DMA antes y después. |
+| 3 | 10–15 | — | — | Reservado. |
+
+Condiciones de `Jcc` (`rs`): 0 `EQ` (`Z=1`), 1 `NE`, 2 `CS` (`C=1`), 3 `CC`, 4 `MI` (`N=1`),
+5 `PL`, 6 `VS` (`V=1`), 7 `VC`, 8 `HI` (`C=1 && Z=0`), 9 `LS` (`C=0 || Z=1`),
+10 `GE` (`N=V`), 11 `LT` (`N!=V`), 12 `GT` (`Z=0 && N=V`), 13 `LE` (`Z=1 || N!=V`),
+14 `ALWAYS`, 15 `NEVER`.
+
+Reglas de flags: `ADD`/`ADC`/`SUB` actualizan `Z/N/C/V`; `C = 1` significa acarreo en `ADD` y
+«sin borrow» en `SUB`/`CMP`; `V` es overflow de complemento a dos. `AND`/`OR`/`XOR`/`TEST`
+actualizan `Z/N` y limpian `C/V`; los desplazamientos con cuenta 0 no cambian flags; `MUL` deja
+`C/V = 0`; `DIV`/`DIVU`/`MOD`/`MODU` actualizan `Z/N` y dejan `C/V = 0`. `DIV`/`MOD` truncan hacia
+cero y el resto tiene el signo del dividendo. `DIV`/`MOD` con divisor cero usan `DIVIDE_BY_ZERO`;
+el caso `INT_MIN / -1` y `INT_MIN % -1` usan `ARITHMETIC_OVERFLOW`. `PUSH`/`POP` exigen `size = 10`
+y `SP` alineado a 4; `LEA` ignora `size`; `MOV` de memoria admite 8/16/32. `CALL` lee el destino
+antes de escribir `R15`. `RDCYCLE`/`RDTIME` exigen `rd != rs`; si coinciden, `ILLEGAL_INSTRUCTION`.
+
+Privilegios de instrucción: `CSR*`, `ERET`, `SFENCE.VMA` y `HALT` son solo `S`; `ECALL`, `HOST`,
+`RDCYCLE`, `RDTIME`, `FENCE` y `BREAK` son `U/S`; el resto es común. Una instrucción privilegiada
+en `U` produce `PRIVILEGE`. `HALT` con `IE = 0` produce `ILLEGAL_INSTRUCTION`; dormir exige timer e
+interrupciones habilitadas.
+
+CSR de v3.0: `STATUS` 0x100, `EPC` 0x101, `CAUSE` 0x102, `BADVADDR` 0x103, `TVEC` 0x104,
+`PTBR` 0x105, `SCRATCH` 0x106, `PIDENT` 0x107, `MIDENT` 0x108, `FLAGS` 0x109. `TVEC` se alinea a
+256 bytes y `PTBR` a 4 KB; un valor no alineado o con bits reservados no cero es
+`ILLEGAL_INSTRUCTION`. En `CSR*`, `rd = 0` significa «no leer» y `rs = 0` significa «no escribir»;
+por eso `CSRR`/`CSRW` son alias puros y R0 no se usa como operando en estas instrucciones. Los 20
+bits altos del inmediato CSR deben ser cero; un número de CSR no definido o un valor con bits
+reservados no cero es `ILLEGAL_INSTRUCTION`. `PIDENT` acepta 0–63 o 0xFFFF_FFFF; `MIDENT` acepta un
+handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
+
+### 5. Memoria, MMU y MMIO
+
+1. **Mapa virtual** (constante, sin relocación):
+   - `0x0000_0000`–`0x00FF_FFFF`: ROM de 16 MiB, R/X, supervisor.
+   - `0x0100_0000`–`0x01FF_FFFF`: MMIO de 16 MiB, supervisor, decodificado **antes** de la MMU.
+   - `0x0200_0000`–`0x7FFF_FFFF`: espacio de usuario, hasta ~2 GiB.
+   - `0x8000_0000`–`0xFFFF_FFFF`: espacio de kernel, 2 GiB.
+   - `resetVector = 0x0000_0000`. Las pilas iniciales son `0x7FFF_F000` (usuario) y
+     `0xFFFF_F000` (kernel), con una página de guarda no mapeada debajo; el kernel las mapea.
+2. La ROM física ocupa `0x0000_0000`–`0x00FF_FFFF`; el MMIO físico ocupa
+   `0x0100_0000`–`0x01FF_FFFF`; la RAM física empieza en `0x0200_0000` y tiene `RAM_SIZE` bytes.
+   Cualquier acceso físico fuera de esas regiones es `BUS_ERROR`. La ROM física es de solo lectura:
+   un store a una página que la mapee produce `STORE_FAULT`.
+3. **MMU apagada** al reset: las direcciones son físicas, solo se permite `S`, no hay permisos de
+   página. El BIOS la enciende escribiendo `STATUS.MMU = 1` después de construir la page table. Un
+   `ERET` a `U` con MMU apagada es `PRIVILEGE`. Con MMU apagada, `PC`/`EPC`/`TVEC`/`BADVADDR` son
+   físicas; con MMU encendida son virtuales. El BIOS mantiene una identidad para su propio código o
+   actualiza `TVEC` al encender la MMU.
+4. Paginación de **dos niveles, 4 KB, 10 + 10 + 12 bits**. `PTBR` es la dirección física de la
+   tabla de nivel 1, alineada a 4 KB (los 12 bits bajos deben ser cero; si no, `ILLEGAL_INSTRUCTION`
+   al escribir el CSR). El PDE contiene `[31:12]` dirección física de la tabla de nivel 2 y bit 0
+   `V`; el resto debe ser cero. El PTE contiene:
+   - `[31:12]` frame físico;
+   - bit 11 reservado (0);
+   - bit 10 `S` (snapshot compartido);
+   - bit 9 `C` (copy-on-write);
+   - bit 8 `G` (global);
+   - bit 7 `D` (dirty);
+   - bit 6 `A` (accessed);
+   - bit 5 `U` (accesible desde usuario);
+   - bit 4 `X`, bit 3 `W`, bit 2 `R`, bit 0 `V`; bit 1 reservado (0).
+   Un PDE o PTE con bits reservados no cero produce falta.
+5. `W && X` es una página inválida y produce falta. Una página válida con `R = 0` no se puede leer,
+   con `W = 0` no se puede escribir y con `X = 0` no se puede ejecutar; la falta es `LOAD_FAULT`,
+   `STORE_FAULT` o `INSTRUCTION_FAULT`, respectivamente. `U` solo puede leer/escribir/ejecutar
+   páginas con `U = 1`; `S` puede acceder a páginas de usuario. El hardware marca `A` en toda
+   traducción válida y `D` en toda escritura. `C` o `S` con escritura producen `STORE_FAULT` para
+   que el kernel resuelva COW/snapshot; el guest nunca recibe una escritura silenciosa sobre una
+   página compartida.
+6. La TLB es una caché; su contenido debe ser coherente con la page table después de escribir
+   `PTBR` o ejecutar `SFENCE.VMA`. No hay ASID en v3.0: cambiar de proceso implica escribir `PTBR`
+   y vaciar la TLB. Un TLB obsoleto es un bug del emulador, no un comportamiento permitido.
+7. **MMIO antes de la MMU.** El rango `0x0100_0000`–`0x01FF_FFFF` no se traduce; el bus lo decodifica
+   directamente y solo `S` puede acceder. Los accesos deben ser de 32 bits y estar alineados a 4;
+   otro tamaño o alineación produce `ALIGNMENT` o `BUS_ERROR`. No se puede mapear MMIO mediante un
+   PTE: un PTE que apunte a la región MMIO es `BUS_ERROR`.
+8. **Dispositivos v3.0** (cada uno de 4 KB, registros de 32 bits):
+   - `0x0100_0000` UART: `TX` WO, `RX` RO, `STATUS` RO (bit 0 TX listo, bit 1 RX disponible,
+     bit 2 overflow), `CTRL` RW (bit 0 IRQ RX, bit 1 IRQ TX).
+   - `0x0100_1000` TIMER: `CMP_LO`/`CMP_HI` RW, `CTRL` RW (bit 0 enable, bit 1 periódico,
+     bit 2 IRQ), `STATUS` RW1C (bit 0 fired), `PERIOD_LO`/`PERIOD_HI` RW (por defecto 1.000.000 ns),
+     `TIME_LO`/`TIME_HI` RO con latch (leer `TIME_LO` fija el alto hasta leer `TIME_HI`).
+   - `0x0100_2000` PIC: `PENDING` RO, `MASK` RW (1 = enmascarada; reset todo 1), `ACK` WO,
+     `IN_SERVICE` RO, `SOFT_IRQ` WO (escribe 1 en una línea para pendiente por software).
+   - `0x0100_3000` DISPLAY: `COLS` RO (80), `ROWS` RO (25), `CURSOR` RW (`fila << 16 | columna`),
+     `CTRL` RW (bit 0 enable, bit 1 clear), búfer de texto de 80×25 celdas de 2 bytes (carácter y
+     atributo) en `0x0100_3010`–`0x0100_3FFF`.
+   - `0x0100_4000` NVRAM: `SIZE` RO (4 KiB), `ADDR` RW, `DATA` RW, `COMMIT` WO (1 = flush).
+   - `0x0100_5000` SYSINFO: `RAM_SIZE`, `RAM_BASE`, `ROM_SIZE`, `TOC_OFFSET`, `TOC_COUNT`,
+     `ABI_VERSION` (3), `FEATURES` (bit 0 timer, 1 NVRAM, 2 UART, 3 display, 4 sync, 5 mailbox),
+     `CPU_HZ` (1.000.000.000), `TIME_HZ` (1.000.000.000).
+   - `0x0100_6000` HOST_MAILBOX: `EVENT_TYPE` RO (1 mensaje, 2 apagado, 3 acción host completada),
+     `MESSAGE_HANDLE` RO, `EVENT_SEQ` RO, `ACK` WO, `STATUS` RO (bit 0 pendiente).
+   - `0x0100_7000`–`0x01FF_FFFF`: reservado; acceso `BUS_ERROR`.
+9. Las líneas de IRQ son: 0 timer, 1 UART RX, 2 UART TX, 3 display (no usada en v3.0), 4 reservada,
+   5 host mailbox, 6–15 reservadas y 16–31 software. El PIC es de flanco y latcha `PENDING`. Al
+   tomar la línea pendiente de menor número no enmascarada, limpia ese bit, lo marca en
+   `IN_SERVICE` y vectoriza; `ACK` limpia `IN_SERVICE`. Un nuevo flanco durante el servicio vuelve
+   a poner `PENDING`, pero la línea no se toma hasta el `ACK`. El kernel debe hacer `ACK` antes de
+   `ERET`.
+
+### 6. Tiempo, scheduler y persistencia
+
+1. `RDCYCLE` es un contador monótono de 64 bits de instrucciones retiradas; solo avanza cuando la
+   VM ejecuta. `RDTIME` es un contador monótono de 64 bits de nanosegundos virtuales; avanza
+   durante ejecución y espera. Ambos se leen con un snapshot atómico en dos registros; no hay
+   *tearing*. La frecuencia nominal es 1 GHz para ciclos y 1 ns para tiempo; el overflow es el de
+   un `u64` y no se reinicia salvo reset de la VM.
+2. El CPU comprueba IRQ pendientes al inicio de cada instrucción, antes del fetch. El timer compara
+   `RDTIME` con `CMP`; al alcanzarlo, marca `STATUS.fired` y, si `CTRL.IRQ` y la línea 0 están
+   desenmascaradas, levanta la IRQ 0. En modo periódico suma `PERIOD` a `CMP`; si la VM se atrasó,
+   dispara una vez y fija `CMP = RDTIME + PERIOD` para no generar una tormenta.
+3. `HALT` solo es válido en `S` y exige `IE = 1`; con `IE = 0` es `ILLEGAL_INSTRUCTION`. Detiene el
+   vCPU hasta que haya una IRQ habilitada, un evento de host o el watchdog. Si no hay procesos
+   ejecutables, el host avanza el tiempo virtual hasta el
+   siguiente deadline en lugar de hacer busy-wait. `ECALL` permite al kernel ceder la CPU y dormir;
+   la política temporal (token bucket, backoff, deadline) vive en el guest, no en el host.
+4. Hay **un vCPU por VM**. Varias VM pueden coexistir y ejecutarse en paralelo, pero un guest no
+   ejecuta dos flujos a la vez. El scheduler de procesos es software del kernel; el host solo
+   impone el quantum y el watchdog.
+5. **Quantum de host:** por ejecución, 1.000.000 de instrucciones o 50 ms de reloj de pared, lo que
+   ocurra primero, configurable. Al agotarse, el host aborta la ejecución con
+   `QUANTUM_EXCEEDED` o `HOST_TIMEOUT`, revierte el journal del mensaje y libera el `machineLock`.
+   El guest no puede enmascararlo ni deshabilitarlo. No es fuel y no se expone en el ABI. El reloj
+   de pared del watchdog cuenta solo ejecución de guest: el tiempo bloqueado en `HOST` no consume
+   ese watchdog y queda acotado por el timeout de la acción.
+6. La **máquina es persistente**: RAM, registros, timer, page tables y NVRAM sobreviven entre
+   mensajes mientras la VM está encendida. El journal es por unidad de mensaje: o se confirman
+   todas las mutaciones del mensaje o ninguna. Un aborto de ejecución no revierte el estado de
+   máquina ya avanzado (tiempo, ciclos, cola); no se presenta como éxito de mensaje. Al apagar la
+   VM solo persiste la NVRAM; reiniciar no conserva RAM ni registros.
+7. La cola de mensajes vive en el kernel. El host conserva los objetos `Message` y usa un handle
+   opaco de 32 bits (16 bits de slot + 16 bits de generación) para evitar ABA. El handle no se
+   interpreta en el ABI; el kernel lo trata como opaco. El host mailbox publica el handle y el
+   evento; el kernel lo encola y fija `MIDENT` al ejecutar la política.
+8. Una entrega diferida por `HALT`/sleep **no cuenta como entregada** hasta que el guest registra
+   `ROUTE_DECISION` con target `DELIVER`. Si la VM se apaga o la ejecución se cancela antes, el
+   host devuelve `NOT_DELIVERED`/`CANCELLED`; nunca un éxito falso. Si la entrega física falla
+   después de la decisión, el resultado es el `SyncResult` explícito de la acción y no se reintenta
+   si no es idempotente.
+9. No hay `ROUTE_RATE_LIMIT` ni `DECISION_RATE_LIMIT`. El token bucket y el backoff son software
+   del guest. El host puede aplicar un **cap duro separado** (llamadas por minuto, tamaño de
+   payload, timeout de acción) que devuelve `RATE_LIMITED` para la tasa, `DENIED` para un payload
+   que nunca cabría y `TIMEOUT` para una acción agotada; ese cap no es la política y no se duplica
+   con ella.
+10. El cambio de ROM en caliente no está soportado en v3.0: se marca `RESTART_REQUIRED`. Las
+    instantáneas de memoria son por frame y COW; nunca se clona el espacio de 4 GiB. La compresión
+    de frames queda fuera de v3.0.
+
+### 7. ABI `HOST` v3
+
+1. `HOST` es una hiperllamada síncrona. Entradas:
+   - `R0` = service ID de 32 bits;
+   - `R1` = flags, debe ser 0;
+   - `R2` = dirección virtual del buffer de argumentos;
+   - `R3` = longitud de argumentos en bytes;
+   - `R4` = dirección virtual del buffer de resultado;
+   - `R5` = capacidad del buffer de resultado.
+2. Salidas: `R0` = estado; `R1` = longitud del resultado. Todos los demás registros se preservan.
+   Si la capacidad es insuficiente, `R0 = LIMIT`, `R1 = tamaño requerido` y no se escribe ningún
+   byte parcial. Si `R3 = 0`, `R2` se ignora. Los buffers deben ser accesibles desde el modo actual
+   y estar completamente mapeados; si no, `FAULT`.
+3. Estados: `OK = 0`, `INVALID_ARGUMENT = 1`, `UNSUPPORTED = 2`, `DENIED = 3`, `NOT_FOUND = 4`,
+   `CONFLICT = 5`, `LIMIT = 6` (capacidad/presupuesto), `FAULT = 7`, `INTERNAL = 8`,
+   `NOT_READY = 9`, `RATE_LIMITED = 10`, `TIMEOUT = 11`. No hay códigos negativos ni éxito
+   implícito.
+4. El código de datos es **TLV** con `TlvCodec` de `core-api`: tipo `u8`, longitud `u32` LE,
+   payload; tipos 0 `NULL`, 1 `STRING`, 2 `I64`, 3 `BOOL`, 4 `BYTES`, 5 `LIST`, 6 `MAP`;
+   little-endian, sin padding, UTF-8 validado, sin truncar, ausencia explícita (`NULL`) distinta
+   de cadena vacía, claves duplicadas inválidas en mapas y listas ordenadas. El máximo por buffer
+   es 1 MiB. El puente sync usa además `SyncBridgeCodec`, sin un segundo codec.
+5. Servicios v3:
+
+   | ID | Servicio | Argumentos TLV | Resultado TLV |
+   |---|---|---|---|
+   | `0x0100` | `PROPERTY_READ` | `scope`, `property`, referencias opcionales | `present`, `value` tipado |
+   | `0x0101` | `PROPERTY_WRITE` | `scope`, `property`, `value` | vacío |
+   | `0x0102` | `PROPERTY_EXISTS` | `scope`, `property` | `present` |
+   | `0x0200` | `PERMISSION_CHECK` | `actor`, `channel`, `permission` | `allowed` |
+   | `0x0300` | `ROUTE_DECISION` | `target`, `reason`, `error` opcional | vacío |
+   | `0x0400` | `TRANSFORM_APPLY` | `kind`, `input` | `output` |
+   | `0x0701` | `MESSAGE_ID` | vacío | `id` |
+   | `0x0800` | `SYNC_SURFACE` | vacío | superficies |
+   | `0x0801` | `SYNC_INVOKE` | `backend`, `action`, `args`, `idempotencyKey`/`reason` opcionales | `SyncResult` |
+
+   No existen en v3.0 `STATE_READ/WRITE`, `CHANNEL_RESOLVE/POLICY`, `MESSAGE_CLONE`,
+   `ROUTE_REDIRECT`, `ROUTE_RATE_LIMIT`, `PERMISSION_QUERY` ni `DECISION_RATE_LIMIT`; un ID v2 no
+   listado devuelve `UNSUPPORTED`.
+6. `ROUTE_DECISION.target`: `DELIVER = 0`, `CANCEL_EVENT = 1`, `ERROR = 2`. No existe `DROP`,
+   `LOG` ni `REDIRECT`; no llamar a `DELIVER` es el drop por defecto. Solo `DELIVER` confirma el
+   journal y después intenta la entrega; sin decisión, con `CANCEL_EVENT` o con `ERROR`, el journal
+   del mensaje se descarta (con `CANCEL_EVENT` sí se aplica la cancelación del evento). Un fallo de
+   entrega posterior a `DELIVER` no revierte el mensaje ya
+   confirmado. Una segunda decisión en la misma ejecución devuelve `CONFLICT` e invalida la unidad:
+   no se entrega nada. El destino no viaja en la decisión: el cambio de canal
+   se hace con `SYNC_INVOKE("textformatter", "channel.set", ...)` antes de decidir, y el backoff es
+   tiempo de guest. Ese cambio de canal se registra en el journal; la segunda fase de routing se
+   computa sobre el overlay y solo se entrega si la unidad termina en `DELIVER`. Así se conservan
+   D02/D03/D40/D42 y ADR-036 §16.5; el `destination`/`backoff` de D41 no se expone en el ABI v3.
+7. `PROPERTY_WRITE` escribe en el overlay del journal; las lecturas posteriores de la misma
+   ejecución ven el cambio (read-your-writes). El commit es todo o nada. `PROP_CHANNEL`,
+   `PROP_DIRECTION`, `PROP_TYPE` y `PROP_CANCELLED` son de solo lectura; escribir una de ellas
+   devuelve `DENIED`. El canal se cambia solo por la acción sync. Los IDs de propiedad son los de
+   ADR-031, sin `PROP_PROCESSED`, `PROP_SOUNDS`, `PROP_ACTOR_WORLD` ni `PROP_SLEEP_MILLIS`;
+   `PROP_CANCELLED` se conserva como lectura de estado, no como target.
+8. `PERMISSION_CHECK` es fail-closed: actor, canal o permiso ausente/vacío/desconocido devuelve
+   `allowed = false`; un argumento malformado devuelve `INVALID_ARGUMENT`. `PROPERTY_READ` y
+   `PROPERTY_EXISTS` de una propiedad desconocida devuelven `present = false`; `PROPERTY_WRITE`
+   devuelve `NOT_FOUND`; `TRANSFORM_APPLY` con `kind` desconocido devuelve `UNSUPPORTED`;
+   `ROUTE_DECISION` con `target` inválido devuelve `INVALID_ARGUMENT`. `SYNC_SURFACE` devuelve
+   `UNSUPPORTED` si el puente no está instalado y una lista vacía si existe pero no hay backends.
+   `SYNC_INVOKE` mapea `Ok→OK`, `Denied→DENIED`, `Unsupported→UNSUPPORTED`,
+   `InvalidArgument→INVALID_ARGUMENT`, `NotFound→NOT_FOUND`, `Conflict→CONFLICT`,
+   `RateLimited→RATE_LIMITED`, `Timeout→TIMEOUT` y `HostFailure→INTERNAL`; conserva
+   `retryAfterMillis`/`reason` y devuelve `UNSUPPORTED` sin puente. `SYNC_SURFACE` exige la
+   capacidad `sync.surface` y `SYNC_INVOKE` la capacidad `sync.invoke`, además de la capacidad
+   concreta de la acción.
+9. `HOST` requiere `PIDENT` válido para cualquier servicio de política y `MIDENT` válido para los
+   servicios que operan sobre el mensaje (`PROPERTY_*`, `PERMISSION_CHECK`, `ROUTE_DECISION`,
+   `TRANSFORM_APPLY`, `MESSAGE_ID`, `SYNC_INVOKE`); `SYNC_SURFACE` solo exige `PIDENT`. `PIDENT`
+   es el índice del programa en la tabla del loader (0–63); `MIDENT` es el handle del mensaje
+   actual; ambos son CSR de supervisor (0x107 y 0x108) y `U` no puede escribirlos. El host resuelve
+   el SHA-256 y las capacidades desde su tabla, no desde el guest. Sin identidad verificada,
+   `DENIED` o `NOT_READY`. `Principal.Official` no ejecuta `HOST`.
+10. Capacidades baseline (`iflow.property.read`, `iflow.property.write`, `iflow.permission.check`,
+    `iflow.route.decision`, `iflow.transform.apply`, `iflow.message.id`) se conceden a todo
+    programa verificado que las declare. Las acciones sync usan `sync.<backend>.<accion>` o
+    `module.<moduleId>.<accion>` y exigen concesión del operador por SHA-256, con la intersección
+    declarada/concedida de ADR-036 §16.6. Una capacidad desconocida en la imagen invalida la ROM.
+11. `HOST` no cambia `STATUS`, no es reentrante y puede ceder la CPU mientras espera al host. Una
+    acción sync puede tener efecto externo antes del commit del journal; no hay transacción entre
+    efecto nativo y mensaje (ADR-036 §16.6). Un timeout devuelve `TIMEOUT`, nunca éxito.
+
+### 8. Formato ROM v3 (`.flow`)
+
+1. El `.flow` v3 es una ROM completa, no un ejecutable. Cabecera de 80 bytes:
+
+   | Offset | Tamaño | Campo |
+   |---:|---:|---|
+   | 0 | 8 | magic `FLOWROM\0` |
+   | 8 | 2 | `formatVersion = 3` |
+   | 10 | 2 | `isaVersion = 32` |
+   | 12 | 2 | `abiVersion = 3` |
+   | 14 | 2 | `headerSize = 80` |
+   | 16 | 4 | `flags` (bit 0 firmada; bits 1–31 reservados) |
+   | 20 | 4 | `romSize` |
+   | 24 | 4 | `resetVector` |
+   | 28 | 4 | `tocOffset` |
+   | 32 | 2 | `tocCount` |
+   | 34 | 2 | `tocEntrySize = 64` |
+   | 36 | 4 | `hashAlgorithm = 1` (SHA-256) |
+   | 40 | 4 | `signatureOffset` (0 si no hay) |
+   | 44 | 4 | `signatureSize` (0 si no hay) |
+   | 48 | 32 | `hash` SHA-256 |
+
+2. El hash cubre toda la ROM con los 32 bytes del campo `hash` puestos a cero. Se verifica antes de
+   mapear. Un hash todo cero es inválido. Si `flags.bit0 = 1`, debe existir firma y el host la
+   verifica antes de cargar; el parser de la VM comprueba presencia y límites, no criptografía.
+   `signatureOffset`/`signatureSize` deben caber en la ROM y no solaparse con la cabecera, la TOC
+   ni los segmentos; si `flags.bit0 = 0`, ambos deben ser cero.
+3. La TOC tiene entradas de 64 bytes:
+
+   | Offset | Tamaño | Campo |
+   |---:|---:|---|
+   | 0 | 1 | `type` (1 BIOS, 2 BOOT, 3 KERNEL, 4 PROGRAM, 5 DATA, 6 FONT, 7 CONFIG; 8+ reservado) |
+   | 1 | 1 | `flags` (bit 0 R, 1 W, 2 X, 3 U; bits 4–7 reservados) |
+   | 2 | 2 | reservado (0) |
+   | 4 | 4 | `offset` en la ROM |
+   | 8 | 4 | `size` copiado |
+   | 12 | 4 | `loadAddress` virtual |
+   | 16 | 4 | `entryPoint` (0 si no es ejecutable) |
+   | 20 | 4 | `memSize` (≥ `size`) |
+   | 24 | 32 | hash SHA-256 del segmento |
+   | 56 | 8 | reservado (0) |
+
+4. Límites y validación: `headerSize = 80`, `tocEntrySize = 64`, `hashAlgorithm = 1`;
+   `romSize <= 16 MiB`; `tocOffset >= 80` y alineado a 8; `tocCount <= 256`; hay exactamente un
+   segmento BIOS, uno BOOT y uno KERNEL, y como máximo 64 PROGRAM;
+   `tocOffset + tocCount*64 <= romSize`; sin desbordamiento de 32 bits; cada `loadAddress` está
+   alineado a 4 KiB y cada segmento cumple
+   `offset >= 80 + tocCount*64`, `offset + size <= romSize` y no solapa cabecera, TOC ni firma;
+   `loadAddress + memSize` no desborda 32 bits; segmentos sin solaparse en ROM ni en memoria
+   virtual; `size > 0`; `memSize >= size`; hash de segmento distinto de cero; `entryPoint` dentro
+   del segmento si `X`; `resetVector` dentro del segmento BIOS y ejecutable. Solo los primeros
+   `romSize` bytes de la ventana ROM se mapean en `0x0000_0000` con permisos R/X y `U = 0`; la
+   última página se zero-fill hasta 4 KiB y los demás segmentos se copian a su `loadAddress` con
+   los flags de la TOC y zero-fill hasta `memSize`.
+5. Reglas por tipo: BIOS en `0x0000_0000`, R/X, supervisor; BOOT/KERNEL en `0x8000_0000`–
+   `0xFFFF_FFFF`, R/X o R/W, supervisor; PROGRAM en `0x0200_0000`–`0x7FFF_FFFF`, `U = 1`, R/X y
+   `W = 0`; DATA es para firmware/kernel, no para programas; FONT/CONFIG son datos. `W && X` se
+   rechaza. El flag `W` de la TOC de un `PROGRAM` debe ser 0: los permisos de datos/bss salen de
+   `PRG3`, no de la TOC. Un `PROGRAM` empieza con la subcabecera `PRG3` de 32 bytes:
+
+   | Offset | Tamaño | Campo |
+   |---:|---:|---|
+   | 0 | 4 | magic `PRG3` |
+   | 4 | 4 | `codeOffset` |
+   | 8 | 4 | `codeEnd` |
+   | 12 | 4 | `dataOffset` |
+   | 16 | 4 | `dataEnd` |
+   | 20 | 4 | `capabilitiesOffset` |
+   | 24 | 4 | `capabilitiesLength` |
+   | 28 | 4 | reservado (0) |
+
+   Los offsets son relativos al inicio del segmento. `codeOffset >= 32`, `codeEnd > codeOffset`,
+   `dataEnd >= dataOffset`, y los rangos de código, datos y capacidades caben en `size` y no se
+   solapan. Sin datos, `dataOffset = dataEnd = 0`; `memSize >= dataEnd`; el `entryPoint` de la TOC,
+   traducido a offset (`entryPoint - loadAddress`), debe caer en `[codeOffset, codeEnd)`. Las
+   capacidades son `u16 count` seguido de `u16 length + UTF-8` sin NUL, máximo 256 entradas de
+   128 bytes. El kernel lee `PRG3` y las capacidades desde la ROM antes de mapear; solo los rangos
+   de código y datos/bss se mapean. El SHA-256 del programa es el del segmento completo y es la
+   identidad de `Principal.Program`.
+6. Un `.flow` v2, un `magic` distinto, `formatVersion != 3`, `isaVersion != 32`,
+   `abiVersion != 3`, `headerSize != 80`, `tocEntrySize != 64`, `hashAlgorithm != 1`, un `type` 0
+   u 8+, un `PRG3` con magic distinto, cualquier reservado distinto de cero o cualquier límite
+   incumplido se rechaza con `UnsupportedFormatException`/`InvalidRomException`. No hay lectura
+   doble ni migración en runtime. Los fixtures v2 del compilador son material de test, no
+   artefactos aceptados por v3.
+
+### 9. Arranque y carga de programas
+
+1. El host valida la ROM, la mapea físicamente y arranca en `resetVector` con MMU apagada, `S`,
+   interrupciones deshabilitadas y registros de §1.8. El BIOS hace POST: pila, `TVEC`, PIC, timer,
+   NVRAM, display, page tables y `SYSINFO`; después enciende `STATUS.MMU` y salta al bootloader.
+2. El bootloader solo copia y verifica el segmento `KERNEL` de ROM a RAM y salta a su entry point.
+   No hace POST, no reconstruye page tables, no cambia el stack ni enciende interrupciones.
+3. El kernel inicializa el scheduler, la cola, las syscalls y los timers; carga los segmentos
+   `PROGRAM` por TOC directa, sin filesystem, verificando hash y `PRG3`, y crea un proceso por
+   programa. El máximo es 64 programas. Los programas no son relocalizables en v3.0: el linker fija
+   `loadAddress`; el kernel mapea el rango de código R/X y el de datos/bss R/W, ambos con `U = 1` y
+   `W^X`, y zero-fill desde `max(dataEnd, codeEnd)` hasta `memSize`. Los datos de programa no se
+   cargan como segmentos DATA separados.
+4. El kernel asigna `PIDENT` en el contexto de cada proceso, en orden de aparición de los
+   segmentos `PROGRAM` en la TOC, y `MIDENT` al ejecutar la política de un mensaje. El host mailbox
+   (IRQ 5) entrega el handle opaco; el kernel lo encola y lo conserva hasta la decisión, cancelación
+   o apagado. El host no conoce la lógica del kernel ni cablea programas.
+5. Si un trap ocurre con `TVEC = 0`, si el doble fallo se repite, si el watchdog expira o si una
+   instrucción/servicio no está soportado, la ejecución termina con error explícito; no hay
+   fallback silencioso ni éxito parcial. Cambiar la ROM exige reiniciar la VM.
+
+### 10. Límites y valores por defecto
+
+| Límite | Valor por defecto | Rango / nota |
+|---|---:|---|
+| RAM por VM | 64 MiB | 16 MiB–1 GiB configurable; 4 GiB máximo arquitectónico |
+| ROM | 16 MiB | fijo por mapa |
+| Frames | 4 KiB | asignación dispersa bajo demanda |
+| TOC | 256 entradas | 64 bytes por entrada |
+| Programas | 64 | `PIDENT` 0–63 |
+| TLV por buffer | 1 MiB | validado en un único punto |
+| Payload sync | 64 KiB | configurable; exceso `DENIED` |
+| Timeout de acción | 1000 ms | configurable por acción |
+| Quantum de host | 1.000.000 instrucciones / 50 ms | lo primero que ocurra; no enmascarable |
+| Timer | 1 kHz | periodo 1 ms; `RDTIME` en ns |
+| NVRAM | 4 KiB | persistente entre reinicios |
+| Cola | handles 32 bits | slot 16 + generación 16 |
+| Páginas | 4 KiB | dos niveles; sin páginas grandes en v3.0 |
+
+### 10.1. Cierre de las decisiones abiertas de §8.8
+
+| Preguntas | Decisión |
+|---|---|
+| 1 | La máquina v3 **reemplaza** a la v2; no hay targets conviviendo. |
+| 2 | ROM en `0x0000_0000`; `resetVector = 0x0000_0000`. |
+| 3 | 64 MiB por defecto; 16 MiB–1 GiB configurable; 4 GiB máximo arquitectónico. |
+| 4 | Páginas de 4 KB, dos niveles 10+10+12; sin páginas grandes en v3.0. |
+| 5 | Compresión de frames **fuera** de v3.0; se medirá antes de proponerla. |
+| 6 | Handle opaco de 32 bits (slot 16 + generación 16); el ABI no lo interpreta. |
+| 7 | Timer/RTC y contador virtual de ciclos; `RDCYCLE` y `RDTIME`. |
+| 8 | Carga por TOC directa; sin filesystem en v3.0. |
+| 9 | `U/S`, páginas `U`, `W^X` y capacidades baseline/sync por SHA-256. |
+| 10 | `.flow` v2 rechazado; sin migración runtime; se reensambla/recompila a v3. |
+| 11 | ROM mapeada R/X, no como dispositivo de bloque. |
+| 12 | Sin benchmark en V1; la aceptación de rendimiento se mide en V6. |
+| 13–17 | Codificación de 3/7 bytes, cajas jerárquicas, `MOV` único, sin `LI` opcode, little-endian, campos de 4 bits y `size` de 2 bits. |
+| 18–21 | Sin fuel en el ABI; quantum de host + watchdog no enmascarables; timer IRQ + `HALT`; `RDCYCLE`/`RDTIME`; ciclos como diagnóstico. |
+| 22–25 | Contadores de 64 bits con snapshot atómico; 1 GHz/1 ns; `RDTIME` avanza también al dormir; busy-wait se permite pero el watchdog lo corta; dormir es `HALT` con timer, no un bucle. |
+| 27 | `RDCYCLE`/`RDTIME`, timer MMIO e IRQ 0; el RTC es el mismo reloj virtual. |
+| 28 | `HALT` no lleva deadline; el kernel programa el timer y duerme; una IRQ despierta; `HALT` exige `IE = 1`. |
+| 29 | Token bucket en RAM del guest; sobrevive sleep; no sobrevive reinicio salvo que se guarde en NVRAM. |
+| 30 | Se eliminan `ROUTE_RATE_LIMIT` y `DECISION_RATE_LIMIT`; una sola decisión de guest. |
+| 31 | Cap duro del host separado; tasa `RATE_LIMITED`, payload `DENIED`, timeout `TIMEOUT`. |
+| 32 | El watchdog del host aborta en frontera de instrucción, revierte el journal y libera `machineLock`. |
+| 33 | `PERMISSION`/`WORLD` vacíos o no verificables son fail-closed (`allowed = false`). |
+| 34 | Una entrega diferida no cuenta hasta `DELIVER`; si se cancela o apaga, `NOT_DELIVERED`/`CANCELLED`, nunca éxito. |
+
+Las preguntas 26 y 35–38 ya estaban cerradas en §5.4 y ADR-031; este ADR no las reabre.
+
+### 11. Consecuencias
+
+- V2 debe **reemplazar** el intérprete, el parser, la MMU, el bus, el PIC y el ABI v2, no añadir un
+  modo paralelo. El `ProgramImage.CURRENT_FORMAT_VERSION = 2` y los opcodes v2 dejan de ser
+  contrato; el `.flow` v2 se rechaza. El compilador y el ensamblador v3 son la única vía de autoría.
+- La máquina gana un modelo de arranque real (BIOS → bootloader → kernel → programas), MMU de
+  32 bits, IRQ, timer, tiempo virtual y persistencia. El fuel desaparece del ABI; el quantum y el
+  watchdog son límites de seguridad del host, no política del guest. Esto sustituye la cláusula
+  «coste de fuel» de ADR-036 §16.6 para v3; las cuotas pasan a llamadas/minuto, payload y timeout.
+- El contrato de política de ADR-031 se conserva: default deny, `DELIVER` explícito, una sola
+  decisión, `CANCEL_EVENT` separado, TLV, read-your-writes, sin `REDIRECT`/`RATE_LIMIT`. El cambio
+  de canal sigue siendo `textformatter.channel.set` por `SYNC_INVOKE`, no un import dedicado.
+- El ABI C de ADR-023 queda implementable sin cambios: `R13`/`R14` son `FP`/`SP`, `R15` es `LR`,
+  la pila es de 4 bytes y el retorno es `R0`/`R1:R0`. El compilador C sigue bloqueado por V5, no
+  por V1.
+- `iflow-wasm` no se toca: su ABI de imports y W3.5 son una línea paralela. Este ADR no declara
+  paridad `.flow`/`.wasm`; esa matriz sigue en W3.5.
+- La seguridad es fail-closed: ROM y segmentos con hash, `W^X`, `U/S`, MMIO solo supervisor,
+  capacidades declaradas y concedidas por SHA-256, sin acceso a filesystem/red/procesos del host y
+  sin stubs. Un servicio o instrucción no soportados fallan explícitamente.
+
+### 12. Lo que este ADR no promete
+
+- No implementa V2–V5 ni cambia código en V1.
+- No conserva compatibilidad v2, no migra `.flow` v2 en runtime y no mantiene dos lectores.
+- No incluye compresión de frames, multi-vCPU, ASID, páginas grandes, hot-reload de ROM ni
+  verificación criptográfica de firmas dentro de la VM.
+- No define benchmarks de «networking empresarial»; se medirán con V6 y no se asumen.
+- No declara estable la suite ni sustituye el E2E real de ADR-034.
+- No autoriza cambios en `docs/prompts/`; la especificación sigue siendo de solo lectura.
+
+### 13. Criterios de validación de la implementación
+
+V1 se cierra con este ADR. V2–V5 deben demostrar, como mínimo:
+
+1. Ensamblador v3: codifica y decodifica todas las instrucciones, rechaza formas reservadas y
+   produce ROM con hash/TOC válidos; `LI` solo como alias.
+2. CPU: flags, saltos, `CALL`/`RET`, pila, alineación, `ECALL`/`ERET`, doble fallo y watchdog.
+3. MMU: page walk de dos niveles, `U/S`, `W^X`, `A/D`, COW/snapshot, TLB coherente y límites de
+   frame; ningún `AIOOBE` escapa como fallo de VM.
+4. IRQ/tiempo: PIC, máscara, prioridad, `ACK`, timer periódico/one-shot, `RDCYCLE`/`RDTIME` sin
+   tearing, `HALT`/sleep y avance de tiempo sin busy-wait.
+5. ABI `HOST`: TLV, estados, capacidad insuficiente, buffers inválidos, `PIDENT`/`MIDENT`,
+   `ROUTE_DECISION` única, read-your-writes y mapeo de `SyncResult`.
+6. ROM: rechazo de v2, magic/versión, hash, solapamientos, `memSize`, `W^X`, `PRG3`, capacidades y
+   límites; carga BIOS/boot/kernel/programa.
+7. Integración: un mensaje real atraviesa el pipeline con una política `.flow` v3 y produce el
+   mismo resultado observable que el contrato de ADR-031/ADR-036, sin fuel y sin doble camino.
