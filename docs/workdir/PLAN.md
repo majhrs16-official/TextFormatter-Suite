@@ -1818,8 +1818,9 @@ Reglas de diseño:
 
 La línea vigente de `iflow-vm` sigue siendo la **v2 de 16 bits** mientras V2 sustituye el núcleo
 por el contrato v3 de ADR-037. V2-0 implementó el contenedor ROM v3 aislado, V2-1 el decoder de la
-ISA v3 y V2-2 la ALU/registros/flags v3, todos sin cablear al motor; no existe un despacho dual
-v2/v3. La migración a v3 (ISA/ABI de
+ISA v3, V2-2 la ALU/registros/flags v3 y V2-3 el núcleo de ejecución v3 (fetch/decode/execute,
+CSR, memoria y traps, privilegios, `HOST` mínimo, ciclos y tiempo), todos sin cablear al motor; no
+existe un despacho dual v2/v3. La migración a v3 (ISA/ABI de
 32 bits, scheduler, persistencia, quantum) es posterior y no se mezcla con esos slices. Por eso el
 fuel sigue siendo el límite de ejecución vigente en v2 y las referencias de ADR-036 §16.6/§16.7 al
 coste de fuel describen esa línea, no el objetivo v3.
@@ -1836,7 +1837,7 @@ camino v2/v3: la migración sustituye la línea vigente.
 |---|---|---|
 | **V0 — Módulo y spec** | `src/iflow-vm/` renombrado, Gradle/CI/docs actualizados y especificación v3 enlazada | ✅ `:src:iflow-vm:build`, `:src:iflow-wasm:build` y `:src:host:build` verificados con JDK 21 |
 | **V1 — Contrato 32 bits** | ✅ **ADR-037 (2026-11-14):** ISA, memoria/MMU, IRQ, scheduler, tiempo, formato ROM y ABI `HOST` v3; corte limpio sin compatibilidad `.flow` v2 | Contrato congelado antes de tocar el núcleo |
-| **V2 — Núcleo** | **V2-0 completado (2026-11-14):** contenedor ROM v3 aislado en `me.majhrs16.suite.iflow.vm.rom` (`RomParser`, cabecera/TOC de 80/64 bytes, `PRG3`, capacidades, hashes SHA-256, `W^X`, rechazo explícito de `.flow` v2) con 62 tests. **V2-1 completado (2026-11-14):** decoder v3 aislado en `me.majhrs16.suite.iflow.vm.isa.v3` (`Opcode`, `Instruction`, `InstructionDecoder`, `MachineFault`, registros/CSR, cajas de 3/7 bytes, formas, `size`, reservados y lector de instrucciones) con 25 tests. **V2-2 completado (2026-11-14):** ALU v3 aislada (`Alu`, `Flags`, `RegisterFile`) con 42 tests de aritmética, `ADC`, préstamo/carry, overflow, desplazamientos, `MUL`/`DIV`/`MOD` con signo y sin signo, trampas aritméticas y banco de 16 registros. Los tres slices están **sin cablear** a `VmPolicyEngine`/`VmConfigLoader`/`IflowVmActivator`. Siguiente: núcleo de ejecución (fetch/decode/execute, memoria, control de flujo y traps), MMU, bus, PIC y ABI `HOST` v3. | Tests de memoria, privilegios y arranque |
+| **V2 — Núcleo** | **V2-0 completado (2026-11-14):** contenedor ROM v3 aislado en `me.majhrs16.suite.iflow.vm.rom` (`RomParser`, cabecera/TOC de 80/64 bytes, `PRG3`, capacidades, hashes SHA-256, `W^X`, rechazo explícito de `.flow` v2) con 62 tests. **V2-1 completado (2026-11-14):** decoder v3 aislado en `me.majhrs16.suite.iflow.vm.isa.v3` (`Opcode`, `Instruction`, `InstructionDecoder`, `MachineFault`, registros/CSR, cajas de 3/7 bytes, formas, `size`, reservados y lector de instrucciones) con 25 tests. **V2-2 completado (2026-11-14):** ALU v3 aislada (`Alu`, `Flags`, `RegisterFile`) con 42 tests de aritmética, `ADC`, préstamo/carry, overflow, desplazamientos, `MUL`/`DIV`/`MOD` con signo y sin signo, trampas aritméticas y banco de 16 registros. **V2-3 completado (2026-11-14):** núcleo de ejecución aislado (`Cpu`, `Status`, `CsrFile`, `DataMemory`, `MemoryFault`, `HostCall`, `HostHandler`, `HostResult`, `HostStatus`, `TimeSource`) con fetch/decode/execute, GPR/flags/CSR, memoria y alineación, saltos/`CALL`/`RET`, privilegios, `ECALL`/`ERET`, `HOST` mínimo, `RDCYCLE`/`RDTIME`, `SFENCE.VMA`/`FENCE`, `BREAK`/`NOP`/`HALT`, doble falta y `TVEC=0`. Los cuatro slices están **sin cablear** a `VmPolicyEngine`/`VmConfigLoader`/`IflowVmActivator`. Siguiente: MMU, bus, PIC y ABI `HOST` v3 completo. | Tests de memoria, privilegios y arranque |
 | **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
 | **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
 | **V5 — Herramientas de ensamblado** | Assembler `.flowasm` v3, firmware, ejemplos y validador | Build reproducible + tests |
@@ -2317,7 +2318,7 @@ Líneas Prod/Test = líneas físicas de todas las `.java` de `src/main` y `src/t
 
 **Próxima acción T4:** ✅ **COMPLETADO** — tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld` (14 tests neutrales: dominio, activador y descriptor), `observability` (15 tests) y `messages` (18 tests) — usando mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
 
-**Próxima acción:** V1 cerrado con ADR-037; V2-0 (contenedor ROM v3 aislado), V2-1 (decoder ISA v3 aislado) y V2-2 (ALU, flags y registro v3 aislados) completados con 62 + 25 + 42 tests. Siguiente slice de V2: núcleo de ejecución (fetch/decode/execute, memoria, control de flujo y traps), MMU, bus, PIC y ABI `HOST` v3, sustituyendo el núcleo v2 sin camino dual. W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
+**Próxima acción:** V1 cerrado con ADR-037; V2-0 (contenedor ROM v3 aislado), V2-1 (decoder ISA v3 aislado), V2-2 (ALU, flags y registro v3 aislados) y V2-3 (núcleo de ejecución v3 aislado) completados con 62 + 25 + 42 tests más la suite del núcleo. Siguiente slice de V2: MMU, bus, PIC y ABI `HOST` v3 completo, sustituyendo el núcleo v2 sin camino dual. W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
 
 ---
 

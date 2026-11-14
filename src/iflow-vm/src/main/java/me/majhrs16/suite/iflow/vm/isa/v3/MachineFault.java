@@ -39,6 +39,7 @@ public final class MachineFault extends RuntimeException {
     private final Code code;
     private final int pc;
     private final Integer badAddress;
+    private final String detail;
 
     public MachineFault(Code code, int pc, String message) {
         this(code, pc, null, message);
@@ -49,6 +50,7 @@ public final class MachineFault extends RuntimeException {
         this.code = code;
         this.pc = pc;
         this.badAddress = badAddress;
+        this.detail = message;
     }
 
     public Code code() {
@@ -63,6 +65,19 @@ public final class MachineFault extends RuntimeException {
         return badAddress;
     }
 
+    /**
+     * Relocates a fault raised while fetching an instruction to the address of
+     * that instruction, preserving the original bad address.
+     */
+    public MachineFault atInstruction(int instructionPc, Integer fetchAddress) {
+        if (pc == instructionPc && (badAddress == null
+                ? fetchAddress == null
+                : badAddress.equals(fetchAddress))) {
+            return this;
+        }
+        return new MachineFault(code, instructionPc, fetchAddress, detail);
+    }
+
     public int vector() {
         return code.vector();
     }
@@ -73,6 +88,30 @@ public final class MachineFault extends RuntimeException {
 
     public static MachineFault instructionFault(int pc, String detail) {
         return new MachineFault(Code.INSTRUCTION_FAULT, pc, detail);
+    }
+
+    public static MachineFault loadFault(int pc, int badAddress, String detail) {
+        return new MachineFault(Code.LOAD_FAULT, pc, badAddress, detail);
+    }
+
+    public static MachineFault storeFault(int pc, int badAddress, String detail) {
+        return new MachineFault(Code.STORE_FAULT, pc, badAddress, detail);
+    }
+
+    public static MachineFault alignment(int pc, int badAddress, String detail) {
+        return new MachineFault(Code.ALIGNMENT, pc, badAddress, detail);
+    }
+
+    public static MachineFault privilege(int pc, String detail) {
+        return new MachineFault(Code.PRIVILEGE, pc, detail);
+    }
+
+    public static MachineFault busError(int pc, int badAddress, String detail) {
+        return new MachineFault(Code.BUS_ERROR, pc, badAddress, detail);
+    }
+
+    public static MachineFault breakpoint(int pc, String detail) {
+        return new MachineFault(Code.BREAKPOINT, pc, detail);
     }
 
     public static MachineFault divideByZero(int pc) {

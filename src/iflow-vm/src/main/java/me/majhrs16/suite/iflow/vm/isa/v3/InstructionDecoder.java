@@ -136,7 +136,22 @@ public final class InstructionDecoder {
             throw MachineFault.instructionFault(pc,
                     "instruction fetch crosses the 32-bit address space");
         }
-        return reader.readByte((int) address) & 0xFF;
+        try {
+            return reader.readByte((int) address) & 0xFF;
+        } catch (MachineFault fault) {
+            throw fault.atInstruction(pc, fetchAddress(fault, (int) address));
+        }
+    }
+
+    private static Integer fetchAddress(MachineFault fault, int address) {
+        if (fault.badAddress() != null) {
+            return fault.badAddress();
+        }
+        if (fault.code() == MachineFault.Code.INSTRUCTION_FAULT
+                || fault.code() == MachineFault.Code.BUS_ERROR) {
+            return address;
+        }
+        return null;
     }
 
     private static MachineFault illegal(int pc, String detail) {

@@ -2,7 +2,6 @@ package me.majhrs16.suite.iflow.vm.isa.v3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -268,8 +267,8 @@ class InstructionDecoderTest {
     }
 
     @Test
-    void propagatesReaderFault() {
-        MachineFault expected = MachineFault.instructionFault(0, "boom");
+    void relocatesReaderFaultToTheInstructionPc() {
+        MachineFault expected = MachineFault.instructionFault(1, "boom");
         InstructionReader reader = address -> {
             if (address == 1) {
                 throw expected;
@@ -280,7 +279,9 @@ class InstructionDecoderTest {
         MachineFault actual = assertThrows(MachineFault.class,
                 () -> new InstructionDecoder().decode(0, reader));
 
-        assertSame(expected, actual);
+        assertEquals(MachineFault.Code.INSTRUCTION_FAULT, actual.code());
+        assertEquals(0, actual.pc());
+        assertEquals(1, actual.badAddress());
     }
 
     @Test
