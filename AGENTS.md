@@ -20,6 +20,8 @@ La primera respuesta tras una compactación debe incluir literalmente esta frase
 
 Un resumen, un checkpoint o un reinicio de sesión que conserven el contexto no exigen esta relectura.
 
+- En cada inicio o reinicio/compactación de contexto, carga y aplica siempre la skill `caveman` (modo `full`), adaptando sus reglas de compresión telegráfica al idioma español (sin artículos, saludos ni muletillas, manteniendo código y términos técnicos intactos).
+
 ## Autoridad documental
 
 Ante una contradicción, aplica este orden:
