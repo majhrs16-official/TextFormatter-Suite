@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-09
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-13
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -1812,11 +1812,17 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
 4. **Fail-closed.** Permiso ausente, ambiguo o no verificable → `Denied`. No se hereda el fail-open
    de `PERMISSION`/`WORLD` (TF-002).
 5. **Cuotas.** Timeout por acción (`timeoutMillis`), llamadas por minuto por programa, coste de fuel
-   por llamada de host y tamaño máximo de payload. El agotamiento devuelve `RateLimited` o `Timeout`,
-   no un éxito parcial.
+   por llamada de host y tamaño máximo de payload. El presupuesto de llamadas agotado devuelve
+   `RateLimited` con el reintento en milisegundos; un payload que excede `max-payload-bytes` devuelve
+   `Denied`, no `RateLimited`, porque repetir los mismos argumentos nunca cabría. Ningún agotamiento
+   produce un éxito parcial.
 6. **Auditoría.** Registro append-only con hash del programa, backend, acción, actor, hash de
    argumentos (nunca valores), resultado y duración. Los argumentos marcados como secreto se
-   redactan. La ruta la fija `storage.md`; cambiarla requiere autorización.
+   redactan; un argumento que la acción no declara también se redacta (fail-closed). El hash es
+   determinista: ordena las claves y sustituye los valores redactados por una marca fija. Una acción
+   de programa exige que el registro sea escribible antes de ejecutarse; un llamador oficial se
+   audita best-effort para no detener el pipeline. La ruta es `<data>/config/iflow/audit.log`
+   (`storage.md` §5); cambiarla requiere autorización.
 7. **Idempotencia.** Solo se reintenta una acción marcada `idempotent`; la clave es
    `message.id() + action + target`. Las acciones no idempotentes no se reintentan. `message.deliver`
    es no idempotente: un reintento duplicaría la entrega local, así que el sobre se intenta una vez.
@@ -1862,8 +1868,8 @@ motores lo usan tal cual; ningún motor redefine el formato.
 
 Una superficie es un mapa `backend`, `contractVersion`, `actions`. Una acción es un mapa `id`,
 `kind`, `params`, `result`, `idempotent`, `timeoutMillis`. Un parámetro es un mapa `name`, `type`,
-`required`, `item`. Las superficies se ordenan por `backend` y las acciones por `id` para que la
-codificación sea determinista. Los argumentos y el resultado usan el mapeo neutral de
+`required`, `item`, `secret`. Las superficies se ordenan por `backend` y las acciones por `id` para
+que la codificación sea determinista. Los argumentos y el resultado usan el mapeo neutral de
 `SyncBridgeCodec`: `null`, string, i64, bool, bytes, lista y mapa.
 
 ##### 16.7.2 Estados
@@ -1916,7 +1922,10 @@ la VM lo deja además en `R4`.
   detección mira el journal (`SET_CHANNEL`/`REDIRECT_CHANNEL`); en Wasm compara el mensaje de trabajo
   con el original.
 - El bus se resuelve con un `Supplier` por invocación: `iflow-vm` e `iflow-wasm` pueden activarse
-  antes que `sync-bus`. Sin bus, `sync_surface`/`sync_invoke` devuelven `UNSUPPORTED`.
+  antes que `sync-bus`. Sin bus, `sync_surface`/`sync_invoke` devuelven `UNSUPPORTED`. El bus
+  resuelve también la concesión (`ProgramGrantStore`) y la auditoría (`ActionAudit`) con suppliers:
+  sin concesión, sin auditoría escribible o sin cuota, la acción devuelve `DENIED` o
+  `RATE_LIMITED` y no tiene efecto.
 - El puente no crea un presupuesto de fuel nuevo: usa el base y el coste por byte del registro de
   servicios. `sync.invoke` no se concede por declarar una capacidad de acción.
 

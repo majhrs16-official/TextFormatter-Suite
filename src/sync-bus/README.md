@@ -13,6 +13,14 @@
   `message.send`) and that `surface().backend()` equals `sink.name()`.
 - Execute one action through `invoke(SyncCall)` with surface, argument and
   authorization checks; every failure maps to an explicit `SyncResult`.
+- Authorize third-party programs by the SHA-256 of their image: the effective
+  capability is `sync.<backend>.<action>` for sinks and
+  `module.<moduleId>.<action>` for host actions, intersected with the operator
+  grant. `DESTRUCTIVE` and `MODERATION` require `allow-destructive: true`.
+- Enforce the per-program call window and the TLV payload bound; an exhausted
+  budget returns `RateLimited` and an oversized payload returns `Denied`.
+- Append one audit entry per attempt with the redacted argument hash; a program
+  action requires a writable audit trail before it runs.
 - Fan out only the LCM (`broadcast(SyncCall)`); a native action is never turned
   into a mass operation.
 - Deliver `message.send` through one bounded queue per sink (`send`, `sendTo`).
@@ -34,7 +42,8 @@
   `Message`; the bus only distributes it.
 - No native action implementation: each backend executes its own surface. The
   bus only validates, queues, bounds and maps the result.
-- No grant store yet: `Principal.Program` is denied fail-closed.
+- No grant storage: the bus consumes the `ProgramGrantStore` and `ActionAudit`
+  services; `suite-runtime` owns `config/iflow/grants.yml` and `audit.log`.
 - No persistence.
 
 ---
@@ -62,8 +71,8 @@
 | Component | Role |
 |-----------|------|
 | `SyncBus` | Public contract in `core-api`: registration, `surfaces`, `invoke`, LCM `broadcast`, `send`/`sendTo`, lifecycle, metrics |
-| `DefaultSyncBus` | Implementation: surface validation, permission gate, dedup cache, per-sink workers, timeouts, retries |
-| `SyncBusActivator` | `ModuleActivator` that creates, publishes, starts and stops the bus |
+| `DefaultSyncBus` | Implementation: surface validation, authorization, quotas, audit trail, dedup cache, per-sink workers, timeouts, retries |
+| `SyncBusActivator` | `ModuleActivator` that creates, publishes, starts and stops the bus and resolves `ProgramGrantStore`/`ActionAudit` by service |
 | `SyncBusModule` | Legacy kernel descriptor publishing the `sync-bus` capability |
 
 Constants in `DefaultSyncBus`:
@@ -75,6 +84,7 @@ Constants in `DefaultSyncBus`:
 | Max retries | 3 |
 | Initial / max retry delay | 100 ms / 30 s |
 | Dedup window / max entries | 60 s / 50,000 |
+| Program call window | 60 s |
 | Action timeout ceiling | 30 s |
 
 ---
@@ -102,10 +112,15 @@ Directed and native actions use the same envelope:
 ```text
 caller → SyncBus.invoke(SyncCall)
               ↓
-      validate backend + surface + arguments + authority
+      validate backend + surface + arguments
+              ↓
+      authorize: grant by SHA-256 + capability + allow-destructive
+                 + payload bound + writable audit + call window
               ↓
       message.send → per-backend queue (same path as send)
       native action → bounded execution off the caller thread
+              ↓
+      append one audit entry (redacted argument hash)
               ↓
       SyncResult (never null, never a fabricated success)
 ```
@@ -151,7 +166,7 @@ Ordering guarantees:
 | Entry Point | Location | Called By |
 |-------------|----------|-----------|
 | `SyncBusActivator` | `SyncBusActivator.java` | Module runtime |
-| `DefaultSyncBus(PluginLogger)` | `DefaultSyncBus.java` | `SyncBusActivator` |
+| `DefaultSyncBus(PluginLogger, Supplier<ProgramGrantStore>, Supplier<ActionAudit>)` | `DefaultSyncBus.java` | `SyncBusActivator` (services resolved on every call) |
 | `register(SyncSink)` | `DefaultSyncBus.java` | Sink packages or `discoverSinks` |
 | `start()` / `stop()` | `DefaultSyncBus.java` | Activator lifecycle |
 | `invoke(SyncCall)` | `DefaultSyncBus.java` | Pipeline, features and iFlow bridge |
@@ -170,7 +185,10 @@ Ordering guarantees:
 - Return `Unsupported` for an unpublished action; never return a no-op success.
 - Add a new sink module; do not modify the bus for platform-specific behavior.
 - `Principal.Official` is restricted to `backend.info`/`message.send`.
-  `Principal.Program` stays denied until `config/iflow/grants.yml` exists.
+  `Principal.Program` runs only the actions covered by its grant in
+  `config/iflow/grants.yml`; a missing, ambiguous or unreadable grant is a
+  denial, and `DESTRUCTIVE`/`MODERATION` also require `allow-destructive: true`.
+  Secret parameters and undeclared arguments are redacted before hashing.
 
 ---
 
@@ -191,6 +209,12 @@ the LCM, and both `Principal.Official` on a native action and
 `PackageRuntimeTest.installsSyncBusPackageAndHotRegistersSinkModule`
 installs the real `sync-bus` ZIP and a sink package, then unloads the sink and
 checks that the running bus unregisters it.
+
+`DefaultSyncBusAuthorizationTest` covers the operator grant: missing grant,
+missing capability, exact capability, trailing wildcard, destructive and
+moderation without `allow-destructive`, the per-minute budget, an oversized
+payload, secret/undeclared argument redaction, a missing or read-only audit
+trail, a failing grant store and the `module.<id>.<action>` host capability.
 
 ```bash
 ./gradlew :src:sync-bus:test --no-daemon

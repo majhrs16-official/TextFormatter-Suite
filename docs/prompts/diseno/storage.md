@@ -41,7 +41,9 @@ Reglas:
 │   │   ├── commands.yml
 │   │   └── messages.yml
 │   ├── iflow/                           ← hub iFlow (selección de motor)
-│   │   └── config.yml
+│   │   ├── config.yml
+│   │   ├── grants.yml
+│   │   └── audit.log
 │   ├── iflow-firewall/                  ← motor SpEL legacy
 │   │   └── rules.yml
 │   ├── textformatter/
@@ -158,6 +160,34 @@ config-version: 1.0
 Solo se aceptan los nombres canónicos. El valor por defecto es `iflow-firewall`. Si el backend
 configurado no está disponible y el fallback está activo, el hub usa el primer backend disponible
 según la prioridad fijada en ADR-032.
+
+#### 4.1.1 `config/iflow/grants.yml` — concesiones de programas
+
+Dueño: `suite-runtime` (`YamlProgramGrantStore`). Autoriza acciones de programas iFlow de terceros
+(ADR-036 §16.6). El índice es el SHA-256 en minúsculas de la imagen del programa, nunca su nombre.
+
+```yaml
+defaults:
+  calls-per-minute: 60
+  max-payload-bytes: 65536
+grants:
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef":
+    capabilities:
+      - sync.discord.channel.create
+      - module.textformatter.*
+    allow-destructive: false
+    calls-per-minute: 30
+    max-payload-bytes: 4096
+config-version: 1.0
+```
+
+`defaults` solo aporta `calls-per-minute` y `max-payload-bytes`; cada concesión puede sobrescribirlos.
+`capabilities` admite nombres exactos o un comodín final (`sync.discord.*`); el comodín no vale como
+segmento intermedio. `allow-destructive: true` es obligatorio para `DESTRUCTIVE` y `MODERATION`.
+
+Un archivo ausente es un store vacío válido: todo programa queda denegado. Un archivo ilegible,
+inválido, con claves desconocidas, hashes duplicados o patrones inválidos deshabilita el store
+completo hasta que el operador lo corrija: nunca se aplica una concesión parcial.
 
 ### 4.2 `config/iflow-firewall/rules.yml` — motor SpEL legacy
 
@@ -281,6 +311,7 @@ PlaceholderAPI/otros plugins; su estado es en memoria y no persiste configuraci�
 | Ruta | Dueño | Contenido |
 |---|---|---|
 | `<data>/storage.yml` | `suite-runtime` (`YamlUserLanguageStore`) | Idioma por UUID. Lectura por `lastModified`; escritura atómica (temp + move). |
+| `<data>/config/iflow/audit.log` | `suite-runtime` (`AppendOnlyActionAudit`) | Auditoría append-only de acciones sync: una línea por intento, con hash de argumentos y sin valores. `force` a disco en cada entrada; sin rotación ni reescritura. |
 | `<data>/suite.log` | `logger` | Log de la suite. Fallback: `/tmp/TextFormatter-Suite.log`. |
 | `<data>/manager/library/` | Manager | Estado, artefactos, caché, journal, backup y trash de paquetes. |
 

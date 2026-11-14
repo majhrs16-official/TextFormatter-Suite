@@ -178,8 +178,8 @@ reloads active modules in dependency order.
 **Principal**
 Origin of a sync action invocation: `Official(moduleId)` for official suite code
 and `Program(sha256)` for a third-party iFlow program. `Official` may only
-invoke the least common multiple; `Program` is denied until the operator grant
-store exists.
+invoke the least common multiple; `Program` runs only the capabilities granted
+by the operator for its SHA-256.
 
 ## R
 

@@ -85,9 +85,9 @@ class SyncContractTest {
     @Test
     void rejectsInvalidParamSpecs() {
         assertThrows(IllegalArgumentException.class, () -> new SyncParamSpec(
-                "", SyncValueType.STRING, true, null));
+                "", SyncValueType.STRING, true, null, false));
         assertThrows(NullPointerException.class, () -> new SyncParamSpec(
-                "name", null, true, null));
+                "name", null, true, null, false));
     }
 
     @Test

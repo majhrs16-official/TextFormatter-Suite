@@ -11,6 +11,8 @@ import me.majhrs16.suite.api.runtime.ModuleContext;
 import me.majhrs16.suite.api.runtime.ModuleDeactivatedEvent;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
 import me.majhrs16.suite.api.spi.SyncBus;
+import me.majhrs16.suite.api.sync.ActionAudit;
+import me.majhrs16.suite.api.sync.ProgramGrantStore;
 
 /**
  * Runtime activator of the {@code sync-bus} package.
@@ -45,7 +47,10 @@ public final class SyncBusActivator implements ModuleActivator {
     public void start(ModuleContext context) throws Exception {
         ServiceRegistry registry = context.services();
         EventBus eventBus = context.events();
-        DefaultSyncBus created = new DefaultSyncBus(context.logger());
+        DefaultSyncBus created = new DefaultSyncBus(
+                context.logger(),
+                () -> registry.find(ProgramGrantStore.class).orElse(null),
+                () -> registry.find(ActionAudit.class).orElse(null));
         EventBus.Subscription activated = null;
         EventBus.Subscription deactivated = null;
         try {

@@ -1,0 +1,33 @@
+# Concesiones de acciones para programas iFlow de terceros.
+#
+# El índice es el SHA-256 (minúsculas) de la imagen del programa, nunca su
+# nombre. Sin una entrada aquí, el programa no puede ejecutar ninguna acción:
+# permiso ausente, ambiguo o no verificable es una denegación.
+#
+# Cada concesión admite:
+#   capabilities:       capacidades exactas o comodín final (sync.discord.*,
+#                       module.textformatter.*); el programa debe declarar la
+#                       acción exacta en su imagen.
+#   allow-destructive:  obligatorio para acciones DESTRUCTIVE y MODERATION.
+#   calls-per-minute:   presupuesto de llamadas autorizadas por minuto.
+#   max-payload-bytes:  tamaño máximo del payload TLV de argumentos.
+#
+# defaults:
+#   calls-per-minute: 60
+#   max-payload-bytes: 65536
+#
+# grants:
+#   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef":
+#     capabilities:
+#       - sync.discord.channel.create
+#       - module.textformatter.*
+#     allow-destructive: false
+#     calls-per-minute: 30
+#     max-payload-bytes: 4096
+
+defaults:
+  calls-per-minute: 60
+  max-payload-bytes: 65536
+grants: {}
+
+config-version: 1.0

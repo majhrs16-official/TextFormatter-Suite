@@ -9,7 +9,7 @@
 - Define the **Module** contract and lifecycle (`Module`, `ModuleDescriptor`, `Capability`, `Requirement`, `SemVer`)
 - Define the **runtime lifecycle API** (`ModuleActivator`, `ModuleContext`, `ServiceRegistry`, `EventBus`, `Scheduler`, `ResourceTracker`, `PlatformPorts`, `PlatformHandle`, `ModuleState`, `ModuleActivatedEvent`, `ModuleDeactivatedEvent`)
 - Define **shared cross-package contracts** (`api.channel.Channel`/`ChannelRegistry`, `api.iflow.Router` and routing value types)
-- Define **sync action contracts** (`api.sync.ActionKind`, `Principal`, `SyncActionSpec`, `SyncCall`, `SyncParamSpec`, `SyncResult`, `SyncSurface`, `SyncValueType`)
+- Define **sync action contracts** (`api.sync.ActionKind`, `Principal`, `SyncActionSpec`, `SyncCall`, `SyncParamSpec`, `SyncResult`, `SyncSurface`, `SyncValueType`, `ProgramGrant`, `ProgramGrantStore`, `ActionAudit`, `ActionAuditRecord`)
 - Define **message domain types** (`Message`, `ChatMessage`, `Actor`, `Channel`, `MessageType`, `Direction`, `Language`, `ColorMode`, `Formats`, `SoundSpec`)
 - Define **SPI interfaces** for platform/implementation plugins:
   - `ActorDirectory` — resolve actors (players, consoles, etc.) by name/UUID
@@ -87,6 +87,8 @@
 | `SyncSurface` / `SyncActionSpec` / `SyncParamSpec` | Declarative actions published by each sync backend; every surface includes the least common multiple (`backend.info`, `message.send`, `message.deliver`) |
 | `SyncCall` / `SyncResult` | One action invocation and its explicit outcome (`Ok`, `Denied`, `Unsupported`, `InvalidArgument`, `NotFound`, `Conflict`, `RateLimited`, `Timeout`, `HostFailure`) |
 | `Principal` / `ActionKind` / `SyncValueType` | Caller origin, authorization nature and neutral argument vocabulary; no SDK type crosses the boundary |
+| `ProgramGrant` / `ProgramGrantStore` | Operator grant per program SHA-256: capabilities, `allow-destructive`, calls per minute and payload bound; the store is fail-closed |
+| `ActionAudit` / `ActionAuditRecord` | Append-only audit contract: one entry per attempt with the redacted argument hash and canonical status, never argument values |
 | `HostActionHandler` / `HostActionContext` | Agnostic host actions resolved by canonical name (no published surface); the context carries the working message, actors and registries |
 | `TlvCodec` | Shared TLV codec (`NULL`/`STRING`/`I64`/`BOOL`/`BYTES`/`LIST`/`MAP`) used by `iflow-vm` and `iflow-wasm` |
 | `SyncBridgeCodec` | Wire contract of the iFlow sync bridge: `sync_surface`/`sync_invoke` payloads and canonical status names |
@@ -113,9 +115,13 @@ contain the least common multiple: `backend.info` (`READ`, 5 s), `message.send`
 never carry SDK objects.
 
 `SyncResult` is a sealed, explicit outcome; there is no silent skip and no
-fabricated success. Authority is fail-closed in this slice:
-`Principal.Official` may only invoke the LCM and `Principal.Program` is denied
-until the operator grant store exists.
+fabricated success. Authority is fail-closed: `Principal.Official` may only
+invoke the LCM, and `Principal.Program` runs only the actions covered by the
+operator grant for its SHA-256 (`ProgramGrant`). The grant can list exact
+capabilities or a trailing wildcard (`sync.discord.*`) and is intersected with
+the program image's own declaration. `DESTRUCTIVE` and `MODERATION` also require
+`allow-destructive: true`; the call budget and payload bound are part of the
+grant.
 
 A backend with native operations publishes them next to the LCM and overrides
 `invoke()`. `sync-discord` is the first one: it declares `channel.create`,
@@ -198,6 +204,8 @@ None — this is a contract library. Entry points are in modules that **implemen
 16. api/sync/SyncCall.java         → Action invocation envelope
 17. api/sync/SyncResult.java       → Explicit action outcome
 18. api/sync/SyncBridgeCodec.java  → Wire contract of the iFlow sync bridge
+19. api/sync/ProgramGrant.java     → Operator grant per program SHA-256
+20. api/sync/ActionAudit.java      → Append-only audit contract
 ```
 
 ---

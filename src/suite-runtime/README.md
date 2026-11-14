@@ -21,6 +21,10 @@
 - **Configuración** — `DefaultConfigInstaller` instala los defaults que falten y
   `RuntimeConfigRegistry` expone la configuración resuelta. `YamlUserLanguageStore`
   persiste el idioma por UUID en `<data>/storage.yml`.
+- **Autoridad iFlow** — `YamlProgramGrantStore` carga `config/iflow/grants.yml`
+  (concesiones por SHA-256, fail-closed) y `AppendOnlyActionAudit` escribe
+  `<data>/config/iflow/audit.log` con una línea por intento. Ambos se registran
+  como servicios antes de activar paquetes y se recargan/cierran con el runtime.
 - **Estado y eventos** — `RuntimeStateStore`, `RuntimeEventBus` y
   `RuntimeScheduler` sostienen el estado de ejecución y la publicación de eventos
   de ciclo de vida.
@@ -61,6 +65,8 @@
 | `PackageRuntime` | Aplica cambios de paquete y activa/desactiva módulos |
 | `SuiteCommands` / `RuntimeCommandRegistry` | Árbol de comandos y comandos raíz |
 | `DefaultConfigInstaller` | Instala defaults en `config/<module>/` |
+| `YamlProgramGrantStore` | Concesiones de programas iFlow por SHA-256 (`config/iflow/grants.yml`) |
+| `AppendOnlyActionAudit` | Auditoría append-only de acciones sync (`config/iflow/audit.log`) |
 | `YamlUserLanguageStore` | Persistencia de idioma por UUID (`storage.yml`) |
 
 ## 6. Configuración
@@ -70,8 +76,10 @@ El layout canónico está en `docs/prompts/diseno/storage.md`. El runtime lee
 existe un lector de la raíz plana ni de `config/manager/`.
 
 `DefaultConfigInstaller` solo escribe defaults canónicos ausentes; no migra ni
-lee archivos de la raíz plana. `SuiteRuntime.resolveRouter()` exige el hub
-`iflow` y no acepta un `Router` publicado directamente por un motor.
+lee archivos de la raíz plana. Instala también `config/iflow/grants.yml` vacío
+(`grants: {}`), de modo que todo programa queda denegado hasta que el operador
+conceda capacidades. `SuiteRuntime.resolveRouter()` exige el hub `iflow` y no
+acepta un `Router` publicado directamente por un motor.
 
 `config/suite/config.yml` acepta `outputs` y `outputs-parallel`; `SuiteRuntime`
 los carga en `HostConfig` y el motor resuelve el plan efectivo por mensaje.

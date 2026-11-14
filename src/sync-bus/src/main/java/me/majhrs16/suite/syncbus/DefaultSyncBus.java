@@ -1,6 +1,7 @@
 package me.majhrs16.suite.syncbus;
 
 import me.majhrs16.suite.api.message.Message;
+import me.majhrs16.suite.api.iflow.TlvCodec;
 import me.majhrs16.suite.api.pipeline.DeliveryEnvelope;
 import me.majhrs16.suite.api.pipeline.ParallelMode;
 import me.majhrs16.suite.api.runtime.ServiceRegistry;
@@ -8,10 +9,15 @@ import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.SyncBus;
 import me.majhrs16.suite.api.spi.SyncListener;
 import me.majhrs16.suite.api.spi.SyncSink;
+import me.majhrs16.suite.api.sync.ActionAudit;
+import me.majhrs16.suite.api.sync.ActionAuditRecord;
 import me.majhrs16.suite.api.sync.HostActionContext;
 import me.majhrs16.suite.api.sync.HostActionHandler;
 import me.majhrs16.suite.api.sync.Principal;
+import me.majhrs16.suite.api.sync.ProgramGrant;
+import me.majhrs16.suite.api.sync.ProgramGrantStore;
 import me.majhrs16.suite.api.sync.SyncActionSpec;
+import me.majhrs16.suite.api.sync.SyncBridgeCodec;
 import me.majhrs16.suite.api.sync.SyncCall;
 import me.majhrs16.suite.api.sync.SyncParamSpec;
 import me.majhrs16.suite.api.sync.SyncResult;
@@ -19,18 +25,23 @@ import me.majhrs16.suite.api.sync.SyncSurface;
 import me.majhrs16.suite.api.sync.SyncValueType;
 
 import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -78,6 +89,11 @@ public final class DefaultSyncBus implements SyncBus {
     private static final long DEDUP_WINDOW_MS = 60_000;
     private static final int DEDUP_MAX_ENTRIES = 50000;
     private static final long DEFAULT_ASYNC_TIMEOUT_MS = 30_000;
+    private static final long CALL_WINDOW_NANOS = TimeUnit.MINUTES.toNanos(1);
+    private static final String CAPABILITY_SYNC = "sync.";
+    private static final String CAPABILITY_MODULE = "module.";
+    private static final String REDACTED_VALUE = "<redacted>";
+    private static final String OPAQUE_VALUE = "<opaque>";
 
     // Lifecycle states
     private enum LifecycleState { NEW, RUNNING, STOPPING, STOPPED }
@@ -89,6 +105,9 @@ public final class DefaultSyncBus implements SyncBus {
     private final PluginLogger logger;
     private final long asyncTimeoutMillis;
     private final int perSinkQueueCapacity;
+    private final Supplier<ProgramGrantStore> grants;
+    private final Supplier<ActionAudit> audit;
+    private final ConcurrentMap<String, CallWindow> callWindows = new ConcurrentHashMap<>();
 
     // Global bounded queue used by the metrics contract and by the shutdown sentinel.
     private final ThreadPoolExecutor globalExecutor;
@@ -110,7 +129,24 @@ public final class DefaultSyncBus implements SyncBus {
     private final AtomicLong totalDeduped = new AtomicLong(0);
 
     public DefaultSyncBus(PluginLogger logger) {
-        this(logger, DEFAULT_ASYNC_TIMEOUT_MS, DEFAULT_PER_SINK_QUEUE_CAPACITY);
+        this(logger, DEFAULT_ASYNC_TIMEOUT_MS, DEFAULT_PER_SINK_QUEUE_CAPACITY,
+                () -> null, () -> null);
+    }
+
+    /**
+     * Builds a bus with the operator grant store and audit trail resolved on
+     * every call, so a module can activate before or after the store exists.
+     *
+     * @param logger diagnostic sink
+     * @param grants program grant store supplier; {@code null} result denies
+     *               every program
+     * @param audit  audit trail supplier; {@code null} result denies every
+     *               program action and skips official audit
+     */
+    public DefaultSyncBus(PluginLogger logger, Supplier<ProgramGrantStore> grants,
+                          Supplier<ActionAudit> audit) {
+        this(logger, DEFAULT_ASYNC_TIMEOUT_MS, DEFAULT_PER_SINK_QUEUE_CAPACITY,
+                grants, audit);
     }
 
     /**
@@ -122,7 +158,8 @@ public final class DefaultSyncBus implements SyncBus {
      * bound.</p>
      */
     DefaultSyncBus(PluginLogger logger, long asyncTimeoutMillis) {
-        this(logger, asyncTimeoutMillis, DEFAULT_PER_SINK_QUEUE_CAPACITY);
+        this(logger, asyncTimeoutMillis, DEFAULT_PER_SINK_QUEUE_CAPACITY,
+                () -> null, () -> null);
     }
 
     /**
@@ -130,6 +167,11 @@ public final class DefaultSyncBus implements SyncBus {
      * to fill a sink queue without allocating the production capacity.
      */
     DefaultSyncBus(PluginLogger logger, long asyncTimeoutMillis, int perSinkQueueCapacity) {
+        this(logger, asyncTimeoutMillis, perSinkQueueCapacity, () -> null, () -> null);
+    }
+
+    DefaultSyncBus(PluginLogger logger, long asyncTimeoutMillis, int perSinkQueueCapacity,
+                   Supplier<ProgramGrantStore> grants, Supplier<ActionAudit> audit) {
         this.logger = Objects.requireNonNull(logger, "logger");
         if (asyncTimeoutMillis <= 0) {
             throw new IllegalArgumentException("asyncTimeoutMillis must be positive");
@@ -139,6 +181,8 @@ public final class DefaultSyncBus implements SyncBus {
         }
         this.asyncTimeoutMillis = asyncTimeoutMillis;
         this.perSinkQueueCapacity = perSinkQueueCapacity;
+        this.grants = grants == null ? () -> null : grants;
+        this.audit = audit == null ? () -> null : audit;
 
         // Global executor with CallerRunsPolicy for backpressure
         this.globalExecutor = new ThreadPoolExecutor(
@@ -389,73 +433,80 @@ public final class DefaultSyncBus implements SyncBus {
     @Override
     public SyncResult invoke(SyncCall call) {
         Objects.requireNonNull(call, "call");
+        long startedNanos = System.nanoTime();
         if (state.get() != LifecycleState.RUNNING) {
             return new SyncResult.HostFailure("sync bus is not running");
         }
 
         SinkContext ctx = sinks.get(call.backend());
         if (ctx == null) {
-            return new SyncResult.Unsupported(
-                    "backend '" + call.backend() + "' is not registered");
+            return recordAudit(call, null, new SyncResult.Unsupported(
+                    "backend '" + call.backend() + "' is not registered"), startedNanos);
         }
 
         SyncActionSpec spec = ctx.surface.action(call.action()).orElse(null);
         if (spec == null) {
-            return new SyncResult.Unsupported(
-                    "action '" + call.canonicalName() + "' is not published");
+            return recordAudit(call, null, new SyncResult.Unsupported(
+                    "action '" + call.canonicalName() + "' is not published"), startedNanos);
         }
 
         SyncResult denied = authorize(call, spec);
         if (denied != null) {
-            return denied;
+            return recordAudit(call, spec, denied, startedNanos);
         }
 
         SyncResult invalid = validateArguments(call, spec);
         if (invalid != null) {
-            return invalid;
+            return recordAudit(call, spec, invalid, startedNanos);
         }
 
+        SyncResult result;
         if (SyncSurface.MESSAGE_SEND.equals(call.action())
                 || SyncSurface.MESSAGE_DELIVER.equals(call.action())) {
             // The message paths stay in the per-sink queue so directed delivery
             // keeps the same isolation and retry policy as a fan-out.
-            return await(dispatchCall(ctx, call, spec));
+            result = await(dispatchCall(ctx, call, spec));
+        } else {
+            result = executeBounded(ctx.sink, call, effectiveTimeout(spec));
         }
-        return executeBounded(ctx.sink, call, effectiveTimeout(spec));
+        return recordAudit(call, spec, result, startedNanos);
     }
 
     @Override
     public SyncResult invokeHost(SyncCall call, HostActionContext context) {
         Objects.requireNonNull(call, "call");
         Objects.requireNonNull(context, "context");
+        long startedNanos = System.nanoTime();
         if (state.get() != LifecycleState.RUNNING) {
             return new SyncResult.HostFailure("sync bus is not running");
         }
 
         HostActionHandler handler = hostHandlers.get(call.canonicalName());
         if (handler == null) {
-            return new SyncResult.Unsupported(
-                    "host action '" + call.canonicalName() + "' is not registered");
+            return recordAudit(call, null, new SyncResult.Unsupported(
+                    "host action '" + call.canonicalName() + "' is not registered"),
+                    startedNanos);
         }
         if (!handler.handles(call)) {
-            return new SyncResult.Unsupported(
+            return recordAudit(call, null, new SyncResult.Unsupported(
                     "host action '" + call.canonicalName()
-                            + "' does not match its registered handler");
+                            + "' does not match its registered handler"), startedNanos);
         }
 
         SyncActionSpec spec = handler.action();
-        SyncResult denied = authorizeHost(call);
+        SyncResult denied = authorizeHost(call, spec);
         if (denied != null) {
-            return denied;
+            return recordAudit(call, spec, denied, startedNanos);
         }
 
         SyncResult invalid = validateArguments(call, spec);
         if (invalid != null) {
-            return invalid;
+            return recordAudit(call, spec, invalid, startedNanos);
         }
 
-        return executeBounded(
+        SyncResult result = executeBounded(
                 () -> handler.invoke(call, context), call, effectiveTimeout(spec));
+        return recordAudit(call, spec, result, startedNanos);
     }
 
     @Override
@@ -798,31 +849,282 @@ public final class DefaultSyncBus implements SyncBus {
         }
     }
 
-    private static SyncResult authorize(SyncCall call, SyncActionSpec spec) {
+    /**
+     * Authorizes one sink action. Official callers may only invoke the least
+     * common multiple; a third-party program needs an operator grant that
+     * covers the derived {@code sync.<backend>.<action>} capability.
+     *
+     * @return {@code null} when the action may run, otherwise the explicit
+     *         denial or rate limit
+     */
+    private SyncResult authorize(SyncCall call, SyncActionSpec spec) {
         if (call.principal() instanceof Principal.Official) {
             return isLcmAction(spec.id())
                     ? null
                     : new SyncResult.Denied(
                             "Principal.Official may only invoke the least common multiple");
         }
-        return new SyncResult.Denied(
-                "program grants are not configured; principal "
-                        + principalId(call.principal()) + " is denied");
+        return authorizeProgram(call, spec, CAPABILITY_SYNC);
     }
 
     /**
-     * Host actions are never part of the LCM, so an official caller is always
-     * denied. Program grants are not configured yet, so a third-party program
-     * is denied too until the operator grant store exists.
+     * Authorizes one host action. Host actions are never part of the least
+     * common multiple, so an official caller is always denied. A program needs
+     * a grant covering {@code module.<backend>.<action>}.
+     *
+     * @return {@code null} when the action may run, otherwise the explicit
+     *         denial or rate limit
      */
-    private static SyncResult authorizeHost(SyncCall call) {
+    private SyncResult authorizeHost(SyncCall call, SyncActionSpec spec) {
         if (call.principal() instanceof Principal.Official) {
             return new SyncResult.Denied(
                     "Principal.Official may not invoke host actions");
         }
-        return new SyncResult.Denied(
-                "program grants are not configured; principal "
-                        + principalId(call.principal()) + " is denied");
+        return authorizeProgram(call, spec, CAPABILITY_MODULE);
+    }
+
+    private SyncResult authorizeProgram(SyncCall call, SyncActionSpec spec, String prefix) {
+        if (!(call.principal() instanceof Principal.Program program)) {
+            return new SyncResult.Denied(
+                    "unknown principal " + principalId(call.principal()) + " is denied");
+        }
+
+        ProgramGrantStore store;
+        try {
+            store = grants.get();
+        } catch (RuntimeException failure) {
+            return new SyncResult.Denied(
+                    "program grant store failed for " + principalId(program)
+                            + "; the call is denied: " + describe(failure));
+        }
+        if (store == null) {
+            return new SyncResult.Denied(
+                    "program grant store is not available; " + principalId(program)
+                            + " is denied");
+        }
+
+        ProgramGrant grant;
+        try {
+            grant = store.find(program.sha256()).orElse(null);
+        } catch (RuntimeException failure) {
+            return new SyncResult.Denied(
+                    "program grant store failed for " + principalId(program)
+                            + "; the call is denied: " + describe(failure));
+        }
+        if (grant == null) {
+            return new SyncResult.Denied(
+                    "no operator grant for " + principalId(program));
+        }
+
+        String capability = prefix + call.canonicalName();
+        if (!grant.allows(capability)) {
+            return new SyncResult.Denied(
+                    "operator grant for " + principalId(program)
+                            + " does not authorize capability '" + capability + "'");
+        }
+        if (!grant.permits(spec.kind())) {
+            return new SyncResult.Denied(
+                    "capability '" + capability + "' is " + spec.kind()
+                            + " and the grant does not set allow-destructive: true");
+        }
+
+        int payloadBytes;
+        try {
+            payloadBytes = TlvCodec.encodeMap(redactedArguments(call, spec)).length;
+        } catch (RuntimeException failure) {
+            return new SyncResult.Denied(
+                    "arguments of '" + call.canonicalName()
+                            + "' have no neutral representation; the call is denied: "
+                            + describe(failure));
+        }
+        if (payloadBytes > grant.maxPayloadBytes()) {
+            return new SyncResult.Denied(
+                    "argument payload of '" + call.canonicalName() + "' is "
+                            + payloadBytes + " bytes and exceeds max-payload-bytes "
+                            + grant.maxPayloadBytes() + " for " + principalId(program));
+        }
+
+        ActionAudit trail;
+        try {
+            trail = audit.get();
+        } catch (RuntimeException failure) {
+            return new SyncResult.Denied(
+                    "audit trail failed for " + principalId(program)
+                            + "; the call is denied: " + describe(failure));
+        }
+        if (trail == null) {
+            return new SyncResult.Denied(
+                    "audit trail is not available; " + principalId(program)
+                            + " cannot execute audited actions");
+        }
+        try {
+            trail.ensureWritable();
+        } catch (RuntimeException failure) {
+            return new SyncResult.Denied(
+                    "audit trail is not writable; " + principalId(program)
+                            + " cannot execute audited actions: " + describe(failure));
+        }
+
+        long retryAfter = callWindow(program.sha256()).reserve(grant.callsPerMinute());
+        return retryAfter > 0 ? new SyncResult.RateLimited(retryAfter) : null;
+    }
+
+    private CallWindow callWindow(String sha256) {
+        return callWindows.computeIfAbsent(sha256, ignored -> new CallWindow());
+    }
+
+    /**
+     * Appends the audit entry for one attempt and returns the same result.
+     *
+     * <p>A program action is denied before it runs when the trail is missing or
+     * not writable, so this method only logs a post-execution append failure:
+     * the native effect cannot be reverted (ADR-036 §16.6.8). Official callers
+     * are audited best-effort so a full disk never stops the pipeline.</p>
+     */
+    private SyncResult recordAudit(SyncCall call, SyncActionSpec spec, SyncResult result,
+                                   long startedNanos) {
+        ActionAudit trail;
+        try {
+            trail = audit.get();
+        } catch (RuntimeException failure) {
+            logger.error("SyncBus: cannot resolve the audit trail for '"
+                    + call.canonicalName() + "': " + describe(failure));
+            return result;
+        }
+        if (trail == null) {
+            if (call.principal() instanceof Principal.Program) {
+                logger.error("SyncBus: program action '" + call.canonicalName()
+                        + "' finished without an audit trail");
+            }
+            return result;
+        }
+
+        String argsHash;
+        try {
+            argsHash = sha256(TlvCodec.encodeMap(redactedArguments(call, spec)));
+        } catch (RuntimeException failure) {
+            argsHash = ActionAuditRecord.NO_ARGS;
+        }
+        ActionAuditRecord record = new ActionAuditRecord(
+                Instant.now(),
+                call.principal() instanceof Principal.Program program
+                        ? program.sha256() : ActionAuditRecord.NO_PROGRAM,
+                principalId(call.principal()),
+                call.backend(),
+                call.action(),
+                argsHash,
+                SyncBridgeCodec.statusName(result),
+                Math.max(0, TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - startedNanos)),
+                auditDetail(result));
+        try {
+            trail.record(record);
+        } catch (RuntimeException failure) {
+            logger.error("SyncBus: cannot append the audit entry for '"
+                    + call.canonicalName() + "': " + describe(failure));
+        }
+        return result;
+    }
+
+    /**
+     * Builds the argument map used for the audit digest and the payload bound.
+     *
+     * <p>Secret parameters, parameters not declared by the action and values
+     * without a neutral representation are replaced by a fixed marker before
+     * hashing: the trail never carries argument values and an undeclared value
+     * is treated as secret (fail-closed). Keys are sorted so the digest is
+     * deterministic.</p>
+     */
+    private static Map<String, TlvCodec.TlvValue> redactedArguments(
+            SyncCall call, SyncActionSpec spec) {
+        Map<String, SyncParamSpec> declared = new HashMap<>();
+        if (spec != null) {
+            for (SyncParamSpec param : spec.params()) {
+                declared.put(param.name(), param);
+            }
+        }
+        Map<String, TlvCodec.TlvValue> encoded = new TreeMap<>();
+        for (Map.Entry<String, Object> arg : call.args().entrySet()) {
+            SyncParamSpec param = declared.get(arg.getKey());
+            if (param == null || param.secret()) {
+                encoded.put(arg.getKey(), TlvCodec.stringValue(REDACTED_VALUE));
+                continue;
+            }
+            try {
+                encoded.put(arg.getKey(), SyncBridgeCodec.encodeValue(arg.getValue()));
+            } catch (IllegalArgumentException opaque) {
+                encoded.put(arg.getKey(), TlvCodec.stringValue(OPAQUE_VALUE));
+            }
+        }
+        return encoded;
+    }
+
+    private static String sha256(byte[] data) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(data));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is not available", impossible);
+        }
+    }
+
+    private static String auditDetail(SyncResult result) {
+        if (result instanceof SyncResult.Ok) {
+            return "";
+        }
+        if (result instanceof SyncResult.Denied denied) {
+            return denied.reason();
+        }
+        if (result instanceof SyncResult.Unsupported unsupported) {
+            return unsupported.reason();
+        }
+        if (result instanceof SyncResult.InvalidArgument invalid) {
+            return invalid.reason();
+        }
+        if (result instanceof SyncResult.NotFound notFound) {
+            return notFound.reason();
+        }
+        if (result instanceof SyncResult.Conflict conflict) {
+            return conflict.reason();
+        }
+        if (result instanceof SyncResult.RateLimited limited) {
+            return "retry after " + limited.retryAfterMillis() + "ms";
+        }
+        if (result instanceof SyncResult.Timeout timeout) {
+            return timeout.reason();
+        }
+        if (result instanceof SyncResult.HostFailure failure) {
+            return failure.reason();
+        }
+        return "";
+    }
+
+    /**
+     * Rolling one-minute call budget for one program image.
+     *
+     * <p>The limit is read from the current grant on every reservation, so a
+     * reload that changes {@code calls-per-minute} applies without restarting
+     * the bus.</p>
+     */
+    private static final class CallWindow {
+        private long windowStartNanos = System.nanoTime();
+        private int used;
+
+        synchronized long reserve(int limit) {
+            long now = System.nanoTime();
+            long elapsed = now - windowStartNanos;
+            if (elapsed < 0 || elapsed >= CALL_WINDOW_NANOS) {
+                windowStartNanos = now;
+                elapsed = 0;
+                used = 0;
+            }
+            if (used >= limit) {
+                long remaining = CALL_WINDOW_NANOS - elapsed;
+                return Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining));
+            }
+            used++;
+            return 0;
+        }
     }
 
     private static String principalId(Principal principal) {

@@ -77,6 +77,8 @@ public final class SyncBridgeCodec {
     public static final String KEY_REQUIRED = "required";
     /** Parameter key: element spec for lists. */
     public static final String KEY_ITEM = "item";
+    /** Parameter key: redact the value before hashing for the audit trail. */
+    public static final String KEY_SECRET = "secret";
 
     /** Canonical status names, shared by VM and Wasm. */
     public static final String STATUS_OK = "OK";
@@ -372,6 +374,7 @@ public final class SyncBridgeCodec {
         payload.put(KEY_REQUIRED, TlvCodec.boolValue(param.required()));
         payload.put(KEY_ITEM, param.item() == null
                 ? TlvCodec.nullValue() : encodeParam(param.item()));
+        payload.put(KEY_SECRET, TlvCodec.boolValue(param.secret()));
         return TlvCodec.mapValue(payload);
     }
 
@@ -384,7 +387,8 @@ public final class SyncBridgeCodec {
                 SyncValueType.valueOf(
                         required(payload, KEY_TYPE, TlvCodec.TYPE_STRING).asString()),
                 required(payload, KEY_REQUIRED, TlvCodec.TYPE_BOOL).asBool(),
-                item.isNull() ? null : decodeParam(item));
+                item.isNull() ? null : decodeParam(item),
+                required(payload, KEY_SECRET, TlvCodec.TYPE_BOOL).asBool());
     }
 
     private static TlvCodec.TlvValue required(Map<String, TlvCodec.TlvValue> payload,
@@ -405,7 +409,14 @@ public final class SyncBridgeCodec {
         return value;
     }
 
-    private static String statusName(SyncResult result) {
+    /**
+     * @param result explicit sync outcome
+     * @return the canonical status name shared by VM, Wasm and the audit trail
+     */
+    public static String statusName(SyncResult result) {
+        if (result instanceof SyncResult.Ok) {
+            return STATUS_OK;
+        }
         if (result instanceof SyncResult.Denied) {
             return STATUS_DENIED;
         }

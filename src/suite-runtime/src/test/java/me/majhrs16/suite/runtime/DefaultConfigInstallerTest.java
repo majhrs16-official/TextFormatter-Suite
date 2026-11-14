@@ -53,6 +53,8 @@ class DefaultConfigInstallerTest {
                 .hasContent("rules: []\n");
         assertThat(dir.resolve("config/iflow/config.yml"))
                 .hasContent("engine: iflow-firewall\n");
+        assertThat(dir.resolve("config/iflow/grants.yml"))
+                .hasContent("grants: []\n");
         assertThat(dir.resolve("config/manager")).doesNotExist();
     }
 
@@ -141,6 +143,7 @@ class DefaultConfigInstallerTest {
         resources.put("/defaults/inworld.yml", "enabled: false\n");
         resources.put("/defaults/rules.yml", "rules: []\n");
         resources.put("/defaults/iflow.yml", "engine: iflow-firewall\n");
+        resources.put("/defaults/iflow-grants.yml", "grants: []\n");
         return resources;
     }
 }

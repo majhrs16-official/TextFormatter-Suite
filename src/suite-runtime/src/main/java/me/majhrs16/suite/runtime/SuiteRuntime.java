@@ -38,6 +38,8 @@ import me.majhrs16.suite.api.spi.MessageDispatch;
 import me.majhrs16.suite.api.spi.PipelineTraceSource;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.api.spi.TranslationService;
+import me.majhrs16.suite.api.sync.ActionAudit;
+import me.majhrs16.suite.api.sync.ProgramGrantStore;
 import me.majhrs16.suite.host.DeliveryExecutor;
 import me.majhrs16.suite.host.PipelineEngine;
 import me.majhrs16.suite.host.PipelineEnvironment;
@@ -97,6 +99,8 @@ public final class SuiteRuntime implements AutoCloseable {
     private DeliveryExecutor deliveryExecutor;
     private ServiceRegistry.Registration deliveryRegistration;
     private HostConfig config;
+    private YamlProgramGrantStore programGrants;
+    private AppendOnlyActionAudit actionAudit;
     private long pipelinePlanVersion;
     private String pipelineError = "pipeline has not been built";
     private boolean started;
@@ -173,6 +177,15 @@ public final class SuiteRuntime implements AutoCloseable {
                 libraryRoot, configRoot, ports.info(), logger, stateStore, commands, configs);
         platformRegistrations.add(moduleHost.services().register(
             MessageDispatch.class, messageDispatch));
+        Path iflowConfig = HostPaths.moduleConfigDir(dataDir, "iflow");
+        programGrants = YamlProgramGrantStore.load(
+                iflowConfig.resolve("grants.yml"), logger);
+        actionAudit = new AppendOnlyActionAudit(
+                iflowConfig.resolve("audit.log"), logger);
+        platformRegistrations.add(moduleHost.services().register(
+            ProgramGrantStore.class, programGrants));
+        platformRegistrations.add(moduleHost.services().register(
+            ActionAudit.class, actionAudit));
         registerPendingPlatformServices();
         packageRuntime = new PackageRuntime(manager, moduleHost, logger);
         SuiteCommands.register(commands, this);
@@ -379,6 +392,11 @@ public final class SuiteRuntime implements AutoCloseable {
             registration.close();
         }
         platformRegistrations.clear();
+        if (actionAudit != null) {
+            actionAudit.close();
+            actionAudit = null;
+        }
+        programGrants = null;
         if (moduleHost != null) {
             moduleHost.close();
         }
@@ -551,6 +569,9 @@ public final class SuiteRuntime implements AutoCloseable {
      */
     public synchronized List<ActivationResult> reloadActiveModules() {
         ensureStarted();
+        if (programGrants != null) {
+            programGrants.reload();
+        }
         closePipeline();
         List<ActivationResult> results = moduleHost.reloadActiveModules();
         rebuildPipeline();

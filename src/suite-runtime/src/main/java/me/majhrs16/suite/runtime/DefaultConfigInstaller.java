@@ -75,6 +75,9 @@ public final class DefaultConfigInstaller {
 
         Path iflowHub = HostPaths.moduleConfigDir(dataFolder, "iflow").resolve("config.yml");
         install(resources, logger, "defaults/iflow.yml", iflowHub);
+
+        Path iflowGrants = HostPaths.moduleConfigDir(dataFolder, "iflow").resolve("grants.yml");
+        install(resources, logger, "defaults/iflow-grants.yml", iflowGrants);
     }
 
     private static void install(Function<String, InputStream> resources, PluginLogger logger,

@@ -12,8 +12,9 @@ package me.majhrs16.suite.api.sync;
  *
  * <p>Authorization is the bus's responsibility: it denies
  * {@link Principal.Official} for every host action and
- * {@link Principal.Program} until the operator grant store exists. A handler
- * only has to reject an official caller that reaches it directly.</p>
+ * {@link Principal.Program} without an operator grant that covers the
+ * {@code module.<backend>.<action>} capability. A handler only has to reject
+ * an official caller that reaches it directly.</p>
  */
 public interface HostActionHandler {
 

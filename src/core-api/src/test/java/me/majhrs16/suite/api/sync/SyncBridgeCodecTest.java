@@ -131,6 +131,28 @@ class SyncBridgeCodecTest {
     }
 
     @Test
+    void statusNameCoversEveryResult() {
+        assertEquals(SyncBridgeCodec.STATUS_OK,
+                SyncBridgeCodec.statusName(new SyncResult.Ok(null)));
+        assertEquals(SyncBridgeCodec.STATUS_DENIED,
+                SyncBridgeCodec.statusName(new SyncResult.Denied("no")));
+        assertEquals(SyncBridgeCodec.STATUS_UNSUPPORTED,
+                SyncBridgeCodec.statusName(new SyncResult.Unsupported("missing")));
+        assertEquals(SyncBridgeCodec.STATUS_INVALID_ARGUMENT,
+                SyncBridgeCodec.statusName(new SyncResult.InvalidArgument("bad")));
+        assertEquals(SyncBridgeCodec.STATUS_NOT_FOUND,
+                SyncBridgeCodec.statusName(new SyncResult.NotFound("absent")));
+        assertEquals(SyncBridgeCodec.STATUS_CONFLICT,
+                SyncBridgeCodec.statusName(new SyncResult.Conflict("twice")));
+        assertEquals(SyncBridgeCodec.STATUS_RATE_LIMITED,
+                SyncBridgeCodec.statusName(new SyncResult.RateLimited(1_500)));
+        assertEquals(SyncBridgeCodec.STATUS_TIMEOUT,
+                SyncBridgeCodec.statusName(new SyncResult.Timeout("slow")));
+        assertEquals(SyncBridgeCodec.STATUS_HOST_FAILURE,
+                SyncBridgeCodec.statusName(new SyncResult.HostFailure("boom")));
+    }
+
+    @Test
     void nullAndFalseAndZeroSurviveTheRoundTrip() {
         SyncResult.Ok zero = new SyncResult.Ok(0L);
         SyncResult.Ok flag = new SyncResult.Ok(false);

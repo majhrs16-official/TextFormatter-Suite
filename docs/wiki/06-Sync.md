@@ -234,14 +234,23 @@ because a retry would duplicate the local delivery. Every action is bounded by
 its declared timeout and the bus ceiling (30 s); a timeout, full queue or crash
 is reported as `Timeout`/`HostFailure`, not as success.
 
-Authority is fail-closed in this slice: `Principal.Official` may only invoke the
-LCM, and `Principal.Program` is denied until the operator grant store
-(`config/iflow/grants.yml`) exists. `sync-discord`, `sync-telegram`,
-`sync-http`, `sync-websocket`, `sync-socket`, `sync-velocity-core` and the local
-sinks (`sync-bukkit`/`sync-fabric` through `LocalSyncSink`) publish and execute
-native actions, but third parties cannot execute them until the grant store
-exists. An unknown native action returns `Unsupported`; an adapter that is not
-connected returns `HostFailure`.
+Authority is fail-closed: `Principal.Official` may only invoke the LCM, and
+`Principal.Program` runs only what the operator grants for its SHA-256 in
+`config/iflow/grants.yml`. A grant lists exact capabilities or a trailing
+wildcard (`sync.discord.*`, `module.textformatter.*`); the program must also
+declare the exact action in its image, and the effective authority is the
+intersection. `DESTRUCTIVE` and `MODERATION` additionally require
+`allow-destructive: true`. Each grant carries `calls-per-minute` and
+`max-payload-bytes`: an exhausted budget returns `RateLimited`, an oversized
+payload returns `Denied`. A missing, ambiguous or unreadable grant denies the
+action. `sync-discord`, `sync-telegram`, `sync-http`, `sync-websocket`,
+`sync-socket`, `sync-velocity-core` and the local sinks
+(`sync-bukkit`/`sync-fabric` through `LocalSyncSink`) publish and execute native
+actions for granted programs. An unknown native action returns `Unsupported`;
+an adapter that is not connected returns `HostFailure`. Every attempt appends
+one line to `<data>/config/iflow/audit.log` with the program hash, backend,
+action, actor, redacted argument hash, status and duration; secret and
+undeclared argument values are never written.
 
 ### Agnostic host action: `textformatter.channel.set`
 
@@ -250,9 +259,9 @@ canonical name and validates the call against the handler's `SyncActionSpec`.
 `textformatter.channel.set` is `WRITE`, takes `channel` (`CHANNEL_REF`) and
 returns the working `Message` with the new channel. It is not part of the LCM,
 so `Principal.Official` is always denied. A third-party program reaches it
-through `sync_invoke("textformatter", "channel.set", ...)` once the operator
-grants `module.textformatter.channel.set`; until the grant store exists,
-`Principal.Program` is denied as well. The handler validates that the channel
+through `sync_invoke("textformatter", "channel.set", ...)` when the operator
+grants `module.textformatter.channel.set`; without that capability the program
+is denied. The handler validates that the channel
 exists and that the emitter may send and the recipient may receive: an unknown
 channel is `NotFound`, a missing permission is `Denied`, and a missing handler
 is `Unsupported`. The engine detects the channel change and runs exactly one

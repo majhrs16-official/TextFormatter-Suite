@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado, mientras concesiones, auditoría y cuotas siguen pendientes. PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -461,10 +461,10 @@ de sinks ya están aplicados. La fachada legacy está retirada y solo queda la c
 
 ### Feature propuesta — superficie de acciones de los backends sync (PL-2, 2026-11-06)
 
-> **Estado:** contratos, bus y superficies nativas de `sync-discord`,
+> **Estado:** contratos, bus, superficies nativas de `sync-discord`,
 > `sync-telegram`, `sync-http`, `sync-websocket`, `sync-socket` y
-> `sync-velocity-core` implementados (2026-11-12/13); el resto de backends,
-> concesiones, auditoría, cuotas y puente iFlow siguen pendientes.
+> `sync-velocity-core`, puente iFlow, concesiones por SHA-256, cuotas y
+> auditoría implementados (2026-11-12/13); el resto de backends sigue pendiente.
 > Depende de **ADR-036 §16** (aceptado el 2026-11-06); **TF-006 quedó cerrado el
 > 2026-11-07** y TF-005 el 2026-11-06.
 
@@ -500,7 +500,7 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | Timeout e identidad por acción | `DefaultSyncBus.effectiveTimeout`/`dispatchCall`; `DefaultSyncBusTest` | `broadcastAsync` se retiró; cada acción conserva timeout explícito y resultado propio. |
 | `set_channel` es un import dedicado de v3 | `PolicyAbiV3.SET_CHANNEL`; `PolicyHost.setChannel` | No es genérico ni está sujeto a concesiones por acción. |
 | Los sinks se descubren por servicio | `DefaultSyncBus.discoverSinks`; eventos de ciclo de vida | Sin `feature → feature`; el paquete no depende del bus. |
-| No hay concesiones ni auditoría de acciones | — | Un tercero no puede recibir autoridad acotada; `Principal.Program` se deniega. |
+| Concesiones, cuotas y auditoría | `ProgramGrant`/`ProgramGrantStore`, `ActionAudit`/`ActionAuditRecord`, `YamlProgramGrantStore`, `AppendOnlyActionAudit`; `DefaultSyncBusAuthorizationTest` | Un tercero solo ejecuta la intersección de su declaración y la concesión del operador; sin concesión, sin auditoría escribible o sin cuota no hay efecto. |
 
 > **Nomenclatura:** `sync-tcpudp` está deprecado; el módulo vigente es `sync-socket`
 > (`src/sync-tcpudp` está vacío y fuera de `settings.gradle`). Quedan referencias obsoletas en
@@ -511,12 +511,12 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | Área | Cambio |
 |---|---|
 | `core-api` | **Implementado (2026-11-07):** `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`, `SyncValueType`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
-| `sync-bus` | **Implementado (2026-11-07):** registro y validación de superficies, `invoke`, fan-out exclusivo del LCM, `send`/`sendTo`, timeout por acción y autoridad fail-closed; `invokeHost` y `HostActionHandler` para acciones agnósticas (2026-11-13). Pendientes: auditoría y cuotas. |
+| `sync-bus` | **Implementado (2026-11-07):** registro y validación de superficies, `invoke`, fan-out exclusivo del LCM, `send`/`sendTo`, timeout por acción y autoridad fail-closed; `invokeHost` y `HostActionHandler` para acciones agnósticas (2026-11-13). **Concesiones y cuotas (2026-11-13):** capacidad derivada, `allow-destructive`, `calls-per-minute`, `max-payload-bytes` y auditoría con hash de argumentos redactados. |
 | `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. `sync-bukkit`/`sync-fabric` publican además el sink local y las acciones del entorno, eventos incluidos. |
 | `iflow-vm` | **Implementado (2026-11-13):** servicios `SYNC_SURFACE`/`SYNC_INVOKE` con TLV compartido, DMA, fuel y mapeo de estados; `set_channel` no existe. |
 | `iflow-wasm` | **Implementado (2026-11-13):** imports `sync_surface`/`sync_invoke` con el mismo TLV y estados; `set_channel` retirado. |
-| `suite-runtime` | Concesiones por SHA-256, auditoría y cuotas. |
-| Configuración | `config/iflow/grants.yml`; ruta de auditoría en `storage.md`. |
+| `suite-runtime` | **Implementado (2026-11-13):** `YamlProgramGrantStore` (carga estricta y recarga atómica), `AppendOnlyActionAudit` (`<data>/config/iflow/audit.log`, `force` por entrada) y registro/cierre en `SuiteRuntime`. |
+| Configuración | `config/iflow/grants.yml` con `defaults`, `capabilities`, `allow-destructive`, `calls-per-minute` y `max-payload-bytes`; default vacío instalado en ambos hosts; ruta de auditoría en `storage.md` §5. |
 | Tests | Conformidad VM/Wasm, autorización, destructivos, cuotas, `textformatter.channel.set` y regresión del LCM. |
 
 #### Pasos de implementación
@@ -528,7 +528,7 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 2. **Contratos neutrales. ✅** Añadir los tipos de §16.3 a `core-api` y ampliar `SyncSink`/`SyncBus`.
    `checkArchitecture` prohíbe JDA, Telegram, Bukkit, Fabric y cualquier SDK en `core-api` y
    `sync-bus`. Test de que una superficie se serializa sin tipos de plataforma.
-3. **Bus de acciones. ✅ (salvo auditoría y cuotas)** Indexar `SyncSurface` por backend, validar duplicados, enrutar `invoke`,
+3. **Bus de acciones. ✅ (2026-11-13)** Indexar `SyncSurface` por backend, validar duplicados, enrutar `invoke`,
    aplicar timeout/cuotas, emitir auditoría y mapear cada estado a `SyncResult`. `send(Message)` pasa
    a ser una comodidad sobre `message.send`.
 4. **Backends. ✅ (2026-11-13, salvo la superficie de entorno/eventos de §17.5)** Migrar
@@ -544,9 +544,10 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
    `TlvCodec` y los mismos estados; retirar `set_channel` y actualizar fixtures y programas de
    ejemplo. Los vectores de cable compartidos viven en `core-api`; la suite de conformidad que
    ejecuta el mismo artefacto en ambos motores queda en W3.5.
-7. **Concesiones y auditoría.** `config/iflow/grants.yml` indexado por SHA-256, comodines en la
-   concesión, `allow-destructive`, cuotas por programa y registro append-only con hash de argumentos.
-   Un permiso ausente o ambiguo deniega.
+7. **Concesiones y auditoría. ✅ (2026-11-13)** `config/iflow/grants.yml` indexado por SHA-256, comodines
+   finales en la concesión, `allow-destructive`, cuotas por programa y registro append-only con hash
+   de argumentos redactados. Un permiso ausente, ambiguo o no verificable deniega; un payload que
+   excede el límite devuelve `Denied` y la cuota agotada `RateLimited`.
 8. **Guardas.** `checkArchitecture`: ninguna feature requiere otra; ningún backend importa el núcleo
    del bus; las políticas oficiales no declaran `sync.invoke`. Test de que el LCM no invoca acciones
    nativas.
@@ -574,14 +575,13 @@ Completado en esta unidad:
 
 Pendiente y fuera de esta unidad:
 
-- `config/iflow/grants.yml`, autenticación de `Principal.Program`, cuotas por
-  programa y auditoría append-only.
 - Migración de los backends restantes (`sync-bukkit` y `sync-fabric`):
   `sync-discord`, `sync-telegram`, `sync-http`, `sync-websocket`, `sync-socket`
   y `sync-velocity-core` ya publican sus nativas, y los sinks locales publican
   `local.info` (2026-11-13); la superficie de entorno y eventos de §17.5 sigue
   pendiente como slice propio.
-- El puente VM/Wasm y la paridad de `SyncResult`.
+- La suite de conformidad cruzada VM/Wasm y la paridad end-to-end de
+  `SyncResult` (W3.5).
 - La retirada del fuel queda para la migración v3 (véase «Trayectoria v2 → v3 y
   fuel»).
 
@@ -597,8 +597,8 @@ Completado en esta unidad:
   `ServiceRegistry` en `discoverSinks`, valida los argumentos contra el
   `SyncActionSpec` del handler, acota la ejecución con su timeout y aplica
   autoridad fail-closed: `Principal.Official` siempre recibe `Denied` y
-  `Principal.Program` también hasta que exista `config/iflow/grants.yml`. Un
-  handler ausente o desaparecido devuelve `Unsupported`; un duplicado conserva
+  `Principal.Program` recibe `Denied` sin una concesión que cubra la capacidad.
+  Un handler ausente o desaparecido devuelve `Unsupported`; un duplicado conserva
   el primero y se registra.
 - `textformatter` publica `ChannelSetHandler` (`textformatter.channel.set`,
   `WRITE`, argumento `channel` de tipo `CHANNEL_REF`). Valida que el canal exista
@@ -619,13 +619,6 @@ Completado en esta unidad:
   handler, `Denied` para oficial y programa, desaparición del handler y acción
   desconocida), `RouteStageTest` (mutación única, conflicto de segunda mutación,
   redirección legacy) y `WasmPolicyEngineTest` (rechazo del import retirado).
-
-Pendiente y fuera de esta unidad:
-
-- El puente `SYNC_INVOKE`/`sync_invoke` de VM y Wasm, la paridad de `SyncResult`
-  y la ejecución end-to-end de la acción. Hasta entonces el handler se prueba
-  directamente y el bus deniega todo `Principal.Program`.
-- `config/iflow/grants.yml`, cuotas por programa y auditoría append-only.
 
 #### Estado de implementación — puente iFlow (2026-11-13)
 
@@ -661,8 +654,33 @@ Completado en esta unidad:
 Pendiente y fuera de esta unidad:
 
 - La suite de conformidad cruzada que ejecuta el mismo artefacto en VM y Wasm (W3.5).
-- `config/iflow/grants.yml`, cuotas por programa y auditoría append-only: hasta entonces
-  `DefaultSyncBus` sigue denegando todo `Principal.Program`.
+
+#### Estado de implementación — concesiones, cuotas y auditoría (2026-11-13)
+
+Completado en esta unidad:
+
+- `core-api`: `ProgramGrant` (validación de SHA-256, capacidades exactas o comodín final,
+  `allow-destructive` y cuotas), `ProgramGrantStore`, `ActionAudit` y `ActionAuditRecord`;
+  `SyncParamSpec` gana `secret` y `SyncBridgeCodec` lo transporta en el cable.
+- `sync-bus`: `DefaultSyncBus` deriva la capacidad del origen (`sync.<backend>.<accion>` o
+  `module.<moduleId>.<accion>`), resuelve la concesión y la auditoría con suppliers por invocación,
+  exige `allow-destructive` para `DESTRUCTIVE`/`MODERATION`, mide el payload TLV, aplica la ventana
+  de llamadas por minuto y audita cada intento. Sin store, sin concesión, sin auditoría escribible o
+  con payload excedido devuelve `Denied`; la cuota agotada devuelve `RateLimited`.
+  `SyncBusActivator` resuelve ambos servicios por tipo.
+- `suite-runtime`: `YamlProgramGrantStore` carga `config/iflow/grants.yml` con validación estricta
+  (claves desconocidas, hashes duplicados, comodines inválidos o `config-version` incorrecta
+  deshabilitan el store completo) y recarga atómica; `AppendOnlyActionAudit` escribe
+  `<data>/config/iflow/audit.log` con una línea por intento, escapado y `force` a disco.
+  `SuiteRuntime` registra ambos servicios antes de activar paquetes y cierra la auditoría en
+  `stop()`.
+- `spigot-host`/`fabric-host`: default `defaults/iflow-grants.yml` con `grants: {}`;
+  `DefaultConfigInstaller` lo instala como `config/iflow/grants.yml`.
+- Tests: `ProgramGrantTest`, `YamlProgramGrantStoreTest`, `AppendOnlyActionAuditTest`,
+  `DefaultSyncBusAuthorizationTest` (concesión presente/ausente, comodín, destructivo, cuota,
+  payload, redacción de secretos y argumentos no declarados, auditoría ausente o no escribible y
+  acciones de host) y `SyncBridgeCodecTest` (incluye `statusName(Ok)`).
+- Documentación: ADR-036 §16.6.5/§16.6.6/§16.7.1/§16.7.4, `storage.md` §2/§4.1.1/§5 y este PLAN.
 
 #### Estado de implementación — superficie nativa de `sync-discord` (2026-11-12)
 
@@ -702,8 +720,6 @@ Pendiente y fuera de esta unidad:
   adaptador JDK no puede ejecutar.
 - `channel.permission.overwrite`, consultas de miembros/roles, canales de voz y
   eventos de auditoría; se añadirán con sus propios slices.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Estado de implementación — superficie nativa de `sync-telegram` (2026-11-12)
 
@@ -738,8 +754,6 @@ Pendiente y fuera de esta unidad:
 
 - `chat.member.restrict` (mute), `message.pin`/`unpin`, `chat.permission.set` y
   `chat.description.set`; se añadirán con sus propios slices.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Estado de implementación — superficie nativa de `sync-http` (2026-11-13)
 
@@ -777,8 +791,6 @@ Pendiente y fuera de esta unidad:
 
 - Acciones nativas adicionales del endpoint (por ejemplo, cabeceras o métodos
   configurables); no se publican hasta que el adaptador pueda ejecutarlas.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Estado de implementación — superficie nativa de `sync-websocket` (2026-11-13)
 
@@ -819,8 +831,6 @@ Pendiente y fuera de esta unidad:
 
 - Acciones nativas adicionales (por ejemplo, cierre de una conexión concreta o
   suscripción remota); no se publican hasta que el adaptador pueda ejecutarlas.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Estado de implementación — superficie nativa de `sync-socket` (2026-11-13)
 
@@ -851,8 +861,6 @@ Pendiente y fuera de esta unidad:
 - Acciones nativas adicionales (por ejemplo, reapertura forzada del listener o
   métricas de datagramas); no se publican hasta que el adaptador pueda
   ejecutarlas.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Estado de implementación — superficie nativa de `sync-velocity-core` (2026-11-13)
 
@@ -885,8 +893,6 @@ Pendiente y fuera de esta unidad:
 - Acciones nativas adicionales (por ejemplo, reconexión del adaptador o
   inspección de la cola); no se publican hasta que el adaptador pueda
   ejecutarlas.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Estado de implementación — superficie nativa de `sync-bukkit`/`sync-fabric` (2026-11-13)
 
@@ -912,8 +918,6 @@ Pendiente y fuera de esta unidad:
 - La superficie de entorno y eventos de ADR-036 §17.5 (jugadores, consola,
   canales, scoreboard y acción sobre el evento actual); se añadirá en slices
   propios con sus adaptadores, no como acciones declaradas sin ejecución.
-- Concesiones por SHA-256, `allow-destructive`, auditoría append-only, cuotas y
-  el puente VM/Wasm de PL-2.
 
 #### Criterios de cierre y tests
 

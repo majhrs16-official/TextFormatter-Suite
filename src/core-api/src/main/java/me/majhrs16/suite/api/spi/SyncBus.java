@@ -78,8 +78,8 @@ public interface SyncBus extends AutoCloseable {
      *
      * <p>Authority is fail-closed: {@link me.majhrs16.suite.api.sync.Principal.Official}
      * may invoke only the least common multiple, and
-     * {@link me.majhrs16.suite.api.sync.Principal.Program} is denied until the
-     * operator grant store exists.</p>
+     * {@link me.majhrs16.suite.api.sync.Principal.Program} runs only the
+     * capabilities granted by the operator for its SHA-256.</p>
      *
      * @param call invocation, must not be null
      * @return the explicit outcome, never {@code null}
