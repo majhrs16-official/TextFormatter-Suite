@@ -52,3 +52,9 @@ local del build.
 El motor puede llamar desde cualquier hilo. La implementación de `ChatDelivery`
 decide si necesita volver al hilo principal de la plataforma; el contrato no
 impone un hilo concreto.
+
+## 7. Tests
+
+`ComponentRenderedOutputTest` verifica que el único tipo del pipeline que conoce
+Adventure conserve el componente y el texto visible, y que rechace ambos nulos.
+Se ejecuta con `./gradlew :src:core-render:test`.

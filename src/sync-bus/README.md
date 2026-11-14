@@ -17,8 +17,9 @@
   capability is `sync.<backend>.<action>` for sinks and
   `module.<moduleId>.<action>` for host actions, intersected with the operator
   grant. `DESTRUCTIVE` and `MODERATION` require `allow-destructive: true`.
-- Enforce the per-program call window and the TLV payload bound; an exhausted
-  budget returns `RateLimited` and an oversized payload returns `Denied`.
+- Enforce the per-program sliding 60-second call window and the TLV payload
+  bound; an exhausted budget returns `RateLimited` and an oversized payload
+  returns `Denied`.
 - Append one audit entry per attempt with the redacted argument hash; a program
   action requires a writable audit trail before it runs.
 - Fan out only the LCM (`broadcast(SyncCall)`); a native action is never turned

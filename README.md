@@ -47,7 +47,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 | **Extensiones (SDK)** | ✅ Implementada y probada | `Extension`, `ExtensionContext`, `ExtensionManager`, Capability system, example-extension; 21 tests |
 | **Web Editor** | ⚠️ Funcional con deuda visual/funcional | Tests unitarios (StateStore, model, validate, version labels) + harnesses integración (canvas, preview, import/export ZIP, i18n EN/ES, undo/redo, docking); `npm run check` verde, pero la UI **no se considera estable** |
 | **Config schema v2.2 (single-source)** | ✅ Sincronizado | `ConfigPath` enum → `paths.json`/`js/paths.js`/`js/model.js` via `ConfigSchemaGenerator`; `verifySchema` en CI (56 paths) |
-| **Dependency Verification** | ✅ Activa con excepción documentada | 44 lockfiles (root + 43 subproyectos), `verification-metadata.xml` con 626 componentes, `checkLocks` bloqueante; los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
+| **Dependency Verification** | ✅ Activa con excepciones documentadas | 44 lockfiles (root + 43 subproyectos), `verification-metadata.xml` con 627 componentes, `checkLocks` bloqueante; 29 módulos desactivan la verificación en sus classpaths de test porque AssertJ 3.25.3 no está en el metadato, y los classpaths de `fabric-host` quedan fuera porque Loom remapea artefactos localmente |
 | **Security Sprint 3** | ✅ Controles implementados | Tokens `char[]`, MiniEscape 10 chars, PAPI dynamic check, SSRF (`getAllByName` + rechazo de `userinfo`), `SafeConstructor` en 6 cargas YAML, path traversal APT y límites de recursos; SpEL aislado en `iflow-firewall` con sandbox (ADR-001); sin hallazgos P0/P1 abiertos en la auditoría vigente |
 | **Tests E2E pipeline completo** | ❌ Pendiente | Chat → iFlow → format → delivery en servidor real; 12 tests E2E unitarios existen pero requieren servidor real para validación completa |
 | **GitHub Releases / publicación** | ❌ Denegado por decisión | No se publicarán releases ni tags mientras el proyecto siga en desarrollo; distribución vía source/build local. Ver [`docs/workdir/PLAN.md`](docs/workdir/PLAN.md) |
@@ -364,7 +364,7 @@ cd src/web-editor && npm run check
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
 | Javadoc | `./gradlew javadocAll --no-daemon` | En `**/build/docs/javadoc/` |
 | Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 44 lockfiles, 0 missing; falla si falta alguno |
-| Verificación dependencias | `gradle/verification-metadata.xml` + `--dependency-verification=strict` en CI | Activa; 626 componentes; excepción documentada solo para los classpaths de `fabric-host` (artefactos remapeados por Loom) |
+| Verificación dependencias | `gradle/verification-metadata.xml` + `--dependency-verification=strict` en CI | Activa; 627 componentes; excepciones documentadas: classpaths de test (AssertJ 3.25.3) y classpaths de `fabric-host` (artefactos remapeados por Loom) |
 | Web editor check | `cd src/web-editor && npm run check` | Format + lint + tests unitarios |
 | Web editor tests integración | `cd src/web-editor && npm run test:integration` | Harnesses func/interact/click/chain/undo/diffing/bind |
 | **Build reproducible (release)** | `BUILD_TIMESTAMP=1728000000000 ./gradlew build -Pversion=1.0.0` | JAR con `Build-Timestamp` fijo |

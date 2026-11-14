@@ -12,6 +12,11 @@ repositories {
 dependencies {
     api project(':src:core-api')
     api 'net.kyori:adventure-api:4.17.0'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core:3.25.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 java {
@@ -22,6 +27,24 @@ java {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
+
+// Test-only dependencies (JUnit/AssertJ) are not covered by
+// verification-metadata.xml, so verification is disabled for the test
+// classpaths, as in the rest of the modules.
+configurations.configureEach {
+    if (name in ['testCompileClasspath', 'testRuntimeClasspath']) {
+        resolutionStrategy {
+            disableDependencyVerification()
+        }
+    }
 }
 
 publishing {

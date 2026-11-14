@@ -240,9 +240,9 @@ Authority is fail-closed: `Principal.Official` may only invoke the LCM, and
 wildcard (`sync.discord.*`, `module.textformatter.*`); the program must also
 declare the exact action in its image, and the effective authority is the
 intersection. `DESTRUCTIVE` and `MODERATION` additionally require
-`allow-destructive: true`. Each grant carries `calls-per-minute` and
-`max-payload-bytes`: an exhausted budget returns `RateLimited`, an oversized
-payload returns `Denied`. A missing, ambiguous or unreadable grant denies the
+`allow-destructive: true`. Each grant carries `calls-per-minute` (a sliding
+60-second window) and `max-payload-bytes`: an exhausted budget returns
+`RateLimited`, an oversized payload returns `Denied`. A missing, ambiguous or unreadable grant denies the
 action. `sync-discord`, `sync-telegram`, `sync-http`, `sync-websocket`,
 `sync-socket`, `sync-velocity-core` and the local sinks
 (`sync-bukkit`/`sync-fabric` through `LocalSyncSink`) publish and execute native

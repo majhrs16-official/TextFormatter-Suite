@@ -29,9 +29,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -63,6 +65,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -108,6 +111,7 @@ public final class DefaultSyncBus implements SyncBus {
     private final Supplier<ProgramGrantStore> grants;
     private final Supplier<ActionAudit> audit;
     private final ConcurrentMap<String, CallWindow> callWindows = new ConcurrentHashMap<>();
+    private volatile LongSupplier nanoClock = System::nanoTime;
 
     // Global bounded queue used by the metrics contract and by the shutdown sentinel.
     private final ThreadPoolExecutor globalExecutor;
@@ -965,8 +969,17 @@ public final class DefaultSyncBus implements SyncBus {
                             + " cannot execute audited actions: " + describe(failure));
         }
 
-        long retryAfter = callWindow(program.sha256()).reserve(grant.callsPerMinute());
+        long retryAfter = callWindow(program.sha256())
+                .reserve(grant.callsPerMinute(), nanoClock.getAsLong());
         return retryAfter > 0 ? new SyncResult.RateLimited(retryAfter) : null;
+    }
+
+    /**
+     * Replaces the monotonic clock that drives call quotas. Package-private so
+     * tests can assert the window semantics without waiting a full minute.
+     */
+    void useClock(LongSupplier clock) {
+        this.nanoClock = Objects.requireNonNull(clock, "clock");
     }
 
     private CallWindow callWindow(String sha256) {
@@ -1100,29 +1113,38 @@ public final class DefaultSyncBus implements SyncBus {
     }
 
     /**
-     * Rolling one-minute call budget for one program image.
+     * Sliding one-minute call budget for one program image.
+     *
+     * <p>Every authorized call is stamped and expires exactly one minute after
+     * it happened. A fixed window would reset the whole budget at the boundary
+     * and let a program spend it twice in a short interval; here the oldest
+     * stamp decides how long the next call has to wait.</p>
      *
      * <p>The limit is read from the current grant on every reservation, so a
      * reload that changes {@code calls-per-minute} applies without restarting
-     * the bus.</p>
+     * the bus. Memory is bounded by the number of calls made inside the window:
+     * stamps are evicted on every reservation.</p>
      */
     private static final class CallWindow {
-        private long windowStartNanos = System.nanoTime();
-        private int used;
+        private final Deque<Long> stamps = new ArrayDeque<>();
 
-        synchronized long reserve(int limit) {
-            long now = System.nanoTime();
-            long elapsed = now - windowStartNanos;
-            if (elapsed < 0 || elapsed >= CALL_WINDOW_NANOS) {
-                windowStartNanos = now;
-                elapsed = 0;
-                used = 0;
+        synchronized long reserve(int limit, long now) {
+            while (!stamps.isEmpty()) {
+                long age = now - stamps.peekFirst();
+                // A negative age means the clock moved backwards: forget the
+                // stamp instead of blocking the program until it catches up.
+                if (age >= CALL_WINDOW_NANOS || age < 0) {
+                    stamps.pollFirst();
+                } else {
+                    break;
+                }
             }
-            if (used >= limit) {
-                long remaining = CALL_WINDOW_NANOS - elapsed;
-                return Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining));
+            if (stamps.size() >= limit) {
+                long remaining = CALL_WINDOW_NANOS - (now - stamps.peekFirst());
+                return Math.max(1, Math.min(TimeUnit.NANOSECONDS.toMillis(remaining),
+                        TimeUnit.NANOSECONDS.toMillis(CALL_WINDOW_NANOS)));
             }
-            used++;
+            stamps.addLast(now);
             return 0;
         }
     }

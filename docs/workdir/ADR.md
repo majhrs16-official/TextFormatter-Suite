@@ -113,7 +113,8 @@ los consumidores nuevos usan el contrato vigente y no el motor legacy.
 
 ## ADR-002 — Puertos de entrega y despacho neutral
 
-**Estado:** Aceptada.
+**Estado:** Aceptada. El punto 3 queda superado por ADR-036 §9: `MessageDispatcher` se sustituye
+por `PipelineEngine` + `RecipientResolver` + `DeliveryExecutor`. El resto sigue vigente.
 
 **Decisión.**
 
@@ -1686,7 +1687,8 @@ public record SyncParamSpec(
         String name,
         SyncValueType type,
         boolean required,
-        SyncParamSpec item                // solo para listas; null en el resto
+        SyncParamSpec item,               // solo para listas; null en el resto
+        boolean secret                    // redactar el valor antes de auditar
 ) {}
 
 public record DeliveryUnit(
@@ -1750,7 +1752,9 @@ public interface SyncBus {
 `SyncParamSpec` tipa los argumentos como datos neutrales (`STRING`, `INTEGER`, `BOOLEAN`, `DURATION`,
 `ACTOR_REF`, `CHANNEL_REF`, `MESSAGE_REF`, `ROLE_REF`, `DELIVERY_REF`, `OBJECT`). `OBJECT` es un mapa
 anidado validado por el backend; el núcleo no interpreta su contenido. `DELIVERY_REF` transporta un
-`DeliveryEnvelope` y no un tipo de SDK. Ningún tipo de JDA, Telegram, Bukkit o Fabric cruza esta
+`DeliveryEnvelope` y no un tipo de SDK. `secret` marca el parámetro cuya representación se redacta
+antes de hashear para la auditoría; no altera la validación ni el valor que recibe el backend.
+Ningún tipo de JDA, Telegram, Bukkit o Fabric cruza esta
 frontera. `backend` es el namespace; las acciones del host usan `textformatter`, no `"*"`. El nombre
 canónico de una acción es `<backend>.<action>` y admite profundidad arbitraria.
 La capacidad se deriva del origen: `sync.<action>` para acciones de sink y
@@ -1812,7 +1816,9 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
 4. **Fail-closed.** Permiso ausente, ambiguo o no verificable → `Denied`. No se hereda el fail-open
    de `PERMISSION`/`WORLD` (TF-002).
 5. **Cuotas.** Timeout por acción (`timeoutMillis`), llamadas por minuto por programa, coste de fuel
-   por llamada de host y tamaño máximo de payload. El presupuesto de llamadas agotado devuelve
+   por llamada de host y tamaño máximo de payload. El presupuesto de llamadas es una ventana
+   deslizante de 60 s: cada llamada autorizada caduca exactamente un minuto después, así que el
+   límite no se duplica al cruzar un borde de ventana. El presupuesto agotado devuelve
    `RateLimited` con el reintento en milisegundos; un payload que excede `max-payload-bytes` devuelve
    `Denied`, no `RateLimited`, porque repetir los mismos argumentos nunca cabría. Ningún agotamiento
    produce un éxito parcial.
@@ -1938,8 +1944,8 @@ la VM lo deja además en `R4`.
   retira el import dedicado, sin reintroducir `REDIRECT` ni `CHANNEL_REDIRECT`.
 - **ADR-019.** Los `sync-*` dejan de requerir `sync-bus` (§15); publican `SyncSink` y el bus los
   descubre.
-- **`storage.md` §2.** La regla «un submódulo declara `require(...)` del padre» contradice §15 y esta
-  sección; actualizarla requiere autorización explícita.
+- **`storage.md` §1 (Terminología), regla 2.** La regla «un submódulo declara `require(...)` del
+  padre» contradice §15 y esta sección; actualizarla requiere autorización explícita.
 - **Rutas.** Las concesiones viven en `config/iflow/grants.yml` (layout `config/<módulo>/`), no en
   `config/suite/iflow/`: `config/suite/` es solo para la configuración global.
 - **Especificación iFlow.** El baseline v3 limita al guest a contenido/metadatos; esta sección amplía

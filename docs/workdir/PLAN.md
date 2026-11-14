@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo.**)
+> Última actualización: 2026-11-13 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo).**)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -58,7 +58,7 @@
 | **P0.4** | Purga de compatibilidad y módulos legacy | Eliminar adaptadores, aliases, dobles lectores, puentes de conversión y fachadas de compatibilidad. Restaurar `CoreTranslator` como módulo legacy independiente, marcado *deprecated* y Bukkit-only por PlaceholderAPI (ADR-035); no como shim ni recuperando `suite-common-legacy`. El `LegacyBridge` de `7dd164a4^` no se restaura. Actualizar todos los consumidores en el mismo cambio. | Completado (2026-11-05) |
 | **P0.5** | Purga de tests de compatibilidad | Eliminar o reescribir los tests que afirman el contrato viejo o la migración legacy. Añadir regresiones que demuestren rechazo o ignorancia del camino viejo, tests de `config-version`, tests de contrato `>= 1.0.0` y tests de `CoreTranslator`. | Completado (2026-11-04) |
 | **P0.6** | Auditoría vigente | `AUDITORIA.md` contiene la auditoría integral de 2026-11-06 (TF-001…TF-012), con cobertura, evidencia, matriz y roadmap; el ciclo documental anterior (D-001…D-010) queda cerrado. Este PLAN mantiene el estado operativo y el mapeo P0/P1/P2 ↔ Alta/Media/Baja. Los hallazgos P0/P1 se corrigen con test de regresión antes de avanzar. | Completado (2026-11-06; informe reemplazado por completo) |
-| **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin tests omitidos ni fallos tolerados. | Completado (2026-11-04) |
+| **P0.7** | Gate completo | `./gradlew build checkArchitecture checkLocks --no-daemon` en verde, sin fallos tolerados. Los 10 tests condicionales omitidos (`logger` 3, `spigot-host` 4, `loadtest` 3) declaran su condición en el propio test y no enmascaran un fallo. | Completado (2026-11-04) |
 | **P0.8** | Coherencia documental (P0) | `philosophy.md`, `ADR.md`, `PLAN.md`, `contexto/proyecto.md`, `diseno/storage.md`, `especificaciones/*`, `iflow-cpu-design.md` y las skills: una sola base `1.0`, contrato `[1.0.0, host]`, un solo camino vigente, sin planes/fases dentro del ADR, sin rutas ni migraciones legacy y con poda del historial cerrado. | Completado (2026-11-05) |
 | **P0.8b** | Coherencia de la wiki | Actualizar `docs/wiki` para que no presente `iflow.engine.kind`, exclusividad de instalación ni pruebas reales antiguas como estado vigente. La wiki queda fuera de la auditoría documental de 2026-11-04. | Completado (2026-11-04) |
 
@@ -75,7 +75,7 @@
 |---|---|
 | Versión base de la suite | `1.0.0` en `build.gradle:6`; manifiestos y capabilities en `1.0.0` |
 | Versión de esquema YAML | `1.0`; contrato único en `ConfigVersion` (`src/core-api/.../ConfigVersion.java:16`) |
-| Archivos `.yml` de configuración | 34, todos con `config-version: 1.0` en la raíz y como última línea |
+| Archivos `.yml` de configuración | 37 (32 de `main` + 5 fixtures de test); 36 con `config-version: 1.0` en la raíz y como última línea |
 | Excepción de `config-version` | `src/spigot-host/src/main/resources/plugin.yml` (descriptor de plugin) |
 | Aliases de configuración legacy | 0 en producción; eliminados en P0.4 y cubiertos por tests de rechazo |
 | Lectores de rutas planas | 0 en producción; los tests demuestran que las rutas planas se ignoran |
@@ -109,11 +109,13 @@ revisión independiente del schema del editor.
 
 **`config-version` por archivo**
 
-Los 34 YAML de configuración tienen `config-version: 1.0` como clave raíz y última línea no vacía:
+Los 36 YAML de configuración (31 de `main` + 5 fixtures de test) declaran `config-version: 1.0`
+como clave raíz y última línea no vacía.
 
 - Defaults de `spigot-host`: `config.yml:25`, `commands.yml`, `messages.yml:53`, `iflow.yml`,
-  `rules.yml:14`, canales, `sync/discord.yml`, `sync/websocket.yml`, `translators/google.yml`.
-- Defaults de `fabric-host`: el mismo conjunto, con sus rutas canónicas.
+  `iflow-grants.yml`, `rules.yml:14`, canales, `sync/discord.yml`, `sync/websocket.yml`,
+  `translators/google.yml`.
+- Defaults de `fabric-host`: el mismo conjunto (incluido `iflow-grants.yml`), con sus rutas canónicas.
 - Defaults de módulos: `inworld.yml`, `sync-bukkit/config.yml`, `sync-fabric/config.yml`,
   `sync-velocity/sync/velocity.yml`.
 - Fixtures del editor: `src/host/src/test/resources/editor-default/config/suite/config.yml:16` y
@@ -123,7 +125,7 @@ Los 34 YAML de configuración tienen `config-version: 1.0` como clave raíz y ú
 La comprobación automatizada usada para este inventario fue:
 
 ```text
-34 archivos; todos con config-version; todos en la última línea no comentada.
+37 archivos; 36 con config-version; todos en la última línea no comentada.
 ```
 
 **Aliases y compatibilidad eliminados en P0.4**
@@ -263,7 +265,7 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 
 ### Feature propuesta — pipeline secuencial configurable (PL-1, 2026-11-05)
 
-> **Estado:** implementación en curso por slices. **ADR-036 aceptado
+> **Estado:** implementado (PL-1 y PL-3 cerrados). **ADR-036 aceptado
 > (2026-11-06).** Sustituye o enmienda ADR-019 (composition root y
 > dependencias), ADR-024/025 (puertos neutrales y adapters), ADR-032 (hub iFlow), ADR-008
 > (backend→fachada) y ADR-003 (§16, autoridad del guest) en lo relativo a los requisitos entre
@@ -275,7 +277,9 @@ forma parte del cierre de la purga pre-1.0. Sin este ciclo no se declara estabil
 > (§14/§15), consumo opcional del catálogo de canales y descubrimiento de sinks por servicio.
 > La retirada de `SuiteHost`/`MessageDispatcher` como fachada legacy está cerrada: el motor,
 > `RecipientResolver` y `DeliveryExecutor` son el único camino de despacho, y la traza se
-> publica en `SuiteRuntime.pipelineTraces()`. Pendiente: la configuración de `outputs` (§17).
+> publica en `SuiteRuntime.pipelineTraces()`. La configuración de `outputs` (§17) quedó
+> implementada en PL-3: precedencia mensaje → suite → default del módulo, `outputs-parallel` y
+> entrega local por `message.deliver`.
 > La traducción de `<tr>` se mantiene dentro del
 > render de `textformatter`; no se traslada a una etapa `translate`. Cualquier cambio en
 > `docs/prompts/` requiere autorización explícita. La sincronización de salidas de §17 se planifica
@@ -502,9 +506,11 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | Los sinks se descubren por servicio | `DefaultSyncBus.discoverSinks`; eventos de ciclo de vida | Sin `feature → feature`; el paquete no depende del bus. |
 | Concesiones, cuotas y auditoría | `ProgramGrant`/`ProgramGrantStore`, `ActionAudit`/`ActionAuditRecord`, `YamlProgramGrantStore`, `AppendOnlyActionAudit`; `DefaultSyncBusAuthorizationTest` | Un tercero solo ejecuta la intersección de su declaración y la concesión del operador; sin concesión, sin auditoría escribible o sin cuota no hay efecto. |
 
-> **Nomenclatura:** `sync-tcpudp` está deprecado; el módulo vigente es `sync-socket`
-> (`src/sync-tcpudp` está vacío y fuera de `settings.gradle`). Quedan referencias obsoletas en
-> `build.gradle` y en el editor web; se registran como deuda de limpieza y no forman parte de PL-2.
+> **Nomenclatura:** `sync-tcpudp` está retirado; el módulo vigente es `sync-socket`. El nombre ya no
+> aparece en build ni en el código: se retiró de `build.gradle`, se eliminó el directorio vacío
+> `src/sync-tcpudp` y `src/sync-socket/settings.gradle` declara `suite-sync-socket`. La pestaña
+> «TCP / UDP» del editor (`data-edge="tcpudp"`) es un ancla de UI para las claves `sync.tcp.*` y
+> `sync.udp.*`, no una referencia al módulo retirado.
 
 #### Impacto previsto
 
@@ -2183,55 +2189,64 @@ fases vive en Git.
 
 ### Cobertura de tests exhaustiva — Iniciativa transversal
 
-> **Situación actual (2026-10-27):** inventario real generado con `./gradlew testInventory` — **34 módulos Java** en `src/`:
-> - **0 sin directorio de tests**
+> **Situación actual (2026-11-13):** inventario medido sobre el árbol vigente — **43 módulos Java** en `src/`:
+> - **0 sin directorio de tests** — `core-render` incorporó `src/test` en este cambio
 > - **0 directorios vacíos**
-> - **34 con tests** (1–27 archivos); solo `iflow-vm` (27), `host` (12) y `textformatter` (7) superan 5 archivos
-> - **10 módulos con reporte JaCoCo**: `iflow-vm` (86.2%/71.3%), `kernel` (91.1%/82.0%), `logger` (93.3%/78.6%), `messages` (93.3%/75.0%), `textformatter` (81.6%/66.7%), `host` (30.9%/23.8%), `spigot-host` (2.5%/4.6%), `transport` (6.0%/1.0%), `fabric-host` (0.0%/0.0%), `tester` (0.0%/0.0%)
-> - **23 módulos con tests pero SIN reporte JaCoCo** (cobertura N/A) — requieren `jacocoTestReport`
+> - **43 con tests** (1–29 archivos); `iflow-vm` (29) y `core-api` (20) son los mayores
+> - **28 módulos con reporte JaCoCo**; 15 sin reporte (cobertura N/A)
+> - Cobertura de línea < 70 %: `sync-fabric` 10.5 %, `sync-discord-jda` 19.4 %, `fabric-host` 20.7 %, `spigot-host` y `transport` 30.3 %, `sync-velocity` 42.3 %, `sync-discord` y `messages` 60.0 %, `coretranslator` 61.0 %, `iflow-firewall` 61.7 %, `sync-websocket` 62.1 %, `sync-velocity-core` 62.3 %, `observability` 65.7 %
 
-**Inventario detallado (baseline T0 → T1 actualizado 2026-10-24):**
+**Inventario detallado (T1 actualizado 2026-11-13):**
 
-| Módulo | Test Dir | Archivos Test | Líneas Prod | Líneas Test | Cobertura Línea | Cobertura Rama | Gaps Críticos |
+| Módulo | Test Dir | Archivos Test | Líneas Prod | Líneas Test | Cobertura Línea | Cobertura Rama | Gaps |
 |---|---|---:|---:|---:|---:|---:|---|
-| `src:core-api` | ✅ OK | 2 | N/A | 259 | N/A | N/A | Pocos tests (<3) |
-| `src:example-extension` | ✅ OK | 1 | N/A | 45 | N/A | N/A | Pocos tests (<3) |
-| `src:extension-api` | ✅ OK | 3 | N/A | 260 | N/A | N/A | `ExtensionContext` usa puertos neutrales, sin `host` |
-| `src:fabric-host` | ✅ OK | 5 | 840 | 86 | 18.4% | 11.2% | `FabricTestProbe` cubierto; E2E real posterior a 1.0.0 pendiente (ADR-034); cobertura global baja |
-| `src:gtranslate` | ✅ OK | 3 | N/A | 229 | N/A | N/A |  |
-| `src:host` | ✅ OK | 9 | 1503 | 1628 | 30.9% | 23.8% | Cobertura línea <70%; Cobertura rama <50% |
-| `src:iflow-vm` | ✅ OK | 27 | 2618 | 6271 | 86.2% | 71.3% |  |
-| `src:iflow-wasm` | ✅ OK | 1 | N/A | 32 | N/A | N/A | Pocos tests (<3) |
-| `src:iflow-firewall` | ✅ OK | 5 | 2553 | 722 | 61.6% | 50.1% | Restauración literal del motor SpEL (44 tests); incluye validador del grafo del editor |
-| `src:chattranslator` | ✅ OK | 1 | N/A | 350+ | N/A | N/A | 12 tests unitarios |
-| `src:inworld` | ✅ OK | 3 | 349 | 356 | 88.1% | 74.2% | `PACKAGE` neutral; `InWorldHandler`/`InWorldPlatform`; `SpigotInWorldListener` en `spigot-host` |
-| `src:kernel` | ✅ OK | 4 | 202 | 243 | 91.1% | 82.0% |  |
-| `src:loadtest` | ✅ OK | 4 | N/A | 1120 | N/A | N/A |  |
-| `src:logger` | ✅ OK | 4 | 75 | 405 | 93.3% | 78.6% |  |
-| `src:ltranslate` | ✅ OK | 3 | N/A | 288 | N/A | N/A |  |
-| `src:manager-apt` | ✅ OK | 3 | N/A | 317 | N/A | N/A |  |
-| `src:manager-core` | ✅ OK | 3 | N/A | 683 | N/A | N/A |  |
-| `src:manager-spi` | ✅ OK | 2 | N/A | 323 | N/A | N/A | Pocos tests (<3) |
-| `src:messages` | ✅ OK | 1 | 30 | 53 | 93.3% | 75.0% | 18 tests integración |
-| `src:observability` | ✅ OK | 2 | N/A | 105 | N/A | N/A | 15 tests integración |
-| `src:performance` | ✅ OK | 2 | N/A | 135 | N/A | N/A | Pocos tests (<3) |
-| `src:presets` | ✅ OK | 5 | N/A | 1152 | N/A | N/A | `Preset.apply` + `FilePresetTarget` reales; paquete y activador probados; comando integrado en `suite-runtime` |
-| `src:spigot-host` | ✅ OK | 4 | 590 | 3346 | 7.5% | 7.7% | Cobertura línea <70%; Cobertura rama <50%; `SpigotInWorldListener` cubierto con Mockito |
-| `src:sync-bus` | ✅ OK | 1 | N/A | 116 | N/A | N/A | Pocos tests (<3) |
-| `src:sync-discord` | ✅ OK | 3 | N/A | 250 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin JDA |
-| `src:sync-discord-jda` | ✅ OK | 1 | N/A | 130 | N/A | N/A | Adaptador JDA; tests sin red |
-| `src:sync-discord-jdk` | ✅ OK | 3 | N/A | 320 | N/A | N/A | Adaptador JDK; tests con WebSocket loopback |
-| `src:sync-http` | ✅ OK | 3 | N/A | 192 | N/A | N/A |  |
-| `src:sync-socket` | ✅ OK | 3 | N/A | 202 | N/A | N/A |  |
-| `src:sync-telegram` | ✅ OK | 2 | N/A | 173 | N/A | N/A | Pocos tests (<3) |
-| `src:sync-velocity-core` | ✅ OK | 1 | N/A | 420 | N/A | N/A | Paquete neutral: puerto en `core-api`, sin Velocity API |
-| `src:sync-velocity` | ✅ OK | 1 | N/A | 180 | N/A | N/A | Plugin/adapter Velocity real; tests con Mockito |
-| `src:sync-websocket` | ✅ OK | 1 | N/A | 26 | N/A | N/A | Pocos tests (<3) |
-| `src:tester` | ✅ OK | 3 | 271 | 1057 | 81.6% | 55.8% | `PACKAGE` neutral; `TestProbe` + `SpigotTestProbe`; suite completa con probe falso |
-| `src:textformatter` | ✅ OK | 6 | 282 | 512 | 81.6% | 66.7% |  |
-| `src:transport` | ✅ OK | 1 | 351 | 22 | 6.0% | 1.0% | Pocos tests (<3); Cobertura línea <70%; Cobertura rama <50% |
+| `src:chattranslator` | ✅ OK | 4 | 799 | 656 | N/A | N/A | Sin reporte JaCoCo |
+| `src:core-api` | ✅ OK | 20 | 8800 | 2526 | N/A | N/A | Sin reporte JaCoCo |
+| `src:core-render` | ✅ OK | 1 | 132 | 46 | N/A | N/A | Sin reporte JaCoCo; Pocos tests (<3) |
+| `src:coretranslator` | ✅ OK | 3 | 589 | 522 | 61.0% | 51.5% | Cobertura línea <70% |
+| `src:example-extension` | ✅ OK | 1 | 141 | 45 | N/A | N/A | Sin reporte JaCoCo; Pocos tests (<3) |
+| `src:extension-api` | ✅ OK | 4 | 883 | 569 | N/A | N/A | Sin reporte JaCoCo |
+| `src:fabric-host` | ✅ OK | 3 | 1117 | 344 | 20.7% | 12.4% | Cobertura línea <70%; Cobertura rama <50% |
+| `src:gtranslate` | ✅ OK | 5 | 199 | 566 | N/A | N/A | Sin reporte JaCoCo |
+| `src:host` | ✅ OK | 15 | 3083 | 3300 | 87.4% | 79.0% | — |
+| `src:iflow` | ✅ OK | 3 | 651 | 839 | 86.0% | 77.9% | — |
+| `src:iflow-firewall` | ✅ OK | 6 | 2378 | 887 | 61.7% | 51.8% | Cobertura línea <70% |
+| `src:iflow-vm` | ✅ OK | 29 | 7319 | 6813 | 86.0% | 72.4% | — |
+| `src:iflow-wasm` | ✅ OK | 6 | 2163 | 1485 | N/A | N/A | Sin reporte JaCoCo |
+| `src:inworld` | ✅ OK | 3 | 332 | 349 | 89.0% | 74.2% | — |
+| `src:kernel` | ✅ OK | 5 | 465 | 324 | 91.8% | 82.5% | — |
+| `src:loadtest` | ✅ OK | 3 | 839 | 877 | N/A | N/A | Sin reporte JaCoCo |
+| `src:logger` | ✅ OK | 4 | 362 | 405 | 85.4% | 78.6% | — |
+| `src:ltranslate` | ✅ OK | 5 | 223 | 635 | N/A | N/A | Sin reporte JaCoCo |
+| `src:manager-apt` | ✅ OK | 4 | 2115 | 558 | N/A | N/A | Sin reporte JaCoCo |
+| `src:manager-core` | ✅ OK | 3 | 1952 | 1279 | N/A | N/A | Sin reporte JaCoCo |
+| `src:manager-spi` | ✅ OK | 5 | 1139 | 834 | N/A | N/A | Sin reporte JaCoCo |
+| `src:messages` | ✅ OK | 2 | 146 | 117 | 60.0% | 64.3% | Cobertura línea <70%; Pocos tests (<3) |
+| `src:observability` | ✅ OK | 6 | 901 | 556 | 65.7% | 60.7% | Cobertura línea <70% |
+| `src:performance` | ✅ OK | 2 | 1630 | 135 | N/A | N/A | Sin reporte JaCoCo; Pocos tests (<3) |
+| `src:presets` | ✅ OK | 6 | 1199 | 757 | N/A | N/A | Sin reporte JaCoCo |
+| `src:spigot-host` | ✅ OK | 5 | 1167 | 674 | 30.3% | 25.9% | Cobertura línea <70%; Cobertura rama <50% |
+| `src:suite-runtime` | ✅ OK | 12 | 5421 | 4304 | N/A | N/A | Sin reporte JaCoCo |
+| `src:sync-bukkit` | ✅ OK | 3 | 308 | 383 | 78.7% | 55.9% | — |
+| `src:sync-bus` | ✅ OK | 4 | 1848 | 2465 | 72.8% | 68.2% | — |
+| `src:sync-common` | ✅ OK | 4 | 624 | 531 | 87.9% | 76.7% | — |
+| `src:sync-discord` | ✅ OK | 3 | 595 | 477 | 60.0% | 47.4% | Cobertura línea <70%; Cobertura rama <50% |
+| `src:sync-discord-jda` | ✅ OK | 1 | 327 | 71 | 19.4% | 14.1% | Cobertura línea <70%; Cobertura rama <50%; Pocos tests (<3) |
+| `src:sync-discord-jdk` | ✅ OK | 2 | 557 | 582 | 84.6% | 64.3% | Pocos tests (<3) |
+| `src:sync-fabric` | ✅ OK | 2 | 324 | 74 | 10.5% | 16.7% | Cobertura línea <70%; Cobertura rama <50%; Pocos tests (<3) |
+| `src:sync-http` | ✅ OK | 5 | 803 | 964 | 79.2% | 64.1% | — |
+| `src:sync-socket` | ✅ OK | 4 | 746 | 612 | 78.3% | 56.0% | — |
+| `src:sync-telegram` | ✅ OK | 3 | 654 | 557 | 84.7% | 74.5% | — |
+| `src:sync-velocity` | ✅ OK | 1 | 262 | 139 | 42.3% | 60.0% | Cobertura línea <70%; Pocos tests (<3) |
+| `src:sync-velocity-core` | ✅ OK | 1 | 949 | 485 | 62.3% | 54.1% | Cobertura línea <70%; Pocos tests (<3) |
+| `src:sync-websocket` | ✅ OK | 3 | 890 | 426 | 62.1% | 51.4% | Cobertura línea <70% |
+| `src:tester` | ✅ OK | 3 | 1017 | 293 | 83.5% | 55.8% | — |
+| `src:textformatter` | ✅ OK | 9 | 1558 | 1286 | 87.2% | 70.3% | — |
+| `src:transport` | ✅ OK | 2 | 1038 | 395 | 30.3% | 28.8% | Cobertura línea <70%; Cobertura rama <50%; Pocos tests (<3) |
 
-**Resumen:** 34 módulos totales · **34 con tests** · **0 sin test dir** · **0 vacíos** · 13 con cobertura real · 21 con tests pero sin reporte JaCoCo.
+**Resumen:** 43 módulos totales · **43 con tests** · **0 sin test dir** · **0 vacíos** · 28 con cobertura real · 15 con tests pero sin reporte JaCoCo.
+
+Líneas Prod/Test = líneas físicas de todas las `.java` de `src/main` y `src/test`; cobertura = JaCoCo del último gate (2026-11-13).
 
 **Objetivo:** que **cada módulo** tenga una suite de tests unitarios y de componente con **cobertura significativa** (líneas/branches ≥ 70 % en código de producción, ≥ 90 % en SPI/API pública) y tests de regresión para cada bug/fix documentado.
 

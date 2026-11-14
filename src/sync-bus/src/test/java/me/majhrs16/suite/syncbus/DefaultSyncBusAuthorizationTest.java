@@ -33,7 +33,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -193,6 +195,41 @@ class DefaultSyncBusAuthorizationTest {
             assertTrue(limited instanceof SyncResult.RateLimited, limited.toString());
             assertTrue(((SyncResult.RateLimited) limited).retryAfterMillis() > 0);
             assertEquals(2, sink.calls.get(), "the exhausted call must not reach the sink");
+        } finally {
+            bus.stop();
+        }
+    }
+
+    @Test
+    void theCallBudgetIsASlidingWindowAndCannotBeDoubledAtTheBoundary() throws Exception {
+        ProgramGrant grant = new ProgramGrant(SHA, Set.of("sync.discord.channel.create"),
+                false, 2, 65_536);
+        SurfaceSink sink = new SurfaceSink("discord", call -> new SyncResult.Ok(null));
+        DefaultSyncBus bus = bus(Map.of(SHA, grant), new RecordingAudit());
+        AtomicLong now = new AtomicLong();
+        bus.useClock(now::get);
+        bus.register(sink);
+        bus.start();
+        try {
+            assertTrue(bus.invoke(call("channel.create", Map.of("name", "one"))).isOk());
+            now.set(TimeUnit.SECONDS.toNanos(59));
+            assertTrue(bus.invoke(call("channel.create", Map.of("name", "two"))).isOk());
+
+            now.set(TimeUnit.SECONDS.toNanos(59) + TimeUnit.MILLISECONDS.toNanos(500));
+            SyncResult limited = bus.invoke(call("channel.create", Map.of("name", "three")));
+            assertTrue(limited instanceof SyncResult.RateLimited, limited.toString());
+            long retry = ((SyncResult.RateLimited) limited).retryAfterMillis();
+            assertTrue(retry > 0 && retry <= 500, "retryAfter=" + retry);
+
+            // The first call expires at t=60s and the second only at t=119s. A
+            // fixed window would refund the whole budget at t=60s and let both
+            // remaining attempts through.
+            now.set(TimeUnit.SECONDS.toNanos(60) + TimeUnit.MILLISECONDS.toNanos(500));
+            assertTrue(bus.invoke(call("channel.create", Map.of("name", "four"))).isOk());
+            now.set(TimeUnit.SECONDS.toNanos(61));
+            SyncResult stillLimited = bus.invoke(call("channel.create", Map.of("name", "five")));
+            assertTrue(stillLimited instanceof SyncResult.RateLimited, stillLimited.toString());
+            assertEquals(3, sink.calls.get());
         } finally {
             bus.stop();
         }
