@@ -116,7 +116,7 @@ jacocoTestCoverageVerification {
 }
 tasks.named('check') { dependsOn 'jacocoTestCoverageVerification' }
 
-// Shared library package: iflow-vm and other engines load it from
+// Shared library package: iflow-16 and other engines load it from
 // library/dependencies through the manager.
 ext.moduleVersion = '1.0.0'
 ext.moduleType = 'DEPENDENCY'

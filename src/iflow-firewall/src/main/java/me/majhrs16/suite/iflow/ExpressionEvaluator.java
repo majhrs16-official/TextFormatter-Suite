@@ -6,8 +6,8 @@ import java.util.Map;
  * Evaluates legacy iFlow rule expressions (conditions and actions).
  *
  * <p>This SPI belongs to {@code iflow-firewall}; it is not used by templates,
- * by {@code iflow-vm} or by {@code iflow-wasm}. The host no longer exposes
- * {@code <expr>} tags.</p>
+ * by {@code iflow-16}, {@code iflow-32} or by {@code iflow-wasm}. The host no
+ * longer exposes {@code <expr>} tags.</p>
  */
 public interface ExpressionEvaluator {
 

@@ -20,7 +20,7 @@
 ## 2. Non-Responsibilities
 
 - **No WebSocket client** — server only
-- **No message routing** — `iflow-vm` decides what to sync
+- **No message routing** — the iFlow engine decides what to sync
 - **No platform-specific code** — pure Java, uses `org.java_websocket`
 
 ---

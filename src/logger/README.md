@@ -5,7 +5,8 @@
 `logger` provides the structured logger and utilities shared by suite modules.
 It is distributed as a `DEPENDENCY` package, not as a feature package: the
 manager installs it under `manager/library/dependencies/logger.jar` and the
-module classloader makes it visible to consumers such as `iflow-vm`.
+module classloader makes it visible to consumers such as `iflow-16` and
+`iflow-32`.
 
 ## Runtime model
 
@@ -35,4 +36,5 @@ stack-trace handling.
 
 - [core-api](../core-api/README.md) — `PluginLogger` contract.
 - [suite-runtime](../suite-runtime) — dependency resolution and classloading.
-- [iflow-vm](../iflow-vm/README.md) — first consumer of this dependency package.
+- [iflow-16](../iflow-16/README.md) — legacy 16-bit consumer of this dependency package.
+- [iflow-32](../iflow-32/README.md) — 32-bit line that also consumes this dependency package.

@@ -19,7 +19,7 @@
 
 - No es el motor por defecto ni la única superficie de políticas: el hub
   `iflow` selecciona el backend activo (ADR-032).
-- No sustituye a `iflow-vm` ni a `iflow-wasm`; los tres pueden estar instalados.
+- No sustituye a `iflow-16`, `iflow-32` ni a `iflow-wasm`; los cuatro pueden estar instalados.
 - No ejecuta el grafo de nodos del editor: el motor evalúa reglas SpEL.
 - No contiene lógica de plataforma ni de entrega.
 
@@ -49,7 +49,7 @@ config-version: "1.0"
 ```
 
 El hub consulta la disponibilidad de cada backend y aplica la prioridad
-`iflow-firewall` → `iflow-vm` → `iflow-wasm` cuando el configurado no está
+`iflow-firewall` → `iflow-16` → `iflow-wasm` cuando el configurado no está
 disponible. No hay orden implícito por registro.
 
 ## 5. Main Components

@@ -99,7 +99,7 @@ The policy subsystem. The `iflow` hub selects one installed backend and
 publishes `IflowHub`.
 
 **IflowBackend**
-SPI implemented by `iflow-firewall`, `iflow-vm` and `iflow-wasm`.
+SPI implemented by `iflow-firewall`, `iflow-16` and `iflow-wasm`.
 
 **IflowHub**
 Stable facade over the active backend. `SuiteRuntime` requires the hub; an
@@ -110,9 +110,13 @@ Legacy SpEL backend. Executes rules under `rules:` in
 `config/iflow-firewall/rules.yml`; validates the editor graph but does not
 execute `nodes:`/`edges:`.
 
-**iflow-vm**
-Deterministic VM backend. Executes a binary `.flow` program, normally
-`config/iflow-vm/policy.flow`.
+**iflow-16**
+Deterministic 16-bit VM backend, supported for compatibility. Executes a binary
+`.flow` v2 program, normally `config/iflow-16/policy.flow`.
+
+**iflow-32**
+Separate 32-bit v3 core: ROM `FLOWROM`, ISA v3, paged MMU, MMIO devices and
+`HOST` v3. It does not publish an `IflowBackend` until V4.
 
 **iflow-wasm**
 WebAssembly backend (Chicory). Requires a pinned module and reloads when the

@@ -41,7 +41,7 @@ config/
     config.yml                       # iFlow hub: backend selection
   iflow-firewall/
     rules.yml                        # SpEL rules + editor graph
-  iflow-vm/
+  iflow-16/
     policy.flow                      # Binary VM program (optional)
   inworld/config.yml
   observability/config.yml
@@ -108,7 +108,7 @@ backend against the resolved stages: a backend without an owner or claimed by tw
 explicit error, never a silent skip. `textformatter` is not a delivery backend and never appears as
 a sink in `outputs`.
 
-`route` owns the iFlow backends (`sync.iflow-vm`, `sync.iflow-wasm`, `sync.iflow-firewall`) and uses
+`route` owns the iFlow backends (`sync.iflow-16`, `sync.iflow-wasm`, `sync.iflow-firewall`) and uses
 the selected engine for that message. `<tr>` inside `format` owns the translation backends
 (`sync.gtranslate`, `sync.ltranslate`) and uses the selected provider. Without an owned target both
 keep their configured default and fallback. `route` and `format` accept at most one owned target; a
@@ -131,7 +131,7 @@ for the message that declares it.
 ### iFlow hub (`config/iflow/config.yml`)
 
 ```yaml
-engine: iflow-firewall              # iflow-firewall | iflow-vm | iflow-wasm
+engine: iflow-firewall              # iflow-firewall | iflow-16 | iflow-wasm
 fallback-on-unavailable: true       # Use the next installed backend if the selected one is missing
 config-version: 1.0
 ```
@@ -139,8 +139,9 @@ config-version: 1.0
 The three engines may be installed together. The hub activates exactly one and
 publishes `IflowHub`; `SuiteRuntime` requires the hub and does not accept a
 `Router` published directly by an engine. Default selection order when the
-configured backend is unavailable: `iflow-firewall` → `iflow-vm` →
-`iflow-wasm`.
+configured backend is unavailable: `iflow-firewall` → `iflow-16` →
+`iflow-wasm`. `iflow-32` has no `IflowBackend` until V4, so it is not part of
+that order and the hub never falls back between `iflow-16` and `iflow-32`.
 
 ### Repository configuration
 
@@ -322,7 +323,7 @@ config-version: 1.0
 
 ## iFlow policy files
 
-- `config/iflow-vm/policy.flow`: binary VM program executed by `iflow-vm`. If
+- `config/iflow-16/policy.flow`: binary VM program executed by `iflow-16`. If
   absent or invalid, the VM uses a pass-through program.
 - `config/iflow-firewall/rules.yml`: map with `config-version: 1.0`. The
   executable SpEL rules live under `rules:`; the editor graph uses `nodes:` and
@@ -370,7 +371,7 @@ iFlow hub.
 | `config/sync-*/**` | Restart the server |
 | `config/iflow/config.yml` | Restart the server; the hub re-reads its selection on the next pipeline build |
 | `config/iflow-firewall/rules.yml` | Restart the server while that backend is active |
-| `config/iflow-vm/policy.flow` | Restart the server; the VM reads the program at activation |
+| `config/iflow-16/policy.flow` | Restart the server; the VM reads the program at activation |
 | `manager/repo.yml` | Restart the server |
 | A preset | `/<root> presets apply <preset>` writes files and reloads active modules |
 

@@ -14,7 +14,7 @@
     config: 'config/suite/config.yml',
     graph: 'config/iflow-firewall/rules.yml',
     packages: 'manager/library/status',
-    'rom.iflow-vm': 'config/iflow-vm/policy.flow',
+    'rom.iflow-16': 'config/iflow-16/policy.flow',
     'rom.iflow-wasm': 'config/iflow-wasm/policy.wasm',
     'rom.iflow-wasm.sha256': 'config/iflow-wasm/policy.sha256',
   });
@@ -41,7 +41,7 @@
     'suite',
     'iflow',
     'iflow-firewall',
-    'iflow-vm',
+    'iflow-16',
     'iflow-wasm',
     'textformatter',
     'chattranslator',

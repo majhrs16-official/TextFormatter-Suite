@@ -39,7 +39,7 @@
 
 - No platform I/O: Discord, Telegram, HTTP, TCP/UDP and WebSocket live in their
   own sync modules.
-- No message formatting, translation or routing: `host`/`iflow-vm` produce the
+- No message formatting, translation or routing: `host`/the iFlow engine produce the
   `Message`; the bus only distributes it.
 - No native action implementation: each backend executes its own surface. The
   bus only validates, queues, bounds and maps the result.

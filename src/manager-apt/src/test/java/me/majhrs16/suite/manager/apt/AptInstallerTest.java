@@ -39,11 +39,11 @@ class AptInstallerTest {
     @Test
     void confirmationResultBuildsAptStylePrompt() {
         RepositoryManager.PackageCandidate candidate = new RepositoryManager.PackageCandidate(
-                "iflow-vm", "1.0.0", "stable", "local", "https://example.com/iflow-vm.zip",
+                "iflow-16", "1.0.0", "stable", "local", "https://example.com/iflow-16.zip",
                 100, "sha256", 0);
         PackageEntry installed = new PackageEntry(
                 "iflow-firewall", "1.0.0", "stable", PackageType.PACKAGE,
-                List.of(), List.of("iflow-vm"), List.of("iflow"),
+                List.of(), List.of("iflow-16"), List.of("iflow"),
                 "none", "common", "", "none", "sha256", 100,
                 Map.of(), "", "", Map.of());
         DependencyResolver.ResolutionPlan plan = new DependencyResolver.ResolutionPlan(
@@ -53,23 +53,23 @@ class AptInstallerTest {
         AptInstaller.InstallResult result = AptInstaller.InstallResult.confirmation(plan);
 
         assertTrue(result.requiresConfirmation());
-        assertEquals("Deseas instalar estos paquetes?: iflow-vm 1.0.0\n"
+        assertEquals("Deseas instalar estos paquetes?: iflow-16 1.0.0\n"
                 + "  Reemplazarán a: iflow-firewall 1.0.0", result.confirmationMessage());
     }
 
     @Test
     void runtimeFailureKeepsTheInstallationAndReportsActivationFailed() {
         AptInstaller.InstallResult installed = new AptInstaller.InstallResult(
-                true, List.of("iflow-vm"), null);
+                true, List.of("iflow-16"), null);
 
         AptInstaller.InstallResult failed = installed.withRuntimeFailure(
-                ModuleState.ACTIVATION_FAILED, "iflow-vm", "start failed", null);
+                ModuleState.ACTIVATION_FAILED, "iflow-16", "start failed", null);
 
         assertFalse(failed.success());
         assertTrue(failed.installed(), "a runtime failure must not undo the commit");
         assertEquals(ModuleState.ACTIVATION_FAILED, failed.activation());
         assertEquals(AptInstaller.InstallResult.FailedStage.RUNTIME, failed.failedStage());
-        assertEquals("iflow-vm", failed.moduleId());
+        assertEquals("iflow-16", failed.moduleId());
     }
 
     @Test

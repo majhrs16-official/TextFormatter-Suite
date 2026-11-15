@@ -433,17 +433,17 @@ class PackageInstallerTest {
 
         Path firewallZip = tempDir.resolve("iflow-firewall.zip");
         createZipWithMetadata(firewallZip, "iflow-firewall", "1.0.0", "stable",
-                "firewall.jar", "firewall".getBytes(), "", "iflow-vm", "iflow");
+                "firewall.jar", "firewall".getBytes(), "", "iflow-16", "iflow");
         installer.install(firewallZip, false);
 
-        Path vmZip = tempDir.resolve("iflow-vm.zip");
-        createZipWithMetadata(vmZip, "iflow-vm", "1.0.0", "stable",
+        Path vmZip = tempDir.resolve("iflow-16.zip");
+        createZipWithMetadata(vmZip, "iflow-16", "1.0.0", "stable",
                 "vm.jar", "vm".getBytes(), "", "", "iflow");
 
         InstallException ex = assertThrows(InstallException.class, () -> installer.install(vmZip, false));
         assertTrue(ex.getMessage().contains("Package conflict"));
         assertTrue(db.isInstalled("iflow-firewall"));
-        assertFalse(db.isInstalled("iflow-vm"));
+        assertFalse(db.isInstalled("iflow-16"));
     }
 
     @Test
@@ -457,18 +457,18 @@ class PackageInstallerTest {
 
         Path firewallZip = tempDir.resolve("iflow-firewall-force.zip");
         createZipWithMetadata(firewallZip, "iflow-firewall", "1.0.0", "stable",
-                "firewall-force.jar", "firewall".getBytes(), "", "iflow-vm", "iflow");
+                "firewall-force.jar", "firewall".getBytes(), "", "iflow-16", "iflow");
         installer.install(firewallZip, false);
 
-        Path vmZip = tempDir.resolve("iflow-vm-force.zip");
-        createZipWithMetadata(vmZip, "iflow-vm", "1.0.0", "stable",
+        Path vmZip = tempDir.resolve("iflow-16-force.zip");
+        createZipWithMetadata(vmZip, "iflow-16", "1.0.0", "stable",
                 "vm-force.jar", "vm".getBytes(), "", "", "iflow");
 
         // force is a deliberate operator decision: both exclusive packages coexist.
         installer.install(vmZip, true);
 
         assertTrue(db.isInstalled("iflow-firewall"));
-        assertTrue(db.isInstalled("iflow-vm"));
+        assertTrue(db.isInstalled("iflow-16"));
     }
 
     @Test
@@ -481,7 +481,7 @@ class PackageInstallerTest {
         PackageInstaller installer = new PackageInstaller(db, installRoot, createLogger());
 
         Path providerZip = tempDir.resolve("provider.zip");
-        createZipWithMetadata(providerZip, "iflow-vm", "1.0.0", "stable",
+        createZipWithMetadata(providerZip, "iflow-16", "1.0.0", "stable",
                 "provider.jar", "provider".getBytes(), "", "", "iflow");
         installer.install(providerZip, false);
 

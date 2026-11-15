@@ -22,8 +22,9 @@ are no runtime migrations from older layouts.
   LibreTranslate (`ltranslate`) providers. It does not publish a pipeline stage;
   `textformatter` consumes it for `<tr>` spans.
 - **iFlow** — the `iflow` hub selects one of three coexisting backends:
-  `iflow-firewall` (SpEL rules), `iflow-vm` (binary `.flow`) or `iflow-wasm`
-  (WebAssembly).
+  `iflow-firewall` (SpEL rules), `iflow-16` (binary `.flow`) or `iflow-wasm`
+  (WebAssembly). The separate `iflow-32` module contains the 32-bit v3 core but
+  does not publish a backend yet; it is wired to the hub in V4.
 - **Sync** — Discord, Telegram, HTTP, TCP/UDP, WebSocket, Velocity, Bukkit and
   Fabric event sinks.
 - **Module Manager** — content-addressed acquisition, journaled commit and
@@ -80,7 +81,7 @@ The layout is canonical:
 │   │   └── translators/*.yml
 │   ├── iflow/config.yml
 │   ├── iflow-firewall/rules.yml
-│   ├── iflow-vm/policy.flow
+│   ├── iflow-16/policy.flow
 │   └── sync-*/…
 ├── manager/
 │   ├── repo.yml
@@ -113,13 +114,14 @@ iFlow backend selection is separate:
 
 ```yaml
 # config/iflow/config.yml
-engine: iflow-firewall              # iflow-firewall | iflow-vm | iflow-wasm
+engine: iflow-firewall              # iflow-firewall | iflow-16 | iflow-wasm
 fallback-on-unavailable: true
 config-version: 1.0
 ```
 
 `iflow.engine.kind` does not exist. The three backends may be installed
-together; the hub activates exactly one.
+together; the hub activates exactly one. `iflow-32` is not a selectable engine
+until V4, and the hub never falls back from one VM line to the other.
 
 ## Commands
 
@@ -176,7 +178,7 @@ directly; the runtime resolves packages, contracts and dependencies.
 | Runtime | `kernel`, `suite-runtime`, `host` |
 | Formatting | `textformatter`, `messages` |
 | Translation | `chattranslator`, `gtranslate`, `ltranslate`, `coretranslator` |
-| iFlow | `iflow`, `iflow-vm`, `iflow-firewall`, `iflow-wasm` |
+| iFlow | `iflow`, `iflow-16`, `iflow-32`, `iflow-firewall`, `iflow-wasm` |
 | Sync | `sync-bus`, `sync-discord`, `sync-telegram`, `sync-http`, `sync-socket`, `sync-websocket`, `sync-velocity-core`, `sync-velocity`, `sync-bukkit`, `sync-fabric` |
 | Manager | `manager-spi`, `manager-core`, `manager-apt` |
 | Platform hosts | `spigot-host`, `fabric-host` |

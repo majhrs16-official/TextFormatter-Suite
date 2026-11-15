@@ -14,7 +14,8 @@ TextFormatter Suite
 │   ├── kernel            → Module loading & dependency resolution
 │   ├── textformatter     → Template engine, placeholders, channels
 │   ├── iflow             → hub que descubre `IflowBackend` y publica el `Router` estable; selección y fallback
-│   ├── iflow-vm          → VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget (base de la VM de 32 bits)
+│   ├── iflow-16          → VM legacy 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` v2, `HOST` v2, fuel
+│   ├── iflow-32          → núcleo VM 32-bit v3: ROM, ISA, MMU paginada, MMIO y `HOST` v3 (integración V4 pendiente)
 │   ├── iflow-wasm        → motor WebAssembly (`.wasm`) con Chicory; contrato v3, router, SHA-256 y hot-reload
 │   ├── iflow-firewall    → motor de reglas SpEL legacy + grafo del editor
 │   ├── host              → Shared bootstrap, dispatch, configuration
@@ -77,7 +78,8 @@ TextFormatter Suite
 | `kernel` | Module discovery, dependency graph, loading, SPI resolution | `core-api` | `suite-runtime`, `manager-core`, test fixtures |
 | `textformatter` | Template rendering (MiniMessage), placeholders | `core-api` | `host`, `spigot-host`, `fabric-host` |
 | `iflow` | Hub de selección: descubre `IflowBackend`, publica `IflowHub` y `Router`, aplica `engine`/`fallback-on-unavailable` desde `config/iflow/config.yml` | `core-api`, `snakeyaml` | `suite-runtime`, `spigot-host`, `fabric-host` |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow`, `HOST` instruction, fuel budget, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `core-api`, `logger` (dependency package) | `iflow` (backend), `host` legacy |
+| `iflow-16` | VM legacy 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` v2, `HOST` v2, fuel, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `core-api`, `logger` (dependency package) | `iflow` (backend), `host` legacy |
+| `iflow-32` | Núcleo VM de 32 bits: ROM `FLOWROM`, ISA v3, MMU paginada, bus MMIO, dispositivos y `HOST` v3 | `core-api` | integración con el hub en V4 |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; contrato v3, `WasmPolicyRouter`, SHA-256 obligatorio y hot-reload; publica `IflowBackend` | `core-api`, `com.dylibso.chicory:runtime` | `iflow` (backend), `host` legacy |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado desde `933bdd3^` (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor | `core-api`, `spring-expression`, `jackson`, `snakeyaml` | `iflow` (backend), `host` legacy, web editor |
 | `coretranslator` | Expansión PlaceholderAPI legacy `%cot_*`; Bukkit-only, *deprecated*, mantenida | `core-api`, Paper API, PlaceholderAPI | `spigot-host` (instalado por el Manager) |
@@ -122,7 +124,8 @@ TextFormatter Suite
 | `core-api` | Contracts & SPI | Define all platform-agnostic interfaces and shared contracts | `Module`, `ModuleActivator`, `ServiceRegistry`, `ModuleActivatedEvent`, `ActorDirectory`, `TranslationService`, `SyncSink`, `Message`, `Channel`, `ChannelRegistry`, `Router` | — (no runtime entry) | [core-api/README.md](core-api/README.md) |
 | `kernel` | Module system | Load modules, resolve deps, SPI | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` | `ModuleLoader.load()` | [kernel/README.md](kernel/README.md) |
 | `textformatter` | Formatting engine | Templates, placeholders | `DefaultTextFormatter`, `TemplateRenderer`, `TextFormatterActivator` | `TextFormatterActivator` | [textformatter/README.md](textformatter/README.md) |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `IflowVmActivator` | [iflow-vm/README.md](iflow-vm/README.md) |
+| `iflow-16` | VM legacy 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` v2, `HOST` v2, fuel 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU` | `Iflow16Activator` | [iflow-16/README.md](iflow-16/README.md) |
+| `iflow-32` | Núcleo VM v3 de 32 bits (ROM, ISA, MMU, MMIO, `HOST` v3); sin activador hasta V4 | `RomParser`, `Cpu`, `MachineMemory`, `HostAbi` | pendiente | [iflow-32/README.md](iflow-32/README.md) |
 | `iflow-wasm` | Motor WebAssembly con Chicory (W3) | `WasmModuleLoader`, `WasmContract`, `WasmPolicyRouter`, `IflowBackend` | `IflowWasmActivator` | [iflow-wasm/README.md](iflow-wasm/README.md) |
 | `iflow-firewall` | Motor SpEL legacy + grafo del editor | `DefaultRouter`, `RuleExpressionEvaluator`, `RuleConfigLoader`, `RuleGraph`, `FirewallConfig` | `IflowFirewallActivator` | — |
 | `host` | Neutral pipeline | Dispatch, config, message catalog | `PipelineEngine`, `RecipientResolver`, `DeliveryExecutor`, `ConfigLoader`, `HostPaths` | `SuiteRuntime` builds the pipeline | [host/README.md](host/README.md) |
@@ -164,12 +167,14 @@ TextFormatter Suite
   → ChannelRegistry.java
 ```
 
-### Understand Message Routing (iflow-vm)
+### Understand Message Routing (iflow-16 / iflow-32)
 ```
-→ src/iflow-vm/README.md#data-flow
-  → VmPolicyEngine.java
-  → VmInterpreter.java / SoftMMU.java
-  → VmConfigLoader.java (policy.flow)
+→ src/iflow/README.md (hub and selection)
+  → src/iflow-16/README.md#data-flow (legacy 16-bit engine)
+    → VmPolicyEngine.java
+    → VmInterpreter.java / SoftMMU.java
+    → VmConfigLoader.java (policy.flow v2)
+  → src/iflow-32/README.md (32-bit v3 core, integration pending)
 ```
 
 ### Understand Wasm Policy Engine (iflow-wasm)
@@ -365,7 +370,7 @@ Module.initialize() called in order
 | **Module System** | `kernel` | `ModuleLoader`, `ModuleGraph`, `ModuleDescriptor` |
 | **Formatting** | `textformatter` | `DefaultTextFormatter`, `TemplateRenderer` |
 | **Shared channel/routing contracts** | `core-api` | `api/channel/Channel`, `api/channel/ChannelRegistry`, `api/iflow/Router` |
-| **Routing/Rules (VM)** | `iflow-vm` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` |
+| **Routing/Rules (VM)** | `iflow-16` / `iflow-32` | `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`, `VmConfigLoader` (v2); `Cpu`, `MachineMemory`, `HostAbi` (v3) |
 | **Translation** | `chattranslator` + `gtranslate`/`ltranslate` | `ChatTranslator`/`TranslationService`; `GTranslateProvider`/`LTranslateProvider` implement `TranslatorProvider` |
 | **Sync/Transport** | `transport` + sync modules | `Transport`, `HttpTransport`, `SyncSink` implementations |
 | **Observability** | `observability` | `MetricsCollector`, `HealthCheckRegistry`, `MetricsEndpoint`, `DebugEndpoint` |
@@ -396,7 +401,7 @@ Module.initialize() called in order
 | Understand overall architecture | `src/README.md` (this file) | Module READMEs |
 | Understand module loading | `kernel/src/main/java/me/majhrs16/suite/kernel/ModuleLoader.java` | `ModuleGraph.java` |
 | Understand formatting | `textformatter/src/main/java/me/majhrs16/suite/textformatter/DefaultTextFormatter.java` | `TemplateRenderer.java`, `core-api/src/main/java/me/majhrs16/suite/api/channel/ChannelRegistry.java` |
-| Understand routing (VM) | `iflow-vm/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java` |
+| Understand routing (VM) | `iflow-16/src/main/java/me/majhrs16/suite/iflow/vm/engine/VmPolicyEngine.java` | `VmInterpreter.java`, `SoftMMU.java`; v3 core in `iflow-32/` |
 | Understand bootstrap | `suite-runtime/src/main/java/me/majhrs16/suite/runtime/SuiteRuntime.java` | `PipelineEngine.java`, `RecipientResolver.java`, `DeliveryExecutor.java` |
 | Understand Spigot integration | `spigot-host/src/main/java/me/majhrs16/suite/spigothost/TextFormatterSuitePlugin.java` | `SpigotActorDirectory.java`, `SpigotChatDelivery.java` |
 | Understand Fabric integration | `fabric-host/src/main/java/me/majhrs16/suite/fabrichost/TextFormatterSuiteMod.java` | `FabricActorDirectory.java`, `FabricChatDelivery.java` |

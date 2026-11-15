@@ -93,7 +93,7 @@ class FormatStageTest {
     void targetOwnedByAnotherStageIsIgnored() {
         StageResult result = new FormatStage(new EchoFormatter(backendRenderer("gtranslate")))
                 .perRecipient(unit(), context(Language.EN,
-                        OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
+                        OutputPlan.of(List.of("sync.iflow-16"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertEquals("ES->FR:hola", result.message().rendered().plainText(),
@@ -118,7 +118,7 @@ class FormatStageTest {
                 new EchoFormatter(backendRenderer("gtranslate")));
 
         assertTrue(stage.ownsOutput("gtranslate"));
-        assertFalse(stage.ownsOutput("iflow-vm"));
+        assertFalse(stage.ownsOutput("iflow-16"));
         assertFalse(stage.ownsOutput(null));
     }
 

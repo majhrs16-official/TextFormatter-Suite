@@ -34,7 +34,7 @@ dependencies {
     testImplementation project(':src:textformatter')
     testImplementation project(':src:chattranslator')
     testImplementation project(':src:iflow')
-    testImplementation project(':src:iflow-vm')
+    testImplementation project(':src:iflow-16')
     testImplementation project(':src:iflow-firewall')
     testImplementation project(':src:transport')
     testImplementation project(':src:gtranslate')

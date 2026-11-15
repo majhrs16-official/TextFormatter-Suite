@@ -1,5 +1,5 @@
 # iFlow hub: selecciona uno de los backends instalados.
-# Valores: iflow-firewall | iflow-vm | iflow-wasm
+# Valores: iflow-firewall | iflow-16 | iflow-32 | iflow-wasm
 engine: iflow-firewall
 
 # Si el backend configurado no está disponible, usa el primer backend

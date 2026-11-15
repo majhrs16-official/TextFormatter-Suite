@@ -18,7 +18,7 @@ public interface IflowHub extends Router {
     /**
      * Resuelve el router de un backend concreto para un override por mensaje.
      *
-     * <p>El nombre debe ser canónico ({@code iflow-firewall}, {@code iflow-vm},
+     * <p>El nombre debe ser canónico ({@code iflow-firewall}, {@code iflow-16},
      * {@code iflow-wasm}). Un backend instalado pero no disponible aplica el
      * fallback de ADR-032 si está habilitado. La selección sigue siendo
      * responsabilidad exclusiva del hub.</p>

@@ -175,7 +175,7 @@ const source = archiveOf([
     'enabled: true\nremoteHost: 127.0.0.1\nremotePort: 9093\nlocalPort: 0\nconfig-version: 1.0\n'
   ),
   entry('config/suite/messages.yml', 'prefix: "[suite]"\n'),
-  entry('config/iflow-vm/policy.flow', new Uint8Array([0, 1, 2, 3])),
+  entry('config/iflow-16/policy.flow', new Uint8Array([0, 1, 2, 3])),
   entry('manager/library/status', statusText),
 ]);
 const imported = Mapping.fromSuite(source);
@@ -200,9 +200,9 @@ assertEq(state.packages[0].files.length, 1, 'hydrates the package file list');
 assert(imported.consumed.includes('config/suite/config.yml'), 'marks config as consumed');
 assert(imported.consumed.includes('manager/library/status'), 'marks the package database as consumed');
 assertEq(imported.deferred.length, 0, 'no files are deferred');
-assert(imported.opaque.includes('config/iflow-vm/policy.flow'), 'keeps the invalid VM ROM opaque');
+assert(imported.opaque.includes('config/iflow-16/policy.flow'), 'keeps the invalid VM ROM opaque');
 assert(
-  imported.warnings.some(w => w.path === 'config/iflow-vm/policy.flow' && w.message.includes('ROM inválida')),
+  imported.warnings.some(w => w.path === 'config/iflow-16/policy.flow' && w.message.includes('ROM inválida')),
   'warns about the invalid VM ROM'
 );
 
@@ -240,7 +240,7 @@ const flowBytes = buildFlow();
 const wasmBytes = buildWasm();
 const wasmHash = Rom.sha256Hex(wasmBytes);
 const romSource = archiveOf([
-  entry('config/iflow-vm/policy.flow', flowBytes),
+  entry('config/iflow-16/policy.flow', flowBytes),
   entry('config/iflow-wasm/policy.wasm', wasmBytes),
   entry('config/iflow-wasm/policy.sha256', wasmHash + '  policy.wasm\n'),
 ]);
@@ -251,24 +251,24 @@ assertEq(romImport.state.roms[1].kind, 'wasm', 'hydrates the Wasm ROM second');
 assertEq(romImport.state.roms[0].sha256, null, 'the flow does not invent a sidecar');
 assertEq(romImport.state.roms[1].sha256, wasmHash, 'hydrates the wasm hash');
 assertEq(romImport.state.roms[1].sidecarPath, 'config/iflow-wasm/policy.sha256', 'hydrates the sidecar path');
-assert(romImport.consumed.includes('config/iflow-vm/policy.flow'), 'marks the flow as consumed');
+assert(romImport.consumed.includes('config/iflow-16/policy.flow'), 'marks the flow as consumed');
 assert(romImport.consumed.includes('config/iflow-wasm/policy.wasm'), 'marks the wasm as consumed');
 assert(romImport.consumed.includes('config/iflow-wasm/policy.sha256'), 'marks the sidecar as consumed');
 
 const romUntouched = Mapping.toSuite(romImport.state, romSource, romImport);
 assertEq(romUntouched.written, [], 'does not rewrite untouched ROMs');
-assert(romUntouched.preserved.includes('config/iflow-vm/policy.flow'), 'preserves the untouched flow');
+assert(romUntouched.preserved.includes('config/iflow-16/policy.flow'), 'preserves the untouched flow');
 assert(romUntouched.preserved.includes('config/iflow-wasm/policy.wasm'), 'preserves the untouched wasm');
 assert(romUntouched.preserved.includes('config/iflow-wasm/policy.sha256'), 'preserves the untouched sidecar');
-bytesEq(romSource.get('config/iflow-vm/policy.flow'), flowBytes, 'flow bytes are identical');
+bytesEq(romSource.get('config/iflow-16/policy.flow'), flowBytes, 'flow bytes are identical');
 bytesEq(romSource.get('config/iflow-wasm/policy.wasm'), wasmBytes, 'wasm bytes are identical');
 
 const editedFlow = buildFlow({ code: [0x00, 0x00, 0x00] });
 const flowEdit = Mapping.fromSuite(romSource);
 flowEdit.state.roms[0].data = Rom.toBase64(editedFlow);
 const flowOut = Mapping.toSuite(flowEdit.state, romSource, flowEdit);
-assert(flowOut.written.includes('config/iflow-vm/policy.flow'), 'writes the edited flow');
-bytesEq(romSource.get('config/iflow-vm/policy.flow'), editedFlow, 'writes the new flow bytes');
+assert(flowOut.written.includes('config/iflow-16/policy.flow'), 'writes the edited flow');
+bytesEq(romSource.get('config/iflow-16/policy.flow'), editedFlow, 'writes the new flow bytes');
 
 const newWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00]);
 const newWasmHash = Rom.sha256Hex(newWasm);
@@ -309,7 +309,7 @@ assert(
 );
 
 const cloneSource = archiveOf([
-  entry('config/iflow-vm/policy.flow', flowBytes),
+  entry('config/iflow-16/policy.flow', flowBytes),
   entry('config/iflow-wasm/policy.wasm', wasmBytes),
   entry('config/iflow-wasm/policy.sha256', wasmHash + '  policy.wasm\n'),
 ]);
@@ -334,10 +334,10 @@ assertEq(
 const deleteImport = Mapping.fromSuite(romSource);
 deleteImport.state.roms = [];
 const deleteOut = Mapping.toSuite(deleteImport.state, romSource, deleteImport);
-assert(deleteOut.removed.includes('config/iflow-vm/policy.flow'), 'deletes the removed flow');
+assert(deleteOut.removed.includes('config/iflow-16/policy.flow'), 'deletes the removed flow');
 assert(deleteOut.removed.includes('config/iflow-wasm/policy.wasm'), 'deletes the removed wasm');
 assert(deleteOut.removed.includes('config/iflow-wasm/policy.sha256'), 'deletes the removed sidecar');
-assert(!romSource.has('config/iflow-vm/policy.flow'), 'the flow is gone from the archive');
+assert(!romSource.has('config/iflow-16/policy.flow'), 'the flow is gone from the archive');
 assert(!romSource.has('config/iflow-wasm/policy.wasm'), 'the wasm is gone from the archive');
 
 console.log('\n--- toSuite: untouched files preserve bytes ---');
@@ -359,19 +359,19 @@ bytesEq(
 bytesEq(source.get('config/sync-discord/config.yml'), encoder.encode(originalDiscord), 'sync bytes are identical');
 bytesEq(source.get('config/suite/messages.yml'), encoder.encode(originalMessages), 'extra bytes are identical');
 bytesEq(source.get('manager/library/status'), encoder.encode(originalStatus), 'package database bytes are identical');
-assertEq(text(source, 'config/iflow-vm/policy.flow'), '\u0000\u0001\u0002\u0003', 'opaque ROM bytes are identical');
+assertEq(text(source, 'config/iflow-16/policy.flow'), '\u0000\u0001\u0002\u0003', 'opaque ROM bytes are identical');
 
 console.log('\n--- toSuite: package database ---');
 const packageSource = archiveOf([entry('manager/library/status', statusText)]);
 const packageImport = Mapping.fromSuite(packageSource);
 packageImport.state.packages[0].version = '1.0.1';
-packageImport.state.packages[0].dependencies = ['iflow-vm@>=1.0.0'];
+packageImport.state.packages[0].dependencies = ['iflow-16@>=1.0.0'];
 packageImport.state.packages[0].extra['Installed-Time'] = '2024-01-01T00:00:00Z';
 const packageExport = Mapping.toSuite(packageImport.state, packageSource, packageImport);
 assert(packageExport.written.includes('manager/library/status'), 'rewrites the edited package database');
 const packageOut = text(packageSource, 'manager/library/status');
 assert(packageOut.includes('Version: 1.0.1'), 'writes the edited package version');
-assert(packageOut.includes('Dependencies: iflow-vm@>=1.0.0'), 'writes the edited dependencies');
+assert(packageOut.includes('Dependencies: iflow-16@>=1.0.0'), 'writes the edited dependencies');
 assert(packageOut.includes('Installed-Time: 2024-01-01T00:00:00Z'), 'writes the edited extra field');
 assertEq(Db.parse(packageOut)[0].files, packageImport.state.packages[0].files, 'preserves the package files');
 

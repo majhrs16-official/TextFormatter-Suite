@@ -11,7 +11,9 @@ version. The project is pre-1.0 and there is no supported `2.x` line.
 - `host` pipeline: routing, formatting, translation and dispatch.
 - `textformatter` channels, `chattranslator` facade and provider packages
   (`gtranslate`, `ltranslate`, `inworld`).
-- `iflow` hub with `iflow-firewall`, `iflow-vm` and `iflow-wasm` backends.
+- `iflow` hub with `iflow-firewall`, `iflow-16` and `iflow-wasm` backends. The
+  separate `iflow-32` module holds the 32-bit v3 core; its hub integration is
+  pending for V4.
 - Sync sinks: Discord, Telegram, HTTP, TCP/UDP, Velocity, WebSocket, Bukkit and
   Fabric events.
 - Manager: staged install, dependency resolution, package status and runtime

@@ -79,9 +79,9 @@ public final class IflowConfig {
 
     /**
      * Normaliza el nombre del paquete. Solo se aceptan los nombres canónicos
-     * {@code iflow-firewall}, {@code iflow-vm} e {@code iflow-wasm}; un valor
-     * desconocido se conserva para que el hub falle cerrado con un mensaje
-     * explícito.
+     * {@code iflow-firewall}, {@code iflow-16}, {@code iflow-32} e
+     * {@code iflow-wasm}; un valor desconocido se conserva para que el hub falle
+     * cerrado con un mensaje explícito.
      */
     public static String normalize(String value) {
         if (value == null || value.isBlank()) {

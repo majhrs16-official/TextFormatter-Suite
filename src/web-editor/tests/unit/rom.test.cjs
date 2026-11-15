@@ -142,7 +142,7 @@ assertEq(flowResult.meta.abiVersion, 2, 'lee abiVersion');
 assertEq(flowResult.meta.codeLength, 2, 'lee codeLength');
 assertEq(flowResult.meta.capabilitiesCount, 1, 'lee capabilitiesCount');
 assertEq(flowResult.meta.hash, Rom.sha256Hex(flow.subarray(0, flow.length - 32)), 'expone el hash');
-const entry = Rom.entryFromBytes('config/iflow-vm/policy.flow', flow);
+const entry = Rom.entryFromBytes('config/iflow-16/policy.flow', flow);
 assert(entry.valid, 'entryFromBytes acepta el .flow');
 assertEq(entry.kind, 'flow', 'detecta el tipo flow');
 assert(entry.canonical, 'marca la ruta canónica');
@@ -223,23 +223,23 @@ assert(!missingSidecar.valid, 'exige sidecar al importar');
 assert(/falta el sidecar/.test(missingSidecar.error), 'explica el sidecar ausente');
 
 console.log('\n--- rutas y clones ---');
-assert(Rom.isRomPath('config/iflow-vm/policy.flow'), 'reconoce un .flow canónico');
-assert(Rom.isRomPath('config/iflow-vm/policy-copy.flow'), 'reconoce un .flow clonado');
+assert(Rom.isRomPath('config/iflow-16/policy.flow'), 'reconoce un .flow canónico');
+assert(Rom.isRomPath('config/iflow-16/policy-copy.flow'), 'reconoce un .flow clonado');
 assert(Rom.isRomPath('config/iflow-wasm/policy.wasm'), 'reconoce un .wasm canónico');
-assert(!Rom.isRomPath('config/iflow-vm/readme.txt'), 'ignora un archivo que no es ROM');
-assert(!Rom.isRomPath('config/other/policy.flow'), 'ignora un .flow fuera de iflow-vm');
+assert(!Rom.isRomPath('config/iflow-16/readme.txt'), 'ignora un archivo que no es ROM');
+assert(!Rom.isRomPath('config/other/policy.flow'), 'ignora un .flow fuera de iflow-16');
 assert(Rom.isSidecarPath('config/iflow-wasm/policy.sha256'), 'reconoce un sidecar');
 assertEq(Rom.kindOfPath('a.flow'), 'flow', 'kindOfPath flow');
 assertEq(Rom.kindOfPath('a.wasm'), 'wasm', 'kindOfPath wasm');
 assertEq(Rom.kindOfPath('a.txt'), null, 'kindOfPath desconocido');
 assertEq(
-  Rom.clonePath('config/iflow-vm/policy.flow', new Set()),
-  'config/iflow-vm/policy-copy.flow',
+  Rom.clonePath('config/iflow-16/policy.flow', new Set()),
+  'config/iflow-16/policy-copy.flow',
   'sugiere un nombre de clon'
 );
 assertEq(
-  Rom.clonePath('config/iflow-vm/policy.flow', new Set(['config/iflow-vm/policy-copy.flow'])),
-  'config/iflow-vm/policy-copy-2.flow',
+  Rom.clonePath('config/iflow-16/policy.flow', new Set(['config/iflow-16/policy-copy.flow'])),
+  'config/iflow-16/policy-copy-2.flow',
   'evita colisiones de clon'
 );
 

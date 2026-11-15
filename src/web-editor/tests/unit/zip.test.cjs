@@ -192,7 +192,7 @@ for (let i = 0; i < 256; i++) {
 }
 const stored = buildZip([
   { name: 'config/suite/config.yml', data: text },
-  { name: 'config/iflow-vm/policy.flow', data: binary },
+  { name: 'config/iflow-16/policy.flow', data: binary },
 ]);
 const storedReader = new Zip.Reader(stored.bytes);
 assertEq(storedReader.entries.length, 2, 'reads both entries');
@@ -242,7 +242,7 @@ const names = [];
 for (const entry of storedReader) {
   names.push(entry.filename);
 }
-assertEq(names, ['config/suite/config.yml', 'config/iflow-vm/policy.flow'], 'reader is iterable');
+assertEq(names, ['config/suite/config.yml', 'config/iflow-16/policy.flow'], 'reader is iterable');
 
 console.log('\n--- integrity ---');
 const badCrc = buildZip([{ name: 'bad.txt', data: 'hello', crc: 0x12345678 }]);

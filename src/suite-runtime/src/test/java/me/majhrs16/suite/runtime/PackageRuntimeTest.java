@@ -637,7 +637,7 @@ class PackageRuntimeTest {
     void installsRealTesterPackageAfterFormatterAndRouter() throws Exception {
         Path loggerZip = packageFromProperty("logger.package");
         Path textformatterZip = packageFromProperty("textformatter.package");
-        Path vmZip = packageFromProperty("iflow-vm.package");
+        Path vmZip = packageFromProperty("iflow-16.package");
         Path testerZip = packageFromProperty("tester.package");
 
         try (Fixture fixture = fixture()) {
@@ -693,10 +693,10 @@ class PackageRuntimeTest {
     }
 
     @Test
-    void installsRealIflowVmPackageWithItsLoggerDependency() throws Exception {
+    void installsRealIflow16PackageWithItsLoggerDependency() throws Exception {
         Path loggerZip = packageFromProperty("logger.package");
         Path textformatterZip = packageFromProperty("textformatter.package");
-        Path vmZip = packageFromProperty("iflow-vm.package");
+        Path vmZip = packageFromProperty("iflow-16.package");
 
         try (Fixture fixture = fixture()) {
             installDependencies(fixture, "snakeyaml", "jackson-databind");
@@ -709,9 +709,9 @@ class PackageRuntimeTest {
             assertEquals(1, activation.size());
             assertTrue(activation.get(0).isSuccess(),
                     () -> "activation failed: " + activation.get(0).message());
-            assertEquals(ModuleState.ACTIVE, fixture.host.state("iflow-vm").orElseThrow());
+            assertEquals(ModuleState.ACTIVE, fixture.host.state("iflow-16").orElseThrow());
             assertTrue(fixture.host.services().find(Router.class).isPresent(),
-                    "iflow-vm must publish the shared Router service");
+                    "iflow-16 must publish the shared Router service");
         }
     }
 

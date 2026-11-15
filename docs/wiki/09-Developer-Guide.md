@@ -117,7 +117,7 @@ dependencies {
     implementation project(':src:textformatter')
     // The three iFlow backends can coexist; the hub selects one at runtime.
     implementation project(':src:iflow')
-    implementation project(':src:iflow-vm')
+    implementation project(':src:iflow-16')
     implementation project(':src:iflow-firewall')
     implementation project(':src:iflow-wasm')
     // Add other suite modules as needed
@@ -463,7 +463,7 @@ public void benchmarkTemplateRendering() {
 
 # Run specific module tests
 ./gradlew :src:textformatter:test
-./gradlew :src:iflow-vm:test
+./gradlew :src:iflow-16:test
 
 # Build one reproducible module package and its .sha256 sidecar
 ./gradlew :src:textformatter:modulePackage

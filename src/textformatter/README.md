@@ -18,7 +18,7 @@
 
 ## 2. Non-Responsibilities
 
-- **No message routing or policy evaluation** — that's `iflow-vm` (VM bytecode `.flow`)
+- **No message routing or policy evaluation** — that's `iflow-16`/`iflow-32` (VM bytecode `.flow`)
 - **No inline scripts/SpEL** — templates are data, not executable expressions
 - **No translation providers** — `gtranslate`/`ltranslate` implement `TranslationService`
 - **No platform-specific code** — pure Java, uses Adventure/MinMessage
@@ -42,7 +42,7 @@
 | Consumer | Usage |
 |----------|-------|
 | `host` | Uses `TextFormatter` during dispatch/rendering |
-| `iflow-vm` | Uses `TextFormatter` for VM transform operations |
+| `iflow-16` / `iflow-32` | Use `TextFormatter` for VM transform operations |
 | `tester` | Uses the live formatter through `TestProbe.format(...)` |
 | `spigot-host` | Renders in-world lines through the neutral `MessageRenderer` port |
 | `fabric-host` | Uses the formatting pipeline via `host` |

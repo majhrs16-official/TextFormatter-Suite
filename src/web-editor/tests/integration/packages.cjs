@@ -88,10 +88,10 @@ setTimeout(() => {
   ok(store.getState().packages[0].name === 'iflow', 'editing the name updates the state');
 
   const deps = $('#pkgEditor [data-pkg-field="dependencies"]');
-  deps.value = 'iflow-vm@>=1.0.0, textformatter';
+  deps.value = 'iflow-16@>=1.0.0, textformatter';
   deps.dispatchEvent(new window.Event('change'));
   ok(
-    JSON.stringify(store.getState().packages[0].dependencies) === JSON.stringify(['iflow-vm@>=1.0.0', 'textformatter']),
+    JSON.stringify(store.getState().packages[0].dependencies) === JSON.stringify(['iflow-16@>=1.0.0', 'textformatter']),
     'dependencies are normalized'
   );
 

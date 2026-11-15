@@ -103,7 +103,7 @@ setTimeout(() => {
   const addedFlow = S.views.addRomBytes(flow, 'policy.flow');
   ok(addedFlow && addedFlow.valid, 'adds a valid .flow');
   ok(store.getState().roms.length === 1, 'the flow is in the state');
-  ok(store.getState().roms[0].path === 'config/iflow-vm/policy.flow', 'uses the canonical flow path');
+  ok(store.getState().roms[0].path === 'config/iflow-16/policy.flow', 'uses the canonical flow path');
   ok($('#romList').querySelectorAll('[data-rom-index]').length === 1, 'list shows the flow');
 
   const disasmBtn = $('#romDisasmBtn');
@@ -125,7 +125,7 @@ setTimeout(() => {
   ok($('#romDisasmBtn') === null, 'a .wasm does not offer disassembly');
 
   const secondFlow = S.views.addRomBytes(buildFlow([0x00, 0x00, 0x00]), 'policy.flow');
-  ok(secondFlow.path === 'config/iflow-vm/policy-copy.flow', 'a second flow becomes a clone');
+  ok(secondFlow.path === 'config/iflow-16/policy-copy.flow', 'a second flow becomes a clone');
   ok(store.getState().roms.length === 3, 'the clone is in the state');
 
   const invalid = S.views.addRomBytes(new Uint8Array([1, 2, 3]), 'broken.flow');
@@ -136,7 +136,7 @@ setTimeout(() => {
   const list = $('#romList');
   const cloneIndex = 2;
   list.querySelector('[data-rom-index="' + cloneIndex + '"]').onclick();
-  ok($('#romEditor [data-rom-field="path"]').value === 'config/iflow-vm/policy-copy.flow', 'selects the clone');
+  ok($('#romEditor [data-rom-field="path"]').value === 'config/iflow-16/policy-copy.flow', 'selects the clone');
 
   const replacement = buildFlow([0x00, 0x00, 0x00, 0x00]);
   const replaced = S.views.replaceRomBytes(replacement);
@@ -146,16 +146,16 @@ setTimeout(() => {
     'the clone keeps the new bytes'
   );
 
-  window.prompt = () => 'config/iflow-vm/policy-copy-2.flow';
+  window.prompt = () => 'config/iflow-16/policy-copy-2.flow';
   const cloned = S.views.cloneRom();
-  ok(cloned && cloned.path === 'config/iflow-vm/policy-copy-2.flow', 'clones the selected ROM');
+  ok(cloned && cloned.path === 'config/iflow-16/policy-copy-2.flow', 'clones the selected ROM');
   ok(store.getState().roms.length === 4, 'the clone is added to the state');
 
   S.views.switchView('rom');
   const pathInput = $('#romEditor [data-rom-field="path"]');
-  pathInput.value = 'config/iflow-vm/policy-copy-3.flow';
+  pathInput.value = 'config/iflow-16/policy-copy-3.flow';
   pathInput.dispatchEvent(new window.Event('change'));
-  ok(store.getState().roms[3].path === 'config/iflow-vm/policy-copy-3.flow', 'edits the clone path');
+  ok(store.getState().roms[3].path === 'config/iflow-16/policy-copy-3.flow', 'edits the clone path');
 
   S.views.removeRom();
   ok(store.getState().roms.length === 3, 'removes the selected ROM');

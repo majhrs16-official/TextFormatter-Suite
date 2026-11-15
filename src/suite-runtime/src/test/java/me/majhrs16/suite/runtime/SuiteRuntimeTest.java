@@ -520,7 +520,7 @@ class SuiteRuntimeTest {
                     .get(0).isSuccess());
             assertTrue(runtime.installLocal(packageFromProperty("iflow.package"), false)
                     .get(0).isSuccess());
-            assertTrue(runtime.installLocal(packageFromProperty("iflow-vm.package"), false)
+            assertTrue(runtime.installLocal(packageFromProperty("iflow-16.package"), false)
                     .get(0).isSuccess());
             assertTrue(runtime.installLocal(packageFromProperty("sync-bus.package"), false)
                     .get(0).isSuccess());

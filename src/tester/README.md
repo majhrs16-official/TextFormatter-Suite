@@ -130,6 +130,6 @@ TestServiceFactory ──→ TestService ─────────────
 
 - [core-api](../core-api/README.md) — `Message`, `Actor`, `ChannelRegistry`, `Router`, SPI
 - [textformatter](../textformatter/README.md) — Live formatter used by the probe; provides `formatter`
-- [iflow-vm](../iflow-vm/README.md) — Live router; provides `router`
+- [iflow-16](../iflow-16/README.md) / [iflow-32](../iflow-32/README.md) — Live routers; provide `router`
 - [spigot-host](../spigot-host/README.md) — `SpigotTestProbe` and Spigot bootstrap
 - [fabric-host](../fabric-host/README.md) — `FabricTestProbe` and Fabric bootstrap

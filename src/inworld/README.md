@@ -21,7 +21,7 @@
 - **No platform API** — no Bukkit, Paper, Fabric or Adventure imports in `src/main`
 - **No event listeners** — the host adapter owns `SignChangeEvent`/`PlayerInteractEvent`
 - **No formatting or delivery** — `InWorldPlatform.format(...)` and `MessageDispatch` stay in the host
-- **No routing policy** — `iflow-vm` decides routing; this package only builds in-world messages
+- **No routing policy** — `iflow-16`/`iflow-32` decide routing; this package only builds in-world messages
 
 ---
 
@@ -64,7 +64,7 @@ SpigotInWorldListener extracts actor, world, coordinates and content
          ↓
 InWorldHandler builds Message + resolves channel
          ↓
-PipelineEngine → textformatter/iflow-vm → sinks
+PipelineEngine → textformatter/iFlow engine → sinks
          ↓
 SpigotInWorldListener formats the sign line through InWorldPlatform.format(...)
 ```

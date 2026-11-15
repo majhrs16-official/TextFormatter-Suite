@@ -61,7 +61,7 @@ class PipelineContractsTest {
         assertThrows(IllegalArgumentException.class,
                 () -> OutputPlan.of(List.of("sync.discord."), ParallelMode.INHERIT));
         assertThrows(IllegalArgumentException.class,
-                () -> OutputPlan.of(List.of("iflow.iflow-vm"), ParallelMode.INHERIT));
+                () -> OutputPlan.of(List.of("iflow.iflow-16"), ParallelMode.INHERIT));
         assertThrows(IllegalArgumentException.class,
                 () -> OutputPlan.of(List.of("chattranslator.gtranslate"), ParallelMode.INHERIT));
     }
@@ -71,7 +71,7 @@ class PipelineContractsTest {
         assertEquals("discord", OutputPlan.backend("sync.discord"));
         assertEquals("discord.eu.west", OutputPlan.backend("sync.discord.eu.west"));
         assertThrows(IllegalArgumentException.class,
-                () -> OutputPlan.backend("iflow.iflow-vm"));
+                () -> OutputPlan.backend("iflow.iflow-16"));
     }
 
     @Test

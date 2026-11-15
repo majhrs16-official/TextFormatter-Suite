@@ -9,7 +9,7 @@ evaluationDependsOn(':src:messages')
 evaluationDependsOn(':src:chattranslator')
 evaluationDependsOn(':src:logger')
 evaluationDependsOn(':src:iflow')
-evaluationDependsOn(':src:iflow-vm')
+evaluationDependsOn(':src:iflow-16')
 evaluationDependsOn(':src:iflow-firewall')
 evaluationDependsOn(':src:iflow-wasm')
 evaluationDependsOn(':src:transport')
@@ -98,9 +98,9 @@ test {
     dependsOn iflowHubPackage
     systemProperty 'iflow.package',
             iflowHubPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
-    def iflowVmPackage = project(':src:iflow-vm').tasks.named('modulePackage')
+    def iflowVmPackage = project(':src:iflow-16').tasks.named('modulePackage')
     dependsOn iflowVmPackage
-    systemProperty 'iflow-vm.package',
+    systemProperty 'iflow-16.package',
             iflowVmPackage.flatMap { it.archiveFile }.get().asFile.absolutePath
     def iflowFirewallPackage = project(':src:iflow-firewall').tasks.named('modulePackage')
     dependsOn iflowFirewallPackage

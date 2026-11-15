@@ -95,7 +95,7 @@ assert(Archive.isExcluded('backup/op/config.yml'), 'excludes backups');
 assert(Archive.isExcluded('tmp/op/config.yml'), 'excludes tmp');
 assert(Archive.isExcluded('manager/runtime/modules.status'), 'excludes runtime state');
 assert(!Archive.isExcluded('manager/library/status'), 'keeps the package database');
-assert(Archive.isSuiteFile('config/iflow-vm/policy.flow'), 'config files belong to the suite');
+assert(Archive.isSuiteFile('config/iflow-16/policy.flow'), 'config files belong to the suite');
 assert(Archive.isSuiteFile('manager/library/status'), 'the package database belongs to the suite');
 assert(!Archive.isSuiteFile('manager/repo.yml'), 'other manager files are outside the selection');
 
@@ -117,21 +117,21 @@ assertThrows(
 console.log('\n--- import: root and selection ---');
 const withPrefix = Archive.fromEntries([
   entry('TextFormatter-Suite/config/suite/config.yml', 'pipeline:\n  - route\n'),
-  entry('TextFormatter-Suite/config/iflow-vm/policy.flow', new Uint8Array([1, 2, 3])),
+  entry('TextFormatter-Suite/config/iflow-16/policy.flow', new Uint8Array([1, 2, 3])),
   entry('TextFormatter-Suite/manager/library/status', 'suite-textformatter 1.0.0\n'),
 ]);
 assertEq(
   withPrefix.paths(),
-  ['config/iflow-vm/policy.flow', 'config/suite/config.yml', 'manager/library/status'],
+  ['config/iflow-16/policy.flow', 'config/suite/config.yml', 'manager/library/status'],
   'imports the prefixed archive and strips the root'
 );
 assertEq(withPrefix.root, 'TextFormatter-Suite/', 'records the detected root');
 assertEq(withPrefix.getText('config/suite/config.yml'), 'pipeline:\n  - route\n', 'reads text as UTF-8');
-assertEq(Array.from(withPrefix.get('config/iflow-vm/policy.flow')), [1, 2, 3], 'preserves binary bytes');
+assertEq(Array.from(withPrefix.get('config/iflow-16/policy.flow')), [1, 2, 3], 'preserves binary bytes');
 
 const withoutPrefix = Archive.fromEntries([
   entry('config/suite/config.yml', 'pipeline:\n  - route\n'),
-  entry('config/iflow-vm/policy.flow', new Uint8Array([1, 2, 3])),
+  entry('config/iflow-16/policy.flow', new Uint8Array([1, 2, 3])),
   entry('manager/library/status', 'suite-textformatter 1.0.0\n'),
 ]);
 assertEq(withoutPrefix.paths(), withPrefix.paths(), 'a ZIP without the prefix produces the same archive');

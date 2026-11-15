@@ -19,13 +19,14 @@ entero antes de concluir.**
 
 ## Cómo
 
-1. Alcance mínimo: `src/iflow-vm/` (implementación actual v2 de 16 bits, objetivo v3
-   de 32 bits), `tools/iflow-compiler/`, sus tests, el ABI `HOST` v2 que implementa
-   el código y los módulos que interactúan con la VM. `src/iflow-wasm/` queda
+1. Alcance mínimo: `src/iflow-16/` (línea legacy v2 de 16 bits), `src/iflow-32/`
+   (línea v3 de 32 bits), `tools/iflow-compiler/`, sus tests, el ABI `HOST` de
+   cada línea y los módulos que interactúan con las VM. `src/iflow-wasm/` queda
    **fuera de alcance**: es la línea WebAssembly/Chicory y se audita por separado.
 2. Contrasta cada contrato con la especificación técnica de referencia v3
-   `docs/prompts/diseno/iflow-cpu-implement.md` y con la implementación real
-   documentada en `src/iflow-vm/README.md` y `tools/iflow-compiler/README.md`.
+   `docs/prompts/diseno/iflow-cpu-implement.md` (solo `iflow-32`) y con la
+   implementación real documentada en `src/iflow-16/README.md`,
+   `src/iflow-32/README.md` y `tools/iflow-compiler/README.md`.
    `docs/prompts/diseno/iflow-cpu-design.md` es un **documento histórico**: sirve
    como contexto de partida, nunca como contrato vigente. Una discrepancia entre
    la spec v3, el README de implementación y el código es un hallazgo, no un

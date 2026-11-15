@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'me.majhrs16'
-description = 'Hub iFlow: descubre y selecciona el backend iflow-firewall, iflow-vm o iflow-wasm'
+description = 'Hub iFlow: descubre y selecciona el backend iflow-firewall, iflow-16, iflow-32 o iflow-wasm'
 
 repositories {
     mavenLocal()

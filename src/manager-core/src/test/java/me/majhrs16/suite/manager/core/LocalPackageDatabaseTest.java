@@ -205,13 +205,13 @@ class LocalPackageDatabaseTest {
     void saveAndLoad_preservesExcludeAndProvide() throws Exception {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
-        db.registerPackage(packageEntry("iflow-vm", "1.0.0", List.of(),
+        db.registerPackage(packageEntry("iflow-16", "1.0.0", List.of(),
                 List.of("iflow-firewall", "iflow-wasm"), List.of("iflow")));
 
         LocalPackageDatabase reloaded = new LocalPackageDatabase(tempDir);
         reloaded.initialize();
 
-        PackageEntry entry = reloaded.getPackage("iflow-vm", "1.0.0", "stable").orElseThrow();
+        PackageEntry entry = reloaded.getPackage("iflow-16", "1.0.0", "stable").orElseThrow();
         assertEquals(List.of("iflow-firewall", "iflow-wasm"), entry.excludes());
         assertEquals(List.of("iflow"), entry.provides());
     }
@@ -222,8 +222,8 @@ class LocalPackageDatabaseTest {
         db.initialize();
 
         PackageEntry firewall = packageEntry("iflow-firewall", "1.0.0", List.of(),
-                List.of("iflow-vm"), List.of("iflow"));
-        PackageEntry vm = packageEntry("iflow-vm", "1.0.0", List.of(),
+                List.of("iflow-16"), List.of("iflow"));
+        PackageEntry vm = packageEntry("iflow-16", "1.0.0", List.of(),
                 List.of(), List.of("iflow"));
 
         db.registerPackage(firewall);
@@ -238,7 +238,7 @@ class LocalPackageDatabaseTest {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
 
-        db.registerPackage(packageEntry("iflow-vm", "1.0.0", List.of(),
+        db.registerPackage(packageEntry("iflow-16", "1.0.0", List.of(),
                 List.of(), List.of("iflow")));
 
         assertTrue(db.isDependencySatisfied("iflow", ">=1.0.0"));
@@ -251,7 +251,7 @@ class LocalPackageDatabaseTest {
         LocalPackageDatabase db = new LocalPackageDatabase(tempDir);
         db.initialize();
 
-        PackageEntry vm = packageEntry("iflow-vm", "1.0.0", List.of(),
+        PackageEntry vm = packageEntry("iflow-16", "1.0.0", List.of(),
                 List.of(), List.of("iflow"));
         PackageEntry firewall = packageEntry("iflow-firewall", "1.0.0", List.of(),
                 List.of(), List.of("iflow"));

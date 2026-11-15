@@ -52,7 +52,7 @@ class IflowConfigTest {
     @Test
     void ignoresFallbackAlias() throws Exception {
         Files.writeString(dir.resolve("config.yml"), """
-                engine: iflow-vm
+                engine: iflow-16
                 fallback: false
                 config-version: 1.0
                 """);

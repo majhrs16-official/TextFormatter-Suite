@@ -8,11 +8,11 @@
 
 ## Qué es TextFormatter Suite
 
-TextFormatter Suite es una **plataforma modular de formateo, traducción y routing de chat para servidores Minecraft**, construida sobre una arquitectura hexagonal (ports & adapters) real. Reemplaza al proyecto monolítico anterior **ChatTranslator** reorganizando sus capacidades en 43 módulos Gradle que se comunican a través de contratos SPI (ServiceLoader) definidos en `core-api`.
+TextFormatter Suite es una **plataforma modular de formateo, traducción y routing de chat para servidores Minecraft**, construida sobre una arquitectura hexagonal (ports & adapters) real. Reemplaza al proyecto monolítico anterior **ChatTranslator** reorganizando sus capacidades en 44 módulos Gradle que se comunican a través de contratos SPI (ServiceLoader) definidos en `core-api`.
 
 **Problema que resuelve:** Los plugins de chat tradicionales mezclan formateo, traducción, permisos, sincronización cross-server y lógica de negocio en una única base de código acoplada a la plataforma (Bukkit/Fabric). TextFormatter Suite separa estas responsabilidades en módulos reemplazables, testeables en aislamiento y desplegables selectivamente.
 
-**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow-vm`, `iflow-wasm`, `iflow-firewall`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen de `core-api` y, cuando aplica, de contratos compartidos (`transport`, `messages`).
+**Enfoque:** Núcleo puro Java (JDK 17/21, cero dependencias externas) + adaptadores de plataforma delgados (`spigot-host`, `fabric-host`) que implementan los puertos del núcleo. Los módulos de funcionalidad (`textformatter`, `iflow-16`, `iflow-32`, `iflow-wasm`, `iflow-firewall`, `gtranslate`, `ltranslate`, `sync-*`, `transport`, `observability`, `presets`, `manager-spi`, etc.) dependen de `core-api` y, cuando aplica, de contratos compartidos (`transport`, `messages`).
 
 **Lo que NO es:**
 - Un plugin único "todo en uno" listo para descargar y usar
@@ -28,7 +28,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 |---------------|--------|-----------|
 | **Arquitectura hexagonal (core-api + SPI)** | ✅ Implementada y probada | `core-api` compila sin dependencias; los puntos de extensión usan ServiceLoader; tests de kernel/module loading pasan |
 | **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 47 tests |
-| **Motor de reglas iFlow (VM)** | ✅ Implementada y probada | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K; 399 tests (VmInterpreter, HostServiceRegistry, VmPolicyEngine, FirmwareIntegrationTest) |
+| **Motor de reglas iFlow (VM)** | ✅ l16 soportada; l32 en integración | `iflow-16`: VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` v2, `HOST` v2 y fuel (411 tests). `iflow-32`: núcleo v3 de 32 bits (ROM, ISA, MMU, `HOST` v3) aislado, 253 tests, pendiente de cablear en V4 |
 | **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 32 tests |
 | **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 38 tests |
 | **Sync Discord** | ✅ Implementada y probada | Gateway v10 neutral + adaptadores JDK/JDA, intents, embeds; tokens `char[]`; 17 + 6 + 4 tests |
@@ -148,7 +148,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 
 ---
 
-## Catálogo de módulos (43 módulos Gradle)
+## Catálogo de módulos (44 módulos Gradle)
 
 ### Núcleo y contratos
 | Módulo | Propósito | Estado |
@@ -165,10 +165,11 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 | Módulo | Propósito | Estado |
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (47 tests) |
-| `iflow` | Hub de selección: publica `IflowHub`/`Router` y elige un backend entre `iflow-firewall`, `iflow-vm` e `iflow-wasm` con fallback priorizado | ✅ Probado (13 tests) |
-| `iflow-vm` | VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` binario, `HOST` instruction, fuel budget 100K, `VmPolicyEngine`, `VmInterpreter`, `SoftMMU`; base de la VM de 32 bits | ✅ Probado (399 tests) |
-| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-vm` e `iflow-wasm` | ✅ Probado (47 tests) |
-| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W0–W3 cerrados (loader, ABI `iflow.*`, `PolicySession`, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload); W3.5 paridad v3 pendiente | ✅ W0–W3 (60 tests) |
+| `iflow` | Hub de selección: publica `IflowHub`/`Router` y elige un backend entre `iflow-firewall`, `iflow-16` e `iflow-wasm` con fallback priorizado; nunca cruza entre las dos líneas VM. `iflow-32` todavía no publica backend (integración V4) | ✅ Probado (35 tests) |
+| `iflow-16` | VM legacy de 16 bits y 64 KB, SoftMMU 4 KB, bytecode `.flow` v2, `HOST` v2 y fuel; línea soportada por retrocompatibilidad | ✅ Probado (411 tests) |
+| `iflow-32` | Núcleo v3 de 32 bits: ROM `FLOWROM`, ISA v3, MMU paginada, bus MMIO, dispositivos y ABI `HOST` v3; pendiente de cablear al hub en V4 | ✅ Núcleo aislado (253 tests) |
+| `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-16`, `iflow-32` e `iflow-wasm` | ✅ Probado (46 tests) |
+| `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W0–W3 cerrados (loader, ABI `iflow.*`, `PolicySession`, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload); W3.5 paridad v3 pendiente | ✅ W0–W3 (49 tests) |
 | `presets` | Presets predefinidos (standard, rpg, staff, minimal), import/export YAML, aplicación a la configuración canónica y recarga de módulos activos; sin motor de ejecución | ✅ Catálogo y aplicación probados (23 tests) |
 
 ### Traducción
@@ -329,7 +330,8 @@ export JAVA_HOME=/opt/javac/x64/21
 ./gradlew build --no-daemon
 
 # Tests solo módulo específico
-./gradlew :src:iflow-vm:test --no-daemon
+./gradlew :src:iflow-16:test --no-daemon
+./gradlew :src:iflow-32:test --no-daemon
 ./gradlew :src:iflow-wasm:test --no-daemon
 
 # Tests suite completa
@@ -360,7 +362,7 @@ cd src/web-editor && npm run check
 | Paquete de un módulo | `./gradlew :src:<modulo>:modulePackage --no-daemon` | ZIP reproducible + `.sha256` en `src/<modulo>/build/distributions/` |
 | Paquetes de terceros | `./gradlew thirdPartyPackages --no-daemon` | Paquetes `DEPENDENCY` en `build/third-party/` |
 | Repositorio de paquetes | `./gradlew moduleRepository -PrepositoryBaseUrl=https://... --no-daemon` | ZIPs, sidecars, `packages.list` y `SHA256SUMS` en `build/repository/`; la URL base es obligatoria |
-| Paquetes iFlow (3 motores) | `./gradlew publishIflowEngines --no-daemon` | Publica `suite-iflow-vm`, `suite-iflow-firewall` y `suite-iflow-wasm` por separado en `build/repo/` |
+| Paquetes iFlow (4 motores) | `./gradlew publishIflowEngines --no-daemon` | Publica `suite-iflow-16`, `suite-iflow-32`, `suite-iflow-firewall` y `suite-iflow-wasm` por separado en `build/repo/` |
 | Mod Fabric | `./gradlew :src:fabric-host:build --no-daemon` | En `src/fabric-host/build/libs/` |
 | Javadoc | `./gradlew javadocAll --no-daemon` | En `**/build/docs/javadoc/` |
 | Lockfiles auditoría | `./gradlew checkLocks --no-daemon` | 44 lockfiles, 0 missing; falla si falta alguno |
@@ -437,7 +439,7 @@ El historial de cambios vive en Git (`git log`). No se mantiene un `CHANGELOG.md
 - [x] Advertencia "Actualmente en desarrollo intenso — No apto para producción" visible al inicio
 - [x] Funcionalidades clasificadas con estados honestos y evidencia (tests, build, probado en servidor)
 - [x] Propósito, enfoque, objetivos y límites explicados sin promesas futuras
-- [x] Catálogo de 43 módulos reales agrupados por responsabilidad con estado
+- [x] Catálogo de 44 módulos reales agrupados por responsabilidad con estado
 - [x] Instalación distingue: uso plugin (requiere build previo) vs desarrollo vs tests
 - [x] IDE (IntelliJ, VS Code) y terminal documentados con comandos verificables
 - [x] Comandos build/test/verificación contrastados contra `settings.gradle`/`build.gradle` y tareas reales
@@ -456,4 +458,4 @@ GPL-3.0 — Ver [`LICENSE`](LICENSE) (si existe en el repo) o cabecera de archiv
 
 ---
 
-*Última actualización: 2026-11-04 — auditoría documental en curso; `CoreTranslator` restaurado como expansión PAPI legacy (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; el hub iFlow selecciona uno de los tres motores instalados (ADR-032). El release sigue descartado por decisión del proyecto. Queda deuda P0 (reset de versiones y `config-version`, purga legacy) y P1 (editor web, wiki y pruebas de plataforma).*
+*Última actualización: 2026-11-15 — `iflow-16` (línea 16-bit soportada) e `iflow-32` (línea 32-bit activa, integración V4 pendiente) separadas por ADR-038; `iflow-16` conserva el contrato v2 y `iflow-32` el v3 de ADR-037; el hub selecciona un motor y nunca hace fallback entre líneas. El release sigue descartado por decisión del proyecto; quedan AUD-1, AUD-2 y W3.5.*

@@ -125,13 +125,13 @@ or extension.
 Choose a backend in `config/iflow/config.yml`:
 
 ```yaml
-engine: iflow-vm
+engine: iflow-16
 fallback-on-unavailable: true
 config-version: 1.0
 ```
 
 For the VM, compile a `.flow` program and place it at
-`config/iflow-vm/policy.flow`. For the firewall, put SpEL rules under `rules:`
+`config/iflow-16/policy.flow`. For the firewall, put SpEL rules under `rules:`
 in `config/iflow-firewall/rules.yml`.
 
 ### What are the editor node types?
@@ -151,15 +151,17 @@ is not executed by the VM.
 
 ### How do I write conditions?
 
-`iflow-vm` has no inline condition language or SpEL. Conditions and actions are
+`iflow-16` has no inline condition language or SpEL. Conditions and actions are
 bytecode in the `.flow` program. The `condition` key in `rules.yml` belongs to
 the legacy firewall's `rules:` list.
 
 ### Can several iFlow engines be installed?
 
-Yes. `iflow-firewall`, `iflow-vm` and `iflow-wasm` may coexist. The `iflow` hub
+Yes. `iflow-firewall`, `iflow-16` and `iflow-wasm` may coexist. The `iflow` hub
 activates exactly one and publishes `IflowHub`; `SuiteRuntime` requires the hub.
-There is no `iflow.engine.kind`.
+There is no `iflow.engine.kind`. `iflow-32` is a separate 32-bit v3 module but
+does not publish a backend until V4; the hub never falls back between the 16-bit
+and 32-bit lines.
 
 ## Sync
 

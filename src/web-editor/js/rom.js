@@ -16,7 +16,7 @@
   'use strict';
 
   const PATHS = Object.freeze({
-    vm: 'config/iflow-vm/policy.flow',
+    vm: 'config/iflow-16/policy.flow',
     wasm: 'config/iflow-wasm/policy.wasm',
     sidecar: 'config/iflow-wasm/policy.sha256',
   });
@@ -451,7 +451,7 @@
 
   function isRomPath(path) {
     return (
-      (path.startsWith('config/iflow-vm/') && kindOfPath(path) === 'flow') ||
+      (path.startsWith('config/iflow-16/') && kindOfPath(path) === 'flow') ||
       (path.startsWith('config/iflow-wasm/') && kindOfPath(path) === 'wasm')
     );
   }

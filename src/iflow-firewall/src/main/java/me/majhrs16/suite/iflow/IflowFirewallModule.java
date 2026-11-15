@@ -9,11 +9,11 @@ import me.majhrs16.suite.api.SemVer;
  * SPI provider for the legacy {@code iflow-firewall} engine.
  *
  * <p>It provides the {@code router} capability and consumes the
- * {@code ChannelRegistry} optionally from the service registry. The three
- * iFlow engines ({@code iflow-vm}, {@code iflow-wasm},
- * {@code iflow-firewall}) are mutually exclusive: only one may be installed,
- * so this descriptor is never active together with {@code iflow-vm} in a
- * supported deployment.</p>
+ * {@code ChannelRegistry} optionally from the service registry. The iFlow
+ * engines ({@code iflow-16}, {@code iflow-32}, {@code iflow-wasm} and
+ * {@code iflow-firewall}) are mutually exclusive: only one may be active, so
+ * this descriptor is never active together with another engine in a supported
+ * deployment.</p>
  */
 public final class IflowFirewallModule implements Module {
 

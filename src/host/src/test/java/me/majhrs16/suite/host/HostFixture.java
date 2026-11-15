@@ -231,17 +231,17 @@ final class HostFixture {
 
     /**
      * Single-backend hub for the host integration tests. The fixture wires the
-     * VM engine directly, so only {@code iflow-vm} is selectable by an
+     * VM engine directly, so only {@code iflow-16} is selectable by an
      * {@code iflow.*} target; any other name is reported as unavailable.
      */
     private static IflowHub hub(Router router) {
         return new IflowHub() {
             @Override public Router router() { return router; }
             @Override public Router router(String backend) {
-                return "iflow-vm".equals(backend) ? router : null;
+                return "iflow-16".equals(backend) ? router : null;
             }
-            @Override public String activeBackend() { return "iflow-vm"; }
-            @Override public List<String> availableBackends() { return List.of("iflow-vm"); }
+            @Override public String activeBackend() { return "iflow-16"; }
+            @Override public List<String> availableBackends() { return List.of("iflow-16"); }
             @Override public boolean reload() { return true; }
             @Override public RouteOutcome route(Message message, Actor recipient) {
                 return router.route(message, recipient);

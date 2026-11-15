@@ -1,8 +1,8 @@
 # iflow-wasm — motor de políticas WebAssembly (Chicory)
 
 Módulo de la línea **`iflow-wasm`**: políticas compiladas a WebAssembly (`.wasm`) y ejecutadas en la
-JVM con **Chicory**. Es una línea paralela e independiente de **`iflow-vm`** (la VM propia de 32
-bits); no hereda el ISA `.flow`, el ABI `HOST` v2 ni el modelo BIOS/kernel.
+JVM con **Chicory**. Es una línea paralela e independiente de **`iflow-16`** (VM legacy de 16 bits)
+y **`iflow-32`** (VM de 32 bits); no hereda el ISA `.flow`, el ABI `HOST` ni el modelo BIOS/kernel.
 
 ## Estado
 
@@ -153,7 +153,8 @@ Un valor se codifica como:
 | `MAP` | `6` | Concatenación de pares `[clave string][valor]`, en orden de inserción y sin claves duplicadas. |
 
 `TlvCodec` copia defensivamente el payload y no trunca caracteres multibyte. El codec es único y
-vive en `core-api` (`me.majhrs16.suite.api.iflow.TlvCodec`), compartido con `iflow-vm`; el contrato
+vive en `core-api` (`me.majhrs16.suite.api.iflow.TlvCodec`), compartido con `iflow-16` e
+`iflow-32`; el contrato
 de cable del puente sync está en `me.majhrs16.suite.api.sync.SyncBridgeCodec`.
 
 ### Límites
@@ -191,7 +192,7 @@ mensaje transformado.
 ## Puente sync (ADR-036 §16.7)
 
 `sync_surface` y `sync_invoke` son imports genéricos: no hay un import por acción. El payload y el
-contrato de cable son los mismos que en `iflow-vm` (`TlvCodec` y `SyncBridgeCodec` de `core-api`),
+contrato de cable son los mismos que en las líneas VM (`TlvCodec` y `SyncBridgeCodec` de `core-api`),
 y los estados canónicos (`OK`, `DENIED`, `UNSUPPORTED`, `INVALID_ARGUMENT`, `NOT_FOUND`,
 `CONFLICT`, `RATE_LIMITED`, `TIMEOUT`, `HOST_FAILURE`) se proyectan al registro del ABI v3.
 
@@ -325,11 +326,12 @@ Para añadir un caso de contrato, usa `WasmTestModule` para emitir el módulo bi
 2. Ejemplos en al menos dos lenguajes y guía de autoría (W4).
 3. Añadir firma de autor (no solo integridad) si el modelo de confianza lo requiere.
 
-## Relación con `iflow-vm`
+## Relación con las líneas VM
 
-- `iflow-vm`: VM propia de 32 bits, ISA `.flow`, BIOS/kernel, compilador `tools/iflow-compiler/`.
-  Su especificación técnica de referencia v3 vive en [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md).
-- `iflow-wasm`: este módulo. No hereda requisitos, ISA ni ABI de `iflow-vm`.
+- `iflow-16`: VM legacy de 16 bits y 64 KB, ISA/formato `.flow` v2 y ABI `HOST` v2.
+- `iflow-32`: VM de 32 bits, ISA/formato `.flow` v3, MMU, scheduler y ABI `HOST` v3. Su
+  especificación técnica de referencia v3 vive en [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md).
+- `iflow-wasm`: este módulo. No hereda requisitos, ISA ni ABI de ninguna línea VM.
 
 La convivencia y la selección de motor se resuelven con el hub `iflow` (ADR-032): los motores
 publican `IflowBackend` y el hub elige uno solo según `config/iflow/config.yml`.

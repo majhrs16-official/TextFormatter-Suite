@@ -183,11 +183,11 @@ class RouteStageTest {
         FakeRouter named = new FakeRouter();
         named.first = RouteOutcome.of(
                 new RouteDecision(PolicyTarget.LOG, null, 0, STEVE, null), message());
-        hub.named.put("iflow-vm", named);
+        hub.named.put("iflow-16", named);
 
         StageResult result = new RouteStage(hub).perRecipient(
                 PipelineMessage.of(message()).withRecipient(STEVE),
-                context(OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
+                context(OutputPlan.of(List.of("sync.iflow-16"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.CONTINUE, result.kind());
         assertEquals(List.of("chat"), named.routedChannels);
@@ -212,26 +212,26 @@ class RouteStageTest {
     @Test
     void unavailableBackendIsAnExplicitError() {
         FakeRouter hub = new FakeRouter();
-        hub.named.put("iflow-vm", null);
+        hub.named.put("iflow-16", null);
 
         StageResult result = new RouteStage(hub).beforeMessage(
                 PipelineMessage.of(message()),
-                context(OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
+                context(OutputPlan.of(List.of("sync.iflow-16"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.ERROR, result.kind());
-        assertEquals("iFlow backend 'iflow-vm' is unavailable", result.detail());
+        assertEquals("iFlow backend 'iflow-16' is unavailable", result.detail());
     }
 
     @Test
     void twoOwnedTargetsAreAConflict() {
         FakeRouter hub = new FakeRouter();
-        hub.named.put("iflow-vm", new FakeRouter());
+        hub.named.put("iflow-16", new FakeRouter());
         hub.named.put("iflow-firewall", new FakeRouter());
 
         StageResult result = new RouteStage(hub).beforeMessage(
                 PipelineMessage.of(message()),
                 context(OutputPlan.of(
-                        List.of("sync.iflow-vm", "sync.iflow-firewall"),
+                        List.of("sync.iflow-16", "sync.iflow-firewall"),
                         ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.ERROR, result.kind());
@@ -244,11 +244,11 @@ class RouteStageTest {
         FakeRouter named = new FakeRouter();
         named.rateLimited = true;
         named.waitNanos = 250_000_000L;
-        hub.named.put("iflow-vm", named);
+        hub.named.put("iflow-16", named);
 
         StageResult result = new RouteStage(hub).beforeMessage(
                 PipelineMessage.of(message()),
-                context(OutputPlan.of(List.of("sync.iflow-vm"), ParallelMode.INHERIT)));
+                context(OutputPlan.of(List.of("sync.iflow-16"), ParallelMode.INHERIT)));
 
         assertEquals(StageResult.Kind.DROP, result.kind());
         assertEquals("rate limit exceeded: 250ms", result.detail());
@@ -257,10 +257,10 @@ class RouteStageTest {
     @Test
     void ownsOnlyAvailableIflowBackends() {
         FakeRouter hub = new FakeRouter();
-        hub.named.put("iflow-vm", new FakeRouter());
+        hub.named.put("iflow-16", new FakeRouter());
         RouteStage stage = new RouteStage(hub);
 
-        assertTrue(stage.ownsOutput("iflow-vm"));
+        assertTrue(stage.ownsOutput("iflow-16"));
         assertFalse(stage.ownsOutput("iflow-wasm"));
         assertFalse(stage.ownsOutput("gtranslate"));
         assertFalse(stage.ownsOutput(null));

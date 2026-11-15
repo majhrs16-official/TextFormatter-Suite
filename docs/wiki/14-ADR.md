@@ -22,10 +22,13 @@ document before changing architecture, contracts or configuration.
 | ADR-029 | Reproducible distribution and third-party boundary | Immutable ZIPs, `.sha256`, `packages.list`, `SHA256SUMS`; shared dependencies are `DEPENDENCY` packages. |
 | ADR-030 | Presets by command | `presets list` and `presets apply` exist; applying a preset reloads active modules in dependency order. |
 | ADR-031 | iFlow policy contract v3 | Defines the VM/Wasm policy contract and fail-closed routing. |
-| ADR-032 | `iflow` hub | The `iflow-firewall`, `iflow-vm` and `iflow-wasm` backends coexist; the hub selects exactly one and publishes `IflowHub`. |
+| ADR-032 | `iflow` hub | The `iflow-firewall`, `iflow-16` and `iflow-wasm` backends coexist; the hub selects exactly one and publishes `IflowHub`. |
 | ADR-033 | Wasm router, artifact SHA-256 and hot reload | Wasm requires a pinned module and reloads when the pin changes. |
 | ADR-034 | Pre-1.0 regime | `1.0.0` is the integrated base, `1.0` is the YAML schema; no legacy readers, aliases or runtime migrations. |
 | ADR-035 | `CoreTranslator` as an independent legacy module | Bukkit-only PlaceholderAPI expansion; deprecated and maintained, not a compatibility shim. |
+| ADR-036 | Configurable sequential pipeline, optional features and per-message outputs | Pipeline stages, neutral feature contracts and `sync` outputs; no stage requires another feature. |
+| ADR-037 | 32-bit machine, ISA and `HOST` v3 contract | Defines `iflow-32`: 32-bit address space, paged MMU, MMIO, scheduler and `HOST` v3. |
+| ADR-038 | Two separate lines: `iflow-16` and `iflow-32` | `iflow-16` is the supported 16-bit v2 line; `iflow-32` is the active 32-bit v3 line. The hub selects one and never falls back across lines. |
 
 ## Precedence
 

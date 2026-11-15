@@ -384,7 +384,7 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 ```
 
 `dist/` es un artefacto generado y **no se versiona**: se produce con `npm run build`
-(y también vía la tarea Gradle `:src:iflow-vm:iflowCompilerBuild`).
+(y también vía la tarea Gradle `:src:iflow-16:iflowCompilerBuild`).
 
 ---
 
@@ -427,7 +427,7 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 
 ## Referencias
 
-- [`src/iflow-vm/README.md`](../../src/iflow-vm/README.md) — VM architecture, ISA, services
-- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica de referencia v3 de `iflow-vm`
-- [`src/iflow-vm/src/main/java/.../VmInterpreter.java`] — Reference interpreter implementation
-- [`src/iflow-vm/src/test/.../VmInterpreterTest.java`] — Instruction test vectors
+- [`src/iflow-16/README.md`](../../src/iflow-16/README.md) — legacy 16-bit VM architecture, ISA and services
+- [`docs/prompts/diseno/iflow-cpu-implement.md`](../../docs/prompts/diseno/iflow-cpu-implement.md) — Especificación técnica de referencia v3 de `iflow-32`
+- [`src/iflow-16/src/main/java/.../VmInterpreter.java`] — Reference interpreter implementation
+- [`src/iflow-16/src/test/.../VmInterpreterTest.java`] — Instruction test vectors

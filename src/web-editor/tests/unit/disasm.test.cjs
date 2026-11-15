@@ -63,7 +63,7 @@ function javaOpcodeTable() {
   const file = path.join(
     repo,
     'src',
-    'iflow-vm',
+    'iflow-16',
     'src',
     'main',
     'java',

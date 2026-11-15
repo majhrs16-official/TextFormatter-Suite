@@ -46,7 +46,7 @@
 **All modules** depend on `core-api`:
 - `kernel` — uses `Module`, `ModuleDescriptor`, `Capability`, `Requirement`
 - `textformatter` — uses `Message`, `Channel`, `TranslationService`, `PlaceholderResolver`
-- `iflow-vm`/`iflow-firewall` — use `Message`, `Channel`, `ActorDirectory` and implement the shared `Router` contract
+- `iflow-16`/`iflow-firewall` — use `Message`, `Channel`, `ActorDirectory` and implement the shared `Router` contract
 - `host` — uses the neutral SPI and domain types; production feature wiring was removed in F4b/F6
 - `suite-runtime` — implements the lifecycle API and publishes `ModuleActivatedEvent`/`ModuleDeactivatedEvent`
 - `gtranslate`/`ltranslate` — publish `TranslatorProvider` in the module `ServiceRegistry`
@@ -90,7 +90,7 @@
 | `ProgramGrant` / `ProgramGrantStore` | Operator grant per program SHA-256: capabilities, `allow-destructive`, calls per minute and payload bound; the store is fail-closed |
 | `ActionAudit` / `ActionAuditRecord` | Append-only audit contract: one entry per attempt with the redacted argument hash and canonical status, never argument values |
 | `HostActionHandler` / `HostActionContext` | Agnostic host actions resolved by canonical name (no published surface); the context carries the working message, actors and registries |
-| `TlvCodec` | Shared TLV codec (`NULL`/`STRING`/`I64`/`BOOL`/`BYTES`/`LIST`/`MAP`) used by `iflow-vm` and `iflow-wasm` |
+| `TlvCodec` | Shared TLV codec (`NULL`/`STRING`/`I64`/`BOOL`/`BYTES`/`LIST`/`MAP`) used by `iflow-16` and `iflow-wasm` |
 | `SyncBridgeCodec` | Wire contract of the iFlow sync bridge: `sync_surface`/`sync_invoke` payloads and canonical status names |
 | `DiscordConnection` / `DiscordOperation` / `DiscordResult` | Neutral Discord port: native operations and their explicit adapter outcomes, without JDA or HTTP types |
 | `PlaceholderResolver` | SPI: resolve `{placeholder}` in messages |
@@ -219,7 +219,7 @@ None — this is a contract library. Entry points are in modules that **implemen
 - [chattranslator](../chattranslator/README.md) — Consumes `TranslatorProvider` services
 - [gtranslate](../gtranslate/README.md) — Publishes `TranslatorProvider` (SPI)
 - [ltranslate](../ltranslate/README.md) — Publishes `TranslatorProvider` (SPI)
-- [iflow-vm](../iflow-vm/README.md) — Implements the shared `Router` contract
+- [iflow-16](../iflow-16/README.md) — Implements the shared `Router` contract
 - [sync-http](../sync-http/README.md) — Implements `SyncSink`
 - [spigot-host](../spigot-host/README.md) — Implements platform SPIs
 - [fabric-host](../fabric-host/README.md) — Implements platform SPIs (compila; no probado en servidor real)

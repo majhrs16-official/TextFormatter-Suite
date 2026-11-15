@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-14
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-15
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -75,8 +75,9 @@ ChatTranslator original + mucho mayor potencial se llama **TextFormatter Suite**
 ## iFlow
 
 Hub de routing/firewall con default deny. La política v3 entrega con `DELIVER`, cancela el evento
-con `CANCEL_EVENT` o falla con `ERROR` (ADR-031). Los motores `iflow-firewall`, `iflow-vm` e
-`iflow-wasm` son backends seleccionables por el hub (ADR-032); no son targets de política.
+con `CANCEL_EVENT` o falla con `ERROR` (ADR-031). Los motores `iflow-firewall`, `iflow-16`,
+`iflow-32` e `iflow-wasm` son backends seleccionables por el hub (ADR-032); no son targets de
+política. `iflow-16` e `iflow-32` son líneas separadas (ADR-038).
 
 ## Fases y estado
 
@@ -102,8 +103,8 @@ roadmaps, tablas de estado ni historial de fases.
 **Decisión.** SpEL no forma parte de `textformatter`, presets, `<expr>`, el editor web ni del
 contrato de la VM. La única superficie ejecutable de políticas es iFlow. El motor
 `iflow-firewall` conserva SpEL como implementación legacy independiente, con sandbox, allowlist de
-clases, caché LRU acotada (1024) y `spring-expression` solo en su classpath. `iflow-vm` e
-`iflow-wasm` no usan SpEL. `rules.yml` acepta el esquema de reglas del motor legacy; el grafo del
+clases, caché LRU acotada (1024) y `spring-expression` solo en su classpath. `iflow-16`, `iflow-32`
+e `iflow-wasm` no usan SpEL. `rules.yml` acepta el esquema de reglas del motor legacy; el grafo del
 editor se valida pero no se ejecuta. Cualquier política nueva debe implementarse en la VM o en Wasm.
 
 **Consecuencias.** Una sola superficie de políticas por motor; `textformatter` no depende de Spring;
@@ -378,7 +379,7 @@ actualizar; cero JARs o ids duplicados son un error explícito.
 | Adaptadores | `spigot-host`, `fabric-host` | Solo `core-api` + `suite-runtime` + SDK de plataforma; bootstrap sin listeners de eventos |
 | Sincronizadores de plataforma | `sync-bukkit`, `sync-fabric` | Paquetes de plataforma descargables; capturan eventos, traducen a `Message`, despachan y publican el sink local `bukkit`/`fabric` |
 | Paquetes de dependencia | `logger`, `transport`, SnakeYAML, JDA, Adventure y demás librerías compartidas | Paquetes `DEPENDENCY`; el manager los descarga, verifica, relocaliza y carga por módulo |
-| Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow`, `iflow-vm`, `iflow-firewall`, `iflow-wasm` | Paquetes instalados por defecto; los motores iFlow no se excluyen |
+| Paquetes base | `textformatter`, `messages`, `chattranslator`, `iflow`, `iflow-16`, `iflow-32`, `iflow-firewall`, `iflow-wasm` | Paquetes instalados por defecto; los motores iFlow no se excluyen |
 | Paquetes opcionales | `gtranslate`, `ltranslate`, `sync-bus`, `sync-*`, `observability`, `presets`, `inworld`, `extension-api` | Paquetes neutrales; dependencias declaradas en `METADATA/package.list` |
 | Producción auxiliar | `tester` | `PACKAGE` neutral + `TestProbe`; benchmarking y traza del pipeline |
 | Harness | `loadtest`, `performance`, `example-extension`, `fixtures` | Fuera del artefacto de producción |
@@ -1070,14 +1071,16 @@ de entrega implícita, `REDIRECT`, `processed` o `LOG`.
 2. Los motores publican `IflowBackend` (`name()`, `router()`, `isAvailable()`). No publican la
    selección ni conocen al hub.
 3. La configuración canónica del hub es `config/iflow/config.yml`:
-   `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`. Solo se
-   aceptan los nombres canónicos; no hay alias cortos ni `default-backend` en este archivo. Las
-   rutas `config/manager/iflow/config.yml` y `manager/config/iflow/config.yml` son incorrectas y no
-   se aceptan como fallback.
+   `engine: iflow-firewall | iflow-16 | iflow-32 | iflow-wasm` y
+   `fallback-on-unavailable: true|false`. Solo se aceptan los nombres canónicos; no hay alias cortos
+   ni `default-backend` en este archivo. Las rutas `config/manager/iflow/config.yml` y
+   `manager/config/iflow/config.yml` son incorrectas y no se aceptan como fallback.
 4. El valor por defecto es `iflow-firewall`. Si el backend configurado no está disponible y
    `fallback-on-unavailable` es `true`, el hub usa el primer backend disponible según la prioridad
-   explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`, independiente del orden de activación de
-   los módulos. Si no hay ninguno, `IflowHub.router()` devuelve `null` y el runtime deja el pipeline
+   explícita `iflow-firewall` → `iflow-16`/`iflow-32` → `iflow-wasm`, independiente del orden de
+   activación de los módulos. **Nunca hay fallback entre `iflow-16` e `iflow-32`**: son semánticas
+   distintas y el engine debe elegirse explícitamente. Si no hay ninguno, `IflowHub.router()` devuelve
+   `null` y el runtime deja el pipeline
    sin motor; las llamadas directas al hub fallan cerradas con `REJECT`. El orden se fija con un
    test de aceptación; no se deduce del orden de registro del `ServiceRegistry`.
 5. `IflowHub` extiende `Router`. `SuiteRuntime` exige `IflowHub`: un motor no puede sustituirlo
@@ -1120,7 +1123,7 @@ Cambiar la selección en caliente requiere que el hub refresque; los eventos
 6. `iflow-wasm` publica `IflowBackend` con nombre `iflow-wasm`; `isAvailable()` refleja si hay una
    política verificada y validada. El hub `iflow` puede aplicar `fallback-on-unavailable`.
 7. El router aplica las políticas de envío/recepción del canal y el rate limit de emisión, igual que
-   `iflow-vm` e `iflow-firewall`.
+   `iflow-16`, `iflow-32` e `iflow-firewall`.
 
 **Consecuencias.** Un `.wasm` sin sidecar no se ejecuta; el hub puede seguir con otro backend. El
 operador debe actualizar el sidecar al cambiar la política. El watcher es un hilo daemon por router y
@@ -1927,7 +1930,7 @@ la VM lo deja además en `R4`.
 - Una segunda mutación de canal en la misma unidad es `CONFLICT` y no se aplica. En la VM la
   detección mira el journal (`SET_CHANNEL`/`REDIRECT_CHANNEL`); en Wasm compara el mensaje de trabajo
   con el original.
-- El bus se resuelve con un `Supplier` por invocación: `iflow-vm` e `iflow-wasm` pueden activarse
+- El bus se resuelve con un `Supplier` por invocación: `iflow-16`, `iflow-32` e `iflow-wasm` pueden activarse
   antes que `sync-bus`. Sin bus, `sync_surface`/`sync_invoke` devuelven `UNSUPPORTED`. El bus
   resuelve también la concesión (`ProgramGrantStore`) y la auditoría (`ActionAudit`) con suppliers:
   sin concesión, sin auditoría escribible o sin cuota, la acción devuelve `DENIED` o
@@ -2045,7 +2048,7 @@ alternativas ni aliases en español (ADR-034).
 
 | Etapa | Módulo | Backends | Tipo |
 |---|---|---|---|
-| `route` | `iflow` (hub) | `iflow-vm`, `iflow-wasm`, `iflow-firewall` | transformación |
+| `route` | `iflow` (hub) | `iflow-16`, `iflow-32`, `iflow-wasm`, `iflow-firewall` | transformación |
 | `format` | `textformatter` | `gtranslate`, `ltranslate` | transformación |
 | `sync` | `sync-bus` | `discord`, `telegram`, `http`, `websocket`, `tcp`, `udp`, `velocity`, `bukkit`, `fabric` | entrega |
 
@@ -2087,7 +2090,7 @@ entrega ni un namespace de `outputs`. Su backend de traducción se escribe `sync
 
 #### 17.7 Efecto en las etapas
 
-- `route` posee los backends iFlow (`sync.iflow-vm`, `sync.iflow-wasm`, `sync.iflow-firewall`); si
+- `route` posee los backends iFlow (`sync.iflow-16`, `sync.iflow-32`, `sync.iflow-wasm`, `sync.iflow-firewall`); si
   el plan declara uno, lo usa; si no, el hub aplica su default y fallback de ADR-032.
 - La traducción de `<tr>` dentro de `format` posee los backends de traducción
   (`sync.gtranslate`, `sync.ltranslate`); si el plan declara uno, lo usa; si no, la fachada aplica su
@@ -2215,21 +2218,24 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
 
 ---
 
-## ADR-037 — Contrato de máquina, ISA y ABI `HOST` v3 de `iflow-vm`
+## ADR-037 — Contrato de máquina, ISA y ABI `HOST` v3 de `iflow-32`
 
-**Estado:** Aceptada y congelada (2026-11-14). Cierra V1. La implementación pertenece a V2–V5;
-este ADR no autoriza a conservar el camino v2 en paralelo.
+**Estado:** Aceptada y congelada (2026-11-14). Cierra V1. La implementación pertenece a V2–V5.
+**Alcance (ADR-038, 2026-11-15):** este contrato rige el motor `iflow-32`; no prohíbe la línea
+separada `iflow-16`, que se rige por ADR-038.
 
-**Contexto.** `src/iflow-vm` implementa hoy la máquina v2 de 16 bits y 64 KB, con fuel por
+**Contexto.** `src/iflow-16` implementa hoy la máquina v2 de 16 bits y 64 KB, con fuel por
 ejecución, un `.flow` ejecutable y un ABI `HOST` basado en registros. La especificación v3
 (`docs/prompts/diseno/iflow-cpu-implement.md`, §8) exige una máquina de 32 bits, ROM con BIOS,
 bootloader y kernel, MMU paginada, IRQ, tiempo virtual, persistencia entre mensajes y un ABI de
 servicios acotado. Las preguntas 1–25 y 27–34 de §8.8 seguían abiertas. Este ADR las resuelve y fija
 el contrato que V2–V5 deben implementar.
 
-**Decisión.** Se sustituye la línea v2 por una única máquina v3. No hay convivencia de ISAs,
-lectores dobles, migración en runtime ni adaptadores de compatibilidad. Un `.flow` v2 se rechaza
-con un error explícito de formato; el ensamblador y el compilador v3 generan únicamente ROM v3.
+**Decisión.** Se sustituye la línea v2 por una única máquina v3 **dentro del motor `iflow-32`**. No
+hay convivencia de ISAs, lectores dobles, migración en runtime ni adaptadores de compatibilidad en
+ese motor. Un `.flow` v2 se rechaza con un error explícito de formato; el ensamblador y el
+compilador v3 generan únicamente ROM v3. La línea `iflow-16` es un motor separado (ADR-038), no un
+modo de compatibilidad de `iflow-32`.
 
 ### 1. Modelo de ejecución y registros
 
@@ -2798,3 +2804,85 @@ V1 se cierra con este ADR. V2–V5 deben demostrar, como mínimo:
    límites; carga BIOS/boot/kernel/programa.
 7. Integración: un mensaje real atraviesa el pipeline con una política `.flow` v3 y produce el
    mismo resultado observable que el contrato de ADR-031/ADR-036, sin fuel y sin doble camino.
+
+---
+
+## ADR-038 — Dos líneas separadas: `iflow-16` e `iflow-32`
+
+**Estado:** Aceptada (2026-11-15). Sustituye en parte el alcance global de ADR-037: ADR-037 sigue
+siendo el contrato de `iflow-32`; esta decisión crea y rige la línea `iflow-16`.
+
+**Contexto.** `src/iflow-vm` implementa la máquina v2 de 16 bits y 64 KB. La línea v3 de 32 bits
+ya tiene contrato congelado en ADR-037 y un núcleo aislado, pero todavía no está cableada al hub.
+La v2 no es solo deuda: tiene un público real en servidores con poca CPU o RAM y en entornos
+embebidos, y debe poder recibir soporte y correcciones sin arrastrar las decisiones de la v3. Al
+mismo tiempo, la auditoría manual de la línea 16-bit identificó que el `.flow` no es «solo un
+programa»: es una imagen ROM con cabecera, TOC, segmentos y un modelo BIOS/bootloader/kernel. Ese
+hallazgo se aplicó inicialmente a la migración de 32 bits, pero conceptualmente afecta a ambas
+líneas.
+
+**Decisión.**
+
+1. **Dos módulos independientes, no un módulo con dos ISAs.**
+   - `iflow-16`: la línea actual `src/iflow-vm`, de 16 bits y 64 KB, ISA/formato `.flow` v2, ABI
+     `HOST` v2 y fuel. Se publica como `suite-iflow-16` y se identifica como `iflow-16`.
+   - `iflow-32`: la línea nueva `src/iflow-32`, de 32 bits, ISA/formato `.flow` v3, ABI `HOST` v3,
+     MMU, scheduler y espacio de direcciones de hasta 4 GiB. Se publica como `suite-iflow-32` y se
+     identifica como `iflow-32`.
+   - El nombre `iflow-vm` desaparece. No se conserva alias de módulo, artefacto, capability ni
+     engine. El rename es un cambio breaking deliberado del régimen pre-1.0.
+
+2. **El hub selecciona; ninguna VM despacha dos ISAs.** `iflow-16` solo acepta artefactos v2 y
+   `iflow-32` solo acepta artefactos v3. No hay lector doble, migración en runtime ni despacho
+   dual dentro de un núcleo. El hub resuelve el engine configurado y falla explícitamente si no
+   está disponible; no hay fallback automático entre `iflow-32` e `iflow-16`.
+
+3. **ADR-037 queda acotado a `iflow-32`.** Su regla «un `.flow` v2 se rechaza» aplica al motor de
+   32 bits. `iflow-16` sigue aceptando `.flow` v2 y rechaza `.flow` v3. «La v3 sustituye a la v2»
+   significa que `iflow-32` es la línea activa, no que `iflow-16` se elimine.
+
+4. **Ciclo de vida asimétrico.** `iflow-16` es una línea soportada: recibe bugs, seguridad y
+   compatibilidad. `iflow-32` es la línea activa. La paridad de features es una recomendación, no
+   una obligación: si `iflow-16` puede heredar una feature de `iflow-32` sin romper sus límites,
+   se evalúa y se hace; si no, se documenta la diferencia.
+
+5. **Compartir primero, divergir después.** Se permite compartir `core-api`, modelos neutrales,
+   puertos de host y utilidades que no impongan la semántica de una ISA. Todo componente
+   compartido debe tener tests de contrato y no puede asumir 16/32 bits, MMU, fuel ni un ABI
+   concreto. Si una línea necesita evolucionar de forma incompatible, el componente se bifurca y
+   cada módulo conserva su copia. No se comparte el núcleo, el decoder, la MMU, el formato ROM ni
+   el ABI `HOST`.
+
+6. **Herencia técnica sujeta a verificación.** La MMU de `iflow-32` puede adaptarse a `iflow-16`
+   si conserva el espacio de 16 bits, los 64 KB, la ABI v2 y el determinismo; no se asume que sea
+   compatible. El modelo de ROM (cabecera, TOC, segmentos, BIOS/bootloader/kernel) aplica a ambas
+   líneas, pero cada una define su layout. `.flow` es una imagen ROM, no un programa suelto. Los
+   hallazgos de la auditoría manual que originaron el rediseño se revisan para ambas líneas, no
+   solo para la de 32 bits.
+
+7. **Migración de nombres.** El cambio se hace ahora, antes de V4: `src/iflow-vm` pasa a
+   `src/iflow-16`, se crea `src/iflow-32` y se mueven a él los paquetes v3 aislados (`rom`,
+   `isa.v3`, `memory.v3`, `host.v3`). Se actualizan `settings.gradle`, publicaciones, cobertura,
+   CI, tests, configuración y documentación. No se conservan rutas ni identificadores antiguos.
+
+**Consecuencias.**
+
+- Positivas: aislamiento de seguridad y memoria, evolución independiente, compatibilidad real de
+  la línea 16-bit, audiencias diferenciadas y ausencia de `if(version)` en los núcleos.
+- Negativas: dos suites de tests, dos matrices de CI, dos documentaciones, dos superficies de
+  seguridad y posibles portes de fixes entre líneas.
+- Riesgos: que el código compartido se convierta en un contrato encubierto; que la paridad se
+  vuelva obligatoria por inercia; que la configuración siga usando `iflow-vm` por costumbre. Se
+  mitiga con tests de contrato, revisión de dependencias y eliminación explícita de alias.
+
+**Criterios de validación.**
+
+1. `:src:iflow-16:build` y `:src:iflow-32:build` pasan con la misma JDK.
+2. `iflow-16` ejecuta sus tests y artefactos v2; `iflow-32` ejecuta sus tests y rechaza v2.
+3. El hub selecciona `iflow-16` o `iflow-32` y falla explícito si el engine no existe.
+4. No queda ninguna referencia activa a `iflow-vm` en módulos, artefactos, capabilities,
+   configuración, tests ni documentación de trabajo.
+5. No hay fallback automático entre las dos líneas ni lectura cruzada de `.flow`.
+
+**Lo que este ADR no promete.** No declara paridad inmediata de features, no migra `.flow` v2 a
+v3, no conserva alias de compatibilidad y no elimina `iflow-16` cuando `iflow-32` madure.

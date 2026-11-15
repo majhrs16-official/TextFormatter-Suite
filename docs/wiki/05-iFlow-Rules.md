@@ -9,8 +9,12 @@ backends may be installed together; the hub activates exactly one and publishes
 | Backend | Package | Policy source |
 |---------|---------|---------------|
 | Firewall | `iflow-firewall` | SpEL rules in `config/iflow-firewall/rules.yml` |
-| VM | `iflow-vm` | Binary `.flow` program in `config/iflow-vm/policy.flow` |
+| VM | `iflow-16` | Binary `.flow` program in `config/iflow-16/policy.flow` |
 | Wasm | `iflow-wasm` | WebAssembly module with a SHA-256 pin |
+
+`iflow-32` is a separate 32-bit v3 module, but it does not publish an
+`IflowBackend` yet; it becomes selectable in V4. The hub never crosses between
+`iflow-16` and `iflow-32`.
 
 `SuiteRuntime` requires the hub. An engine no longer publishes a `Router` that
 can bypass the hub.
@@ -18,18 +22,18 @@ can bypass the hub.
 ### Hub configuration (`config/iflow/config.yml`)
 
 ```yaml
-engine: iflow-firewall            # iflow-firewall | iflow-vm | iflow-wasm
+engine: iflow-firewall            # iflow-firewall | iflow-16 | iflow-wasm
 fallback-on-unavailable: true     # Use the next installed backend if the selected one is missing
 config-version: 1.0
 ```
 
 Default selection is `iflow-firewall`. With fallback enabled, the order is
-`iflow-firewall` → `iflow-vm` → `iflow-wasm`. `iflow.engine.kind` does not
+`iflow-firewall` → `iflow-16` → `iflow-wasm`. `iflow.engine.kind` does not
 exist; backend selection lives only in this file.
 
-## `iflow-vm`
+## `iflow-16`
 
-`iflow-vm` implements the `Router` SPI by executing a small deterministic virtual
+`iflow-16` implements the `Router` SPI by executing a small deterministic virtual
 machine:
 
 - 16-bit address space, flat 64 KB.
@@ -86,13 +90,13 @@ arguments in registers; errors can raise IRQ 1. The host reads diagnostics throu
 The ISA includes data transfer, indirect memory access, arithmetic, logic,
 shifts, comparisons, branches, calls, stack operations, `HOST`, `RAISE`, `ACK`,
 `RET` and `HALT`. See
-[`src/iflow-vm/README.md`](../../src/iflow-vm/README.md) and
-[`src/iflow-vm/HDL.md`](../../src/iflow-vm/HDL.md).
+[`src/iflow-16/README.md`](../../src/iflow-16/README.md) and
+[`src/iflow-16/HDL.md`](../../src/iflow-16/HDL.md).
 
 ### Build and test
 
 ```bash
-./gradlew :src:iflow-vm:test --no-daemon
+./gradlew :src:iflow-16:test --no-daemon
 ```
 
 The tests cover interpreter, MMU, host services, policy engine and firmware
@@ -130,6 +134,6 @@ pinned module changes.
 ## Notes
 
 The old declarative `rules.yml` syntax with `cond`, `action`, `target` and SpEL
-conditions belongs to `iflow-firewall`. It is not part of `iflow-vm` or
+conditions belongs to `iflow-firewall`. It is not part of `iflow-16` or
 `iflow-wasm`. Do not use old wiki revisions as a reference for the VM; use the
 module README and tests.

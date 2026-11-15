@@ -22,7 +22,7 @@
 - **No direct host reload** — `FilePresetTarget` persists files but does not reload modules; `DefaultPresetService` delegates that step to the runtime callback supplied by `suite-runtime`
 - **No policy evaluation** — routing, conditions and actions belong to the iFlow VM (`.flow`)
 - **No inline expressions** — SpEL and `PresetRule` conditions were removed from the repository
-- **No message routing** — `iflow-vm` handles routing
+- **No message routing** — `iflow-16`/`iflow-32` handle routing
 - **No formatting** — delegates to `textformatter`
 - **No platform-specific code** — pure Java/YAML
 
@@ -142,4 +142,4 @@ Channel templates are persisted from `Formats.formatList()` (falling back to `te
 - [chattranslator](../chattranslator/README.md) — Translator backends persisted by presets
 - `suite-runtime` — Built-in `presets` command and active-module reload (`SuiteCommands`, `SuiteRuntime.reloadActiveModules()`)
 - [spigot-host](../spigot-host/README.md) / [fabric-host](../fabric-host/README.md) — Platform bootstrap that starts the runtime
-- [iflow-vm](../iflow-vm/README.md) — VM policies and routing
+- [iflow-16](../iflow-16/README.md) / [iflow-32](../iflow-32/README.md) — VM policies and routing

@@ -30,7 +30,7 @@
 
 ## 2. Non-Responsibilities
 
-- **No message routing** — `iflow-vm` decides what to sync
+- **No message routing** — the iFlow engine decides what to sync
 - **No formatting** — messages already formatted by `textformatter`
 - **No translation** — already translated if needed
 - **No platform-specific code** (except `sync-velocity` which is Velocity-specific)

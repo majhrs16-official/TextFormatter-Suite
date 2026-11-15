@@ -92,7 +92,7 @@ class IflowHubTest {
         FakeRouter vm = new FakeRouter();
         FakeRouter firewall = new FakeRouter();
         context.services.register(IflowBackend.class,
-                new FakeBackend("iflow-vm", vm, true));
+                new FakeBackend("iflow-16", vm, true));
         context.services.register(IflowBackend.class,
                 new FakeBackend("iflow-firewall", firewall, true));
         context.services.register(IflowBackend.class,
@@ -174,13 +174,13 @@ class IflowHubTest {
         context.services.register(IflowBackend.class,
                 new FakeBackend("iflow-firewall", firewall, true));
         context.services.register(IflowBackend.class,
-                new FakeBackend("iflow-vm", vm, true));
+                new FakeBackend("iflow-16", vm, true));
         new IflowActivator().start(context);
 
         IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
 
         assertSame(firewall, hub.router("iflow-firewall"));
-        assertSame(vm, hub.router("iflow-vm"));
+        assertSame(vm, hub.router("iflow-16"));
         assertNull(hub.router("iflow-unknown"));
     }
 
@@ -196,12 +196,12 @@ class IflowHubTest {
         context.services.register(IflowBackend.class,
                 new FakeBackend("iflow-firewall", firewall, true));
         context.services.register(IflowBackend.class,
-                new FakeBackend("iflow-vm", new FakeRouter(), false));
+                new FakeBackend("iflow-16", new FakeRouter(), false));
         new IflowActivator().start(context);
 
         IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
 
-        assertSame(firewall, hub.router("iflow-vm"));
+        assertSame(firewall, hub.router("iflow-16"));
     }
 
     @Test
@@ -215,12 +215,88 @@ class IflowHubTest {
         context.services.register(IflowBackend.class,
                 new FakeBackend("iflow-firewall", new FakeRouter(), true));
         context.services.register(IflowBackend.class,
-                new FakeBackend("iflow-vm", new FakeRouter(), false));
+                new FakeBackend("iflow-16", new FakeRouter(), false));
         new IflowActivator().start(context);
 
         IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
 
-        assertNull(hub.router("iflow-vm"));
+        assertNull(hub.router("iflow-16"));
+    }
+
+    @Test
+    void selects32WhenItIsTheConfiguredBackend() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-32
+                fallback-on-unavailable: false
+                config-version: 1.0
+                """);
+        FakeContext context = new FakeContext(dir);
+        FakeRouter vm32 = new FakeRouter();
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-32", vm32, true));
+
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+        assertEquals("iflow-32", hub.activeBackend());
+        assertSame(vm32, hub.router());
+    }
+
+    @Test
+    void unavailable32NeverFallsBackTo16() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-32
+                fallback-on-unavailable: true
+                config-version: 1.0
+                """);
+        FakeContext context = new FakeContext(dir);
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-16", new FakeRouter(), true));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-32", new FakeRouter(), false));
+
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+        assertEquals("none", hub.activeBackend());
+        assertNull(hub.router("iflow-32"));
+    }
+
+    @Test
+    void unavailable16NeverFallsBackTo32() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-16
+                fallback-on-unavailable: true
+                config-version: 1.0
+                """);
+        FakeContext context = new FakeContext(dir);
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-16", new FakeRouter(), false));
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-32", new FakeRouter(), true));
+
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+        assertEquals("none", hub.activeBackend());
+        assertNull(hub.router("iflow-16"));
+    }
+
+    @Test
+    void fallbackPriorityDoesNotInclude32() throws Exception {
+        Files.writeString(dir.resolve("config.yml"), """
+                engine: iflow-firewall
+                fallback-on-unavailable: true
+                config-version: 1.0
+                """);
+        FakeContext context = new FakeContext(dir);
+        context.services.register(IflowBackend.class,
+                new FakeBackend("iflow-32", new FakeRouter(), true));
+
+        new IflowActivator().start(context);
+
+        IflowHub hub = context.services.find(IflowHub.class).orElseThrow();
+        assertEquals("none", hub.activeBackend());
     }
 
     private static final class FakeBackend implements IflowBackend {

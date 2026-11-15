@@ -4,7 +4,8 @@
 backend iFlow entre los instalados:
 
 - `iflow-firewall` — motor de reglas SpEL legacy.
-- `iflow-vm` — VM propia (implementación v2 de 16 bits; objetivo v3 de 32 bits).
+- `iflow-16` — VM propia legacy de 16 bits y 64 KB (ISA/formato v2).
+- `iflow-32` — VM propia moderna de 32 bits (ISA/formato v3, MMU, scheduler y HOST v3).
 - `iflow-wasm` — políticas WebAssembly con Chicory.
 
 El host no importa ninguno de esos paquetes. Solo consume `Router` y, para
@@ -19,7 +20,7 @@ Archivo canónico:
 ```
 
 ```yaml
-engine: iflow-firewall        # iflow-firewall | iflow-vm | iflow-wasm
+engine: iflow-firewall        # iflow-firewall | iflow-16 | iflow-32 | iflow-wasm
 fallback-on-unavailable: true # usa el backend disponible según la prioridad explícita
 ```
 
@@ -54,8 +55,9 @@ motor se activa o desactiva, el hub se refresca con `ModuleActivatedEvent` y
 1. Si el backend configurado está disponible, se selecciona.
 2. Si no está disponible y `fallback-on-unavailable` es `true`, se selecciona
    el primer backend disponible según la prioridad explícita
-   `iflow-firewall` → `iflow-vm` → `iflow-wasm`, independiente del orden de
-   registro.
+   `iflow-firewall` → `iflow-16` → `iflow-wasm`, independiente del orden de
+   registro. Nunca se hace fallback entre `iflow-16` e `iflow-32`: si el engine
+   configurado es una de esas líneas, solo se usa esa línea o se falla.
 3. Si no hay backend disponible, el hub no publica un router operativo: el
    pipeline del runtime queda sin motor y `IflowHub.router()` devuelve `null`.
    Las llamadas directas al hub fallan cerradas (`REJECT`).

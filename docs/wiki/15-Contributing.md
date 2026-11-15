@@ -45,7 +45,7 @@ Useful focused commands:
 
 ```bash
 ./gradlew :src:textformatter:test --no-daemon
-./gradlew :src:iflow-vm:test --no-daemon
+./gradlew :src:iflow-16:test --no-daemon
 ./gradlew :src:suite-runtime:test --no-daemon
 ./gradlew spotlessApply
 ./gradlew spotlessCheck

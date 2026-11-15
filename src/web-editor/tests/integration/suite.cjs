@@ -184,8 +184,8 @@ setTimeout(async () => {
     { name: 'TextFormatter-Suite/config/suite/config.yml', data: CONFIG_A },
     { name: 'TextFormatter-Suite/config/textformatter/channels/general.yml', data: CHANNEL_A },
     { name: 'TextFormatter-Suite/manager/library/status', data: PACKAGES_A },
-    { name: 'TextFormatter-Suite/config/iflow-vm/policy.flow', data: new window.Uint8Array(ROM_A) },
-    { name: 'TextFormatter-Suite/config/iflow-vm/valid.flow', data: VALID_FLOW },
+    { name: 'TextFormatter-Suite/config/iflow-16/policy.flow', data: new window.Uint8Array(ROM_A) },
+    { name: 'TextFormatter-Suite/config/iflow-16/valid.flow', data: VALID_FLOW },
     { name: 'TextFormatter-Suite/config/unknownmod/blob.bin', data: new window.Uint8Array(BLOB_A) },
     { name: 'TextFormatter-Suite/config/custom/notes.txt', data: NOTES_A },
     { name: 'TextFormatter-Suite/README.md', data: '# fuera del conjunto\n' },
@@ -196,7 +196,7 @@ setTimeout(async () => {
   ok($('#suiteModal').classList.contains('show'), 'import opens the summary modal');
   const bodyA = $('#suiteModalBody').textContent;
   ok(bodyA.includes('config/unknownmod'), 'the summary lists the modules');
-  ok(bodyA.includes('config/iflow-vm/policy.flow'), 'the summary lists the ROM warning');
+  ok(bodyA.includes('config/iflow-16/policy.flow'), 'the summary lists the ROM warning');
   ok(bodyA.includes('se conserva sin hidratar'), 'the summary lists the binary warning');
   ok($('#suiteModalApply').style.display !== 'none', 'a valid import offers replace state');
 
@@ -207,8 +207,8 @@ setTimeout(async () => {
   ok(store.getState().packages.length === 1, 'the imported package database hydrates the model');
   ok(store.getState().packages[0].name === 'iflow', 'the package name is parsed');
   ok(store.getState().roms.length === 1, 'only the valid ROM is hydrated');
-  ok(store.getState().roms[0].path === 'config/iflow-vm/valid.flow', 'the valid ROM path is kept');
-  ok(!store.getState().roms.some(rom => rom.path === 'config/iflow-vm/policy.flow'), 'an invalid ROM is not hydrated');
+  ok(store.getState().roms[0].path === 'config/iflow-16/valid.flow', 'the valid ROM path is kept');
+  ok(!store.getState().roms.some(rom => rom.path === 'config/iflow-16/policy.flow'), 'an invalid ROM is not hydrated');
   ok(store.getState().extra['config/custom/notes.txt'] === NOTES_A, 'unmapped text is kept as extra');
 
   /* ── Exportación con prefijo fijo y bytes preservados ───── */
@@ -233,11 +233,11 @@ setTimeout(async () => {
     'an unknown binary is preserved byte by byte'
   );
   ok(
-    sameBytes(exportedA.get('TextFormatter-Suite/config/iflow-vm/policy.flow'), new window.Uint8Array(ROM_A)),
+    sameBytes(exportedA.get('TextFormatter-Suite/config/iflow-16/policy.flow'), new window.Uint8Array(ROM_A)),
     'an invalid ROM is preserved byte by byte'
   );
   ok(
-    sameBytes(exportedA.get('TextFormatter-Suite/config/iflow-vm/valid.flow'), VALID_FLOW),
+    sameBytes(exportedA.get('TextFormatter-Suite/config/iflow-16/valid.flow'), VALID_FLOW),
     'a valid ROM is preserved byte by byte'
   );
   ok(

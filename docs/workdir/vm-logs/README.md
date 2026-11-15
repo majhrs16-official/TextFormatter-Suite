@@ -1,7 +1,7 @@
 # iFlow VM — debug capture logs
 
 > **Nota:** los logs conservan `:src:iflow` porque son anteriores al renombre de V0. La ruta actual
-> del módulo es `src/iflow-vm/` y la tarea Gradle es `:src:iflow-vm:test`.
+> del módulo es `src/iflow-16/` y la tarea Gradle es `:src:iflow-16:test`.
 
 Generated with the zero-overhead logger compiled with `-Plogger.debug=true`.
 
@@ -46,10 +46,10 @@ MEM MOVE [0x1000..0x1003] -> [0x1002..0x1005] len=4 sumSrc=0x0044 sumDst=0x0066
 export JAVA_HOME=/opt/javac/x64/21
 
 # firmware only
-./gradlew :src:iflow:test -Plogger.debug=true --tests '*FirmwareIntegrationTest*'
+./gradlew :src:iflow-16:test -Plogger.debug=true --tests '*FirmwareIntegrationTest*'
 
 # full suite (debug dumps on screen)
-./gradlew :src:iflow:test -Plogger.debug=true
+./gradlew :src:iflow-16:test -Plogger.debug=true
 ```
 
 ## Quick consistency checks

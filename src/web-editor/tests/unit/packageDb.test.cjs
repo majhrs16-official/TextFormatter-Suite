@@ -91,7 +91,7 @@ const multiple = [
   'Version: 2.0.0',
   'Channel: beta',
   'Type: PACKAGE',
-  'Dependencies: iflow@>=1.0.0, iflow-vm',
+  'Dependencies: iflow@>=1.0.0, iflow-16',
   'Exclude: old-textformatter',
   'Provide: textformatter-core',
   'Arch: none',
@@ -108,7 +108,7 @@ const multiple = [
 ].join('\n');
 const entries = Db.parse(multiple);
 assertEq(entries.length, 2, 'parsea varias entradas');
-assertEq(entries[1].dependencies, ['iflow@>=1.0.0', 'iflow-vm'], 'normaliza dependencias');
+assertEq(entries[1].dependencies, ['iflow@>=1.0.0', 'iflow-16'], 'normaliza dependencias');
 assertEq(entries[1].exclude, ['old-textformatter'], 'lee Exclude');
 assertEq(entries[1].provide, ['textformatter-core'], 'lee Provide');
 assertEq(entries[1].extra, { 'Installed-Time': '2024-01-01T00:00:00Z' }, 'conserva campos desconocidos');
@@ -140,7 +140,7 @@ assertEq(
     'Version: 2.0.0',
     'Channel: beta',
     'Type: PACKAGE',
-    'Dependencies: iflow@>=1.0.0,iflow-vm',
+    'Dependencies: iflow@>=1.0.0,iflow-16',
     'Exclude: old-textformatter',
     'Provide: textformatter-core',
     'Arch: none',

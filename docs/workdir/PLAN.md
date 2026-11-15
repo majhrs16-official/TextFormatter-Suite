@@ -3,7 +3,7 @@
 > **Obligatorio leer y seguir [La Filosofia](/docs/prompts/contexto/philosophy.md)** antes de trabajar en este documento o en el código.
 >
 > Documento vivo: reléelo antes de cada sesión de trabajo para no perder el rumbo.
-> Última actualización: 2026-11-15 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `message.edit`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo); `storage.md` §1 se alineó con ADR-036 §15. Quedan registradas **AUD-1** (implementación de `sync`) y **AUD-2** (funcionamiento general del Manager) como revisiones **manuales, hechas por una persona** función por función, cuyo diagnóstico se escribe en `AUDITORIA.md` mientras la auditoría está en curso y queda congelado al terminar (prioridad baja/media). PL-2 se amplía (2026-11-14) con `PATCH` en el `Transport` neutral y `discord.message.edit` en `sync-discord` sobre ambos adaptadores, y con la superficie de entorno/eventos de §17.5 en `sync-bukkit`/`sync-fabric` mediante el puerto neutral `LocalEnvironment` (`player.*`, `console.command`, `scoreboard.set`, `event.*`). **V1 cerrado (2026-11-14): contrato de máquina, ISA y ABI `HOST` v3 congelado en ADR-037; el núcleo sigue en v2 hasta su cableado en V4 y no se abre un camino paralelo v2/v3.** **V2-4 completado (2026-11-15):** memoria física dispersa con snapshots COW por frame, MMU de dos niveles con TLB coherente, bus MMIO supervisor, PIC/timer/UART/display/NVRAM/SYSINFO/mailbox y ABI `HOST` v3 completo (TLV, identidad, capacidades, `ROUTE_DECISION` única y mapeo de `SyncResult`), con 55 tests nuevos; el slice sigue aislado de `VmPolicyEngine`/`VmConfigLoader`/`IflowVmActivator` y el núcleo v2 sigue siendo el vigente. Siguiente: V3 (persistencia y tiempo) y, en V4, cablear el núcleo v3 y retirar el v2 sin camino dual.)
+> Última actualización: 2026-11-15 (**TF-002, TF-005 y TF-006 cerrados con test de regresión (fail-closed de `PERMISSION`/`WORLD`; `broadcast` cuenta sinks que aceptan y permite reintento; `broadcastAsync` se retiró al abrir PL-2 y cada acción conserva timeout e identidad explícitos). PL-2 (contratos de superficie de acciones y bus) implementado: `api.sync.*`, `SyncSink.surface()/invoke()`, `SyncBus.surfaces()/invoke()/broadcast(SyncCall)/send/sendTo`, autoridad fail-closed y resultados explícitos; `sync-discord` publica y ejecuta su primera superficie nativa (`channel.create`, `channel.delete`, `message.delete`, `message.edit`, `member.ban`, `role.assign`) sobre los adaptadores JDA y JDK, `sync-telegram` publica y ejecuta la suya (`chat.title.set`, `chat.leave`, `message.delete`, `message.edit`, `chat.member.ban`, `chat.member.unban`) sobre la Bot API y `sync-http` publica y ejecuta `webhook.send` y `endpoint.info` con mapeo explícito de estados HTTP, `sync-websocket` publica `path.broadcast` y `client.info` y corrige el reinicio del servidor, y `sync-socket` publica `endpoint.info`/`connection.probe` en TCP y `endpoint.info` en UDP, y `sync-velocity-core` publica `proxy.info`, `mapping.resolve` y `queue.purge`, y `sync-bukkit`/`sync-fabric` publican `local.info` desde `LocalSyncSink`; `textformatter.channel.set` implementado como acción de host con segunda fase de routing y retirada del import dedicado `set_channel` de la ABI v3; el puente iFlow (`SYNC_SURFACE`/`SYNC_INVOKE` en la VM y `sync_surface`/`sync_invoke` en Wasm, con `TlvCodec` y `SyncBridgeCodec` compartidos en `core-api`) implementado; concesiones por SHA-256 en `config/iflow/grants.yml` (comodines finales, `allow-destructive`), cuotas por programa y auditoría append-only con hash de argumentos redactados en `<data>/config/iflow/audit.log` implementadas (2026-11-13). PL-1 iniciado por slices: contratos neutrales del pipeline en `core-api` (`PipelineStage`, `PipelineContext`, `PipelineMessage`, `StageResult`, `PipelinePlan`, `OutputPlan`), `ComponentRenderedOutput` en `core-render`, `RecipientResolver` extraído, motor de ejecución (`PipelineEngine`, `DeliveryExecutor`, `BoundedPipelineTrace`) con 10 tests, etapas `route`/`format`/`sync` publicadas por `iflow`/`textformatter`/`sync-bus` con 12 tests, y **motor cableado como camino de producción de `suite-runtime`**, alimentado por la lista `pipeline` de `config/suite/config.yml`. La migración de descriptores de ADR-036 §15 está aplicada: ninguna feature exige otra feature, `checkArchitecture` rechaza requisitos no neutrales y los sinks se descubren por servicio publicado (`discoverSinks` + eventos de ciclo de vida) sin que el paquete dependa del bus. La traducción de plantillas permanece en `textformatter` mediante `<tr>` y el puerto `TranslationService`; no se separa como etapa. La fachada legacy `SuiteHost`/`MessageDispatcher` fue retirada: `PipelineEngine`, `RecipientResolver` y `DeliveryExecutor` son el único camino, `DispatchOutcome` informa `status`/`considered`/`failed` y el runtime expone `pipelineTraces()`. La configuración de `outputs` está implementada (mensaje → suite → default del módulo) con `outputs-parallel`; PL-3 cierra contrato, selección por etapa, orden/paralelismo, resultado agregado, entrega local por `sync.bukkit`/`sync.fabric` mediante `message.deliver` y el puerto `LocalDelivery`, la validación de propiedad de backends por etapa con el namespace `sync`, y la documentación de wiki y esquema. P0.1, P0.4, P0.6 y P0.8 cerrados; P0.4 purgó aliases, constructores de compatibilidad, `%s`, `reset`, W2, etiquetas `F7+`, versiones `2.1`/`3.0` y metadatos históricos; CoreTranslator sigue como expansión PAPI legacy `%cot_*` (ADR-035); contrato mínimo `>= 1.0.0` con techo en el host; P0.2, P0.3, P0.5, P0.7, P0.8 y P0.8b cerrados con gate verde. P0.8 podó los ADR duplicados en este PLAN, alineó `docs/prompts/` (raíz de comandos, fases del editor y régimen pre-1.0) y dejó `ADR.md` sin planes ni fases. Se registran `PL-1` —pipeline secuencial configurable—, `PL-2` —acciones de los backends sync—, `PL-3` —sincronización de salidas— y `PL-4` —import/export de la suite en el editor—; PL-4 avanza por slices: lector ZIP, archivo de suite, mapeo, interfaz, CST de YAML, base de paquetes, ROM, desensamblador, validación, exportación DEFLATE, tests de integración y documentación final implementados; PL-4 queda cerrado. **ADR-036 fue aceptado el 2026-11-06**; el catálogo de canales sigue en `textformatter` y su consumo pasa a ser opcional. P0.6 cerró la auditoría integral (TF-001…TF-012) y reemplazó `AUDITORIA.md` por completo. Cierre de detalles (2026-11-13): cuota de llamadas con ventana deslizante de 60 s y test de regresión que falla con ventana fija, `core-render` con `src/test`, `sync-tcpudp` erradicado (build, directorio y `settings.gradle`) e inventario de tests regenerado (43 módulos, 1744 tests, 28 con JaCoCo); `storage.md` §1 se alineó con ADR-036 §15. Quedan registradas **AUD-1** (implementación de `sync`) y **AUD-2** (funcionamiento general del Manager) como revisiones **manuales, hechas por una persona** función por función, cuyo diagnóstico se escribe en `AUDITORIA.md` mientras la auditoría está en curso y queda congelado al terminar (prioridad baja/media). PL-2 se amplía (2026-11-14) con `PATCH` en el `Transport` neutral y `discord.message.edit` en `sync-discord` sobre ambos adaptadores, y con la superficie de entorno/eventos de §17.5 en `sync-bukkit`/`sync-fabric` mediante el puerto neutral `LocalEnvironment` (`player.*`, `console.command`, `scoreboard.set`, `event.*`). **V1 cerrado (2026-11-14): contrato de máquina, ISA y ABI `HOST` v3 congelado en ADR-037; el núcleo sigue en v2 hasta su cableado en V4 y no se abre un camino paralelo v2/v3.** **V2-4 completado (2026-11-15):** memoria física dispersa con snapshots COW por frame, MMU de dos niveles con TLB coherente, bus MMIO supervisor, PIC/timer/UART/display/NVRAM/SYSINFO/mailbox y ABI `HOST` v3 completo (TLV, identidad, capacidades, `ROUTE_DECISION` única y mapeo de `SyncResult`), con 55 tests nuevos; el slice sigue aislado de `VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator` y el núcleo v2 sigue siendo el vigente. **V0 completado (2026-11-15):** `src/iflow-vm` pasa a `src/iflow-16`, se crea `src/iflow-32`, el hub no cruza el fallback entre ambas líneas y el gate completo queda verde. Siguiente: V3 (persistencia y tiempo) y, en V4, cablear el núcleo v3 sin retirar `iflow-16`.)
 
 > **Régimen pre-1.0 (2026-11-04, ADR-034):** el proyecto no tiene versión estable ni producción.
 > Todos los módulos, componentes, contratos, artefactos y configuraciones se alinean a la base
@@ -22,16 +22,16 @@
 > **Hub iFlow (2026-11-04, ADR-032):** se añadió el paquete `iflow` como hub de selección. Los
 > motores publican `IflowBackend`; el hub publica `IflowHub` y `Router`, elige un backend y aplica
 > fallback configurable. Configuración canónica: `config/iflow/config.yml` con
-> `engine: iflow-firewall|iflow-vm|iflow-wasm` y `fallback-on-unavailable`. Default
+> `engine: iflow-firewall|iflow-16|iflow-32|iflow-wasm` y `fallback-on-unavailable`. Default
 > `iflow-firewall`. `SuiteRuntime` exige `IflowHub`; un motor no puede publicar un `Router` que
 > sustituya al hub. `iflow.engine.kind` fue eliminado en P0.3 (ADR-034).
-> `iflow-firewall`, `iflow-vm` e `iflow-wasm` ya publican su backend; Wasm exige SHA-256 y recarga automáticamente.
+> `iflow-firewall`, `iflow-16`, `iflow-32` e `iflow-wasm` publican su backend; Wasm exige SHA-256 y recarga automáticamente.
 
 > **Estado actual (2026-11-04).** Base integrada en construcción; no hay versión estable ni
 > producción. Cerrados en su alcance: comandos neutrales y raíz configurable, sincronizadores de
 > plataforma, empaquetado reproducible, paquetes de terceros y presets. ADR-027 implementado: adquisición,
-> commit con journal y activación separada; la etapa 2 es el único rollback automático. `iflow-vm`
-> conserva el núcleo v2 de 16 bits mientras V2 implementa el contrato v3 congelado en ADR-037;
+> commit con journal y activación separada; la etapa 2 es el único rollback automático. `iflow-16`
+> conserva el núcleo v2 de 16 bits; `iflow-32` implementa el contrato v3 congelado en ADR-037;
 > `iflow-wasm` (Chicory) es la línea paralela. W3.5 (paridad `.flow` v3/VM) sigue pendiente y V6
 > (compilador C) está bloqueado por V5. `CoreTranslator` se
 > restauró como expansión PAPI legacy `%cot_*` (ADR-035). El E2E real es posterior a `1.0.0`.
@@ -233,7 +233,8 @@ PLAN. El informe de 2026-11-06 ya no contiene esa cita. No se crea un archivo au
 **Orden de trabajo:** cierre de los P0 de la auditoría (TF-002 ✅ → TF-005 ✅ → TF-006 ✅ → TF-001/PL-1) → W3.5 (feature nueva + fix masivo) → V6 (bloqueado por V5; la ejecución del corpus requiere V2–V4).
 
 **Cierre del ciclo anterior:** D-009 quedó resuelto. `IflowBackendManager` aplica la prioridad
-explícita `iflow-firewall` → `iflow-vm` → `iflow-wasm`; el test de aceptación está en `IflowHubTest`.
+explícita `iflow-firewall` → `iflow-16`/`iflow-32` → `iflow-wasm`; nunca hay fallback entre
+`iflow-16` e `iflow-32`. El test de aceptación está en `IflowHubTest`.
 
 **Deuda conocida tras P0.2/P0.3/P0.4 (2026-11-05):**
 
@@ -295,7 +296,7 @@ verificada el 2026-11-05 sobre `2f5d3b27`:
 | Hecho verificado | Evidencia | Efecto |
 |---|---|---|
 | `textformatter` es el único proveedor de `channel-api` | `TextFormatterModule.java:24`; `TextFormatterActivator.java:32` | El catálogo y su capability pertenecen a `textformatter`; es correcto por diseño. El problema es que otras features lo exigen como requisito. |
-| Los tres motores iFlow requieren `channel-api` | `IflowFirewallModule.java:27`; `IflowVmActivator.java:35`; `IfowWasmModule.java:23`; `IflowWasmActivator.java:34` | El requisito duro deja los motores inactivos si falta `textformatter`; debe ser un consumo opcional. |
+| Los tres motores iFlow requieren `channel-api` | `IflowFirewallModule.java:27`; `Iflow16Activator.java:35`; `IfowWasmModule.java:23`; `IflowWasmActivator.java:34` | El requisito duro deja los motores inactivos si falta `textformatter`; debe ser un consumo opcional. |
 | `inworld`, `sync-bukkit`, `sync-fabric` y `tester` también requieren `channel-api` | `InWorldModule.java:27`; `SyncBukkitActivator.java:45`; `SyncFabricActivator.java:46`; `TesterModule.java:25` | Cuatro features más dependen de que `textformatter` esté instalado. |
 | `SuiteRuntime` exige servicios concretos para construir el pipeline | `SuiteRuntime.java:203-211`; `resolveRouter()` en `245-253` | Sin `ChannelRegistry`, `TranslationService`, `IflowHub`, `MessageRenderer`, `ChatDelivery`, `ActorDirectory` o `PermissionChecker` no hay pipeline utilizable. El fallo se registra como «pipeline unavailable» (`SuiteRuntime.java:225-232`), no como arranque funcional. |
 | El orden del pipeline está hardcodeado | `SuiteHost` (`SuiteHost.java:150-162`) y `MessageDispatcher` (`MessageDispatcher.java:40`) | No existe una lista ordenada configurable; el orden lo imponen el cableado y el grafo. |
@@ -520,7 +521,7 @@ no hay efecto. La capacidad se deriva del origen: `sync.<backend>.<accion>` para
 | `core-api` | **Implementado (2026-11-07):** `SyncSurface`, `SyncActionSpec`, `SyncParamSpec`, `ActionKind`, `SyncCall`, `SyncResult`, `Principal`, `SyncValueType`; `SyncSink`/`SyncBus` ampliados. Sin tipos de SDK. |
 | `sync-bus` | **Implementado (2026-11-07):** registro y validación de superficies, `invoke`, fan-out exclusivo del LCM, `send`/`sendTo`, timeout por acción y autoridad fail-closed; `invokeHost` y `HostActionHandler` para acciones agnósticas (2026-11-13). **Concesiones y cuotas (2026-11-13):** capacidad derivada, `allow-destructive`, `calls-per-minute`, `max-payload-bytes` y auditoría con hash de argumentos redactados. |
 | `sync-*` | Implementar `surface()` e `invoke()`; publicar `SyncSink` sin requerir el bus; declarar `stage:sync` solo en `sync-bus`. `sync-bukkit`/`sync-fabric` publican además el sink local y las acciones del entorno, eventos incluidos. |
-| `iflow-vm` | **Implementado (2026-11-13):** servicios `SYNC_SURFACE`/`SYNC_INVOKE` con TLV compartido, DMA, fuel y mapeo de estados; `set_channel` no existe. |
+| `iflow-16` | **Implementado (2026-11-13):** servicios `SYNC_SURFACE`/`SYNC_INVOKE` con TLV compartido, DMA, fuel y mapeo de estados; `set_channel` no existe. |
 | `iflow-wasm` | **Implementado (2026-11-13):** imports `sync_surface`/`sync_invoke` con el mismo TLV y estados; `set_channel` retirado. |
 | `suite-runtime` | **Implementado (2026-11-13):** `YamlProgramGrantStore` (carga estricta y recarga atómica), `AppendOnlyActionAudit` (`<data>/config/iflow/audit.log`, `force` por entrada) y registro/cierre en `SuiteRuntime`. |
 | Configuración | `config/iflow/grants.yml` con `defaults`, `capabilities`, `allow-destructive`, `calls-per-minute` y `max-payload-bytes`; default vacío instalado en ambos hosts; ruta de auditoría en `storage.md` §5. |
@@ -1035,7 +1036,7 @@ planificar el cambio. Se registra como deuda de baja prioridad, no como requisit
 #### Objetivo
 
 Permitir que un mensaje declare, en orden, qué backend usa cada salida. Todos los targets comparten el
-namespace `sync`: `sync.iflow-vm`, `sync.gtranslate`, `sync.discord`. Sin `outputs`, se aplica
+namespace `sync`: `sync.iflow-16`, `sync.gtranslate`, `sync.discord`. Sin `outputs`, se aplica
 `config/suite/config.yml`; sin esa clave, el default del módulo. `sync-bus` deja de ser solo un
 fan-out y publica la etapa terminal `sync`, sin un módulo nuevo. La entrega local (`bukkit`, `fabric`)
 es una salida más de `sync`, no un camino paralelo al pipeline.
@@ -1060,7 +1061,7 @@ es una salida más de `sync`, no un camino paralelo al pipeline.
 |---|---|
 | `core-api` | **Implementado (2026-11-09):** `OutputPlan`, `ParallelMode`, `Message.outputPlan()`, `PipelineContext.outputs()`; todos los targets son `List<String>` con formato `sync.<backend>` y `PipelineStage.ownsOutput`. Sin tipos de plataforma. |
 | `suite-runtime` | **Implementado (2026-11-09):** precedencia mensaje → suite → módulo, validación y traza del origen (`message`, `suite`, `module-default`) como entrada sintética `outputs`. |
-| `iflow` | **Implementado (2026-11-09):** `route` posee los backends iFlow (`sync.iflow-vm`, `sync.iflow-wasm`, `sync.iflow-firewall`) y los resuelve por el hub; conserva default/fallback de ADR-032; dos targets propios son conflicto y un backend no disponible es error explícito. |
+| `iflow` | **Implementado (2026-11-09):** `route` posee los backends iFlow (`sync.iflow-16`, `sync.iflow-wasm`, `sync.iflow-firewall`) y los resuelve por el hub; conserva default/fallback de ADR-032; dos targets propios son conflicto y un backend no disponible es error explícito. |
 | `textformatter` | **Implementado (2026-11-09):** `format` posee los backends de traducción (`sync.gtranslate`, `sync.ltranslate`) y los usa para elegir el proveedor de `<tr>`; conserva default/fallback de la fachada. |
 | `sync-bus` | **Implementado (2026-11-09):** `sync` posee los backends de sink y usa sus targets en orden; `sendTo(List, Message, ParallelMode)` y `deliverTo(List, DeliveryEnvelope, ParallelMode)` respetan `outputs-parallel`; fan-out completo si no hay targets. `deliver`/`deliverTo` despachan `message.deliver`; `deliver` deduplica y `deliverTo` no. |
 | `sync-bukkit` / `sync-fabric` | **Implementado (2026-11-09; `local.info` el 2026-11-13; entorno/eventos de §17.5 el 2026-11-14):** publican `LocalSyncSink` como `bukkit`/`fabric` con la superficie LCM, `local.info` y las acciones de entorno (`player.*`, `console.command`, `scoreboard.set`, `event.*`) sobre el puerto neutral `LocalEnvironment`; la entrega local delega en `LocalDelivery` y devuelve `Ok(DeliverySummary)`. Un evento no cancelable falla con `Unsupported`. |
@@ -1076,7 +1077,7 @@ es una salida más de `sync`, no un camino paralelo al pipeline.
    validación del namespace `sync` y error explícito. El plan efectivo se resuelve una vez por
    emisión en `PipelineEngine` y se expone en `PipelineContext.outputs()`.
 3. **Etapas. ✅ (2026-11-09)** Cada etapa declara `ownsOutput(backend)`: `route` posee los backends
-   iFlow, `format` los de traducción y `sync` los de sink. `route` resuelve `sync.iflow-vm` por el
+   iFlow, `format` los de traducción y `sync` los de sink. `route` resuelve `sync.iflow-16` por el
    hub y la traducción de `<tr>` dentro de `format` resuelve `sync.gtranslate` por la fachada. Sin
    target propio, cada etapa conserva su default y fallback. Dos targets propios de una etapa de
    transformación son `CONFLICT`; un backend desconocido o ambiguo lo rechaza el motor.
@@ -1119,7 +1120,7 @@ Completado en esta unidad:
 - Tests: `MessageOutputPlanTest`, `OutputPlanResolverTest`, `ConfigLoaderTest` y
   `PipelineEngineTest` cubren default, precedencia, vacío vs ausente, paralelismo, namespace
   inválido, backend desconocido y backend ambiguo.
-- `route` posee los backends iFlow y resuelve `sync.iflow-vm` con `IflowHub.router(backend)`; sin
+- `route` posee los backends iFlow y resuelve `sync.iflow-16` con `IflowHub.router(backend)`; sin
   target propio usa el hub y su fail-closed actual. `FormatStage` posee los backends de traducción,
   resuelve `sync.gtranslate` y lo pasa al render de `<tr>`; `TranslationService.translate(...,
   backend)` conserva el fallback de la fachada y falla explícitamente ante un proveedor desconocido.
@@ -1233,7 +1234,7 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
 | El parser YAML descarta comentarios | `yaml.js:144` ignora `#` al tokenizar | Un archivo editado pierde sus comentarios al serializarse. |
 | No hay desensamblador | `tools/iflow-compiler/src` solo contiene `assembler.ts`, `cli.ts`, `types.ts`, `index.ts` | La gestión de ROM no puede ofrecer desensamblado sin una herramienta nueva. |
 | La base de datos de paquetes no es YAML | `LocalPackageDatabase` lee `manager/library/status` con `ManifestParser` | El editor necesita un parser/serializador propio y una advertencia de riesgo. |
-| Las ROM tienen rutas canónicas concretas | `VmConfigLoader` usa `config/iflow-vm/policy.flow`; `WasmPolicyRouter` usa `config/iflow-wasm/policy.wasm` + sidecar SHA-256 | El modo suite debe incluir esos archivos, no todo `config/iflow*`. |
+| Las ROM tienen rutas canónicas concretas | `VmConfigLoader` usa `config/iflow-16/policy.flow`; `WasmPolicyRouter` usa `config/iflow-wasm/policy.wasm` + sidecar SHA-256 | El modo suite debe incluir esos archivos, no todo `config/iflow*`. |
 
 #### Alcance
 
@@ -1242,7 +1243,7 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
     `sync-*`, `inworld`, etc.).
   - `manager/library/status` (base de datos de paquetes) solo para listado y edición, con una
     advertencia visible de consistencia/estabilidad. No se importan los JARs ni las dependencias.
-  - ROM de iFlow: `config/iflow-vm/policy.flow` y `config/iflow-wasm/policy.wasm` con su sidecar
+  - ROM de iFlow: `config/iflow-16/policy.flow` y `config/iflow-wasm/policy.wasm` con su sidecar
     SHA-256.
 - **Modo proyecto (actual):** se conserva para el modelo visual plano; no se elimina ni se
   sustituye por el modo suite.
@@ -1322,7 +1323,7 @@ los archivos no editados y no transporta JARs, dependencias, caché, journal, ba
 | `sync.bukkit` | `config/sync-bukkit/config.yml` |
 | `sync.fabric` | `config/sync-fabric/config.yml` |
 | `packages` | `manager/library/status` (listado/edición con advertencia) |
-| `rom.iflow-vm` | `config/iflow-vm/policy.flow` |
+| `rom.iflow-16` | `config/iflow-16/policy.flow` |
 | `rom.iflow-wasm` | `config/iflow-wasm/policy.wasm` + `policy.sha256` |
 
 `state.extra` conserva `config/suite/messages.yml`, `config/suite/commands.yml`, el
@@ -1372,7 +1373,7 @@ legacy ni lectores alternativos (ADR-034).
    elimina con advertencia permanente y valida el candidato antes de mutar. Tests:
    `tests/unit/packageDb.test.cjs` (64 casos), `tests/unit/suiteMapping.test.cjs` (121 casos con
    paquetes y preservación byte a byte) y `tests/integration/packages.cjs` (vista).
-7. **ROM de iFlow. ✅ (2026-11-12)** Añadir gestión de `config/iflow-vm/policy.flow` y
+7. **ROM de iFlow. ✅ (2026-11-12)** Añadir gestión de `config/iflow-16/policy.flow` y
    `config/iflow-wasm/policy.wasm` con su sidecar SHA-256: listar, añadir, borrar, editar y clonar.
    El clon copia bytes y sidecar; al editar un `.wasm` se recalcula el hash y se reescribe el
    sidecar. Se validan cabecera, versión, longitudes y hash antes de aceptar el archivo.
@@ -1461,7 +1462,7 @@ Completado en el slice 3 (paso 3):
   usuario no la tocó, no se inventa. Las secciones añadidas, renombradas o eliminadas se escriben,
   renombran o borran en su ruta canónica.
 - Los archivos opacos (YAML inválido, binarios, SpEL) y los diferidos
-  (`config/iflow-vm/policy.flow`, `config/iflow-wasm/policy.wasm` y su sidecar) nunca se sobrescriben;
+  (`config/iflow-16/policy.flow`, `config/iflow-wasm/policy.wasm` y su sidecar) nunca se sobrescriben;
   la exportación lo reporta como aviso. `state.extra` tampoco puede pisar una ruta mapeada. La base
   de paquetes dejó de ser diferida en el paso 6.
 - El mapeo no añade `manifest.json` ni transporta JARs, caché, journal, backups o temporales.
@@ -1538,7 +1539,7 @@ Completado en el slice 7 (paso 7):
 - `state.roms` es un array JSON-serializable de entradas
   `{id, path, kind, canonical, data (base64), valid, error, meta, sidecarPath, sidecarText, sha256}`,
   de modo que undo/redo y `StateStore.replace` funcionan sin conversiones.
-- Un `.flow` bajo `config/iflow-vm/` y un `.wasm` bajo `config/iflow-wasm/` se hidratan como ROM.
+- Un `.flow` bajo `config/iflow-16/` y un `.wasm` bajo `config/iflow-wasm/` se hidratan como ROM.
   Un `.wasm` importado exige un sidecar con hash coincidente; si falta o no coincide, queda opaco,
   produce aviso y nunca se sobrescribe. Una ROM inválida también queda opaca.
 - `putRoms()` valida cada entrada, exige sidecar coincidente para `.wasm`, escribe el sidecar con
@@ -1596,7 +1597,7 @@ Completado en el slice 9 (paso 9):
   directorio de primer nivel) y `archivo opaco preservado; no se valida`.
 - `KNOWN_MODULES` enumera los módulos que el runtime reconoce bajo `config/`; un directorio fuera de
   la lista es un aviso porque puede ser una extensión válida que el editor aún no modela.
-- Las ROM (`config/iflow-vm/`, `config/iflow-wasm/`) y `manager/library/status` no son YAML y quedan
+- Las ROM (`config/iflow-16/`, `config/iflow-wasm/`) y `manager/library/status` no son YAML y quedan
   fuera del validador: se validan con `Suite.rom` y `Suite.packageDb` en sus propios slices.
 - `js/importExport.js` valida el archivo que devuelve `toSuite` **antes** de descargar. Si hay
   errores muestra `showSuiteErrors` en el modal existente (`#suiteModal`, con `#suiteModalApply`
@@ -1723,46 +1724,52 @@ Pendiente y fuera de esta unidad:
 
 ---
 
-## DOBLE LÍNEA — 2026-10-23: `iflow-vm` (32 bits) e `iflow-wasm` (Chicory)
+## LÍNEAS — 2026-10-23, revisado 2026-11-15: `iflow-16`, `iflow-32` e `iflow-wasm`
 
 ### Decisión
 
-**iFlow no se abandona ni se elimina.** Se mantienen dos líneas paralelas que comparten el contrato
+**iFlow no se abandona ni se elimina.** Se mantienen líneas paralelas que comparten el contrato
 de políticas del host, pero no el mismo runtime:
 
-- **`iflow-vm` — VM propia de 32 bits.** Es la evolución de la VM actual (`src/iflow-vm/`), con las
-  mejoras pendientes de `docs/prompts/diseno/iflow-cpu-implement.md`: memoria/MMU de 32 bits, ISA `.flow` revisada,
-  BIOS/kernel/scheduler, IRQ, tiempo, persistencia y concurrencia. Conserva el compilador
-  `tools/iflow-compiler/` y los artefactos `.flow`. No se borra nada de la base actual.
-- **`iflow-wasm` — motor WebAssembly.** Es la línea nueva basada en **Chicory**, con artefactos
+- **`iflow-16` — VM propia de 16 bits y 64 KB.** Es la línea actual (`src/iflow-16/`), de
+  minimalismo extremo y soporte legacy: ISA/formato v2, ABI `HOST` v2, fuel, ROM de 16 bits y
+  límites de memoria explícitos. Recibe bugs, seguridad y compatibilidad; su público son servidores
+  con poca CPU/RAM y entornos embebidos.
+- **`iflow-32` — VM propia de 32 bits.** Es la línea nueva (`src/iflow-32/`), con memoria/MMU de
+  32 bits, ISA `.flow` v3, BIOS/kernel/scheduler, IRQ, tiempo, persistencia y concurrencia. Es la
+  línea activa y no hereda el ABI `HOST` v2.
+- **`iflow-wasm` — motor WebAssembly.** Es la línea basada en **Chicory**, con artefactos
   `.wasm` portables, instancias aisladas, memoria lineal propia y un ABI de imports acotado. No
   hereda el ISA `.flow`, el ABI `HOST` v2 ni el modelo BIOS/kernel.
 
-Las dos líneas son independientes. Los hallazgos `IFLOW-MAN-*` se incorporan como requisitos de `iflow-vm`; **no se
-aplican automáticamente** a `iflow-wasm`. El host podrá seleccionar el motor por configuración
-cuando ambas estén listas.
+Las líneas son independientes. Los hallazgos `IFLOW-MAN-*` se revisan para `iflow-16` e `iflow-32`
+y **no se aplican automáticamente** a `iflow-wasm`. El host selecciona el motor por configuración;
+no hay despacho dual dentro de una VM.
 
 ### Selección de motores iFlow mediante el hub `iflow` (2026-11-04, ADR-032)
 
-> **Los tres motores — `iflow-vm`, `iflow-wasm` e `iflow-firewall` — publican `IflowBackend`.**
-> El paquete `iflow` es el hub: descubre los backends y activa **uno solo** para el routing.
-> Pueden coexistir instalados; el hub es la fuente de verdad y aplica el fallback configurado.
+> **Los cuatro motores — `iflow-16`, `iflow-32`, `iflow-wasm` e `iflow-firewall` — publican
+> `IflowBackend`.** El paquete `iflow` es el hub: descubre los backends y activa **uno solo** para
+> el routing. Pueden coexistir instalados; el hub es la fuente de verdad y aplica el fallback
+> configurado, pero nunca cruza entre `iflow-16` e `iflow-32`.
 >
 > Configuración canónica: `config/iflow/config.yml` con
-> `engine: iflow-firewall | iflow-vm | iflow-wasm` y `fallback-on-unavailable: true|false`.
-> El default es `iflow-firewall`. `iflow.engine.kind` ya no existe: la selección de motor vive
-> solo en `config/iflow/config.yml` y el hub es el único punto de resolución.
+> `engine: iflow-firewall | iflow-16 | iflow-32 | iflow-wasm` y
+> `fallback-on-unavailable: true|false`. El default es `iflow-firewall`. `iflow.engine.kind` ya no
+> existe: la selección de motor vive solo en `config/iflow/config.yml` y el hub es el único punto
+> de resolución.
 >
 > Los contratos neutrales (`Router`, `IflowHub`, `IflowBackend`) viven en `core-api` bajo
 > `me.majhrs16.suite.iflow`; cada motor usa su propio subpaquete. `SuiteRuntime` exige
 > `IflowHub` y no acepta un `Router` suelto. `iflow-wasm` ya publica su backend con hash y watcher.
 >
-> El monorepo compila los tres motores y el hub; `./gradlew publishIflowEngines` publica
-> `suite-iflow`, `suite-iflow-vm`, `suite-iflow-wasm` y `suite-iflow-firewall` en `build/repo`.
+> El monorepo compila los cuatro motores y el hub; `./gradlew publishIflowEngines` publica
+> `suite-iflow`, `suite-iflow-16`, `suite-iflow-32`, `suite-iflow-wasm` y `suite-iflow-firewall`
+> en `build/repo`.
 
 El único pendiente transversal es la **paridad funcional de propiedades del mensaje** (W3.5) contra
 la **spec v3**: que `iflow-wasm` implemente el mismo contrato de transformación, decisión y entrega,
-no el ABI `HOST` v2 de `src/iflow-vm`. No reactiva el backlog de 32 bits de la VM. Detalle en
+no el ABI `HOST` v2 de `src/iflow-16`. No reactiva el backlog de `iflow-32`. Detalle en
 «Paridad funcional pendiente».
 
 ### Qué se conserva
@@ -1774,16 +1781,18 @@ no el ABI `HOST` v2 de `src/iflow-vm`. No reactiva el backlog de 32 bits de la V
 - La configuración por módulo y el editor web como superficies de autoría.
 - Las decisiones de seguridad que no dependen del runtime: sandbox, capabilities, límites duros de
   memoria/tiempo/tamaño, validación de artefactos y verificación de integridad.
-- **`src/iflow-vm/` como base de la VM de 32 bits**: código, tests, fixtures y compilador se conservan y
-  evolucionan en la línea de 32 bits. **No se borra.**
+- **`src/iflow-16/` como línea legacy de 16 bits**: código, tests, fixtures, compilador y ROM de
+  16 bits se conservan. **No se borra.**
+- **`src/iflow-32/` como línea activa de 32 bits**: recibe el núcleo v3 aislado y evoluciona con
+  ADR-037.
 - **WebAssembly + Chicory** como línea `iflow-wasm`, con módulo propio en `src/iflow-wasm/`.
 
 ### Qué no se hereda en `iflow-wasm`
 
 - El ISA `.flow`, el ABI `HOST` v2, el modelo BIOS → bootloader → kernel → userspace, el mapa de
   64 KB, los frames de 4 KB y el fuel como mecanismo de límite del motor.
-- Los hallazgos `IFLOW-MAN-*` como deuda del motor Wasm: pertenecen a `iflow-vm`.
-- La documentación que presenta iFlow como único motor; se actualiza a la doble línea.
+- Los hallazgos `IFLOW-MAN-*` como deuda del motor Wasm: pertenecen a `iflow-16` e `iflow-32`.
+- La documentación que presenta iFlow como único motor; se actualiza a las líneas separadas.
 
 ### Arquitectura objetivo de `iflow-wasm` (borrador, sujeta a ADR)
 
@@ -1814,35 +1823,92 @@ Reglas de diseño:
 6. **Autoría multi-lenguaje.** El panel web puede editar WAT/AssemblyScript o subir un `.wasm`
    compilado; el servidor no ejecuta toolchains nativas arbitrarias.
 
-### Trayectoria v2 → v3 y fuel (2026-11-07)
+### Trayectoria v2 → v3, retrocompatibilidad y fuel (2026-11-07, revisado 2026-11-15)
 
-La línea vigente de `iflow-vm` sigue siendo la **v2 de 16 bits** mientras V2 sustituye el núcleo
-por el contrato v3 de ADR-037. V2-0 implementó el contenedor ROM v3 aislado, V2-1 el decoder de la
-ISA v3, V2-2 la ALU/registros/flags v3, V2-3 el núcleo de ejecución v3 (fetch/decode/execute,
-CSR, memoria y traps, privilegios, `HOST` mínimo, ciclos y tiempo) y V2-4 la memoria física
-dispersa, la MMU, el bus MMIO, el PIC, los dispositivos y el ABI `HOST` v3 completo, todos sin
-cablear al motor; no existe un despacho dual v2/v3. La migración a v3 (ISA/ABI de
-32 bits, scheduler, persistencia, quantum) es posterior y no se mezcla con esos slices. Por eso el
-fuel sigue siendo el límite de ejecución vigente en v2 y las referencias de ADR-036 §16.6/§16.7 al
-coste de fuel describen esa línea, no el objetivo v3.
+La **v2 de 16 bits y 64 KB** no se trata como código a borrar: es `iflow-16`, la línea de
+**retrocompatibilidad** que debe quedar terminada, soportada y funcional. La **v3** es `iflow-32`,
+la línea de escala. Son **dos módulos separados**; la convivencia se resuelve en el hub, que
+selecciona un engine, no con un despacho dual dentro de un núcleo.
 
-`IFLOW-MAN-D36R` (retirar el fuel como límite) sigue siendo el objetivo de v3, pero su reemplazo
-—quantum de scheduler, timer IRQ, watchdog de host, cuotas por actor o una combinación— no está
-decidido ni implementado (preguntas 18-21 de `iflow-cpu-implement.md` §8.8). Cuando se aborde V3
-se actualizará el ADR y el puente `SYNC_INVOKE` dejará de cobrar fuel. No se introduce un doble
-camino v2/v3: la migración sustituye la línea vigente.
+V2-0 implementó el contenedor ROM v3 aislado, V2-1 el decoder de la ISA v3, V2-2 la
+ALU/registros/flags v3, V2-3 el núcleo de ejecución v3 (fetch/decode/execute, CSR, memoria y
+traps, privilegios, `HOST` mínimo, ciclos y tiempo) y V2-4 la memoria física dispersa, la MMU, el
+bus MMIO, el PIC, los dispositivos y el ABI `HOST` v3 completo, todos sin cablear al motor; no
+existe un despacho dual v2/v3. La migración a v3 (ISA/ABI de 32 bits, scheduler, persistencia,
+quantum) es posterior y no se mezcla con esos slices. Por eso el fuel sigue siendo el límite de
+ejecución vigente en v2 y las referencias de ADR-036 §16.6/§16.7 al coste de fuel describen esa
+línea, no el objetivo v3.
 
-### Fases de `iflow-vm` (32 bits)
+**Límites de `iflow-16` que justifican `iflow-32`.** Cargar datos del entorno Minecraft en la RAM
+virtual al vuelo mediante `HOST` es posible, pero los 64 KB limitan la carga a unos pocos cientos
+de nombres de jugadores. Lo mismo ocurre con la cola de mensajes para aplicar limitación de
+velocidad o cargar varios mensajes: aunque solo se guarden IDs tipo puntero —que además habría que
+mapear a UUID y al contenido del mensaje—, el techo teórico es de unos 22 000 mensajes; el
+overhead del protocolo de la propia cola lo reduce a unos 750 mensajes. En una network grande
+alcanzar 750 mensajes por segundo en toda la red es relativamente fácil, de modo que `iflow-16`
+no puede ser la solución general de memoria/cola. Su público real son servidores con poca CPU o
+RAM y entornos embebidos.
+
+**Objetivo de `iflow-32`.** Pasar de 64 KB a un espacio de direcciones de hasta **4 GiB** (máximo
+arquitectónico; la RAM física configurable de ADR-037 es 16 MiB–1 GiB y cualquier ampliación
+física exige revisar ese límite), con `kernelspace` y `userspace` formales, y rediseñar la
+arquitectura a partir de la auditoría manual: eliminar la quota de instrucciones, mejorar la
+instrucción `HOST`, rediseñar el formato de transacción y el uso de registros, entre otros
+cambios.
+
+`IFLOW-MAN-D36R` (retirar el fuel como límite) sigue siendo el objetivo de `iflow-32`, pero su
+reemplazo —quantum de scheduler, timer IRQ, watchdog de host, cuotas por actor o una combinación—
+no está decidido ni implementado (preguntas 18-21 de `iflow-cpu-implement.md` §8.8). Cuando se
+aborde V3 se actualizará el ADR y el puente `SYNC_INVOKE` dejará de cobrar fuel.
+
+> **Resuelto por ADR-038 (2026-11-15).** ADR-037 queda acotado al motor `iflow-32`: su regla de
+> rechazo de `.flow` v2 aplica a esa línea. `iflow-16` es un módulo separado que sigue aceptando
+> `.flow` v2 y se rige por ADR-038. No hay alias `iflow-16`; el rename es breaking y se hace antes
+> de V4.
+
+**Auditoría, ROM y herencia.** La auditoría manual de la línea 16-bit identificó que `.flow` no es
+«solo un programa»: es una imagen ROM con cabecera, TOC, segmentos y un modelo
+BIOS/bootloader/kernel. El hallazgo se aplicó inicialmente al rediseño de 32 bits, pero aplica a
+ambas líneas; cada una define su layout. La MMU de `iflow-32` puede adaptarse a `iflow-16` si
+conserva el espacio de 16 bits, los 64 KB, la ABI v2 y el determinismo; no se asume compatible
+hasta verificarlo.
+
+**Código compartido y ciclo de vida.** Se permite compartir primero `core-api`, modelos neutrales,
+puertos de host y utilidades que no impongan una ISA; si una línea necesita evolucionar de forma
+incompatible, el componente se bifurca. No se comparte el núcleo, decoder, MMU, formato ROM ni ABI
+`HOST`. `iflow-16` recibe bugs, seguridad y compatibilidad; `iflow-32` es la línea activa. La
+paridad de features es una recomendación, no una obligación.
+
+**Paquetes Java internos.** Ambas líneas conservan el prefijo
+`me.majhrs16.suite.iflow.vm` mientras no exista colisión de clases; los paquetes no son contrato
+público y cada línea puede renombrarlos cuando su implementación diverja. Las clases de entrada ya
+son `Iflow16Module`/`Iflow16Activator` para la línea 16 y el hub usa los IDs `iflow-16` e
+`iflow-32`.
+
+### Fases de `iflow-32` (32 bits)
 
 | Fase | Entregable | Criterio de cierre |
 |---|---|---|
-| **V0 — Módulo y spec** | `src/iflow-vm/` renombrado, Gradle/CI/docs actualizados y especificación v3 enlazada | ✅ `:src:iflow-vm:build`, `:src:iflow-wasm:build` y `:src:host:build` verificados con JDK 21 |
-| **V1 — Contrato 32 bits** | ✅ **ADR-037 (2026-11-14):** ISA, memoria/MMU, IRQ, scheduler, tiempo, formato ROM y ABI `HOST` v3; corte limpio sin compatibilidad `.flow` v2 | Contrato congelado antes de tocar el núcleo |
-| **V2 — Núcleo** | **V2-0 completado (2026-11-14):** contenedor ROM v3 aislado en `me.majhrs16.suite.iflow.vm.rom` (`RomParser`, cabecera/TOC de 80/64 bytes, `PRG3`, capacidades, hashes SHA-256, `W^X`, rechazo explícito de `.flow` v2) con 62 tests. **V2-1 completado (2026-11-14):** decoder v3 aislado en `me.majhrs16.suite.iflow.vm.isa.v3` (`Opcode`, `Instruction`, `InstructionDecoder`, `MachineFault`, registros/CSR, cajas de 3/7 bytes, formas, `size`, reservados y lector de instrucciones) con 25 tests. **V2-2 completado (2026-11-14):** ALU v3 aislada (`Alu`, `Flags`, `RegisterFile`) con 42 tests de aritmética, `ADC`, préstamo/carry, overflow, desplazamientos, `MUL`/`DIV`/`MOD` con signo y sin signo, trampas aritméticas y banco de 16 registros. **V2-3 completado (2026-11-14):** núcleo de ejecución aislado (`Cpu`, `Status`, `CsrFile`, `DataMemory`, `MemoryFault`, `HostCall`, `HostHandler`, `HostResult`, `HostStatus`, `TimeSource`) con fetch/decode/execute, GPR/flags/CSR, memoria y alineación, saltos/`CALL`/`RET`, privilegios, `ECALL`/`ERET`, `HOST` mínimo, `RDCYCLE`/`RDTIME`, `SFENCE.VMA`/`FENCE`, `BREAK`/`NOP`/`HALT`, doble falta y `TVEC=0`. **V2-4 completado (2026-11-15):** memoria física dispersa con snapshots COW por frame, MMU de dos niveles con TLB coherente, bus MMIO supervisor, PIC, timer, UART, display, NVRAM, SYSINFO, host mailbox y ABI `HOST` v3 completo (TLV, identidad, capacidades, `ROUTE_DECISION` única y mapeo de `SyncResult`) con 55 tests nuevos. Los cinco slices están **sin cablear** a `VmPolicyEngine`/`VmConfigLoader`/`IflowVmActivator`; V2 queda cerrado y el siguiente paso es V3 (persistencia y tiempo), con el cableado del núcleo v3 y la retirada del v2 en V4. | Tests de memoria, privilegios y arranque |
-| **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia | Tests de ejecución persistente y cancelación |
-| **V4 — Integración** | `iflow-vm` conectado a `Router`/`MessageDispatcher` | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
+| **V0 — Módulo y spec** | ✅ **Completado (2026-11-15):** `src/iflow-vm/` renombrado a `src/iflow-16/`; `src/iflow-32/` contiene los paquetes v3; `settings.gradle`, publicaciones, cobertura, lockfiles, tests, configuración, wiki y READMEs actualizados. El hub selecciona por nombre y no hace fallback entre `iflow-16` e `iflow-32`; `iflow-32` queda sin `ModuleActivator` hasta V4 | `:src:iflow-16:test` (411) y `:src:iflow-32:test` (253) verdes; `./gradlew build checkArchitecture checkLocks` verde; `src/web-editor` en verde |
+| **V1 — Contrato 32 bits** | ✅ **ADR-037 (2026-11-14):** ISA, memoria/MMU, IRQ, scheduler, tiempo, formato ROM y ABI `HOST` v3 de `iflow-32`; ADR-038 (2026-11-15) separa la línea `iflow-16` y acota el rechazo de `.flow` v2 a `iflow-32` | Contrato v3 congelado; convivencia por hub, sin alias ni despacho dual |
+| **V2 — Núcleo** | **V2-0 completado (2026-11-14):** contenedor ROM v3 aislado en `me.majhrs16.suite.iflow.vm.rom` (`RomParser`, cabecera/TOC de 80/64 bytes, `PRG3`, capacidades, hashes SHA-256, `W^X`, rechazo explícito de `.flow` v2) con 62 tests. **V2-1 completado (2026-11-14):** decoder v3 aislado en `me.majhrs16.suite.iflow.vm.isa.v3` (`Opcode`, `Instruction`, `InstructionDecoder`, `MachineFault`, registros/CSR, cajas de 3/7 bytes, formas, `size`, reservados y lector de instrucciones) con 25 tests. **V2-2 completado (2026-11-14):** ALU v3 aislada (`Alu`, `Flags`, `RegisterFile`) con 42 tests de aritmética, `ADC`, préstamo/carry, overflow, desplazamientos, `MUL`/`DIV`/`MOD` con signo y sin signo, trampas aritméticas y banco de 16 registros. **V2-3 completado (2026-11-14):** núcleo de ejecución aislado (`Cpu`, `Status`, `CsrFile`, `DataMemory`, `MemoryFault`, `HostCall`, `HostHandler`, `HostResult`, `HostStatus`, `TimeSource`) con fetch/decode/execute, GPR/flags/CSR, memoria y alineación, saltos/`CALL`/`RET`, privilegios, `ECALL`/`ERET`, `HOST` mínimo, `RDCYCLE`/`RDTIME`, `SFENCE.VMA`/`FENCE`, `BREAK`/`NOP`/`HALT`, doble falta y `TVEC=0`. **V2-4 completado (2026-11-15):** memoria física dispersa con snapshots COW por frame, MMU de dos niveles con TLB coherente, bus MMIO supervisor, PIC, timer, UART, display, NVRAM, SYSINFO, host mailbox y ABI `HOST` v3 completo (TLV, identidad, capacidades, `ROUTE_DECISION` única y mapeo de `SyncResult`) con 55 tests nuevos. Los cinco slices están **sin cablear** a `VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`. El núcleo v3 de V2 queda cerrado; antes de V3 hay que cerrar funcionalmente **`iflow-16`** (CPU, `HOST`, ROM, cola y límites) y en V4 integrar `iflow-32` en el hub sin despacho dual ni retirada de `iflow-16`. | Tests de memoria, privilegios y arranque |
+| **V3 — Persistencia y tiempo** | Scheduler, sleep/wake, RTC, quantum, journal y concurrencia; se aborda después del cierre funcional de `iflow-16` | Tests de ejecución persistente y cancelación |
+| **V4 — Integración** | `iflow-32` conectado a `Router`/`MessageDispatcher`; `iflow-16` conservada como línea soportada y seleccionable por el hub | Un mensaje real atraviesa el pipeline con una política `.flow` de 32 bits |
 | **V5 — Herramientas de ensamblado** | Assembler `.flowasm` v3, firmware, ejemplos y validador | Build reproducible + tests |
 | **V6 — Compilador C** | Compilador C11 freestanding a `.flowasm` v3, `libiflow` y ejemplos | Corpus C compila, ejecuta en VM v3 y produce el mismo resultado observable; tests y determinismo |
+
+#### Cierre y soporte de `iflow-16` (previo a V3)
+
+`iflow-16` debe quedar funcional y soportada por retrocompatibilidad, no solo congelada:
+
+- **CPU:** completar las instrucciones, traps, `HOST` y errores que falten; sin stubs ni no-ops; tests de regresión.
+- **ROM:** corregir la interpretación de `.flow` como programa suelto. La imagen incluye cabecera, TOC, segmentos y el modelo BIOS/bootloader/kernel; el layout es de 16 bits y no se copia el de `iflow-32` sin verificar compatibilidad.
+- **`HOST`:** cargar datos del entorno Minecraft al vuelo (por ejemplo, nombres de jugadores) dentro de los 64 KB; documentar el límite real de unos pocos cientos de entradas.
+- **Cola y rate limiting:** implementar una cola acotada, backoff y descarte explícito; medir el overhead del protocolo. El techo práctico es de unos 750 mensajes, no 22 000 IDs.
+- **Soporte:** journal/estado de host suficiente para diagnóstico y recuperación; compatibilidad de `.flow` v2 en esta línea.
+- **Criterio de cierre:** tests verdes, límites medidos y documentados, y ninguna promesa de memoria por encima de 64 KB. No se inicia V3 hasta cerrar esta línea.
+
+La convivencia con `iflow-32` se resuelve en el hub: cada módulo tiene su ISA y no hay doble lector ni despacho dual. Se permite compartir primero `core-api`, modelos neutrales, puertos de host y utilidades sin semántica de ISA; cuando una línea necesite divergir, el componente se bifurca. No hay alias `iflow-16` ni fallback automático entre líneas.
 
 #### V6 — Compilador C (ADR-023)
 
@@ -2045,14 +2111,14 @@ se deja bloqueado por V5; V1 ya está congelado, no se adelanta como POC.
 - Selección de motor (`.flow` vs `.wasm`) por configuración: **cerrada en ADR-032** (hub `iflow`).
 
 
-### Paridad funcional pendiente: `iflow-vm` (v3) ↔ `iflow-wasm`
+### Paridad funcional pendiente: `iflow-32` (v3) ↔ `iflow-wasm`
 
 > **Base de la paridad:** la **spec v3** (`docs/prompts/diseno/iflow-cpu-implement.md`), no el código
-> actual de `src/iflow-vm`. Ese código implementa la **v2 de 16 bits** y se conserva como base
-> histórica; sus `PROP_*`, `MessageHostContext`, `PolicyTarget` y `HOST` v2 **no son contrato vigente**.
+> de `src/iflow-16`. Ese código implementa la **v2 de 16 bits** y se conserva como línea legacy; sus
+> `PROP_*`, `MessageHostContext`, `PolicyTarget` y `HOST` v2 **no son contrato vigente**.
 >
 > **Alcance:** replicar en Wasm el contrato v3 de transformación, decisión y entrega, sin heredar ISA,
-> MMU, BIOS/kernel ni ABI `HOST` v2. **No** incluye el backlog V2–V5 de la VM de 32 bits; V1 ya está congelado en ADR-037.
+> MMU, BIOS/kernel ni ABI `HOST` v2. **No** incluye el backlog V2–V5 de `iflow-32`; V1 ya está congelado en ADR-037.
 
 El objetivo es que una política `.wasm` observe y transforme el mensaje y emita la misma decisión
 explícita que una política `.flow` v3, con el mismo resultado observable. La paridad es de **contrato**,
@@ -2109,29 +2175,29 @@ no de implementación: los nombres de imports pueden diferir, la semántica no.
 **Fases:** W1 define los imports alineados a la spec v3 (✅ cerrado); W2 implementa las host
 functions y el engine aislado (✅ cerrado); W3 integra el motor en el pipeline con router, hash y
 hot-reload (✅ cerrado); W3.5 cierra la paridad. W3.5 está desbloqueado por ADR-031. No se toca el
-backlog V2–V5 de `iflow-vm`; V1 ya está congelado en ADR-037.
+backlog V2–V5 de `iflow-32`; V1 ya está congelado en ADR-037.
 
 ### Decisiones pendientes (ADR)
 
-- **`iflow-vm`:** ISA de 32 bits, mapa de memoria, MMU, IRQ, scheduler, política de tiempo
-  (quantum/timer/watchdog), journal, concurrencia y ABI `HOST` v3. No hay compatibilidad con
-  `.flow` v2: el contrato viejo se corta en la purga pre-1.0 (ADR-034).
+- **`iflow-32`:** ISA de 32 bits, mapa de memoria, MMU, IRQ, scheduler, política de tiempo
+  (quantum/timer/watchdog), journal, concurrencia y ABI `HOST` v3. No acepta `.flow` v2; esa
+  compatibilidad pertenece a `iflow-16` (ADR-038).
 - **`iflow-wasm`:** nombre/artefacto definitivo, versión de Chicory (W0 fija `runtime:1.4.0`;
   falta decidir compilador/WASI), capabilities y límites. El ABI de imports, la validación de
 exports, el hash del `.wasm` y el hot-reload quedaron cerrados en W1/W3 (`PolicyAbiV3`,
   `WasmPolicyRouter`, ADR-033).
-- **Paridad `iflow-vm` ↔ `iflow-wasm`:** contrato de política cerrado en ADR-031 (D01–D05,
+- **Paridad `iflow-32` ↔ `iflow-wasm`:** contrato de política cerrado en ADR-031 (D01–D05,
   Q26, Q35–Q38, `IFLOW-MAN-31/43…45`, ABI TLV y decisión única). El hash/hot-reload y la selección
   de motor quedaron cerrados en ADR-032/ADR-033; falta la matriz de paridad W3.5, alineada a la
-  **spec v3** y no al ABI v2 de `src/iflow-vm`.
+  **spec v3** y no al ABI v2 de `src/iflow-16`.
 
 ### Próxima acción inmediata (V0/W0/W1, CT1–CT4 ✅ y cierre de paridad)
 
 1. Mantener `docs/prompts/diseno/iflow-cpu-implement.md` como especificación técnica de referencia v3 de la VM de 32 bits.
-2. Conservar `src/iflow-vm/` como base de la VM de 32 bits.
+2. Conservar `src/iflow-16/` como línea legacy de 16 bits y crear/extraer `src/iflow-32/` como línea de 32 bits.
 3. Mantener el scaffold de `src/iflow-wasm/` (Chicory, loader, tests, lockfile/verificación) validado con JDK.
 4. ADRs del motor Wasm y de la VM de 32 bits: cerrados en ADR-031, ADR-032 y ADR-033.
-5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5, desbloqueado por ADR-031); W3 ya está cerrado con `WasmPolicyRouter`, SHA-256 y hot-reload. No se toma el código v2 como contrato ni se aborda el backlog V2–V5 de `iflow-vm` (V1 ya está congelado en ADR-037).
+5. Completar la paridad funcional de propiedades y decisiones entre ambos motores contra la spec v3 (W3.5, desbloqueado por ADR-031); W3 ya está cerrado con `WasmPolicyRouter`, SHA-256 y hot-reload. No se toma el código v2 como contrato ni se aborda el backlog V2–V5 de `iflow-32` (V1 ya está congelado en ADR-037).
 6. **ChatTranslator:** CT4 completado; CT5 diferido con el editor web.
 7. **V6 — Compilador C:** diseño en ADR-023; no se inicia antes de V5. La implementación empieza por C0 (subconjunto y ABI) con el ISA v3 ya congelado en ADR-037; no se adelanta contra el ISA v2.
 
@@ -2176,7 +2242,7 @@ Semántica de instalación:
    primero los paquetes en conflicto y después instala el plan. Las sobrecargas
    sin barrera fallan explícitamente si hay reemplazos. En los comandos, el token
    final `confirm` activa esa confirmación:
-   `/suite repo install iflow-vm confirm`.
+   `/suite repo install iflow-16 confirm`.
 4. Las dependencias satisfechas por `Provide` se reconocen tanto al instalar como al
    comprobar dependencias inversas y al diagnosticar paquetes rotos.
 
@@ -2188,7 +2254,7 @@ Provide: router
 ```
 
 Los tres motores iFlow **no** declaran `Exclude` entre sí (ADR-032). Cada uno declara su
-propia capability (`iflow-vm`, `iflow-wasm`) y `router`; el hub `iflow` es el paquete que
+propia capability (`iflow-16`, `iflow-wasm`) y `router`; el hub `iflow` es el paquete que
 provee `iflow` y elige el backend activo.
 
 El estado instalado conserva `Exclude`/`Provide` al serializarse, de modo que la
@@ -2239,7 +2305,7 @@ fases vive en Git.
 > **Situación actual (2026-11-13):** inventario medido sobre el árbol vigente — **43 módulos Java** en `src/`:
 > - **0 sin directorio de tests** — `core-render` incorporó `src/test` en este cambio
 > - **0 directorios vacíos**
-> - **43 con tests** (1–29 archivos); `iflow-vm` (29) y `core-api` (20) son los mayores
+> - **43 con tests** (1–29 archivos); `iflow-16` (29) y `core-api` (20) son los mayores
 > - **28 módulos con reporte JaCoCo**; 15 sin reporte (cobertura N/A)
 > - Cobertura de línea < 70 %: `sync-fabric` 10.5 %, `sync-discord-jda` 19.4 %, `fabric-host` 20.7 %, `spigot-host` y `transport` 30.3 %, `sync-velocity` 42.3 %, `sync-discord` y `messages` 60.0 %, `coretranslator` 61.0 %, `iflow-firewall` 61.7 %, `sync-websocket` 62.1 %, `sync-velocity-core` 62.3 %, `observability` 65.7 %
 
@@ -2258,7 +2324,7 @@ fases vive en Git.
 | `src:host` | ✅ OK | 15 | 3083 | 3300 | 87.4% | 79.0% | — |
 | `src:iflow` | ✅ OK | 3 | 651 | 839 | 86.0% | 77.9% | — |
 | `src:iflow-firewall` | ✅ OK | 6 | 2378 | 887 | 61.7% | 51.8% | Cobertura línea <70% |
-| `src:iflow-vm` | ✅ OK | 29 | 7319 | 6813 | 86.0% | 72.4% | — |
+| `src:iflow-16` | ✅ OK | 29 | 7319 | 6813 | 86.0% | 72.4% | — |
 | `src:iflow-wasm` | ✅ OK | 6 | 2163 | 1485 | N/A | N/A | Sin reporte JaCoCo |
 | `src:inworld` | ✅ OK | 3 | 332 | 349 | 89.0% | 74.2% | — |
 | `src:kernel` | ✅ OK | 5 | 465 | 324 | 91.8% | 82.5% | — |
@@ -2305,7 +2371,7 @@ Líneas Prod/Test = líneas físicas de todas las `.java` de `src/main` y `src/t
 | **T3 — Tests de contrato SPI/API** ✅ | Cada `core-api`, `extension-api`, `manager-spi`, `kernel` tiene tests que validan contratos (ServiceLoader, interfaces, modelos inmutables) sin depender de implementaciones | **Tests de contrato pasan en aislamiento**; documentación de contratos generada |
 | **T4 — Tests de integración por dominio** ✅ | `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld`, `observability`, `messages`: tests con testcontainers/mocks de red, disco y plataforma | Suite de integración ejecuta en CI (< 10 min) sin servidor real; el E2E real es la tarea E2E.1 posterior a 1.0.0 (ADR-034) |
 | **T5 — Tests de regresión obligatorios** | Cada bug/fix P0/P1 de `AUDITORIA.md`, commits `fix:` tiene al menos un test que falla sin el fix y pasa con él | Matriz bug→test inline en `docs/workdir/PLAN.md` |
-| **T6 — Fuzzing y property-based** | Módulos de parsing/serialización (`textformatter`, `messages`, `iflow-vm` bytecode, `iflow-wasm` loader) usan jqwik o JUnit-Quickcheck | Campañas nocturnas en CI; hallazgos → issues automáticos |
+| **T6 — Fuzzing y property-based** | Módulos de parsing/serialización (`textformatter`, `messages`, `iflow-16` bytecode, `iflow-wasm` loader) usan jqwik o JUnit-Quickcheck | Campañas nocturnas en CI; hallazgos → issues automáticos |
 | **T7 — Performance/soak baselines** | `loadtest`, `performance`: benchmarks JMH con umbrales de regresión (p99, throughput, heap) | Alertas automáticas si hay regresión > 10 % |
 
 **Reglas de diseño:**
@@ -2319,7 +2385,7 @@ Líneas Prod/Test = líneas físicas de todas las `.java` de `src/main` y `src/t
 
 **Próxima acción T4:** ✅ **COMPLETADO** — tests de integración por dominio para `sync-*`, `transport`, `host`, `gtranslate`/`ltranslate`, `presets`, `inworld` (14 tests neutrales: dominio, activador y descriptor), `observability` (15 tests) y `messages` (18 tests) — usando mocks de red, disco y plataforma; suite < 10 min en CI sin servidor real.
 
-**Próxima acción:** V1 cerrado con ADR-037; V2-0 (contenedor ROM v3 aislado), V2-1 (decoder ISA v3 aislado), V2-2 (ALU, flags y registro v3 aislados), V2-3 (núcleo de ejecución v3 aislado) y V2-4 (memoria física, MMU, bus, PIC, dispositivos y ABI `HOST` v3 completo) completados con 62 + 25 + 42 tests más la suite del núcleo y 55 tests nuevos del slice V2-4. V2 queda cerrado; siguiente: V3 (persistencia y tiempo) y, en V4, cablear el núcleo v3 en `iflow-vm` y retirar el v2 sin camino dual. W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
+**Próxima acción:** V1 cerrado con ADR-037; V2-0 (contenedor ROM v3 aislado), V2-1 (decoder ISA v3 aislado), V2-2 (ALU, flags y registro v3 aislados), V2-3 (núcleo de ejecución v3 aislado) y V2-4 (memoria física, MMU, bus, PIC, dispositivos y ABI `HOST` v3 completo) completados con 62 + 25 + 42 tests más la suite del núcleo y 55 tests nuevos del slice V2-4. El núcleo v3 de V2 queda cerrado; siguiente: separar `src/iflow-16` y `src/iflow-32`, cerrar funcionalmente `iflow-16` (CPU, ROM, `HOST`, cola y límites) y después V3 (persistencia y tiempo). En V4 se integra `iflow-32` en el hub sin despacho dual ni fallback; ADR-038 define la convivencia y el ciclo de vida de ambas líneas. W1/W2/W3 cerrados (contrato `iflow.*`, firmas, TLV, `PolicySession`, host functions, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload). Falta W3.5: matriz de paridad `.flow` v3 vs `.wasm` con el mismo resultado observable, sin reabrir el contrato v2.
 
 ---
 
@@ -2412,10 +2478,11 @@ export JAVA_HOME=/opt/javac/x64/21
 ./gradlew --offline build
 ```
 
-> 🧱 **Toolchain de iFlow VM (2026-10-23, actualizado 2026-10-29).** `tools/iflow-compiler/` y
-> `:src:iflow-vm:test` son la base de `iflow-vm`; se conservan y evolucionan a 32 bits. El compilador
-> C de V6 vivirá en `tools/iflow-c/` y emitirá `.flowasm` v3; no sustituye al assembler. En paralelo,
-> `iflow-wasm` usa Chicory y artefactos `.wasm`, no `.flow`.
+> 🧱 **Toolchain de iFlow VM (2026-10-23, actualizado 2026-11-15).** `tools/iflow-compiler/` y
+> `:src:iflow-16:test` son la base de `iflow-16`; se conservan. `iflow-32` tendrá su propio
+> assembler v3 en V5 y sus tests en `:src:iflow-32:test`. El compilador C de V6 vivirá en
+> `tools/iflow-c/` y emitirá `.flowasm` v3; no sustituye al assembler. En paralelo, `iflow-wasm`
+> usa Chicory y artefactos `.wasm`, no `.flow`.
 
 ### Criterio de uso
 
@@ -2490,7 +2557,7 @@ El manager descarga del repositorio el archivo `packages.list` y, a partir de ah
 
 Si tienes opción a elegir, impleméntalas todas y déjaselo al usuario. No se fuerza un monolito a elegir un solo motor. Cada motor, backend o implementación es un módulo independiente instalable y reemplazable.
 
-**Consecuencia:** `iflow-vm`, `iflow-wasm` e `iflow-firewall` son conceptualmente excluyentes para el routing, pero coexisten como paquetes independientes. El usuario elige cuál instalar y el hub activa uno solo.
+**Consecuencia:** `iflow-16`, `iflow-32`, `iflow-wasm` e `iflow-firewall` son conceptualmente excluyentes para el routing, pero coexisten como paquetes independientes. El usuario elige cuál instalar y el hub activa uno solo; `iflow-16` e `iflow-32` nunca comparten despacho ni fallback.
 
 ### P11. Extensiones sin catálogo cerrado
 

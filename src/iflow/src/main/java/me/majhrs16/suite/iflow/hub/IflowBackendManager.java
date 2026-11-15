@@ -25,8 +25,11 @@ final class IflowBackendManager {
      */
     private static final List<String> FALLBACK_PRIORITY = List.of(
             "iflow-firewall",
-            "iflow-vm",
+            "iflow-16",
             "iflow-wasm");
+    // `iflow-32` no entra en la lista: el fallback nunca puede cruzar entre las
+    // líneas 16-bit y 32-bit. Si el engine configurado es una de ellas, solo se
+    // usa esa línea o se falla explícitamente.
 
     private final ModuleContext context;
     private final IflowConfig config;
@@ -67,7 +70,11 @@ final class IflowBackendManager {
         }
 
         if (config.fallback()) {
+            boolean configuredIsVm = isVmEngine(config.engine());
             for (String name : FALLBACK_PRIORITY) {
+                if (configuredIsVm && isVmEngine(name)) {
+                    continue;
+                }
                 IflowBackend candidate = byName.get(name);
                 if (candidate != null && candidate.isAvailable()) {
                     this.active = candidate;
@@ -110,7 +117,11 @@ final class IflowBackendManager {
             return named;
         }
         if (config.fallback()) {
+            boolean requestedIsVm = isVmEngine(requested);
             for (String name : FALLBACK_PRIORITY) {
+                if (requestedIsVm && isVmEngine(name)) {
+                    continue;
+                }
                 IflowBackend candidate = backendNamed(name);
                 if (candidate != null && candidate.isAvailable()) {
                     return candidate;
@@ -118,6 +129,10 @@ final class IflowBackendManager {
             }
         }
         return null;
+    }
+
+    private static boolean isVmEngine(String name) {
+        return "iflow-16".equals(name) || "iflow-32".equals(name);
     }
 
     private IflowBackend backendNamed(String name) {
