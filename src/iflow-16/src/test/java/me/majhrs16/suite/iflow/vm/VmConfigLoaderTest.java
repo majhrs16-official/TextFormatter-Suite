@@ -3,6 +3,7 @@ package me.majhrs16.suite.iflow.vm;
 import me.majhrs16.suite.api.spi.PluginLogger;
 import me.majhrs16.suite.iflow.vm.isa.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
+import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.service.HostServiceRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -84,15 +85,18 @@ class VmConfigLoaderTest {
     }
 
     @Test
-    void loadProgramFallsBackWhenPolicyFlowIsCorrupt(@TempDir Path dir) throws IOException {
+    void loadProgramFailsClosedWhenPolicyFlowIsCorrupt(@TempDir Path dir) throws IOException {
         byte[] corrupt = buildFlow(new byte[]{ Opcode.HALT }, 0);
         corrupt[corrupt.length - 1] ^= 0xFF; // break the SHA-256 trailer
         Files.write(dir.resolve("policy.flow"), corrupt);
 
-        ProgramImage program = VmConfigLoader.loadProgram(dir, null);
+        VmException failure = assertThrows(VmException.class,
+                () -> VmConfigLoader.loadProgram(dir, null));
 
-        // Malformed binaries must not abort startup: pass-through is used.
-        assertEquals(11, program.code().length);
+        // A present but malformed policy is a configuration error, not a reason
+        // to silently replace it with the pass-through program.
+        assertEquals(VmException.Code.INVALID_PROGRAM, failure.code());
+        assertTrue(failure.getMessage().contains("Hash verification failed"));
     }
 
     /**

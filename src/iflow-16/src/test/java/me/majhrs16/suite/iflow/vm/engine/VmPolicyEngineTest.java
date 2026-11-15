@@ -354,6 +354,24 @@ class VmPolicyEngineTest {
     }
 
     @Test
+    void programWithoutRouteDecisionFailsClosed() {
+        // A policy that halts without calling ROUTE_DECISION must not deliver by
+        // omission; the default is REJECT (IFLOW-MAN-08).
+        VmPolicyEngine engine = createEngine();
+        engine.setProgram(ProgramImage.builder()
+            .entryPoint(0)
+            .code(new byte[]{Opcode.HALT})
+            .build());
+
+        RouteOutcome outcome = engine.route(
+            createMessage("hello", "chat", createActor("Alice")),
+            createActor("Bob"));
+
+        assertEquals(PolicyTarget.REJECT, outcome.decision().target());
+        assertFalse(outcome.decision().delivered());
+    }
+
+    @Test
     void propertyReadServesMessageContentThroughHostContext() {
         // The program reads PROP_CONTENT through the host port and branches on the
         // first byte: 'p' -> LOG, anything else -> DROP. This proves the message

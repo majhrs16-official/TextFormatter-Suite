@@ -57,7 +57,7 @@ machine:
 | `VmDisplay` | Text framebuffer mapped through MMIO |
 | `VmNvram` | Persistent BIOS state across messages |
 | `VmPic` | 16-line interrupt controller with mask/raise/ack |
-| `VmConfigLoader` | Loads `policy.flow`; pass-through fallback |
+| `VmConfigLoader` | Loads `policy.flow`; pass-through only when the file is absent |
 | `ProgramImage` | Immutable bytecode + constants + capabilities + hash |
 
 ### Memory model
