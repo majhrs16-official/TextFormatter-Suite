@@ -19,7 +19,9 @@ public record HostCall(
         int argumentLength,
         int resultAddress,
         int resultCapacity,
-        DataMemory memory
+        DataMemory memory,
+        int pident,
+        int mident
 ) {
 
     public static final int MAX_BUFFER = 1024 * 1024;

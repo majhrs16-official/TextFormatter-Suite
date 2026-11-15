@@ -730,7 +730,9 @@ class CpuTest {
     void unhandledTrapIsAnExplicitHostError() {
         load(0, Opcode.BREAK, InstructionForm.REGISTER, 0, 0, 0);
 
-        assertThrows(IllegalStateException.class, () -> cpu.step());
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> cpu.step());
+        assertTrue(error.getMessage().startsWith("UNHANDLED_TRAP:"));
     }
 
     @Test
@@ -747,7 +749,9 @@ class CpuTest {
         assertEquals(doubleFaultPc, cpu.pc());
 
         memory.load(doubleFaultPc, new byte[] {(byte) 0xFF});
-        assertThrows(IllegalStateException.class, () -> cpu.step());
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> cpu.step());
+        assertEquals("Double fault during double fault", error.getMessage());
     }
 
     private void assertConditions(Flags flags, boolean[] expected) {

@@ -19,8 +19,9 @@ public final class Cpu {
     private final DataMemory memory;
     private final TimeSource timeSource;
     private final HostHandler hostHandler;
+    private final InterruptController interrupts;
     private final RegisterFile registers = new RegisterFile();
-    private final CsrFile csrs = new CsrFile();
+    private final CsrFile csrs;
 
     private int pc;
     private long cycles;
@@ -38,10 +39,32 @@ public final class Cpu {
                DataMemory memory,
                TimeSource timeSource,
                HostHandler hostHandler) {
+        this(resetVector, instructionReader, memory, timeSource, hostHandler, null);
+    }
+
+    public Cpu(int resetVector,
+               InstructionReader instructionReader,
+               DataMemory memory,
+               TimeSource timeSource,
+               HostHandler hostHandler,
+               InterruptController interrupts) {
+        this(resetVector, instructionReader, memory, timeSource, hostHandler, interrupts,
+                new CsrFile());
+    }
+
+    public Cpu(int resetVector,
+               InstructionReader instructionReader,
+               DataMemory memory,
+               TimeSource timeSource,
+               HostHandler hostHandler,
+               InterruptController interrupts,
+               CsrFile csrs) {
         this.instructionReader = Objects.requireNonNull(instructionReader, "instructionReader");
         this.memory = Objects.requireNonNull(memory, "memory");
         this.timeSource = Objects.requireNonNull(timeSource, "timeSource");
         this.hostHandler = hostHandler;
+        this.interrupts = interrupts;
+        this.csrs = Objects.requireNonNull(csrs, "csrs");
         reset(resetVector);
     }
 
@@ -80,6 +103,9 @@ public final class Cpu {
      *         the CPU is halted
      */
     public boolean step() {
+        if (deliverInterrupt()) {
+            return true;
+        }
         if (halted) {
             return false;
         }
@@ -92,6 +118,26 @@ public final class Cpu {
             takeTrap(fault);
             return true;
         }
+    }
+
+    private boolean deliverInterrupt() {
+        if (interrupts == null) {
+            return false;
+        }
+        interrupts.poll();
+        if (!csrs.status().interruptEnable()) {
+            return false;
+        }
+        int line = interrupts.takePending();
+        if (line < 0) {
+            return false;
+        }
+        if (line > 31) {
+            throw new IllegalStateException("Interrupt source returned line " + line);
+        }
+        halted = false;
+        enterTrap(pc, 16 + line, null);
+        return true;
     }
 
     private void execute(Instruction instruction) {
@@ -299,7 +345,9 @@ public final class Cpu {
                 argumentLength,
                 registers.get(Register.R4),
                 resultCapacity,
-                memory);
+                memory,
+                csrs.pident(),
+                csrs.mident());
         HostResult result;
         try {
             result = Objects.requireNonNull(hostHandler.call(call), "host result");
@@ -378,22 +426,25 @@ public final class Cpu {
     }
 
     private void takeTrap(MachineFault fault) {
-        int tvec = csrs.tvec();
-        if (tvec == 0) {
+        if (csrs.tvec() == 0) {
             throw new IllegalStateException("UNHANDLED_TRAP: " + fault.getMessage(), fault);
         }
+        enterTrap(fault.pc(), fault.code().vector(), fault.badAddress());
+    }
 
-        MachineFault.Code cause = fault.code();
+    private void enterTrap(int instructionPc, int vector, Integer badAddress) {
+        int tvec = csrs.tvec();
+        if (tvec == 0) {
+            throw new IllegalStateException("UNHANDLED_TRAP: TVEC is zero");
+        }
         if (csrs.status().trap()) {
             if (csrs.cause() == MachineFault.Code.DOUBLE_FAULT.vector()) {
-                throw new IllegalStateException("Double fault during double fault: "
-                        + fault.getMessage(), fault);
+                throw new IllegalStateException("Double fault during double fault");
             }
-            cause = MachineFault.Code.DOUBLE_FAULT;
+            vector = MachineFault.Code.DOUBLE_FAULT.vector();
         }
-
-        csrs.enterTrap(fault.pc(), cause.vector(), fault.badAddress());
-        pc = tvec + Integer.BYTES * cause.vector();
+        csrs.enterTrap(instructionPc, vector, badAddress);
+        pc = tvec + Integer.BYTES * vector;
     }
 
     private int memoryAddress(Instruction instruction) {

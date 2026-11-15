@@ -19,7 +19,8 @@ public final class MemoryFault extends RuntimeException {
                 && code != MachineFault.Code.STORE_FAULT
                 && code != MachineFault.Code.INSTRUCTION_FAULT
                 && code != MachineFault.Code.ALIGNMENT
-                && code != MachineFault.Code.BUS_ERROR) {
+                && code != MachineFault.Code.BUS_ERROR
+                && code != MachineFault.Code.PRIVILEGE) {
             throw new IllegalArgumentException("Not a memory fault: " + code);
         }
         this.code = code;
@@ -51,8 +52,16 @@ public final class MemoryFault extends RuntimeException {
         return new MemoryFault(MachineFault.Code.BUS_ERROR, address, detail);
     }
 
+    public static MemoryFault instructionFault(int address, String detail) {
+        return new MemoryFault(MachineFault.Code.INSTRUCTION_FAULT, address, detail);
+    }
+
     public static MemoryFault alignment(int address, String detail) {
         return new MemoryFault(MachineFault.Code.ALIGNMENT, address, detail);
+    }
+
+    public static MemoryFault privilege(int address, String detail) {
+        return new MemoryFault(MachineFault.Code.PRIVILEGE, address, detail);
     }
 
     private static String format(MachineFault.Code code, int badAddress, String detail) {
