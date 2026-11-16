@@ -20,8 +20,8 @@ import net.kyori.adventure.text.Component;
 
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -42,20 +42,33 @@ public final class DeliveryExecutor implements LocalDelivery, AutoCloseable {
     private final boolean soundEnabled;
     private final PluginLogger logger;
     private final ScheduledExecutorService sleepScheduler;
+    private final BoundedRateLimitQueue rateLimitQueue;
 
     public DeliveryExecutor(ChatDelivery delivery,
                             ChannelRegistry channels,
                             boolean soundEnabled,
                             PluginLogger logger) {
+        this(delivery, channels, soundEnabled, logger,
+                BoundedRateLimitQueue.DEFAULT_CAPACITY);
+    }
+
+    public DeliveryExecutor(ChatDelivery delivery,
+                            ChannelRegistry channels,
+                            boolean soundEnabled,
+                            PluginLogger logger,
+                            int rateLimitQueueCapacity) {
         this.delivery = Objects.requireNonNull(delivery, "delivery");
         this.channels = Optional.ofNullable(channels);
         this.soundEnabled = soundEnabled;
         this.logger = Objects.requireNonNull(logger, "logger");
-        this.sleepScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1, r -> {
             Thread thread = new Thread(r, "msg-delivery-sleep-scheduler");
             thread.setDaemon(true);
             return thread;
         });
+        scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        this.sleepScheduler = scheduler;
+        this.rateLimitQueue = new BoundedRateLimitQueue(scheduler, rateLimitQueueCapacity);
     }
 
     @Override
@@ -65,6 +78,8 @@ public final class DeliveryExecutor implements LocalDelivery, AutoCloseable {
         int silenced = 0;
         int redirected = 0;
         int failed = 0;
+        int queued = 0;
+        int discarded = 0;
         for (DeliveryUnit unit : envelope.units()) {
             DeliveryResult result;
             try {
@@ -78,25 +93,48 @@ public final class DeliveryExecutor implements LocalDelivery, AutoCloseable {
                 case SILENCED -> silenced++;
                 case REDIRECTED -> redirected++;
                 case FAILED -> failed++;
+                case QUEUED -> queued++;
+                case DISCARDED -> discarded++;
             }
         }
-        return new DeliverySummary(delivered, silenced, redirected, failed);
+        return new DeliverySummary(delivered, silenced, redirected, failed, queued, discarded);
     }
 
     private DeliveryResult deliver(DeliveryUnit unit) {
         Objects.requireNonNull(unit, "unit");
         Component component = componentOf(unit.rendered());
         RouteDecision decision = unit.decision();
+        Message message = unit.message();
 
         if (decision != null && decision.target() == PolicyTarget.REDIRECT) {
             delivery.deliverConsole(component);
             return DeliveryResult.redirected();
         }
+        if (decision != null && decision.target() == PolicyTarget.RATE_LIMIT) {
+            long backoffMillis = Math.max(0L, decision.backoffMillis());
+            if (backoffMillis == 0L) {
+                deliverNow(unit.recipient(), component, message);
+                return DeliveryResult.delivered();
+            }
+            boolean accepted = rateLimitQueue.offer(backoffMillis, () -> {
+                try {
+                    deliverNow(unit.recipient(), component, message);
+                } catch (RuntimeException failure) {
+                    logger.error("Error delivering queued message to "
+                            + unit.recipient().name(), failure);
+                }
+            });
+            if (!accepted) {
+                logger.warn("Rate-limit delivery queue full; discarded message for "
+                        + unit.recipient().name());
+                return DeliveryResult.discarded("rate-limit queue full");
+            }
+            return DeliveryResult.queued(decision.describe());
+        }
         if (decision != null && !decision.delivered()) {
             return DeliveryResult.silenced(decision.describe());
         }
 
-        Message message = unit.message();
         long sleepMillis = message.sleepMillis();
         if (sleepMillis > 0) {
             sleepScheduler.schedule(() -> deliverNow(unit.recipient(), component, message),

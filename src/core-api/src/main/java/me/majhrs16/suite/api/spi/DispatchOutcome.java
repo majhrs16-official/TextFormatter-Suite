@@ -21,6 +21,8 @@ import java.util.Objects;
  * @param silenced    recipients dropped/rejected/rate-limited by a stage
  * @param redirected  copies sent to the console instead of a recipient
  * @param failed      recipients whose stage or delivery failed
+ * @param queued      rate-limited units accepted for later delivery
+ * @param discarded   rate-limited units dropped because the bounded queue was full
  * @param outputs     per-target delivery results, in output-plan order
  */
 public record DispatchOutcome(
@@ -30,6 +32,8 @@ public record DispatchOutcome(
         int silenced,
         int redirected,
         int failed,
+        int queued,
+        int discarded,
         List<OutputOutcome> outputs
 ) {
 
@@ -40,7 +44,7 @@ public record DispatchOutcome(
 
     /** Outcome for a pass that never entered a pipeline or has no report. */
     public static DispatchOutcome none() {
-        return new DispatchOutcome(PipelineStatus.NO_PIPELINE, 0, 0, 0, 0, 0, List.of());
+        return new DispatchOutcome(PipelineStatus.NO_PIPELINE, 0, 0, 0, 0, 0, 0, 0, List.of());
     }
 
     /** @return whether anything reached a destination */

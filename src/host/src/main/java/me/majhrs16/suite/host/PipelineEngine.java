@@ -151,6 +151,8 @@ public final class PipelineEngine implements AutoCloseable {
                 counters.silenced + delivered.silenced(),
                 counters.redirected + delivered.redirected(),
                 counters.failed + delivered.failed(),
+                delivered.queued(),
+                delivered.discarded(),
                 cancelEvent, outputResults, trace, null);
     }
 
@@ -360,10 +362,10 @@ public final class PipelineEngine implements AutoCloseable {
                                             StageResult result) {
         return switch (result.kind()) {
             case DROP, REJECT -> new PipelineOutcome(
-                    status, 0, 0, 1, 0, 0,
+                    status, 0, 0, 1, 0, 0, 0, 0,
                     result.message().cancelEvent(), result.outputs(), trace, result.detail());
             case ERROR -> new PipelineOutcome(
-                    status, 0, 0, 0, 0, 1,
+                    status, 0, 0, 0, 0, 1, 0, 0,
                     result.message().cancelEvent(), result.outputs(), trace, result.detail());
             case CONTINUE, NOT_APPLICABLE -> throw new IllegalStateException(
                     "non-terminal result in terminal outcome");
@@ -422,6 +424,8 @@ public final class PipelineEngine implements AutoCloseable {
         int silenced = 0;
         int redirected = 0;
         int failed = 0;
+        int queued = 0;
+        int discarded = 0;
         for (OutputOutcome output : outputs) {
             if (output.result() instanceof SyncResult.Ok ok
                     && ok.value() instanceof DeliverySummary summary) {
@@ -429,9 +433,11 @@ public final class PipelineEngine implements AutoCloseable {
                 silenced += summary.silenced();
                 redirected += summary.redirected();
                 failed += summary.failed();
+                queued += summary.queued();
+                discarded += summary.discarded();
             }
         }
-        return new DeliverySummary(delivered, silenced, redirected, failed);
+        return new DeliverySummary(delivered, silenced, redirected, failed, queued, discarded);
     }
 
     @Override

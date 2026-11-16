@@ -305,7 +305,9 @@ record DispatchOutcome(
     int delivered,
     int silenced,
     int redirected,
-    int failed
+    int failed,
+    int queued,
+    int discarded
 ) {}
 ```
 

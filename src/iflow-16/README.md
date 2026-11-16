@@ -250,6 +250,22 @@ genéricos: no hay una instrucción ni un servicio por acción. Ambos usan el `T
 `options` para servicios de propiedad: `(scope << 8) | propId`, con `propId` en los **8 bits bajos** (namespaceado por `scope`).
 `scope`: `0x01` MESSAGE · `0x02` EMITTER · `0x03` RECIPIENT · `0x04` CHANNEL · `0x05` SERVER.
 
+### Datos del entorno Minecraft y límite de 64 KB
+
+- `SCOPE_EMITTER` y `SCOPE_RECIPIENT` exponen `name`, `uuid` y `language` del emisor y del
+  destinatario del mensaje actual; no se copia el objeto completo del jugador.
+- `SCOPE_SERVER` está reservado: el ABI v2 no define todavía propiedades de servidor.
+- Para listar jugadores o consultar el entorno se usa el puente genérico `SYNC_INVOKE`
+  (`player.list` en los backends `bukkit`/`fabric`). El host devuelve un TLV en el buffer `R2`;
+  `R3` es la capacidad de entrada y, a la salida, los bytes escritos. La respuesta no se trunca:
+  si no cabe, `BUFFER_TOO_SMALL` y `R3` lleva el tamaño requerido para reintentar.
+- La lista se materializa **solo** en el buffer indicado, no se precarga el entorno entero. Con
+  nombres de unos 16 B, UUID (36 B) y mundo más el overhead TLV, el techo práctico son unos pocos
+  cientos de entradas. Los 64 KB no permiten cargar el censo completo de una network grande; para
+  eso está la línea `iflow-32`.
+- Regresión: `HostServiceRegistryTest` cubre una respuesta `player.list` que cabe y otra que no,
+  comprobando que el límite se reporta explícitamente y no se produce un éxito parcial.
+
 ### Fuel Budget
 
 - Base: 1 unidad/instrucción

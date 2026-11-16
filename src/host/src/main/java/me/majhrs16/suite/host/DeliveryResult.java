@@ -18,7 +18,11 @@ public record DeliveryResult(Kind kind, String detail) {
         /** The rendered copy went to the console instead of the recipient. */
         REDIRECTED,
         /** Delivery raised; the unit is counted as failed. */
-        FAILED
+        FAILED,
+        /** The rate-limited unit was accepted by the bounded delivery queue. */
+        QUEUED,
+        /** The rate-limited unit was dropped because the queue was full. */
+        DISCARDED
     }
 
     public DeliveryResult {
@@ -39,5 +43,13 @@ public record DeliveryResult(Kind kind, String detail) {
 
     public static DeliveryResult failed(String detail) {
         return new DeliveryResult(Kind.FAILED, detail);
+    }
+
+    public static DeliveryResult queued(String detail) {
+        return new DeliveryResult(Kind.QUEUED, detail);
+    }
+
+    public static DeliveryResult discarded(String detail) {
+        return new DeliveryResult(Kind.DISCARDED, detail);
     }
 }

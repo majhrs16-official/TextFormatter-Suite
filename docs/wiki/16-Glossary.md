@@ -58,7 +58,8 @@ See `PipelineEngine`.
 
 **DispatchOutcome**
 Result of a dispatch: pipeline status plus considered, delivered, silenced,
-redirected and failed counts.
+redirected, failed, queued (accepted for later rate-limited delivery) and
+discarded (dropped because the bounded queue was full) counts.
 
 ## E
 

@@ -13,28 +13,33 @@ package me.majhrs16.suite.api.pipeline;
  * @param silenced   units discarded by a routing decision
  * @param redirected units shown on the console instead of the recipient
  * @param failed     units whose delivery raised
+ * @param queued     rate-limited units accepted for later delivery
+ * @param discarded  rate-limited units dropped because the bounded queue was full
  */
 public record DeliverySummary(
         int delivered,
         int silenced,
         int redirected,
-        int failed
+        int failed,
+        int queued,
+        int discarded
 ) {
 
     public DeliverySummary {
-        if (delivered < 0 || silenced < 0 || redirected < 0 || failed < 0) {
+        if (delivered < 0 || silenced < 0 || redirected < 0 || failed < 0
+                || queued < 0 || discarded < 0) {
             throw new IllegalArgumentException("delivery counters must not be negative");
         }
     }
 
     /** @return a summary with every counter at zero */
     public static DeliverySummary empty() {
-        return new DeliverySummary(0, 0, 0, 0);
+        return new DeliverySummary(0, 0, 0, 0, 0, 0);
     }
 
     /** @return the number of units described by this summary */
     public int total() {
-        return delivered + silenced + redirected + failed;
+        return delivered + silenced + redirected + failed + queued + discarded;
     }
 
     /** @return the sum of both summaries */
@@ -46,6 +51,8 @@ public record DeliverySummary(
                 delivered + other.delivered,
                 silenced + other.silenced,
                 redirected + other.redirected,
-                failed + other.failed);
+                failed + other.failed,
+                queued + other.queued,
+                discarded + other.discarded);
     }
 }

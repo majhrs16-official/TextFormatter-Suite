@@ -71,7 +71,7 @@ class DebugEndpointIntegrationTest {
         when(channels.resolve("chat.global")).thenReturn(channel);
 
         when(dispatcher.dispatchAndReport(any(Message.class)))
-            .thenReturn(new DispatchOutcome(PipelineStatus.READY, 1, 1, 0, 0, 0,
+            .thenReturn(new DispatchOutcome(PipelineStatus.READY, 1, 1, 0, 0, 0, 0, 0,
                     java.util.List.of()));
 
         debugEndpoint = new DebugEndpoint(dispatcher, channels, logger, authToken, 0);

@@ -14,10 +14,12 @@ import me.majhrs16.suite.api.pipeline.DeliverySummary;
  * API.</p>
  *
  * <p>The implementation must be synchronous from the caller's point of view:
- * when it returns, every unit has been delivered, silenced, redirected or
- * counted as failed. Asynchronous delivery scheduled by the implementation
- * (for example a delayed message) is counted as delivered when it is
- * successfully scheduled.</p>
+ * when it returns, every unit has been delivered, queued for later delivery,
+ * silenced, redirected, discarded or counted as failed. A rate-limited unit
+ * accepted by the bounded queue is reported as {@code queued}, never as
+ * delivered. Asynchronous delivery scheduled by the implementation (for
+ * example a delayed message) is counted as delivered when it is successfully
+ * scheduled.</p>
  */
 public interface LocalDelivery {
 

@@ -835,7 +835,7 @@ public final class SuiteRuntime implements AutoCloseable {
             return new DispatchOutcome(
                     outcome.status(), outcome.considered(), outcome.delivered(),
                     outcome.silenced(), outcome.redirected(), outcome.failed(),
-                    outcome.outputs());
+                    outcome.queued(), outcome.discarded(), outcome.outputs());
         }
     }
 

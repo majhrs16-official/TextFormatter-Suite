@@ -843,6 +843,64 @@ class HostServiceRegistryTest {
     }
 
     @Test
+    void syncInvokeLoadsAPlayerListWithinTheBuffer() {
+        List<Map<String, Object>> players = List.of(
+            Map.of("uuid", "00000000-0000-0000-0000-000000000001",
+                "name", "Alice", "world", "world"),
+            Map.of("uuid", "00000000-0000-0000-0000-000000000002",
+                "name", "Bob", "world", "world"));
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+            @Override public SyncResult invokeHostAction(String backend, String action,
+                                                         Map<String, Object> args) {
+                assertEquals("bukkit", backend);
+                assertEquals("player.list", action);
+                return new SyncResult.Ok(players);
+            }
+        });
+
+        byte[] request = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("bukkit", "player.list", Map.of()));
+        int base = ctx.outputBufferVAddr();
+        ctx.softMMU().writeBlock(base, request, 0, request.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_INVOKE,
+            base, ctx.ioBufferSize(), 0);
+
+        assertEquals(ServiceResult.Status.OK, result.status());
+        assertEquals(new SyncResult.Ok(players), SyncBridgeCodec.decodeResult(
+            ctx.softMMU().getRegion(base, result.bytesTransferred())));
+    }
+
+    @Test
+    void syncInvokeReportsTheRequiredSizeWhenThePlayerListDoesNotFit() {
+        List<Map<String, Object>> players = new java.util.ArrayList<>();
+        for (int i = 1; i <= 8; i++) {
+            players.add(Map.of("uuid", "00000000-0000-0000-0000-00000000000" + i,
+                "name", "Player" + i, "world", "world"));
+        }
+        HostServiceRegistry hsr = new HostServiceRegistry();
+        ExecutionContext ctx = createSyncContext(hsr, new HostContext() {
+            @Override public SyncResult invokeHostAction(String backend, String action,
+                                                         Map<String, Object> args) {
+                return new SyncResult.Ok(players);
+            }
+        });
+
+        byte[] request = SyncBridgeCodec.encodeInvokeRequest(
+            new SyncBridgeCodec.InvokeRequest("bukkit", "player.list", Map.of()));
+        int capacity = request.length + 8;
+        assertTrue(request.length < capacity, "the request must fit the probe buffer");
+        int base = ctx.outputBufferVAddr();
+        ctx.softMMU().writeBlock(base, request, 0, request.length);
+        ServiceResult result = hsr.invoke(ctx, HostServiceRegistry.SYNC_INVOKE,
+            base, capacity, 0);
+
+        assertEquals(ServiceResult.Status.BUFFER_TOO_SMALL, result.status());
+        assertTrue(result.bytesTransferred() > capacity,
+            "R3 must carry the required response size");
+    }
+
+    @Test
     void syncInvokeMapsEveryFailureStatus() {
         Map<SyncResult, ServiceResult.Status> cases = new LinkedHashMap<>();
         cases.put(new SyncResult.Denied("no"), ServiceResult.Status.DENIED);

@@ -98,7 +98,7 @@ class LocalSyncSinkTest {
     @Test
     void reportsWhetherTheHostRegisteredTheLocalPort() {
         FakeRegistry registry = new FakeRegistry();
-        registry.add(LocalDelivery.class, envelope -> new DeliverySummary(1, 0, 0, 0));
+        registry.add(LocalDelivery.class, envelope -> new DeliverySummary(1, 0, 0, 0, 0, 0));
         LocalSyncSink sink = sink("fabric", registry);
 
         SyncResult result = sink.invoke(call("fabric", "local.info", PROGRAM));
@@ -269,7 +269,7 @@ class LocalSyncSinkTest {
     @Test
     void deliversThroughTheLocalPortAndReturnsItsSummary() {
         FakeRegistry registry = new FakeRegistry();
-        DeliverySummary summary = new DeliverySummary(2, 1, 0, 0);
+        DeliverySummary summary = new DeliverySummary(2, 1, 0, 0, 0, 0);
         DeliveryEnvelope envelope = DeliveryEnvelope.empty(
                 Message.builder().text("hello").build());
         registry.add(LocalDelivery.class, actual -> {
@@ -329,7 +329,7 @@ class LocalSyncSinkTest {
     @Test
     void executesMessageDeliverThroughThePublishedSurface() {
         FakeRegistry registry = new FakeRegistry();
-        DeliverySummary summary = new DeliverySummary(1, 0, 0, 0);
+        DeliverySummary summary = new DeliverySummary(1, 0, 0, 0, 0, 0);
         registry.add(LocalDelivery.class, envelope -> summary);
         LocalSyncSink sink = sink("bukkit", registry);
         DeliveryEnvelope envelope = DeliveryEnvelope.empty(

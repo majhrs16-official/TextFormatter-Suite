@@ -1707,7 +1707,8 @@ public record DeliveryEnvelope(
 ) {}
 
 public record DeliverySummary(
-        int delivered, int silenced, int redirected, int failed
+        int delivered, int silenced, int redirected, int failed,
+        int queued, int discarded
 ) {}
 
 public interface LocalDelivery {            // puerto neutral, lo implementa el host
@@ -1784,6 +1785,9 @@ las acciones del host no tienen superficie y el bus las resuelve en su handler i
   `LocalDelivery`. El sink local (`sync-bukkit`, `sync-fabric`) resuelve el puerto en cada entrega y
   devuelve `Ok(DeliverySummary)` con los contadores reales; sin puerto devuelve `HostFailure`, y
   `message.send` sobre un sink local devuelve `Unsupported` porque el camino local exige el sobre.
+- `DeliverySummary` distingue `queued` (unidad `RATE_LIMIT` aceptada por la cola acotada, pendiente de
+  entrega) de `discarded` (unidad rechazada porque la cola está llena). Ninguna de las dos cuenta como
+  `delivered`; el descarte es explícito y observable.
 
 #### 16.5 `textformatter.channel.set`
 

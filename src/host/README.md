@@ -14,7 +14,8 @@
   el plan de salidas efectivo una vez por emisión (mensaje → suite → default).
 - **Message dispatch** — `RecipientResolver` expande `Direction` con
   `ActorDirectory`; `DeliveryExecutor` aplica `sleepMillis`, sonidos y
-  `ChatDelivery`.
+  `ChatDelivery`, y encola las entregas limitadas por `RATE_LIMIT` con un
+  backoff acotado.
 - **Configuration loading** — `ConfigLoader` lee `config/suite/config.yml` y
   produce `HostConfig`; `HostPaths` resuelve el layout canónico del host
   (`config/suite/`) y el de los módulos (`config/<module>/`).
@@ -59,7 +60,8 @@
 | `PipelineEngine` | Orden, fases, expansión por destinatario, entrega y traza |
 | `OutputPlanResolver` | Precedencia mensaje → `config/suite/config.yml` → default del módulo |
 | `RecipientResolver` | Expande `Direction` con `ActorDirectory` y políticas fail-closed |
-| `DeliveryExecutor` | `sleepMillis`, sonidos y llamadas a `ChatDelivery` |
+| `DeliveryExecutor` | `sleepMillis`, sonidos, llamadas a `ChatDelivery` y cola acotada de `RATE_LIMIT` |
+| `BoundedRateLimitQueue` | Backoff no bloqueante, capacidad máxima y descarte explícito |
 | `PipelineOutcome` | Estado, contadores y traza de un despacho |
 | `ConfigLoader` | Carga `HostConfig` desde YAML |
 | `HostPaths` | `config/suite/` para el host y `config/<module>/` para módulos; sin fallback a la raíz plana |
@@ -82,8 +84,21 @@ OutputPlanResolver (mensaje → suite → default) → PipelineContext.outputs()
   ↓
 MESSAGE_PRE → RecipientResolver → RECIPIENT (route → format) → DeliveryExecutor → MESSAGE_POST (sync)
   ↓
-PipelineOutcome (status, considered, delivered, silenced, redirected, failed, trace)
+PipelineOutcome (status, considered, delivered, silenced, redirected, failed,
+                queued, discarded, trace)
 ```
+
+### Rate-limited delivery
+
+`RouteDecision.RATE_LIMIT` does not drop the unit on the floor. `DeliveryExecutor`
+schedules it after `backoffMillis` on a single daemon scheduler shared with
+`sleepMillis`. `BoundedRateLimitQueue` caps pending deliveries (750 by default)
+and releases its permit when the task runs, so a burst cannot grow the host heap
+without limit. When the queue is full, the unit is reported as `DISCARDED` and
+counted in `DeliverySummary.discarded`; it is never counted as delivered. A
+zero backoff is delivered synchronously. The capacity is a host safety limit,
+not the 64 KB VM budget: each queued entry keeps the rendered component and the
+per-recipient message.
 
 ## 7. Entry points
 

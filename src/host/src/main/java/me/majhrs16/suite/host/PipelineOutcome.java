@@ -16,6 +16,8 @@ import java.util.Objects;
  * @param silenced   recipients discarded/rejected/throttled by a stage
  * @param redirected console copies produced by a redirect decision
  * @param failed     recipients whose stage or delivery failed
+ * @param queued     rate-limited units accepted for later delivery
+ * @param discarded  rate-limited units dropped because the queue was full
  * @param cancelEvent whether a stage requested cancelling the platform event
  * @param outputs    per-target delivery results, in output-plan order
  * @param trace      per-stage trace for diagnostics
@@ -28,6 +30,8 @@ public record PipelineOutcome(
         int silenced,
         int redirected,
         int failed,
+        int queued,
+        int discarded,
         boolean cancelEvent,
         List<OutputOutcome> outputs,
         PipelineTrace trace,
@@ -42,7 +46,8 @@ public record PipelineOutcome(
 
     /** Outcome for a message that never entered the pipeline. */
     public static PipelineOutcome none(PipelineStatus status, PipelineTrace trace, String reason) {
-        return new PipelineOutcome(status, 0, 0, 0, 0, 0, false, List.of(), trace, reason);
+        return new PipelineOutcome(status, 0, 0, 0, 0, 0, 0, 0, false,
+                List.of(), trace, reason);
     }
 
     /** @return whether anything reached a destination */
