@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import me.majhrs16.suite.iflow.vm.isa.v3.Csr;
 import me.majhrs16.suite.iflow.vm.isa.v3.CsrFile;
 import me.majhrs16.suite.iflow.vm.isa.v3.Status;
+import me.majhrs16.suite.iflow.vm.isa.v3.TimeSource;
 
 /**
  * Test helper that builds a sparse but complete v3 machine.
@@ -25,8 +26,16 @@ public final class MachineFixture {
         this(new byte[0]);
     }
 
+    public MachineFixture(TimeSource timeSource) {
+        this(new byte[0], timeSource);
+    }
+
     public MachineFixture(byte[] rom) {
         memory = new MachineMemory(csrs, rom, RAM_SIZE, clock::get);
+    }
+
+    public MachineFixture(byte[] rom, TimeSource timeSource) {
+        memory = new MachineMemory(csrs, rom, RAM_SIZE, timeSource);
     }
 
     public void enableMmu(boolean supervisor) {

@@ -85,4 +85,18 @@ class TimerTest {
         assertEquals(0, timer.readRegister(Timer.STATUS));
         assertTrue(timer.readRegister(Timer.PERIOD_LO) > 0);
     }
+
+    @Test
+    void deadlineComparisonIsUnsigned() {
+        AtomicLong clock = new AtomicLong(0);
+        Timer timer = new Timer(clock::get, new Pic());
+        timer.writeRegister(Timer.CMP_LO, 0xFFFF_FFFF);
+        timer.writeRegister(Timer.CMP_HI, 0x7FFF_FFFF);
+        timer.writeRegister(Timer.CTRL, Timer.CTRL_ENABLE);
+        clock.set(Long.MIN_VALUE);
+
+        timer.tick();
+
+        assertEquals(Timer.STATUS_FIRED, timer.readRegister(Timer.STATUS));
+    }
 }

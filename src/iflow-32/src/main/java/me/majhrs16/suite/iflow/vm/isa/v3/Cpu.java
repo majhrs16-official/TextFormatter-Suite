@@ -26,6 +26,7 @@ public final class Cpu {
     private int pc;
     private long cycles;
     private boolean halted;
+    private Opcode lastOpcode;
 
     public Cpu(int resetVector,
                InstructionReader instructionReader,
@@ -72,6 +73,7 @@ public final class Cpu {
         pc = resetVector;
         cycles = 0;
         halted = false;
+        lastOpcode = null;
         registers.reset();
         csrs.reset();
     }
@@ -86,6 +88,14 @@ public final class Cpu {
 
     public boolean halted() {
         return halted;
+    }
+
+    /**
+     * Opcode attempted by the latest {@link #step()}, or {@code null} when the
+     * step only delivered an interrupt or failed before decoding.
+     */
+    public Opcode lastOpcode() {
+        return lastOpcode;
     }
 
     public RegisterFile registers() {
@@ -103,6 +113,7 @@ public final class Cpu {
      *         the CPU is halted
      */
     public boolean step() {
+        lastOpcode = null;
         if (deliverInterrupt()) {
             return true;
         }
@@ -111,6 +122,7 @@ public final class Cpu {
         }
         try {
             Instruction instruction = decoder.decode(pc, instructionReader);
+            lastOpcode = instruction.opcode();
             execute(instruction);
             cycles++;
             return true;

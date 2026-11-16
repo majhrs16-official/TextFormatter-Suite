@@ -72,7 +72,7 @@ public final class Timer implements MmioDevice {
             return;
         }
         long now = timeSource.timeNanos();
-        if (now < compare) {
+        if (Long.compareUnsigned(now, compare) < 0) {
             return;
         }
         fired = true;
@@ -80,7 +80,7 @@ public final class Timer implements MmioDevice {
             pic.raise(IRQ_LINE);
         }
         if ((control & CTRL_PERIODIC) != 0) {
-            compare = saturatingAdd(now, period);
+            compare = now + period;
             armed = true;
         } else {
             armed = false;
@@ -161,10 +161,5 @@ public final class Timer implements MmioDevice {
 
     private boolean enabled() {
         return (control & CTRL_ENABLE) != 0;
-    }
-
-    private static long saturatingAdd(long left, long right) {
-        long sum = left + right;
-        return sum < left ? Long.MAX_VALUE : sum;
     }
 }
