@@ -632,4 +632,158 @@ class VmInterpreterTest {
 
         assertEquals(0x2222, ctx.registers().get(RegisterFile.R0));
     }
+
+    @Test
+    void modInstructionUsesSignedRemainder() {
+        var positive = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, 0x00, 0x0D,
+            Opcode.LI, 1, 0x00, 0x05,
+            Opcode.MOD, (0 << 4) | 1,
+            Opcode.HALT
+        });
+        positive.first().execute(positive.second());
+        assertEquals(3, positive.second().registers().get(RegisterFile.R0));
+
+        var negative = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, (byte) 0xFF, (byte) 0xF3, // -13
+            Opcode.LI, 1, 0x00, 0x05,
+            Opcode.MOD, (0 << 4) | 1,
+            Opcode.HALT
+        });
+        negative.first().execute(negative.second());
+        assertEquals(0xFFFD, negative.second().registers().get(RegisterFile.R0));
+    }
+
+    @Test
+    void modByZeroThrows() {
+        var p = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, 0x00, 0x0A,
+            Opcode.LI, 1, 0x00, 0x00,
+            Opcode.MOD, (0 << 4) | 1,
+            Opcode.HALT
+        });
+
+        VmException e = assertThrows(VmException.class, () -> p.first().execute(p.second()));
+        assertEquals(VmException.Code.DIVISION_BY_ZERO, e.code());
+    }
+
+    @Test
+    void signedDivisionOverflowThrows() {
+        var p = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, (byte) 0x80, 0x00,
+            Opcode.LI, 1, (byte) 0xFF, (byte) 0xFF,
+            Opcode.DIV, (0 << 4) | 1,
+            Opcode.HALT
+        });
+
+        VmException e = assertThrows(VmException.class, () -> p.first().execute(p.second()));
+        assertEquals(VmException.Code.ARITHMETIC_FAULT, e.code());
+    }
+
+    @Test
+    void arithmeticShiftRightSignExtends() {
+        var p = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, (byte) 0x80, 0x00,
+            Opcode.LI, 1, 0x00, 0x01,
+            Opcode.SAR, (0 << 4) | 1,
+            Opcode.HALT
+        });
+        p.first().execute(p.second());
+
+        assertEquals(0xC000, p.second().registers().get(RegisterFile.R0));
+    }
+
+    @Test
+    void jnzJcAndJvBranchOnTheirFlags() {
+        // CMP 1,0 clears Z: JNZ must skip the following LI.
+        var jnz = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, 0x00, 0x01,
+            Opcode.LI, 1, 0x00, 0x00,
+            Opcode.CMP, (0 << 4) | 1,
+            Opcode.JNZ, 0x00, 0x04,
+            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.HALT
+        });
+        jnz.first().execute(jnz.second());
+        assertEquals(1, jnz.second().registers().get(RegisterFile.R0));
+
+        // 0xFFFF + 1 sets carry: JC must skip the following LI.
+        var jc = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, (byte) 0xFF, (byte) 0xFF,
+            Opcode.LI, 1, 0x00, 0x01,
+            Opcode.ADD, (0 << 4) | 1,
+            Opcode.JC, 0x00, 0x04,
+            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.HALT
+        });
+        jc.first().execute(jc.second());
+        assertEquals(0, jc.second().registers().get(RegisterFile.R0));
+
+        // 0x7FFF + 1 sets overflow: JV must skip the following LI.
+        var jv = createInterpreterAndContext(new byte[]{
+            Opcode.LI, 0, 0x7F, (byte) 0xFF,
+            Opcode.LI, 1, 0x00, 0x01,
+            Opcode.ADD, (0 << 4) | 1,
+            Opcode.JV, 0x00, 0x04,
+            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.HALT
+        });
+        jv.first().execute(jv.second());
+        assertEquals(0x8000, jv.second().registers().get(RegisterFile.R0));
+    }
+
+    @Test
+    void copyAndMoveTransferBlocksThroughTheDma() {
+        byte[] source = {'A', 'B', 'C', 'D', 'E'};
+
+        var copy = createInterpreterAndContext(blockTransfer(Opcode.COPY, 0x3000, 0x3010, 5));
+        copy.second().bus().writeBlock(0x3000, source, 0, source.length);
+        copy.first().execute(copy.second());
+        assertArrayEquals(source, readBlock(copy.second(), 0x3010, source.length));
+
+        var move = createInterpreterAndContext(blockTransfer(Opcode.MOVE, 0x3000, 0x3002, 3));
+        move.second().bus().writeBlock(0x3000, source, 0, source.length);
+        move.first().execute(move.second());
+        assertArrayEquals(new byte[]{'A', 'B', 'A', 'B', 'C'},
+            readBlock(move.second(), 0x3000, source.length));
+    }
+
+    @Test
+    void jumpOutsideTheCodeThrows() {
+        var p = createInterpreterAndContext(new byte[]{
+            Opcode.JMP, 0x7F, (byte) 0xFF,
+            Opcode.HALT
+        });
+
+        VmException e = assertThrows(VmException.class, () -> p.first().execute(p.second()));
+        assertEquals(VmException.Code.INVALID_JUMP, e.code());
+    }
+
+    @Test
+    void nonGeneralPurposeRegisterOperandThrows() {
+        var p = createInterpreterAndContext(new byte[]{
+            Opcode.MOV, (byte) 0xF0, // rd=R15, not a general-purpose register
+            Opcode.HALT
+        });
+
+        VmException e = assertThrows(VmException.class, () -> p.first().execute(p.second()));
+        assertEquals(VmException.Code.INVALID_OPERAND, e.code());
+    }
+
+    private static byte[] blockTransfer(int opcode, int source, int destination, int length) {
+        return new byte[]{
+            (byte) opcode,
+            (byte) (source >> 8), (byte) source,
+            (byte) (destination >> 8), (byte) destination,
+            (byte) (length >> 8), (byte) length,
+            0x00, // reserved padding: BLOCK instructions are 8 bytes
+            Opcode.HALT
+        };
+    }
+
+    private static byte[] readBlock(ExecutionContext context, int address, int length) {
+        byte[] result = new byte[length];
+        context.bus().readBlock(address, result, 0, length);
+        return result;
+    }
 }

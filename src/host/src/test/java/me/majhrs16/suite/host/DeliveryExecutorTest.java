@@ -66,6 +66,27 @@ class DeliveryExecutorTest {
     }
 
     @Test
+    void defaultQueueAcceptsSevenHundredFiftyPendingUnitsAndDiscardsTheNext() {
+        RecordingDelivery delivery = new RecordingDelivery();
+        DeliveryExecutor executor = new DeliveryExecutor(
+                delivery, null, false, NoopLogger.INSTANCE);
+        RouteDecision slow = new RouteDecision(
+                PolicyTarget.RATE_LIMIT, "busy", 60_000L, ALEX, ALEX);
+        DeliveryUnit[] units = new DeliveryUnit[751];
+        for (int i = 0; i < units.length; i++) {
+            units[i] = unit(slow);
+        }
+
+        DeliverySummary summary = executor.deliver(envelope(units));
+
+        assertEquals(750, summary.queued());
+        assertEquals(1, summary.discarded());
+        assertEquals(0, summary.delivered());
+        assertEquals(0, delivery.count());
+        executor.close();
+    }
+
+    @Test
     void deliversImmediatelyWhenTheBackoffIsZero() {
         RecordingDelivery delivery = new RecordingDelivery();
         DeliveryExecutor executor = new DeliveryExecutor(
