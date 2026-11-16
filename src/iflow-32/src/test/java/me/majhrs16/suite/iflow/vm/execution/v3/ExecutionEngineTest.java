@@ -26,24 +26,75 @@ class ExecutionEngineTest {
     private static final int TVEC = 0x0201_0000;
 
     @Test
-    void reportsQuantumExceededAtAnInstructionBoundary() {
+    void preemptsAtAnInstructionBoundaryAndKeepsTheCpuResumable() {
         VirtualClock clock = new VirtualClock(100);
         MachineFixture fixture = new MachineFixture(clock);
+        Cpu cpu = cpu(fixture, clock, null);
+        fixture.csrs.setStatus(Status.fromBits(Status.PRV | Status.IE));
+        for (int index = 0; index < 3; index++) {
+            writeOpcode(fixture.memory, RESET + index * 3, Opcode.NOP);
+        }
+        writeOpcode(fixture.memory, RESET + 9, Opcode.HALT);
+        ExecutionEngine engine = new ExecutionEngine(cpu, clock,
+                () -> Long.MAX_VALUE, () -> { });
+
+        ExecutionReport first = engine.run(new ExecutionQuantum(3, 50_000_000));
+
+        assertEquals(ExecutionStatus.PREEMPTED, first.status());
+        assertEquals(3, first.steps());
+        assertEquals(3, first.cycles());
+        assertEquals(103, first.virtualNanos());
+        assertEquals(RESET + 9, cpu.pc());
+
+        ExecutionReport second = engine.run(new ExecutionQuantum(10, 50_000_000));
+
+        assertEquals(ExecutionStatus.HALTED, second.status());
+        assertEquals(1, second.steps());
+        assertEquals(4, second.cycles());
+        assertTrue(cpu.halted());
+    }
+
+    @Test
+    void preemptsWhenTheWallClockSliceExpiresWithoutFailingTheGuest() {
+        VirtualClock clock = new VirtualClock();
+        MachineFixture fixture = new MachineFixture(clock);
+        AtomicLong wall = new AtomicLong();
+        NanoClock nanoClock = () -> wall.getAndAdd(20_000_000);
         Cpu cpu = cpu(fixture, clock, null);
         fixture.csrs.setStatus(Status.fromBits(Status.PRV));
         for (int index = 0; index < 4; index++) {
             writeOpcode(fixture.memory, RESET + index * 3, Opcode.NOP);
         }
-        ExecutionEngine engine = new ExecutionEngine(cpu, clock,
+        ExecutionEngine engine = new ExecutionEngine(cpu, clock, nanoClock,
                 () -> Long.MAX_VALUE, () -> { });
 
-        ExecutionReport report = engine.run(new ExecutionBudget(3, 50_000_000));
+        ExecutionReport report = engine.run(new ExecutionQuantum(100, 50_000_000));
 
-        assertEquals(ExecutionStatus.QUANTUM_EXCEEDED, report.status());
+        assertEquals(ExecutionStatus.PREEMPTED, report.status());
         assertEquals(3, report.steps());
+        assertEquals(60_000_000, report.guestNanos());
         assertEquals(3, report.cycles());
-        assertEquals(103, report.virtualNanos());
-        assertEquals(RESET + 9, cpu.pc());
+    }
+
+    @Test
+    void watchdogFaultsWhenOneGuestStepExceedsTheBound() {
+        VirtualClock clock = new VirtualClock();
+        MachineFixture fixture = new MachineFixture(clock);
+        AtomicLong wall = new AtomicLong();
+        NanoClock nanoClock = () -> wall.getAndAdd(60_000_000);
+        Cpu cpu = cpu(fixture, clock, null);
+        fixture.csrs.setStatus(Status.fromBits(Status.PRV));
+        writeOpcode(fixture.memory, RESET, Opcode.NOP);
+        ExecutionEngine engine = new ExecutionEngine(cpu, clock, nanoClock,
+                () -> Long.MAX_VALUE, () -> { });
+
+        ExecutionReport report = engine.run(new ExecutionQuantum(100, 50_000_000));
+
+        assertEquals(ExecutionStatus.WATCHDOG, report.status());
+        assertEquals(1, report.steps());
+        assertEquals(1, report.cycles());
+        assertEquals(0, report.guestNanos());
+        assertEquals(RESET + 3, cpu.pc());
     }
 
     @Test
@@ -56,7 +107,7 @@ class ExecutionEngineTest {
         ExecutionEngine engine = new ExecutionEngine(cpu, clock,
                 fixture.memory.timer()::nextDeadline, fixture.memory.timer()::tick);
 
-        ExecutionReport report = engine.run(new ExecutionBudget(5, 50_000_000));
+        ExecutionReport report = engine.run(new ExecutionQuantum(5, 50_000_000));
 
         assertEquals(ExecutionStatus.HALTED, report.status());
         assertEquals(1, report.steps());
@@ -86,7 +137,7 @@ class ExecutionEngineTest {
 
         ExecutionEngine engine = new ExecutionEngine(cpu, clock,
                 timer::nextDeadline, timer::tick);
-        ExecutionReport report = engine.run(new ExecutionBudget(20, 50_000_000));
+        ExecutionReport report = engine.run(new ExecutionQuantum(20, 50_000_000));
 
         assertEquals(ExecutionStatus.HALTED, report.status());
         assertEquals(4, report.cycles());
@@ -97,7 +148,7 @@ class ExecutionEngineTest {
     }
 
     @Test
-    void hostTimeIsNotChargedToTheGuestWatchdog() {
+    void hostTimeIsNotChargedToTheGuestQuantumOrWatchdog() {
         VirtualClock clock = new VirtualClock();
         MachineFixture fixture = new MachineFixture(clock);
         AtomicLong wall = new AtomicLong();
@@ -113,7 +164,7 @@ class ExecutionEngineTest {
         ExecutionEngine engine = new ExecutionEngine(cpu, clock, nanoClock,
                 () -> Long.MAX_VALUE, () -> { });
 
-        ExecutionReport report = engine.run(new ExecutionBudget(10, 10));
+        ExecutionReport report = engine.run(new ExecutionQuantum(10, 10));
 
         assertEquals(ExecutionStatus.HALTED, report.status());
         assertEquals(2, report.steps());

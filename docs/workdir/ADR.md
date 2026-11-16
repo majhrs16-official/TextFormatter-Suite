@@ -2224,9 +2224,11 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
 
 ## ADR-037 — Contrato de máquina, ISA y ABI `HOST` v3 de `iflow-32`
 
-**Estado:** Aceptada y congelada (2026-11-14). Cierra V1. La implementación pertenece a V2–V5.
+**Estado:** Aceptada y congelada (2026-11-14). Cierra V1. **Enmendada el 2026-11-16:** `iflow-32`
+es multinúcleo intra-VM; se añaden §1.9, §6.1 y §7.12, y se corrigen §4 (extensión atómica),
+§5.8/§5.9 (IPI y dispositivos), §6.4, §10 y §12. La implementación de multinúcleo es V3-2.
 **Alcance (ADR-038, 2026-11-15):** este contrato rige el motor `iflow-32`; no prohíbe la línea
-separada `iflow-16`, que se rige por ADR-038.
+separada `iflow-16`, que se rige por ADR-038 y conserva **un único vCPU por diseño**.
 
 **Contexto.** `src/iflow-16` implementa hoy la máquina v2 de 16 bits y 64 KB, con fuel por
 ejecución, un `.flow` ejecutable y un ABI `HOST` basado en registros. La especificación v3
@@ -2267,8 +2269,14 @@ modo de compatibilidad de `iflow-32`.
    baseline es soft-float.
 8. El estado de reset es determinista: `PC = resetVector`, `SP = FP = LR = 0`, GPR a cero,
    `FLAGS = 0`, `STATUS = 0x0000_0002` (supervisor, MMU apagada, interrupciones deshabilitadas),
-   `TVEC = 0`, `PTBR = 0`, `PIDENT = MIDENT = 0xFFFF_FFFF`, `SCRATCH = 0`. El BIOS fija su pila
-   antes de usar `CALL`.
+   `TVEC = 0`, `PTBR = 0`, `PIDENT = MIDENT = 0xFFFF_FFFF`, `SCRATCH = 0`, `COREID = índice del
+   core`. El BIOS fija su pila antes de usar `CALL`.
+9. **Núcleos.** `CORE_COUNT = N` es configurable, `1 ≤ N ≤ 64`; no es una VM por core. Cada core
+   tiene estado arquitectónico propio: `PC`, GPR, `FLAGS`, `STATUS`, `EPC`, `CAUSE`, `BADVADDR`,
+   `TVEC`, `PTBR`, `PIDENT`, `MIDENT`, `SCRATCH`, TLB, reserva de `LR.W` y estado de traps.
+   `RDCYCLE` es por core; `RDTIME` es global. La RAM/ROM física, el bus MMIO, el PIC, el timer, la
+   NVRAM y los marcos de page tables son compartidos. El kernel guest decide qué proceso corre en
+   cada core; el host no implementa ese scheduler ni crea una VM por core.
 
 ### 2. Privilegios y excepciones
 
@@ -2358,7 +2366,7 @@ modo de compatibilidad de `iflow-32`.
 | 2 | 3 | `RET` | 00 | `PC = R15`. |
 | 2 | 4 | `ECALL` | 00 | Trap de syscall; vector 7/8 según `PRV`; número en `R0`. |
 | 2 | 5 | `ERET` | 00 | Retorno de trap; solo supervisor y con `TRAP = 1`. |
-| 2 | 6 | `HALT` | 00 | Detiene el vCPU hasta IRQ habilitada, evento o watchdog; solo supervisor. |
+| 2 | 6 | `HALT` | 00 | Detiene el core hasta IRQ habilitada, evento o watchdog; solo supervisor. |
 | 2 | 7 | `BREAK` | 00 | Trap de breakpoint; código en `R0`; vector 1. |
 | 2 | 8 | `NOP` | 00 | No hace nada. |
 | 2 | 9–15 | — | — | Reservado. |
@@ -2372,7 +2380,12 @@ modo de compatibilidad de `iflow-32`.
 | 3 | 7 | `CSRW` | 01 | Alias de `CSRRW 0, csr, rs`; escritura pura. |
 | 3 | 8 | `SFENCE.VMA` | 00 | Vacía la TLB; necesario tras cambiar PTBR o una página. |
 | 3 | 9 | `FENCE` | 00 | Ordena accesos de memoria/MMIO/DMA antes y después. |
-| 3 | 10–15 | — | — | Reservado. |
+| 3 | 10 | `LR.W` | 10 | Carga 32 bits y deja una reserva de `LR.W` sobre la dirección física. |
+| 3 | 11 | `SC.W` | 11 | `rd` = éxito (1/0), `rs` = valor; almacena solo si la reserva sigue válida. |
+| 3 | 12 | `AMOADD.W` | 11 | `rd` = valor anterior; `[addr] += rs`, atómico. |
+| 3 | 13 | `AMOSWAP.W` | 11 | `rd` = valor anterior; `[addr] = rs`, atómico. |
+| 3 | 14 | `AMOAND.W` | 11 | `rd` = valor anterior; `[addr] &= rs`, atómico. |
+| 3 | 15 | `AMOOR.W` | 11 | `rd` = valor anterior; `[addr] |= rs`, atómico. |
 
 Condiciones de `Jcc` (`rs`): 0 `EQ` (`Z=1`), 1 `NE`, 2 `CS` (`C=1`), 3 `CC`, 4 `MI` (`N=1`),
 5 `PL`, 6 `VS` (`V=1`), 7 `VC`, 8 `HI` (`C=1 && Z=0`), 9 `LS` (`C=0 || Z=1`),
@@ -2388,13 +2401,28 @@ el caso `INT_MIN / -1` y `INT_MIN % -1` usan `ARITHMETIC_OVERFLOW`. `PUSH`/`POP`
 y `SP` alineado a 4; `LEA` ignora `size`; `MOV` de memoria admite 8/16/32. `CALL` lee el destino
 antes de escribir `R15`. `RDCYCLE`/`RDTIME` exigen `rd != rs`; si coinciden, `ILLEGAL_INSTRUCTION`.
 
+**Extensión atómica (enmienda 2026-11-16).** `LR.W`, `SC.W` y `AMO*` son la base de
+sincronización intra-VM. El modelo es secuencialmente consistente para accesos de 32 bits
+alineados; los accesos de 8/16 bits no son atómicos entre cores y exigen exclusión del kernel.
+`LR.W` deja una reserva por core y dirección física; cualquier store de otro core a esa dirección,
+un `SC.W`, un trap, `ERET`, `HALT` o un cambio de contexto la invalidan. `SC.W` escribe `rd = 1`
+solo si la reserva sigue válida; si falla, `rd = 0` y no escribe memoria. `AMO*` hacen
+leer-modificar-escribir atómico y devuelven el valor anterior en `rd`; `rs` es el operando. Todos
+exigen alineación a 4 y `size = 10`; otra forma, tamaño o dirección produce
+`ILLEGAL_INSTRUCTION`, `ALIGNMENT` o `BUS_ERROR`. Solo operan sobre RAM; un `LR.W`/`SC.W`/`AMO*`
+sobre MMIO es `BUS_ERROR`. `rd` y `rs` pueden coincidir: el operando se lee antes de escribir el
+resultado. Sin esta extensión implementada, `CORE_COUNT > 1` falla explícitamente; no se simula
+multinúcleo con un solo hilo.
+
 Privilegios de instrucción: `CSR*`, `ERET`, `SFENCE.VMA` y `HALT` son solo `S`; `ECALL`, `HOST`,
-`RDCYCLE`, `RDTIME`, `FENCE` y `BREAK` son `U/S`; el resto es común. Una instrucción privilegiada
-en `U` produce `PRIVILEGE`. `HALT` con `IE = 0` produce `ILLEGAL_INSTRUCTION`; dormir exige timer e
-interrupciones habilitadas.
+`RDCYCLE`, `RDTIME`, `FENCE`, `LR.W`, `SC.W`, `AMO*` y `BREAK` son `U/S`; el resto es común. Una
+instrucción privilegiada en `U` produce `PRIVILEGE`. `HALT` con `IE = 0` produce
+`ILLEGAL_INSTRUCTION`; dormir exige timer e interrupciones habilitadas.
 
 CSR de v3.0: `STATUS` 0x100, `EPC` 0x101, `CAUSE` 0x102, `BADVADDR` 0x103, `TVEC` 0x104,
-`PTBR` 0x105, `SCRATCH` 0x106, `PIDENT` 0x107, `MIDENT` 0x108, `FLAGS` 0x109. `TVEC` se alinea a
+`PTBR` 0x105, `SCRATCH` 0x106, `PIDENT` 0x107, `MIDENT` 0x108, `FLAGS` 0x109, `COREID` 0x10A.
+`COREID` es de solo lectura, devuelve el índice del core (0–63) y escribirla produce
+`ILLEGAL_INSTRUCTION`. `TVEC` se alinea a
 256 bytes y `PTBR` a 4 KB; un valor no alineado o con bits reservados no cero es
 `ILLEGAL_INSTRUCTION`. En `CSR*`, `rd = 0` significa «no leer» y `rs = 0` significa «no escribir»;
 por eso `CSRR`/`CSRW` son alias puros y R0 no se usa como operando en estas instrucciones. Los 20
@@ -2452,52 +2480,75 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    - `0x0100_0000` UART: `TX` WO, `RX` RO, `STATUS` RO (bit 0 TX listo, bit 1 RX disponible,
      bit 2 overflow), `CTRL` RW (bit 0 IRQ RX, bit 1 IRQ TX).
    - `0x0100_1000` TIMER: `CMP_LO`/`CMP_HI` RW, `CTRL` RW (bit 0 enable, bit 1 periódico,
-     bit 2 IRQ), `STATUS` RW1C (bit 0 fired), `PERIOD_LO`/`PERIOD_HI` RW (por defecto 1.000.000 ns),
-     `TIME_LO`/`TIME_HI` RO con latch (leer `TIME_LO` fija el alto hasta leer `TIME_HI`).
-   - `0x0100_2000` PIC: `PENDING` RO, `MASK` RW (1 = enmascarada; reset todo 1), `ACK` WO,
-     `IN_SERVICE` RO, `SOFT_IRQ` WO (escribe 1 en una línea para pendiente por software).
+     bit 2 IRQ), `TARGET` RW (`[7:0]` core destino, `0xFF` broadcast; reset 0), `STATUS` RW1C
+     (bit 0 fired), `PERIOD_LO`/`PERIOD_HI` RW (por defecto 1.000.000 ns), `TIME_LO`/`TIME_HI` RO
+     con latch (leer `TIME_LO` fija el alto hasta leer `TIME_HI`). `TIME_*` es global; `CMP`,
+     `CTRL`, `TARGET` y `STATUS` los gestiona el kernel y la IRQ 0 se entrega al core destino.
+   - `0x0100_2000` PIC: banco por core de `PENDING` RO, `MASK` RW (1 = enmascarada; reset todo 1),
+     `ACK` WO e `IN_SERVICE` RO; `SOFT_IRQ` WO (`[7:0]` línea, `[15:8]` core destino, `0xFF`
+     broadcast; escribe 1 en una línea para pendiente por software o IPI). Cada core solo ve y
+     modifica su banco.
    - `0x0100_3000` DISPLAY: `COLS` RO (80), `ROWS` RO (25), `CURSOR` RW (`fila << 16 | columna`),
      `CTRL` RW (bit 0 enable, bit 1 clear), búfer de texto de 80×25 celdas de 2 bytes (carácter y
      atributo) en `0x0100_3010`–`0x0100_3FFF`.
    - `0x0100_4000` NVRAM: `SIZE` RO (4 KiB), `ADDR` RW, `DATA` RW, `COMMIT` WO (1 = flush).
    - `0x0100_5000` SYSINFO: `RAM_SIZE`, `RAM_BASE`, `ROM_SIZE`, `TOC_OFFSET`, `TOC_COUNT`,
-     `ABI_VERSION` (3), `FEATURES` (bit 0 timer, 1 NVRAM, 2 UART, 3 display, 4 sync, 5 mailbox),
-     `CPU_HZ` (1.000.000.000), `TIME_HZ` (1.000.000.000).
+     `CORE_COUNT`, `ABI_VERSION` (3), `FEATURES` (bit 0 timer, 1 NVRAM, 2 UART, 3 display, 4 sync,
+     5 mailbox, 6 multicore), `CPU_HZ` (1.000.000.000), `TIME_HZ` (1.000.000.000).
    - `0x0100_6000` HOST_MAILBOX: `EVENT_TYPE` RO (1 mensaje, 2 apagado, 3 acción host completada),
-     `MESSAGE_HANDLE` RO, `EVENT_SEQ` RO, `ACK` WO, `STATUS` RO (bit 0 pendiente).
+     `MESSAGE_HANDLE` RO, `EVENT_SEQ` RO, `TARGET` RW (`[7:0]` core destino; reset 0), `ACK` WO,
+     `STATUS` RO (bit 0 pendiente).
    - `0x0100_7000`–`0x01FF_FFFF`: reservado; acceso `BUS_ERROR`.
 9. Las líneas de IRQ son: 0 timer, 1 UART RX, 2 UART TX, 3 display (no usada en v3.0), 4 reservada,
-   5 host mailbox, 6–15 reservadas y 16–31 software. El PIC es de flanco y latcha `PENDING`. Al
-   tomar la línea pendiente de menor número no enmascarada, limpia ese bit, lo marca en
-   `IN_SERVICE` y vectoriza; `ACK` limpia `IN_SERVICE`. Un nuevo flanco durante el servicio vuelve
-   a poner `PENDING`, pero la línea no se toma hasta el `ACK`. El kernel debe hacer `ACK` antes de
-   `ERET`.
+   5 host mailbox, 6–15 reservadas y 16–31 software. El PIC es de flanco, con `PENDING`, `MASK` e
+   `IN_SERVICE` **por core**; cada core atiende solo su banco. Al tomar la línea pendiente de menor
+   número no enmascarada, limpia ese bit, lo marca en `IN_SERVICE` y vectoriza; `ACK` local limpia
+   `IN_SERVICE`. Un nuevo flanco durante el servicio vuelve a poner `PENDING`, pero la línea no se
+   toma hasta el `ACK`. El kernel debe hacer `ACK` antes de `ERET`. Las líneas 16–31 son software y
+   `SOFT_IRQ` las dirige al core indicado (IPI); `TARGET = 0xFF` es broadcast. Una IPI a un core
+   fuera de `CORE_COUNT` es `BUS_ERROR`; no se ignora en silencio. El timer y el mailbox usan
+   `TARGET` para elegir el core que recibe su IRQ; el kernel puede reenviarla con una IPI.
 
 ### 6. Tiempo, scheduler y persistencia
 
-1. `RDCYCLE` es un contador monótono de 64 bits de instrucciones retiradas; solo avanza cuando la
-   VM ejecuta. `RDTIME` es un contador monótono de 64 bits de nanosegundos virtuales; avanza
-   durante ejecución y espera. Ambos se leen con un snapshot atómico en dos registros; no hay
-   *tearing*. La frecuencia nominal es 1 GHz para ciclos y 1 ns para tiempo; el overflow es el de
-   un `u64` y no se reinicia salvo reset de la VM.
+1. `RDCYCLE` es un contador monótono de 64 bits **por core** de instrucciones retiradas; solo
+   avanza cuando ese core ejecuta. `RDTIME` es un contador monótono de 64 bits **global** de
+   nanosegundos virtuales; avanza durante ejecución y espera. Cada core lee su `RDCYCLE`; `RDTIME`
+   es común. Ambos se leen con un snapshot atómico en dos registros; no hay *tearing*. La
+   frecuencia nominal es 1 GHz para ciclos y 1 ns para tiempo; el overflow es el de un `u64` y no
+   se reinicia salvo reset de la VM.
 2. El CPU comprueba IRQ pendientes al inicio de cada instrucción, antes del fetch. El timer compara
    `RDTIME` con `CMP`; al alcanzarlo, marca `STATUS.fired` y, si `CTRL.IRQ` y la línea 0 están
    desenmascaradas, levanta la IRQ 0. En modo periódico suma `PERIOD` a `CMP`; si la VM se atrasó,
    dispara una vez y fija `CMP = RDTIME + PERIOD` para no generar una tormenta.
 3. `HALT` solo es válido en `S` y exige `IE = 1`; con `IE = 0` es `ILLEGAL_INSTRUCTION`. Detiene el
-   vCPU hasta que haya una IRQ habilitada, un evento de host o el watchdog. Si no hay procesos
+   core hasta que haya una IRQ habilitada, un evento de host o el watchdog. Si no hay procesos
    ejecutables, el host avanza el tiempo virtual hasta el
    siguiente deadline en lugar de hacer busy-wait. `ECALL` permite al kernel ceder la CPU y dormir;
    la política temporal (token bucket, backoff, deadline) vive en el guest, no en el host.
-4. Hay **un vCPU por VM**. Varias VM pueden coexistir y ejecutarse en paralelo, pero un guest no
-   ejecuta dos flujos a la vez. El scheduler de procesos es software del kernel; el host solo
-   impone el quantum y el watchdog.
-5. **Quantum de host:** por ejecución, 1.000.000 de instrucciones o 50 ms de reloj de pared, lo que
-   ocurra primero, configurable. Al agotarse, el host aborta la ejecución con
-   `QUANTUM_EXCEEDED` o `HOST_TIMEOUT`, revierte el journal del mensaje y libera el `machineLock`.
-   El guest no puede enmascararlo ni deshabilitarlo. No es fuel y no se expone en el ABI. El reloj
-   de pared del watchdog cuenta solo ejecución de guest: el tiempo bloqueado en `HOST` no consume
-   ese watchdog y queda acotado por el timeout de la acción.
+4. **Núcleos.** `iflow-32` es **una sola VM con `CORE_COUNT = N` núcleos configurables**
+   (`1 ≤ N ≤ 64`), no una VM por core. Los N cores comparten RAM, ROM, bus MMIO, kernel y estado
+   de máquina; cada uno tiene su estado arquitectónico. El scheduler de procesos es software del
+   kernel guest; el host solo crea los cores, impone quantum/watchdog por core y no decide qué
+   proceso corre en cada uno. El detalle de coherencia, atómicas, IPI, arranque y journal está en
+   §6.1. La implementación es **V3-2**; hasta que exista, `N > 1` falla explícitamente
+   (`UNSUPPORTED`/`RESTART_REQUIRED`) y no se degrada a un solo core en silencio.
+5. **Quantum de host por core (preempción, no fuel):** 1.000.000 de instrucciones o 50 ms de
+   ejecución de guest por core y por slice, lo que ocurra primero, configurable. Al agotarse, el
+   host recupera el control y devuelve `PREEMPTED`; **no es un fallo, no termina el mensaje, no
+   revierte el journal y no limita la vida de la VM ni el número de slices**. El estado
+   arquitectónico, la RAM, el journal abierto y los contadores se conservan; el host puede reanudar
+   el mismo core de inmediato o cederlo a otro trabajo. El guest no puede enmascarar ni desactivar
+   el quantum. No hay `machineLock` global para la ejecución normal: el lock de máquina solo
+   serializa ciclo de vida (reset, snapshot, apagado). No es fuel y no se expone en el ABI.
+   **Watchdog de paso:** si un solo paso de guest tarda más de 50 ms de reloj de pared en retornar
+   (excluyendo `HOST`), el host devuelve `WATCHDOG` y deja el core en `FAULTED`; es una salvaguarda
+   contra un fallo de implementación o un bloqueo del host, no una política de entrega ni un límite
+   para programas largos. El tiempo bloqueado en `HOST` no consume el quantum ni el watchdog y
+   queda acotado por el timeout de la acción. La demora de un mensaje es responsabilidad del
+   programa de userspace/kernel guest, no del host. La comprobación es por paso y no interrumpe
+   asíncronamente un `cpu.step()` que nunca retorne; esa interrupción externa exigiría aislar el
+   core y queda fuera de V3-1.
 6. La **máquina es persistente**: RAM, registros, timer, page tables y NVRAM sobreviven entre
    mensajes mientras la VM está encendida. El journal es por unidad de mensaje: o se confirman
    todas las mutaciones del mensaje o ninguna. Un aborto de ejecución no revierte el estado de
@@ -2521,6 +2572,69 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
     instantáneas de memoria son por frame y COW; nunca se clona el espacio de 4 GiB. La compresión
     de frames queda fuera de v3.0.
 
+### 6.1. Núcleos, coherencia y concurrencia (enmienda 2026-11-16)
+
+1. **Modelo.** `CORE_COUNT` es configurable (`1 ≤ N ≤ 64`). Es **una sola VM con N vCPU**, no N
+   VMs ni N kernels. Los cores comparten RAM, ROM, bus MMIO, PIC, timer, NVRAM, kernel y marcos de
+   page tables; cada core conserva su estado arquitectónico y su TLB. El host crea los cores y
+   aplica quantum/watchdog por core; el kernel guest decide qué proceso corre en cada uno.
+2. **Estado por core.** `PC`, GPR, `FLAGS`, `STATUS`, `EPC`, `CAUSE`, `BADVADDR`, `TVEC`, `PTBR`,
+   `PIDENT`, `MIDENT`, `SCRATCH`, TLB, reserva de `LR.W` y estado de traps son privados. `COREID`
+   (0x10A, RO) identifica el core; `SYSINFO.CORE_COUNT` publica N y `FEATURES` bit 6 indica
+   multicore. `RDCYCLE` es por core; `RDTIME` es global. `TVEC` y `PTBR` pueden apuntar a
+   estructuras compartidas, pero cada core mantiene su copia.
+3. **Memoria compartida.** El modelo es **secuencialmente consistente** para accesos de 32 bits
+   alineados. Los accesos de 8/16 bits no son atómicos entre cores; el kernel debe protegerlos con
+   `LR.W`/`SC.W` o con exclusión mutua. `FENCE` ordena memoria/MMIO observables; en v3.0 con
+   coherencia secuencial no cambia el resultado, pero se conserva como barrera contractual. No hay
+   cachés de datos; la TLB es por core. Un snapshot o apagado exige detener todos los cores y
+   tomar el lock de ciclo de vida; no se toma un snapshot con cores ejecutando.
+4. **MMIO.** El bus serializa cada transacción de 32 bits alineada y publica el efecto antes de
+   retirar la instrucción. Los dispositivos que no admiten concurrencia serializan internamente y
+   nunca descartan una escritura en silencio. El PIC tiene `PENDING`/`MASK`/`IN_SERVICE` por core;
+   `TIMER.TARGET` y `HOST_MAILBOX.TARGET` eligen el core de destino; `SOFT_IRQ` puede dirigir una
+   línea software a otro core como IPI. Un `TARGET` fuera de `CORE_COUNT` es `BUS_ERROR`.
+5. **Atómicas.** `LR.W`/`SC.W`/`AMO*` de §4 son obligatorias para locks, colas y contadores
+   compartidos. La reserva de `LR.W` es por core y dirección física; cualquier store de otro core
+   a la misma dirección, un `SC.W`, un trap, `ERET`, `HALT` o un cambio de contexto la invalidan.
+   `SC.W` devuelve 1 solo si la reserva sigue válida; si no, devuelve 0 y no escribe. Los `AMO*`
+   son leer-modificar-escribir secuencialmente consistentes y solo operan sobre RAM; no hay
+   atómicas sobre MMIO.
+6. **IPI y TLB.** `SFENCE.VMA` vacía solo la TLB del core que la ejecuta. Tras cambiar una page
+   table compartida, el kernel debe enviar una IPI a los demás cores (líneas software 16–31 con
+   `SOFT_IRQ`) y esperar su confirmación antes de reutilizar el marco; no hay ASID ni shootdown
+   automático del host. Un core que recibe la IPI ejecuta `SFENCE.VMA` y la reconoce.
+7. **Scheduler.** El kernel guest es el único scheduler de procesos. El core 0 es el boot core:
+   todos los cores arrancan en `resetVector`, leen `COREID`, y los cores 1..N-1 esperan la
+   liberación del kernel en `HALT` o en una espera cooperativa; no ejecutan guest antes de que el
+   kernel los publique. El host no hace work stealing ni elige el core de un mensaje. `HALT` es por
+   core; si todos los cores están dormidos, el host avanza el tiempo virtual hasta el deadline más
+   cercano; si alguno ejecuta, el tiempo avanza con la ejecución.
+8. **Quantum, watchdog y fallo.** El quantum y el watchdog son por core y no cobran tiempo
+   bloqueado en `HOST`. Agotar el quantum devuelve `PREEMPTED`: no aborta la unidad de mensaje, no
+   descarta el journal abierto y no limita la vida de la VM; el host puede reanudar el mismo core.
+   El watchdog de paso solo devuelve `WATCHDOG` si un único paso de guest supera 50 ms de reloj de
+   pared; entonces el core queda `FAULTED`, el journal abierto no se confirma y no se revierte
+   ninguna unidad ya confirmada por otro core. Si el fallo puede haber corrompido estado
+   compartido, la VM se marca `FAULTED` y exige reinicio; no se continúa con un core zombi ni se
+   presenta un éxito falso. Los demás cores se detienen de forma ordenada en ese caso. La
+   comprobación es por paso: si el código del host que implementa una instrucción no retorna, el
+   hilo no recupera el control; una interrupción externa de un core colgado queda fuera de V3-1.
+9. **Journal y `HOST` concurrente.** El journal es por unidad de mensaje, no por VM. Varias
+   unidades pueden ejecutarse en cores distintos con overlays y decisiones independientes; cada
+   una tiene su propio contexto de ABI y su latch de `ROUTE_DECISION`, sin compartir el de otra.
+   `PROPERTY_*` y `ROUTE_DECISION` solo ven el overlay de su unidad; no hay visibilidad cruzada
+   antes del commit. El host serializa las mutaciones globales o los servicios no thread-safe, pero
+   no toma un `machineLock` global para ejecutar guest. El aborto de una unidad no revierte
+   unidades ya confirmadas por otros cores.
+10. **Arranque y gate.** El BIOS y el kernel deben ser multicore-safe; si no lo son, `N > 1` no se
+    habilita. La implementación de este apartado es **V3-2** y debe entregar, como mínimo:
+    `CORE_COUNT`, estado por core, `COREID`/`SYSINFO`, atómicas, IPI, PIC por core, TLB shootdown,
+    scheduler de guest, watchdog por core y journal concurrente. Hasta que todo eso exista,
+    `CORE_COUNT > 1` falla explícitamente (`UNSUPPORTED`/`RESTART_REQUIRED`); no hay un modo
+    single-core silencioso ni un fallback. `CORE_COUNT = 1` debe seguir siendo determinista y es el
+    único modo soportado por V1/V2/V3-1.
+
 ### 7. ABI `HOST` v3
 
 1. `HOST` es una hiperllamada síncrona. Entradas:
@@ -2535,9 +2649,9 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    byte parcial. Si `R3 = 0`, `R2` se ignora. Los buffers deben ser accesibles desde el modo actual
    y estar completamente mapeados; si no, `FAULT`.
 3. Estados: `OK = 0`, `INVALID_ARGUMENT = 1`, `UNSUPPORTED = 2`, `DENIED = 3`, `NOT_FOUND = 4`,
-   `CONFLICT = 5`, `LIMIT = 6` (capacidad/presupuesto), `FAULT = 7`, `INTERNAL = 8`,
-   `NOT_READY = 9`, `RATE_LIMITED = 10`, `TIMEOUT = 11`. No hay códigos negativos ni éxito
-   implícito.
+   `CONFLICT = 5`, `LIMIT = 6` (solo capacidad del buffer de resultado), `FAULT = 7`,
+   `INTERNAL = 8`, `NOT_READY = 9`, `RATE_LIMITED = 10`, `TIMEOUT = 11`. No hay códigos negativos
+   ni éxito implícito. `LIMIT` no significa fuel, gas ni presupuesto de ejecución agotado.
 4. El código de datos es **TLV** con `TlvCodec` de `core-api`: tipo `u8`, longitud `u32` LE,
    payload; tipos 0 `NULL`, 1 `STRING`, 2 `I64`, 3 `BOOL`, 4 `BYTES`, 5 `LIST`, 6 `MAP`;
    little-endian, sin padding, UTF-8 validado, sin truncar, ausencia explícita (`NULL`) distinta
@@ -2604,6 +2718,18 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 11. `HOST` no cambia `STATUS`, no es reentrante y puede ceder la CPU mientras espera al host. Una
     acción sync puede tener efecto externo antes del commit del journal; no hay transacción entre
     efecto nativo y mensaje (ADR-036 §16.6). Un timeout devuelve `TIMEOUT`, nunca éxito.
+12. Con `CORE_COUNT > 1`, cada core tiene su propio contexto de ABI y de decisión; el latch de
+    `ROUTE_DECISION` no se comparte. Las operaciones sobre una unidad de mensaje se serializan por
+    `MIDENT` y su journal; `HOST` puede ejecutarse en varios cores a la vez, pero los servicios que
+    tocan estado global del host se serializan en el host. Un `PROPERTY_WRITE` de una unidad no es
+    visible para otra antes del commit. Sin identidad verificada, `DENIED`.
+13. **Sin fuel, gas ni presupuesto de ejecución en el ABI.** El guest no recibe, paga ni consulta
+    un contador de ejecución; no existe un estado `OUT_OF_FUEL`, `LIMIT` no es un agotamiento de
+    ejecución y `TIMEOUT` solo describe el timeout de una acción `HOST`. El quantum de host es un
+    slice de preempción reanudable, no una cuota total: no limita la vida de la VM, la duración de
+    un mensaje ni el número de slices. Si un mensaje se retrasa, la política de admisión, cola y
+    backoff es del kernel/userspace guest. La única cota de pared de una llamada `HOST` es el
+    timeout explícito de su acción.
 
 ### 8. Formato ROM v3 (`.flow`)
 
@@ -2694,8 +2820,10 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 ### 9. Arranque y carga de programas
 
 1. El host valida la ROM, la mapea físicamente y arranca en `resetVector` con MMU apagada, `S`,
-   interrupciones deshabilitadas y registros de §1.8. El BIOS hace POST: pila, `TVEC`, PIC, timer,
-   NVRAM, display, page tables y `SYSINFO`; después enciende `STATUS.MMU` y salta al bootloader.
+   interrupciones deshabilitadas y registros de §1.8. Cada core arranca con su `COREID`; el core 0
+   es el boot core y hace POST: pila, `TVEC`, PIC, timer, NVRAM, display, page tables y `SYSINFO`;
+   los cores 1..N-1 esperan la liberación del kernel en `HALT` o en una espera cooperativa y no
+   ejecutan guest antes. Después el BIOS enciende `STATUS.MMU` y salta al bootloader.
 2. El bootloader solo copia y verifica el segmento `KERNEL` de ROM a RAM y salta a su entry point.
    No hace POST, no reconstruye page tables, no cambia el stack ni enciende interrupciones.
 3. El kernel inicializa el scheduler, la cola, las syscalls y los timers; carga los segmentos
@@ -2721,10 +2849,11 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 | Frames | 4 KiB | asignación dispersa bajo demanda |
 | TOC | 256 entradas | 64 bytes por entrada |
 | Programas | 64 | `PIDENT` 0–63 |
+| Núcleos por VM | 1..64 | configurable (`CORE_COUNT`); `iflow-16` = 1 por diseño; `>1` exige V3-2 |
 | TLV por buffer | 1 MiB | validado en un único punto |
 | Payload sync | 64 KiB | configurable; exceso `DENIED` |
-| Timeout de acción | 1000 ms | configurable por acción |
-| Quantum de host | 1.000.000 instrucciones / 50 ms | lo primero que ocurra; no enmascarable |
+| Timeout de acción | 1000 ms | solo para una acción `HOST`; no es límite de la VM |
+| Quantum de host | 1.000.000 instrucciones / 50 ms | slice de preempción por core; no es fuel ni límite total |
 | Timer | 1 kHz | periodo 1 ms; `RDTIME` en ns |
 | NVRAM | 4 KiB | persistente entre reinicios |
 | Cola | handles 32 bits | slot 16 + generación 16 |
@@ -2740,7 +2869,7 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 | 4 | Páginas de 4 KB, dos niveles 10+10+12; sin páginas grandes en v3.0. |
 | 5 | Compresión de frames **fuera** de v3.0; se medirá antes de proponerla. |
 | 6 | Handle opaco de 32 bits (slot 16 + generación 16); el ABI no lo interpreta. |
-| 7 | Timer/RTC y contador virtual de ciclos; `RDCYCLE` y `RDTIME`. |
+| 7 | Timer/RTC y contador virtual de ciclos; `RDCYCLE` por core y `RDTIME` global. |
 | 8 | Carga por TOC directa; sin filesystem en v3.0. |
 | 9 | `U/S`, páginas `U`, `W^X` y capacidades baseline/sync por SHA-256. |
 | 10 | `.flow` v2 rechazado; sin migración runtime; se reensambla/recompila a v3. |
@@ -2754,9 +2883,10 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 | 29 | Token bucket en RAM del guest; sobrevive sleep; no sobrevive reinicio salvo que se guarde en NVRAM. |
 | 30 | Se eliminan `ROUTE_RATE_LIMIT` y `DECISION_RATE_LIMIT`; una sola decisión de guest. |
 | 31 | Cap duro del host separado; tasa `RATE_LIMITED`, payload `DENIED`, timeout `TIMEOUT`. |
-| 32 | El watchdog del host aborta en frontera de instrucción, revierte el journal y libera `machineLock`. |
+| 32 | El quantum se comprueba en frontera de instrucción y devuelve `PREEMPTED` sin abortar la unidad ni revertir el journal; el watchdog de paso solo marca `FAULTED` el core si un único paso supera 50 ms y el journal abierto no se confirma. El `machineLock` global solo se usa para ciclo de vida. |
 | 33 | `PERMISSION`/`WORLD` vacíos o no verificables son fail-closed (`allowed = false`). |
 | 34 | Una entrega diferida no cuenta hasta `DELIVER`; si se cancela o apaga, `NOT_DELIVERED`/`CANCELLED`, nunca éxito. |
+| Núcleos | `iflow-32` tiene `CORE_COUNT` configurable (1..64) intra-VM; `iflow-16` conserva un único vCPU por diseño. El kernel guest decide el scheduler; el host no crea una VM por core ni hace fallback. |
 
 Las preguntas 26 y 35–38 ya estaban cerradas en §5.4 y ADR-031; este ADR no las reabre.
 
@@ -2769,6 +2899,15 @@ Las preguntas 26 y 35–38 ya estaban cerradas en §5.4 y ADR-031; este ADR no l
   32 bits, IRQ, timer, tiempo virtual y persistencia. El fuel desaparece del ABI; el quantum y el
   watchdog son límites de seguridad del host, no política del guest. Esto sustituye la cláusula
   «coste de fuel» de ADR-036 §16.6 para v3; las cuotas pasan a llamadas/minuto, payload y timeout.
+- **No hay fuel, gas ni presupuesto total de ejecución en v3.** El ABI no expone un contador de
+  ejecución ni un estado de agotamiento; `LIMIT` solo indica capacidad insuficiente del buffer y
+  `TIMEOUT` solo el timeout de una acción `HOST`. El quantum de 1M/50 ms es un slice reanudable y
+  no limita la vida de la VM, la duración del mensaje ni el número de slices. El retraso de un
+  mensaje es política del kernel/userspace guest, no un fallo del host.
+- La enmienda de multinúcleo convierte `iflow-32` en **una VM con N vCPU configurables**, no en
+  una colección de VMs. Exige estado por core, atómicas, IPI, TLB shootdown, MMIO/PIC seguro,
+  scheduler de guest, watchdog por core y journal concurrente; hasta V3-2, `CORE_COUNT > 1` falla
+  explícito. `iflow-16` conserva un único vCPU por diseño y no hereda esta decisión.
 - El contrato de política de ADR-031 se conserva: default deny, `DELIVER` explícito, una sola
   decisión, `CANCEL_EVENT` separado, TLV, read-your-writes, sin `REDIRECT`/`RATE_LIMIT`. El cambio
   de canal sigue siendo `textformatter.channel.set` por `SYNC_INVOKE`, no un import dedicado.
@@ -2785,8 +2924,10 @@ Las preguntas 26 y 35–38 ya estaban cerradas en §5.4 y ADR-031; este ADR no l
 
 - No implementa V2–V5 ni cambia código en V1.
 - No conserva compatibilidad v2, no migra `.flow` v2 en runtime y no mantiene dos lectores.
-- No incluye compresión de frames, multi-vCPU, ASID, páginas grandes, hot-reload de ROM ni
-  verificación criptográfica de firmas dentro de la VM.
+- No incluye compresión de frames, ASID, páginas grandes, hot-reload de ROM ni verificación
+  criptográfica de firmas dentro de la VM.
+- El multinúcleo intra-VM de `iflow-32` **sí** es contrato desde la enmienda de 2026-11-16; su
+  implementación es V3-2 y no se promete en V1/V2. `iflow-16` no implementa multinúcleo.
 - No define benchmarks de «networking empresarial»; se medirán con V6 y no se asumen.
 - No declara estable la suite ni sustituye el E2E real de ADR-034.
 - No autoriza cambios en `docs/prompts/`; la especificación sigue siendo de solo lectura.
@@ -2808,6 +2949,9 @@ V1 se cierra con este ADR. V2–V5 deben demostrar, como mínimo:
    límites; carga BIOS/boot/kernel/programa.
 7. Integración: un mensaje real atraviesa el pipeline con una política `.flow` v3 y produce el
    mismo resultado observable que el contrato de ADR-031/ADR-036, sin fuel y sin doble camino.
+8. Multinúcleo: `CORE_COUNT = 1` determinista; `CORE_COUNT > 1` solo se habilita con estado por
+   core, atómicas, IPI, TLB shootdown, MMIO/PIC por core, journal concurrente y watchdog por core.
+   Sin esas piezas, `CORE_COUNT > 1` falla explícito. `iflow-16` no implementa multinúcleo.
 
 ---
 
@@ -2829,10 +2973,12 @@ líneas.
 
 1. **Dos módulos independientes, no un módulo con dos ISAs.**
    - `iflow-16`: la línea actual `src/iflow-vm`, de 16 bits y 64 KB, ISA/formato `.flow` v2, ABI
-     `HOST` v2 y fuel. Se publica como `suite-iflow-16` y se identifica como `iflow-16`.
+     `HOST` v2 y fuel. Se publica como `suite-iflow-16` y se identifica como `iflow-16`. Conserva
+     **un único vCPU por diseño**: el techo de 64 KB y la simplicidad del kernel no permiten un
+     multinúcleo intra-VM creíble; no se simula ni se promete.
    - `iflow-32`: la línea nueva `src/iflow-32`, de 32 bits, ISA/formato `.flow` v3, ABI `HOST` v3,
-     MMU, scheduler y espacio de direcciones de hasta 4 GiB. Se publica como `suite-iflow-32` y se
-     identifica como `iflow-32`.
+     MMU, scheduler, **multinúcleo intra-VM configurable** y espacio de direcciones de hasta 4 GiB.
+     Se publica como `suite-iflow-32` y se identifica como `iflow-32`.
    - El nombre `iflow-vm` desaparece. No se conserva alias de módulo, artefacto, capability ni
      engine. El rename es un cambio breaking deliberado del régimen pre-1.0.
 
@@ -2899,6 +3045,11 @@ líneas.
      SHA-256 final; el hash cubre todo el payload. El layout anterior de 20 bytes se rechaza por
      `layoutMagic`: no hay lector legacy, alias ni migración en runtime. Un `.flow` v3 se rechaza
      por versión/layout, no se reinterpreta como v2.
+
+9. **Núcleos por línea.** `iflow-32` es una sola VM con `CORE_COUNT` núcleos configurables
+   (ADR-037 enmendado, 2026-11-16); no es una VM por core. `iflow-16` conserva **un único vCPU por
+   diseño**, por el techo estructural de 64 KB y por la simplicidad de su kernel. La decisión no se
+   hereda entre líneas: no se simula multinúcleo en 16 bits ni se impone el único core a 32 bits.
 
 **Consecuencias.**
 

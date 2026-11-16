@@ -8,15 +8,19 @@ import me.majhrs16.suite.iflow.vm.isa.v3.Opcode;
 import me.majhrs16.suite.iflow.vm.isa.v3.VirtualClock;
 
 /**
- * Host-side execution window of one v3 vCPU.
+ * Host-side execution slice of one v3 vCPU.
  *
- * <p>This class only enforces the quantum and the watchdog from ADR-037
- * section 6.5. It is not a guest scheduler: the kernel decides what runs next.
- * When the vCPU is halted, the engine advances virtual time to the next armed
- * deadline instead of busy-waiting and lets the timer raise its IRQ.</p>
+ * <p>This class enforces the non-maskable quantum and watchdog from ADR-037 section 6.5. It is
+ * not a guest scheduler: the kernel decides what runs next. A quantum expiry returns
+ * {@link ExecutionStatus#PREEMPTED} and keeps the vCPU and its open journal resumable; it is not a
+ * message timeout. Only a single guest step that exceeds the watchdog bound returns
+ * {@link ExecutionStatus#WATCHDOG} and faults the core.</p>
  *
- * <p>Wall-clock time spent inside a {@code HOST} hypercall is not charged to
- * the guest watchdog; the action timeout bounds that call independently.</p>
+ * <p>When the vCPU is halted, the engine advances virtual time to the next armed deadline instead
+ * of busy-waiting and lets the timer raise its IRQ.</p>
+ *
+ * <p>Wall-clock time spent inside a {@code HOST} hypercall is not charged to the guest quantum or
+ * watchdog; the action timeout bounds that call independently.</p>
  */
 public final class ExecutionEngine {
 
@@ -48,29 +52,30 @@ public final class ExecutionEngine {
     }
 
     /**
-     * Runs until the vCPU halts without a wake source or a host limit expires.
+     * Runs until the vCPU halts without a wake source, the quantum expires, or the watchdog fires.
      *
-     * <p>The limit is checked only at instruction boundaries. A budget abort
-     * leaves the machine state advanced; reverting a message journal belongs to
-     * the caller, not to this engine.</p>
+     * <p>The limit is checked only at instruction boundaries. {@code PREEMPTED} leaves the machine
+     * state and the open journal intact; reverting or committing a message journal belongs to the
+     * caller. {@code WATCHDOG} means one guest instruction did not return within the bound and the
+     * core must not be treated as healthy.</p>
      */
-    public ExecutionReport run(ExecutionBudget budget) {
-        Objects.requireNonNull(budget, "budget");
+    public ExecutionReport run(ExecutionQuantum quantum) {
+        Objects.requireNonNull(quantum, "quantum");
         long steps = 0;
         long guestNanos = 0;
 
         while (true) {
-            if (steps >= budget.maxInstructions()) {
-                return report(ExecutionStatus.QUANTUM_EXCEEDED, steps, guestNanos);
+            if (steps >= quantum.maxInstructions()) {
+                return report(ExecutionStatus.PREEMPTED, steps, guestNanos);
             }
-            if (guestNanos >= budget.maxGuestNanos()) {
-                return report(ExecutionStatus.HOST_TIMEOUT, steps, guestNanos);
+            if (guestNanos >= quantum.maxGuestNanos()) {
+                return report(ExecutionStatus.PREEMPTED, steps, guestNanos);
             }
 
             Step step;
             if (cpu.halted()) {
                 poll.run();
-                step = executeStep();
+                step = executeStep(quantum);
                 if (!step.attempted()) {
                     long deadline = nextDeadline.getAsLong();
                     if (deadline == Long.MAX_VALUE) {
@@ -81,41 +86,46 @@ public final class ExecutionEngine {
                         clock.advanceTo(deadline);
                     }
                     poll.run();
-                    step = executeStep();
+                    step = executeStep(quantum);
                     if (!step.attempted()) {
                         return report(ExecutionStatus.HALTED, steps, guestNanos);
                     }
                 }
             } else {
-                step = executeStep();
+                step = executeStep(quantum);
                 if (!step.attempted()) {
                     continue;
                 }
+            }
+
+            if (step.watchdog()) {
+                return report(ExecutionStatus.WATCHDOG, steps + 1, guestNanos);
             }
 
             steps++;
             guestNanos = saturatingAdd(guestNanos, step.guestNanos());
             clock.advanceNanos(NANOS_PER_INSTRUCTION);
 
-            if (steps >= budget.maxInstructions()) {
-                return report(ExecutionStatus.QUANTUM_EXCEEDED, steps, guestNanos);
+            if (steps >= quantum.maxInstructions()) {
+                return report(ExecutionStatus.PREEMPTED, steps, guestNanos);
             }
-            if (guestNanos >= budget.maxGuestNanos()) {
-                return report(ExecutionStatus.HOST_TIMEOUT, steps, guestNanos);
+            if (guestNanos >= quantum.maxGuestNanos()) {
+                return report(ExecutionStatus.PREEMPTED, steps, guestNanos);
             }
         }
     }
 
-    private Step executeStep() {
+    private Step executeStep(ExecutionQuantum quantum) {
         long start = nanoClock.nanoTime();
         boolean attempted = cpu.step();
         if (!attempted) {
             return Step.NOT_ATTEMPTED;
         }
+        long elapsed = Math.max(0L, nanoClock.nanoTime() - start);
         if (cpu.lastOpcode() == Opcode.HOST) {
-            return new Step(true, 0L);
+            return new Step(true, 0L, false);
         }
-        return new Step(true, Math.max(0L, nanoClock.nanoTime() - start));
+        return new Step(true, elapsed, elapsed > quantum.maxGuestNanos());
     }
 
     private ExecutionReport report(ExecutionStatus status, long steps, long guestNanos) {
@@ -129,8 +139,8 @@ public final class ExecutionEngine {
         return left + right;
     }
 
-    private record Step(boolean attempted, long guestNanos) {
+    private record Step(boolean attempted, long guestNanos, boolean watchdog) {
 
-        private static final Step NOT_ATTEMPTED = new Step(false, 0L);
+        private static final Step NOT_ATTEMPTED = new Step(false, 0L, false);
     }
 }

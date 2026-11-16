@@ -3,7 +3,7 @@ package me.majhrs16.suite.iflow.vm.execution.v3;
 import java.util.Objects;
 
 /**
- * Observable result of a host execution window.
+ * Observable result of one host execution slice.
  *
  * @param status       terminal state
  * @param steps        attempted instructions, including trap and IRQ delivery
