@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-15
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-16
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -2864,6 +2864,37 @@ líneas.
    `src/iflow-16`, se crea `src/iflow-32` y se mueven a él los paquetes v3 aislados (`rom`,
    `isa.v3`, `memory.v3`, `host.v3`). Se actualizan `settings.gradle`, publicaciones, cobertura,
    CI, tests, configuración y documentación. No se conservan rutas ni identificadores antiguos.
+
+8. **Layout `.flow` v2 de `iflow-16` (ROM2).** El contenedor de 16 bits se rediseña como imagen
+   ROM con cabecera, TOC y segmentos tipados. El layout es propio de `iflow-16`; no se comparte
+   con la ROM v3 de ADR-037.
+   - **Cabecera de 32 bytes, big-endian.** `+0` magic `0x464C4F57` (`FLOW`); `+4` format `2`;
+     `+5` ISA `2`; `+6` ABI mínima `2`; `+7` firmware mínimo `1`; `+8` `entryPoint` u16;
+     `+10` `tocOffset` u16; `+12` `tocEntryCount` u16; `+14` flags de cabecera (0);
+     `+16` layout magic `0x524F4D32` (`ROM2`); `+20` `payloadSize` u32 (bytes antes del hash);
+     `+24` y `+28` reservados (0).
+   - **TOC de 16 bytes por entrada.** `+0` tipo u8; `+1` flags u8; `+2` `vaddr` u16;
+     `+4` `fileOffset` u32; `+8` `size` u16; `+10` `memSize` u16; `+12` reservado u32 (0).
+     Los offsets son absolutos desde el inicio del archivo. Se admiten de 1 a 16 entradas.
+   - **Tipos de segmento.** `BIOS=1`, `BOOTLOADER=2`, `KERNEL=3`, `PROGRAM=4`, `CONSTANTS=5`,
+     `CAPABILITIES=6`, `DEBUG=7`. Del 1 al 5 son cargables; el 6 y el 7 son metadatos y siempre
+     tienen `memSize=0`.
+   - **Flags de segmento.** `R=1`, `W=2`, `X=4`, `U=8`; coinciden con los bits de `PageEntry`.
+     El cargador escribe con `W` temporal y aplica al final los permisos declarados. `BIOS`,
+     `BOOTLOADER` y `KERNEL` son `R/X` de kernel; `PROGRAM` es `R/X` de usuario; `CONSTANTS` es
+     `R` y vive exactamente en `0x2000`.
+   - **Región de imagen.** Los segmentos de código (BIOS, bootloader, kernel y programa) terminan como
+     máximo en `0x2000`; el BIOS ocupa la página 0 y los demás empiezan alineados a página. Las
+     constantes viven en `0x2000..0x2FFF` y el resto de la imagen no se usa para código. `entryPoint`
+     debe caer dentro de un segmento ejecutable almacenado. El compilador emite BIOS, PROGRAM y
+     CONSTANTS; los tipos `BOOTLOADER` y `KERNEL` quedan reservados para una separación posterior.
+   - **Orden de bytes de datos.** Los payloads cargables se copian a memoria tal cual. Como el ISA
+     lee palabras little-endian, el segmento `CONSTANTS` almacena cada palabra en orden de memoria
+     (byte bajo primero), no en el orden big-endian de la cabecera.
+   - **Integridad y rechazo.** `payloadSize` debe coincidir con el archivo menos los 32 bytes del
+     SHA-256 final; el hash cubre todo el payload. El layout anterior de 20 bytes se rechaza por
+     `layoutMagic`: no hay lector legacy, alias ni migración en runtime. Un `.flow` v3 se rechaza
+     por versión/layout, no se reinterpreta como v2.
 
 **Consecuencias.**
 

@@ -24,6 +24,7 @@ import me.majhrs16.suite.iflow.vm.execution.ModificationJournal;
 import me.majhrs16.suite.iflow.vm.execution.VmInterpreter;
 import me.majhrs16.suite.iflow.vm.PassThroughProgram;
 import me.majhrs16.suite.iflow.vm.isa.ProgramImage;
+import me.majhrs16.suite.iflow.vm.isa.ProgramSegment;
 import me.majhrs16.suite.iflow.vm.irq.VmPic;
 import me.majhrs16.suite.iflow.vm.isa.VmException;
 import me.majhrs16.suite.iflow.vm.memory.PageEntry;
@@ -337,50 +338,15 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
         // is a supervisor master, so it may write kernel-owned pages (design.md §14).
         VmBus bus = VmBus.supervisor(mmu);
 
-        // Code region: up to CODE_PAGES pages (firmware ROM page 0 + user code
-        // page 1). The region is reserved in full so code never aliases the
-        // constants page, regardless of whether firmware is enabled. It is mapped
-        // as kernel-owned (R/W/X) while the image is written, then demoted to R/X
-        // with mprotect: the program can never write it, not even during boot.
-        byte[] code = program.code();
-        int codePages = (code.length + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
-        if (codePages > VmMemoryMap.CODE_PAGES) {
-            throw new IllegalArgumentException(
-                "Program code too large: " + code.length + " bytes (" + codePages + " pages), " +
-                "maximum is " + VmMemoryMap.CODE_MAX_SIZE + " bytes (" + VmMemoryMap.CODE_PAGES +
-                " pages: firmware ROM + user code)."
-            );
-        }
-        for (int p = 0; p < codePages; p++) {
-            int vaddrPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p;
-            int frameBase = VmMemoryMap.CODE_BASE + p * VmMemoryMap.PAGE; // Identity mapping
-            pageTable.mapPageKernel(vaddrPage, frameBase,
-                PageEntry.PERM_READ | PageEntry.PERM_WRITE | PageEntry.PERM_EXECUTE);
-        }
-
-        // Copy code into physical memory
-        bus.writeBlock(VmMemoryMap.CODE_BASE, code, 0, code.length);
-
-        // Demote code pages to R/X (mprotect: remove write after writing)
-        for (int p = 0; p < codePages; p++) {
-            int vaddrPage = VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE) + p;
-            pageTable.protect(vaddrPage, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
-        }
-
-        // Map the constants page - kernel-owned R/W while writing, then R
-        if (program.constants().length > 0) {
-            byte[] constBytes = new byte[program.constants().length * 2];
-            for (int i = 0; i < program.constants().length; i++) {
-                int val = program.constants()[i];
-                constBytes[i * 2] = (byte) (val & 0xFF);
-                constBytes[i * 2 + 1] = (byte) ((val >> 8) & 0xFF);
+        // The image is a TOC of typed segments. Each segment is mapped at its
+        // declared virtual address, written through the supervising bus and then
+        // demoted to its final permissions. The loader never assumes a fixed
+        // code/constants layout: BIOS, optional bootloader/kernel, program and
+        // constants all travel the same path.
+        for (ProgramSegment segment : program.segments()) {
+            if (segment.isLoadable()) {
+                loadSegment(segment, pageTable, bus);
             }
-            int constPage = VmMemoryMap.pageOf(VmMemoryMap.CONSTANTS_BASE);
-            pageTable.mapPageKernel(constPage, VmMemoryMap.CONSTANTS_BASE,
-                PageEntry.PERM_READ | PageEntry.PERM_WRITE);
-            bus.writeBlock(VmMemoryMap.CONSTANTS_BASE, constBytes, 0, constBytes.length);
-            // Read-only for the program after writing (mprotect)
-            pageTable.protect(constPage, PageEntry.PERM_READ);
         }
 
         // Map data pages - R/W
@@ -409,6 +375,69 @@ public final class VmPolicyEngine implements Router, AutoCloseable {
             int page = VmMemoryMap.pageOf(VmMemoryMap.USER_BASE) + p;
             pageTable.mapPage(page, VmMemoryMap.USER_BASE + p * VmMemoryMap.PAGE,
                 PageEntry.PERM_READ | PageEntry.PERM_WRITE);
+        }
+    }
+
+    /**
+     * Maps, writes and protects one loadable TOC segment.
+     * <p>
+     * The loader is a supervisor master, so it temporarily grants write access
+     * to every page of the segment, writes the stored payload (skipping the MMIO
+     * aperture), zero-fills any reserved tail, and finally applies the segment's
+     * declared permissions. Ownership comes from the segment type, never from a
+     * hardcoded address.
+     * </p>
+     */
+    private static void loadSegment(ProgramSegment segment, PageTable pageTable, VmBus bus) {
+        int vaddr = segment.virtualAddress();
+        int pages = (segment.memSize() + VmMemoryMap.PAGE - 1) / VmMemoryMap.PAGE;
+        int firstPage = VmMemoryMap.pageOf(vaddr);
+        int writable = segment.permissions() | PageEntry.PERM_WRITE;
+        for (int p = 0; p < pages; p++) {
+            int page = firstPage + p;
+            int frameBase = vaddr + p * VmMemoryMap.PAGE;
+            if (segment.isUserOwned()) {
+                pageTable.mapPage(page, frameBase, writable);
+            } else {
+                pageTable.mapPageKernel(page, frameBase, writable);
+            }
+        }
+
+        byte[] data = segment.data();
+        writeSkippingMmio(bus, vaddr, data);
+        int tail = segment.memSize() - data.length;
+        if (tail > 0) {
+            writeSkippingMmio(bus, vaddr + data.length, new byte[tail]);
+        }
+
+        for (int p = 0; p < pages; p++) {
+            pageTable.protect(firstPage + p, segment.permissions());
+        }
+    }
+
+    /**
+     * Writes memory through the bus without touching the device MMIO aperture.
+     * The BIOS page contains the aperture at 0x0F00-0x0FFF; the image may store
+     * zeros there (the ROM layout reserves it), but those bytes are device
+     * registers, not RAM, and must never be written during boot.
+     */
+    private static void writeSkippingMmio(VmBus bus, int vaddr, byte[] data) {
+        if (data.length == 0) {
+            return;
+        }
+        int start = vaddr;
+        int end = vaddr + data.length;
+        int mmioStart = VmMemoryMap.DEVICE_MMIO_BASE;
+        int mmioEnd = mmioStart + VmMemoryMap.DEVICE_MMIO_SIZE;
+        if (end <= mmioStart || start >= mmioEnd) {
+            bus.writeBlock(start, data, 0, data.length);
+            return;
+        }
+        if (start < mmioStart) {
+            bus.writeBlock(start, data, 0, mmioStart - start);
+        }
+        if (end > mmioEnd) {
+            bus.writeBlock(mmioEnd, data, mmioEnd - start, end - mmioEnd);
         }
     }
 

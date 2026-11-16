@@ -283,8 +283,42 @@ export const PROGRAM_VERSIONS = {
   minFirmware: 1,
 } as const;
 
+/** TOC segment type codes (format 2, layout revision 1). */
+export enum SegmentType {
+  BIOS = 1,
+  BOOTLOADER = 2,
+  KERNEL = 3,
+  PROGRAM = 4,
+  CONSTANTS = 5,
+  CAPABILITIES = 6,
+  DEBUG = 7,
+}
+
+/** Segment permission flags; the low bits match the Java PageEntry constants. */
+export const SEGMENT_FLAGS = {
+  READ: 0x1,
+  WRITE: 0x2,
+  EXECUTE: 0x4,
+  USER: 0x8,
+} as const;
+
+/** One typed segment described by the ROM TOC. */
+export interface ProgramSegment {
+  type: SegmentType;
+  flags: number;
+  virtualAddress: number;
+  /** Stored payload (may be empty only after validation). */
+  data: Uint8Array;
+  /** Bytes reserved at virtualAddress; >= data.length for loadable segments. */
+  memSize: number;
+}
+
 /**
- * Program Image (matches Java ProgramImage structure)
+ * Program Image (matches Java ProgramImage structure).
+ *
+ * {@code segments} is authoritative. {@code code} and {@code constants} are
+ * derived views kept for the disassembler and existing callers; the serializer
+ * always writes the segment list.
  */
 export interface ProgramImage {
   formatVersion: number;
@@ -292,6 +326,7 @@ export interface ProgramImage {
   minAbiVersion: number;
   minFirmwareVersion: number;
   entryPoint: number;
+  segments: ProgramSegment[];
   code: Uint8Array;
   constants: number[];
   capabilities: string[];

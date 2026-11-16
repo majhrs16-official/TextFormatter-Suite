@@ -11,7 +11,7 @@
 Convierte código ensamblador `.flowasm` (texto legible) a binario `.flow` (ejecutable por la VM iflow).
 
 - **Entrada**: `.flowasm` (mnemónicos, labels, directivas, expresiones `LABEL+OFFSET`)
-- **Salida**: `.flow` binario (header + code + constants + capabilities + hash)
+- **Salida**: `.flow` binario (cabecera, TOC, segmentos tipados y hash SHA-256)
 
 ---
 
@@ -336,7 +336,7 @@ if (diagnostics.some(d => d.severity === 'error')) {
     process.exit(1);
 }
 
-// program es ProgramImage (header + code + constants + capabilities + hash)
+// program es ProgramImage (cabecera, TOC, segmentos tipados y hash)
 // Serializar a binario .flow:
 const binary = asm.serializeProgramImage(program);
 fs.writeFileSync('output.flow', Buffer.from(binary));
@@ -390,6 +390,8 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 
 ## Formato binario `.flow` generado
 
+### Cabecera (32 bytes, big-endian)
+
 | Offset | Tamaño | Campo |
 |--------|--------|-------|
 | 0x00   | 4      | magic = 0x464C4F57 ("FLOW", u32 big-endian) |
@@ -398,30 +400,49 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 | 0x06   | 1      | minAbiVersion |
 | 0x07   | 1      | minFirmwareVersion |
 | 0x08   | 2      | entryPoint (u16 big-endian) |
-| 0x0A   | 2      | codeLength (u16 big-endian) |
-| 0x0C   | 2      | constantsLength (u16 big-endian) |
-| 0x0E   | 1      | capabilitiesCount |
-| 0x0F   | 1      | reserved (0) |
-| 0x10   | 2      | debugLength (u16 big-endian; 0 = sin sección debug) |
-| 0x12   | 2      | reserved (0) |
-| 0x14   | N      | code (codeLength bytes; operandos inmediatos big-endian `[hi, lo]`) |
-| ...    | 2×N    | constants (u16 big-endian en el fichero) |
-| ...    | var    | capabilities (null-terminated strings) |
-| ...    | debugLength | debug (UTF-8, opcional; solo con `-d`) |
-| ...    | 32     | hash (SHA-256 of all preceding bytes) |
+| 0x0A   | 2      | tocOffset (u16 big-endian) |
+| 0x0C   | 2      | tocEntryCount (u16 big-endian; 1..16) |
+| 0x0E   | 2      | headerFlags (0) |
+| 0x10   | 4      | layoutMagic = 0x524F4D32 ("ROM2", u32 big-endian) |
+| 0x14   | 4      | payloadSize (u32 big-endian; bytes before the hash) |
+| 0x18   | 4      | reserved (0) |
+| 0x1C   | 4      | reserved (0) |
+
+### TOC (16 bytes por entrada)
+
+| Offset | Tamaño | Campo |
+|--------|--------|-------|
+| +0x00  | 1      | type (1 BIOS, 2 BOOTLOADER, 3 KERNEL, 4 PROGRAM, 5 CONSTANTS, 6 CAPABILITIES, 7 DEBUG) |
+| +0x01  | 1      | flags (R=1, W=2, X=4, USER=8) |
+| +0x02  | 2      | virtualAddress (u16 big-endian) |
+| +0x04  | 4      | fileOffset (u32 big-endian, absoluto desde el inicio) |
+| +0x08  | 2      | size (u16 big-endian; bytes almacenados) |
+| +0x0A  | 2      | memSize (u16 big-endian; bytes reservados; 0 en metadatos) |
+| +0x0C  | 4      | reserved (0) |
+
+Tras el TOC vienen los payloads en el mismo orden, y al final el hash SHA-256 de
+32 bytes sobre todo lo anterior. Los segmentos cargables (`BIOS`..`CONSTANTS`)
+se copian a memoria tal cual; `CAPABILITIES` y `DEBUG` son metadatos y no se
+cargan. El compilador emite `BIOS` en `0x0000`, `PROGRAM` en página alineada
+(`0x1000` con firmware, `0x0000` en bare-metal) y `CONSTANTS` en `0x2000`.
+`CONSTANTS` ocupa como máximo 4 KiB (2048 palabras); el compilador rechaza un
+pool mayor en vez de emitir una imagen que el parser de runtime descartaría.
 
 > **El magic rechaza pronto.** Un fichero que no empieza por `FLOW` se descarta como «not a .flow»
-> antes de leer versiones o hash. **Formato 2 (2026-10-19):** añade el magic y la sección `debug`;
-> los `.flow` de formato 1 hay que recompilarlos.
+> antes de leer versiones o hash. El `layoutMagic` hace lo mismo con el contenedor: un `.flow` del
+> layout anterior de 20 bytes se rechaza sin lector doble. **ROM2 (2026-11-16):** sustituye el
+> contenedor monolítico por cabecera + TOC + segmentos tipados; hay que recompilar los `.flow`
+> antiguos.
 >
-> **`-d/--debug`.** Emite la sección `debug` (dirección + fuente de cada instrucción y tabla de
-> símbolos `SYM nombre = 0x…`). Es informativa: el runtime nunca la ejecuta, y queda cubierta por el
+> **`-d/--debug`.** Emite un segmento `DEBUG` (dirección + fuente de cada instrucción y tabla de
+> símbolos `SYM nombre = 0x…`). Es informativo: el runtime nunca lo ejecuta, y queda cubierto por el
 > hash, así que no puede alterar el programa sin romper la integridad.
 
-> **Endianness mixto (deliberado).** La cabecera y los operandos inmediatos del *código* son
-> **big-endian**; las palabras de **datos** en memoria son **little-endian**, y por eso las
-> constantes se reescriben en little-endian al materializarse (para que `LDW` las lea bien). No es
-> una errata: el parser (`ProgramImageParser`) lee la cabecera y las constantes en big-endian.
+> **Endianness mixto (deliberado).** La cabecera, el TOC y los operandos inmediatos del *código* son
+> **big-endian**; las palabras de **datos** en memoria son **little-endian**. Como los payloads se
+> copian a memoria sin conversión, el segmento `CONSTANTS` se serializa ya en little-endian para que
+> `LDW` lo lea bien. No es una errata: quien escriba un ensamblador o un parser nuevo debe respetar
+> esa separación.
 
 ---
 

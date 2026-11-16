@@ -64,6 +64,16 @@ class PageEntryTest {
     }
 
     @Test
+    void frameBaseOutsideThe16BitSpaceIsRejected() {
+        assertThrows(IllegalArgumentException.class,
+            () -> PageEntry.mapped(0x10000, PageEntry.PERM_READ));
+        assertThrows(IllegalArgumentException.class,
+            () -> PageEntry.mapped(-1, PageEntry.PERM_READ));
+        assertThrows(IllegalArgumentException.class,
+            () -> PageEntry.mappedKernel(0x10000, PageEntry.PERM_READ));
+    }
+
+    @Test
     void hasPermissionChecksCorrectly() {
         PageEntry entry = PageEntry.mapped(0x1000, PageEntry.PERM_READ | PageEntry.PERM_EXECUTE);
         assertTrue(entry.hasPermission(PageEntry.PERM_READ));

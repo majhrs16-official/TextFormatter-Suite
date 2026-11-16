@@ -96,12 +96,28 @@ class VmConfigLoaderTest {
     }
 
     /**
-     * Serializes a minimal valid .flow image: format-2 header (magic + versions +
-     * sizes + debug length) + code (no constants, no debug) + capabilities +
-     * SHA-256 trailer, matching {@code ProgramImageParser.parse}.
+     * Serializes a minimal valid ROM2 image: 32-byte header, a 16-byte TOC entry
+     * per segment (PROGRAM plus optional CAPABILITIES), payloads and the SHA-256
+     * trailer, matching {@code ProgramImageParser.parse}.
      */
     private static byte[] buildFlow(byte[] code, int entryPoint, String... capabilities) {
         try {
+            byte[] capabilityBytes = new byte[0];
+            if (capabilities.length > 0) {
+                ByteArrayOutputStream caps = new ByteArrayOutputStream();
+                for (String cap : capabilities) {
+                    caps.write(cap.getBytes(StandardCharsets.US_ASCII));
+                    caps.write(0);
+                }
+                capabilityBytes = caps.toByteArray();
+            }
+
+            int tocOffset = 32;
+            int segmentCount = capabilities.length > 0 ? 2 : 1;
+            int payloadStart = tocOffset + segmentCount * 16;
+            int capabilityOffset = payloadStart + code.length;
+            int payloadSize = capabilityOffset + capabilityBytes.length;
+
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             out.write(new byte[]{0x46, 0x4C, 0x4F, 0x57}); // magic "FLOW"
             out.write(2); // format version
@@ -110,21 +126,49 @@ class VmConfigLoaderTest {
             out.write(1); // minimum firmware version
             out.write((entryPoint >> 8) & 0xFF);
             out.write(entryPoint & 0xFF);
+            out.write((tocOffset >> 8) & 0xFF);
+            out.write(tocOffset & 0xFF);
+            out.write((segmentCount >> 8) & 0xFF);
+            out.write(segmentCount & 0xFF);
+            out.write(0); out.write(0); // header flags
+            out.write(new byte[]{0x52, 0x4F, 0x4D, 0x32}); // layout "ROM2"
+            out.write((payloadSize >>> 24) & 0xFF);
+            out.write((payloadSize >>> 16) & 0xFF);
+            out.write((payloadSize >>> 8) & 0xFF);
+            out.write(payloadSize & 0xFF);
+            out.write(new byte[8]); // reserved
+
+            // PROGRAM at 0x0000: a bare-metal image with no BIOS segment.
+            out.write(4); // SegmentType.PROGRAM
+            out.write(1 | 4 | 8); // R | X | USER
+            out.write(0); out.write(0); // virtual address
+            out.write((payloadStart >>> 24) & 0xFF);
+            out.write((payloadStart >>> 16) & 0xFF);
+            out.write((payloadStart >>> 8) & 0xFF);
+            out.write(payloadStart & 0xFF);
             out.write((code.length >> 8) & 0xFF);
             out.write(code.length & 0xFF);
-            out.write(0); // constants length (high)
-            out.write(0); // constants length (low)
-            out.write(capabilities.length);
-            out.write(0); // reserved
-            out.write(0); // debug length (high)
-            out.write(0); // debug length (low)
-            out.write(0); // reserved
-            out.write(0); // reserved
-            out.write(code);
-            for (String cap : capabilities) {
-                out.write(cap.getBytes(StandardCharsets.US_ASCII));
-                out.write(0);
+            out.write((code.length >> 8) & 0xFF);
+            out.write(code.length & 0xFF);
+            out.write(new byte[4]); // reserved
+
+            if (capabilities.length > 0) {
+                out.write(6); // SegmentType.CAPABILITIES
+                out.write(0); // flags
+                out.write(0); out.write(0); // virtual address
+                out.write((capabilityOffset >>> 24) & 0xFF);
+                out.write((capabilityOffset >>> 16) & 0xFF);
+                out.write((capabilityOffset >>> 8) & 0xFF);
+                out.write(capabilityOffset & 0xFF);
+                out.write((capabilityBytes.length >> 8) & 0xFF);
+                out.write(capabilityBytes.length & 0xFF);
+                out.write(0); out.write(0); // memSize
+                out.write(new byte[4]); // reserved
             }
+
+            out.write(code);
+            out.write(capabilityBytes);
+
             byte[] body = out.toByteArray();
             out.write(MessageDigest.getInstance("SHA-256").digest(body));
             return out.toByteArray();

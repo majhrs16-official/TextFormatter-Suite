@@ -17,11 +17,21 @@ import {
   Opcode,
   PROGRAM_MAGIC,
   PROGRAM_VERSIONS,
+  SegmentType,
+  SEGMENT_FLAGS,
   type ProgramImage,
+  type ProgramSegment,
 } from './types';
 
-const HEADER_SIZE = 20;
+const HEADER_SIZE = 32;
+const TOC_ENTRY_SIZE = 16;
 const HASH_SIZE = 32;
+const LAYOUT_MAGIC = 0x524f4d32; // "ROM2"
+const MAX_TOC_ENTRIES = 16;
+const IMAGE_END = 0x3000;
+const CODE_END = 0x2000;
+const CONSTANTS_BASE = 0x2000;
+const PAGE_SIZE = 0x1000;
 const USER_ORIGIN = 0x1000;
 
 const REGISTER_NAMES = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'IP', 'SP', 'FP', 'FL'];
@@ -112,14 +122,14 @@ async function sha256(data: Uint8Array): Promise<Uint8Array> {
 }
 
 /**
- * Parses a `.flow` v2 image with the same checks as the Java
- * `ProgramImageParser`: magic, format/ISA/ABI/firmware versions, section
- * lengths, NUL-terminated capabilities, optional debug section and trailing
- * SHA-256 with no extra bytes.
+ * Parses a `.flow` format 2 / layout revision 1 ("ROM2") image with the same
+ * checks as the Java `ProgramImageParser`: header, TOC, typed segments,
+ * permissions, 16-bit image bounds, NUL-terminated capabilities, optional debug
+ * segment and trailing SHA-256 with no extra bytes.
  */
 export async function parseProgramImage(data: Uint8Array, verifyHash = true): Promise<ProgramImage> {
-  if (data.length < HEADER_SIZE) {
-    throw new DisassemblerError('datos demasiado cortos para la cabecera');
+  if (data.length < HEADER_SIZE + HASH_SIZE) {
+    throw new DisassemblerError('datos demasiado cortos para la cabecera y el hash');
   }
   const magic = u32(data, 0);
   if (magic !== PROGRAM_MAGIC) {
@@ -143,67 +153,253 @@ export async function parseProgramImage(data: Uint8Array, verifyHash = true): Pr
       'firmware ' + minFirmwareVersion + ' más nuevo que ' + PROGRAM_VERSIONS.minFirmware
     );
   }
-  const entryPoint = u16(data, 8);
-  const codeLength = u16(data, 10);
-  const constantsLength = u16(data, 12);
-  const capabilitiesCount = data[14];
-  const debugLength = u16(data, 16);
-  let offset = HEADER_SIZE;
-
-  if (offset + codeLength > data.length) {
-    throw new DisassemblerError('sección de código truncada');
+  const layoutMagic = u32(data, 16);
+  if (layoutMagic !== LAYOUT_MAGIC) {
+    throw new DisassemblerError(
+      'layout .flow no soportado: se esperaba ROM2, hay 0x' + layoutMagic.toString(16).toUpperCase()
+    );
   }
-  const code = data.slice(offset, offset + codeLength);
-  offset += codeLength;
 
-  if (offset + constantsLength * 2 > data.length) {
-    throw new DisassemblerError('sección de constantes truncada');
+  const entryPoint = u16(data, 8);
+  const tocOffset = u16(data, 10);
+  const tocEntryCount = u16(data, 12);
+  const headerFlags = u16(data, 14);
+  const payloadSize = u32(data, 20);
+  if (headerFlags !== 0) {
+    throw new DisassemblerError('flags de cabecera no soportados: 0x' + headerFlags.toString(16));
+  }
+  if (u32(data, 24) !== 0 || u32(data, 28) !== 0) {
+    throw new DisassemblerError('campos reservados de cabecera no nulos');
+  }
+  if (payloadSize !== data.length - HASH_SIZE) {
+    throw new DisassemblerError(
+      'tamaño de payload incoherente: cabecera ' + payloadSize + ', archivo ' + (data.length - HASH_SIZE)
+    );
+  }
+  if (tocEntryCount < 1 || tocEntryCount > MAX_TOC_ENTRIES) {
+    throw new DisassemblerError('número de entradas TOC inválido: ' + tocEntryCount);
+  }
+  if (tocOffset < HEADER_SIZE) {
+    throw new DisassemblerError('el TOC se solapa con la cabecera');
+  }
+  const tocEnd = tocOffset + tocEntryCount * TOC_ENTRY_SIZE;
+  if (tocEnd > payloadSize) {
+    throw new DisassemblerError('el TOC se extiende más allá del payload');
+  }
+
+  interface Toc {
+    index: number;
+    type: SegmentType;
+    flags: number;
+    virtualAddress: number;
+    fileOffset: number;
+    size: number;
+    memSize: number;
+  }
+
+  const toc: Toc[] = [];
+  for (let i = 0; i < tocEntryCount; i++) {
+    const base = tocOffset + i * TOC_ENTRY_SIZE;
+    const typeCode = data[base];
+    const type = Object.values(SegmentType).includes(typeCode as SegmentType)
+      ? (typeCode as SegmentType)
+      : null;
+    if (type === null) {
+      throw new DisassemblerError('tipo de segmento desconocido: 0x' + typeCode.toString(16));
+    }
+    const flags = data[base + 1];
+    if ((flags & ~(SEGMENT_FLAGS.READ | SEGMENT_FLAGS.WRITE | SEGMENT_FLAGS.EXECUTE | SEGMENT_FLAGS.USER)) !== 0) {
+      throw new DisassemblerError('flags de segmento desconocidos: 0x' + flags.toString(16));
+    }
+    const virtualAddress = u16(data, base + 2);
+    const fileOffset = u32(data, base + 4);
+    const size = u16(data, base + 8);
+    const memSize = u16(data, base + 10);
+    if (u32(data, base + 12) !== 0) {
+      throw new DisassemblerError('campos reservados de TOC no nulos');
+    }
+    if (fileOffset < tocEnd || fileOffset + size > payloadSize) {
+      throw new DisassemblerError(
+        'rango de archivo fuera del payload en TOC[' + i + ']: ' + fileOffset + '+' + size
+      );
+    }
+    toc.push({ index: i, type, flags, virtualAddress, fileOffset, size, memSize });
+  }
+
+  const loadable = new Set<SegmentType>([
+    SegmentType.BIOS,
+    SegmentType.BOOTLOADER,
+    SegmentType.KERNEL,
+    SegmentType.PROGRAM,
+    SegmentType.CONSTANTS,
+  ]);
+  const executable = new Set<SegmentType>([
+    SegmentType.BIOS,
+    SegmentType.BOOTLOADER,
+    SegmentType.KERNEL,
+    SegmentType.PROGRAM,
+  ]);
+  const rangesOverlap = (aStart: number, aEnd: number, bStart: number, bEnd: number) =>
+    aStart < bEnd && bStart < aEnd;
+
+  for (let i = 0; i < toc.length; i++) {
+    const a = toc[i];
+    if (a.size > 0) {
+      for (let j = i + 1; j < toc.length; j++) {
+        const b = toc[j];
+        if (b.size > 0 && rangesOverlap(a.fileOffset, a.fileOffset + a.size, b.fileOffset, b.fileOffset + b.size)) {
+          throw new DisassemblerError('rangos de archivo solapados en TOC[' + i + '] y TOC[' + j + ']');
+        }
+      }
+    }
+    if (!loadable.has(a.type)) {
+      continue;
+    }
+    for (let j = i + 1; j < toc.length; j++) {
+      const b = toc[j];
+      if (loadable.has(b.type)
+        && rangesOverlap(a.virtualAddress, a.virtualAddress + a.memSize,
+          b.virtualAddress, b.virtualAddress + b.memSize)) {
+        throw new DisassemblerError('rangos virtuales solapados en TOC[' + i + '] y TOC[' + j + ']');
+      }
+    }
+  }
+
+  const counts = new Map<SegmentType, number>();
+  for (const entry of toc) {
+    counts.set(entry.type, (counts.get(entry.type) ?? 0) + 1);
+    if (!loadable.has(entry.type)) {
+      if (entry.virtualAddress !== 0 || entry.memSize !== 0 || entry.flags !== 0 || entry.size === 0) {
+        throw new DisassemblerError('segmento de metadatos inválido: ' + SegmentType[entry.type]);
+      }
+      continue;
+    }
+    if ((entry.virtualAddress & (PAGE_SIZE - 1)) !== 0) {
+      throw new DisassemblerError('segmento no alineado a página: ' + SegmentType[entry.type]);
+    }
+    if (entry.size === 0 || entry.memSize < entry.size) {
+      throw new DisassemblerError('tamaño de segmento inválido: ' + SegmentType[entry.type]);
+    }
+    const limit = entry.type === SegmentType.CONSTANTS ? IMAGE_END : CODE_END;
+    if (entry.virtualAddress + entry.memSize > limit) {
+      throw new DisassemblerError(
+        'segmento fuera de la región de ' +
+          (entry.type === SegmentType.CONSTANTS ? 'imagen' : 'código') +
+          ': ' +
+          SegmentType[entry.type]
+      );
+    }
+    const codeFlags = SEGMENT_FLAGS.READ | SEGMENT_FLAGS.EXECUTE;
+    if (entry.type === SegmentType.BIOS
+      || entry.type === SegmentType.BOOTLOADER
+      || entry.type === SegmentType.KERNEL) {
+      if ((entry.flags & codeFlags) !== codeFlags
+        || (entry.flags & (SEGMENT_FLAGS.WRITE | SEGMENT_FLAGS.USER)) !== 0) {
+        throw new DisassemblerError('segmento de código con flags inválidos: ' + SegmentType[entry.type]);
+      }
+      if (entry.type === SegmentType.BIOS
+        && (entry.virtualAddress !== 0 || entry.memSize > PAGE_SIZE)) {
+        throw new DisassemblerError('el BIOS debe ocupar la página 0');
+      }
+    } else if (entry.type === SegmentType.PROGRAM) {
+      if ((entry.flags & (codeFlags | SEGMENT_FLAGS.USER)) !== (codeFlags | SEGMENT_FLAGS.USER)
+        || (entry.flags & SEGMENT_FLAGS.WRITE) !== 0) {
+        throw new DisassemblerError('PROGRAM debe ser R/X y de usuario');
+      }
+    } else if (entry.type === SegmentType.CONSTANTS) {
+      if (entry.virtualAddress !== CONSTANTS_BASE
+        || entry.memSize !== entry.size
+        || (entry.size & 1) !== 0
+        || entry.flags !== SEGMENT_FLAGS.READ) {
+        throw new DisassemblerError('segmento CONSTANTS inválido');
+      }
+    }
+  }
+  if ((counts.get(SegmentType.PROGRAM) ?? 0) !== 1) {
+    throw new DisassemblerError('la imagen debe tener exactamente un segmento PROGRAM');
+  }
+  for (const type of [SegmentType.BIOS, SegmentType.BOOTLOADER, SegmentType.KERNEL,
+    SegmentType.CONSTANTS, SegmentType.CAPABILITIES, SegmentType.DEBUG]) {
+    if ((counts.get(type) ?? 0) > 1) {
+      throw new DisassemblerError('segmento duplicado: ' + SegmentType[type]);
+    }
+  }
+
+  const segments: ProgramSegment[] = [];
+  const capabilities: string[] = [];
+  let debugInfo = '';
+  for (const entry of toc) {
+    const bytes = data.slice(entry.fileOffset, entry.fileOffset + entry.size);
+    if (entry.type === SegmentType.CAPABILITIES) {
+      let start = 0;
+      for (let i = 0; i < bytes.length; i++) {
+        if (bytes[i] !== 0) {
+          continue;
+        }
+        const capability = new TextDecoder().decode(bytes.slice(start, i));
+        if (capability.length === 0) {
+          throw new DisassemblerError('capacidad vacía');
+        }
+        capabilities.push(capability);
+        start = i + 1;
+      }
+      if (start !== bytes.length) {
+        throw new DisassemblerError('capacidad sin terminador NUL');
+      }
+      continue;
+    }
+    if (entry.type === SegmentType.DEBUG) {
+      debugInfo = new TextDecoder().decode(bytes);
+      continue;
+    }
+    segments.push({
+      type: entry.type,
+      flags: entry.flags,
+      virtualAddress: entry.virtualAddress,
+      data: bytes,
+      memSize: entry.memSize,
+    });
+  }
+
+  let end = 0;
+  for (const segment of segments) {
+    if (executable.has(segment.type)) {
+      end = Math.max(end, segment.virtualAddress + segment.memSize);
+    }
+  }
+  const code = new Uint8Array(end);
+  for (const segment of segments) {
+    if (executable.has(segment.type)) {
+      code.set(segment.data, segment.virtualAddress);
+    }
   }
   const constants: number[] = [];
-  for (let i = 0; i < constantsLength; i++) {
-    constants.push(u16(data, offset));
-    offset += 2;
+  for (const segment of segments
+    .filter(segment => segment.type === SegmentType.CONSTANTS)
+    .sort((a, b) => a.virtualAddress - b.virtualAddress)) {
+    for (let i = 0; i < segment.data.length; i += 2) {
+      constants.push((segment.data[i] | (segment.data[i + 1] << 8)) & 0xFFFF);
+    }
   }
 
-  const capabilities: string[] = [];
-  for (let i = 0; i < capabilitiesCount; i++) {
-    if (offset >= data.length) {
-      throw new DisassemblerError('sección de capacidades truncada');
+  let entryIsExecutable = false;
+  for (const segment of segments) {
+    if (executable.has(segment.type)
+      && entryPoint >= segment.virtualAddress
+      && entryPoint < segment.virtualAddress + segment.data.length) {
+      entryIsExecutable = true;
+      break;
     }
-    let end = offset;
-    while (end < data.length && data[end] !== 0) {
-      end++;
-    }
-    if (end >= data.length) {
-      throw new DisassemblerError('capacidad sin terminador NUL');
-    }
-    const capability = new TextDecoder().decode(data.slice(offset, end));
-    if (capability.length === 0) {
-      throw new DisassemblerError('capacidad vacía');
-    }
-    capabilities.push(capability);
-    offset = end + 1;
+  }
+  if (!entryIsExecutable) {
+    throw new DisassemblerError(
+      'entryPoint 0x' + entryPoint.toString(16).toUpperCase() + ' fuera de todo segmento ejecutable'
+    );
   }
 
-  let debugInfo = '';
-  if (debugLength > 0) {
-    if (offset + debugLength > data.length) {
-      throw new DisassemblerError('sección de depuración truncada');
-    }
-    debugInfo = new TextDecoder().decode(data.slice(offset, offset + debugLength));
-    offset += debugLength;
-  }
-
-  if (offset + HASH_SIZE > data.length) {
-    throw new DisassemblerError('hash truncado');
-  }
-  const hash = data.slice(offset, offset + HASH_SIZE);
-  offset += HASH_SIZE;
-  if (offset !== data.length) {
-    throw new DisassemblerError('bytes extra tras el hash: ' + (data.length - offset));
-  }
+  const hash = data.slice(payloadSize, payloadSize + HASH_SIZE);
   if (verifyHash) {
-    const expected = await sha256(data.slice(0, data.length - HASH_SIZE));
+    const expected = await sha256(data.slice(0, payloadSize));
     for (let i = 0; i < HASH_SIZE; i++) {
       if (expected[i] !== hash[i]) {
         throw new DisassemblerError('el SHA-256 del archivo no coincide');
@@ -217,6 +413,7 @@ export async function parseProgramImage(data: Uint8Array, verifyHash = true): Pr
     minAbiVersion,
     minFirmwareVersion,
     entryPoint,
+    segments,
     code,
     constants,
     capabilities,

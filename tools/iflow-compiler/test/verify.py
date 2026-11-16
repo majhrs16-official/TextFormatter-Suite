@@ -103,7 +103,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(here, "firmware.flow"), "rb") as f:
     data = f.read()
 
-# Parse header (format 2: magic + versions + sizes + debug length)
+# Parse header (ROM2: 32-byte header + 16-byte TOC entries)
 print("=== HEADER ===")
 print(f"magic: 0x{int.from_bytes(data[0:4], 'big'):08x} (\"FLOW\")")
 print(f"formatVersion: {data[4]}")
@@ -111,16 +111,34 @@ print(f"isaVersion: {data[5]}")
 print(f"minAbiVersion: {data[6]}")
 print(f"minFirmwareVersion: {data[7]}")
 entryPoint = (data[8] << 8) | data[9]
-codeLength = (data[10] << 8) | data[11]
-constantsLength = (data[12] << 8) | data[13]
-capabilitiesLength = data[14]
-debugLength = (data[16] << 8) | data[17]
+tocOffset = (data[10] << 8) | data[11]
+tocCount = (data[12] << 8) | data[13]
+layoutMagic = int.from_bytes(data[16:20], 'big')
+payloadSize = int.from_bytes(data[20:24], 'big')
 print(f"entryPoint: 0x{entryPoint:04x}")
-print(f"codeLength: {codeLength}")
-print(f"constantsLength: {constantsLength}")
-print(f"capabilitiesLength: {capabilitiesLength}")
-print(f"debugLength: {debugLength}")
+print(f"tocOffset: {tocOffset}")
+print(f"tocCount: {tocCount}")
+print(f"layoutMagic: 0x{layoutMagic:08x}")
+print(f"payloadSize: {payloadSize}")
 
-print("\n=== CODE ===")
-disassemble(data, 20, codeLength)
+print("\n=== TOC ===")
+segments = []
+for i in range(tocCount):
+    base = tocOffset + i * 16
+    seg_type = data[base]
+    flags = data[base + 1]
+    vaddr = (data[base + 2] << 8) | data[base + 3]
+    file_offset = int.from_bytes(data[base + 4:base + 8], 'big')
+    size = (data[base + 8] << 8) | data[base + 9]
+    mem_size = (data[base + 10] << 8) | data[base + 11]
+    print(f"[{i}] type={seg_type} flags=0x{flags:02x} vaddr=0x{vaddr:04x} "
+          f"offset={file_offset} size={size} memSize={mem_size}")
+    segments.append((seg_type, vaddr, file_offset, size, mem_size))
+
+program = next((s for s in segments if s[0] == 4), None)
+if program is None:
+    raise SystemExit("no PROGRAM segment")
+_, program_vaddr, program_offset, program_size, _ = program
+print(f"\n=== PROGRAM (0x{program_vaddr:04x}) ===")
+disassemble(data, program_offset, program_size)
 

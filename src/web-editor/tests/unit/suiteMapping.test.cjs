@@ -76,29 +76,53 @@ function hashOf(bytes) {
 
 function buildFlow(over) {
   const options = Object.assign({ code: [0x00, 0x00], capabilities: ['log'], debug: 'main' }, over || {});
-  const caps = [];
+  const code = Buffer.from(options.code);
+  const segments = [{ type: 4, flags: 1 | 4 | 8, vaddr: 0, data: code, memSize: code.length }];
+
+  const capParts = [];
   for (const cap of options.capabilities) {
-    caps.push(...Buffer.from(cap, 'utf8'), 0);
+    capParts.push(Buffer.from(cap, 'utf8'), Buffer.from([0]));
   }
+  const caps = capParts.length > 0 ? Buffer.concat(capParts) : Buffer.alloc(0);
+  if (caps.length > 0) {
+    segments.push({ type: 6, flags: 0, vaddr: 0, data: caps, memSize: 0 });
+  }
+
   const debug = Buffer.from(options.debug, 'utf8');
-  const size = 20 + options.code.length + caps.length + debug.length;
-  const out = Buffer.alloc(size);
+  if (debug.length > 0) {
+    segments.push({ type: 7, flags: 0, vaddr: 0, data: debug, memSize: 0 });
+  }
+
+  const tocOffset = 32;
+  let cursor = tocOffset + segments.length * 16;
+  for (const segment of segments) {
+    segment.fileOffset = cursor;
+    cursor += segment.data.length;
+  }
+  const payloadSize = cursor;
+  const out = Buffer.alloc(payloadSize);
   out.writeUInt32BE(0x464c4f57, 0);
   out[4] = 2;
   out[5] = 2;
   out[6] = 2;
   out[7] = 1;
   out.writeUInt16BE(0, 8);
-  out.writeUInt16BE(options.code.length, 10);
-  out.writeUInt16BE(0, 12);
-  out[14] = options.capabilities.length;
-  out.writeUInt16BE(debug.length, 16);
-  let offset = 20;
-  Buffer.from(options.code).copy(out, offset);
-  offset += options.code.length;
-  Buffer.from(caps).copy(out, offset);
-  offset += caps.length;
-  debug.copy(out, offset);
+  out.writeUInt16BE(tocOffset, 10);
+  out.writeUInt16BE(segments.length, 12);
+  out.writeUInt16BE(0, 14);
+  out.writeUInt32BE(0x524f4d32, 16);
+  out.writeUInt32BE(payloadSize, 20);
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const base = tocOffset + i * 16;
+    out[base] = segment.type;
+    out[base + 1] = segment.flags;
+    out.writeUInt16BE(segment.vaddr, base + 2);
+    out.writeUInt32BE(segment.fileOffset, base + 4);
+    out.writeUInt16BE(segment.data.length, base + 8);
+    out.writeUInt16BE(segment.memSize, base + 10);
+    segment.data.copy(out, segment.fileOffset);
+  }
   return new Uint8Array(Buffer.concat([out, hashOf(out)]));
 }
 

@@ -5,9 +5,10 @@
  * exige `WasmPolicyRouter`. Todo es síncrono y sin dependencias para que la
  * exportación pueda abortar antes de escribir bytes inválidos.
  *
- * Formato `.flow` v2 (ProgramImageParser): cabecera big-endian de 20 bytes,
- * sección de código, constantes u16, capacidades terminadas en NUL, sección
- * debug opcional y un trailer SHA-256 de 32 bytes sobre todo lo anterior.
+ * Formato `.flow` v2 (ProgramImageParser): cabecera big-endian de 32 bytes con
+ * layout ROM2, TOC de 16 bytes por entrada, segmentos tipados (BIOS, PROGRAM,
+ * CONSTANTS y metadatos), payload copiado a memoria y un trailer SHA-256 de 32
+ * bytes sobre todo lo anterior.
  *
  * Formato `.wasm`: magic `\0asm`, versión 1 little-endian y secciones con
  * longitud varuint32. El editor no valida la semántica del módulo; solo la
@@ -23,14 +24,30 @@
 
   const FLOW = Object.freeze({
     MAGIC: 0x464c4f57,
-    HEADER_SIZE: 20,
+    LAYOUT_MAGIC: 0x524f4d32,
+    HEADER_SIZE: 32,
+    TOC_ENTRY_SIZE: 16,
+    MAX_TOC_ENTRIES: 16,
     FORMAT_VERSION: 2,
     ISA_VERSION: 2,
     ABI_VERSION: 2,
     FIRMWARE_VERSION: 1,
-    CODE_MAX_SIZE: 8192,
+    PAGE_SIZE: 0x1000,
+    IMAGE_END: 0x3000,
+    CONSTANTS_BASE: 0x2000,
     CONSTANTS_MAX_SIZE: 4096,
     HASH_SIZE: 32,
+    FLAG_READ: 1,
+    FLAG_WRITE: 2,
+    FLAG_EXECUTE: 4,
+    FLAG_USER: 8,
+    SEGMENT_BIOS: 1,
+    SEGMENT_BOOTLOADER: 2,
+    SEGMENT_KERNEL: 3,
+    SEGMENT_PROGRAM: 4,
+    SEGMENT_CONSTANTS: 5,
+    SEGMENT_CAPABILITIES: 6,
+    SEGMENT_DEBUG: 7,
   });
 
   const WASM = Object.freeze({
@@ -233,99 +250,224 @@
 
   function validateFlow(bytes) {
     const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    if (data.length < FLOW.HEADER_SIZE) {
-      return { ok: false, error: 'datos demasiado cortos para la cabecera .flow', meta: null };
+    const fail = message => ({ ok: false, error: message, meta: null });
+    if (data.length < FLOW.HEADER_SIZE + FLOW.HASH_SIZE) {
+      return fail('datos demasiado cortos para la cabecera .flow y el hash');
     }
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const magic = view.getUint32(0);
     if (magic !== FLOW.MAGIC) {
-      return {
-        ok: false,
-        error: 'no es un .flow (magic 0x' + magic.toString(16) + ', esperado 0x464c4f57)',
-        meta: null,
-      };
+      return fail('no es un .flow (magic 0x' + magic.toString(16) + ', esperado 0x464c4f57)');
     }
     const formatVersion = data[4];
     const isaVersion = data[5];
     const abiVersion = data[6];
     const firmwareVersion = data[7];
     if (formatVersion !== FLOW.FORMAT_VERSION) {
-      return { ok: false, error: 'versión de formato .flow no soportada: ' + formatVersion, meta: null };
+      return fail('versión de formato .flow no soportada: ' + formatVersion);
     }
     if (isaVersion > FLOW.ISA_VERSION) {
-      return { ok: false, error: 'versión de ISA demasiado nueva: ' + isaVersion, meta: null };
+      return fail('versión de ISA demasiado nueva: ' + isaVersion);
     }
     if (abiVersion !== FLOW.ABI_VERSION) {
-      return {
-        ok: false,
-        error: 'ABI incompatible: ' + abiVersion + ' (se espera ' + FLOW.ABI_VERSION + ')',
-        meta: null,
-      };
+      return fail('ABI incompatible: ' + abiVersion + ' (se espera ' + FLOW.ABI_VERSION + ')');
     }
     if (firmwareVersion > FLOW.FIRMWARE_VERSION) {
-      return { ok: false, error: 'firmware mínimo demasiado nuevo: ' + firmwareVersion, meta: null };
+      return fail('firmware mínimo demasiado nuevo: ' + firmwareVersion);
+    }
+    const layoutMagic = view.getUint32(16);
+    if (layoutMagic !== FLOW.LAYOUT_MAGIC) {
+      return fail('layout .flow no soportado: 0x' + layoutMagic.toString(16) + ' (se espera ROM2)');
     }
 
     const entryPoint = view.getUint16(8);
-    const codeLength = view.getUint16(10);
-    const constantsLength = view.getUint16(12);
-    const capabilitiesCount = data[14];
-    const debugLength = view.getUint16(16);
+    const tocOffset = view.getUint16(10);
+    const tocCount = view.getUint16(12);
+    const headerFlags = view.getUint16(14);
+    const payloadSize = view.getUint32(20);
+    if (headerFlags !== 0) {
+      return fail('flags de cabecera no soportados: 0x' + headerFlags.toString(16));
+    }
+    if (view.getUint32(24) !== 0 || view.getUint32(28) !== 0) {
+      return fail('campos reservados de cabecera no nulos');
+    }
+    if (payloadSize + FLOW.HASH_SIZE > data.length) {
+      return fail('payload .flow truncado: cabecera ' + payloadSize + ', archivo ' + (data.length - FLOW.HASH_SIZE));
+    }
+    if (payloadSize + FLOW.HASH_SIZE < data.length) {
+      return fail('bytes extra después del hash: ' + (data.length - payloadSize - FLOW.HASH_SIZE));
+    }
+    if (tocOffset < FLOW.HEADER_SIZE) {
+      return fail('el TOC se solapa con la cabecera');
+    }
+    if (tocCount < 1 || tocCount > FLOW.MAX_TOC_ENTRIES) {
+      return fail('número de entradas TOC inválido: ' + tocCount);
+    }
+    const tocEnd = tocOffset + tocCount * FLOW.TOC_ENTRY_SIZE;
+    if (tocEnd > payloadSize) {
+      return fail('el TOC se extiende más allá del payload');
+    }
 
-    if (codeLength > FLOW.CODE_MAX_SIZE) {
-      return { ok: false, error: 'sección de código demasiado grande: ' + codeLength + ' bytes', meta: null };
+    const toc = [];
+    for (let i = 0; i < tocCount; i++) {
+      const base = tocOffset + i * FLOW.TOC_ENTRY_SIZE;
+      const type = data[base];
+      if (type < 1 || type > 7) {
+        return fail('tipo de segmento desconocido: 0x' + type.toString(16));
+      }
+      const flags = data[base + 1];
+      if ((flags & ~(FLOW.FLAG_READ | FLOW.FLAG_WRITE | FLOW.FLAG_EXECUTE | FLOW.FLAG_USER)) !== 0) {
+        return fail('flags de segmento desconocidos: 0x' + flags.toString(16));
+      }
+      const vaddr = view.getUint16(base + 2);
+      const fileOffset = view.getUint32(base + 4);
+      const size = view.getUint16(base + 8);
+      const memSize = view.getUint16(base + 10);
+      if (view.getUint32(base + 12) !== 0) {
+        return fail('campos reservados de TOC no nulos');
+      }
+      if (fileOffset < tocEnd || fileOffset + size > payloadSize) {
+        return fail('rango de archivo fuera del payload en TOC[' + i + ']');
+      }
+      toc.push({ type, flags, vaddr, fileOffset, size, memSize });
     }
-    let offset = FLOW.HEADER_SIZE;
-    if (offset + codeLength > data.length) {
-      return { ok: false, error: 'sección de código truncada', meta: null };
-    }
-    offset += codeLength;
 
-    if (constantsLength * 2 > FLOW.CONSTANTS_MAX_SIZE) {
-      return {
-        ok: false,
-        error: 'sección de constantes demasiado grande: ' + constantsLength * 2 + ' bytes',
-        meta: null,
-      };
-    }
-    if (offset + constantsLength * 2 > data.length) {
-      return { ok: false, error: 'sección de constantes truncada', meta: null };
-    }
-    offset += constantsLength * 2;
-
-    for (let i = 0; i < capabilitiesCount; i++) {
-      let terminated = false;
-      while (offset < data.length) {
-        if (data[offset] === 0) {
-          offset++;
-          terminated = true;
-          break;
+    for (let i = 0; i < toc.length; i++) {
+      const a = toc[i];
+      for (let j = i + 1; j < toc.length; j++) {
+        const b = toc[j];
+        if (a.size > 0 && b.size > 0 && a.fileOffset < b.fileOffset + b.size && b.fileOffset < a.fileOffset + a.size) {
+          return fail('rangos de archivo solapados en TOC[' + i + '] y TOC[' + j + ']');
         }
-        offset++;
+        if (
+          a.type <= FLOW.SEGMENT_CONSTANTS &&
+          b.type <= FLOW.SEGMENT_CONSTANTS &&
+          a.memSize > 0 &&
+          b.memSize > 0 &&
+          a.vaddr < b.vaddr + b.memSize &&
+          b.vaddr < a.vaddr + a.memSize
+        ) {
+          return fail('rangos virtuales solapados en TOC[' + i + '] y TOC[' + j + ']');
+        }
       }
-      if (!terminated) {
-        return { ok: false, error: 'capacidad sin terminador NUL', meta: null };
+    }
+
+    const counts = new Map();
+    let program = null;
+    let constants = null;
+    let capabilitiesCount = 0;
+    let debugLength = 0;
+    let codeLength = 0;
+    const codeFlags = FLOW.FLAG_READ | FLOW.FLAG_EXECUTE;
+    for (const segment of toc) {
+      counts.set(segment.type, (counts.get(segment.type) || 0) + 1);
+      if (segment.type === FLOW.SEGMENT_CAPABILITIES || segment.type === FLOW.SEGMENT_DEBUG) {
+        if (segment.vaddr !== 0 || segment.memSize !== 0 || segment.flags !== 0) {
+          return fail('segmento de metadatos inválido');
+        }
+        if (segment.size === 0) {
+          return fail('segmento de metadatos vacío');
+        }
+        if (segment.type === FLOW.SEGMENT_DEBUG) {
+          debugLength = segment.size;
+        } else {
+          let start = 0;
+          for (let i = segment.fileOffset; i < segment.fileOffset + segment.size; i++) {
+            if (data[i] !== 0) {
+              continue;
+            }
+            if (i === start + segment.fileOffset) {
+              return fail('capacidad vacía');
+            }
+            capabilitiesCount++;
+            start = i - segment.fileOffset + 1;
+          }
+          if (start !== segment.size) {
+            return fail('capacidad sin terminador NUL');
+          }
+        }
+        continue;
+      }
+
+      if (segment.vaddr % FLOW.PAGE_SIZE !== 0) {
+        return fail('segmento no alineado a página');
+      }
+      if (segment.size === 0 || segment.memSize < segment.size) {
+        return fail('tamaño de segmento inválido');
+      }
+      const region = segment.type === FLOW.SEGMENT_CONSTANTS ? 'imagen' : 'código';
+      const limit = segment.type === FLOW.SEGMENT_CONSTANTS ? FLOW.IMAGE_END : FLOW.CONSTANTS_BASE;
+      if (segment.vaddr + segment.memSize > limit) {
+        return fail('segmento fuera de la región de ' + region);
+      }
+      if (
+        segment.type === FLOW.SEGMENT_BIOS ||
+        segment.type === FLOW.SEGMENT_BOOTLOADER ||
+        segment.type === FLOW.SEGMENT_KERNEL
+      ) {
+        if ((segment.flags & codeFlags) !== codeFlags || (segment.flags & (FLOW.FLAG_WRITE | FLOW.FLAG_USER)) !== 0) {
+          return fail('segmento de código con flags inválidos');
+        }
+        if (segment.type === FLOW.SEGMENT_BIOS && (segment.vaddr !== 0 || segment.memSize > FLOW.PAGE_SIZE)) {
+          return fail('el BIOS debe ocupar la página 0');
+        }
+      } else if (segment.type === FLOW.SEGMENT_PROGRAM) {
+        if (
+          (segment.flags & (codeFlags | FLOW.FLAG_USER)) !== (codeFlags | FLOW.FLAG_USER) ||
+          (segment.flags & FLOW.FLAG_WRITE) !== 0
+        ) {
+          return fail('PROGRAM debe ser R/X y de usuario');
+        }
+        program = segment;
+      } else if (segment.type === FLOW.SEGMENT_CONSTANTS) {
+        if (
+          segment.vaddr !== FLOW.CONSTANTS_BASE ||
+          segment.memSize !== segment.size ||
+          (segment.size & 1) !== 0 ||
+          segment.size > FLOW.CONSTANTS_MAX_SIZE ||
+          segment.flags !== FLOW.FLAG_READ
+        ) {
+          return fail('segmento CONSTANTS inválido');
+        }
+        constants = segment;
       }
     }
-
-    if (offset + debugLength > data.length) {
-      return { ok: false, error: 'sección de depuración truncada', meta: null };
+    if ((counts.get(FLOW.SEGMENT_PROGRAM) || 0) !== 1 || !program) {
+      return fail('la imagen debe tener exactamente un segmento PROGRAM');
     }
-    offset += debugLength;
-
-    if (offset + FLOW.HASH_SIZE > data.length) {
-      return { ok: false, error: 'falta el trailer SHA-256', meta: null };
+    for (const type of [
+      FLOW.SEGMENT_BIOS,
+      FLOW.SEGMENT_BOOTLOADER,
+      FLOW.SEGMENT_KERNEL,
+      FLOW.SEGMENT_CONSTANTS,
+      FLOW.SEGMENT_CAPABILITIES,
+      FLOW.SEGMENT_DEBUG,
+    ]) {
+      if ((counts.get(type) || 0) > 1) {
+        return fail('segmento duplicado');
+      }
     }
-    if (offset + FLOW.HASH_SIZE !== data.length) {
-      return {
-        ok: false,
-        error: 'bytes extra después del hash: ' + (data.length - offset - FLOW.HASH_SIZE),
-        meta: null,
-      };
+    if (program.size === 0) {
+      return fail('el .flow no tiene código');
+    }
+    for (const segment of toc) {
+      if (segment.type >= FLOW.SEGMENT_BIOS && segment.type <= FLOW.SEGMENT_PROGRAM) {
+        codeLength = Math.max(codeLength, segment.vaddr + segment.memSize);
+      }
+    }
+    const entryOk = toc.some(
+      segment =>
+        segment.type >= FLOW.SEGMENT_BIOS &&
+        segment.type <= FLOW.SEGMENT_PROGRAM &&
+        entryPoint >= segment.vaddr &&
+        entryPoint < segment.vaddr + segment.size
+    );
+    if (!entryOk) {
+      return fail('punto de entrada inválido: 0x' + entryPoint.toString(16));
     }
 
-    const expected = data.slice(offset, offset + FLOW.HASH_SIZE);
-    const actual = sha256(data.subarray(0, offset));
+    const expected = data.slice(payloadSize, payloadSize + FLOW.HASH_SIZE);
+    const actual = sha256(data.subarray(0, payloadSize));
     let same = true;
     for (let i = 0; i < FLOW.HASH_SIZE; i++) {
       if (expected[i] !== actual[i]) {
@@ -334,17 +476,7 @@
       }
     }
     if (!same) {
-      return { ok: false, error: 'el SHA-256 del .flow no coincide', meta: null };
-    }
-    if (codeLength === 0) {
-      return { ok: false, error: 'el .flow no tiene código', meta: null };
-    }
-    if (entryPoint >= codeLength) {
-      return {
-        ok: false,
-        error: 'punto de entrada inválido: 0x' + entryPoint.toString(16) + ' (código: ' + codeLength + ')',
-        meta: null,
-      };
+      return fail('el SHA-256 del .flow no coincide');
     }
 
     return {
@@ -357,9 +489,10 @@
         firmwareVersion,
         entryPoint,
         codeLength,
-        constantsLength,
+        constantsLength: constants ? constants.size / 2 : 0,
         capabilitiesCount,
         debugLength,
+        segmentCount: toc.length,
         hash: hexOf(expected),
       },
     };

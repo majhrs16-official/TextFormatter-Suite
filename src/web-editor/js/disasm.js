@@ -11,8 +11,13 @@
   'use strict';
 
   const USER_ORIGIN = 0x1000;
-  const HEADER_SIZE = 20;
+  const HEADER_SIZE = 32;
+  const TOC_ENTRY_SIZE = 16;
+  const HASH_SIZE = 32;
   const MAGIC = 0x464c4f57;
+  const LAYOUT_MAGIC = 0x524f4d32; // "ROM2"
+  const MAX_TOC_ENTRIES = 16;
+  const EXECUTABLE = new Set([1, 2, 3, 4]);
 
   const OPCODES = {
     0x00: 'LI',
@@ -126,21 +131,75 @@
     if (!bytes || typeof bytes.length !== 'number' || typeof bytes.subarray !== 'function') {
       throw new DisasmError('datos demasiado cortos para la cabecera');
     }
-    if (bytes.length < HEADER_SIZE) {
-      throw new DisasmError('datos demasiado cortos para la cabecera');
+    if (bytes.length < HEADER_SIZE + HASH_SIZE) {
+      throw new DisasmError('datos demasiado cortos para la cabecera y el hash');
     }
     const magic = u32(bytes, 0);
     if (magic !== MAGIC) {
       throw new DisasmError('no es un .flow (magic ' + hex(magic, 8) + ')');
     }
-    const codeLength = u16(bytes, 10);
-    if (HEADER_SIZE + codeLength > bytes.length) {
-      throw new DisasmError('sección de código truncada');
+    const layoutMagic = u32(bytes, 16);
+    if (layoutMagic !== LAYOUT_MAGIC) {
+      throw new DisasmError('layout .flow no soportado: ' + hex(layoutMagic, 8));
     }
-    return {
-      entryPoint: u16(bytes, 8),
-      code: bytes.subarray(HEADER_SIZE, HEADER_SIZE + codeLength),
-    };
+    const entryPoint = u16(bytes, 8);
+    const tocOffset = u16(bytes, 10);
+    const tocCount = u16(bytes, 12);
+    const payloadSize = u32(bytes, 20) >>> 0;
+    if (payloadSize !== bytes.length - HASH_SIZE) {
+      throw new DisasmError('payload .flow truncado o incoherente');
+    }
+    if (tocOffset < HEADER_SIZE) {
+      throw new DisasmError('el TOC se solapa con la cabecera');
+    }
+    if (tocCount < 1 || tocCount > MAX_TOC_ENTRIES) {
+      throw new DisasmError('número de entradas TOC inválido: ' + tocCount);
+    }
+    const tocEnd = tocOffset + tocCount * TOC_ENTRY_SIZE;
+    if (tocEnd > payloadSize) {
+      throw new DisasmError('el TOC se extiende más allá del payload');
+    }
+
+    const segments = [];
+    let end = 0;
+    for (let i = 0; i < tocCount; i++) {
+      const base = tocOffset + i * TOC_ENTRY_SIZE;
+      const type = bytes[base];
+      if (type < 1 || type > 7) {
+        throw new DisasmError('tipo de segmento desconocido: 0x' + type.toString(16));
+      }
+      const flags = bytes[base + 1];
+      if ((flags & ~0x0f) !== 0) {
+        throw new DisasmError('flags de segmento desconocidos: 0x' + flags.toString(16));
+      }
+      const vaddr = u16(bytes, base + 2);
+      const fileOffset = u32(bytes, base + 4) >>> 0;
+      const size = u16(bytes, base + 8);
+      const memSize = u16(bytes, base + 10);
+      const reserved = u32(bytes, base + 12);
+      if (reserved !== 0) {
+        throw new DisasmError('campos reservados de TOC no nulos');
+      }
+      if (fileOffset < tocEnd || fileOffset + size > payloadSize) {
+        throw new DisasmError('rango de archivo fuera del payload en TOC[' + i + ']');
+      }
+      if (EXECUTABLE.has(type)) {
+        if (size === 0 || size > memSize) {
+          throw new DisasmError('segmento ejecutable truncado en TOC[' + i + ']');
+        }
+        end = Math.max(end, vaddr + memSize);
+      }
+      segments.push({ type, vaddr, fileOffset, size });
+    }
+
+    const code = new Uint8Array(end);
+    for (const segment of segments) {
+      if (!EXECUTABLE.has(segment.type)) {
+        continue;
+      }
+      code.set(bytes.subarray(segment.fileOffset, segment.fileOffset + segment.size), segment.vaddr);
+    }
+    return { entryPoint, code };
   }
 
   function decodeAt(code, address) {

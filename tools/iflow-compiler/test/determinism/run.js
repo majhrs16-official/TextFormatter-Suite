@@ -31,6 +31,10 @@ if (!fs.existsSync(cli)) {
 }
 
 const MAGIC = 0x464c4f57; // "FLOW"
+const LAYOUT_MAGIC = 0x524f4d32; // "ROM2"
+const HEADER_SIZE = 32;
+const TOC_ENTRY_SIZE = 16;
+const HASH_SIZE = 32;
 
 function assemble(source, extra = []) {
   const tag = extra.length ? extra.join('').replace(/[^a-z0-9]/gi, '') : 'plain';
@@ -42,27 +46,86 @@ function assemble(source, extra = []) {
   return fs.readFileSync(out);
 }
 
-/** Returns a list of format-2 container violations (empty when the file is well-formed). */
+/** Returns a list of ROM2 container violations (empty when the file is well-formed). */
 function formatProblems(buf, expectDebug) {
   const problems = [];
 
   const magic = buf.readUInt32BE(0);
   if (magic !== MAGIC) problems.push(`magic 0x${magic.toString(16)} != 0x464c4f57`);
-
   if (buf[4] !== 2) problems.push(`formatVersion ${buf[4]} != 2`);
+  if (buf.readUInt32BE(16) !== LAYOUT_MAGIC) {
+    problems.push(`layoutMagic 0x${buf.readUInt32BE(16).toString(16)} != 0x524f4d32`);
+  }
 
-  const codeLength = buf.readUInt16BE(10);
-  const debugLength = buf.readUInt16BE(16);
-  if (expectDebug && debugLength === 0) problems.push('expected a debug section, found none');
-  if (!expectDebug && debugLength !== 0) problems.push(`unexpected debug section (${debugLength} B)`);
+  const tocOffset = buf.readUInt16BE(10);
+  const tocCount = buf.readUInt16BE(12);
+  const payloadSize = buf.readUInt32BE(20);
+  if (payloadSize !== buf.length - HASH_SIZE) {
+    problems.push(`payloadSize ${payloadSize} != file-32 (${buf.length - HASH_SIZE})`);
+  }
+  if (tocOffset !== HEADER_SIZE) problems.push(`tocOffset ${tocOffset} != ${HEADER_SIZE}`);
+  if (tocCount < 1 || tocCount > 16) problems.push(`tocCount ${tocCount} out of range`);
+  const tocEnd = tocOffset + tocCount * TOC_ENTRY_SIZE;
+  if (tocEnd > payloadSize) problems.push(`TOC ends at ${tocEnd} > payload ${payloadSize}`);
 
-  if (buf.length < 20 + codeLength + 32) problems.push('file shorter than header + code + hash');
+  const types = [];
+  const ranges = [];
+  let hasDebug = false;
+  for (let i = 0; i < tocCount; i++) {
+    const base = tocOffset + i * TOC_ENTRY_SIZE;
+    if (base + TOC_ENTRY_SIZE > buf.length) {
+      problems.push(`TOC entry ${i} truncated`);
+      break;
+    }
+    const type = buf[base];
+    const fileOffset = buf.readUInt32BE(base + 4);
+    const size = buf.readUInt16BE(base + 8);
+    const memSize = buf.readUInt16BE(base + 10);
+    types.push(type);
+    if (fileOffset < tocEnd || fileOffset + size > payloadSize) {
+      problems.push(`segment ${i} file range ${fileOffset}+${size} outside payload`);
+    }
+    if (size > 0) {
+      for (const [otherOffset, otherSize] of ranges) {
+        if (fileOffset < otherOffset + otherSize && otherOffset < fileOffset + size) {
+          problems.push(`segment ${i} overlaps another segment's file range`);
+        }
+      }
+      ranges.push([fileOffset, size]);
+    }
+    // Only loadable segments reserve memory; metadata (CAPABILITIES/DEBUG)
+    // must keep memSize at zero.
+    if (type >= 1 && type <= 5) {
+      if (memSize < size) problems.push(`segment ${i} memSize ${memSize} < size ${size}`);
+    } else if (memSize !== 0) {
+      problems.push(`metadata segment ${i} reserves memory (memSize ${memSize})`);
+    }
+    if (type === 7) hasDebug = true;
+  }
+  if (!types.includes(1)) problems.push('missing BIOS segment');
+  if (!types.includes(4)) problems.push('missing PROGRAM segment');
+  if (expectDebug && !hasDebug) problems.push('expected a DEBUG segment, found none');
+  if (!expectDebug && hasDebug) problems.push('unexpected DEBUG segment');
 
-  const hash = buf.subarray(buf.length - 32);
-  const computed = crypto.createHash('sha256').update(buf.subarray(0, buf.length - 32)).digest();
+  const hash = buf.subarray(buf.length - HASH_SIZE);
+  const computed = crypto.createHash('sha256').update(buf.subarray(0, buf.length - HASH_SIZE)).digest();
   if (!hash.equals(computed)) problems.push('SHA-256 mismatch over the payload');
 
   return problems;
+}
+
+/** Returns the bytes of the first segment of the given type, or null. */
+function segmentData(buf, wantedType) {
+  const tocOffset = buf.readUInt16BE(10);
+  const tocCount = buf.readUInt16BE(12);
+  for (let i = 0; i < tocCount; i++) {
+    const base = tocOffset + i * TOC_ENTRY_SIZE;
+    if (buf[base] !== wantedType) continue;
+    const fileOffset = buf.readUInt32BE(base + 4);
+    const size = buf.readUInt16BE(base + 8);
+    return buf.subarray(fileOffset, fileOffset + size);
+  }
+  return null;
 }
 
 let failed = 0;
@@ -103,17 +166,9 @@ for (const name of fixtures) {
 try {
   const debugged = assemble(path.join(testDir, 'simple.flowasm'), ['-d']);
   const problems = formatProblems(debugged, true);
-  const debugLength = debugged.readUInt16BE(16);
-  const headerEnd = 20;
-  const codeLength = debugged.readUInt16BE(10);
-  const constantsLength = debugged.readUInt16BE(12);
-  const capabilitiesCount = debugged.readUInt8(14);
-  let debugStart = headerEnd + codeLength + constantsLength * 2;
-  for (let i = 0; i < capabilitiesCount; i++) {
-    while (debugged[debugStart] !== 0) debugStart++;
-    debugStart++;
-  }
-  const debugText = debugged.subarray(debugStart, debugStart + debugLength).toString('utf8');
+  const debugBytes = segmentData(debugged, 7);
+  const debugLength = debugBytes ? debugBytes.length : 0;
+  const debugText = debugBytes ? debugBytes.toString('utf8') : '';
   if (!debugText.includes('SYM ')) problems.push('debug section has no symbol table');
 
   if (problems.length) {

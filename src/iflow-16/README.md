@@ -43,12 +43,13 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
   (no es un permiso nominal); las instrucciones se leen de memoria, no de la imagen de
   despliegue. La página se valida al entrar en ella y se sirve de una ventana de 4 KB
   (I-cache) en el contexto.
-- **Propiedad de página** (`Privilege`): las páginas *kernel* (código/constantes) son
-  legibles/ejecutables por el programa pero **solo escribibles por el supervisor** (host,
-  cargador y DMA); un write del programa falla con `PRIVILEGE_FAULT` aunque el bit W esté
-  presente. El cargador mapea código/constantes como kernel y baja W con `mprotect`.
+- **Propiedad de página** (`Privilege`): las páginas *kernel* (BIOS, bootloader/kernel y
+  constantes) son legibles/ejecutables por el programa pero **solo escribibles por el
+  supervisor** (host, cargador y DMA); un write del programa falla con `PRIVILEGE_FAULT`
+  aunque el bit W esté presente. El cargador mapea esos segmentos como kernel; `PROGRAM`
+  se mapea como *user-owned*, se escribe con W durante la carga y termina en R/X sin W.
 - **Mapeo típico** (fuente única: `VmMemoryMap`):
-  - Páginas 0-1: Código (R/X, **kernel**) — ROM de firmware (0x0000) + código de usuario (0x1000); en bare-metal sólo se usa la página 0
+  - Páginas 0-1: Código (R/X) — BIOS **kernel** en 0x0000 y `PROGRAM` **user-owned** en 0x1000; en bare-metal sólo se usa la página 0
   - Página 2: Constantes (R, **kernel**) (0x2000)
   - Páginas 3-4: Datos/Heap (R/W) (0x3000–0x4FFF)
   - Páginas 5-6: Pila (R/W, crece hacia abajo desde 0x7000)
@@ -259,40 +260,58 @@ genéricos: no hay una instrucción ni un servicio por acción. Ambos usan el `T
 ### Formato binario `.flow`
 
 ```
-Header (20 bytes):
-  u32 magic             = 0x464C4F57 ("FLOW", big-endian)
+Header (32 bytes, big-endian):
+  u32 magic             = 0x464C4F57 ("FLOW")
   u8  formatVersion     = 2
   u8  isaVersion        = 2
   u8  minAbiVersion     = 2
   u8  minFirmwareVersion= 1
-  u16 entryPoint        (big-endian)
-  u16 codeLength        (big-endian)
-  u16 constantsLength   (big-endian)
-  u8  capabilitiesCount
-  u8  reserved          (0)
-  u16 debugLength       (big-endian; 0 = sin sección debug)
-  u16 reserved          (0)
+  u16 entryPoint
+  u16 tocOffset
+  u16 tocEntryCount     (1..16)
+  u16 headerFlags       (0)
+  u32 layoutMagic       = 0x524F4D32 ("ROM2")
+  u32 payloadSize       (bytes before the final hash)
+  u32 reserved          (0)
+  u32 reserved          (0)
 
-Code section: codeLength bytes (los operandos inmediatos son big-endian [hi, lo])
-Constants: constantsLength × u16 (big-endian en el fichero; se materializan
-           little-endian en memoria para que LDW las lea de forma natural)
-Capabilities: null-terminated strings
-Debug section: debugLength bytes UTF-8 (opcional, solo con `-d`; nunca se ejecuta)
+TOC entry (16 bytes, repeated tocEntryCount times):
+  u8  type              (1 BIOS, 2 BOOTLOADER, 3 KERNEL, 4 PROGRAM,
+                         5 CONSTANTS, 6 CAPABILITIES, 7 DEBUG)
+  u8  flags             (R=1, W=2, X=4, USER=8)
+  u16 virtualAddress
+  u32 fileOffset        (absolute from the start of the file)
+  u16 size              (stored payload bytes)
+  u16 memSize           (bytes reserved in memory; metadata segments use 0)
+  u32 reserved          (0)
+
+Payload: one stored section per TOC entry, in TOC order
 Hash: 32 bytes (SHA-256 of everything before the hash field)
 ```
 
+The compiler emits `BIOS` at `0x0000`, `PROGRAM` at a page-aligned image
+address (`0x1000` with firmware, `0x0000` in bare-metal) and `CONSTANTS` at
+`0x2000`. `CAPABILITIES` and `DEBUG` are metadata and are never loaded. The
+loader writes each loadable payload at its virtual address, skips the MMIO
+window, zero-fills any `memSize > size` tail and applies the declared
+permissions at the end. `PROGRAM` is `R/X` user-owned, `BIOS` is `R/X`
+kernel-owned and `CONSTANTS` is `R`.
+
 > **El magic existe para rechazar pronto** (auditoría `IFLOW-AUD-038`): un fichero que no empieza
 > por `FLOW` se descarta como «not a .flow» al instante, en lugar de fallar más tarde con un error
-> de versión o de hash confuso. El cargador sigue siendo tolerante: si el `policy.flow` está
-> corrupto o no es del formato, arranca con el programa pass-through.
+> de versión o de hash confuso. El `layoutMagic` cumple la misma función con el layout: un `.flow`
+> del contenedor anterior de 20 bytes se rechaza en vez de leerse con un segundo parser. El cargador
+> sigue siendo tolerante: si el `policy.flow` está corrupto o no es del formato, arranca con el
+> programa pass-through.
 >
-> **Formato 2 (2026-10-19).** Añade el magic y la sección `debug` versionada. Los `.flow` de formato
-> 1 empiezan directamente por las versiones, así que se rechazan: **hay que recompilar** con el
+> **ROM2 (2026-11-16).** Sustituye el contenedor monolítico de 20 bytes por una imagen con TOC y
+> segmentos tipados. Los `.flow` antiguos no se migran en runtime: **hay que recompilar** con el
 > ensamblador actual.
 
-> **Endianness mixto (deliberado).** La cabecera del contenedor y los operandos inmediatos de las
-> instrucciones son **big-endian**; las palabras de **datos** en memoria (RAM y constantes ya
-> materializadas) son **little-endian**. Quien escriba un ensamblador o un parser nuevo debe
+> **Endianness mixto (deliberado).** La cabecera, el TOC y los operandos inmediatos de las
+> instrucciones son **big-endian**; las palabras de **datos** en memoria (RAM y el payload de
+> `CONSTANTS`) son **little-endian**. El payload cargable se copia tal cual, así que `CONSTANTS`
+> se serializa ya en orden de memoria. Quien escriba un ensamblador o un parser nuevo debe
 > respetarlo: asumir «todo little-endian» decodifica mal la cabecera y los inmediatos.
 
 El parser exige que `minAbiVersion` **coincida exactamente** con el ABI del runtime

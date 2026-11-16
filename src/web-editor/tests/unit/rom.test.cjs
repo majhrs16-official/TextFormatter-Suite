@@ -44,43 +44,90 @@ function buildFlow(over) {
       isa: 2,
       abi: 2,
       firmware: 1,
+      layout: 0x524f4d32,
       entryPoint: 0,
       code: [0x00, 0x00],
+      programVaddr: 0,
       constants: [],
       capabilities: [],
+      rawCapabilities: null,
       debug: '',
+      tocCount: null,
     },
     over || {}
   );
-  const caps = [];
-  for (const cap of options.capabilities) {
-    caps.push(...Buffer.from(cap, 'utf8'), 0);
+
+  const code = Buffer.from(options.code);
+  const segments = [
+    { type: 4, flags: 1 | 4 | 8, vaddr: options.programVaddr, data: code, memSize: code.length },
+  ];
+
+  if (options.constants.length > 0) {
+    const data = Buffer.alloc(options.constants.length * 2);
+    options.constants.forEach((value, index) => data.writeUInt16LE(value, index * 2));
+    segments.push({ type: 5, flags: 1, vaddr: 0x2000, data, memSize: data.length });
   }
+
+  let capabilityData = Buffer.alloc(0);
+  if (options.rawCapabilities !== null) {
+    capabilityData = Buffer.from(options.rawCapabilities);
+  } else {
+    const parts = [];
+    for (const cap of options.capabilities) {
+      parts.push(Buffer.from(cap, 'utf8'), Buffer.from([0]));
+    }
+    capabilityData = parts.length > 0 ? Buffer.concat(parts) : Buffer.alloc(0);
+  }
+  if (capabilityData.length > 0) {
+    segments.push({ type: 6, flags: 0, vaddr: 0, data: capabilityData, memSize: 0 });
+  }
+
   const debug = Buffer.from(options.debug, 'utf8');
-  const size = 20 + options.code.length + options.constants.length * 2 + caps.length + debug.length;
-  const out = Buffer.alloc(size);
+  if (debug.length > 0) {
+    segments.push({ type: 7, flags: 0, vaddr: 0, data: debug, memSize: 0 });
+  }
+
+  const tocCount = options.tocCount === null ? segments.length : options.tocCount;
+  const tocOffset = 32;
+  let cursor = tocOffset + tocCount * 16;
+  for (const segment of segments) {
+    segment.fileOffset = cursor;
+    cursor += segment.data.length;
+  }
+  const payloadSize = cursor;
+  const out = Buffer.alloc(payloadSize);
+
   out.writeUInt32BE(0x464c4f57, 0);
   out[4] = options.format;
   out[5] = options.isa;
   out[6] = options.abi;
   out[7] = options.firmware;
   out.writeUInt16BE(options.entryPoint, 8);
-  out.writeUInt16BE(options.code.length, 10);
-  out.writeUInt16BE(options.constants.length, 12);
-  out[14] = options.capabilities.length;
-  out[15] = 0;
-  out.writeUInt16BE(debug.length, 16);
-  out.writeUInt16BE(0, 18);
-  let offset = 20;
-  Buffer.from(options.code).copy(out, offset);
-  offset += options.code.length;
-  for (const value of options.constants) {
-    out.writeUInt16BE(value, offset);
-    offset += 2;
+  out.writeUInt16BE(tocOffset, 10);
+  out.writeUInt16BE(tocCount, 12);
+  out.writeUInt16BE(0, 14);
+  out.writeUInt32BE(options.layout, 16);
+  out.writeUInt32BE(payloadSize, 20);
+  out.writeUInt32BE(0, 24);
+  out.writeUInt32BE(0, 28);
+
+  for (let i = 0; i < tocCount; i++) {
+    const segment = segments[i];
+    if (!segment) {
+      continue;
+    }
+    const base = tocOffset + i * 16;
+    out[base] = segment.type;
+    out[base + 1] = segment.flags;
+    out.writeUInt16BE(segment.vaddr, base + 2);
+    out.writeUInt32BE(segment.fileOffset, base + 4);
+    out.writeUInt16BE(segment.data.length, base + 8);
+    out.writeUInt16BE(segment.memSize, base + 10);
+    out.writeUInt32BE(0, base + 12);
   }
-  Buffer.from(caps).copy(out, offset);
-  offset += caps.length;
-  debug.copy(out, offset);
+  for (const segment of segments) {
+    segment.data.copy(out, segment.fileOffset);
+  }
   return Buffer.concat([out, hashOf(out)]);
 }
 
@@ -133,14 +180,16 @@ assertEq(
 );
 
 console.log('\n--- .flow válido ---');
-const flow = buildFlow({ capabilities: ['log'], debug: 'main' });
+const flow = buildFlow({ capabilities: ['log'], debug: 'main', constants: [0x1234] });
 const flowResult = Rom.validateFlow(flow);
 assert(flowResult.ok, 'acepta un .flow v2 válido — ' + flowResult.error);
 assertEq(flowResult.meta.formatVersion, 2, 'lee formatVersion');
 assertEq(flowResult.meta.isaVersion, 2, 'lee isaVersion');
 assertEq(flowResult.meta.abiVersion, 2, 'lee abiVersion');
 assertEq(flowResult.meta.codeLength, 2, 'lee codeLength');
+assertEq(flowResult.meta.constantsLength, 1, 'lee constantsLength');
 assertEq(flowResult.meta.capabilitiesCount, 1, 'lee capabilitiesCount');
+assertEq(flowResult.meta.segmentCount, 4, 'lee el número de segmentos');
 assertEq(flowResult.meta.hash, Rom.sha256Hex(flow.subarray(0, flow.length - 32)), 'expone el hash');
 const entry = Rom.entryFromBytes('config/iflow-16/policy.flow', flow);
 assert(entry.valid, 'entryFromBytes acepta el .flow');
@@ -159,6 +208,11 @@ assert(!Rom.validateFlow(buildFlow({ abi: 1 })).ok, 'rechaza ABI distinta');
 assert(!Rom.validateFlow(buildFlow({ firmware: 2 })).ok, 'rechaza firmware futuro');
 assert(!Rom.validateFlow(buildFlow({ entryPoint: 2 })).ok, 'rechaza entryPoint fuera del código');
 assert(!Rom.validateFlow(buildFlow({ code: [] })).ok, 'rechaza código vacío');
+assert(!Rom.validateFlow(buildFlow({ programVaddr: 0x2000 })).ok, 'rechaza programa en la página de constantes');
+assert(
+  /región de código/.test(Rom.validateFlow(buildFlow({ programVaddr: 0x2000 })).error),
+  'explica la región del programa'
+);
 assert(!Rom.validateFlow(Buffer.from([0, 1, 2])).ok, 'rechaza datos cortos');
 
 const badHash = Buffer.from(flow);
@@ -173,13 +227,11 @@ assert(/bytes extra/.test(Rom.validateFlow(extra).error), 'explica los bytes ext
 const truncated = flow.subarray(0, flow.length - 1);
 assert(!Rom.validateFlow(truncated).ok, 'rechaza trailer truncado');
 
-const unterminated = Buffer.alloc(20);
-unterminated.writeUInt32BE(0x464c4f57, 0);
-unterminated[4] = 2;
-unterminated[5] = 2;
-unterminated[6] = 2;
-unterminated[7] = 1;
-unterminated[14] = 1;
+const oldLayout = buildFlow({ layout: 0 });
+assert(!Rom.validateFlow(oldLayout).ok, 'rechaza el layout anterior de 20 B');
+assert(/layout/.test(Rom.validateFlow(oldLayout).error), 'explica el layout no soportado');
+
+const unterminated = buildFlow({ rawCapabilities: Buffer.from('log') });
 assert(!Rom.validateFlow(unterminated).ok, 'rechaza capacidad sin NUL');
 assert(/terminador NUL/.test(Rom.validateFlow(unterminated).error), 'explica la capacidad sin NUL');
 

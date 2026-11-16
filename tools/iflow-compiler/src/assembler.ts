@@ -16,11 +16,17 @@ import {
   AssemblerResult,
   Diagnostic,
   ProgramImage,
+  ProgramSegment,
+  SegmentType,
+  SEGMENT_FLAGS,
   PROGRAM_MAGIC,
   PROGRAM_VERSIONS,
   Symbol as SymbolType,
   isGPR,
 } from './types';
+
+/** Constants live in the single page at 0x2000..0x2FFF. */
+const CONSTANTS_MAX_SIZE = 0x1000;
 
 interface LabelDef {
   name: string;
@@ -1178,13 +1184,15 @@ class Assembler {
   }
 
   private createResultSync(program: Uint8Array): AssemblerResult {
-    // For error cases, just return without computing hash
+    // For error cases, just return without computing hash. The empty segment
+    // list is intentional: an error result is never serialized.
     const programImage: ProgramImage = {
       formatVersion: PROGRAM_VERSIONS.format,
       isaVersion: PROGRAM_VERSIONS.isa,
       minAbiVersion: PROGRAM_VERSIONS.minAbi,
       minFirmwareVersion: PROGRAM_VERSIONS.minFirmware,
       entryPoint: this.getEntryPointAddress(),
+      segments: [],
       code: program,
       constants: this.constantPool,
       capabilities: Array.from(this.capabilities),
@@ -1205,6 +1213,8 @@ class Assembler {
   }
 
   private async createResult(program: Uint8Array): Promise<AssemblerResult> {
+    const segments = this.buildSegments(program);
+
     // Serialize program image without hash first
     const programImageNoHash: ProgramImage = {
       formatVersion: PROGRAM_VERSIONS.format,
@@ -1212,6 +1222,7 @@ class Assembler {
       minAbiVersion: PROGRAM_VERSIONS.minAbi,
       minFirmwareVersion: PROGRAM_VERSIONS.minFirmware,
       entryPoint: this.getEntryPointAddress(),
+      segments,
       code: program,
       constants: this.constantPool,
       capabilities: Array.from(this.capabilities),
@@ -1242,10 +1253,125 @@ class Assembler {
   }
 
   /**
-   * Serializes the header and every payload section, i.e. everything the SHA-256
-   * hash covers (all bytes before the trailing 32-byte hash field).
+   * Builds the typed TOC segments for the assembled image.
+   * <p>
+   * The BIOS occupies page 0 (including the reserved MMIO tail). The user
+   * program starts at 0x1000 when firmware is on, or at 0x0000 for a bare-metal
+   * image (the leading padding to a higher {@code .origin} stays in the segment,
+   * so absolute addresses are preserved). Constants and metadata are separate
+   * segments. The compiler never emits BOOTLOADER/KERNEL segments today; the
+   * format and parser reserve their type codes for a later split.
+   * </p>
+   */
+  private buildSegments(program: Uint8Array): ProgramSegment[] {
+    const segments: ProgramSegment[] = [];
+    const userStart = this.firmwareEnabled ? 0x1000 : 0x0000;
+
+    if (this.firmwareEnabled) {
+      if (program.length < 0x1000) {
+        this.addDiagnostic('error',
+          `Firmware image is shorter than one page: ${program.length} bytes`, 0, 0);
+      } else {
+        const bios = program.slice(0, 0x1000);
+        segments.push({
+          type: SegmentType.BIOS,
+          flags: SEGMENT_FLAGS.READ | SEGMENT_FLAGS.EXECUTE,
+          virtualAddress: 0x0000,
+          data: bios,
+          memSize: bios.length,
+        });
+      }
+    }
+
+    const programData = program.slice(userStart);
+    if (programData.length === 0) {
+      this.addDiagnostic('error', 'Program segment is empty', 0, 0);
+    } else {
+      const end = userStart + programData.length;
+      if (end > 0x2000) {
+        this.addDiagnostic('error',
+          `Program segment outside the code region: 0x${end.toString(16)} > 0x2000`,
+          0, 0);
+      }
+      segments.push({
+        type: SegmentType.PROGRAM,
+        flags: SEGMENT_FLAGS.READ | SEGMENT_FLAGS.EXECUTE | SEGMENT_FLAGS.USER,
+        virtualAddress: userStart,
+        data: programData,
+        memSize: programData.length,
+      });
+    }
+
+    if (this.constantPool.length > 0) {
+      const constantsSize = this.constantPool.length * 2;
+      if (constantsSize > CONSTANTS_MAX_SIZE) {
+        this.addDiagnostic('error',
+          `Constants section too large: ${constantsSize} bytes ` +
+          `(max ${CONSTANTS_MAX_SIZE} bytes / 1 page).`,
+          0, 0);
+      }
+      const data = new Uint8Array(constantsSize);
+      for (let i = 0; i < this.constantPool.length; i++) {
+        const value = this.constantPool[i] & 0xFFFF;
+        // Loadable payloads are copied to memory verbatim; the ISA reads words
+        // little-endian, so constants are stored in target byte order.
+        data[i * 2] = value & 0xFF;
+        data[i * 2 + 1] = (value >> 8) & 0xFF;
+      }
+      segments.push({
+        type: SegmentType.CONSTANTS,
+        flags: SEGMENT_FLAGS.READ,
+        virtualAddress: 0x2000,
+        data,
+        memSize: data.length,
+      });
+    }
+
+    if (this.capabilities.size > 0) {
+      const encoder = new TextEncoder();
+      const chunks = Array.from(this.capabilities).map(capability => {
+        const encoded = encoder.encode(capability);
+        const withNul = new Uint8Array(encoded.length + 1);
+        withNul.set(encoded);
+        return withNul;
+      });
+      const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const data = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        data.set(chunk, offset);
+        offset += chunk.length;
+      }
+      segments.push({
+        type: SegmentType.CAPABILITIES,
+        flags: 0,
+        virtualAddress: 0,
+        data,
+        memSize: 0,
+      });
+    }
+
+    if (this.options.debug) {
+      const data = new TextEncoder().encode(this.generateDebugInfo());
+      if (data.length > 0) {
+        segments.push({
+          type: SegmentType.DEBUG,
+          flags: 0,
+          virtualAddress: 0,
+          data,
+          memSize: 0,
+        });
+      }
+    }
+
+    return segments;
+  }
+
+  /**
+   * Serializes the header, TOC and payload segments, i.e. everything the
+   * SHA-256 hash covers (all bytes before the trailing 32-byte hash field).
    *
-   * Layout (format 2, IFLOW-AUD-037/038), big-endian:
+   * Layout (format 2, layout revision 1 "ROM2"), big-endian:
    * <pre>
    *   +0   u32  magic 0x464C4F57 ("FLOW")
    *   +4   u8   formatVersion
@@ -1253,29 +1379,72 @@ class Assembler {
    *   +6   u8   minAbiVersion
    *   +7   u8   minFirmwareVersion
    *   +8   u16  entryPoint
-   *   +10  u16  codeLength
-   *   +12  u16  constantsLength
-   *   +14  u8   capabilitiesCount
-   *   +15  u8   reserved (0)
-   *   +16  u16  debugLength        (bytes of the debug section; 0 = absent)
-   *   +18  u16  reserved (0)
-   *   +20        code
-   *              constants (u16 each)
-   *              capabilities (NUL-terminated strings)
-   *              debug section (UTF-8, debugLength bytes, optional)
+   *   +10  u16  tocOffset
+   *   +12  u16  tocEntryCount
+   *   +14  u16  headerFlags (0)
+   *   +16  u32  layoutMagic 0x524F4D32 ("ROM2")
+   *   +20  u32  payloadSize (bytes before the trailing SHA-256)
+   *   +24  u32  reserved (0)
+   *   +28  u32  reserved (0)
+   *   +32        TOC entries (16 bytes each)
+   *              segment payloads
+   * </pre>
+   *
+   * TOC entry:
+   * <pre>
+   *   +0   u8   segment type
+   *   +1   u8   flags (1=R, 2=W, 4=X, 8=user)
+   *   +2   u16  virtualAddress
+   *   +4   u32  fileOffset
+   *   +8   u16  size (stored bytes)
+   *   +10  u16  memSize (reserved bytes)
+   *   +12  u32  reserved (0)
    * </pre>
    */
   private serializePayload(image: ProgramImage): number[] {
-    const debugBytes = image.debugInfo
-      ? new TextEncoder().encode(image.debugInfo)
-      : new Uint8Array(0);
-    if (debugBytes.length > 0xFFFF) {
-      throw new Error(`debug info too large: ${debugBytes.length} bytes (max 65535)`);
+    const segments = image.segments ?? [];
+    if (segments.length === 0) {
+      throw new Error('Cannot serialize an image without segments');
+    }
+    if (segments.length > 16) {
+      throw new Error(`Too many segments: ${segments.length} (max 16)`);
+    }
+
+    const tocOffset = 32;
+    const tocSize = segments.length * 16;
+    const payloadStart = tocOffset + tocSize;
+    const offsets: number[] = [];
+    let cursor = payloadStart;
+    for (const segment of segments) {
+      if (segment.data.length > 0xFFFF) {
+        throw new Error(`Segment payload too large: ${segment.data.length} bytes (max 65535)`);
+      }
+      if (segment.memSize < 0 || segment.memSize > 0xFFFF) {
+        throw new Error(`Segment memSize out of range: ${segment.memSize}`);
+      }
+      if (segment.type === SegmentType.CONSTANTS
+        && segment.data.length > CONSTANTS_MAX_SIZE) {
+        throw new Error(
+          `Constants section too large: ${segment.data.length} bytes ` +
+          `(max ${CONSTANTS_MAX_SIZE})`,
+        );
+      }
+      offsets.push(cursor);
+      cursor += segment.data.length;
+    }
+    const payloadSize = cursor;
+    if (payloadSize > 0xFFFFFFFF) {
+      throw new Error(`Image payload too large: ${payloadSize} bytes`);
     }
 
     const parts: number[] = [];
+    const pushBytes = (bytes: Uint8Array) => {
+      for (const byte of bytes) {
+        parts.push(byte & 0xFF);
+      }
+    };
 
-    // Header (20 bytes)
+    // Header (32 bytes)
     parts.push(
       (PROGRAM_MAGIC >>> 24) & 0xFF,
       (PROGRAM_MAGIC >>> 16) & 0xFF,
@@ -1288,34 +1457,48 @@ class Assembler {
     parts.push(image.minFirmwareVersion & 0xFF);
     parts.push((image.entryPoint >> 8) & 0xFF);
     parts.push(image.entryPoint & 0xFF);
-    parts.push((image.code.length >> 8) & 0xFF);
-    parts.push(image.code.length & 0xFF);
-    parts.push((image.constants.length >> 8) & 0xFF);
-    parts.push(image.constants.length & 0xFF);
-    parts.push(image.capabilities.length & 0xFF);
-    parts.push(0); // reserved
-    parts.push((debugBytes.length >> 8) & 0xFF);
-    parts.push(debugBytes.length & 0xFF);
-    parts.push(0, 0); // reserved
+    parts.push((tocOffset >> 8) & 0xFF);
+    parts.push(tocOffset & 0xFF);
+    parts.push((segments.length >> 8) & 0xFF);
+    parts.push(segments.length & 0xFF);
+    parts.push(0, 0); // header flags
+    parts.push(
+      0x52, 0x4F, 0x4D, 0x32, // "ROM2"
+    );
+    parts.push(
+      (payloadSize >>> 24) & 0xFF,
+      (payloadSize >>> 16) & 0xFF,
+      (payloadSize >>> 8) & 0xFF,
+      payloadSize & 0xFF,
+    );
+    parts.push(0, 0, 0, 0); // reserved
+    parts.push(0, 0, 0, 0); // reserved
 
-    // Code
-    parts.push(...Array.from(image.code));
-
-    // Constants
-    for (const c of image.constants) {
-      parts.push((c >> 8) & 0xFF, c & 0xFF);
+    // TOC
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      parts.push(segment.type & 0xFF);
+      parts.push(segment.flags & 0xFF);
+      parts.push((segment.virtualAddress >> 8) & 0xFF);
+      parts.push(segment.virtualAddress & 0xFF);
+      const offset = offsets[i];
+      parts.push(
+        (offset >>> 24) & 0xFF,
+        (offset >>> 16) & 0xFF,
+        (offset >>> 8) & 0xFF,
+        offset & 0xFF,
+      );
+      parts.push((segment.data.length >> 8) & 0xFF);
+      parts.push(segment.data.length & 0xFF);
+      parts.push((segment.memSize >> 8) & 0xFF);
+      parts.push(segment.memSize & 0xFF);
+      parts.push(0, 0, 0, 0); // reserved
     }
 
-    // Capabilities (null-terminated strings)
-    for (const cap of image.capabilities) {
-      for (const ch of cap) {
-        parts.push(ch.charCodeAt(0));
-      }
-      parts.push(0);
+    // Segment payloads, in TOC order
+    for (const segment of segments) {
+      pushBytes(segment.data);
     }
-
-    // Debug section (optional)
-    parts.push(...Array.from(debugBytes));
 
     return parts;
   }

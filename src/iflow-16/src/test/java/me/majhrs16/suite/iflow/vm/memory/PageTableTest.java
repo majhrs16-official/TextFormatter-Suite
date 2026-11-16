@@ -228,6 +228,34 @@ class PageTableTest {
         assertThrows(VmException.class, () -> table.mapPage(0, 0x1234, PageEntry.PERM_READ));
     }
 
+    @Test
+    void frameBaseOutsideThe16BitSpaceIsRejected() {
+        PageTable table = new PageTable();
+        VmException e = assertThrows(VmException.class,
+            () -> table.mapPage(0, 0x10000, PageEntry.PERM_READ));
+        assertEquals(VmException.Code.MEMORY_FAULT, e.code());
+        assertTrue(e.getMessage().contains("16-bit"));
+        assertThrows(VmException.class,
+            () -> table.mapPageKernel(1, 0x10000, PageEntry.PERM_READ));
+        assertThrows(VmException.class,
+            () -> table.mapPage(0, -1, PageEntry.PERM_READ));
+    }
+
+    @Test
+    void everyValid16BitFrameBaseIsAccepted() {
+        PageTable table = new PageTable();
+        for (int base = 0; base < PageTable.ADDRESS_SPACE_SIZE; base += PageEntry.PAGE_SIZE) {
+            table.mapPage(0, base, PageEntry.PERM_READ);
+            assertEquals(base, table.getEntryByIndex(0).getFrameBase());
+        }
+    }
+
+    @Test
+    void pageMaskMatchesThe16BitFrameSpace() {
+        assertEquals(0xF000, PageEntry.PAGE_MASK);
+        assertEquals(PageEntry.PAGE_MASK, PageTable.PAGE_MASK);
+    }
+
     // ===== Copy-on-write forking (IFLOW-AUD-029) =====
 
     @Test

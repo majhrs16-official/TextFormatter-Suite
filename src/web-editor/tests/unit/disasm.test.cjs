@@ -168,8 +168,21 @@ try {
 assert(threw, 'rejects a userStart outside the code');
 
 console.log('\n--- errores y resincronización ---');
-const unknown = fixture('simple');
-unknown[20 + 0x1000] = 0xf0;
+function programFileOffset(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tocOffset = view.getUint16(10);
+  const tocCount = view.getUint16(12);
+  for (let i = 0; i < tocCount; i++) {
+    const base = tocOffset + i * 16;
+    if (bytes[base] === 4) {
+      return view.getUint32(base + 4);
+    }
+  }
+  throw new Error('PROGRAM segment not found');
+}
+
+const unknown = Buffer.from(fixture('simple'));
+unknown[programFileOffset(unknown)] = 0xf0;
 const unknownResult = Disasm.decode(unknown);
 assert(
   unknownResult.diagnostics.some(diagnostic => diagnostic.message.includes('opcode desconocido 0xF0')),
@@ -188,6 +201,16 @@ try {
 }
 assert(threw, 'rejects a bad magic');
 
+const oldLayout = Buffer.from(fixture('simple'));
+oldLayout.writeUInt32BE(0, 16);
+threw = false;
+try {
+  Disasm.decode(oldLayout);
+} catch (error) {
+  threw = error.name === 'DisasmError' && /layout/.test(error.message);
+}
+assert(threw, 'rejects the previous layout');
+
 threw = false;
 try {
   Disasm.decode(new Uint8Array([0, 1, 2]));
@@ -196,16 +219,15 @@ try {
 }
 assert(threw, 'rejects a short header');
 
-const truncated = fixture('simple');
-truncated[10] = 0xff;
-truncated[11] = 0xff;
+const truncated = Buffer.from(fixture('simple'));
+truncated.writeUInt32BE(truncated.length, 20);
 threw = false;
 try {
   Disasm.decode(truncated);
 } catch (error) {
-  threw = error.name === 'DisasmError' && /truncada/.test(error.message);
+  threw = error.name === 'DisasmError' && /truncad|incoherente/.test(error.message);
 }
-assert(threw, 'rejects a truncated code section');
+assert(threw, 'rejects a truncated payload');
 
 console.log('\n--- listado ---');
 const listing = Disasm.formatListing(simple);

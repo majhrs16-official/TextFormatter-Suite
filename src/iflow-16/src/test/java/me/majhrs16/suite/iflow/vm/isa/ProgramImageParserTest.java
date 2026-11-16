@@ -10,91 +10,154 @@ import java.security.MessageDigest;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Structural validation performed before hash verification. These cases only need
- * a well-formed 20-byte header (format 2): the size checks fire before the
- * code/constants payload is read or the hash is checked.
+ * Structural validation performed before hash verification: header fields,
+ * TOC bounds, segment rules and the format-2 layout revision.
  */
 class ProgramImageParserTest {
 
-    /**
-     * Format-2 header: magic + versions + sizes + reserved bytes. No debug section
-     * and no capabilities, so the parser reaches the size checks with a header the
-     * magic/version validation accepts.
-     */
-    private static byte[] header(int entryPoint, int codeLength, int constantsLength) {
-        return new byte[]{
-            0x46, 0x4C, 0x4F, 0x57,           // magic "FLOW"
-            2, 2, 2, 1,                       // format, isa, minAbi, minFirmware
-            (byte) (entryPoint >> 8), (byte) entryPoint,
-            (byte) (codeLength >> 8), (byte) codeLength,
-            (byte) (constantsLength >> 8), (byte) constantsLength,
-            0,                                // capabilities length
-            0,                                // reserved
-            0, 0,                             // debug length
-            0, 0                              // reserved
-        };
+    private static final int HEADER_SIZE = 32;
+    private static final int TOC_ENTRY_SIZE = 16;
+
+    private record SegmentSpec(ProgramSegmentType type, int flags, int virtualAddress,
+                               byte[] data, int memSize) {
     }
 
-    /** A complete, hash-correct image with the given code and debug text. */
-    private static byte[] image(byte[] code, String debug) throws Exception {
-        byte[] dbg = debug.getBytes(StandardCharsets.UTF_8);
+    private static SegmentSpec program(byte[] data) {
+        return new SegmentSpec(ProgramSegmentType.PROGRAM,
+            ProgramSegment.FLAG_READ | ProgramSegment.FLAG_EXECUTE | ProgramSegment.FLAG_USER,
+            0x1000, data, data.length);
+    }
+
+    private static SegmentSpec debug(String text) {
+        return new SegmentSpec(ProgramSegmentType.DEBUG, 0, 0,
+            text.getBytes(StandardCharsets.UTF_8), 0);
+    }
+
+    /**
+     * Serializes a complete ROM2 image with the given TOC entries and payloads.
+     * The trailing SHA-256 covers the whole body, so every case starts from a
+     * hash-correct file and only the rule under test is violated.
+     */
+    private static byte[] image(int entryPoint, SegmentSpec... segments) throws Exception {
+        int tocOffset = HEADER_SIZE;
+        int payloadStart = tocOffset + segments.length * TOC_ENTRY_SIZE;
+        int payloadSize = payloadStart;
+        for (SegmentSpec segment : segments) {
+            payloadSize += segment.data().length;
+        }
+
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(new byte[]{0x46, 0x4C, 0x4F, 0x57});
-        out.write(2); out.write(2); out.write(2); out.write(1);
-        out.write(0); out.write(0);                 // entry point 0
-        out.write((code.length >> 8) & 0xFF); out.write(code.length & 0xFF);
-        out.write(0); out.write(0);                 // constants length
-        out.write(0);                               // capabilities count
-        out.write(0);                               // reserved
-        out.write((dbg.length >> 8) & 0xFF); out.write(dbg.length & 0xFF);
-        out.write(0); out.write(0);                 // reserved
-        out.write(code, 0, code.length);
-        out.write(dbg, 0, dbg.length);
+        out.write(new byte[]{0x46, 0x4C, 0x4F, 0x57}); // magic "FLOW"
+        out.write(2); // format
+        out.write(2); // ISA
+        out.write(2); // minimum ABI
+        out.write(1); // minimum firmware
+        out.write((entryPoint >> 8) & 0xFF);
+        out.write(entryPoint & 0xFF);
+        out.write((tocOffset >> 8) & 0xFF);
+        out.write(tocOffset & 0xFF);
+        out.write((segments.length >> 8) & 0xFF);
+        out.write(segments.length & 0xFF);
+        out.write(0); out.write(0); // header flags
+        out.write(new byte[]{0x52, 0x4F, 0x4D, 0x32}); // layout "ROM2"
+        out.write((payloadSize >>> 24) & 0xFF);
+        out.write((payloadSize >>> 16) & 0xFF);
+        out.write((payloadSize >>> 8) & 0xFF);
+        out.write(payloadSize & 0xFF);
+        out.write(new byte[8]); // reserved
+
+        int cursor = payloadStart;
+        for (SegmentSpec segment : segments) {
+            out.write(segment.type().code());
+            out.write(segment.flags());
+            out.write((segment.virtualAddress() >> 8) & 0xFF);
+            out.write(segment.virtualAddress() & 0xFF);
+            out.write((cursor >>> 24) & 0xFF);
+            out.write((cursor >>> 16) & 0xFF);
+            out.write((cursor >>> 8) & 0xFF);
+            out.write(cursor & 0xFF);
+            out.write((segment.data().length >> 8) & 0xFF);
+            out.write(segment.data().length & 0xFF);
+            out.write((segment.memSize() >> 8) & 0xFF);
+            out.write(segment.memSize() & 0xFF);
+            out.write(new byte[4]); // reserved
+            cursor += segment.data().length;
+        }
+        for (SegmentSpec segment : segments) {
+            out.write(segment.data());
+        }
+
         byte[] body = out.toByteArray();
         out.write(MessageDigest.getInstance("SHA-256").digest(body));
         return out.toByteArray();
     }
 
     @Test
-    void rejectsCodeLargerThanTheCodeRegion() {
-        byte[] data = header(0, VmMemoryMap.CODE_MAX_SIZE + 1, 0);
+    void rejectsProgramOutsideTheCodeRegion() throws Exception {
+        byte[] data = image(0x1000, new SegmentSpec(ProgramSegmentType.PROGRAM,
+            ProgramSegment.FLAG_READ | ProgramSegment.FLAG_EXECUTE | ProgramSegment.FLAG_USER,
+            0x1000, new byte[]{0x68}, 0x2001));
 
         VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
         assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
-        assertTrue(e.getMessage().contains("Code section too large"), e.getMessage());
+        assertTrue(e.getMessage().contains("outside the code region"), e.getMessage());
     }
 
     @Test
-    void rejectsConstantsLargerThanTheConstantsPage() {
-        // codeLength = 1 so the parser reads one code byte before the constants
-        // size check fires (which happens before truncation/hash validation).
-        byte[] data = new byte[21];
-        byte[] h = header(0, 1, VmMemoryMap.CONSTANTS_MAX_SIZE / 2 + 1);
-        System.arraycopy(h, 0, data, 0, h.length);
+    void rejectsProgramInTheConstantsPage() throws Exception {
+        SegmentSpec segment = new SegmentSpec(ProgramSegmentType.PROGRAM,
+            ProgramSegment.FLAG_READ | ProgramSegment.FLAG_EXECUTE | ProgramSegment.FLAG_USER,
+            VmMemoryMap.CONSTANTS_BASE, new byte[]{0x68}, 1);
+        byte[] data = image(VmMemoryMap.CONSTANTS_BASE, segment);
 
         VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
         assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
-        assertTrue(e.getMessage().contains("Constants section too large"), e.getMessage());
+        assertTrue(e.getMessage().contains("outside the code region"), e.getMessage());
     }
 
     @Test
-    void rejectsAnOlderAbiBinary() {
+    void acceptsProgramThatEndsAtTheCodeLimit() throws Exception {
+        byte[] code = new byte[VmMemoryMap.PAGE];
+        code[0] = 0x68;
+        SegmentSpec segment = new SegmentSpec(ProgramSegmentType.PROGRAM,
+            ProgramSegment.FLAG_READ | ProgramSegment.FLAG_EXECUTE | ProgramSegment.FLAG_USER,
+            0x1000, code, code.length);
+
+        ProgramImage program = ProgramImageParser.parse(image(0x1000, segment));
+        assertEquals(VmMemoryMap.CONSTANTS_BASE, program.code().length);
+    }
+
+    @Test
+    void rejectsConstantsOutsideTheConstantsPage() throws Exception {
+        byte[] data = image(0x1000,
+            program(new byte[]{0x68}),
+            new SegmentSpec(ProgramSegmentType.CONSTANTS, ProgramSegment.FLAG_READ,
+                VmMemoryMap.CONSTANTS_BASE, new byte[]{0, 0},
+                VmMemoryMap.CONSTANTS_MAX_SIZE + 1));
+
+        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
+        assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
+        assertTrue(e.getMessage().contains("outside the image region"), e.getMessage());
+    }
+
+    @Test
+    void rejectsAnOlderAbiBinary() throws Exception {
         // The runtime implements exactly one HOST calling convention: a program
         // built for the previous ABI must be rejected, not silently accepted.
-        byte[] h = header(0, 1, 0);
-        h[6] = 1; // minAbi = 1 (current is 2)
+        byte[] data = image(0x1000, program(new byte[]{0x68}));
+        data[6] = 1; // minAbi = 1 (current is 2)
 
-        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(h));
+        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
         assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
         assertTrue(e.getMessage().contains("Incompatible ABI version"), e.getMessage());
     }
 
     @Test
-    void rejectsANewerAbiBinary() {
-        byte[] h = header(0, 1, 0);
-        h[6] = 3; // minAbi = 3 (current is 2)
+    void rejectsANewerAbiBinary() throws Exception {
+        byte[] data = image(0x1000, program(new byte[]{0x68}));
+        data[6] = 3; // minAbi = 3 (current is 2)
 
-        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(h));
+        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
         assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
         assertTrue(e.getMessage().contains("Incompatible ABI version"), e.getMessage());
     }
@@ -103,7 +166,7 @@ class ProgramImageParserTest {
     void rejectsAFileWithoutTheMagicNumber() {
         // A foreign file must fail as "not a .flow", before any version or hash
         // check (IFLOW-AUD-038).
-        byte[] data = new byte[20];
+        byte[] data = new byte[64];
         data[4] = 2; // a plausible format version, but no magic
 
         VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
@@ -112,20 +175,34 @@ class ProgramImageParserTest {
     }
 
     @Test
+    void rejectsThePreviousLayoutWithoutADualReader() throws Exception {
+        // The 20-byte header of the former layout is not a supported variant:
+        // layoutMagic must reject it instead of falling back to another reader.
+        byte[] data = image(0x1000, program(new byte[]{0x68}));
+        data[16] = 0; data[17] = 0; data[18] = 0; data[19] = 0;
+
+        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
+        assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
+        assertTrue(e.getMessage().contains("Unsupported .flow layout"), e.getMessage());
+    }
+
+    @Test
     void readsTheOptionalDebugSection() throws Exception {
-        // Format 2 carries the debug section before the hash; the parser must
+        // Format 2 carries the debug section as a TOC segment; the parser must
         // surface it and still verify the hash over the whole payload.
         ProgramImage program = ProgramImageParser.parse(
-            image(new byte[]{(byte) 0x68}, "0000: HALT\nSYM main = 0x0000\n"));
+            image(0x1000, program(new byte[]{0x68}), debug("0000: HALT\nSYM main = 0x1000\n")));
 
-        assertEquals(1, program.code().length);
+        assertEquals(0x1001, program.code().length);
+        assertEquals(0x68, program.code()[0x1000] & 0xFF);
         assertTrue(program.debugInfo().contains("HALT"), program.debugInfo());
         assertTrue(program.debugInfo().contains("SYM main"), program.debugInfo());
     }
 
     @Test
     void aProgramWithoutDebugSectionHasEmptyDebugInfo() throws Exception {
-        ProgramImage program = ProgramImageParser.parse(image(new byte[]{(byte) 0x68}, ""));
+        ProgramImage program = ProgramImageParser.parse(
+            image(0x1000, program(new byte[]{0x68})));
         assertEquals("", program.debugInfo());
     }
 }

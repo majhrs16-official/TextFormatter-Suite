@@ -15,7 +15,7 @@ public final class PageTable {
 
     public static final int PAGE_SIZE = PageEntry.PAGE_SIZE;      // 4KB
     public static final int PAGE_SHIFT = PageEntry.PAGE_SHIFT;    // 12
-    public static final int PAGE_MASK = PageEntry.PAGE_MASK;      // 0xFFFFF000
+    public static final int PAGE_MASK = PageEntry.PAGE_MASK;      // 0xF000 (16-bit frame)
     public static final int OFFSET_MASK = PageEntry.OFFSET_MASK;  // 0x0FFF
     public static final int NUM_PAGES = 16;                       // 64KB / 4KB = 16
     public static final int ADDRESS_SPACE_SIZE = NUM_PAGES * PAGE_SIZE; // 64KB
@@ -67,6 +67,11 @@ public final class PageTable {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Invalid page index: " + virtualPage);
         }
+        if (frameBase < 0 || frameBase >= ADDRESS_SPACE_SIZE) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Frame base outside the 16-bit address space: 0x"
+                    + Integer.toHexString(frameBase));
+        }
         if ((frameBase & ~PageEntry.PAGE_MASK) != 0) {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Frame base not page-aligned: 0x" + Integer.toHexString(frameBase));
@@ -83,6 +88,11 @@ public final class PageTable {
         if (virtualPage < 0 || virtualPage >= NUM_PAGES) {
             throw new VmException(VmException.Code.MEMORY_FAULT,
                 "Invalid page index: " + virtualPage);
+        }
+        if (frameBase < 0 || frameBase >= ADDRESS_SPACE_SIZE) {
+            throw new VmException(VmException.Code.MEMORY_FAULT,
+                "Frame base outside the 16-bit address space: 0x"
+                    + Integer.toHexString(frameBase));
         }
         if ((frameBase & ~PageEntry.PAGE_MASK) != 0) {
             throw new VmException(VmException.Code.MEMORY_FAULT,

@@ -61,6 +61,22 @@ function withHash(bytes) {
   return Buffer.concat([body, sha256(body)]);
 }
 
+function segmentTocOffset(bytes, wantedType) {
+  const tocOffset = bytes.readUInt16BE(10);
+  const tocCount = bytes.readUInt16BE(12);
+  for (let i = 0; i < tocCount; i++) {
+    const base = tocOffset + i * 16;
+    if (bytes[base] === wantedType) {
+      return base;
+    }
+  }
+  throw new Error(`segment type ${wantedType} not found`);
+}
+
+function segmentFileOffset(bytes, wantedType) {
+  return bytes.readUInt32BE(segmentTocOffset(bytes, wantedType) + 4);
+}
+
 function checkFixture(name) {
   console.log(`\n--- ${name}.flow ---`);
   const { res, json } = disassemble(path.join(fixtures, name + '.flow'));
@@ -189,7 +205,8 @@ ok(truncatedRes.status !== 0, 'rejects a truncated header');
 
 const unknownFile = path.join(tmp, 'unknown.flow');
 const unknown = Buffer.from(source);
-unknown[20 + 0x1000] = 0xf0;
+// PROGRAM starts at the user origin (0x1000); corrupt its first opcode.
+unknown[segmentFileOffset(unknown, 4)] = 0xf0;
 fs.writeFileSync(unknownFile, withHash(unknown));
 const unknownRes = disassemble(unknownFile);
 ok(unknownRes.res.status !== 0, 'an unknown opcode fails the decode');
@@ -201,6 +218,14 @@ ok(
 ok(unknownRes.json && unknownRes.json.instructions.some(instruction => instruction.mnemonic === '.byte'), 'emits .byte');
 const unknownListing = run([unknownFile]);
 ok(unknownListing.stdout.includes('.byte 0xF0'), 'the listing shows the .byte');
+
+const outOfRegionFile = path.join(tmp, 'out-of-region.flow');
+const outOfRegion = Buffer.from(source);
+outOfRegion.writeUInt16BE(0x2000, segmentTocOffset(outOfRegion, 4) + 2);
+fs.writeFileSync(outOfRegionFile, withHash(outOfRegion));
+const outOfRegionRes = run([outOfRegionFile]);
+ok(outOfRegionRes.status !== 0, 'rejects a program outside the code region');
+ok(/región de código/.test(outOfRegionRes.stderr), 'explains the code region');
 
 console.log('\n--- determinism ---');
 const first = run([path.join(fixtures, 'firmware.flow'), '--json']);

@@ -22,6 +22,7 @@ if (!fs.existsSync(cli)) {
 
 const outFile = path.join(os.tmpdir(), 'iflow-validation.flow');
 let failed = 0;
+let total = cases.length;
 
 for (const c of cases) {
   const args = [cli, path.join(dir, c.file), '-o', outFile];
@@ -31,16 +32,25 @@ for (const c of cases) {
   const outcomeOk = c.expect === 'ok' ? res.status === 0 : res.status !== 0;
   const matchOk = !c.match || output.includes(c.match);
 
-  // Optional byte-level assertion over the code section of the produced .flow.
-  // Format 2 header: [10..11] = codeLength, code starts at offset 20.
+  // Optional byte-level assertion over the PROGRAM segment of the produced .flow.
+  // ROM2 layout: 32-byte header, then 16-byte TOC entries.
   let bytesOk = true;
   let actualCodeHex = '';
   if (c.codeHex) {
     if (res.status === 0) {
       const buf = fs.readFileSync(outFile);
-      const codeLength = (buf[10] << 8) | buf[11];
-      actualCodeHex = buf.subarray(20, 20 + codeLength).toString('hex');
-      bytesOk = actualCodeHex === c.codeHex;
+      const tocOffset = buf.readUInt16BE(10);
+      const tocCount = buf.readUInt16BE(12);
+      const program = Array.from({ length: tocCount }, (_, i) => tocOffset + i * 16)
+        .find(base => buf[base] === 4);
+      if (program === undefined) {
+        bytesOk = false;
+      } else {
+        const fileOffset = buf.readUInt32BE(program + 4);
+        const size = buf.readUInt16BE(program + 8);
+        actualCodeHex = buf.subarray(fileOffset, fileOffset + size).toString('hex');
+        bytesOk = actualCodeHex === c.codeHex;
+      }
     } else {
       bytesOk = false;
     }
@@ -60,5 +70,24 @@ for (const c of cases) {
   }
 }
 
-console.log(`\n${cases.length - failed}/${cases.length} cases passed`);
+// Generated case: the constants page is 4 KiB, so 2049 words cannot fit.
+const overflowFile = path.join(os.tmpdir(), 'iflow-constants-overflow.flowasm');
+const overflowSource = Array.from({ length: 2049 }, (_, i) => `.const c${i}, 0`)
+  .concat('HALT')
+  .join('\n') + '\n';
+fs.writeFileSync(overflowFile, overflowSource);
+const overflow = spawnSync(process.execPath, [cli, overflowFile, '-o', outFile], {
+  encoding: 'utf8',
+});
+const overflowOutput = `${overflow.stdout || ''}${overflow.stderr || ''}`;
+total++;
+if (overflow.status !== 0 && overflowOutput.includes('Constants section too large')) {
+  console.log('ok   constants-overflow.flowasm');
+} else {
+  failed++;
+  console.error(`FAIL constants-overflow.flowasm (expected error, exit ${overflow.status})`);
+  console.error(overflowOutput.trim().split('\n').map(l => `       ${l}`).join('\n'));
+}
+
+console.log(`\n${total - failed}/${total} cases passed`);
 process.exit(failed ? 1 : 0);

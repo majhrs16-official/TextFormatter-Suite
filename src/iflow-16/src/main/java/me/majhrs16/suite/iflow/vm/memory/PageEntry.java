@@ -17,7 +17,8 @@ public final class PageEntry {
 
     public static final int PAGE_SIZE = 0x1000; // 4KB
     public static final int PAGE_SHIFT = 12;    // 2^12 = 4096
-    public static final int PAGE_MASK = 0xFFFFF000; // Mask to get page base address
+    /** Mask for the 16-bit frame base: 64 KB / 4 KB = 16 frames (0x0000..0xF000). */
+    public static final int PAGE_MASK = 0xF000;
     public static final int OFFSET_MASK = 0x0FFF;   // Mask to get offset within page
 
     // Permission bits
@@ -31,6 +32,10 @@ public final class PageEntry {
     private final boolean user;     // Program domain may write it (vs kernel-owned)
 
     private PageEntry(int frameBase, int permissions, boolean valid, boolean user) {
+        if (frameBase < 0 || frameBase > 0xFFFF) {
+            throw new IllegalArgumentException(
+                "Frame base outside the 16-bit address space: 0x" + Integer.toHexString(frameBase));
+        }
         this.frameBase = frameBase & PAGE_MASK;
         this.permissions = permissions & (PERM_READ | PERM_WRITE | PERM_EXECUTE);
         this.valid = valid;
