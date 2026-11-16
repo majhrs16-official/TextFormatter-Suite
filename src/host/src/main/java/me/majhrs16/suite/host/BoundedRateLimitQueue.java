@@ -18,9 +18,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * reported as a successful or queued delivery.</p>
  *
  * <p>The capacity is a host safety limit, not a VM-memory budget. The default
- * matches the documented practical ceiling of {@code iflow-16} (750 messages);
- * each pending entry still retains its rendered component, so the actual heap
- * cost depends on message size.</p>
+ * follows the conservative text-UUID budget of {@code iflow-16} (24,000 / 32 =
+ * 750); each pending entry still retains its rendered component, so the actual
+ * heap cost depends on message size. A VM-side queue would store 8-10 byte
+ * handles plus metadata, not full UUIDs; the budget and its limits are
+ * documented in {@code src/iflow-16/README.md}.</p>
  */
 final class BoundedRateLimitQueue {
 

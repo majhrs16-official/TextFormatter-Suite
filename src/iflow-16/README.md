@@ -266,6 +266,31 @@ genéricos: no hay una instrucción ni un servicio por acción. Ambos usan el `T
 - Regresión: `HostServiceRegistryTest` cubre una respuesta `player.list` que cabe y otra que no,
   comprobando que el límite se reporta explícitamente y no se produce un éxito parcial.
 
+### Límites de la cola de rate limit (24 KB)
+
+La cola de `RATE_LIMIT` vive en el host (`BoundedRateLimitQueue`), no en la VM: guarda unidades
+renderizadas, no handles de 16 bits. Aun así, el presupuesto de la VM se puede acotar con la RAM
+de usuario disponible:
+
+| Representación por entrada | Bytes | Entradas en 24 KB |
+|----------------------------|------:|------------------:|
+| Handle de 16 bits | 2 | 12.288 |
+| Handle + generación de 16 bits | 4 | 6.144 |
+| Índice (2) + deadline (4) + estado (1) + flags (1) | 8 | 3.072 |
+| Lo anterior + generación (2) | 10 | 2.457 |
+| UUID binario | 16 | 1.536 |
+| UUID como texto hexadecimal | 32 | 768 |
+
+- La RAM de usuario son 28 KB; con la pantalla activa quedan 24 KB (24.576 B). El cálculo de
+  24.000 B / 32 B = 750 es el caso conservador de guardar el UUID completo como texto.
+- Una cola real de la VM no debe guardar UUID completos: guarda handles más deadline, estado y
+  flags. Con 8–10 B por entrada caben unas 2.457–3.072 entradas; el array de handles de 16 bits
+  llega a 12.288.
+- La generación evita ABA cuando el host reutiliza un slot. El UUID y el contenido del mensaje
+  se resuelven en el host, fuera de la RAM de la VM.
+- El límite de 750 de `BoundedRateLimitQueue` es un techo de seguridad del host alineado con el
+  caso conservador de UUID-texto; no es una medición del heap de la VM ni un límite del ABI.
+
 ### Fuel Budget
 
 - Base: 1 unidad/instrucción
