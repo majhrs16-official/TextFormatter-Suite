@@ -5,7 +5,7 @@
 > **`iflow-wasm`** (WebAssembly + Chicory) está en [`src/iflow-wasm/`](../iflow-wasm/). Ninguna
 > de las dos hereda este ISA, este ABI `HOST` ni el modelo BIOS/kernel.
 
-> **Estado**: ✅ Implementada y probada (411 tests)
+> **Estado**: ✅ Implementada y probada (428 tests)
 >
 > **Tipo**: Módulo funcional (VM interpreted)
 > **Contrato**: Implementa `Router` SPI (`core-api`) y proporciona la capability `router`
@@ -406,7 +406,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `BiosBootTest` | End-to-end del BIOS activo: resetea en `fw_reset`, configura la pantalla, encadena a `main` y toma el camino caliente en el segundo mensaje (D32) |
 | `IrqDeliveryTest` | End-to-end de IRQ: el BIOS publica la tabla, `main` instala su manejador, habilita y dispara la línea; el manejador corre y la interrupción es transparente (registros restaurados) (D33) |
 
-**Total: 411 tests passing**
+**Total: 428 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -468,7 +468,7 @@ src/iflow-16/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 411 tests
+├── src/test/java/...                  # 428 tests
 └── build.gradle
 ```
 
