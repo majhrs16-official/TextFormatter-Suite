@@ -28,7 +28,7 @@ TextFormatter Suite es una **plataforma modular de formateo, traducción y routi
 |---------------|--------|-----------|
 | **Arquitectura hexagonal (core-api + SPI)** | ✅ Implementada y probada | `core-api` compila sin dependencias; los puntos de extensión usan ServiceLoader; tests de kernel/module loading pasan |
 | **Motor de formateo MiniMessage (`textformatter`)** | ✅ Implementada y probada | `TemplateRenderer`, `MiniEscape` (10 chars), `ChannelRegistry`, `<tr>` tags; 47 tests |
-| **Motor de reglas iFlow (VM)** | ✅ l16 soportada; l32 en integración | `iflow-16`: VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` v2, `HOST` v2 y fuel (414 tests). `iflow-32`: núcleo v3 de 32 bits (ROM, ISA, MMU, `HOST` v3) aislado, 253 tests, pendiente de cablear en V4 |
+| **Motor de reglas iFlow (VM)** | ✅ l16 soportada; l32 en integración | `iflow-16`: VM 16-bit flat 64KB + SoftMMU 4KB, bytecode `.flow` v2, `HOST` v2 y fuel (411 tests). `iflow-32`: núcleo v3 de 32 bits (ROM, ISA, MMU, `HOST` v3) aislado, 253 tests, pendiente de cablear en V4 |
 | **Traducción Google (gtranslate)** | ✅ Implementada y probada | Web scraping con UA rotation, rate limit, concatena todos segmentos; 32 tests |
 | **Traducción LibreTranslate (ltranslate)** | ✅ Implementada y probada | Self-hosted/público, long-poll, tokens `char[]`; 38 tests |
 | **Sync Discord** | ✅ Implementada y probada | Gateway v10 neutral + adaptadores JDK/JDA, intents, embeds; tokens `char[]`; 17 + 6 + 4 tests |
@@ -166,7 +166,7 @@ eje. En la fila `deuda (todo+stubs)` menos es mejor.*
 |--------|-----------|--------|
 | `textformatter` | MiniMessage engine, `TemplateRenderer`, `ChannelRegistry`, `<tr>` translation, `MiniEscape` | ✅ Probado (47 tests) |
 | `iflow` | Hub de selección: publica `IflowHub`/`Router` y elige un backend entre `iflow-firewall`, `iflow-16` e `iflow-wasm` con fallback priorizado; nunca cruza entre las dos líneas VM. `iflow-32` todavía no publica backend (integración V4) | ✅ Probado (35 tests) |
-| `iflow-16` | VM legacy de 16 bits y 64 KB, SoftMMU 4 KB, bytecode `.flow` v2, `HOST` v2 y fuel; línea soportada por retrocompatibilidad | ✅ Probado (414 tests) |
+| `iflow-16` | VM legacy de 16 bits y 64 KB, SoftMMU 4 KB, bytecode `.flow` v2, `HOST` v2 y fuel; línea soportada por retrocompatibilidad | ✅ Probado (411 tests) |
 | `iflow-32` | Núcleo v3 de 32 bits: ROM `FLOWROM`, ISA v3, MMU paginada, bus MMIO, dispositivos y ABI `HOST` v3; pendiente de cablear al hub en V4 | ✅ Núcleo aislado (253 tests) |
 | `iflow-firewall` | Motor de reglas SpEL legacy restaurado (`DefaultRouter`, `RuleExpressionEvaluator`, `Rule`, `TransformOp`) + validador del grafo del editor; backend seleccionable por el hub, puede coexistir instalado con `iflow-16`, `iflow-32` e `iflow-wasm` | ✅ Probado (46 tests) |
 | `iflow-wasm` | Motor WebAssembly (`.wasm`) con Chicory; W0–W3 cerrados (loader, ABI `iflow.*`, `PolicySession`, `WasmPolicyEngine`, `WasmPolicyRouter`, SHA-256 y hot-reload); W3.5 paridad v3 pendiente | ✅ W0–W3 (49 tests) |

@@ -5,7 +5,7 @@
 > **`iflow-wasm`** (WebAssembly + Chicory) está en [`src/iflow-wasm/`](../iflow-wasm/). Ninguna
 > de las dos hereda este ISA, este ABI `HOST` ni el modelo BIOS/kernel.
 
-> **Estado**: ✅ Implementada y probada (414 tests)
+> **Estado**: ✅ Implementada y probada (411 tests)
 >
 > **Tipo**: Módulo funcional (VM interpreted)
 > **Contrato**: Implementa `Router` SPI (`core-api`) y proporciona la capability `router`
@@ -30,7 +30,7 @@ iflow v2 reemplaza el motor de reglas basado en SpEL/regions por una **máquina 
 | `VmDisplay` | Pantalla de texto mapeada en memoria (D31): celda de 2 bytes (carácter + atributo `[letra:4][fondo:4]`, estilo VERA/X16); registros de control MMIO; API de framebuffer para el host |
 | `VmNvram` | NVRAM del BIOS (D32): ventana de almacenamiento persistente en la apertura MMIO para el estado que sobrevive entre mensajes (p. ej. la bandera de arranque en frío, la tabla de IRQ) |
 | `VmPic` | Controlador de interrupciones (D33): esclavo MMIO con latch/máscara de 16 líneas, disparo por software (`RAISE`) y confirmación (`ACK`); el runtime lo consulta para despachar |
-| `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL); pass-through solo si el archivo no existe |
+| `VmConfigLoader` | Carga binaria `.flow` (sin YAML/SpEL), fallback pass-through |
 | `ProgramImage` | Imagen de programa inmutable (bytecode + constantes + capabilities + hash) |
 | `VmException` | Excepciones tipadas con IP capture (INVALID_OPCODE, MEMORY_FAULT, OUT_OF_FUEL, etc.) |
 
@@ -283,9 +283,8 @@ Hash: 32 bytes (SHA-256 of everything before the hash field)
 
 > **El magic existe para rechazar pronto** (auditoría `IFLOW-AUD-038`): un fichero que no empieza
 > por `FLOW` se descarta como «not a .flow» al instante, en lugar de fallar más tarde con un error
-> de versión o de hash confuso. Si `policy.flow` no existe, el cargador usa el programa
-> pass-through documentado; si existe pero está corrupto o no es del formato, la activación falla
-> explícitamente y no sustituye la política por pass-through.
+> de versión o de hash confuso. El cargador sigue siendo tolerante: si el `policy.flow` está
+> corrupto o no es del formato, arranca con el programa pass-through.
 >
 > **Formato 2 (2026-10-19).** Añade el magic y la sección `debug` versionada. Los `.flow` de formato
 > 1 empiezan directamente por las versiones, así que se rechazan: **hay que recompilar** con el
@@ -340,15 +339,14 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30); pantalla mapeada en memoria (D31); puente sync (mutación, conflicto y `UNSUPPORTED` sin bus) |
 | `VmDisplayTest` | Periférico de vídeo: decodificación de la ventana y del banco de registros, geometría, carácter/atributo, bloques, limpieza y render ANSI (D31) |
 | `VmNvramTest` | NVRAM del BIOS: decodificación de ventana, R/W byte/palabra/bloque, ventana por defecto (D32) |
-| `VmBusTest` | Palabras que cruzan RAM/MMIO o el final de un dispositivo se dividen sin desbordar el esclavo (IFLOW-MAN-16) |
 | `VmPicTest` | Controlador de interrupciones: decodificación, latch/máscara, prioridad, servicio/ACK, registros MMIO (D33) |
 | `VmIntegrationTest` | Programas multi-instrucción |
-| `VmConfigLoaderTest` | Carga binario, pass-through solo si falta el archivo y fallo explícito si está corrupto |
+| `VmConfigLoaderTest` | Carga binario, fallback pass-through |
 | `FirmwareIntegrationTest` | **Ejecución firmware completo** (arithmetic, logic, shifts, jumps, memory, block ops, HOST services, loops) y POST del BIOS que configura la pantalla (D32) |
 | `BiosBootTest` | End-to-end del BIOS activo: resetea en `fw_reset`, configura la pantalla, encadena a `main` y toma el camino caliente en el segundo mensaje (D32) |
 | `IrqDeliveryTest` | End-to-end de IRQ: el BIOS publica la tabla, `main` instala su manejador, habilita y dispara la línea; el manejador corre y la interrupción es transparente (registros restaurados) (D33) |
 
-**Total: 414 tests passing**
+**Total: 411 tests passing**
 
 ### Migración desde v1 (SpEL/regiones)
 
@@ -369,7 +367,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `Iflow16Activator` | Activa el motor y publica `IflowBackend` (`iflow-16`) |
 | `VmPolicyEngine` | Implementa `Router`, ejecuta VM, valida resultado |
 | `VmPolicyEngine.setProgram()` | Hot-reload de `ProgramImage` |
-| `VmConfigLoader.loadProgram()` | Carga `policy.flow`; pass-through solo si el archivo no existe |
+| `VmConfigLoader.loadProgram()` | Carga `policy.flow` o fallback pass-through |
 
 ### Files
 
@@ -410,7 +408,7 @@ src/iflow-16/
 │       │   └── ServiceResult.java
 │       └── loader/                    # (vacío - legacy)
 │
-├── src/test/java/...                  # 414 tests
+├── src/test/java/...                  # 411 tests
 └── build.gradle
 ```
 

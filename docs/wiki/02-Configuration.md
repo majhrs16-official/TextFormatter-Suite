@@ -324,9 +324,7 @@ config-version: 1.0
 ## iFlow policy files
 
 - `config/iflow-16/policy.flow`: binary VM program executed by `iflow-16`. If
-  absent, the VM uses the documented pass-through program. If present but
-  unreadable or invalid, activation fails explicitly; the engine never replaces
-  a broken policy with pass-through.
+  absent or invalid, the VM uses a pass-through program.
 - `config/iflow-firewall/rules.yml`: map with `config-version: 1.0`. The
   executable SpEL rules live under `rules:`; the editor graph uses `nodes:` and
   `edges:`. A root-level list is rejected because it cannot declare a version.

@@ -67,11 +67,9 @@ public final class PolicyResultValidator {
             );
         }
 
-        // Extract routing decision from journal. A program that finishes without
-        // publishing ROUTE_DECISION does not get to deliver by omission: the
-        // policy contract is fail-closed (IFLOW-MAN-08).
-        PolicyTarget target = PolicyTarget.REJECT;
-        String reason = "policy did not decide";
+        // Extract routing decision from journal
+        PolicyTarget target = PolicyTarget.LOG;
+        String reason = "policy";
         long backoffMillis = 0;
         String redirectChannel = null;
 

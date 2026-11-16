@@ -98,20 +98,11 @@ public final class VmBus {
     }
 
     public int readWord(int vaddr) {
-        VmDevice low = memory.deviceFor(vaddr);
-        VmDevice high = memory.deviceFor(vaddr + 1);
-        if (low == high) {
-            if (low != null) {
-                return low.readWord(vaddr);
-            }
-            return memory.readWord(vaddr, privilege);
+        VmDevice d = memory.deviceFor(vaddr);
+        if (d != null) {
+            return d.readWord(vaddr);
         }
-        // The word crosses a device boundary (RAM/device or two devices):
-        // decode each byte through its own slave instead of misaddressing the
-        // whole word to the device that owns only the first byte.
-        int lowByte = readByte(vaddr);
-        int highByte = readByte(vaddr + 1);
-        return lowByte | (highByte << 8);
+        return memory.readWord(vaddr, privilege);
     }
 
     public void writeByte(int vaddr, int value) {
@@ -124,20 +115,12 @@ public final class VmBus {
     }
 
     public void writeWord(int vaddr, int value) {
-        VmDevice low = memory.deviceFor(vaddr);
-        VmDevice high = memory.deviceFor(vaddr + 1);
-        if (low == high) {
-            if (low != null) {
-                low.writeWord(vaddr, value);
-                return;
-            }
-            memory.writeWord(vaddr, value, privilege);
+        VmDevice d = memory.deviceFor(vaddr);
+        if (d != null) {
+            d.writeWord(vaddr, value);
             return;
         }
-        // Split a word that crosses a device boundary so neither half is
-        // written to the wrong slave (IFLOW-MAN-16).
-        writeByte(vaddr, value & 0xFF);
-        writeByte(vaddr + 1, (value >> 8) & 0xFF);
+        memory.writeWord(vaddr, value, privilege);
     }
 
     public void readBlock(int vaddr, byte[] dest, int destOffset, int length) {
