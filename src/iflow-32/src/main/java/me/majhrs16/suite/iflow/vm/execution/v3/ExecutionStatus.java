@@ -16,6 +16,6 @@ public enum ExecutionStatus {
     /** The quantum expired; the vCPU is resumable and no state was discarded. */
     PREEMPTED,
 
-    /** A single guest step exceeded the non-maskable watchdog bound; the core is faulted. */
+    /** A single guest step exceeded the host watchdog bound; the core is faulted. */
     WATCHDOG
 }

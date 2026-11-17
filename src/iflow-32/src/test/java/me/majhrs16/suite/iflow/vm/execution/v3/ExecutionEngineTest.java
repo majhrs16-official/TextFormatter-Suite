@@ -98,6 +98,46 @@ class ExecutionEngineTest {
     }
 
     @Test
+    void watchdogCanBeDisabledForSlowHosts() {
+        VirtualClock clock = new VirtualClock();
+        MachineFixture fixture = new MachineFixture(clock);
+        AtomicLong wall = new AtomicLong();
+        NanoClock nanoClock = () -> wall.getAndAdd(60_000_000);
+        Cpu cpu = cpu(fixture, clock, null);
+        fixture.csrs.setStatus(Status.fromBits(Status.PRV | Status.IE));
+        writeOpcode(fixture.memory, RESET, Opcode.NOP);
+        writeOpcode(fixture.memory, RESET + 3, Opcode.HALT);
+        ExecutionEngine engine = new ExecutionEngine(cpu, clock, nanoClock,
+                () -> Long.MAX_VALUE, () -> { }, new WatchdogConfig(false));
+
+        ExecutionReport report = engine.run(new ExecutionQuantum(10, 500_000_000));
+
+        assertEquals(ExecutionStatus.HALTED, report.status());
+        assertEquals(2, report.steps());
+        assertEquals(2, report.cycles());
+        assertEquals(120_000_000, report.guestNanos());
+        assertTrue(cpu.halted());
+        assertFalse(engine.watchdogEnabled());
+    }
+
+    @Test
+    void disabledWatchdogStillCannotMaskTheQuantum() {
+        VirtualClock clock = new VirtualClock();
+        MachineFixture fixture = new MachineFixture(clock);
+        Cpu cpu = cpu(fixture, clock, null);
+        fixture.csrs.setStatus(Status.fromBits(Status.PRV));
+        writeOpcode(fixture.memory, RESET, Opcode.NOP);
+        ExecutionEngine engine = new ExecutionEngine(cpu, clock,
+                () -> Long.MAX_VALUE, () -> { }, new WatchdogConfig(false));
+
+        ExecutionReport report = engine.run(new ExecutionQuantum(1, 50_000_000));
+
+        assertEquals(ExecutionStatus.PREEMPTED, report.status());
+        assertEquals(1, report.steps());
+        assertEquals(RESET + 3, cpu.pc());
+    }
+
+    @Test
     void haltedCpuWithoutAWakeSourceReturnsHalted() {
         VirtualClock clock = new VirtualClock(10);
         MachineFixture fixture = new MachineFixture(clock);

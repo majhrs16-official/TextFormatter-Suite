@@ -10,10 +10,12 @@ import me.majhrs16.suite.iflow.vm.isa.v3.VirtualClock;
 /**
  * Host-side execution slice of one v3 vCPU.
  *
- * <p>This class enforces the non-maskable quantum and watchdog from ADR-037 section 6.5. It is
- * not a guest scheduler: the kernel decides what runs next. A quantum expiry returns
- * {@link ExecutionStatus#PREEMPTED} and keeps the vCPU and its open journal resumable; it is not a
- * message timeout. Only a single guest step that exceeds the watchdog bound returns
+ * <p>This class enforces the quantum and the optional watchdog from ADR-037 section 6.5. The
+ * quantum is non-maskable and always active. The watchdog is active by default and can be disabled
+ * explicitly through {@link WatchdogConfig} for very slow hosts; disabling it never changes the
+ * quantum. This class is not a guest scheduler: the kernel decides what runs next. A quantum expiry
+ * returns {@link ExecutionStatus#PREEMPTED} and keeps the vCPU and its open journal resumable; it is
+ * not a message timeout. Only a single guest step that exceeds the watchdog bound returns
  * {@link ExecutionStatus#WATCHDOG} and faults the core.</p>
  *
  * <p>When the vCPU is halted, the engine advances virtual time to the next armed deadline instead
@@ -31,12 +33,21 @@ public final class ExecutionEngine {
     private final NanoClock nanoClock;
     private final LongSupplier nextDeadline;
     private final Runnable poll;
+    private final WatchdogConfig watchdog;
 
     public ExecutionEngine(Cpu cpu,
                            VirtualClock clock,
                            LongSupplier nextDeadline,
                            Runnable poll) {
-        this(cpu, clock, System::nanoTime, nextDeadline, poll);
+        this(cpu, clock, System::nanoTime, nextDeadline, poll, WatchdogConfig.defaults());
+    }
+
+    public ExecutionEngine(Cpu cpu,
+                           VirtualClock clock,
+                           LongSupplier nextDeadline,
+                           Runnable poll,
+                           WatchdogConfig watchdog) {
+        this(cpu, clock, System::nanoTime, nextDeadline, poll, watchdog);
     }
 
     public ExecutionEngine(Cpu cpu,
@@ -44,11 +55,26 @@ public final class ExecutionEngine {
                            NanoClock nanoClock,
                            LongSupplier nextDeadline,
                            Runnable poll) {
+        this(cpu, clock, nanoClock, nextDeadline, poll, WatchdogConfig.defaults());
+    }
+
+    public ExecutionEngine(Cpu cpu,
+                           VirtualClock clock,
+                           NanoClock nanoClock,
+                           LongSupplier nextDeadline,
+                           Runnable poll,
+                           WatchdogConfig watchdog) {
         this.cpu = Objects.requireNonNull(cpu, "cpu");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.nanoClock = Objects.requireNonNull(nanoClock, "nanoClock");
         this.nextDeadline = Objects.requireNonNull(nextDeadline, "nextDeadline");
         this.poll = Objects.requireNonNull(poll, "poll");
+        this.watchdog = Objects.requireNonNull(watchdog, "watchdog");
+    }
+
+    /** @return {@code true} si el watchdog de paso está activo. */
+    public boolean watchdogEnabled() {
+        return watchdog.enabled();
     }
 
     /**
@@ -125,7 +151,7 @@ public final class ExecutionEngine {
         if (cpu.lastOpcode() == Opcode.HOST) {
             return new Step(true, 0L, false);
         }
-        return new Step(true, elapsed, elapsed > quantum.maxGuestNanos());
+        return new Step(true, elapsed, watchdog.enabled() && elapsed > quantum.maxGuestNanos());
     }
 
     private ExecutionReport report(ExecutionStatus status, long steps, long guestNanos) {
