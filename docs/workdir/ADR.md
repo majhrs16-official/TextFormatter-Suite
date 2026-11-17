@@ -2522,16 +2522,17 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    desenmascaradas, levanta la IRQ 0. En modo periódico suma `PERIOD` a `CMP`; si la VM se atrasó,
    dispara una vez y fija `CMP = RDTIME + PERIOD` para no generar una tormenta.
 3. `HALT` solo es válido en `S` y exige `IE = 1`; con `IE = 0` es `ILLEGAL_INSTRUCTION`. Detiene el
-   core hasta que haya una IRQ habilitada, un evento de host o el watchdog. Si no hay procesos
-   ejecutables, el host avanza el tiempo virtual hasta el
+   core hasta que haya una IRQ habilitada, un evento de host o el watchdog (si está activo). Si no
+   hay procesos ejecutables, el host avanza el tiempo virtual hasta el
    siguiente deadline en lugar de hacer busy-wait. `ECALL` permite al kernel ceder la CPU y dormir;
    la política temporal (token bucket, backoff, deadline) vive en el guest, no en el host.
 4. **Núcleos.** `iflow-32` es **una sola VM con `CORE_COUNT = N` núcleos configurables**
    (`1 ≤ N ≤ 64`), no una VM por core. Los N cores comparten RAM, ROM, bus MMIO, kernel y estado
    de máquina; cada uno tiene su estado arquitectónico. El scheduler de procesos es software del
-   kernel guest; el host solo crea los cores, impone quantum/watchdog por core y no decide qué
-   proceso corre en cada uno. El detalle de coherencia, atómicas, IPI, arranque y journal está en
-   §6.1. La implementación es **V3-2**; hasta que exista, `N > 1` falla explícitamente
+   kernel guest; el host solo crea los cores, impone quantum por core y watchdog de paso
+   configurable, y no decide qué proceso corre en cada uno. El detalle de coherencia, atómicas,
+   IPI, arranque y journal está en §6.1. La implementación es **V3-2**; hasta que exista, `N > 1`
+   falla explícitamente
    (`UNSUPPORTED`/`RESTART_REQUIRED`) y no se degrada a un solo core en silencio.
 5. **Quantum de host por core (preempción, no fuel):** 1.000.000 de instrucciones o 50 ms de
    ejecución de guest por core y por slice, lo que ocurra primero, configurable. Al agotarse, el
@@ -2548,7 +2549,12 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    queda acotado por el timeout de la acción. La demora de un mensaje es responsabilidad del
    programa de userspace/kernel guest, no del host. La comprobación es por paso y no interrumpe
    asíncronamente un `cpu.step()` que nunca retorne; esa interrupción externa exigiría aislar el
-   core y queda fuera de V3-1.
+   core y queda fuera de V3-1. El watchdog está **activo por defecto**. El operador puede
+   desactivarlo explícitamente en `config/iflow-32/config.yml` con `watchdog.enabled: false` para
+   hosts muy lentos donde un solo paso puede superar 50 ms por causas legítimas (CPU antigua, JIT
+   frío o pausas del host). Un archivo ausente mantiene el watchdog activo; un valor inválido falla
+   de forma explícita. Desactivarlo se registra con `warn`, no cambia el quantum, que sigue siendo
+   no enmascarable, y deja sin recuperación un `cpu.step()` que no retorne.
 6. La **máquina es persistente**: RAM, registros, timer, page tables y NVRAM sobreviven entre
    mensajes mientras la VM está encendida. El journal es por unidad de mensaje: o se confirman
    todas las mutaciones del mensaje o ninguna. Un aborto de ejecución no revierte el estado de
@@ -2576,8 +2582,9 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 
 1. **Modelo.** `CORE_COUNT` es configurable (`1 ≤ N ≤ 64`). Es **una sola VM con N vCPU**, no N
    VMs ni N kernels. Los cores comparten RAM, ROM, bus MMIO, PIC, timer, NVRAM, kernel y marcos de
-   page tables; cada core conserva su estado arquitectónico y su TLB. El host crea los cores y
-   aplica quantum/watchdog por core; el kernel guest decide qué proceso corre en cada uno.
+   page tables; cada core conserva su estado arquitectónico y su TLB. El host crea los cores,
+   aplica quantum por core y watchdog de paso configurable; el kernel guest decide qué proceso
+   corre en cada uno.
 2. **Estado por core.** `PC`, GPR, `FLAGS`, `STATUS`, `EPC`, `CAUSE`, `BADVADDR`, `TVEC`, `PTBR`,
    `PIDENT`, `MIDENT`, `SCRATCH`, TLB, reserva de `LR.W` y estado de traps son privados. `COREID`
    (0x10A, RO) identifica el core; `SYSINFO.CORE_COUNT` publica N y `FEATURES` bit 6 indica
@@ -2610,9 +2617,11 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    kernel los publique. El host no hace work stealing ni elige el core de un mensaje. `HALT` es por
    core; si todos los cores están dormidos, el host avanza el tiempo virtual hasta el deadline más
    cercano; si alguno ejecuta, el tiempo avanza con la ejecución.
-8. **Quantum, watchdog y fallo.** El quantum y el watchdog son por core y no cobran tiempo
-   bloqueado en `HOST`. Agotar el quantum devuelve `PREEMPTED`: no aborta la unidad de mensaje, no
-   descarta el journal abierto y no limita la vida de la VM; el host puede reanudar el mismo core.
+8. **Quantum, watchdog y fallo.** El quantum es por core y no cobra tiempo bloqueado en `HOST`.
+   El watchdog de paso es por core, está activo por defecto y se configura en
+   `config/iflow-32/config.yml`; desactivarlo no altera el quantum. Agotar el quantum devuelve
+   `PREEMPTED`: no aborta la unidad de mensaje, no descarta el journal abierto y no limita la vida
+   de la VM; el host puede reanudar el mismo core.
    El watchdog de paso solo devuelve `WATCHDOG` si un único paso de guest supera 50 ms de reloj de
    pared; entonces el core queda `FAULTED`, el journal abierto no se confirma y no se revierte
    ninguna unidad ya confirmada por otro core. Si el fallo puede haber corrompido estado
@@ -2620,6 +2629,8 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    presenta un éxito falso. Los demás cores se detienen de forma ordenada en ese caso. La
    comprobación es por paso: si el código del host que implementa una instrucción no retorna, el
    hilo no recupera el control; una interrupción externa de un core colgado queda fuera de V3-1.
+   Con el watchdog desactivado, un `cpu.step()` colgado deja de ser recuperable; es una decisión
+   explícita del operador, se registra con `warn` y no habilita ningún fallback silencioso.
 9. **Journal y `HOST` concurrente.** El journal es por unidad de mensaje, no por VM. Varias
    unidades pueden ejecutarse en cores distintos con overlays y decisiones independientes; cada
    una tiene su propio contexto de ABI y su latch de `ROUTE_DECISION`, sin compartir el de otra.
@@ -2876,14 +2887,14 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 | 11 | ROM mapeada R/X, no como dispositivo de bloque. |
 | 12 | Sin benchmark en V1; la aceptación de rendimiento se mide en V6. |
 | 13–17 | Codificación de 3/7 bytes, cajas jerárquicas, `MOV` único, sin `LI` opcode, little-endian, campos de 4 bits y `size` de 2 bits. |
-| 18–21 | Sin fuel en el ABI; quantum de host + watchdog no enmascarables; timer IRQ + `HALT`; `RDCYCLE`/`RDTIME`; ciclos como diagnóstico. |
-| 22–25 | Contadores de 64 bits con snapshot atómico; 1 GHz/1 ns; `RDTIME` avanza también al dormir; busy-wait se permite pero el watchdog lo corta; dormir es `HALT` con timer, no un bucle. |
+| 18–21 | Sin fuel en el ABI; quantum de host no enmascarable; watchdog de paso activo por defecto y desactivable en configuración; timer IRQ + `HALT`; `RDCYCLE`/`RDTIME`; ciclos como diagnóstico. |
+| 22–25 | Contadores de 64 bits con snapshot atómico; 1 GHz/1 ns; `RDTIME` avanza también al dormir; busy-wait se permite pero el watchdog lo corta si está activo; dormir es `HALT` con timer, no un bucle. |
 | 27 | `RDCYCLE`/`RDTIME`, timer MMIO e IRQ 0; el RTC es el mismo reloj virtual. |
 | 28 | `HALT` no lleva deadline; el kernel programa el timer y duerme; una IRQ despierta; `HALT` exige `IE = 1`. |
 | 29 | Token bucket en RAM del guest; sobrevive sleep; no sobrevive reinicio salvo que se guarde en NVRAM. |
 | 30 | Se eliminan `ROUTE_RATE_LIMIT` y `DECISION_RATE_LIMIT`; una sola decisión de guest. |
 | 31 | Cap duro del host separado; tasa `RATE_LIMITED`, payload `DENIED`, timeout `TIMEOUT`. |
-| 32 | El quantum se comprueba en frontera de instrucción y devuelve `PREEMPTED` sin abortar la unidad ni revertir el journal; el watchdog de paso solo marca `FAULTED` el core si un único paso supera 50 ms y el journal abierto no se confirma. El `machineLock` global solo se usa para ciclo de vida. |
+| 32 | El quantum se comprueba en frontera de instrucción y devuelve `PREEMPTED` sin abortar la unidad ni revertir el journal; el watchdog de paso, activo por defecto y desactivable en `config/iflow-32/config.yml`, solo marca `FAULTED` el core si un único paso supera 50 ms y el journal abierto no se confirma. El `machineLock` global solo se usa para ciclo de vida. |
 | 33 | `PERMISSION`/`WORLD` vacíos o no verificables son fail-closed (`allowed = false`). |
 | 34 | Una entrega diferida no cuenta hasta `DELIVER`; si se cancela o apaga, `NOT_DELIVERED`/`CANCELLED`, nunca éxito. |
 | Núcleos | `iflow-32` tiene `CORE_COUNT` configurable (1..64) intra-VM; `iflow-16` conserva un único vCPU por diseño. El kernel guest decide el scheduler; el host no crea una VM por core ni hace fallback. |
@@ -2896,8 +2907,9 @@ Las preguntas 26 y 35–38 ya estaban cerradas en §5.4 y ADR-031; este ADR no l
   modo paralelo. El `ProgramImage.CURRENT_FORMAT_VERSION = 2` y los opcodes v2 dejan de ser
   contrato; el `.flow` v2 se rechaza. El compilador y el ensamblador v3 son la única vía de autoría.
 - La máquina gana un modelo de arranque real (BIOS → bootloader → kernel → programas), MMU de
-  32 bits, IRQ, timer, tiempo virtual y persistencia. El fuel desaparece del ABI; el quantum y el
-  watchdog son límites de seguridad del host, no política del guest. Esto sustituye la cláusula
+  32 bits, IRQ, timer, tiempo virtual y persistencia. El fuel desaparece del ABI; el quantum es un
+  límite de seguridad no enmascarable y el watchdog de paso es una salvaguarda configurable, no
+  política del guest. Esto sustituye la cláusula
   «coste de fuel» de ADR-036 §16.6 para v3; las cuotas pasan a llamadas/minuto, payload y timeout.
 - **No hay fuel, gas ni presupuesto total de ejecución en v3.** El ABI no expone un contador de
   ejecución ni un estado de agotamiento; `LIMIT` solo indica capacidad insuficiente del buffer y
@@ -2950,8 +2962,9 @@ V1 se cierra con este ADR. V2–V5 deben demostrar, como mínimo:
 7. Integración: un mensaje real atraviesa el pipeline con una política `.flow` v3 y produce el
    mismo resultado observable que el contrato de ADR-031/ADR-036, sin fuel y sin doble camino.
 8. Multinúcleo: `CORE_COUNT = 1` determinista; `CORE_COUNT > 1` solo se habilita con estado por
-   core, atómicas, IPI, TLB shootdown, MMIO/PIC por core, journal concurrente y watchdog por core.
-   Sin esas piezas, `CORE_COUNT > 1` falla explícito. `iflow-16` no implementa multinúcleo.
+   core, atómicas, IPI, TLB shootdown, MMIO/PIC por core, journal concurrente y watchdog de paso
+   configurable por core. Sin esas piezas, `CORE_COUNT > 1` falla explícito. `iflow-16` no
+   implementa multinúcleo.
 
 ---
 
@@ -3072,3 +3085,102 @@ líneas.
 
 **Lo que este ADR no promete.** No declara paridad inmediata de features, no migra `.flow` v2 a
 v3, no conserva alias de compatibilidad y no elimina `iflow-16` cuando `iflow-32` madure.
+
+---
+
+## ADR-039 — Canal WebSocket de configuración en vivo, telemetría y relay ZIP E2EE
+
+**Estado:** Propuesta revisada (2026-11-16). No aceptada: no crea contrato vigente ni autoriza
+implementación. Origen: `docs/prompts/diseno/web-editor-transmission.md`, que no se modifica. El
+documento de origen la numera «ADR-0027», pero ese número ya pertenece a ADR-027; se registra como
+ADR-039. Plan asociado: PL-5 en `PLAN.md`. Esta revisión sustituye la anotación inicial centrada solo
+en el ZIP: el canal WebSocket pasa a ser la vía primaria de configuración en vivo y el ZIP queda como
+fallback offline.
+
+**Contexto.** El editor web importa y exporta la suite como ZIP local (PL-4). Se quiere configurar y
+observar servidores TextFormatter en caliente, sin backend autoalojado ni servicio de pago, y sin
+depender de un ZIP completo para cada cambio. Los canales de mensajería tradicionales imponen
+límites de payload y el ZIP se vuelve un transporte lento y obsoleto para cambios pequeños. La
+propuesta usa un canal WebSocket bidireccional, con brokers públicos o un endpoint directo del
+plugin Velocity, telemetría y un fallback ZIP offline.
+
+**Decisión propuesta.**
+
+1. **Hosts en configuración, nunca hardcodeados.** La lista de endpoints vive en
+   `config/web-editor/mirrors.yml`, relativa a la raíz de configuración, con
+   `config-version: 1.0`. El runtime Java y el editor no contienen hosts, puertos ni orden de
+   cascada incrustados. Se distribuye un archivo por defecto, se lee al iniciar y al recargar
+   configuración, y admite añadir, desactivar, reordenar o sustituir hosts, incluido un servidor
+   personalizado. Un archivo ausente o inválido falla de forma explícita; no se usa una lista de
+   emergencia hardcodeada.
+2. **Dos modos de canal.** `relay` usa brokers públicos MQTT sobre WebSocket con E2EE. `direct`
+   usa WSS contra el plugin Velocity de TextFormatterSuite. El modo, endpoint, prioridad y cascada
+   salen de `mirrors.yml`; el código no elige un host por su cuenta. El navegador bajo HTTPS solo
+   intenta WSS para evitar *mixed content*. El ZIP no es el protocolo primario del canal.
+3. **Sincronización incremental.** El canal transporta operaciones por archivo o ruta con hash o
+   versión base, no el ZIP completo. Solo viajan las partes relevantes: cambios de YAML, altas,
+   bajas, renombrados y consultas. La aplicación es atómica, conserva comentarios y formato del CST
+   y detecta conflictos de base. Un snapshot completo solo se usa para la primera carga o para una
+   exportación/importación explícita.
+4. **Acciones en caliente y telemetría.** El canal ofrece petición/respuesta y suscripciones para
+   consultar el estado vivo de la máquina iFlow, el consumo de CPU virtual por proceso, la RAM
+   virtual utilizada, los núcleos activos, el quantum/watchdog y el journal. También puede exponer
+   acciones explícitas de configuración o control, siempre con capacidades, autorización y
+   auditoría. Una métrica no soportada por el motor activo falla de forma explícita; no se inventa
+   ni se rellena con un valor falso.
+5. **Jerarquía multi servidor.** El editor muestra una lista seleccionable de servidores para
+   entornos de networking como Velocity o Bungee. En modo `direct`, el plugin Velocity actúa como
+   coordinador: conoce los servidores hijos, publica su topología y canaliza configuración y
+   telemetría de cada uno hacia la página. El ZIP normal contiene un solo servidor, pero el modelo
+   y el contenedor deben admitir una jerarquía multi servidor aunque la UI no la use al principio.
+   Bungee solo se soporta si se implementa de forma explícita; no se promete por analogía.
+6. **Seguridad y autorización.** En `relay` se mantiene AES-128-GCM con IV de 12 bytes y el código
+   de 48 hex; topic y clave siguen siendo un secreto portador. En `direct`, TLS no sustituye la
+   autenticación de aplicación. Consultar telemetría, editar configuración y ejecutar acciones de
+   control son permisos distintos, con fail-closed, auditoría y aislamiento entre servidores.
+7. **Fallback ZIP explícito.** Si el canal no está disponible, se usa la exportación/importación
+   ZIP local de PL-4. El fallback puede ser manual o automático, pero se reporta y nunca se presenta
+   como sincronización en vivo correcta. No hay éxito silencioso ni se oculta el fallo remoto.
+8. **ZIP de uno o varios servidores.** El ZIP normal representa un servidor, pero el esquema debe
+   admitir una jerarquía multi servidor. El formato exacto del contenedor queda pendiente; no se
+   añade un lector doble ni se reinterpreta un ZIP de un servidor como si fuera multi servidor.
+
+**Consecuencias.**
+
+- Positivas: cambios en caliente, menos ancho de banda, telemetría operativa, selección de servidor
+  y coordinación centralizada desde Velocity sin backend propio.
+- Negativas: protocolo bidireccional nuevo, autenticación y autorización por servidor, resolución
+  de conflictos, cliente WebSocket/MQTT en el navegador y más superficie de pruebas.
+- Riesgos: brokers públicos sin SLA, secreto portador en relay, deriva entre configuración viva y
+  ZIP offline, métricas obsoletas o inventadas y permisos insuficientes entre servidores hijos.
+
+**Requisitos para aceptar la propuesta.**
+
+1. Definir y validar el esquema de `config/web-editor/mirrors.yml`: `id`, `kind`
+   (`relay`/`direct`), URL, TLS, prioridad, `enabled`, credenciales por referencia y recarga. Sin
+   lista hardcodeada y sin secretos en claro.
+2. Definir el modelo de amenaza: quién conoce el código de 48 hex, qué protege E2EE, qué metadatos
+   ve el broker y cómo se autentica el endpoint directo.
+3. Versionar el protocolo incremental: operaciones, hash base, idempotencia, aplicación atómica,
+   conflictos, endianness y límites de mensaje. El ZIP no puede ser el mensaje de sincronización.
+4. Definir idempotencia ante duplicados de QoS 1 por `TRANSFER_ID` + `CHUNK_INDEX` si el ZIP usa
+   relay, y el comportamiento ante transferencias simultáneas o IDs repetidos.
+5. Resolver el techo de 16 bits de los índices ZIP: 65.535 chunks × 4096 B ≈ 256 MiB. El canal
+   incremental no debe heredar ese límite; una transferencia ZIP por red debe rechazar tamaños
+   mayores de forma explícita.
+6. Fijar el contrato de telemetría: identidad de proceso, unidades, muestreo, coste, retención y
+   métricas disponibles en `iflow-16`, `iflow-32` e `iflow-wasm`. `iflow-32` incluye quantum y
+   watchdog por core; `iflow-16` conserva un vCPU y fuel.
+7. Definir la topología multi servidor: identificador estable, padre/hijo, aislamiento, selección
+   en la UI y coordinación desde Velocity. Bungee solo si se implementa.
+8. Exigir pruebas de fallo: archivo de mirrors ausente/inválido, host personalizado, relay caído,
+   directo sin auth, timeout, chunk perdido, duplicado, CRC/GCM inválido, conflicto de edición,
+   métrica no soportada y fallback explícito.
+9. Mantener el canal separado del pipeline y de `sync-websocket`. `sync-websocket` es un servidor
+   WebSocket de la suite, no un broker MQTT público ni un segundo camino de entrega.
+10. Conservar el ZIP de PL-4: misma raíz, mismas reglas de validación, mismos límites y un solo
+    lector. El canal en vivo no introduce un formato de archivo alternativo.
+
+**Lo que este ADR no promete.** No acepta la propuesta, no añade dependencias, no implementa el
+canal, no garantiza disponibilidad de brokers públicos, no autentica identidades por TLS sola, no
+soporta Bungee sin implementación y no sustituye la importación/exportación ZIP local.
