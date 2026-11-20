@@ -9,7 +9,6 @@ import me.majhrs16.suite.iflow.vm.isa.v3.CsrFile;
 import me.majhrs16.suite.iflow.vm.isa.v3.DataMemory;
 import me.majhrs16.suite.iflow.vm.isa.v3.InstructionReader;
 import me.majhrs16.suite.iflow.vm.isa.v3.InterruptController;
-import me.majhrs16.suite.iflow.vm.isa.v3.MachineFault;
 import me.majhrs16.suite.iflow.vm.isa.v3.MemoryFault;
 import me.majhrs16.suite.iflow.vm.isa.v3.MemorySize;
 import me.majhrs16.suite.iflow.vm.isa.v3.TimeSource;
@@ -17,12 +16,14 @@ import me.majhrs16.suite.iflow.vm.rom.RomImage;
 import me.majhrs16.suite.iflow.vm.rom.RomHeader;
 
 /**
- * Complete v3 memory subsystem: MMU, physical bus, ROM/RAM and MMIO devices.
+ * Shared v3 machine memory: physical bus, ROM/RAM, MMIO devices and per-core
+ * architectural views.
  *
- * <p>This is the only object the v3 CPU needs as {@link DataMemory} and
- * {@link InstructionReader}. It decodes MMIO before the MMU, as ADR-037
- * requires, and exposes the PIC through {@link InterruptController} so the CPU
- * can deliver an IRQ before the next fetch.</p>
+ * <p>The machine owns the devices, the physical memory and the atomic
+ * reservation map. Each {@link CoreMemory} owns its CSR file and TLB, so a
+ * vCPU can execute with its own page table without duplicating RAM or MMIO
+ * state. The direct methods of this class are the view of the default core
+ * passed to the constructor, which keeps the single-core API stable.</p>
  */
 public final class MachineMemory
         implements DataMemory, InstructionReader, InterruptController, AtomicMemory {
@@ -34,10 +35,8 @@ public final class MachineMemory
             | SysInfo.FEATURE_DISPLAY
             | SysInfo.FEATURE_MAILBOX;
 
-    private final CsrFile csrs;
     private final int coreCount;
     private final PhysicalMemory physical;
-    private final Mmu mmu;
     private final TimeSource timeSource;
     private final Pic pic;
     private final Timer timer;
@@ -49,6 +48,8 @@ public final class MachineMemory
     private final MmioDevice[] devices;
     private final Object atomicLock = new Object();
     private final Map<Integer, Integer> reservations = new HashMap<>();
+    private final Map<Integer, CoreMemory> cores = new HashMap<>();
+    private final CoreMemory defaultCore;
 
     public MachineMemory(CsrFile csrs, byte[] rom, int ramSize, TimeSource timeSource) {
         this(csrs, rom, ramSize, timeSource, new Nvram(new byte[Nvram.BYTES]),
@@ -65,7 +66,7 @@ public final class MachineMemory
     public MachineMemory(CsrFile csrs, byte[] rom, int ramSize, TimeSource timeSource,
                          Nvram nvram, int tocOffset, int tocCount, int abiVersion,
                          int features, int coreCount) {
-        this.csrs = Objects.requireNonNull(csrs, "csrs");
+        Objects.requireNonNull(csrs, "csrs");
         if (coreCount < Pic.MIN_CORE_COUNT || coreCount > Pic.MAX_CORE_COUNT) {
             throw new IllegalArgumentException(
                     "CORE_COUNT must be " + Pic.MIN_CORE_COUNT + ".." + Pic.MAX_CORE_COUNT
@@ -77,7 +78,6 @@ public final class MachineMemory
         }
         this.coreCount = coreCount;
         this.physical = new PhysicalMemory(rom, ramSize);
-        this.mmu = new Mmu(physical);
         this.timeSource = Objects.requireNonNull(timeSource, "timeSource");
         this.nvram = Objects.requireNonNull(nvram, "nvram");
         this.pic = new Pic(coreCount);
@@ -87,6 +87,8 @@ public final class MachineMemory
                 abiVersion, features, coreCount);
         this.mailbox = new HostMailbox(pic);
         this.devices = new MmioDevice[] {uart, timer, pic, display, nvram, sysInfo, mailbox};
+        this.defaultCore = new CoreMemory(this, csrs);
+        this.cores.put(csrs.coreId(), defaultCore);
     }
 
     /**
@@ -95,7 +97,11 @@ public final class MachineMemory
      */
     public void reset() {
         physical.clearRam();
-        mmu.flush();
+        synchronized (cores) {
+            for (CoreMemory core : cores.values()) {
+                core.reset();
+            }
+        }
         pic.reset();
         timer.reset();
         uart.reset();
@@ -125,172 +131,95 @@ public final class MachineMemory
                 coreCount);
     }
 
+    /**
+     * Returns the architectural view of one core, creating it on first use.
+     *
+     * @param coreId core index in {@code 0..CORE_COUNT-1}
+     */
+    public CoreMemory core(int coreId) {
+        if (coreId < 0 || coreId >= coreCount) {
+            throw new IllegalArgumentException(
+                    "COREID out of range: " + coreId + " (core-count " + coreCount + ")");
+        }
+        synchronized (cores) {
+            CoreMemory existing = cores.get(coreId);
+            if (existing != null) {
+                return existing;
+            }
+            CoreMemory created = new CoreMemory(this, new CsrFile(coreId));
+            cores.put(coreId, created);
+            return created;
+        }
+    }
+
     // ===== Bus contract =====
 
     @Override
     public int read(int address, MemorySize size) {
-        Objects.requireNonNull(size, "size");
-        if (physical.isMmio(address)) {
-            return readMmio(address, size);
-        }
-        if (!csrs.status().mmuEnabled() && !csrs.status().supervisor()) {
-            throw MemoryFault.privilege(address, "MMU is disabled and user mode is not allowed");
-        }
-        int[] physicalAddresses = translateBytes(address, size, Mmu.Access.READ);
-        int value = 0;
-        for (int index = 0; index < physicalAddresses.length; index++) {
-            value |= physical.readByte(physicalAddresses[index]) << (8 * index);
-        }
-        return value;
+        return defaultCore.read(address, size);
     }
 
     @Override
     public void write(int address, MemorySize size, int value) {
-        Objects.requireNonNull(size, "size");
-        if (physical.isMmio(address)) {
-            writeMmio(address, size, value);
-            return;
-        }
-        if (!csrs.status().mmuEnabled() && !csrs.status().supervisor()) {
-            throw MemoryFault.privilege(address, "MMU is disabled and user mode is not allowed");
-        }
-        int[] physicalAddresses = translateBytes(address, size, Mmu.Access.WRITE);
-        for (int index = 0; index < physicalAddresses.length; index++) {
-            int physicalAddress = physicalAddresses[index];
-            invalidateOtherReservations(physicalAddress);
-            physical.writeByte(physicalAddress, value >>> (8 * index));
-            mmu.notePhysicalWrite(physicalAddress);
-        }
+        defaultCore.write(address, size, value);
     }
 
     @Override
     public int readByte(int address) {
-        if (physical.isMmio(address)) {
-            throw MachineFault.instructionFault(address,
-                    "MMIO is not executable");
-        }
-        try {
-            int physicalAddress = csrs.status().mmuEnabled()
-                    ? mmu.translate(address, Mmu.Access.EXECUTE, csrs.status(), csrs.ptbr())
-                    : address;
-            if (!csrs.status().mmuEnabled() && !csrs.status().supervisor()) {
-                throw MemoryFault.privilege(address, "MMU is disabled and user mode is not allowed");
-            }
-            return physical.readByte(physicalAddress);
-        } catch (MemoryFault fault) {
-            throw new MachineFault(fault.code(), address, fault.badAddress(), fault.detail());
-        }
+        return defaultCore.readByte(address);
     }
 
     @Override
     public void fence() {
-        timer.tick();
+        defaultCore.fence();
     }
 
     @Override
     public void flushTlb() {
-        mmu.flush();
+        defaultCore.flushTlb();
     }
 
     @Override
     public void poll() {
-        timer.tick();
+        defaultCore.poll();
     }
 
     @Override
     public int takePending() {
-        timer.tick();
-        return pic.takePending(csrs.coreId());
+        return defaultCore.takePending();
     }
 
     // ===== Atomics =====
 
     @Override
     public int loadLinked(int address) {
-        synchronized (atomicLock) {
-            int physicalAddress = atomicAddress(address, Mmu.Access.READ);
-            int value = readAtomicWord(physicalAddress, address);
-            reservations.put(csrs.coreId(), physicalAddress);
-            return value;
-        }
+        return defaultCore.loadLinked(address);
     }
 
     @Override
     public boolean storeConditional(int address, int value) {
-        synchronized (atomicLock) {
-            int physicalAddress = atomicAddress(address, Mmu.Access.WRITE);
-            Integer reserved = reservations.remove(csrs.coreId());
-            if (reserved == null || reserved != physicalAddress) {
-                return false;
-            }
-            writeAtomicWord(physicalAddress, value, address);
-            invalidateOtherReservations(physicalAddress);
-            return true;
-        }
+        return defaultCore.storeConditional(address, value);
     }
 
     @Override
     public int atomic(int address, Operation operation, int operand) {
-        synchronized (atomicLock) {
-            int physicalAddress = atomicAddress(address, Mmu.Access.READ);
-            atomicAddress(address, Mmu.Access.WRITE);
-            int previous = readAtomicWord(physicalAddress, address);
-            int result = switch (operation) {
-                case ADD -> previous + operand;
-                case SWAP -> operand;
-                case AND -> previous & operand;
-                case OR -> previous | operand;
-            };
-            writeAtomicWord(physicalAddress, result, address);
-            invalidateOtherReservations(physicalAddress);
-            return previous;
-        }
+        return defaultCore.atomic(address, operation, operand);
     }
 
     @Override
     public void clearReservation() {
-        synchronized (atomicLock) {
-            reservations.remove(csrs.coreId());
-        }
+        defaultCore.clearReservation();
     }
 
-    private int atomicAddress(int address, Mmu.Access access) {
-        if (physical.isMmio(address)) {
-            throw MemoryFault.busError(address, "atomic access to MMIO");
-        }
-        int physicalAddress = translateBytes(address, MemorySize.WORD, access)[0];
-        if (physical.isMmio(physicalAddress)) {
-            throw MemoryFault.busError(address, "atomic access to MMIO");
-        }
-        return physicalAddress;
+    Object atomicLock() {
+        return atomicLock;
     }
 
-    private int readAtomicWord(int physicalAddress, int virtualAddress) {
-        try {
-            return physical.readByte(physicalAddress)
-                    | (physical.readByte(physicalAddress + 1) << 8)
-                    | (physical.readByte(physicalAddress + 2) << 16)
-                    | (physical.readByte(physicalAddress + 3) << 24);
-        } catch (MemoryFault fault) {
-            throw MemoryFault.busError(virtualAddress,
-                    "atomic read failed: " + fault.detail());
-        }
+    Map<Integer, Integer> reservations() {
+        return reservations;
     }
 
-    private void writeAtomicWord(int physicalAddress, int value, int virtualAddress) {
-        try {
-            for (int index = 0; index < Integer.BYTES; index++) {
-                physical.writeByte(physicalAddress + index, value >>> (8 * index));
-                mmu.notePhysicalWrite(physicalAddress + index);
-            }
-        } catch (MemoryFault fault) {
-            throw MemoryFault.busError(virtualAddress,
-                    "atomic write failed: " + fault.detail());
-        }
-    }
-
-    private void invalidateOtherReservations(int physicalAddress) {
-        int coreId = csrs.coreId();
+    void invalidateOtherReservations(int coreId, int physicalAddress) {
         synchronized (atomicLock) {
             reservations.entrySet().removeIf(
                     entry -> entry.getKey() != coreId && entry.getValue() == physicalAddress);
@@ -299,8 +228,8 @@ public final class MachineMemory
 
     // ===== MMIO =====
 
-    private int readMmio(int address, MemorySize size) {
-        checkMmioAccess(address, size);
+    int readMmio(CsrFile csrs, int address, MemorySize size) {
+        checkMmioAccess(csrs, address, size);
         MmioDevice device = deviceFor(address);
         if (device == null) {
             throw MemoryFault.busError(address, "reserved MMIO address");
@@ -313,8 +242,8 @@ public final class MachineMemory
         }
     }
 
-    private void writeMmio(int address, MemorySize size, int value) {
-        checkMmioAccess(address, size);
+    void writeMmio(CsrFile csrs, int address, MemorySize size, int value) {
+        checkMmioAccess(csrs, address, size);
         MmioDevice device = deviceFor(address);
         if (device == null) {
             throw MemoryFault.busError(address, "reserved MMIO address");
@@ -327,7 +256,7 @@ public final class MachineMemory
         }
     }
 
-    private void checkMmioAccess(int address, MemorySize size) {
+    private static void checkMmioAccess(CsrFile csrs, int address, MemorySize size) {
         if (!csrs.status().supervisor()) {
             throw MemoryFault.privilege(address, "MMIO requires supervisor mode");
         }
@@ -352,33 +281,10 @@ public final class MachineMemory
         return null;
     }
 
-    private int[] translateBytes(int address, MemorySize size, Mmu.Access access) {
-        checkAlignment(address, size);
-        int[] physicalAddresses = new int[size.bytes()];
-        for (int index = 0; index < physicalAddresses.length; index++) {
-            long current = Integer.toUnsignedLong(address) + index;
-            if (current > 0xFFFF_FFFFL) {
-                throw MemoryFault.busError(address, "access crosses the 32-bit space");
-            }
-            physicalAddresses[index] = csrs.status().mmuEnabled()
-                    ? mmu.translate((int) current, access, csrs.status(), csrs.ptbr())
-                    : (int) current;
-        }
-        return physicalAddresses;
-    }
-
-    private static void checkAlignment(int address, MemorySize size) {
-        int mask = size.bytes() - 1;
-        if ((address & mask) != 0) {
-            throw MemoryFault.alignment(address,
-                    "unaligned " + size.bytes() + "-byte access");
-        }
-    }
-
     // ===== Accessors =====
 
     public CsrFile csrs() {
-        return csrs;
+        return defaultCore.csrs();
     }
 
     public int coreCount() {
@@ -390,7 +296,7 @@ public final class MachineMemory
     }
 
     public Mmu mmu() {
-        return mmu;
+        return defaultCore.mmu();
     }
 
     public Pic pic() {

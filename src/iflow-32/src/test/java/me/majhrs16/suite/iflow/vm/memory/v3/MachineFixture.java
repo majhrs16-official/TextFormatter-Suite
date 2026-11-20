@@ -38,6 +38,18 @@ public final class MachineFixture {
         memory = new MachineMemory(csrs, rom, RAM_SIZE, timeSource);
     }
 
+    public MachineFixture(int coreCount) {
+        memory = new MachineMemory(csrs, new byte[0], RAM_SIZE, clock::get,
+                new Nvram(new byte[Nvram.BYTES]), 80, 0,
+                MachineMemory.ABI_VERSION, MachineMemory.DEFAULT_FEATURES, coreCount);
+    }
+
+    public MachineFixture(byte[] rom, TimeSource timeSource, int coreCount) {
+        memory = new MachineMemory(csrs, rom, RAM_SIZE, timeSource,
+                new Nvram(new byte[Nvram.BYTES]), 80, 0,
+                MachineMemory.ABI_VERSION, MachineMemory.DEFAULT_FEATURES, coreCount);
+    }
+
     public void enableMmu(boolean supervisor) {
         csrs.write(Csr.PTBR, PTBR, 0);
         csrs.setStatus(Status.fromBits(Status.MMU | (supervisor ? Status.PRV : 0)));
