@@ -1,8 +1,9 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (311 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> **Estado:** núcleo v3 aislado (316 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO`, atómicas, PIC por core, IPI,
-> `TARGET` y vista `CoreMemory` por core); multinúcleo completo e integración con el hub pendientes.
+> `TARGET`, vista `CoreMemory` por core y `MachineRuntime` por core); multinúcleo completo e
+> integración con el hub pendientes.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -16,8 +17,10 @@
   y mailbox con `TARGET` por core) y `CoreMemory` por core con CSR, MMU, TLB y reserva atómica
   propios.
 - `execution/v3`: slice de ejecución del host con quantum de preempción, watchdog de paso
-  configurable y avance de tiempo en `HALT`. No es un scheduler de guest: la política de procesos
-  vive en el kernel y el quantum no es fuel ni un límite total de ejecución.
+  configurable y avance de tiempo en `HALT`; `MachineRuntime` crea un `Cpu`, una vista `CoreMemory`
+  y un `ExecutionEngine` por core, ejecuta solo el core que elige el llamador y marca core y VM como
+  `FAULTED` si un paso supera el watchdog. No es un scheduler de guest: la política de procesos vive
+  en el kernel y el quantum no es fuel ni un límite total de ejecución.
 - `host/v3`: envelope TLV, identidad, capacidades y puente de servicios `HostBridge`.
 
 ## Tiempo y ejecución
@@ -72,8 +75,10 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
   `AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO. También
   entrega el PIC con banco por core, `SOFT_IRQ` con línea/destino (IPI y broadcast) y `TARGET` en
   `TIMER` y `HOST_MAILBOX`; un destino fuera de `CORE_COUNT` es `BUS_ERROR`. `MachineMemory`
-  comparte RAM, MMIO, PIC y reservas atómicas, y `CoreMemory` separa CSR, MMU, TLB y reserva por
-  core. Faltan el TLB shootdown, el scheduler de guest, el watchdog por core y el journal
-  concurrente. Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.
+  comparte RAM, MMIO, PIC y reservas atómicas, `CoreMemory` separa CSR, MMU, TLB y reserva por
+  core, y `MachineRuntime` crea CPU, quantum y watchdog por core. Un cambio de page table no vacía
+  la TLB ajena: el core destino debe ejecutar `SFENCE.VMA` tras la IPI; no hay shootdown automático
+  del host. Faltan el journal concurrente y el kernel guest que complete scheduler y shootdown.
+  Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.

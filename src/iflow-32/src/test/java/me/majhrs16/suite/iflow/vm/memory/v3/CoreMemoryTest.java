@@ -99,13 +99,32 @@ class CoreMemoryTest {
         assertThrows(IllegalArgumentException.class, () -> fixture.memory.core(2));
     }
 
-    private static void map(MachineFixture fixture, int ptbr, int frame) {
+    @Test
+    void changingASharedPageTableDoesNotFlushAnotherCoreTlb() {
+        MachineFixture fixture = new MachineFixture(2);
+        CoreMemory coreOne = fixture.memory.core(1);
+        int pte = map(fixture, CORE_ONE_PTBR, MachineFixture.FRAME_A);
+        enableMmu(coreOne, CORE_ONE_PTBR);
+
+        assertEquals(0, coreOne.read(TARGET, MemorySize.WORD));
+        assertTrue(coreOne.mmu().tlbSize() > 0);
+
+        fixture.put32(pte, MachineFixture.FRAME_B | Mmu.PTE_V | Mmu.PTE_R | Mmu.PTE_W);
+        fixture.put32(MachineFixture.FRAME_B, 0x2222_2222);
+
+        assertEquals(0, coreOne.read(TARGET, MemorySize.WORD));
+        coreOne.flushTlb();
+        assertEquals(0x2222_2222, coreOne.read(TARGET, MemorySize.WORD));
+    }
+
+    private static int map(MachineFixture fixture, int ptbr, int frame) {
         int vpn1 = (TARGET >>> 22) & 0x3FF;
         int vpn2 = (TARGET >>> 12) & 0x3FF;
         int table = ptbr + PhysicalMemory.PAGE_SIZE;
         fixture.put32(ptbr + vpn1 * Integer.BYTES, table | Mmu.PDE_V);
-        fixture.put32(table + vpn2 * Integer.BYTES,
-                frame | Mmu.PTE_V | Mmu.PTE_R | Mmu.PTE_W);
+        int pte = table + vpn2 * Integer.BYTES;
+        fixture.put32(pte, frame | Mmu.PTE_V | Mmu.PTE_R | Mmu.PTE_W);
+        return pte;
     }
 
     private static void enableMmu(CoreMemory core, int ptbr) {
