@@ -150,6 +150,10 @@ class MachineMemoryTest {
                 MemorySize.WORD));
         assertEquals(MachineFixture.RAM_SIZE,
                 fixture.memory.read(SysInfo.BASE + SysInfo.RAM_SIZE, MemorySize.WORD));
+        assertEquals(1, fixture.memory.read(SysInfo.BASE + SysInfo.CORE_COUNT,
+                MemorySize.WORD));
+        assertEquals(0, fixture.memory.read(SysInfo.BASE + SysInfo.FEATURES,
+                MemorySize.WORD) & SysInfo.FEATURE_MULTICORE);
 
         MemoryFault fault = assertThrows(MemoryFault.class,
                 () -> fixture.memory.write(SysInfo.BASE + SysInfo.RAM_SIZE,

@@ -11,7 +11,9 @@ import java.util.Objects;
 public final class CsrFile {
 
     public static final int NO_IDENTITY = 0xFFFF_FFFF;
+    public static final int MAX_CORE_ID = 63;
 
+    private final int coreId;
     private Status status = Status.RESET;
     private int epc;
     private int cause;
@@ -22,6 +24,17 @@ public final class CsrFile {
     private int pident = NO_IDENTITY;
     private int mident = NO_IDENTITY;
     private Flags flags = Flags.CLEAR;
+
+    public CsrFile() {
+        this(0);
+    }
+
+    public CsrFile(int coreId) {
+        if (coreId < 0 || coreId > MAX_CORE_ID) {
+            throw new IllegalArgumentException("COREID must be 0..63: " + coreId);
+        }
+        this.coreId = coreId;
+    }
 
     public void reset() {
         status = Status.RESET;
@@ -34,6 +47,10 @@ public final class CsrFile {
         pident = NO_IDENTITY;
         mident = NO_IDENTITY;
         flags = Flags.CLEAR;
+    }
+
+    public int coreId() {
+        return coreId;
     }
 
     public Status status() {
@@ -97,6 +114,7 @@ public final class CsrFile {
             case PIDENT -> pident;
             case MIDENT -> mident;
             case FLAGS -> flags.bits();
+            case COREID -> coreId;
         };
     }
 
@@ -134,6 +152,7 @@ public final class CsrFile {
             }
             case MIDENT -> mident = value;
             case FLAGS -> flags = Flags.fromBits(value);
+            case COREID -> throw MachineFault.illegalInstruction(pc, "COREID is read-only");
         }
     }
 

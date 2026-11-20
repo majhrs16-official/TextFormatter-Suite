@@ -28,6 +28,39 @@ class CsrFileTest {
         assertEquals(CsrFile.NO_IDENTITY, csrs.pident());
         assertEquals(CsrFile.NO_IDENTITY, csrs.mident());
         assertEquals(Flags.CLEAR, csrs.flags());
+        assertEquals(0, csrs.read(Csr.COREID));
+    }
+
+    @Test
+    void coreIdIdentifiesTheCoreAndIsReadOnly() {
+        CsrFile core = new CsrFile(7);
+
+        assertEquals(7, core.coreId());
+        assertEquals(7, core.read(Csr.COREID));
+
+        MachineFault fault = assertThrows(MachineFault.class,
+                () -> core.write(Csr.COREID, 0, 0x20));
+
+        assertEquals(MachineFault.Code.ILLEGAL_INSTRUCTION, fault.code());
+        assertEquals(0x20, fault.pc());
+        assertEquals(7, core.read(Csr.COREID));
+    }
+
+    @Test
+    void resetKeepsTheCoreIdentity() {
+        CsrFile core = new CsrFile(3);
+        core.write(Csr.SCRATCH, 0x1234, 0);
+
+        core.reset();
+
+        assertEquals(3, core.read(Csr.COREID));
+        assertEquals(0, core.read(Csr.SCRATCH));
+    }
+
+    @Test
+    void coreIdOutsideTheArchitecturalRangeIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new CsrFile(-1));
+        assertThrows(IllegalArgumentException.class, () -> new CsrFile(64));
     }
 
     @Test

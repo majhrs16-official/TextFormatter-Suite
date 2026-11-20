@@ -16,7 +16,8 @@ public enum Csr {
     SCRATCH(0x106),
     PIDENT(0x107),
     MIDENT(0x108),
-    FLAGS(0x109);
+    FLAGS(0x109),
+    COREID(0x10A);
 
     private static final Map<Integer, Csr> BY_ADDRESS = new HashMap<>();
 

@@ -468,6 +468,36 @@ class CpuTest {
     }
 
     @Test
+    void coreIdCsrReadsThePrivateCoreIndex() {
+        CsrFile csrs = new CsrFile(5);
+        Cpu core = new Cpu(0, memory, memory, () -> timeNanos, null, null, csrs);
+        load(0, Opcode.CSRR, InstructionForm.IMMEDIATE, Register.R1, 0,
+                Csr.COREID.address());
+
+        assertTrue(core.step());
+
+        assertEquals(5, core.registers().get(Register.R1));
+        assertEquals(7, core.pc());
+    }
+
+    @Test
+    void coreIdCsrWriteTrapsIllegal() {
+        CsrFile csrs = new CsrFile(5);
+        Cpu core = new Cpu(0, memory, memory, () -> timeNanos, null, null, csrs);
+        csrs.write(Csr.TVEC, TVEC, 0);
+        core.registers().set(Register.R2, 9);
+        load(0, Opcode.CSRW, InstructionForm.IMMEDIATE, 0, Register.R2,
+                Csr.COREID.address());
+
+        assertTrue(core.step());
+
+        assertEquals(MachineFault.Code.ILLEGAL_INSTRUCTION.vector(), core.csrs().cause());
+        assertEquals(0, core.csrs().epc());
+        assertEquals(TVEC, core.pc());
+        assertEquals(5, core.csrs().read(Csr.COREID));
+    }
+
+    @Test
     void csrAccessFromUserIsPrivileged() {
         enableTrapVector();
         cpu.csrs().setStatus(Status.fromBits(Status.MMU));

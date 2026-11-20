@@ -252,7 +252,7 @@ class InstructionDecoderTest {
 
     @Test
     void rejectsUndefinedCsr() {
-        InstructionFixture.assertIllegal(encode(Opcode.CSRRW, I, 1, 2, 0, 0, WORD, 0x10A));
+        InstructionFixture.assertIllegal(encode(Opcode.CSRRW, I, 1, 2, 0, 0, WORD, 0x10B));
     }
 
     @Test
