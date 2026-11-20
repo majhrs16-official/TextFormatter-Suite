@@ -35,10 +35,11 @@ public final class MachineMemory
             | SysInfo.FEATURE_MAILBOX;
 
     private final CsrFile csrs;
+    private final int coreCount;
     private final PhysicalMemory physical;
     private final Mmu mmu;
     private final TimeSource timeSource;
-    private final Pic pic = new Pic();
+    private final Pic pic;
     private final Timer timer;
     private final Uart uart;
     private final Display display = new Display();
@@ -57,15 +58,33 @@ public final class MachineMemory
     public MachineMemory(CsrFile csrs, byte[] rom, int ramSize, TimeSource timeSource,
                          Nvram nvram, int tocOffset, int tocCount, int abiVersion,
                          int features) {
+        this(csrs, rom, ramSize, timeSource, nvram, tocOffset, tocCount, abiVersion,
+                features, 1);
+    }
+
+    public MachineMemory(CsrFile csrs, byte[] rom, int ramSize, TimeSource timeSource,
+                         Nvram nvram, int tocOffset, int tocCount, int abiVersion,
+                         int features, int coreCount) {
         this.csrs = Objects.requireNonNull(csrs, "csrs");
+        if (coreCount < Pic.MIN_CORE_COUNT || coreCount > Pic.MAX_CORE_COUNT) {
+            throw new IllegalArgumentException(
+                    "CORE_COUNT must be " + Pic.MIN_CORE_COUNT + ".." + Pic.MAX_CORE_COUNT
+                            + ": " + coreCount);
+        }
+        if (csrs.coreId() >= coreCount) {
+            throw new IllegalArgumentException(
+                    "COREID " + csrs.coreId() + " exceeds CORE_COUNT " + coreCount);
+        }
+        this.coreCount = coreCount;
         this.physical = new PhysicalMemory(rom, ramSize);
         this.mmu = new Mmu(physical);
         this.timeSource = Objects.requireNonNull(timeSource, "timeSource");
         this.nvram = Objects.requireNonNull(nvram, "nvram");
+        this.pic = new Pic(coreCount);
         this.timer = new Timer(timeSource, pic);
         this.uart = new Uart(pic);
         this.sysInfo = new SysInfo(ramSize, physical.romSize(), tocOffset, tocCount,
-                abiVersion, features);
+                abiVersion, features, coreCount);
         this.mailbox = new HostMailbox(pic);
         this.devices = new MmioDevice[] {uart, timer, pic, display, nvram, sysInfo, mailbox};
     }
@@ -90,13 +109,20 @@ public final class MachineMemory
 
     public static MachineMemory fromRom(CsrFile csrs, RomImage rom, int ramSize,
                                         TimeSource timeSource, boolean syncAvailable) {
+        return fromRom(csrs, rom, ramSize, timeSource, syncAvailable, 1);
+    }
+
+    public static MachineMemory fromRom(CsrFile csrs, RomImage rom, int ramSize,
+                                        TimeSource timeSource, boolean syncAvailable,
+                                        int coreCount) {
         Objects.requireNonNull(rom, "rom");
         RomHeader header = rom.header();
         int features = DEFAULT_FEATURES
                 | (syncAvailable ? SysInfo.FEATURE_SYNC : 0);
         return new MachineMemory(csrs, rom.bytes(), ramSize, timeSource,
                 new Nvram(new byte[Nvram.BYTES]),
-                header.tocOffset(), header.tocCount(), header.abiVersion(), features);
+                header.tocOffset(), header.tocCount(), header.abiVersion(), features,
+                coreCount);
     }
 
     // ===== Bus contract =====
@@ -174,7 +200,7 @@ public final class MachineMemory
     @Override
     public int takePending() {
         timer.tick();
-        return pic.takePending();
+        return pic.takePending(csrs.coreId());
     }
 
     // ===== Atomics =====
@@ -281,7 +307,7 @@ public final class MachineMemory
         }
         timer.tick();
         try {
-            return device.readRegister(address - device.base());
+            return device.readRegister(address - device.base(), csrs.coreId());
         } catch (IllegalArgumentException error) {
             throw MemoryFault.busError(address, error.getMessage());
         }
@@ -295,7 +321,7 @@ public final class MachineMemory
         }
         timer.tick();
         try {
-            device.writeRegister(address - device.base(), value);
+            device.writeRegister(address - device.base(), value, csrs.coreId());
         } catch (IllegalArgumentException error) {
             throw MemoryFault.busError(address, error.getMessage());
         }
@@ -353,6 +379,10 @@ public final class MachineMemory
 
     public CsrFile csrs() {
         return csrs;
+    }
+
+    public int coreCount() {
+        return coreCount;
     }
 
     public PhysicalMemory physical() {

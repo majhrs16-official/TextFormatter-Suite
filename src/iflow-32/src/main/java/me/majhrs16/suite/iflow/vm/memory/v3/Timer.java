@@ -20,17 +20,19 @@ public final class Timer implements MmioDevice {
     public static final int CMP_LO = 0x00;
     public static final int CMP_HI = 0x04;
     public static final int CTRL = 0x08;
-    public static final int STATUS = 0x0C;
-    public static final int PERIOD_LO = 0x10;
-    public static final int PERIOD_HI = 0x14;
-    public static final int TIME_LO = 0x18;
-    public static final int TIME_HI = 0x1C;
+    public static final int TARGET = 0x0C;
+    public static final int STATUS = 0x10;
+    public static final int PERIOD_LO = 0x14;
+    public static final int PERIOD_HI = 0x18;
+    public static final int TIME_LO = 0x1C;
+    public static final int TIME_HI = 0x20;
 
     public static final int CTRL_ENABLE = 1;
     public static final int CTRL_PERIODIC = 1 << 1;
     public static final int CTRL_IRQ = 1 << 2;
 
     public static final int STATUS_FIRED = 1;
+    public static final int TARGET_BROADCAST = Pic.BROADCAST;
 
     private static final long DEFAULT_PERIOD = 1_000_000L;
 
@@ -40,6 +42,7 @@ public final class Timer implements MmioDevice {
     private long compare;
     private long period = DEFAULT_PERIOD;
     private int control;
+    private int target;
     private boolean fired;
     private boolean armed;
     private Integer latchedHigh;
@@ -58,6 +61,7 @@ public final class Timer implements MmioDevice {
         compare = 0;
         period = DEFAULT_PERIOD;
         control = 0;
+        target = 0;
         fired = false;
         armed = false;
         latchedHigh = null;
@@ -77,7 +81,11 @@ public final class Timer implements MmioDevice {
         }
         fired = true;
         if ((control & CTRL_IRQ) != 0) {
-            pic.raise(IRQ_LINE);
+            if (target == TARGET_BROADCAST) {
+                pic.raiseAll(IRQ_LINE);
+            } else {
+                pic.raise(target, IRQ_LINE);
+            }
         }
         if ((control & CTRL_PERIODIC) != 0) {
             compare = now + period;
@@ -91,12 +99,17 @@ public final class Timer implements MmioDevice {
         return armed && enabled() ? compare : Long.MAX_VALUE;
     }
 
+    public int target() {
+        return target;
+    }
+
     @Override
     public int readRegister(int offset) {
         return switch (offset) {
             case CMP_LO -> (int) compare;
             case CMP_HI -> (int) (compare >>> 32);
             case CTRL -> control;
+            case TARGET -> target;
             case STATUS -> fired ? STATUS_FIRED : 0;
             case PERIOD_LO -> (int) period;
             case PERIOD_HI -> (int) (period >>> 32);
@@ -139,6 +152,7 @@ public final class Timer implements MmioDevice {
                     armed = true;
                 }
             }
+            case TARGET -> setTarget(value);
             case STATUS -> {
                 if ((value & STATUS_FIRED) != 0) {
                     fired = false;
@@ -151,6 +165,20 @@ public final class Timer implements MmioDevice {
             default -> throw new IllegalArgumentException(
                     "Unknown timer register 0x" + Integer.toHexString(offset));
         }
+    }
+
+    private void setTarget(int value) {
+        if ((value & ~0xFF) != 0) {
+            throw new IllegalArgumentException(
+                    "TIMER.TARGET must be 0..0xFF: 0x" + Integer.toHexString(value));
+        }
+        int next = value & 0xFF;
+        if (next != TARGET_BROADCAST && next >= pic.coreCount()) {
+            throw new IllegalArgumentException(
+                    "TIMER.TARGET core out of range: " + next
+                            + " (core-count " + pic.coreCount() + ")");
+        }
+        target = next;
     }
 
     private void armIfEnabled() {

@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import me.majhrs16.suite.iflow.vm.isa.v3.CsrFile;
 import me.majhrs16.suite.iflow.vm.isa.v3.MachineFault;
 import me.majhrs16.suite.iflow.vm.isa.v3.MemoryFault;
 import me.majhrs16.suite.iflow.vm.isa.v3.MemorySize;
@@ -159,6 +160,27 @@ class MachineMemoryTest {
                 () -> fixture.memory.write(SysInfo.BASE + SysInfo.RAM_SIZE,
                         MemorySize.WORD, 1));
         assertEquals(MachineFault.Code.BUS_ERROR, fault.code());
+    }
+
+    @Test
+    void picMmioUsesTheCurrentCoreBankAndSysInfoReportsCoreCount() {
+        CsrFile coreOne = new CsrFile(1);
+        MachineMemory memory = new MachineMemory(coreOne, new byte[0],
+                MachineFixture.RAM_SIZE, () -> 0L,
+                new Nvram(new byte[Nvram.BYTES]), 80, 0,
+                MachineMemory.ABI_VERSION, MachineMemory.DEFAULT_FEATURES, 2);
+
+        memory.write(Pic.BASE + Pic.MASK, MemorySize.WORD, 0xFFFF_FFFE);
+        memory.write(Pic.BASE + Pic.SOFT_IRQ, MemorySize.WORD, 16 | (1 << 8));
+
+        assertEquals(0xFFFF_FFFE, memory.pic().mask(1));
+        assertEquals(0xFFFF_FFFF, memory.pic().mask(0));
+        assertEquals(1 << 16, memory.pic().pending(1));
+        assertEquals(0, memory.pic().pending(0));
+        assertEquals(2, memory.read(SysInfo.BASE + SysInfo.CORE_COUNT, MemorySize.WORD));
+        assertEquals(SysInfo.FEATURE_MULTICORE,
+                memory.read(SysInfo.BASE + SysInfo.FEATURES, MemorySize.WORD)
+                        & SysInfo.FEATURE_MULTICORE);
     }
 
     @Test

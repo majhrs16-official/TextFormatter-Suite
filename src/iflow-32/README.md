@@ -1,8 +1,8 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (297 tests); V3-1 (tiempo, quantum y watchdog configurable)
-> implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO` y atómicas); multinúcleo completo
-> e integración con el hub pendientes.
+> **Estado:** núcleo v3 aislado (306 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO`, atómicas, PIC por core, IPI y
+> `TARGET`); multinúcleo completo e integración con el hub pendientes.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -12,8 +12,8 @@
 
 - `rom`: parser de la ROM v3 (`FLOWROM`), cabecera/TOC, `PRG3`, hashes y capacidades.
 - `isa/v3`: decoder, ALU, registros, flags, CPU, CSR, traps, interrupciones y `VirtualClock`.
-- `memory/v3`: memoria física dispersa, MMU, TLB, bus MMIO, PIC, timer, UART, display, NVRAM,
-  SYSINFO y mailbox.
+- `memory/v3`: memoria física dispersa, MMU, TLB, bus MMIO, PIC con banco por core, timer, UART,
+  display, NVRAM, SYSINFO y mailbox con `TARGET` por core.
 - `execution/v3`: slice de ejecución del host con quantum de preempción, watchdog de paso
   configurable y avance de tiempo en `HALT`. No es un scheduler de guest: la política de procesos
   vive en el kernel y el quantum no es fuel ni un límite total de ejecución.
@@ -68,8 +68,10 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
   entre mensajes y el multinúcleo. V3-1 cubre reloj, quantum de preempción, watchdog de paso
   configurable y sleep/wake. V3-2 ya entrega `CoreCountConfig`, `COREID` (`0x10A`, RO),
   `SYSINFO.CORE_COUNT`, `FEATURES` bit 6 y las atómicas `LR.W`/`SC.W`/`AMOADD.W`/`AMOSWAP.W`/
-  `AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO; faltan
-  estado por core, IPI, PIC por core, TLB shootdown, scheduler de guest, watchdog por core y
-  journal concurrente. Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.
+  `AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO. También
+  entrega el PIC con banco por core, `SOFT_IRQ` con línea/destino (IPI y broadcast) y `TARGET` en
+  `TIMER` y `HOST_MAILBOX`; un destino fuera de `CORE_COUNT` es `BUS_ERROR`. Faltan el estado por
+  core completo, TLB shootdown, scheduler de guest, watchdog por core y journal concurrente. Hasta
+  completar V3-2, `CORE_COUNT > 1` falla explícito.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.

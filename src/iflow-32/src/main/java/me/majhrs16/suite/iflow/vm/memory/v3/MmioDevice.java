@@ -25,4 +25,20 @@ public interface MmioDevice {
     int readRegister(int offset);
 
     void writeRegister(int offset, int value);
+
+    /**
+     * Core-aware read used by devices with per-core banks, such as the PIC.
+     * Devices without per-core state keep the single-bank behaviour.
+     */
+    default int readRegister(int offset, int coreId) {
+        return readRegister(offset);
+    }
+
+    /**
+     * Core-aware write used by devices with per-core banks, such as the PIC.
+     * Devices without per-core state keep the single-bank behaviour.
+     */
+    default void writeRegister(int offset, int value, int coreId) {
+        writeRegister(offset, value);
+    }
 }

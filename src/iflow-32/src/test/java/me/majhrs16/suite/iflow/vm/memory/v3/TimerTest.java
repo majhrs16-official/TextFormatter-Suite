@@ -1,6 +1,7 @@
 package me.majhrs16.suite.iflow.vm.memory.v3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -98,5 +99,50 @@ class TimerTest {
         timer.tick();
 
         assertEquals(Timer.STATUS_FIRED, timer.readRegister(Timer.STATUS));
+    }
+
+    @Test
+    void irqFollowsTargetCore() {
+        AtomicLong clock = new AtomicLong(0);
+        Pic pic = new Pic(4);
+        Timer timer = new Timer(clock::get, pic);
+        timer.writeRegister(Timer.TARGET, 2);
+        timer.writeRegister(Timer.CMP_LO, 10);
+        timer.writeRegister(Timer.CTRL, Timer.CTRL_ENABLE | Timer.CTRL_IRQ);
+
+        clock.set(10);
+        timer.tick();
+
+        assertEquals(0, pic.pending(0));
+        assertEquals(0, pic.pending(1));
+        assertEquals(1, pic.pending(2));
+        assertEquals(0, pic.pending(3));
+    }
+
+    @Test
+    void broadcastTargetRaisesEveryCore() {
+        AtomicLong clock = new AtomicLong(0);
+        Pic pic = new Pic(3);
+        Timer timer = new Timer(clock::get, pic);
+        timer.writeRegister(Timer.TARGET, Timer.TARGET_BROADCAST);
+        timer.writeRegister(Timer.CMP_LO, 1);
+        timer.writeRegister(Timer.CTRL, Timer.CTRL_ENABLE | Timer.CTRL_IRQ);
+
+        clock.set(1);
+        timer.tick();
+
+        assertEquals(1, pic.pending(0));
+        assertEquals(1, pic.pending(1));
+        assertEquals(1, pic.pending(2));
+    }
+
+    @Test
+    void targetOutsideCoreCountIsRejected() {
+        Timer timer = new Timer(() -> 0, new Pic(2));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> timer.writeRegister(Timer.TARGET, 2));
+        assertThrows(IllegalArgumentException.class,
+                () -> timer.writeRegister(Timer.TARGET, 0x100));
     }
 }
