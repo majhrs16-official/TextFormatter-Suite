@@ -1,7 +1,10 @@
 package me.majhrs16.suite.iflow.vm.memory.v3;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
+import me.majhrs16.suite.iflow.vm.isa.v3.AtomicMemory;
 import me.majhrs16.suite.iflow.vm.isa.v3.CsrFile;
 import me.majhrs16.suite.iflow.vm.isa.v3.DataMemory;
 import me.majhrs16.suite.iflow.vm.isa.v3.InstructionReader;
@@ -21,7 +24,8 @@ import me.majhrs16.suite.iflow.vm.rom.RomHeader;
  * requires, and exposes the PIC through {@link InterruptController} so the CPU
  * can deliver an IRQ before the next fetch.</p>
  */
-public final class MachineMemory implements DataMemory, InstructionReader, InterruptController {
+public final class MachineMemory
+        implements DataMemory, InstructionReader, InterruptController, AtomicMemory {
 
     public static final int ABI_VERSION = 3;
     public static final int DEFAULT_FEATURES = SysInfo.FEATURE_TIMER
@@ -42,6 +46,8 @@ public final class MachineMemory implements DataMemory, InstructionReader, Inter
     private final SysInfo sysInfo;
     private final HostMailbox mailbox;
     private final MmioDevice[] devices;
+    private final Object atomicLock = new Object();
+    private final Map<Integer, Integer> reservations = new HashMap<>();
 
     public MachineMemory(CsrFile csrs, byte[] rom, int ramSize, TimeSource timeSource) {
         this(csrs, rom, ramSize, timeSource, new Nvram(new byte[Nvram.BYTES]),
@@ -77,6 +83,9 @@ public final class MachineMemory implements DataMemory, InstructionReader, Inter
         display.reset();
         mailbox.reset();
         nvram.reset(nvram.persistentBytes());
+        synchronized (atomicLock) {
+            reservations.clear();
+        }
     }
 
     public static MachineMemory fromRom(CsrFile csrs, RomImage rom, int ramSize,
@@ -122,6 +131,7 @@ public final class MachineMemory implements DataMemory, InstructionReader, Inter
         int[] physicalAddresses = translateBytes(address, size, Mmu.Access.WRITE);
         for (int index = 0; index < physicalAddresses.length; index++) {
             int physicalAddress = physicalAddresses[index];
+            invalidateOtherReservations(physicalAddress);
             physical.writeByte(physicalAddress, value >>> (8 * index));
             mmu.notePhysicalWrite(physicalAddress);
         }
@@ -165,6 +175,100 @@ public final class MachineMemory implements DataMemory, InstructionReader, Inter
     public int takePending() {
         timer.tick();
         return pic.takePending();
+    }
+
+    // ===== Atomics =====
+
+    @Override
+    public int loadLinked(int address) {
+        synchronized (atomicLock) {
+            int physicalAddress = atomicAddress(address, Mmu.Access.READ);
+            int value = readAtomicWord(physicalAddress, address);
+            reservations.put(csrs.coreId(), physicalAddress);
+            return value;
+        }
+    }
+
+    @Override
+    public boolean storeConditional(int address, int value) {
+        synchronized (atomicLock) {
+            int physicalAddress = atomicAddress(address, Mmu.Access.WRITE);
+            Integer reserved = reservations.remove(csrs.coreId());
+            if (reserved == null || reserved != physicalAddress) {
+                return false;
+            }
+            writeAtomicWord(physicalAddress, value, address);
+            invalidateOtherReservations(physicalAddress);
+            return true;
+        }
+    }
+
+    @Override
+    public int atomic(int address, Operation operation, int operand) {
+        synchronized (atomicLock) {
+            int physicalAddress = atomicAddress(address, Mmu.Access.READ);
+            atomicAddress(address, Mmu.Access.WRITE);
+            int previous = readAtomicWord(physicalAddress, address);
+            int result = switch (operation) {
+                case ADD -> previous + operand;
+                case SWAP -> operand;
+                case AND -> previous & operand;
+                case OR -> previous | operand;
+            };
+            writeAtomicWord(physicalAddress, result, address);
+            invalidateOtherReservations(physicalAddress);
+            return previous;
+        }
+    }
+
+    @Override
+    public void clearReservation() {
+        synchronized (atomicLock) {
+            reservations.remove(csrs.coreId());
+        }
+    }
+
+    private int atomicAddress(int address, Mmu.Access access) {
+        if (physical.isMmio(address)) {
+            throw MemoryFault.busError(address, "atomic access to MMIO");
+        }
+        int physicalAddress = translateBytes(address, MemorySize.WORD, access)[0];
+        if (physical.isMmio(physicalAddress)) {
+            throw MemoryFault.busError(address, "atomic access to MMIO");
+        }
+        return physicalAddress;
+    }
+
+    private int readAtomicWord(int physicalAddress, int virtualAddress) {
+        try {
+            return physical.readByte(physicalAddress)
+                    | (physical.readByte(physicalAddress + 1) << 8)
+                    | (physical.readByte(physicalAddress + 2) << 16)
+                    | (physical.readByte(physicalAddress + 3) << 24);
+        } catch (MemoryFault fault) {
+            throw MemoryFault.busError(virtualAddress,
+                    "atomic read failed: " + fault.detail());
+        }
+    }
+
+    private void writeAtomicWord(int physicalAddress, int value, int virtualAddress) {
+        try {
+            for (int index = 0; index < Integer.BYTES; index++) {
+                physical.writeByte(physicalAddress + index, value >>> (8 * index));
+                mmu.notePhysicalWrite(physicalAddress + index);
+            }
+        } catch (MemoryFault fault) {
+            throw MemoryFault.busError(virtualAddress,
+                    "atomic write failed: " + fault.detail());
+        }
+    }
+
+    private void invalidateOtherReservations(int physicalAddress) {
+        int coreId = csrs.coreId();
+        synchronized (atomicLock) {
+            reservations.entrySet().removeIf(
+                    entry -> entry.getKey() != coreId && entry.getValue() == physicalAddress);
+        }
     }
 
     // ===== MMIO =====

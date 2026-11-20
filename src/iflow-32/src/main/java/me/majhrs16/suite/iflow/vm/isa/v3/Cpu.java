@@ -74,6 +74,7 @@ public final class Cpu {
         cycles = 0;
         halted = false;
         lastOpcode = null;
+        clearReservation();
         registers.reset();
         csrs.reset();
     }
@@ -200,6 +201,9 @@ public final class Cpu {
                 memory.fence();
                 advance(instruction);
             }
+            case LR_W -> executeLrW(instruction);
+            case SC_W -> executeScW(instruction);
+            case AMOADD_W, AMOSWAP_W, AMOAND_W, AMOOR_W -> executeAmo(instruction);
             default -> throw new IllegalStateException("Unhandled v3 opcode: " + instruction.opcode());
         }
     }
@@ -312,6 +316,7 @@ public final class Cpu {
             throw MachineFault.privilege(instruction.pc(),
                     "ERET to user mode requires the MMU");
         }
+        clearReservation();
         csrs.setStatus(restored);
         pc = csrs.epc();
     }
@@ -321,6 +326,7 @@ public final class Cpu {
             throw MachineFault.illegalInstruction(instruction.pc(),
                     "HALT requires interrupts enabled");
         }
+        clearReservation();
         pc = instruction.pc() + instruction.length();
         halted = true;
     }
@@ -437,6 +443,93 @@ public final class Cpu {
         advance(instruction);
     }
 
+    private void executeLrW(Instruction instruction) {
+        requireAtomicWord(instruction);
+        int address = memoryAddress(instruction);
+        registers.set(instruction.rd(), loadLinked(address, instruction.pc()));
+        advance(instruction);
+    }
+
+    private void executeScW(Instruction instruction) {
+        requireAtomicWord(instruction);
+        requireUnindexedAtomic(instruction);
+        int value = registers.get(instruction.rs());
+        boolean stored = storeConditional(
+                memoryAddress(instruction), value, instruction.pc());
+        registers.set(instruction.rd(), stored ? 1 : 0);
+        advance(instruction);
+    }
+
+    private void executeAmo(Instruction instruction) {
+        requireAtomicWord(instruction);
+        requireUnindexedAtomic(instruction);
+        AtomicMemory.Operation operation = switch (instruction.opcode()) {
+            case AMOADD_W -> AtomicMemory.Operation.ADD;
+            case AMOSWAP_W -> AtomicMemory.Operation.SWAP;
+            case AMOAND_W -> AtomicMemory.Operation.AND;
+            case AMOOR_W -> AtomicMemory.Operation.OR;
+            default -> throw new IllegalStateException(
+                    "Unhandled atomic operation: " + instruction.opcode());
+        };
+        int operand = registers.get(instruction.rs());
+        int previous = atomic(
+                memoryAddress(instruction), operation, operand, instruction.pc());
+        registers.set(instruction.rd(), previous);
+        advance(instruction);
+    }
+
+    private int loadLinked(int address, int pc) {
+        try {
+            return atomicMemory().loadLinked(address);
+        } catch (MemoryFault fault) {
+            throw new MachineFault(fault.code(), pc, fault.badAddress(), fault.detail());
+        }
+    }
+
+    private boolean storeConditional(int address, int value, int pc) {
+        try {
+            return atomicMemory().storeConditional(address, value);
+        } catch (MemoryFault fault) {
+            throw new MachineFault(fault.code(), pc, fault.badAddress(), fault.detail());
+        }
+    }
+
+    private int atomic(int address, AtomicMemory.Operation operation, int operand, int pc) {
+        try {
+            return atomicMemory().atomic(address, operation, operand);
+        } catch (MemoryFault fault) {
+            throw new MachineFault(fault.code(), pc, fault.badAddress(), fault.detail());
+        }
+    }
+
+    private void requireAtomicWord(Instruction instruction) {
+        if (instruction.size() != MemorySize.WORD) {
+            throw MachineFault.illegalInstruction(instruction.pc(),
+                    instruction.opcode().mnemonic() + " requires a 32-bit access");
+        }
+    }
+
+    private void requireUnindexedAtomic(Instruction instruction) {
+        if (instruction.indexed()) {
+            throw MachineFault.illegalInstruction(instruction.pc(),
+                    instruction.opcode().mnemonic() + " does not accept an index register");
+        }
+    }
+
+    private AtomicMemory atomicMemory() {
+        if (!(memory instanceof AtomicMemory atomic)) {
+            throw new IllegalStateException(
+                    "Data memory does not implement AtomicMemory");
+        }
+        return atomic;
+    }
+
+    private void clearReservation() {
+        if (memory instanceof AtomicMemory atomic) {
+            atomic.clearReservation();
+        }
+    }
+
     private void takeTrap(MachineFault fault) {
         if (csrs.tvec() == 0) {
             throw new IllegalStateException("UNHANDLED_TRAP: " + fault.getMessage(), fault);
@@ -455,6 +548,7 @@ public final class Cpu {
             }
             vector = MachineFault.Code.DOUBLE_FAULT.vector();
         }
+        clearReservation();
         csrs.enterTrap(instructionPc, vector, badAddress);
         pc = tvec + Integer.BYTES * vector;
     }

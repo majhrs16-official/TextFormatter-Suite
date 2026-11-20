@@ -1,8 +1,8 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (289 tests); V3-1 (tiempo, quantum y watchdog configurable)
-> implementado; V3-2 en curso (`CORE_COUNT`, `COREID` y `SYSINFO`); multinúcleo completo e
-> integración con el hub pendientes.
+> **Estado:** núcleo v3 aislado (297 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO` y atómicas); multinúcleo completo
+> e integración con el hub pendientes.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -67,8 +67,9 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
 - V3 sigue abierta: faltan el journal por unidad de mensaje, el scheduler de guest, la persistencia
   entre mensajes y el multinúcleo. V3-1 cubre reloj, quantum de preempción, watchdog de paso
   configurable y sleep/wake. V3-2 ya entrega `CoreCountConfig`, `COREID` (`0x10A`, RO),
-  `SYSINFO.CORE_COUNT` y `FEATURES` bit 6; faltan estado por core, atómicas `LR.W`/`SC.W`/`AMO*`,
-  IPI, PIC por core, TLB shootdown, scheduler de guest, watchdog por core y journal concurrente.
-  Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.
+  `SYSINFO.CORE_COUNT`, `FEATURES` bit 6 y las atómicas `LR.W`/`SC.W`/`AMOADD.W`/`AMOSWAP.W`/
+  `AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO; faltan
+  estado por core, IPI, PIC por core, TLB shootdown, scheduler de guest, watchdog por core y
+  journal concurrente. Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.

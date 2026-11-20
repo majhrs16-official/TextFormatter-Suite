@@ -52,7 +52,13 @@ public enum Opcode {
     CSRR(3, 6, "CSRR", InstructionForm.IMMEDIATE),
     CSRW(3, 7, "CSRW", InstructionForm.IMMEDIATE),
     SFENCE_VMA(3, 8, "SFENCE.VMA", InstructionForm.REGISTER),
-    FENCE(3, 9, "FENCE", InstructionForm.REGISTER);
+    FENCE(3, 9, "FENCE", InstructionForm.REGISTER),
+    LR_W(3, 10, "LR.W", InstructionForm.LOAD),
+    SC_W(3, 11, "SC.W", InstructionForm.STORE),
+    AMOADD_W(3, 12, "AMOADD.W", InstructionForm.STORE),
+    AMOSWAP_W(3, 13, "AMOSWAP.W", InstructionForm.STORE),
+    AMOAND_W(3, 14, "AMOAND.W", InstructionForm.STORE),
+    AMOOR_W(3, 15, "AMOOR.W", InstructionForm.STORE);
 
     private static final Opcode[][] BY_FAMILY = new Opcode[4][16];
 
@@ -92,6 +98,17 @@ public enum Opcode {
 
     public boolean supports(InstructionForm form) {
         return forms.contains(form);
+    }
+
+    /**
+     * @return {@code true} when {@code rs} is the value operand instead of an
+     *         index register, as in {@code SC.W} and {@code AMO*.W}
+     */
+    public boolean usesRsAsOperand() {
+        return switch (this) {
+            case SC_W, AMOADD_W, AMOSWAP_W, AMOAND_W, AMOOR_W -> true;
+            default -> false;
+        };
     }
 
     public static Opcode find(int family, int operation) {

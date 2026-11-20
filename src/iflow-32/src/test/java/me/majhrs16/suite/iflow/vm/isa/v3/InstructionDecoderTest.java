@@ -167,6 +167,15 @@ class InstructionDecoderTest {
                 if (opcode == Opcode.LEA) {
                     size = BYTE;
                 }
+                if (opcode == Opcode.LR_W) {
+                    rs = 0;
+                    idx = 0;
+                    size = WORD;
+                }
+                if (opcode.usesRsAsOperand()) {
+                    idx = 0;
+                    size = WORD;
+                }
                 if (opcode == Opcode.JCC) {
                     rd = 0;
                     rs = 14;
@@ -193,7 +202,7 @@ class InstructionDecoderTest {
 
     @Test
     void rejectsReservedOpcodeCombinations() {
-        for (int[] reserved : new int[][]{{0, 4}, {0, 15}, {2, 9}, {2, 15}, {3, 10}, {3, 15}}) {
+        for (int[] reserved : new int[][]{{0, 4}, {0, 15}, {2, 9}, {2, 15}}) {
             InstructionFixture.assertIllegal(InstructionFixture.instruction(
                     reserved[0], reserved[1], R, 0, 0, 0, 0, WORD, 0));
         }

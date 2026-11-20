@@ -778,7 +778,7 @@ class CpuTest {
         int doubleFaultPc = TVEC + 4 * MachineFault.Code.DOUBLE_FAULT.vector();
         assertEquals(doubleFaultPc, cpu.pc());
 
-        memory.load(doubleFaultPc, new byte[] {(byte) 0xFF});
+        memory.load(doubleFaultPc, new byte[] {(byte) 0x10});
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> cpu.step());
         assertEquals("Double fault during double fault", error.getMessage());

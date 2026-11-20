@@ -53,8 +53,10 @@ public final class InstructionDecoder {
             if (base != 0 || idx != 0) {
                 throw illegal(pc, "base/idx must be zero outside memory forms");
             }
-        } else if (idx == 0 && rs != 0) {
+        } else if (idx == 0 && rs != 0 && !opcode.usesRsAsOperand()) {
             throw illegal(pc, "rs must be zero when idx=0 in memory forms");
+        } else if (idx == 1 && opcode.usesRsAsOperand()) {
+            throw illegal(pc, opcode.mnemonic() + " does not accept an index register");
         }
 
         int immediate = form == InstructionForm.REGISTER
@@ -110,6 +112,11 @@ public final class InstructionDecoder {
                 }
                 if (Csr.fromAddress(immediate) == null) {
                     throw illegal(pc, "undefined CSR 0x" + Integer.toHexString(immediate));
+                }
+            }
+            case LR_W, SC_W, AMOADD_W, AMOSWAP_W, AMOAND_W, AMOOR_W -> {
+                if (size != MemorySize.WORD) {
+                    throw illegal(pc, opcode.mnemonic() + " requires size 32");
                 }
             }
             default -> throw new IllegalStateException("Unhandled v3 opcode: " + opcode);

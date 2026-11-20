@@ -36,8 +36,12 @@ public record Instruction(
         if (!form.isMemory() && (base != 0 || indexed)) {
             throw new IllegalArgumentException("base/idx must be zero outside memory forms");
         }
-        if (form.isMemory() && !indexed && rs != 0) {
+        if (form.isMemory() && !indexed && rs != 0 && !opcode.usesRsAsOperand()) {
             throw new IllegalArgumentException("rs must be zero when idx=0 in memory forms");
+        }
+        if (opcode.usesRsAsOperand() && indexed) {
+            throw new IllegalArgumentException(
+                    opcode.mnemonic() + " does not accept an index register");
         }
     }
 
