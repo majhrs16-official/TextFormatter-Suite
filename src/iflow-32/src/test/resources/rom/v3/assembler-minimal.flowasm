@@ -1,0 +1,23 @@
+.section .bios
+.org 0x00000000
+.entry start
+start:
+  MOV R1, 0x1234
+  NOP
+.section .boot
+.org 0x80000000
+.entry boot
+boot:
+  NOP
+.section .kernel
+.org 0x80001000
+.entry kmain
+kmain:
+  NOP
+.section .program.hello
+.org 0x02000000
+.entry main
+.capability "iflow.property.read"
+main:
+  MOV R2, 7
+  HALT

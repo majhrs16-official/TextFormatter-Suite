@@ -1,10 +1,11 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (326 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> **Estado:** núcleo v3 aislado (328 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO`, atómicas, PIC por core, IPI,
-> `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core y journal concurrente por
-> mensaje); faltan el kernel guest con scheduler/shootdown, la persistencia entre mensajes y la
-> integración con el hub.
+> `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
+> mensaje y V3-2a: ensamblador `.flowasm` v3 `iflow-as-v3` con ROM `FLOWROM` v3/`PRG3`); faltan
+> el kernel guest con scheduler/shootdown, el loader del host que copia los segmentos a su
+> `loadAddress`, la persistencia entre mensajes y la integración con el hub.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -99,7 +100,11 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
   serializan sus transacciones entre cores. Un cambio de page table no vacía
   la TLB ajena: el core destino debe ejecutar `SFENCE.VMA` tras la IPI; no hay shootdown automático
   del host. El journal concurrente por unidad de mensaje está implementado con overlay aislado,
-  read-your-writes y commit solo en `DELIVER`. Faltan el kernel guest que complete scheduler y
-  shootdown y la persistencia entre mensajes. Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.
+  read-your-writes y commit solo en `DELIVER`. V3-2a entrega el ensamblador `.flowasm` v3
+  (`tools/iflow-compiler/src/v3`, CLI `iflow-as-v3`): secciones tipadas, directivas, encoder
+  completo, ROM `FLOWROM` v3 y `PRG3`; `RomParser` acepta la ROM emitida y `InstructionDecoder`
+  la decodifica. Faltan el kernel guest que complete scheduler y shootdown, el loader del host
+  que copie los segmentos a su `loadAddress` y la persistencia entre mensajes. Hasta completar
+  V3-2, `CORE_COUNT > 1` falla explícito.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.

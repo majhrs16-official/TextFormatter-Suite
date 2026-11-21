@@ -12,6 +12,8 @@ Convierte código ensamblador `.flowasm` (texto legible) a binario `.flow` (ejec
 
 - **Entrada**: `.flowasm` (mnemónicos, labels, directivas, expresiones `LABEL+OFFSET`)
 - **Salida**: `.flow` binario (cabecera, TOC, segmentos tipados y hash SHA-256)
+- **Dos ensambladores**: `iflow-as` para la ISA v2 de `iflow-16` e `iflow-as-v3` para
+  la ISA de 32 bits de `iflow-32` (`src/v3/`, véase más abajo).
 
 ---
 
@@ -204,6 +206,107 @@ MOV R3, R7     ; byte = 0x37
 
 ---
 
+## Ensamblador v3 (`iflow-as-v3`)
+
+El módulo `src/v3/` ensambla la ISA de 32 bits de `iflow-32` (ADR-037 §3–§4) y
+emite el contenedor `FLOWROM` v3 (§8). Es independiente del ensamblador v2: no
+importa sus opcodes, registros, secciones ni formato binario.
+
+```bash
+npm run build
+node dist/cli-v3.js kernel.flowasm -o kernel.flow
+# o, tras npm link / instalación:
+iflow-as-v3 kernel.flowasm -o kernel.flow -l
+```
+
+Opciones: `-o/--output`, `-e/--entry <label>`, `-R/--reset <addr>`,
+`--max-rom <bytes>` y `-l/--list` para la tabla de símbolos.
+
+### Secciones
+
+| Sección | Tipo TOC | `org` por defecto | Flags por defecto |
+|---|---:|---:|---|
+| `.section .bios` | 1 | `0x00000000` | `R|X` |
+| `.section .boot` | 2 | `0x80000000` | `R|X` |
+| `.section .kernel` | 3 | `0x80001000` | `R|X` |
+| `.section .program.<nombre>` | 4 | `0x02000000` | `R|X|U` |
+| `.section .data.<nombre>` | 5 | `0x80002000` | `R|W` |
+| `.section .font.<nombre>` | 6 | `0x80003000` | `R` |
+| `.section .config.<nombre>` | 7 | `0x80004000` | `R` |
+
+Un ROM exige exactamente un `BIOS`, un `BOOT` y un `KERNEL`; admite hasta 64
+`PROGRAM`. Cada `org` debe estar alineado a 4 KiB. El ensamblador aplica las
+reglas por tipo de ADR-037 §8.5: BIOS R/X en `0`, BOOT/KERNEL en espacio de
+kernel, PROGRAM en espacio de usuario con `U=1` y `W=0`, DATA como datos
+supervisor, y rechaza `W && X`.
+
+### Directivas
+
+| Directiva | Uso |
+|---|---|
+| `.org <expr>` | Dirección de carga; solo antes del contenido de la sección. |
+| `.entry <label>` | Punto de entrada del segmento. |
+| `.reset <label>` | Vector de reset global (alternativa a `-e`/`-R`). |
+| `.align <n>` | Rellena con ceros hasta el siguiente múltiplo de `n`. |
+| `.byte <expr>...` | Bytes. |
+| `.half <expr>...` | Mitades little-endian. |
+| `.word <expr>...` | Palabras little-endian de 32 bits. |
+| `.string "texto"...` | UTF-8 terminado en NUL por cada argumento. |
+| `.space <n>` | Reserva `n` bytes a cero. |
+| `.capability "nombre"` | Capacidad de un `PROGRAM` (máx. 128 B, máx. 256). |
+| `.flags R\|W\|X\|U` | Sobrescribe los flags del segmento. |
+| `.globl <label>` | Marcador de símbolo global; no cambia la emisión. |
+
+`PROGRAM` se envuelve en la subcabecera `PRG3` de 32 bytes. El código empieza en
+`org + 32`; las capacidades van tras el código y la TOC apunta al `entryPoint`
+absoluto dentro del rango de código.
+
+### Instrucciones y operandos
+
+- Registros `R0`–`R15`; alias `SP` = `R14`, `FP` = `R13`, `LR` = `R15`.
+- `MOV`, `LEA`, `PUSH`, `POP`; ALU `ADD`/`ADC`/`SUB`/`AND`/`OR`/`XOR`/`SHL`/
+  `SHR`/`SAR`/`MUL`/`DIV`/`DIVU`/`MOD`/`MODU`/`CMP`/`TEST`; control `JMP`/`JCC`/
+  `CALL`/`RET`/`ECALL`/`ERET`/`HALT`/`BREAK`/`NOP`; sistema `HOST`/`RDCYCLE`/
+  `RDTIME`/`CSRRW`/`CSRRS`/`CSRRC`/`CSRR`/`CSRW`/`SFENCE.VMA`/`FENCE`; atómicas
+  `LR.W`/`SC.W`/`AMOADD.W`/`AMOSWAP.W`/`AMOAND.W`/`AMOOR.W`.
+- `LI Rd, imm` es un alias de `MOV Rd, imm`; `Jcc` genérico es `JCC <cond>,
+  target` y los alias (`JZ`, `JNE`, `JGE`, …) llevan un solo destino.
+- Sufijos `.B`/`.H` solo en `MOV` de memoria. `MOV [mem], imm` no existe: se
+  escribe `MOV Rt, imm` y luego `MOV [mem], Rt`.
+- Memoria: `[Rbase]`, `[Rbase + disp]`, `[Rbase + Rindex]`,
+  `[Rbase + Rindex + disp]`; el índice no se escala.
+- Nombres CSR: `STATUS`, `EPC`, `CAUSE`, `BADVADDR`, `TVEC`, `PTBR`, `SCRATCH`,
+  `PIDENT`, `MIDENT`, `FLAGS`, `COREID`.
+- Saltos inmediatos se codifican relativos a `PC + 7 + disp32`.
+
+Cada instrucción ocupa 3 bytes en forma registro-registro y 7 bytes en
+inmediato/memoria; todo es little-endian. `MOV` inmediato, ALU, `PUSH`/`POP` y
+atómicas exigen `size = 32`.
+
+### Formato `FLOWROM` v3
+
+Cabecera de 80 bytes (`FLOWROM\0`, versiones 3/32/3, `resetVector`, TOC y hash
+SHA-256), TOC de 64 bytes por segmento y payloads alineados a 16 bytes. El hash
+global cubre la ROM con sus 32 bytes de hash a cero; cada entrada lleva el hash
+del segmento. Un `PROGRAM` añade `PRG3` con `codeOffset`, `codeEnd`, rangos de
+datos y capacidades.
+
+> **Integración pendiente (V3-2b).** El ensamblador emite los segmentos con su
+> `loadAddress` virtual, pero el host todavía no copia BIOS/BOOT/KERNEL desde el
+> contenedor a esas direcciones. `RomParser` valida la imagen y el decodificador
+> v3 acepta sus instrucciones; la ejecución completa espera al loader del host.
+
+Pruebas y fixture de integración:
+
+```bash
+npm run build && npm run test:v3
+# Regenera el ROM de prueba que consume iflow-32:
+node dist/cli-v3.js ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.flowasm \
+  -o ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.rom
+```
+
+---
+
 ## ROM de firmware (0x0000–0x0FFF)
 
 Con firmware activado (por defecto) se antepone una ROM de 4 KiB con la tabla de
@@ -354,12 +457,22 @@ tools/iflow-compiler/
 │   ├── disassembler.ts   # .flow v2 parser, decoder and CFG builder
 │   ├── disasm-cli.ts     # Disassembler CLI entry point (iflow-dis)
 │   ├── index.ts          # Public API barrel (library entry point)
-│   └── types.ts          # ISA definitions, types
+│   ├── types.ts          # ISA definitions, types
+│   ├── cli-v3.ts         # CLI entry point for the v3 assembler (iflow-as-v3)
+│   └── v3/               # Independent ISA v3 assembler and FLOWROM v3 emitter
+│       ├── ast.ts        # v3 syntax tree
+│       ├── lexer.ts      # Tokens for .flowasm v3
+│       ├── parser.ts     # Sections, directives, operands and expressions
+│       ├── encoder.ts    # Instruction classification and encoding
+│       ├── assembler.ts  # Two passes, segments, PRG3, hashes and validation
+│       ├── types.ts      # v3 opcodes, conditions, CSRs and section types
+│       └── index.ts      # Public API barrel
 ├── test/
 │   ├── *.flowasm         # Fixtures (firmware, simple, main_only)
 │   ├── *.flow            # Assembled binaries
 │   ├── disasm/           # run.js (listing, CFG and error-path tests)
-│   └── validation/       # run.js + cases.json (CLI golden tests)
+│   ├── validation/       # run.js + cases.json (CLI golden tests)
+│   └── v3/               # run.js (v3 encoding, ROM, PRG3 and error paths)
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -374,10 +487,13 @@ tools/iflow-compiler/
 npm run build
 
 # Validación del ensamblador (golden CLI: test/validation/*)
-npm test            # validation + determinism + disassembler
+npm test            # validation + determinism + disassembler + v3
 
 # Solo el desensamblador
 npm run test:disasm
+
+# Solo el ensamblador v3
+npm run test:v3
 
 # Recompilar el fixture de firmware
 npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
