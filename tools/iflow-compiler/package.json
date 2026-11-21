@@ -6,17 +6,17 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "npm run test:validation && npm run test:determinism && npm run test:disasm && npm run test:v3",
+    "test": "npm run test:validation && npm run test:determinism && npm run test:disasm && npm run test:cli && npm run test:v3",
     "test:validation": "node test/validation/run.js",
     "test:determinism": "node test/determinism/run.js",
     "test:disasm": "node test/disasm/run.js",
+    "test:cli": "node test/cli/run.js",
     "test:v3": "node test/v3/run.js",
     "test:jest": "jest",
     "dev": "ts-node src/cli.ts"
   },
   "bin": {
     "iflow-as": "dist/cli.js",
-    "iflow-as-v3": "dist/cli-v3.js",
     "iflow-dis": "dist/disasm-cli.js"
   },
   "dependencies": {

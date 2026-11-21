@@ -11,9 +11,10 @@
 Convierte código ensamblador `.flowasm` (texto legible) a binario `.flow` (ejecutable por la VM iflow).
 
 - **Entrada**: `.flowasm` (mnemónicos, labels, directivas, expresiones `LABEL+OFFSET`)
-- **Salida**: `.flow` binario (cabecera, TOC, segmentos tipados y hash SHA-256)
-- **Dos ensambladores**: `iflow-as` para la ISA v2 de `iflow-16` e `iflow-as-v3` para
-  la ISA de 32 bits de `iflow-32` (`src/v3/`, véase más abajo).
+- **Salida**: `.flow` binario (FLOW v2 o FLOWROM v3, según `-f`)
+- **Una CLI, dos backends**: `iflow-as` comparte el parser de argumentos; `-f/--format`
+  elige `flow-v2` (ISA v2 de `iflow-16`) o `flowrom-v3` (ISA de 32 bits de `iflow-32`,
+  módulo `src/v3/`). Los opcodes y formatos no se mezclan.
 
 ---
 
@@ -32,11 +33,12 @@ Requiere **Node.js 18+** y **npm**.
 ## Uso (CLI)
 
 ```bash
-# Compilar
+# Compilar con el backend v2 (formato por defecto)
 node dist/cli.js programa.flowasm -o programa.flow
 
-# Con opciones
+# Con opciones v2
 node dist/cli.js programa.flowasm \
+  -f flow-v2 \
   -o programa.flow \
   -O 0x0000 \        # origen (con firmware, sube a 0x1000)
   -e main \          # entry point label
@@ -47,6 +49,10 @@ node dist/cli.js programa.flowasm \
 # Programa bare-metal (sin ROM de firmware)
 node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 ```
+
+`-f/--format` acepta `flow-v2` (por defecto) y `flowrom-v3`. Las opciones de un
+backend se rechazan de forma explícita en el otro: `-O`, `-d` y `--no-firmware`
+son de v2; `-R/--reset` y `--max-rom` son de v3.
 
 > Por defecto se antepone la **ROM de firmware** (0x0000–0x0FFF) y el código de
 > usuario se coloca en 0x1000. `--no-firmware` compila bare-metal (origen 0x0000).
@@ -206,7 +212,7 @@ MOV R3, R7     ; byte = 0x37
 
 ---
 
-## Ensamblador v3 (`iflow-as-v3`)
+## Backend v3 (`-f flowrom-v3`)
 
 El módulo `src/v3/` ensambla la ISA de 32 bits de `iflow-32` (ADR-037 §3–§4) y
 emite el contenedor `FLOWROM` v3 (§8). Es independiente del ensamblador v2: no
@@ -214,13 +220,15 @@ importa sus opcodes, registros, secciones ni formato binario.
 
 ```bash
 npm run build
-node dist/cli-v3.js kernel.flowasm -o kernel.flow
+node dist/cli.js kernel.flowasm -f flowrom-v3 -o kernel.flow
 # o, tras npm link / instalación:
-iflow-as-v3 kernel.flowasm -o kernel.flow -l
+iflow-as kernel.flowasm -f flowrom-v3 -o kernel.flow -l
 ```
 
-Opciones: `-o/--output`, `-e/--entry <label>`, `-R/--reset <addr>`,
-`--max-rom <bytes>` y `-l/--list` para la tabla de símbolos.
+Opciones comunes: `-o/--output`, `-e/--entry <label>` y `-l/--list` (imprime la
+tabla de símbolos). Específicas de v3: `-R/--reset <addr>` y
+`--max-rom <bytes>` (1–16777216). `-O`, `-d` y `--no-firmware` se rechazan en
+este formato.
 
 ### Secciones
 
@@ -301,8 +309,8 @@ Pruebas y fixture de integración:
 ```bash
 npm run build && npm run test:v3
 # Regenera el ROM de prueba que consume iflow-32:
-node dist/cli-v3.js ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.flowasm \
-  -o ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.rom
+node dist/cli.js ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.flowasm \
+  -f flowrom-v3 -o ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.rom
 ```
 
 ---
@@ -453,12 +461,13 @@ fs.writeFileSync('output.flow', Buffer.from(binary));
 tools/iflow-compiler/
 ├── src/
 │   ├── assembler.ts      # Two-pass assembler (core)
-│   ├── cli.ts            # CLI entry point (commander)
+│   ├── cli.ts            # Unified CLI dispatcher (iflow-as, -f/--format)
+│   ├── cli-v2.ts         # ISA v2 backend runner
+│   ├── cli-v3.ts         # ISA v3 backend runner
 │   ├── disassembler.ts   # .flow v2 parser, decoder and CFG builder
 │   ├── disasm-cli.ts     # Disassembler CLI entry point (iflow-dis)
 │   ├── index.ts          # Public API barrel (library entry point)
 │   ├── types.ts          # ISA definitions, types
-│   ├── cli-v3.ts         # CLI entry point for the v3 assembler (iflow-as-v3)
 │   └── v3/               # Independent ISA v3 assembler and FLOWROM v3 emitter
 │       ├── ast.ts        # v3 syntax tree
 │       ├── lexer.ts      # Tokens for .flowasm v3
@@ -472,6 +481,7 @@ tools/iflow-compiler/
 │   ├── *.flow            # Assembled binaries
 │   ├── disasm/           # run.js (listing, CFG and error-path tests)
 │   ├── validation/       # run.js + cases.json (CLI golden tests)
+│   ├── cli/              # run.js (unified CLI format selection and rejection)
 │   └── v3/               # run.js (v3 encoding, ROM, PRG3 and error paths)
 ├── package.json
 ├── tsconfig.json
@@ -487,10 +497,13 @@ tools/iflow-compiler/
 npm run build
 
 # Validación del ensamblador (golden CLI: test/validation/*)
-npm test            # validation + determinism + disassembler + v3
+npm test            # validation + determinism + disassembler + CLI + v3
 
 # Solo el desensamblador
 npm run test:disasm
+
+# Solo la CLI unificada
+npm run test:cli
 
 # Solo el ensamblador v3
 npm run test:v3

@@ -3,7 +3,7 @@
 > **Estado:** núcleo v3 aislado (328 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO`, atómicas, PIC por core, IPI,
 > `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
-> mensaje y V3-2a: ensamblador `.flowasm` v3 `iflow-as-v3` con ROM `FLOWROM` v3/`PRG3`); faltan
+> mensaje y V3-2a: backend `.flowasm` v3 `iflow-as -f flowrom-v3` con ROM `FLOWROM` v3/`PRG3`); faltan
 > el kernel guest con scheduler/shootdown, el loader del host que copia los segmentos a su
 > `loadAddress`, la persistencia entre mensajes y la integración con el hub.
 >
@@ -101,7 +101,7 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
   la TLB ajena: el core destino debe ejecutar `SFENCE.VMA` tras la IPI; no hay shootdown automático
   del host. El journal concurrente por unidad de mensaje está implementado con overlay aislado,
   read-your-writes y commit solo en `DELIVER`. V3-2a entrega el ensamblador `.flowasm` v3
-  (`tools/iflow-compiler/src/v3`, CLI `iflow-as-v3`): secciones tipadas, directivas, encoder
+  (`tools/iflow-compiler/src/v3`, formato `flowrom-v3` de `iflow-as`): secciones tipadas, directivas, encoder
   completo, ROM `FLOWROM` v3 y `PRG3`; `RomParser` acepta la ROM emitida y `InstructionDecoder`
   la decodifica. Faltan el kernel guest que complete scheduler y shootdown, el loader del host
   que copie los segmentos a su `loadAddress` y la persistencia entre mensajes. Hasta completar

@@ -1,116 +1,109 @@
 #!/usr/bin/env node
 /**
- * iFlow VM Assembler CLI
+ * Unified iFlow assembler CLI.
+ *
+ * The argument surface is shared; `-f/--format` selects the ISA backend.
+ * Each backend keeps its own assembler module and rejects options that do not
+ * apply to it, mirroring NASM's `-f <format>` model without merging opcodes.
  */
-import { Assembler } from './assembler';
-import type { Symbol } from './types';
-import * as fs from 'fs';
-import * as path from 'path';
 import { program } from 'commander';
+import { runV2Cli } from './cli-v2';
+import { runV3Cli } from './cli-v3';
+
+const FORMAT_V2 = 'flow-v2';
+const FORMAT_V3 = 'flowrom-v3';
 
 program
   .name('iflow-as')
-  .description('iFlow VM Assembler - compiles .flowasm to .flow binary')
+  .description('iFlow assembler - .flowasm to FLOW v2 or FLOWROM v3')
   .version('1.0.0')
   .argument('<input>', 'input assembly file (.flowasm)')
+  .option('-f, --format <format>', `output format: ${FORMAT_V2} or ${FORMAT_V3}`, FORMAT_V2)
   .option('-o, --output <file>', 'output binary file (.flow)')
-  .option('-O, --origin <address>', 'program origin address (hex)', '0x0000')
-  .option('-e, --entry <label>', 'entry point label')
-  .option('-d, --debug', 'include debug info')
-  .option('-l, --list', 'output assembly listing')
-  .option('--no-firmware', 'do not prepend the firmware ROM (bare-metal program)')
-  .option('-v, --verbose', 'verbose output');
+  .option('-e, --entry <label>', 'entry point or reset vector label')
+  .option('-l, --list', 'emit the symbol listing')
+  .option('-v, --verbose', 'verbose diagnostics')
+  .option('-O, --origin <address>', `program origin (hex, ${FORMAT_V2} only)`)
+  .option('-d, --debug', `include debug info (${FORMAT_V2} only)`)
+  .option('--no-firmware', `bare-metal program without firmware ROM (${FORMAT_V2} only)`)
+  .option('-R, --reset <address>', `explicit reset vector (hex, ${FORMAT_V3} only)`)
+  .option('--max-rom <bytes>', `maximum ROM size (${FORMAT_V3} only)`);
 
 program.parse(process.argv);
 
-const options = program.opts();
-const inputFile = program.args[0];
+main()
+  .then(code => {
+    process.exitCode = code;
+  })
+  .catch(error => {
+    console.error(`Error: ${(error as Error).message}`);
+    process.exitCode = 1;
+  });
 
-if (!inputFile) {
-  console.error('Error: No input file specified');
-  program.help();
-  process.exit(1);
-}
+async function main(): Promise<number> {
+  const inputFile = program.args[0];
+  if (!inputFile) {
+    console.error('Error: No input file specified');
+    return 1;
+  }
 
-const inputPath = path.resolve(inputFile);
-if (!fs.existsSync(inputPath)) {
-  console.error(`Error: Input file not found: ${inputPath}`);
-  process.exit(1);
-}
+  const options = program.opts();
+  const explicit = (name: string) => program.getOptionValueSource(name) === 'cli';
 
-const outputFile = options.output
-  ? path.resolve(options.output)
-  : path.join(path.dirname(inputPath), path.basename(inputPath, path.extname(inputPath)) + '.flow');
-
-async function main() {
-  try {
-    const source = fs.readFileSync(inputPath, 'utf-8');
-
-    const asm = new Assembler({
-      origin: parseInt(options.origin, 0),
+  if (options.format === FORMAT_V2) {
+    const incompatible: string[] = [];
+    if (explicit('reset')) {
+      incompatible.push('-R/--reset');
+    }
+    if (explicit('maxRom')) {
+      incompatible.push('--max-rom');
+    }
+    if (incompatible.length > 0) {
+      return reject(FORMAT_V2, incompatible);
+    }
+    return runV2Cli({
+      inputFile,
+      outputFile: options.output,
+      origin: options.origin ?? '0x0000',
       entryPoint: options.entry,
       debug: options.debug,
+      list: options.list,
       firmware: options.firmware,
+      verbose: options.verbose,
     });
-
-    const result = await asm.assemble(source, inputPath);
-    const { program, symbols, diagnostics } = result;
-
-    // Output diagnostics
-    for (const diag of diagnostics) {
-      const prefix = diag.severity === 'error' ? 'Error' : diag.severity === 'warning' ? 'Warning' : 'Info';
-      console.error(`${prefix} [${diag.file}:${diag.line}:${diag.column}]: ${diag.message}`);
-    }
-
-    const errors = diagnostics.filter(d => d.severity === 'error');
-    if (errors.length > 0) {
-      console.error(`\nAssembly failed with ${errors.length} error(s)`);
-      process.exit(1);
-    }
-
-    // Write output
-    const programBytes = asm.serializeProgramImage(program);
-    fs.writeFileSync(outputFile, Buffer.from(programBytes));
-    console.log(`✓ Assembled ${inputFile} → ${outputFile} (${programBytes.length} bytes)`);
-
-    if (options.list) {
-      const listFile = outputFile.replace('.flow', '.lst');
-      generateListing(source, symbols, listFile, asm);
-    }
-
-  } catch (error: any) {
-    console.error(`Error: ${error.message}`);
-    if (options.verbose && error.stack) {
-      console.error(error.stack);
-    }
-    process.exit(1);
   }
+
+  if (options.format === FORMAT_V3) {
+    const incompatible: string[] = [];
+    if (explicit('origin')) {
+      incompatible.push('-O/--origin');
+    }
+    if (explicit('debug')) {
+      incompatible.push('-d/--debug');
+    }
+    if (explicit('firmware')) {
+      incompatible.push('--no-firmware');
+    }
+    if (incompatible.length > 0) {
+      return reject(FORMAT_V3, incompatible);
+    }
+    return runV3Cli({
+      inputFile,
+      outputFile: options.output,
+      entryPoint: options.entry,
+      reset: options.reset,
+      maxRom: options.maxRom,
+      list: options.list,
+      verbose: options.verbose,
+    });
+  }
+
+  console.error(`Error: unknown format '${options.format}'. Use ${FORMAT_V2} or ${FORMAT_V3}.`);
+  return 2;
 }
 
-main();
-
-function generateListing(source: string, symbols: Symbol[], listFile: string, asm: Assembler) {
-  const lines = source.split('\n');
-  let output = '';
-  
-  // Header
-  output += '; iFlow Assembly Listing\n';
-  output += `; Source: ${inputPath}\n`;
-  output += `; Generated: ${new Date().toISOString()}\n\n`;
-  
-  // Symbol table
-  output += '; Symbol Table:\n';
-  for (const sym of symbols) {
-    output += `; ${sym.name.padEnd(32)} = 0x${sym.address.toString(16).padStart(4, '0')} (${sym.type})\n`;
-  }
-  output += '\n';
-  
-  // Source with addresses (simplified - just show source with line numbers)
-  output += '; Source:\n';
-  for (let i = 0; i < lines.length; i++) {
-    output += `${String(i + 1).padStart(4, ' ')}: ${lines[i]}\n`;
-  }
-  
-  fs.writeFileSync(listFile, output);
-  console.log(`✓ Listing written to ${listFile}`);
+function reject(format: string, options: string[]): number {
+  console.error(
+    `Error: ${format} does not accept ${options.join(', ')}. Choose the matching --format.`);
+  return 2;
 }
