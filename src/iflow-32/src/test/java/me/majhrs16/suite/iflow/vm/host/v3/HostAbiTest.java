@@ -3,14 +3,20 @@ package me.majhrs16.suite.iflow.vm.host.v3;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +53,7 @@ class HostAbiTest {
         fixture = new MachineFixture();
         bridge = new FakeBridge();
         abi = new HostAbi(bridge);
+        abi.beginExecution(MIDENT);
     }
 
     @Test
@@ -158,16 +165,22 @@ class HostAbiTest {
     }
 
     @Test
-    void propertyWriteExistsPermissionAndMessageIdUseTheBridge() {
+    void propertyWriteUsesReadYourWritesAndDiscardsTheOverlayOnAbort() {
         Map<String, TlvCodec.TlvValue> write = new LinkedHashMap<>();
         write.put(HostAbi.KEY_SCOPE, TlvCodec.stringValue("world"));
         write.put(HostAbi.KEY_PROPERTY, TlvCodec.stringValue("name"));
         write.put(HostAbi.KEY_VALUE, TlvCodec.stringValue("Nether"));
         assertEquals(HostStatus.OK, call(HostServiceId.PROPERTY_WRITE, write,
                 PIDENT, MIDENT, RESULT_CAPACITY).status());
-        assertEquals("Nether", bridge.lastWritten.asString());
+        assertNull(bridge.lastWritten);
+        assertTrue(bridge.properties.isEmpty());
+        assertEquals(1, bridge.validatedWrites);
 
-        bridge.properties.put("world.name", TlvCodec.stringValue("Nether"));
+        HostResult overlay = call(HostServiceId.PROPERTY_READ,
+                propertyArguments("world", "name"), PIDENT, MIDENT, RESULT_CAPACITY);
+        assertTrue(resultMap(overlay).get(HostAbi.KEY_PRESENT).asBool());
+        assertEquals("Nether", resultMap(overlay).get(HostAbi.KEY_VALUE).asString());
+
         HostResult exists = call(HostServiceId.PROPERTY_EXISTS,
                 propertyArguments("world", "name"), PIDENT, MIDENT, RESULT_CAPACITY);
         assertTrue(resultMap(exists).get(HostAbi.KEY_PRESENT).asBool());
@@ -195,32 +208,163 @@ class HostAbiTest {
         HostResult missing = call(HostServiceId.MESSAGE_ID, mapOf(), PIDENT, MIDENT,
                 RESULT_CAPACITY);
         assertEquals(HostStatus.NOT_FOUND, missing.status());
+
+        abi.abortExecution(MIDENT);
+        assertTrue(bridge.properties.isEmpty());
+        assertNull(bridge.lastWritten);
     }
 
     @Test
-    void routeDecisionIsWrittenOncePerExecution() {
-        Map<String, TlvCodec.TlvValue> arguments = new LinkedHashMap<>();
-        arguments.put(HostAbi.KEY_TARGET, TlvCodec.i64Value(HostAbi.TARGET_DELIVER));
-        arguments.put(HostAbi.KEY_REASON, TlvCodec.stringValue("ok"));
+    void routeDecisionIsLatchedPerExecutionAndAppliedOnCommit() throws Exception {
+        Map<String, TlvCodec.TlvValue> arguments = decisionArguments(
+                HostAbi.TARGET_DELIVER, "ok", null);
 
         HostResult first = call(HostServiceId.ROUTE_DECISION, arguments,
                 PIDENT, MIDENT, RESULT_CAPACITY);
         assertEquals(HostStatus.OK, first.status());
-        assertEquals(HostAbi.TARGET_DELIVER, bridge.lastTarget);
-        assertEquals("ok", bridge.lastReason);
+        assertEquals(0, bridge.decisions);
 
         HostResult second = call(HostServiceId.ROUTE_DECISION, arguments,
                 PIDENT, MIDENT, RESULT_CAPACITY);
         assertEquals(HostStatus.CONFLICT, second.status());
-        assertEquals(1, bridge.decisions);
+        assertEquals(0, bridge.decisions);
 
-        abi.beginExecution();
-        arguments.put(HostAbi.KEY_TARGET, TlvCodec.i64Value(HostAbi.TARGET_ERROR));
-        arguments.put(HostAbi.KEY_ERROR, TlvCodec.stringValue("boom"));
+        abi.commitExecution(MIDENT);
+        assertEquals(1, bridge.decisions);
+        assertEquals(HostAbi.TARGET_DELIVER, bridge.lastTarget);
+        assertEquals("ok", bridge.lastReason);
+        assertFalse(abi.isExecutionOpen(MIDENT));
+
+        abi.beginExecution(MIDENT);
+        arguments = decisionArguments(HostAbi.TARGET_ERROR, "failed", "boom");
         assertEquals(HostStatus.OK, call(HostServiceId.ROUTE_DECISION, arguments,
                 PIDENT, MIDENT, RESULT_CAPACITY).status());
+        assertEquals(1, bridge.decisions);
+        abi.commitExecution(MIDENT);
+        assertEquals(2, bridge.decisions);
         assertEquals(HostAbi.TARGET_ERROR, bridge.lastTarget);
         assertEquals("boom", bridge.lastError);
+    }
+
+    @Test
+    void duplicateOpenAndMissingCloseAreExplicit() {
+        assertTrue(abi.isExecutionOpen(MIDENT));
+        assertThrows(IllegalStateException.class, () -> abi.beginExecution(MIDENT));
+        assertThrows(IllegalArgumentException.class,
+                () -> abi.beginExecution(CsrFile.NO_IDENTITY));
+
+        abi.abortExecution(MIDENT);
+        assertFalse(abi.isExecutionOpen(MIDENT));
+        assertEquals(HostStatus.NOT_READY, call(HostServiceId.PROPERTY_READ,
+                propertyArguments("world", "name"), PIDENT, MIDENT,
+                RESULT_CAPACITY).status());
+        assertThrows(IllegalStateException.class, () -> abi.commitExecution(MIDENT));
+        assertThrows(IllegalStateException.class, () -> abi.abortExecution(MIDENT));
+    }
+
+    @Test
+    void cancelErrorAndMissingDecisionNeverApplyWrites() throws Exception {
+        Map<String, TlvCodec.TlvValue> write = propertyWriteArguments("world", "name", "A");
+        assertEquals(HostStatus.OK, call(HostServiceId.PROPERTY_WRITE, write,
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        assertEquals(HostStatus.OK, call(HostServiceId.ROUTE_DECISION,
+                decisionArguments(HostAbi.TARGET_CANCEL_EVENT, "cancel", null),
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        abi.commitExecution(MIDENT);
+        assertEquals(1, bridge.decisions);
+        assertEquals(HostAbi.TARGET_CANCEL_EVENT, bridge.lastTarget);
+        assertTrue(bridge.properties.isEmpty());
+
+        abi.beginExecution(MIDENT);
+        assertEquals(HostStatus.OK, call(HostServiceId.PROPERTY_WRITE, write,
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        assertEquals(HostStatus.OK, call(HostServiceId.ROUTE_DECISION,
+                decisionArguments(HostAbi.TARGET_ERROR, "error", "boom"),
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        abi.commitExecution(MIDENT);
+        assertEquals(2, bridge.decisions);
+        assertEquals(HostAbi.TARGET_ERROR, bridge.lastTarget);
+        assertTrue(bridge.properties.isEmpty());
+
+        abi.beginExecution(MIDENT);
+        assertEquals(HostStatus.OK, call(HostServiceId.PROPERTY_WRITE, write,
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        abi.commitExecution(MIDENT);
+        assertEquals(2, bridge.decisions);
+        assertTrue(bridge.properties.isEmpty());
+    }
+
+    @Test
+    void failedCommitDiscardsTheWriteSetAndClosesTheUnit() {
+        Map<String, TlvCodec.TlvValue> write = propertyWriteArguments("world", "name", "B");
+        assertEquals(HostStatus.OK, call(HostServiceId.PROPERTY_WRITE, write,
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        assertEquals(HostStatus.OK, call(HostServiceId.ROUTE_DECISION,
+                decisionArguments(HostAbi.TARGET_DELIVER, "ok", null),
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        bridge.applyError = HostServiceException.denied("commit refused");
+
+        HostServiceException error = assertThrows(HostServiceException.class,
+                () -> abi.commitExecution(MIDENT));
+
+        assertEquals(HostStatus.DENIED, error.status());
+        assertTrue(bridge.properties.isEmpty());
+        assertFalse(abi.isExecutionOpen(MIDENT));
+    }
+
+    @Test
+    void concurrentMessagesKeepSeparateOverlaysAndCommitIndependently() throws Exception {
+        int otherMident = MIDENT + 1;
+        abi.beginExecution(otherMident);
+
+        int argumentsA = ARGUMENTS + 0x20_000;
+        int resultA = RESULT + 0x20_000;
+        int argumentsB = ARGUMENTS + 0x40_000;
+        int resultB = RESULT + 0x40_000;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<HostResult> first = executor.submit(() -> {
+                start.await();
+                return callAt(HostServiceId.PROPERTY_WRITE,
+                        propertyWriteArguments("world", "name", "A"),
+                        PIDENT, MIDENT, RESULT_CAPACITY, argumentsA, resultA);
+            });
+            Future<HostResult> second = executor.submit(() -> {
+                start.await();
+                return callAt(HostServiceId.PROPERTY_WRITE,
+                        propertyWriteArguments("world", "name", "B"),
+                        PIDENT, otherMident, RESULT_CAPACITY, argumentsB, resultB);
+            });
+            start.countDown();
+            assertEquals(HostStatus.OK, first.get(5, TimeUnit.SECONDS).status());
+            assertEquals(HostStatus.OK, second.get(5, TimeUnit.SECONDS).status());
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertTrue(bridge.properties.isEmpty());
+        assertEquals("A", propertyValue(call(HostServiceId.PROPERTY_READ,
+                propertyArguments("world", "name"), PIDENT, MIDENT, RESULT_CAPACITY)));
+        assertEquals("B", propertyValue(call(HostServiceId.PROPERTY_READ,
+                propertyArguments("world", "name"), PIDENT, otherMident, RESULT_CAPACITY)));
+
+        assertEquals(HostStatus.OK, call(HostServiceId.ROUTE_DECISION,
+                decisionArguments(HostAbi.TARGET_DELIVER, "ok", null),
+                PIDENT, MIDENT, RESULT_CAPACITY).status());
+        assertEquals(HostStatus.OK, call(HostServiceId.ROUTE_DECISION,
+                decisionArguments(HostAbi.TARGET_ERROR, "failed", "boom"),
+                PIDENT, otherMident, RESULT_CAPACITY).status());
+        abi.commitExecution(MIDENT);
+
+        assertEquals("A", bridge.properties.get("world.name").asString());
+        assertTrue(abi.isExecutionOpen(otherMident));
+        assertEquals("B", propertyValue(call(HostServiceId.PROPERTY_READ,
+                propertyArguments("world", "name"), PIDENT, otherMident, RESULT_CAPACITY)));
+
+        abi.abortExecution(otherMident);
+        assertEquals("A", bridge.properties.get("world.name").asString());
+        assertEquals(1, bridge.appliedWrites);
     }
 
     @Test
@@ -361,10 +505,23 @@ class HostAbiTest {
 
     private HostResult call(int service, TlvCodec.TlvValue arguments, int pident,
                             int mident, int capacity) {
-        int length = writeArguments(arguments);
+        return callAt(service, arguments, pident, mident, capacity, ARGUMENTS, RESULT);
+    }
+
+    private HostResult callAt(int service, Map<String, TlvCodec.TlvValue> arguments,
+                              int pident, int mident, int capacity,
+                              int argumentAddress, int resultAddress) {
+        return callAt(service, TlvCodec.mapValue(arguments), pident, mident, capacity,
+                argumentAddress, resultAddress);
+    }
+
+    private HostResult callAt(int service, TlvCodec.TlvValue arguments, int pident,
+                              int mident, int capacity, int argumentAddress,
+                              int resultAddress) {
+        int length = writeArgumentsAt(arguments, argumentAddress);
         HostCall call = new HostCall(0,
                 me.majhrs16.suite.iflow.vm.isa.v3.Privilege.SUPERVISOR,
-                service, 0, ARGUMENTS, length, RESULT, capacity,
+                service, 0, argumentAddress, length, resultAddress, capacity,
                 fixture.memory, pident, mident);
         HostResult result = abi.call(call);
         if (result.status() != HostStatus.LIMIT && result.status() != HostStatus.FAULT) {
@@ -378,12 +535,16 @@ class HostAbiTest {
     }
 
     private int writeArguments(TlvCodec.TlvValue arguments) {
+        return writeArgumentsAt(arguments, ARGUMENTS);
+    }
+
+    private int writeArgumentsAt(TlvCodec.TlvValue arguments, int address) {
         if (arguments == null) {
             return 0;
         }
         byte[] bytes = TlvCodec.encode(arguments.type(), arguments.payload());
         for (int index = 0; index < bytes.length; index++) {
-            writeByte(ARGUMENTS + index, bytes[index]);
+            writeByte(address + index, bytes[index]);
         }
         return bytes.length;
     }
@@ -406,8 +567,34 @@ class HostAbiTest {
         return value.asMap();
     }
 
+    private String propertyValue(HostResult result) {
+        Map<String, TlvCodec.TlvValue> values = resultMap(result);
+        assertTrue(values.get(HostAbi.KEY_PRESENT).asBool());
+        return values.get(HostAbi.KEY_VALUE).asString();
+    }
+
     private static Map<String, TlvCodec.TlvValue> mapOf() {
         return Map.of();
+    }
+
+    private static Map<String, TlvCodec.TlvValue> propertyWriteArguments(String scope,
+                                                                         String property,
+                                                                         String value) {
+        Map<String, TlvCodec.TlvValue> arguments = propertyArguments(scope, property);
+        arguments.put(HostAbi.KEY_VALUE, TlvCodec.stringValue(value));
+        return arguments;
+    }
+
+    private static Map<String, TlvCodec.TlvValue> decisionArguments(int target,
+                                                                    String reason,
+                                                                    String error) {
+        Map<String, TlvCodec.TlvValue> arguments = new LinkedHashMap<>();
+        arguments.put(HostAbi.KEY_TARGET, TlvCodec.i64Value(target));
+        arguments.put(HostAbi.KEY_REASON, TlvCodec.stringValue(reason));
+        if (error != null) {
+            arguments.put(HostAbi.KEY_ERROR, TlvCodec.stringValue(error));
+        }
+        return arguments;
     }
 
     private static Map<String, TlvCodec.TlvValue> propertyArguments(String scope,
@@ -453,7 +640,7 @@ class HostAbiTest {
                 HostAbi.CAP_SYNC_SURFACE,
                 HostAbi.CAP_SYNC_INVOKE,
                 "sync.discord.message.send"));
-        private final Map<String, TlvCodec.TlvValue> properties = new LinkedHashMap<>();
+        private final Map<String, TlvCodec.TlvValue> properties = new ConcurrentHashMap<>();
         private TlvCodec.TlvValue lastWritten;
         private boolean allowed = true;
         private String lastPermissionActor;
@@ -462,7 +649,10 @@ class HostAbiTest {
         private Optional<List<SyncSurface>> surfaces = Optional.empty();
         private SyncResult syncResult = new SyncResult.Ok(null);
         private HostServiceException writeError;
+        private HostServiceException applyError;
         private HostServiceException transformError;
+        private int validatedWrites;
+        private int appliedWrites;
         private int decisions;
         private int lastTarget;
         private String lastReason;
@@ -493,11 +683,34 @@ class HostAbiTest {
         @Override
         public void propertyWrite(int pident, int mident, String scope, String property,
                                   TlvCodec.TlvValue value) throws HostServiceException {
+            throw new AssertionError("PROPERTY_WRITE bypassed the message journal");
+        }
+
+        @Override
+        public void validatePropertyWrite(int pident, int mident, String scope,
+                                          String property, TlvCodec.TlvValue value)
+                throws HostServiceException {
             if (writeError != null) {
                 throw writeError;
             }
-            lastWritten = value;
-            properties.put(scope + "." + property, value);
+            validatedWrites++;
+        }
+
+        @Override
+        public void applyPropertyWrites(List<PropertyWrite> writes)
+                throws HostServiceException {
+            if (applyError != null) {
+                throw applyError;
+            }
+            Map<String, TlvCodec.TlvValue> staged = new LinkedHashMap<>();
+            for (PropertyWrite write : writes) {
+                staged.put(write.scope() + "." + write.property(), write.value());
+            }
+            properties.putAll(staged);
+            appliedWrites += writes.size();
+            if (!writes.isEmpty()) {
+                lastWritten = writes.get(writes.size() - 1).value();
+            }
         }
 
         @Override

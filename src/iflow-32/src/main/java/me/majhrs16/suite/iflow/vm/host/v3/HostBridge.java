@@ -43,8 +43,27 @@ public interface HostBridge {
                                              Map<String, TlvCodec.TlvValue> arguments)
             throws HostServiceException;
 
+    /**
+     * Adds a provisional write to the unit journal after validation. This is
+     * implemented by the per-unit context; the shared bridge only receives the
+     * committed batch through {@link #applyPropertyWrites(List)}.
+     */
     void propertyWrite(int pident, int mident, String scope, String property,
                        TlvCodec.TlvValue value) throws HostServiceException;
+
+    /**
+     * Validates a provisional write before it enters the message journal.
+     * Implementations reject read-only or unknown properties explicitly.
+     */
+    void validatePropertyWrite(int pident, int mident, String scope, String property,
+                               TlvCodec.TlvValue value) throws HostServiceException;
+
+    /**
+     * Applies the committed write set of one message. The implementation must
+     * make the batch atomic or fail without applying any entry; the VM cannot
+     * roll back a partially applied host mutation.
+     */
+    void applyPropertyWrites(List<PropertyWrite> writes) throws HostServiceException;
 
     boolean propertyExists(int pident, int mident, String scope, String property)
             throws HostServiceException;

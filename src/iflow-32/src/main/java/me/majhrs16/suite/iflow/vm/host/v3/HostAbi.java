@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import me.majhrs16.suite.api.iflow.TlvCodec;
 import me.majhrs16.suite.api.sync.SyncBridgeCodec;
@@ -21,11 +22,13 @@ import me.majhrs16.suite.iflow.vm.isa.v3.MemoryFault;
 /**
  * Implementation of the v3 {@code HOST} ABI described by ADR-037 §7.
  *
- * <p>The ABI is synchronous and stateless across calls except for the single
- * {@code ROUTE_DECISION} allowed per execution. {@link #beginExecution()} must
- * be called before each message so the second decision in that message returns
- * {@code CONFLICT}. Registers outside {@code R0}/{@code R1} are not touched
- * here; the CPU installs only the status and result length.</p>
+ * <p>The ABI keeps one {@link HostContext} per message handle. The context
+ * owns the provisional property overlay and the single {@code ROUTE_DECISION}
+ * latch, so two units on different cores cannot see each other's writes or
+ * decisions. {@link #beginExecution(int)} opens a unit and
+ * {@link #commitExecution(int)} or {@link #abortExecution(int)} closes it.
+ * Registers outside {@code R0}/{@code R1} are not touched here; the CPU
+ * installs only the status and result length.</p>
  */
 public final class HostAbi implements HostHandler {
 
@@ -63,17 +66,74 @@ public final class HostAbi implements HostHandler {
     public static final int TARGET_ERROR = 2;
 
     private final HostBridge bridge;
-    private boolean decisionMade;
+    private final Map<Integer, HostContext> contexts = new ConcurrentHashMap<>();
+    private final Object commitLock = new Object();
 
     public HostAbi(HostBridge bridge) {
         this.bridge = Objects.requireNonNull(bridge, "bridge");
     }
 
     /**
-     * Resets the per-execution routing-decision latch.
+     * Opens an independent journal and decision latch for one message unit.
+     * Reusing a handle while its unit is open fails instead of discarding a
+     * provisional write set or decision.
      */
-    public void beginExecution() {
-        decisionMade = false;
+    public void beginExecution(int mident) {
+        if (mident == CsrFile.NO_IDENTITY) {
+            throw new IllegalArgumentException("MIDENT is required");
+        }
+        HostContext context = new HostContext(bridge);
+        HostContext previous = contexts.putIfAbsent(mident, context);
+        if (previous != null) {
+            throw new IllegalStateException(
+                    "message unit already open: " + mident);
+        }
+    }
+
+    /**
+     * Applies or discards the unit according to its route decision. Only
+     * {@code DELIVER} commits the property overlay; {@code CANCEL_EVENT} and
+     * {@code ERROR} record the decision without applying writes; no decision
+     * discards the journal.
+     */
+    public void commitExecution(int mident) throws HostServiceException {
+        HostContext context = openContext(mident);
+        try {
+            synchronized (context) {
+                synchronized (commitLock) {
+                    context.commit(bridge);
+                }
+            }
+        } finally {
+            contexts.remove(mident, context);
+        }
+    }
+
+    /**
+     * Discards the unit's provisional writes and decision.
+     */
+    public void abortExecution(int mident) {
+        HostContext context = openContext(mident);
+        try {
+            synchronized (context) {
+                context.abort();
+            }
+        } finally {
+            contexts.remove(mident, context);
+        }
+    }
+
+    public boolean isExecutionOpen(int mident) {
+        return contexts.containsKey(mident);
+    }
+
+    private HostContext openContext(int mident) {
+        HostContext context = contexts.get(mident);
+        if (context == null) {
+            throw new IllegalStateException(
+                    "no open message unit: " + mident);
+        }
+        return context;
     }
 
     @Override
@@ -88,11 +148,21 @@ public final class HostAbi implements HostHandler {
             if (!isSupported(call.serviceId())) {
                 return error(HostStatus.UNSUPPORTED);
             }
-            int identity = identityStatus(call, requiresMessage(call.serviceId()));
+            boolean messageService = requiresMessage(call.serviceId());
+            int identity = identityStatus(call, messageService);
             if (identity != HostStatus.OK) {
                 return error(identity);
             }
-            return dispatch(call, decodeArguments(call));
+            if (!messageService) {
+                return dispatch(call, decodeArguments(call), bridge);
+            }
+            HostContext context = contexts.get(call.mident());
+            if (context == null) {
+                return error(HostStatus.NOT_READY);
+            }
+            synchronized (context) {
+                return dispatch(call, decodeArguments(call), context);
+            }
         } catch (MemoryFault fault) {
             return error(HostStatus.FAULT);
         } catch (HostServiceException fault) {
@@ -104,29 +174,29 @@ public final class HostAbi implements HostHandler {
         }
     }
 
-    private HostResult dispatch(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult dispatch(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                HostBridge host) throws HostServiceException {
         return switch (call.serviceId()) {
-            case HostServiceId.PROPERTY_READ -> propertyRead(call, arguments);
-            case HostServiceId.PROPERTY_WRITE -> propertyWrite(call, arguments);
-            case HostServiceId.PROPERTY_EXISTS -> propertyExists(call, arguments);
-            case HostServiceId.PERMISSION_CHECK -> permissionCheck(call, arguments);
-            case HostServiceId.ROUTE_DECISION -> routeDecision(call, arguments);
-            case HostServiceId.TRANSFORM_APPLY -> transformApply(call, arguments);
-            case HostServiceId.MESSAGE_ID -> messageId(call);
-            case HostServiceId.SYNC_SURFACE -> syncSurface(call, arguments);
-            case HostServiceId.SYNC_INVOKE -> syncInvoke(call, arguments);
+            case HostServiceId.PROPERTY_READ -> propertyRead(call, arguments, host);
+            case HostServiceId.PROPERTY_WRITE -> propertyWrite(call, arguments, host);
+            case HostServiceId.PROPERTY_EXISTS -> propertyExists(call, arguments, host);
+            case HostServiceId.PERMISSION_CHECK -> permissionCheck(call, arguments, host);
+            case HostServiceId.ROUTE_DECISION -> routeDecision(call, arguments, host);
+            case HostServiceId.TRANSFORM_APPLY -> transformApply(call, arguments, host);
+            case HostServiceId.MESSAGE_ID -> messageId(call, host);
+            case HostServiceId.SYNC_SURFACE -> syncSurface(call, arguments, host);
+            case HostServiceId.SYNC_INVOKE -> syncInvoke(call, arguments, host);
             default -> throw new IllegalStateException(
                     "Unhandled HOST service: " + call.serviceId());
         };
     }
 
-    private HostResult propertyRead(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult propertyRead(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                    HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_PROPERTY_READ);
         String scope = requiredString(arguments, KEY_SCOPE);
         String property = requiredString(arguments, KEY_PROPERTY);
-        Optional<TlvCodec.TlvValue> value = bridge.propertyRead(
+        Optional<TlvCodec.TlvValue> value = host.propertyRead(
                 call.pident(), call.mident(), scope, property, arguments);
         Map<String, TlvCodec.TlvValue> result = new LinkedHashMap<>();
         result.put(KEY_PRESENT, TlvCodec.boolValue(value.isPresent()));
@@ -134,71 +204,67 @@ public final class HostAbi implements HostHandler {
         return deliver(HostStatus.OK, TlvCodec.mapValue(result), call);
     }
 
-    private HostResult propertyWrite(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult propertyWrite(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                     HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_PROPERTY_WRITE);
         String scope = requiredString(arguments, KEY_SCOPE);
         String property = requiredString(arguments, KEY_PROPERTY);
         TlvCodec.TlvValue value = requiredValue(arguments, KEY_VALUE);
-        bridge.propertyWrite(call.pident(), call.mident(), scope, property, value);
+        host.propertyWrite(call.pident(), call.mident(), scope, property, value);
         return deliver(HostStatus.OK, null, call);
     }
 
-    private HostResult propertyExists(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult propertyExists(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                      HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_PROPERTY_READ);
         String scope = requiredString(arguments, KEY_SCOPE);
         String property = requiredString(arguments, KEY_PROPERTY);
-        boolean present = bridge.propertyExists(
+        boolean present = host.propertyExists(
                 call.pident(), call.mident(), scope, property);
         Map<String, TlvCodec.TlvValue> result = new LinkedHashMap<>();
         result.put(KEY_PRESENT, TlvCodec.boolValue(present));
         return deliver(HostStatus.OK, TlvCodec.mapValue(result), call);
     }
 
-    private HostResult permissionCheck(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult permissionCheck(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                       HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_PERMISSION_CHECK);
         String actor = permissionField(arguments, KEY_ACTOR);
         String channel = permissionField(arguments, KEY_CHANNEL);
         String permission = permissionField(arguments, KEY_PERMISSION);
         boolean allowed = !actor.isBlank() && !channel.isBlank() && !permission.isBlank()
-                && bridge.permissionCheck(
+                && host.permissionCheck(
                         call.pident(), call.mident(), actor, channel, permission);
         Map<String, TlvCodec.TlvValue> result = new LinkedHashMap<>();
         result.put(KEY_ALLOWED, TlvCodec.boolValue(allowed));
         return deliver(HostStatus.OK, TlvCodec.mapValue(result), call);
     }
 
-    private HostResult routeDecision(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult routeDecision(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                     HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_ROUTE_DECISION);
-        if (decisionMade) {
-            throw HostServiceException.conflict("ROUTE_DECISION already recorded");
-        }
         int target = target(arguments);
         String reason = requiredString(arguments, KEY_REASON, true);
         String error = optionalString(arguments, KEY_ERROR);
-        bridge.routeDecision(call.pident(), call.mident(), target, reason, error);
-        decisionMade = true;
+        host.routeDecision(call.pident(), call.mident(), target, reason, error);
         return deliver(HostStatus.OK, null, call);
     }
 
-    private HostResult transformApply(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult transformApply(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                      HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_TRANSFORM_APPLY);
         String kind = requiredString(arguments, KEY_KIND);
         TlvCodec.TlvValue input = requiredValue(arguments, KEY_INPUT);
-        TlvCodec.TlvValue output = bridge.transformApply(
+        TlvCodec.TlvValue output = host.transformApply(
                 call.pident(), call.mident(), kind, input);
         Map<String, TlvCodec.TlvValue> result = new LinkedHashMap<>();
         result.put(KEY_OUTPUT, output);
         return deliver(HostStatus.OK, TlvCodec.mapValue(result), call);
     }
 
-    private HostResult messageId(HostCall call) throws HostServiceException {
+    private HostResult messageId(HostCall call, HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_MESSAGE_ID);
-        String id = bridge.messageId(call.mident());
+        String id = host.messageId(call.mident());
         if (id == null || id.isEmpty()) {
             throw HostServiceException.notFound("message id is unavailable");
         }
@@ -207,13 +273,13 @@ public final class HostAbi implements HostHandler {
         return deliver(HostStatus.OK, TlvCodec.mapValue(result), call);
     }
 
-    private HostResult syncSurface(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult syncSurface(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                   HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_SYNC_SURFACE);
         if (!arguments.isEmpty()) {
             throw HostServiceException.invalidArgument("SYNC_SURFACE takes no arguments");
         }
-        Optional<List<SyncSurface>> surfaces = bridge.syncSurfaces(call.pident());
+        Optional<List<SyncSurface>> surfaces = host.syncSurfaces(call.pident());
         if (surfaces.isEmpty()) {
             throw HostServiceException.unsupported("sync bridge is not installed");
         }
@@ -221,8 +287,8 @@ public final class HostAbi implements HostHandler {
                 SyncBridgeCodec.encodeSurfaceResponse(surfaces.get()), call);
     }
 
-    private HostResult syncInvoke(HostCall call, Map<String, TlvCodec.TlvValue> arguments)
-            throws HostServiceException {
+    private HostResult syncInvoke(HostCall call, Map<String, TlvCodec.TlvValue> arguments,
+                                  HostBridge host) throws HostServiceException {
         requireCapability(call, CAP_SYNC_INVOKE);
         String backend = requiredString(arguments, KEY_BACKEND);
         String action = requiredString(arguments, KEY_ACTION);
@@ -235,7 +301,7 @@ public final class HostAbi implements HostHandler {
 
         requireActionCapability(call, backend, action);
 
-        SyncResult result = bridge.syncInvoke(call.pident(), call.mident(),
+        SyncResult result = host.syncInvoke(call.pident(), call.mident(),
                 backend, action, args, idempotencyKey, reason);
         return deliver(syncStatus(result),
                 SyncBridgeCodec.encodeResult(result), call);
