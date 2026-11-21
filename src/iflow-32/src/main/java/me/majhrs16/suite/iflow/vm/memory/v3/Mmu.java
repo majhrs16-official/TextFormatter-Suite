@@ -183,10 +183,7 @@ public final class Mmu {
 
     private int readPhysicalWord(int address, int virtualAddress) {
         try {
-            return physical.readByte(address)
-                    | (physical.readByte(address + 1) << 8)
-                    | (physical.readByte(address + 2) << 16)
-                    | (physical.readByte(address + 3) << 24);
+            return physical.readWord(address);
         } catch (MemoryFault fault) {
             throw MemoryFault.busError(virtualAddress,
                     "page walk failed at physical 0x" + Integer.toHexString(address)
@@ -196,10 +193,7 @@ public final class Mmu {
 
     private void writePhysicalWord(int address, int value, int virtualAddress) {
         try {
-            physical.writeByte(address, value);
-            physical.writeByte(address + 1, value >>> 8);
-            physical.writeByte(address + 2, value >>> 16);
-            physical.writeByte(address + 3, value >>> 24);
+            physical.writeWord(address, value);
         } catch (MemoryFault fault) {
             throw MemoryFault.busError(virtualAddress,
                     "page table update failed at physical 0x"

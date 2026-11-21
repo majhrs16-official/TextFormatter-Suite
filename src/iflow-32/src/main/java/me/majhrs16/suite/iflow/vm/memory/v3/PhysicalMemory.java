@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 import me.majhrs16.suite.iflow.vm.isa.v3.MemoryFault;
 
@@ -39,8 +40,8 @@ public final class PhysicalMemory {
     private final int romMappedSize;
     private final int ramSize;
     private final long ramEnd;
-    private Map<Integer, byte[]> sharedFrames;
-    private final Map<Integer, byte[]> ramFrames = new HashMap<>();
+    private volatile Map<Integer, byte[]> sharedFrames;
+    private final Map<Integer, byte[]> ramFrames = new ConcurrentHashMap<>();
 
     public PhysicalMemory(byte[] rom, int ramSize) {
         Objects.requireNonNull(rom, "rom");
@@ -107,12 +108,16 @@ public final class PhysicalMemory {
 
     public int readByte(int address) {
         if (isRom(address)) {
-            int offset = address - ROM_BASE;
-            return offset < rom.length ? rom[offset] & 0xFF : 0;
+            return readRomByte(address - ROM_BASE);
         }
         if (isRam(address)) {
             byte[] frame = frameForRead(address);
-            return frame == null ? 0 : frame[address & PAGE_MASK] & 0xFF;
+            if (frame == null) {
+                return 0;
+            }
+            synchronized (frame) {
+                return frame[address & PAGE_MASK] & 0xFF;
+            }
         }
         throw MemoryFault.busError(address, "physical read outside ROM/RAM");
     }
@@ -122,14 +127,64 @@ public final class PhysicalMemory {
             throw MemoryFault.store(address, "physical ROM is read-only");
         }
         if (isRam(address)) {
-            int frameIndex = ramFrameIndex(address);
-            byte[] frame = ramFrames.get(frameIndex);
-            if (frame == null) {
-                byte[] shared = sharedFrames.get(frameIndex);
-                frame = shared == null ? new byte[PAGE_SIZE] : shared.clone();
-                ramFrames.put(frameIndex, frame);
+            byte[] frame = frameForWrite(address);
+            synchronized (frame) {
+                frame[address & PAGE_MASK] = (byte) value;
             }
-            frame[address & PAGE_MASK] = (byte) value;
+            return;
+        }
+        throw MemoryFault.busError(address, "physical write outside RAM");
+    }
+
+    /**
+     * Reads one aligned 32-bit word without tearing.
+     *
+     * <p>The v3 bus promises sequentially consistent aligned 32-bit accesses. A
+     * byte loop would let two cores observe a mixed value; this method locks the
+     * RAM frame while it assembles the four bytes. ROM is immutable.</p>
+     */
+    public int readWord(int address) {
+        checkWordAlignment(address);
+        if (isRom(address)) {
+            int offset = address - ROM_BASE;
+            return readRomByte(offset)
+                    | (readRomByte(offset + 1) << 8)
+                    | (readRomByte(offset + 2) << 16)
+                    | (readRomByte(offset + 3) << 24);
+        }
+        if (isRam(address)) {
+            byte[] frame = frameForRead(address);
+            if (frame == null) {
+                return 0;
+            }
+            synchronized (frame) {
+                int offset = address & PAGE_MASK;
+                return (frame[offset] & 0xFF)
+                        | ((frame[offset + 1] & 0xFF) << 8)
+                        | ((frame[offset + 2] & 0xFF) << 16)
+                        | ((frame[offset + 3] & 0xFF) << 24);
+            }
+        }
+        throw MemoryFault.busError(address, "physical read outside ROM/RAM");
+    }
+
+    /**
+     * Writes one aligned 32-bit word without tearing.
+     */
+    public void writeWord(int address, int value) {
+        checkWordAlignment(address);
+        if (isRom(address)) {
+            throw MemoryFault.store(address, "physical ROM is read-only");
+        }
+        if (isRam(address)) {
+            byte[] frame = frameForWrite(address);
+            synchronized (frame) {
+                int offset = address & PAGE_MASK;
+                frame[offset] = (byte) value;
+                frame[offset + 1] = (byte) (value >>> 8);
+                frame[offset + 2] = (byte) (value >>> 16);
+                frame[offset + 3] = (byte) (value >>> 24);
+            }
             return;
         }
         throw MemoryFault.busError(address, "physical write outside RAM");
@@ -196,10 +251,34 @@ public final class PhysicalMemory {
         return new PhysicalMemory(rom, romMappedSize, ramSize, sharedFrames);
     }
 
+    private int readRomByte(int offset) {
+        return offset < rom.length ? rom[offset] & 0xFF : 0;
+    }
+
     private byte[] frameForRead(int address) {
         int index = ramFrameIndex(address);
         byte[] frame = ramFrames.get(index);
         return frame != null ? frame : sharedFrames.get(index);
+    }
+
+    private byte[] frameForWrite(int address) {
+        int index = ramFrameIndex(address);
+        byte[] frame = ramFrames.get(index);
+        if (frame != null) {
+            return frame;
+        }
+        byte[] shared = sharedFrames.get(index);
+        byte[] created = shared == null ? new byte[PAGE_SIZE] : shared.clone();
+        byte[] previous = ramFrames.putIfAbsent(index, created);
+        return previous != null ? previous : created;
+    }
+
+    private static void checkWordAlignment(int address) {
+        if ((address & (Integer.BYTES - 1)) != 0) {
+            throw new IllegalArgumentException(
+                    "physical word access is not 4-byte aligned: 0x"
+                            + Integer.toHexString(address));
+        }
     }
 
     private int ramFrameIndex(int address) {
@@ -233,9 +312,15 @@ public final class PhysicalMemory {
      * Exposes a copy of a visible RAM frame for diagnostics.
      */
     public byte[] ramFrame(int frameIndex) {
-        byte[] frame = ramFrames.containsKey(frameIndex)
-                ? ramFrames.get(frameIndex)
-                : sharedFrames.get(frameIndex);
-        return frame == null ? null : Arrays.copyOf(frame, frame.length);
+        byte[] frame = ramFrames.get(frameIndex);
+        if (frame == null) {
+            frame = sharedFrames.get(frameIndex);
+        }
+        if (frame == null) {
+            return null;
+        }
+        synchronized (frame) {
+            return Arrays.copyOf(frame, frame.length);
+        }
     }
 }

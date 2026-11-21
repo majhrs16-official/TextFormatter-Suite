@@ -56,6 +56,12 @@ public final class CoreMemory
             throw MemoryFault.privilege(address, "MMU is disabled and user mode is not allowed");
         }
         int[] physicalAddresses = translateBytes(address, size, Mmu.Access.READ);
+        int wordBase = contiguousWordBase(size, physicalAddresses);
+        if (wordBase >= 0) {
+            synchronized (machine.atomicLock()) {
+                return machine.physical().readWord(wordBase);
+            }
+        }
         int value = 0;
         for (int index = 0; index < physicalAddresses.length; index++) {
             value |= machine.physical().readByte(physicalAddresses[index]) << (8 * index);
@@ -74,6 +80,19 @@ public final class CoreMemory
             throw MemoryFault.privilege(address, "MMU is disabled and user mode is not allowed");
         }
         int[] physicalAddresses = translateBytes(address, size, Mmu.Access.WRITE);
+        int wordBase = contiguousWordBase(size, physicalAddresses);
+        if (wordBase >= 0) {
+            synchronized (machine.atomicLock()) {
+                for (int physicalAddress : physicalAddresses) {
+                    machine.invalidateOtherReservations(coreId(), physicalAddress);
+                }
+                machine.physical().writeWord(wordBase, value);
+                for (int physicalAddress : physicalAddresses) {
+                    mmu.notePhysicalWrite(physicalAddress);
+                }
+            }
+            return;
+        }
         for (int index = 0; index < physicalAddresses.length; index++) {
             int physicalAddress = physicalAddresses[index];
             machine.invalidateOtherReservations(coreId(), physicalAddress);
@@ -191,10 +210,7 @@ public final class CoreMemory
 
     private int readAtomicWord(int physicalAddress, int virtualAddress) {
         try {
-            return machine.physical().readByte(physicalAddress)
-                    | (machine.physical().readByte(physicalAddress + 1) << 8)
-                    | (machine.physical().readByte(physicalAddress + 2) << 16)
-                    | (machine.physical().readByte(physicalAddress + 3) << 24);
+            return machine.physical().readWord(physicalAddress);
         } catch (MemoryFault fault) {
             throw MemoryFault.busError(virtualAddress,
                     "atomic read failed: " + fault.detail());
@@ -203,14 +219,27 @@ public final class CoreMemory
 
     private void writeAtomicWord(int physicalAddress, int value, int virtualAddress) {
         try {
+            machine.physical().writeWord(physicalAddress, value);
             for (int index = 0; index < Integer.BYTES; index++) {
-                machine.physical().writeByte(physicalAddress + index, value >>> (8 * index));
                 mmu.notePhysicalWrite(physicalAddress + index);
             }
         } catch (MemoryFault fault) {
             throw MemoryFault.busError(virtualAddress,
                     "atomic write failed: " + fault.detail());
         }
+    }
+
+    private static int contiguousWordBase(MemorySize size, int[] physicalAddresses) {
+        if (size != MemorySize.WORD) {
+            return -1;
+        }
+        int base = physicalAddresses[0];
+        for (int index = 1; index < physicalAddresses.length; index++) {
+            if (physicalAddresses[index] != base + index) {
+                return -1;
+            }
+        }
+        return base;
     }
 
     private int[] translateBytes(int address, MemorySize size, Mmu.Access access) {
