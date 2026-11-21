@@ -6,6 +6,10 @@ package me.majhrs16.suite.iflow.vm.memory.v3;
  * <p>Registers are 32-bit and little-endian. The bus validates supervisor mode,
  * word size and 4-byte alignment before calling the device; devices only see
  * register offsets inside their own window.</p>
+ *
+ * <p>An implementation with mutable state must serialize its own transactions:
+ * several vCPUs can reach the bus concurrently. Immutable devices such as
+ * SYSINFO need no lock.</p>
  */
 public interface MmioDevice {
 

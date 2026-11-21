@@ -40,7 +40,7 @@ public final class Nvram implements MmioDevice {
     }
 
     @Override
-    public int readRegister(int offset) {
+    public synchronized int readRegister(int offset) {
         return switch (offset) {
             case SIZE -> BYTES;
             case ADDR -> address;
@@ -52,7 +52,7 @@ public final class Nvram implements MmioDevice {
     }
 
     @Override
-    public void writeRegister(int offset, int value) {
+    public synchronized void writeRegister(int offset, int value) {
         switch (offset) {
             case SIZE -> {
                 // Read-only size.
@@ -69,19 +69,19 @@ public final class Nvram implements MmioDevice {
         }
     }
 
-    public void commit() {
+    public synchronized void commit() {
         System.arraycopy(working, 0, committed, 0, BYTES);
     }
 
-    public byte[] persistentBytes() {
+    public synchronized byte[] persistentBytes() {
         return committed.clone();
     }
 
-    public byte[] workingBytes() {
+    public synchronized byte[] workingBytes() {
         return working.clone();
     }
 
-    public void reset(byte[] persistent) {
+    public synchronized void reset(byte[] persistent) {
         Objects.requireNonNull(persistent, "persistent");
         if (persistent.length != BYTES) {
             throw new IllegalArgumentException("NVRAM must be exactly " + BYTES + " bytes");
@@ -92,7 +92,7 @@ public final class Nvram implements MmioDevice {
     }
 
     @Override
-    public String toString() {
+    public synchronized String toString() {
         return "Nvram[committed=" + Arrays.hashCode(committed) + "]";
     }
 }

@@ -1,6 +1,6 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (318 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> **Estado:** núcleo v3 aislado (319 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO`, atómicas, PIC por core, IPI,
 > `TARGET`, vista `CoreMemory` por core y `MachineRuntime` por core); multinúcleo completo e
 > integración con el hub pendientes.
@@ -77,7 +77,8 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
   `TIMER` y `HOST_MAILBOX`; un destino fuera de `CORE_COUNT` es `BUS_ERROR`. `MachineMemory`
   comparte RAM, MMIO, PIC y reservas atómicas, `CoreMemory` separa CSR, MMU, TLB y reserva por
   core, y `MachineRuntime` crea CPU, quantum y watchdog por core. Las palabras alineadas de 32 bits
-  se leen y escriben sin tearing sobre frames concurrentes. Un cambio de page table no vacía
+  se leen y escriben sin tearing sobre frames concurrentes; los dispositivos MMIO mutables
+  serializan sus transacciones entre cores. Un cambio de page table no vacía
   la TLB ajena: el core destino debe ejecutar `SFENCE.VMA` tras la IPI; no hay shootdown automático
   del host. Faltan el journal concurrente y el kernel guest que complete scheduler y shootdown.
   Hasta completar V3-2, `CORE_COUNT > 1` falla explícito.

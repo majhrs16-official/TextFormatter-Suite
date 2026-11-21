@@ -47,13 +47,13 @@ public final class Uart implements MmioDevice {
         return BASE;
     }
 
-    public void reset() {
+    public synchronized void reset() {
         receiveQueue.clear();
         control = 0;
         overflow = false;
     }
 
-    public void transmitSink(Consumer<Integer> sink) {
+    public synchronized void transmitSink(Consumer<Integer> sink) {
         transmitSink = Objects.requireNonNull(sink, "sink");
     }
 
@@ -62,7 +62,7 @@ public final class Uart implements MmioDevice {
      *
      * @return {@code false} if the bounded queue is full
      */
-    public boolean receive(int value) {
+    public synchronized boolean receive(int value) {
         if (receiveQueue.size() >= QUEUE_CAPACITY) {
             overflow = true;
             return false;
@@ -75,7 +75,7 @@ public final class Uart implements MmioDevice {
     }
 
     @Override
-    public int readRegister(int offset) {
+    public synchronized int readRegister(int offset) {
         return switch (offset) {
             case TX -> 0;
             case RX -> {
@@ -92,7 +92,7 @@ public final class Uart implements MmioDevice {
     }
 
     @Override
-    public void writeRegister(int offset, int value) {
+    public synchronized void writeRegister(int offset, int value) {
         switch (offset) {
             case TX -> {
                 transmitSink.accept(value & 0xFF);

@@ -57,7 +57,7 @@ public final class Timer implements MmioDevice {
         return BASE;
     }
 
-    public void reset() {
+    public synchronized void reset() {
         compare = 0;
         period = DEFAULT_PERIOD;
         control = 0;
@@ -71,7 +71,7 @@ public final class Timer implements MmioDevice {
      * Advances the timer to the current virtual time. Called by the bus before
      * decoding an MMIO access and by the CPU before checking interrupts.
      */
-    public void tick() {
+    public synchronized void tick() {
         if (!armed || !enabled()) {
             return;
         }
@@ -95,16 +95,16 @@ public final class Timer implements MmioDevice {
         }
     }
 
-    public long nextDeadline() {
+    public synchronized long nextDeadline() {
         return armed && enabled() ? compare : Long.MAX_VALUE;
     }
 
-    public int target() {
+    public synchronized int target() {
         return target;
     }
 
     @Override
-    public int readRegister(int offset) {
+    public synchronized int readRegister(int offset) {
         return switch (offset) {
             case CMP_LO -> (int) compare;
             case CMP_HI -> (int) (compare >>> 32);
@@ -132,7 +132,7 @@ public final class Timer implements MmioDevice {
     }
 
     @Override
-    public void writeRegister(int offset, int value) {
+    public synchronized void writeRegister(int offset, int value) {
         switch (offset) {
             case CMP_LO -> {
                 compare = (compare & 0xFFFF_FFFF_0000_0000L) | Integer.toUnsignedLong(value);

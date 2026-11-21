@@ -46,7 +46,7 @@ public final class HostMailbox implements MmioDevice {
     /**
      * Publishes an event and raises IRQ 5.
      */
-    public void publish(int type, int messageHandle) {
+    public synchronized void publish(int type, int messageHandle) {
         eventType = type;
         handle = messageHandle;
         sequence++;
@@ -54,15 +54,15 @@ public final class HostMailbox implements MmioDevice {
         pic.raise(target, IRQ_LINE);
     }
 
-    public boolean pending() {
+    public synchronized boolean pending() {
         return pending;
     }
 
-    public int target() {
+    public synchronized int target() {
         return target;
     }
 
-    public void reset() {
+    public synchronized void reset() {
         eventType = 0;
         handle = 0;
         sequence = 0;
@@ -71,7 +71,7 @@ public final class HostMailbox implements MmioDevice {
     }
 
     @Override
-    public int readRegister(int offset) {
+    public synchronized int readRegister(int offset) {
         return switch (offset) {
             case EVENT_TYPE -> eventType;
             case MESSAGE_HANDLE -> handle;
@@ -85,7 +85,7 @@ public final class HostMailbox implements MmioDevice {
     }
 
     @Override
-    public void writeRegister(int offset, int value) {
+    public synchronized void writeRegister(int offset, int value) {
         switch (offset) {
             case TARGET -> setTarget(value);
             case ACK -> {

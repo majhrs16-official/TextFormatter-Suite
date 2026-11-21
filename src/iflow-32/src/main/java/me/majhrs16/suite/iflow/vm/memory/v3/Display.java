@@ -36,7 +36,7 @@ public final class Display implements MmioDevice {
     }
 
     @Override
-    public int readRegister(int offset) {
+    public synchronized int readRegister(int offset) {
         return switch (offset) {
             case COLS -> COLUMNS;
             case ROWS -> ROWS_COUNT;
@@ -53,7 +53,7 @@ public final class Display implements MmioDevice {
     }
 
     @Override
-    public void writeRegister(int offset, int value) {
+    public synchronized void writeRegister(int offset, int value) {
         switch (offset) {
             case COLS, ROWS -> {
                 // Read-only geometry.
@@ -75,17 +75,17 @@ public final class Display implements MmioDevice {
         }
     }
 
-    public void reset() {
+    public synchronized void reset() {
         clear();
         cursor = 0;
         control = 0;
     }
 
-    public void clear() {
+    public synchronized void clear() {
         Arrays.fill(cells, (byte) 0);
     }
 
-    public byte[] snapshot() {
+    public synchronized byte[] snapshot() {
         return cells.clone();
     }
 
