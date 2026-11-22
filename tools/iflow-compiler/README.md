@@ -11,10 +11,10 @@
 Convierte código ensamblador `.flowasm` (texto legible) a binario `.flow` (ejecutable por la VM iflow).
 
 - **Entrada**: `.flowasm` (mnemónicos, labels, directivas, expresiones `LABEL+OFFSET`)
-- **Salida**: `.flow` binario (FLOW v2 o FLOWROM v3, según `-f`)
+- **Salida**: `.flow` binario (FLOW v2 de `iflow-16` o FLOWROM v3 de `iflow-32`, según `-f`)
 - **Una CLI, dos backends**: `iflow-as` comparte el parser de argumentos; `-f/--format`
-  elige `flow-v2` (ISA v2 de `iflow-16`) o `flowrom-v3` (ISA de 32 bits de `iflow-32`,
-  módulo `src/v3/`). Los opcodes y formatos no se mezclan.
+  elige `iflow-16` (ISA v2 de 16 bits) o `iflow-32` (ISA v3 de 32 bits, módulo
+  `src/v3/`). Los opcodes y formatos no se mezclan.
 
 ---
 
@@ -33,12 +33,12 @@ Requiere **Node.js 18+** y **npm**.
 ## Uso (CLI)
 
 ```bash
-# Compilar con el backend v2 (formato por defecto)
+# Compilar con iflow-16 (formato por defecto)
 node dist/cli.js programa.flowasm -o programa.flow
 
-# Con opciones v2
+# Con opciones de iflow-16
 node dist/cli.js programa.flowasm \
-  -f flow-v2 \
+  -f iflow-16 \
   -o programa.flow \
   -O 0x0000 \        # origen (con firmware, sube a 0x1000)
   -e main \          # entry point label
@@ -50,9 +50,9 @@ node dist/cli.js programa.flowasm \
 node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 ```
 
-`-f/--format` acepta `flow-v2` (por defecto) y `flowrom-v3`. Las opciones de un
+`-f/--format` acepta `iflow-16` (por defecto) y `iflow-32`. Las opciones de un
 backend se rechazan de forma explícita en el otro: `-O`, `-d` y `--no-firmware`
-son de v2; `-R/--reset` y `--max-rom` son de v3.
+son de `iflow-16`; `-R/--reset` y `--max-rom` son de `iflow-32`.
 
 > Por defecto se antepone la **ROM de firmware** (0x0000–0x0FFF) y el código de
 > usuario se coloca en 0x1000. `--no-firmware` compila bare-metal (origen 0x0000).
@@ -212,7 +212,7 @@ MOV R3, R7     ; byte = 0x37
 
 ---
 
-## Backend v3 (`-f flowrom-v3`)
+## Backend v3 (`-f iflow-32`)
 
 El módulo `src/v3/` ensambla la ISA de 32 bits de `iflow-32` (ADR-037 §3–§4) y
 emite el contenedor `FLOWROM` v3 (§8). Es independiente del ensamblador v2: no
@@ -220,13 +220,13 @@ importa sus opcodes, registros, secciones ni formato binario.
 
 ```bash
 npm run build
-node dist/cli.js kernel.flowasm -f flowrom-v3 -o kernel.flow
+node dist/cli.js kernel.flowasm -f iflow-32 -o kernel.flow
 # o, tras npm link / instalación:
-iflow-as kernel.flowasm -f flowrom-v3 -o kernel.flow -l
+iflow-as kernel.flowasm -f iflow-32 -o kernel.flow -l
 ```
 
 Opciones comunes: `-o/--output`, `-e/--entry <label>` y `-l/--list` (imprime la
-tabla de símbolos). Específicas de v3: `-R/--reset <addr>` y
+tabla de símbolos). Específicas de `iflow-32`: `-R/--reset <addr>` y
 `--max-rom <bytes>` (1–16777216). `-O`, `-d` y `--no-firmware` se rechazan en
 este formato.
 
@@ -310,7 +310,7 @@ Pruebas y fixture de integración:
 npm run build && npm run test:v3
 # Regenera el ROM de prueba que consume iflow-32:
 node dist/cli.js ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.flowasm \
-  -f flowrom-v3 -o ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.rom
+  -f iflow-32 -o ../../src/iflow-32/src/test/resources/rom/v3/assembler-minimal.rom
 ```
 
 ---

@@ -10,24 +10,25 @@ import { program } from 'commander';
 import { runV2Cli } from './cli-v2';
 import { runV3Cli } from './cli-v3';
 
-const FORMAT_V2 = 'flow-v2';
-const FORMAT_V3 = 'flowrom-v3';
+const FORMAT_IFLOW_16 = 'iflow-16';
+const FORMAT_IFLOW_32 = 'iflow-32';
 
 program
   .name('iflow-as')
-  .description('iFlow assembler - .flowasm to FLOW v2 or FLOWROM v3')
+  .description('iFlow assembler - .flowasm for iflow-16 or iflow-32')
   .version('1.0.0')
   .argument('<input>', 'input assembly file (.flowasm)')
-  .option('-f, --format <format>', `output format: ${FORMAT_V2} or ${FORMAT_V3}`, FORMAT_V2)
+  .option('-f, --format <format>',
+    `output format: ${FORMAT_IFLOW_16} or ${FORMAT_IFLOW_32}`, FORMAT_IFLOW_16)
   .option('-o, --output <file>', 'output binary file (.flow)')
   .option('-e, --entry <label>', 'entry point or reset vector label')
   .option('-l, --list', 'emit the symbol listing')
   .option('-v, --verbose', 'verbose diagnostics')
-  .option('-O, --origin <address>', `program origin (hex, ${FORMAT_V2} only)`)
-  .option('-d, --debug', `include debug info (${FORMAT_V2} only)`)
-  .option('--no-firmware', `bare-metal program without firmware ROM (${FORMAT_V2} only)`)
-  .option('-R, --reset <address>', `explicit reset vector (hex, ${FORMAT_V3} only)`)
-  .option('--max-rom <bytes>', `maximum ROM size (${FORMAT_V3} only)`);
+  .option('-O, --origin <address>', `program origin (hex, ${FORMAT_IFLOW_16} only)`)
+  .option('-d, --debug', `include debug info (${FORMAT_IFLOW_16} only)`)
+  .option('--no-firmware', `bare-metal program without firmware ROM (${FORMAT_IFLOW_16} only)`)
+  .option('-R, --reset <address>', `explicit reset vector (hex, ${FORMAT_IFLOW_32} only)`)
+  .option('--max-rom <bytes>', `maximum ROM size (${FORMAT_IFLOW_32} only)`);
 
 program.parse(process.argv);
 
@@ -50,7 +51,7 @@ async function main(): Promise<number> {
   const options = program.opts();
   const explicit = (name: string) => program.getOptionValueSource(name) === 'cli';
 
-  if (options.format === FORMAT_V2) {
+  if (options.format === FORMAT_IFLOW_16) {
     const incompatible: string[] = [];
     if (explicit('reset')) {
       incompatible.push('-R/--reset');
@@ -59,7 +60,7 @@ async function main(): Promise<number> {
       incompatible.push('--max-rom');
     }
     if (incompatible.length > 0) {
-      return reject(FORMAT_V2, incompatible);
+      return reject(FORMAT_IFLOW_16, incompatible);
     }
     return runV2Cli({
       inputFile,
@@ -73,7 +74,7 @@ async function main(): Promise<number> {
     });
   }
 
-  if (options.format === FORMAT_V3) {
+  if (options.format === FORMAT_IFLOW_32) {
     const incompatible: string[] = [];
     if (explicit('origin')) {
       incompatible.push('-O/--origin');
@@ -85,7 +86,7 @@ async function main(): Promise<number> {
       incompatible.push('--no-firmware');
     }
     if (incompatible.length > 0) {
-      return reject(FORMAT_V3, incompatible);
+      return reject(FORMAT_IFLOW_32, incompatible);
     }
     return runV3Cli({
       inputFile,
@@ -98,7 +99,8 @@ async function main(): Promise<number> {
     });
   }
 
-  console.error(`Error: unknown format '${options.format}'. Use ${FORMAT_V2} or ${FORMAT_V3}.`);
+  console.error(
+    `Error: unknown format '${options.format}'. Use ${FORMAT_IFLOW_16} or ${FORMAT_IFLOW_32}.`);
   return 2;
 }
 

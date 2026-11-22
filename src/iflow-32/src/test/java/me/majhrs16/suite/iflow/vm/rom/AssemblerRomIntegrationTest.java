@@ -16,10 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Loads the ROM emitted by {@code iflow-as -f flowrom-v3} and decodes its
+ * Loads the ROM emitted by {@code iflow-as -f iflow-32} and decodes its
  * bytes with the real v3 decoder.
  *
- * <p>The fixture is regenerated with {@code iflow-as -f flowrom-v3} from the sibling
+ * <p>The fixture is regenerated with {@code iflow-as -f iflow-32} from the sibling
  * {@code .flowasm} source; the test proves that assembler output is accepted by
  * the ROM parser and decoded without hand-written byte patching. Copying the
  * segments to their {@code loadAddress} belongs to the host loader, not to the
