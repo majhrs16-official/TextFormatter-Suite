@@ -42,7 +42,7 @@ node dist/cli.js programa.flowasm \
   -o programa.flow \
   -O 0x0000 \        # origen (con firmware, sube a 0x1000)
   -e main \          # entry point label
-  -l \               # genera .lst (tabla de símbolos + listado)
+  -l \               # imprime la tabla de símbolos en stdout
   -d \               # activa debugInfo en el objeto; el .flow no lleva sección de debug
   -v                 # verbose
 
@@ -54,6 +54,8 @@ node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 backend se rechazan de forma explícita en el otro: `-O`, `-d` y `--no-firmware`
 son de `iflow-16`; `-R/--reset` y `--max-rom` son de `iflow-32`. Sin `-o`,
 `iflow-16` escribe `<entrada>.flow` e `iflow-32` escribe `<entrada>.rom`.
+`-l/--list` imprime la tabla de símbolos en stdout y no crea archivos; para
+guardarla, redirige: `iflow-as programa.flowasm -l > programa.lst`.
 
 > Por defecto se antepone la **ROM de firmware** (0x0000–0x0FFF) y el código de
 > usuario se coloca en 0x1000. `--no-firmware` compila bare-metal (origen 0x0000).

@@ -1,7 +1,7 @@
 /** ISA v2 backend for the unified `iflow-as` CLI. */
 
 import { Assembler } from './assembler';
-import type { Symbol } from './types';
+import { printSymbolListing } from './cli-listing';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -56,10 +56,7 @@ export async function runV2Cli(options: V2CliOptions): Promise<number> {
     console.log(`✓ Assembled ${options.inputFile} → ${outputFile} (${programBytes.length} bytes)`);
 
     if (options.list) {
-      const listFile = path.join(
-        path.dirname(outputFile),
-        path.basename(outputFile, path.extname(outputFile)) + '.lst');
-      generateListing(inputPath, source, symbols, listFile);
+      printSymbolListing(symbols);
     }
     return 0;
   } catch (error: any) {
@@ -69,32 +66,4 @@ export async function runV2Cli(options: V2CliOptions): Promise<number> {
     }
     return 1;
   }
-}
-
-function generateListing(
-  inputPath: string,
-  source: string,
-  symbols: Symbol[],
-  listFile: string,
-): void {
-  const lines = source.split('\n');
-  let output = '';
-
-  output += '; iFlow Assembly Listing\n';
-  output += `; Source: ${inputPath}\n`;
-  output += `; Generated: ${new Date().toISOString()}\n\n`;
-
-  output += '; Symbol Table:\n';
-  for (const sym of symbols) {
-    output += `; ${sym.name.padEnd(32)} = 0x${sym.address.toString(16).padStart(4, '0')} (${sym.type})\n`;
-  }
-  output += '\n';
-
-  output += '; Source:\n';
-  for (let i = 0; i < lines.length; i++) {
-    output += `${String(i + 1).padStart(4, ' ')}: ${lines[i]}\n`;
-  }
-
-  fs.writeFileSync(listFile, output);
-  console.log(`✓ Listing written to ${listFile}`);
 }

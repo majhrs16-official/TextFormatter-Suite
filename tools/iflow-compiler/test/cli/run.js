@@ -55,11 +55,12 @@ test('defaults to iflow-16', () => {
   assert.strictEqual(explicit.status, 0, explicit.stderr);
 });
 
-test('writes the iflow-16 listing next to the output', () => {
+test('prints the iflow-16 symbol table to stdout', () => {
   const output = path.join(outDir, 'listed.bin');
   const result = run([iflow16Fixture, '--no-firmware', '-l', '-o', output]);
   assert.strictEqual(result.status, 0, result.stderr);
-  assert.ok(fs.existsSync(path.join(outDir, 'listed.lst')), 'listing file is missing');
+  assert.ok(/^\s+main\s+= 0x[0-9a-f]{8}$/m.test(result.stdout), result.stdout);
+  assert.ok(!fs.existsSync(path.join(outDir, 'listed.lst')), 'must not write a .lst file');
   assert.strictEqual(fs.readFileSync(output).subarray(0, 4).toString('ascii'), 'FLOW');
 });
 

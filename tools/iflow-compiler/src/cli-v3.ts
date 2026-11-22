@@ -1,6 +1,7 @@
 /** ISA v3 backend for the unified `iflow-as` CLI. */
 
 import { AssemblerV3, AssemblyError } from './v3';
+import { printSymbolListing } from './cli-listing';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -59,9 +60,7 @@ export function runV3Cli(options: V3CliOptions): number {
     console.log(`✓ Assembled ${options.inputFile} → ${outputFile} (${result.bytes.length} bytes)`);
 
     if (options.list) {
-      for (const symbol of result.symbols) {
-        console.log(`  ${symbol.name.padEnd(32)} = 0x${symbol.address.toString(16).padStart(8, '0')}`);
-      }
+      printSymbolListing(result.symbols);
     }
     return 0;
   } catch (error) {
