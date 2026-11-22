@@ -1,7 +1,7 @@
 {
   "name": "iflow-compiler",
   "version": "1.0.0",
-  "description": "iFlow VM Assembler - Compiles .flowasm to .flow binary",
+  "description": "iFlow VM assembler - compiles .flowasm to .flow (iflow-16) or .rom (iflow-32)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

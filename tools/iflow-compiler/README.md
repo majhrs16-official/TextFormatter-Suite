@@ -1,4 +1,4 @@
-# iflow-compiler — TypeScript Assembler (.flowasm → .flow)
+# iflow-compiler — TypeScript Assembler (.flowasm → .flow / .rom)
 
 > **Estado**: ✅ Funcional  
 > **Ubicación**: `tools/iflow-compiler/`  
@@ -8,10 +8,10 @@
 
 ## Qué hace
 
-Convierte código ensamblador `.flowasm` (texto legible) a binario `.flow` (ejecutable por la VM iflow).
+Convierte código ensamblador `.flowasm` (texto legible) a un binario ejecutable por la VM iflow.
 
 - **Entrada**: `.flowasm` (mnemónicos, labels, directivas, expresiones `LABEL+OFFSET`)
-- **Salida**: `.flow` binario (FLOW v2 de `iflow-16` o FLOWROM v3 de `iflow-32`, según `-f`)
+- **Salida**: `.flow` para `iflow-16` o `.rom` para `iflow-32` (FLOWROM v3), según `-f`
 - **Una CLI, dos backends**: `iflow-as` comparte el parser de argumentos; `-f/--format`
   elige `iflow-16` (ISA v2 de 16 bits) o `iflow-32` (ISA v3 de 32 bits, módulo
   `src/v3/`). Los opcodes y formatos no se mezclan.
@@ -52,7 +52,8 @@ node dist/cli.js programa.flowasm -o programa.flow --no-firmware
 
 `-f/--format` acepta `iflow-16` (por defecto) y `iflow-32`. Las opciones de un
 backend se rechazan de forma explícita en el otro: `-O`, `-d` y `--no-firmware`
-son de `iflow-16`; `-R/--reset` y `--max-rom` son de `iflow-32`.
+son de `iflow-16`; `-R/--reset` y `--max-rom` son de `iflow-32`. Sin `-o`,
+`iflow-16` escribe `<entrada>.flow` e `iflow-32` escribe `<entrada>.rom`.
 
 > Por defecto se antepone la **ROM de firmware** (0x0000–0x0FFF) y el código de
 > usuario se coloca en 0x1000. `--no-firmware` compila bare-metal (origen 0x0000).
@@ -220,9 +221,9 @@ importa sus opcodes, registros, secciones ni formato binario.
 
 ```bash
 npm run build
-node dist/cli.js kernel.flowasm -f iflow-32 -o kernel.flow
+node dist/cli.js kernel.flowasm -f iflow-32 -o kernel.rom
 # o, tras npm link / instalación:
-iflow-as kernel.flowasm -f iflow-32 -o kernel.flow -l
+iflow-as kernel.flowasm -f iflow-32 -o kernel.rom -l
 ```
 
 Opciones comunes: `-o/--output`, `-e/--entry <label>` y `-l/--list` (imprime la

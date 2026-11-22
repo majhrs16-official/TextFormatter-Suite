@@ -10,8 +10,8 @@ import java.util.List;
  * Parser for the v3 {@code FLOWROM} container described by ADR-037 §8.
  *
  * <p>This class only validates and exposes the ROM. It does not map memory,
- * create processes, or read a v2 {@code .flow}: a v2 artifact is rejected
- * explicitly with {@link UnsupportedFormatException}.</p>
+ * create processes, or read an iflow-16 {@code .flow}: that artifact is
+ * rejected explicitly with {@link UnsupportedFormatException}.</p>
  */
 public final class RomParser {
 
@@ -35,7 +35,7 @@ public final class RomParser {
 
     private static final int HASH_OFFSET = 48;
     private static final byte[] MAGIC = {'F', 'L', 'O', 'W', 'R', 'O', 'M', 0};
-    private static final byte[] V2_MAGIC = {'F', 'L', 'O', 'W'};
+    private static final byte[] IFLOW16_MAGIC = {'F', 'L', 'O', 'W'};
     private static final byte[] ZERO_HASH = new byte[HASH_SIZE];
 
     private RomParser() {
@@ -46,11 +46,11 @@ public final class RomParser {
             throw new InvalidRomException("ROM data is null");
         }
         if (data.length < MAGIC.length) {
-            rejectV2IfPresent(data);
+            rejectIflow16IfPresent(data);
             throw new InvalidRomException("ROM is truncated before its magic");
         }
         if (!matches(data, 0, MAGIC)) {
-            rejectV2IfPresent(data);
+            rejectIflow16IfPresent(data);
             throw new UnsupportedFormatException("not a FLOWROM image");
         }
         if (data.length < HEADER_SIZE) {
@@ -324,9 +324,10 @@ public final class RomParser {
         }
     }
 
-    private static void rejectV2IfPresent(byte[] data) {
-        if (startsWith(data, V2_MAGIC)) {
-            throw new UnsupportedFormatException("v2 .flow is not supported; rebuild as FLOWROM v3");
+    private static void rejectIflow16IfPresent(byte[] data) {
+        if (startsWith(data, IFLOW16_MAGIC)) {
+            throw new UnsupportedFormatException(
+                    "iflow-16 .flow is not supported by iflow-32; rebuild as an iflow-32 FLOWROM");
         }
     }
 

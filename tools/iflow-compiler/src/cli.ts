@@ -20,7 +20,7 @@ program
   .argument('<input>', 'input assembly file (.flowasm)')
   .option('-f, --format <format>',
     `output format: ${FORMAT_IFLOW_16} or ${FORMAT_IFLOW_32}`, FORMAT_IFLOW_16)
-  .option('-o, --output <file>', 'output binary file (.flow)')
+  .option('-o, --output <file>', 'output binary file (.flow for iflow-16, .rom for iflow-32)')
   .option('-e, --entry <label>', 'entry point or reset vector label')
   .option('-l, --list', 'emit the symbol listing')
   .option('-v, --verbose', 'verbose diagnostics')

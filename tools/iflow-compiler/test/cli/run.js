@@ -73,6 +73,16 @@ test('selects iflow-32 with -f iflow-32', () => {
   assert.ok(result.stdout.includes('start'), 'symbol table must be printed');
 });
 
+test('iflow-32 default output uses the .rom extension', () => {
+  const input = path.join(outDir, 'kernel.flowasm');
+  fs.copyFileSync(iflow32Fixture, input);
+  const result = run([input, '-f', 'iflow-32']);
+  assert.strictEqual(result.status, 0, result.stderr);
+  const output = path.join(outDir, 'kernel.rom');
+  assert.ok(fs.existsSync(output), 'default output must be kernel.rom');
+  assert.strictEqual(fs.readFileSync(output).subarray(0, 8).toString('ascii'), 'FLOWROM\0');
+});
+
 test('rejects iflow-32-only options on iflow-16', () => {
   const result = run([iflow16Fixture, '-R', '0x0', '-o', path.join(outDir, 'bad.flow')]);
   assert.strictEqual(result.status, 2);

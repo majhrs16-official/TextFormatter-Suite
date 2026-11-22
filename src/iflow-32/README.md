@@ -86,7 +86,7 @@ un solo core. El activador de V4 conectará ambos cargadores a la configuración
 
 - El espacio de direcciones es de 32 bits (máximo arquitectónico 4 GiB); la RAM física configurable
   de ADR-037 es 16 MiB–1 GiB.
-- No acepta `.flow` v2; esa línea pertenece a `iflow-16`.
+- No acepta el `.flow` de `iflow-16`; esa línea pertenece a ese módulo.
 - V3 sigue abierta: faltan el kernel guest con scheduler y TLB shootdown, la persistencia entre
   mensajes y el cierre del multinúcleo. V3-1 cubre reloj, quantum de preempción, watchdog de paso
   configurable y sleep/wake. V3-2 ya entrega `CoreCountConfig`, `COREID` (`0x10A`, RO),

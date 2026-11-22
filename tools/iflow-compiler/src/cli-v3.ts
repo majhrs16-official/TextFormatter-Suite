@@ -36,7 +36,7 @@ export function runV3Cli(options: V3CliOptions): number {
 
   const outputFile = options.outputFile
     ? path.resolve(options.outputFile)
-    : path.join(path.dirname(inputPath), path.basename(inputPath, path.extname(inputPath)) + '.flow');
+    : path.join(path.dirname(inputPath), path.basename(inputPath, path.extname(inputPath)) + '.rom');
 
   try {
     const source = fs.readFileSync(inputPath, 'utf-8');

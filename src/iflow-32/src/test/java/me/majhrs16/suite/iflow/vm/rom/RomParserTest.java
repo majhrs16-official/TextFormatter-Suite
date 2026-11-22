@@ -28,18 +28,18 @@ class RomParserTest {
     }
 
     @Test
-    void rejectsV2MagicExplicitly() {
-        byte[] v2 = new byte[80];
-        v2[0] = 'F';
-        v2[1] = 'L';
-        v2[2] = 'O';
-        v2[3] = 'W';
+    void rejectsIflow16MagicExplicitly() {
+        byte[] iflow16 = new byte[80];
+        iflow16[0] = 'F';
+        iflow16[1] = 'L';
+        iflow16[2] = 'O';
+        iflow16[3] = 'W';
 
         UnsupportedFormatException exception = assertThrows(
                 UnsupportedFormatException.class,
-                () -> RomParser.parse(v2)
+                () -> RomParser.parse(iflow16)
         );
-        assertTrue(exception.getMessage().contains("v2"));
+        assertTrue(exception.getMessage().contains("iflow-16"));
     }
 
     @Test
