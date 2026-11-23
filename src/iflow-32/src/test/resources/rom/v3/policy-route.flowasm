@@ -13,7 +13,7 @@
 ; capacidades) y no recalcula SHA-256 ni interpreta nombres de capacidad: eso
 ; es identidad del host.
 ;
-; Scratch (RAM fisica, identidad tras encender la MMU):
+; Scratch (RAM fisica; el kernel la accede por el alias 0x9000E000 tras la MMU):
 ;   0x0200E000 boot.offset      0x0200E004 boot.size
 ;   0x0200E008 boot.entry       0x0200E00C boot.loadAddress
 ;   0x0200E010 kernel.offset    0x0200E014 kernel.size
@@ -30,26 +30,27 @@
 ;   0x0200E0A0 program_loaded   0x0200E0A4 program_done
 ;   0x0200E0A8 last_host_status 0x0200E0AC last_host_length
 ;   0x0200E0B0 program.pages
+;   0x0200E0B8 pool L2 next   0x0200E0BC pool L2 count
+;   0x0200E0C0.. slots {l1, tabla} del mapeo dinamico
 ;
 ; Page tables:
 ;   0x02000000 L1
 ;   0x02001000..0x02004000 L2 ROM (16 MiB, identidad R/X supervisor)
-;   0x02005000 L2 RAM (4 MiB, identidad R/W supervisor)
+;   0x02005000 L2 RAM (4 MiB; alias kernel en 0x90000000)
 ;   0x02006000 L2 kernel (4 MiB, R/X supervisor)
-;   0x02007000 L2 usuario (PROGRAM en 0x02500000 y pila en 0x02600000)
-;   0x02008000 L2 alias fisico (0x02800000..0x02BFFFFF, R/W supervisor)
+;   0x02008000 L2 alias fisico (0x80400000 -> 0x02800000, R/W supervisor)
+;   0x02009000..0x0200DFFF pool de tablas L2 para PROGRAM y pila
 ;   0x02010000 copia de BOOT (4 KiB)
 ;   0x02020000 copia de KERNEL (hasta 4 MiB)
 ;
-; Mapa del programa:
-;   0x02500000 virtual -> 0x02800000 fisico (codigo R/X/U, datos y bss R/W/U)
-;   0x02600000 virtual -> 0x02900000 fisico (pila R/W/U)
-;   0x02600400 host_status      0x02600404 host_length
-;   0x02600408 route_status     0x0260040C route_length
-;   0x02600800 buffer de resultado HOST (64 bytes)
+; Mapa del programa (loadAddress de la TOC, 4 KiB alineada):
+;   [loadAddress, loadAddress+memSize) -> 0x02800000 (codigo R/X/U, datos/bss R/W/U)
+;   0x7FFFE000 virtual -> 0x02900000 fisico (pila R/W/U; SP = 0x7FFFF000)
+;   La guarda 0x7FFFD000 queda sin mapear. Los buffers de la politica viven
+;   en .bss del propio PROGRAM, no en direcciones fijas del kernel.
 ;
-; El kernel acepta un unico PROGRAM en 0x02500000 con memSize <= 0x10000 y
-; datos y bss en paginas posteriores al codigo. Fuera de ese contrato falla
+; El kernel acepta un unico PROGRAM con memSize <= 0x10000, loadAddress
+; alineada y su rango sin tocar la guarda de pila. Fuera de ese contrato falla
 ; con un marcador BADxxxxxx explicito; no hay relocacion ni fallback.
 
 .section .bios
@@ -135,7 +136,8 @@ scan_next:
     CMP R1, 0x400000
     JHI kernel_too_big
 
-    ; L1: ROM 0..16 MiB, RAM 0x02000000, kernel 0x80000000, usuario y alias.
+    ; L1: ROM 0..16 MiB, kernel y alias; el espacio de usuario queda vacio y el
+    ; kernel accede a la RAM por 0x90000000 (sin identidad en 0x02000000).
     MOV R1, 0x02000000
     MOV R11, 0x02001000
     OR R11, 1
@@ -149,18 +151,27 @@ scan_next:
     MOV R11, 0x02004000
     OR R11, 1
     MOV [R1 + 12], R11
-    MOV R11, 0x02005000
-    OR R11, 1
-    MOV [R1 + 32], R11
+
+    ; Vaciar los indices L1 4..511 (todo el espacio de usuario).
+    MOV R1, 0x02000010
+    MOV R2, 0
+    MOV R3, 508
+clear_user_l1:
+    MOV [R1], R2
+    ADD R1, 4
+    SUB R3, 1
+    JNZ clear_user_l1
+
+    MOV R1, 0x02000000
     MOV R11, 0x02006000
     OR R11, 1
     MOV [R1 + 2048], R11
-    MOV R11, 0x02007000
-    OR R11, 1
-    MOV [R1 + 36], R11
     MOV R11, 0x02008000
     OR R11, 1
-    MOV [R1 + 40], R11
+    MOV [R1 + 2052], R11
+    MOV R11, 0x02005000
+    OR R11, 1
+    MOV [R1 + 2304], R11
 
     ; L2 ROM: 4 tablas de 1024 paginas R/X supervisor.
     MOV R12, 1024
@@ -197,21 +208,11 @@ scan_next:
     MOV R2, 0x02020000
     CALL fill_rx
 
-    ; L2 alias fisico: identidad 0x02800000..0x02BFFFFF, R/W supervisor.
+    ; L2 alias fisico: 0x80400000..0x807FFFFF -> 0x02800000..0x02BFFFFF.
     MOV R12, 1024
     MOV R1, 0x02008000
     MOV R2, 0x02800000
     CALL fill_rw_sup
-
-    ; L2 usuario: limpio; el kernel lo rellena al cargar el programa.
-    MOV R1, 0x02007000
-    MOV R2, 0
-    MOV R3, 1024
-clear_user:
-    MOV [R1], R2
-    ADD R1, 4
-    SUB R3, 1
-    JNZ clear_user
 
     ; Copiar BOOT a RAM, publicar boot_ready y saltar a su direccion virtual.
     MOV R1, [R9 + 0xE000]
@@ -229,6 +230,7 @@ clear_user:
     CSRR R1, STATUS
     OR R1, 0x10
     CSRW STATUS, R1
+    MOV R9, 0x90000000
     MOV R5, [R9 + 0xE008]
     JMP R5
 
@@ -290,11 +292,11 @@ copy_bytes:
 .org 0x80000000
 .entry boot
 boot:
-    MOV R9, 0x02000000
+    MOV R9, 0x90000000
 
     ; Copiar KERNEL de ROM (identidad) a su frame RAM.
     MOV R1, [R9 + 0xE010]
-    MOV R2, 0x02020000
+    MOV R2, 0x90020000
     MOV R3, [R9 + 0xE014]
 boot_copy:
     MOV.B R4, [R1]
@@ -367,7 +369,8 @@ trap_table:
     .space 1
 
 kmain:
-    MOV R9, 0x02000000
+    MOV R9, 0x90000000
+    MOV SP, 0x903FF000
     MOV R1, trap_table
     CSRW TVEC, R1
 
@@ -418,12 +421,24 @@ kmain:
     CMP R1, R2
     JAE bad_size
 
+    ; loadAddress: 4 KiB alineada, dentro de usuario y sin tocar la guarda de
+    ; la pila (0x7FFFD000). El kernel la mapea dinamicamente.
     MOV R1, [R9 + 0xE07C]
-    MOV R2, 0x02500000
+    AND R1, 0xFFF
+    JNZ bad_load
+    MOV R1, [R9 + 0xE07C]
+    MOV R2, 0x02000000
     CMP R1, R2
-    JNE bad_load
+    JAE bad_load
+    MOV R1, [R9 + 0xE07C]
+    MOV R2, [R9 + 0xE080]
+    ADD R1, R2
+    MOV R2, 0x7FFFD000
+    CMP R1, R2
+    JHI bad_load
 
     MOV R1, [R9 + 0xE078]
+    MOV R2, [R9 + 0xE07C]
     SUB R1, R2
     MOV R3, [R9 + 0xE088]
     CMP R1, R3
@@ -538,13 +553,13 @@ caps_ok:
 
     ; Copiar el segmento completo (PRG3 + codigo + capacidades) al alias.
     MOV R1, [R9 + 0xE070]
-    MOV R2, 0x02800000
+    MOV R2, 0x80400000
     MOV R3, [R9 + 0xE074]
     CALL copy_bytes
 
     ; Zero-fill desde size hasta memSize.
     MOV R1, [R9 + 0xE074]
-    MOV R2, 0x02800000
+    MOV R2, 0x80400000
     ADD R2, R1
     MOV R3, [R9 + 0xE080]
     SUB R3, R1
@@ -557,37 +572,60 @@ zero_loop:
     JNZ zero_loop
 zero_done:
 
-    ; Paginas del programa, con W^X por pagina: codigo 0x35, datos/bss 0x2D.
+    ; Pool de tablas L2 y cache de indices L1; el programa puede cruzar 4 MiB.
+    MOV R1, 0x02009000
+    MOV [R9 + 0xE0B8], R1
+    MOV R1, 0
+    MOV [R9 + 0xE0BC], R1
+
     MOV R3, [R9 + 0xE080]
     ADD R3, 0xFFF
     SHR R3, 12
     MOV [R9 + 0xE0B0], R3
-    MOV R4, 0x02800000
-    MOV R5, 0x02007400
-    MOV R6, [R9 + 0xE08C]
-    ADD R6, 0xFFF
-    SHR R6, 12
+    MOV R4, [R9 + 0xE07C]
+    MOV R5, 0x02800000
+    MOV R6, R3
+    MOV R7, [R9 + 0xE08C]
+    ADD R7, 0xFFF
+    SHR R7, 12
 map_pages:
-    MOV R7, R4
-    CMP R6, 0
+    MOV R1, R4
+    SHR R1, 22
+    CALL l2_for
+    MOV R3, R4
+    SHR R3, 12
+    AND R3, 0x3FF
+    SHL R3, 2
+    ADD R3, R2
+    ADD R3, 0x8E000000
+    MOV R8, R5
+    CMP R7, 0
     JZ map_data
-    OR R7, 0x35
-    SUB R6, 1
+    OR R8, 0x35
+    SUB R7, 1
     JMP map_store
 map_data:
-    OR R7, 0x2D
+    OR R8, 0x2D
 map_store:
-    MOV [R5], R7
+    MOV [R3], R8
     ADD R4, 0x1000
-    ADD R5, 4
-    SUB R3, 1
+    ADD R5, 0x1000
+    SUB R6, 1
     JNZ map_pages
 
-    ; Pila de usuario: 0x02600000 -> 0x02900000, R/W/U.
-    MOV R1, 0x02900000
-    OR R1, 0x2D
-    MOV R2, 0x02007800
-    MOV [R2], R1
+    ; Pila de usuario: SP = 0x7FFFF000; pagina 0x7FFFE000 con guarda debajo.
+    MOV R1, 0x7FFFE000
+    SHR R1, 22
+    CALL l2_for
+    MOV R3, 0x7FFFE000
+    SHR R3, 12
+    AND R3, 0x3FF
+    SHL R3, 2
+    ADD R3, R2
+    ADD R3, 0x8E000000
+    MOV R8, 0x02900000
+    OR R8, 0x2D
+    MOV [R3], R8
     FENCE
     SFENCE.VMA
 
@@ -638,7 +676,7 @@ fail:
 
 ; Vector 7 (ECALL de usuario): cerrar la unidad y volver al idle del kernel.
 user_exit:
-    MOV R9, 0x02000000
+    MOV R9, 0x90000000
     CSRR R3, CAUSE
     CMP R3, 7
     JNE unexpected_trap
@@ -655,12 +693,70 @@ idle:
     HALT
     JMP idle
 
+; R1 = indice L1. Devuelve R2 = tabla L2 fisica y crea la entrada si falta.
+; Conserva R4-R8 (estado del bucle de mapeo) y usa alias 0x90000000 para
+; acceder a las tablas; el pool de L2 vive en 0x02009000..0x0200DFFF.
+l2_for:
+    MOV R13, R1
+    MOV R10, R9
+    ADD R10, 0xE0C0
+    MOV R12, [R9 + 0xE0BC]
+l2_lookup:
+    CMP R12, 0
+    JZ l2_alloc
+    MOV R0, [R10]
+    CMP R0, R13
+    JZ l2_found
+    ADD R10, 8
+    SUB R12, 1
+    JMP l2_lookup
+l2_found:
+    MOV R2, [R10 + 4]
+    RET
+l2_alloc:
+    MOV R11, [R9 + 0xE0B8]
+    MOV R3, R11
+    ADD R3, 0x1000
+    CMP R3, 0x0200E000
+    JHI l2_full
+    MOV [R9 + 0xE0B8], R3
+    MOV R10, R11
+    ADD R10, 0x8E000000
+    MOV R12, 1024
+    MOV R0, 0
+l2_zero:
+    MOV [R10], R0
+    ADD R10, 4
+    SUB R12, 1
+    JNZ l2_zero
+    MOV R12, [R9 + 0xE0BC]
+    MOV R10, R9
+    ADD R10, 0xE0C0
+    MOV R3, R12
+    SHL R3, 3
+    ADD R10, R3
+    MOV [R10], R13
+    MOV [R10 + 4], R11
+    ADD R12, 1
+    MOV [R9 + 0xE0BC], R12
+    MOV R3, R13
+    SHL R3, 2
+    ADD R3, 0x90000000
+    MOV R0, R11
+    OR R0, 1
+    MOV [R3], R0
+    MOV R2, R11
+    RET
+l2_full:
+    MOV R1, 0xBAD0000C
+    JMP fail
+
 ; Reinicia la RAM del programa antes de cada unidad: recopia el segmento desde
 ; la ROM, hace zero-fill hasta memSize y limpia la pila de usuario. El kernel
 ; sigue vivo; solo se restaura el estado del programa.
 reset_unit_state:
     MOV R1, [R9 + 0xE070]
-    MOV R2, 0x02800000
+    MOV R2, 0x80400000
     MOV R3, [R9 + 0xE074]
 reset_copy:
     MOV.B R4, [R1]
@@ -671,7 +767,7 @@ reset_copy:
     JNZ reset_copy
 
     MOV R1, [R9 + 0xE074]
-    MOV R2, 0x02800000
+    MOV R2, 0x80400000
     ADD R2, R1
     MOV R3, [R9 + 0xE080]
     SUB R3, R1
@@ -684,7 +780,7 @@ reset_zero:
     JNZ reset_zero
 
 reset_stack:
-    MOV R2, 0x02900000
+    MOV R2, 0x7FFFE000
     MOV R3, 1024
 reset_stack_loop:
     MOV R4, 0
@@ -695,7 +791,7 @@ reset_stack_loop:
     RET
 
 mailbox_irq:
-    MOV R9, 0x02000000
+    MOV R9, 0x90000000
     ; Retirar la IRQ 5 de servicio en el PIC antes de validar el evento.
     MOV R3, 0x20
     MOV R2, 0x01002008
@@ -710,9 +806,9 @@ mailbox_irq:
     MOV R3, 1
     MOV [R1 + 0x10], R3
     CSRW MIDENT, R2
-    MOV SP, 0x023FF000
+    MOV SP, 0x903FF000
     CALL reset_unit_state
-    MOV SP, 0x02600F00
+    MOV SP, 0x7FFFF000
     MOV R3, [R9 + 0xE078]
     CSRW EPC, R3
     MOV R3, 0x36
@@ -725,7 +821,7 @@ unexpected_trap:
     ECALL
 
 .section .program.loader
-.org 0x02500000
+.org 0x053FF000
 .entry program_start
 .capability iflow.property.read
 .capability iflow.route.decision
@@ -737,7 +833,7 @@ unexpected_trap:
 program_start:
     ; La pila debe llegar limpia: el kernel reinicia la RAM del programa en
     ; cada unidad. Un marcador viejo delata aislamiento incompleto.
-    MOV R9, 0x02600E00
+    MOV R9, 0x7FFFEFFC
     MOV R8, [R9]
     CMP R8, 0
     JNE stale_state
@@ -760,29 +856,31 @@ program_start:
 
     MOV R2, read_args
     MOV R3, 52
-    MOV R4, 0x02600800
+    MOV R4, result_buffer
     MOV R5, 1024
     MOV R0, 0x0100
     MOV R1, 0
     HOST
 
     ; Guardar estado y longitud del resultado para diagnostico.
-    MOV R6, 0x02600400
+    MOV R6, host_status
     MOV [R6], R0
     MOV [R6 + 4], R1
 
     CMP R0, 0
     JNE read_failed
 
-    ; Resultado TLV map {present:bool, value:string} en 0x02600800:
+    ; Resultado TLV map {present:bool, value:string} en result_buffer:
     ; +22 bool present, +38 primer byte del contenido (map 5 + present 12 +
     ; bool 6 + clave "value" 10).
-    MOV R8, 0x02600816
+    MOV R8, result_buffer
+    ADD R8, 0x16
     MOV.B R7, [R8]
     CMP R7, 1
     JNE read_failed
 
-    MOV R8, 0x02600826
+    MOV R8, result_buffer
+    ADD R8, 0x26
     MOV.B R7, [R8]
     CMP R7, 0x62
     JZ blocked
@@ -906,5 +1004,15 @@ unit_marker:
 
 .bss
 .align 4
+host_status:
+    .space 4
+host_length:
+    .space 4
+route_status:
+    .space 4
+route_length:
+    .space 4
+result_buffer:
+    .space 1024
 scratch_marker:
     .space 4

@@ -13,8 +13,10 @@
 > `HALT` tras el `ECALL`); aislamiento por unidad completado (el kernel recopia el segmento,
 > hace zero-fill hasta `memSize` y limpia la página de pila antes de cada unidad); datos/bss
 > reales completados (el ensamblador v3 emite `.data`/`.bss` en `PRG3` y la política verifica
-> que los datos vuelven de la ROM y el bss se zeroa en cada unidad). Falta el resto de V4:
-> varios programas y load addresses arbitrarias.
+> que los datos vuelven de la ROM y el bss se zeroa en cada unidad); load addresses arbitrarias
+> completadas (un solo `PROGRAM` en cualquier dirección 4 KiB alineada, pool dinámico de tablas
+> L2 y fixture que cruza la frontera de 4 MiB). Falta el resto de V4: varios programas y el
+> scheduler de procesos guest.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -142,11 +144,18 @@ explícito. No hay política por defecto ni ROM embebida.
   un trap, el watchdog o una política sin decisión producen `REJECT` explícito; tras un fault la
   máquina no se reutiliza y las rutas siguientes responden `RESTART_REQUIRED` hasta `reload()`.
   `boots()` expone el número de arranques para verificar la reutilización en tests.
-- V4 loader slice: el kernel guest acepta **un solo** `PROGRAM` en `0x02500000` con
-  `memSize <= 64 KiB` y datos alineados a página después del código. Valida magic/estructura
-  `PRG3`, copia el segmento a `0x02800000`, zero-fill hasta `memSize`, mapea código `R/X/U`,
-  datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y el `MIDENT`
-  que el kernel toma del handle del mailbox.
+- V4 loader slice: el kernel guest acepta **un solo** `PROGRAM` en cualquier `loadAddress`
+  4 KiB alineada dentro de `0x02000000..0x7FFFD000`, con `memSize <= 64 KiB` y el rango
+  `[loadAddress, loadAddress + memSize)` sin alcanzar la guarda de pila. Valida magic/estructura
+  `PRG3`, copia el segmento al alias `0x80400000` (físico `0x02800000`), zero-fill hasta
+  `memSize`, mapea código `R/X/U`, datos/bss y pila `R/W/U` (sin `W && X` por página) y entra
+  en U con `PIDENT` 0 y el `MIDENT` que el kernel toma del handle del mailbox. El espacio de
+  usuario parte de un L1 vacío: el kernel construye las tablas L2 que necesita en un pool
+  dinámico (`0x02009000..0x0200DFFF`, máximo 5 tablas) y accede a la RAM por el alias supervisor
+  `0x90000000`. La pila vive en `0x7FFFE000 -> 0x02900000` con `SP = 0x7FFFF000` y la guarda
+  `0x7FFFD000` queda sin mapear. El fixture de política usa `.org 0x053FF000`, cruza la frontera
+  de 4 MiB y por tanto obliga a dos entradas L1 distintas; si el pool de tablas se agota, el
+  loader falla con `BAD0000C`.
   Los datos y el bss deben empezar en páginas posteriores al código; si comparten la última
   página de código, el loader falla con `BAD0000A` en vez de degradar `W^X`. El ensamblador v3
   emite esos rangos con las directivas `.data` y `.bss`: `.data` alinea el final del código a
@@ -156,8 +165,8 @@ explícito. No hay política por defecto ni ROM embebida.
   El programa llama a `HOST` para leer propiedades y emitir `ROUTE_DECISION`; la decisión vive en
   el journal del mensaje y solo se aplica al bridge cuando el host hace `commitExecution`.
   El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el
-  guest revalida los rangos que consume. Más de un programa, otra `loadAddress`, `memSize`
-  mayor o datos que compartan página con código fallan con un marcador `BADxxxxxx` explícito,
-  sin relocación ni fallback. El aislamiento de la RAM del programa entre unidades está completado;
-  los programas múltiples, las load addresses arbitrarias y el scheduler de procesos quedan
-  pendientes en V4.
+  guest revalida los rangos que consume. Más de un programa, `loadAddress` no alineada o fuera
+  del rango permitido, `memSize` mayor o datos que compartan página con código fallan con un
+  marcador `BADxxxxxx` explícito, sin relocación ni fallback. El aislamiento de la RAM del
+  programa entre unidades está completado; los programas múltiples y el scheduler de procesos
+  quedan pendientes en V4.
